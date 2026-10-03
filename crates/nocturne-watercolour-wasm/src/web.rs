@@ -679,9 +679,14 @@ impl SceneInstance {
         self.playback.total_ticks()
     }
 
-    #[wasm_bindgen(js_name = tickBudget)]
-    pub fn tick_budget(&self) -> u32 {
-        self.playback.tick_budget()
+    #[wasm_bindgen(js_name = ticksDue)]
+    pub fn ticks_due(&self, elapsed_seconds: f32) -> u32 {
+        self.playback.ticks_due(elapsed_seconds)
+    }
+
+    #[wasm_bindgen(js_name = ticksDueAtProgress)]
+    pub fn ticks_due_at_progress(&self, progress: f32) -> u32 {
+        self.playback.ticks_due_at_progress(progress)
     }
 
     #[wasm_bindgen(js_name = currentTick)]

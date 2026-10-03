@@ -265,6 +265,21 @@ impl<S: Simulator> Playback<S> {
         self.tick_budget
     }
 
+    /// The ticks [`Self::advance_by_elapsed`] would run now for `elapsed_seconds`.
+    pub fn ticks_due(&self, elapsed_seconds: f32) -> u32 {
+        if self.state != PlaybackState::Playing || !elapsed_seconds.is_finite() {
+            return 0;
+        }
+        let target = self.tick_for_progress(self.progress_after(elapsed_seconds));
+        self.budgeted(target).saturating_sub(self.tick)
+    }
+
+    /// The ticks [`Self::advance_to_progress`] would run forward now for `progress`.
+    pub fn ticks_due_at_progress(&self, progress: f32) -> u32 {
+        self.budgeted(self.linear_tick(progress))
+            .saturating_sub(self.tick)
+    }
+
     /// The furthest tick one advance may reach from where it is now.
     fn budgeted(&self, target: u32) -> u32 {
         if self.tick_budget == 0 {
@@ -380,8 +395,7 @@ impl<S: Simulator> Playback<S> {
         if self.state != PlaybackState::Playing || !elapsed_seconds.is_finite() {
             return Ok(());
         }
-        self.elapsed_progress =
-            (self.elapsed_progress + elapsed_seconds.max(0.0) * 1000.0 / self.duration_ms).min(1.0);
+        self.elapsed_progress = self.progress_after(elapsed_seconds);
         let target = self.tick_for_progress(self.elapsed_progress);
         if target > self.tick {
             let reached = self.budgeted(target);
@@ -396,7 +410,7 @@ impl<S: Simulator> Playback<S> {
     /// easing before calling, so this can be driven from any curve.
     pub fn advance_to_progress(&mut self, progress: f32) -> Result<(), EngineError> {
         let p = progress.clamp(0.0, 1.0);
-        let target = (p * self.total_ticks() as f32).round() as u32;
+        let target = self.linear_tick(p);
         if target > self.tick {
             let reached = self.budgeted(target);
             self.run_to(reached)?;
@@ -411,6 +425,14 @@ impl<S: Simulator> Playback<S> {
         }
         self.elapsed_progress = p;
         Ok(())
+    }
+
+    fn progress_after(&self, elapsed_seconds: f32) -> f32 {
+        (self.elapsed_progress + elapsed_seconds.max(0.0) * 1000.0 / self.duration_ms).min(1.0)
+    }
+
+    fn linear_tick(&self, progress: f32) -> u32 {
+        (progress.clamp(0.0, 1.0) * self.total_ticks() as f32).round() as u32
     }
 
     pub fn seek_progress(&mut self, progress: f32) -> Result<(), EngineError> {
@@ -719,6 +741,31 @@ mod tests {
         let mut reference = Playback::new(CpuEngine::default(), budget_scene(), 1000.0).unwrap();
         reference.finish_immediately().unwrap();
         assert_eq!(playback.simulator().grid(), reference.simulator().grid());
+    }
+
+    #[test]
+    fn ticks_due_are_the_ticks_the_next_advance_runs() {
+        let mut clock = Playback::new(CpuEngine::default(), budget_scene(), 1000.0)
+            .unwrap()
+            .with_tick_budget(4);
+        assert_eq!(clock.ticks_due(0.1), 0, "paused");
+        clock.play();
+        for elapsed in [0.0, 0.004, 0.016, 0.1, 0.0, 0.5] {
+            let due = clock.ticks_due(elapsed);
+            let before = clock.current_tick();
+            clock.advance_by_elapsed(elapsed).unwrap();
+            assert_eq!(clock.current_tick() - before, due, "after {elapsed} s");
+        }
+        let mut eased = Playback::new(CpuEngine::default(), budget_scene(), 1000.0)
+            .unwrap()
+            .with_tick_budget(4);
+        for progress in [0.001, 0.004, 0.02, 0.02, 0.5] {
+            let due = eased.ticks_due_at_progress(progress);
+            let before = eased.current_tick();
+            eased.advance_to_progress(progress).unwrap();
+            assert_eq!(eased.current_tick() - before, due, "at {progress}");
+        }
+        assert_eq!(eased.ticks_due_at_progress(0.0), 0, "backwards is a seek");
     }
 
     /// Records the step sizes a playback asks for.

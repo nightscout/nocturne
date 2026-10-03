@@ -8,7 +8,7 @@ import { WatercolourError, toWatercolourError } from './errors';
 import { type ResolvedMode, fallbackOrder, resolveMode, resolveMotion } from './mode';
 import { getPresentation } from './presentation';
 import { type ArtworkRef, type IconRef, type InstanceArgs, type SceneSource, authoredSceneJson, createRefInstance, iconSvg, isArtworkRef, isIconRef, parseSceneDocument } from './scenes';
-import { MAX_SLICE_TICKS, type Scheduler, type SchedulerHandle, getScheduler } from './scheduler';
+import { type Scheduler, type SchedulerHandle, getScheduler } from './scheduler';
 import { type ViewportWait, waitNearViewport } from './viewport';
 
 export type PlayerEvent = 'ready' | 'finished' | 'fallback' | 'error' | 'statechange';
@@ -352,11 +352,7 @@ class LiveBackend implements Backend {
       element: endTurn ? null : canvas,
       tick: (dt) => this.tick(dt),
       render: () => this.render(),
-      gpuCostMs: () => {
-        const stats = this.host.stats();
-        const ticks = this.settling || this.seekTarget !== undefined ? MAX_SLICE_TICKS : this.isPlaying ? this.instance.tickBudget() : 0;
-        return ticks * (stats?.gpuTickMs ?? 0) + (stats?.gpuRenderMs ?? 0);
-      },
+      gpuCostMs: (elapsedSeconds) => this.gpuCostMs(elapsedSeconds),
     });
     this.unsubscribeLost = host.onLost((message) => this.fault(new WatercolourError('DeviceLost', message)));
     this.handle.setActive(true);
@@ -566,6 +562,25 @@ class LiveBackend implements Backend {
       this.scheduler.chargeGpuMs((this.instance.currentTick() - before) * (this.host.stats()?.gpuTickMs ?? 0));
       return changed;
     });
+  }
+
+  /**
+   * The GPU time this frame's tick and render are expected to take. A seek or
+   * settle slice sizes itself to the GPU budget left, so only its first tick
+   * is reserved. A frame that runs no tick and was not invalidated draws at
+   * most the tick blend, which is not reserved.
+   */
+  private gpuCostMs(elapsedSeconds: number): number {
+    const stats = this.host.stats();
+    const ticks = this.seekTarget !== undefined || this.settling ? 1 : this.isPlaying ? this.ticksDue(elapsedSeconds) : 0;
+    const renders = !this.settling && (ticks > 0 || this.dirty);
+    return ticks * (stats?.gpuTickMs ?? 0) + (renders ? (stats?.gpuRenderMs ?? 0) : 0);
+  }
+
+  private ticksDue(elapsedSeconds: number): number {
+    if (!this.easing) return this.instance.ticksDue(elapsedSeconds);
+    const elapsedMs = Math.min(this.durationMs, this.elapsedMs + elapsedSeconds * 1000);
+    return this.instance.ticksDueAtProgress(this.easing(elapsedMs / this.durationMs));
   }
 
   /**

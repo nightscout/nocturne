@@ -12,6 +12,8 @@ function fakeInstance(total: number) {
   let owed = 0;
   const instance = {
     calls,
+    /** Frames the scheduler admitted this instance to advance in. */
+    advances: 0,
     get tick() {
       return tick;
     },
@@ -31,6 +33,7 @@ function fakeInstance(total: number) {
     },
     /** 25 ticks a second: at 60 fps most frames run no tick at all. */
     advanceByElapsed(seconds: number) {
+      instance.advances++;
       if (!playing || tick >= total) return false;
       owed += seconds * 25;
       const whole = Math.floor(owed);
@@ -64,17 +67,23 @@ function fakeInstance(total: number) {
     dispose: () => void calls.push('dispose'),
     simResolution: () => 96,
     totalTicks: () => total,
-    tickBudget: () => 6,
+    ticksDue: (seconds: number) => (playing ? Math.min(total - tick, Math.floor(owed + seconds * 25)) : 0),
+    ticksDueAtProgress: (progress: number) => Math.max(0, Math.round(progress * total) - tick),
     currentTick: () => tick,
   };
   return instance;
 }
 
 function fakeHost(...instances: ReturnType<typeof fakeInstance>[]): EngineHost {
+  return timedHost({}, ...instances);
+}
+
+/** A host whose engine reports these GPU timings. */
+function timedHost(gpuTimings: { gpuTickMs?: number; gpuRenderMs?: number }, ...instances: ReturnType<typeof fakeInstance>[]): EngineHost {
   const engine = {
     createInstance: () => instances.shift(),
     onDeviceLost() {},
-    stats: () => ({ liveInstances: 0, maxLiveInstances: 4 }),
+    stats: () => ({ liveInstances: 0, maxLiveInstances: 4, ...gpuTimings }),
     maxLiveInstances: 4,
   };
   const module = {
@@ -509,5 +518,18 @@ describe('target seeking', () => {
     live.seekTo(0.2); live.finishImmediately(); clock.frame();
     expect(instance.tick).toBe(100);
     live.dispose();
+  });
+});
+
+describe('GPU reservation', () => {
+  it('admits two playing reveals every frame when the ticks they run fit the budget', async () => {
+    const reveals = [fakeInstance(1000), fakeInstance(1000)];
+    const { scheduler, frame } = manualScheduler();
+    const timings = { gpuTickMs: 1, gpuRenderMs: 2 };
+    const players = reveals.map((instance) => player(instance, scheduler, { engineHost: timedHost(timings, instance) }));
+    await Promise.all(players.map((live) => live.ready));
+    for (let i = 0; i < 30; i++) frame();
+    expect(reveals.map((instance) => instance.advances)).toEqual([30, 30]);
+    for (const live of players) live.dispose();
   });
 });
