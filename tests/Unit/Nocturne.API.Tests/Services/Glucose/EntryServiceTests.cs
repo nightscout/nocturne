@@ -528,25 +528,22 @@ public class EntryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task DeleteEntryAsync_WhenSuccessful_DeletesFromV4()
+    public async Task DeleteEntryAsync_DeletesTheStoredEntryTheIdResolvesTo()
     {
-        // Arrange
-        var entryId = "60a1b2c3d4e5f6789012345";
-
+        const string servedId = "0199a1b2c3d47e5f8a9b0c1d";
+        var stored = new SensorGlucose { Id = Guid.Parse("0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b") };
+        _store.Setup(x => x.GetStoredByIdAsync(servedId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(stored);
         _decomposer
-            .Setup(x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.DeleteStoredAsync(stored, WriteOrigin.Live, It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        // Act
-        var result = await _sut.DeleteEntryAsync(entryId, CancellationToken.None);
+        var result = await _sut.DeleteEntryAsync(servedId, CancellationToken.None);
 
-        // Assert
         Assert.True(result);
-        // The per-repo chokepoint delete fires the deletion broadcast.
         _decomposer.Verify(
-            x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            x => x.DeleteStoredAsync(stored, WriteOrigin.Live, It.IsAny<CancellationToken>()),
             Times.Once);
-        _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -554,22 +551,12 @@ public class EntryServiceTests
     [Trait("Category", "Parity")]
     public async Task DeleteEntryAsync_WhenNotFound_ReturnsFalse()
     {
-        // Arrange
-        var entryId = "invalidid";
+        var result = await _sut.DeleteEntryAsync("0123456789abcdef01234567", CancellationToken.None);
 
-        _decomposer
-            .Setup(x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(0);
-
-        // Act
-        var result = await _sut.DeleteEntryAsync(entryId, CancellationToken.None);
-
-        // Assert
         Assert.False(result);
         _decomposer.Verify(
-            x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Once);
-        _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
+            x => x.DeleteStoredAsync(It.IsAny<IV4Record>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     #endregion

@@ -259,8 +259,8 @@ public class EntriesControllerTests
         var entry = processedInput![0];
         entry.Id.Should().NotBeNullOrEmpty();
 
-        // The ID should be a valid GUID-like string (hex characters, 32 chars without dashes)
-        entry.Id.Should().MatchRegex("^[a-f0-9]{32}$");
+        // The wire coerces a stored id that is not an ObjectId, so only an ObjectId is served as stored.
+        MongoObjectId.IsObjectId(entry.Id).Should().BeTrue();
     }
 
     [Fact]
@@ -393,7 +393,7 @@ public class EntriesControllerTests
     }
 
     [Fact]
-    public async Task UpdateEntry_AcceptsIdGeneratedByCreateEndpoint()
+    public async Task UpdateEntry_AcceptsA32HexUuid()
     {
         var generatedId = Guid.CreateVersion7().ToString("N");
         var update = new Entry { Sgv = 123, Mills = 1686565800000 };
@@ -423,7 +423,7 @@ public class EntriesControllerTests
     }
 
     [Fact]
-    public async Task DeleteEntry_AcceptsIdGeneratedByCreateEndpoint()
+    public async Task DeleteEntry_AcceptsA32HexUuid()
     {
         var generatedId = Guid.CreateVersion7().ToString("N");
 
@@ -433,7 +433,43 @@ public class EntriesControllerTests
 
         var result = await _controller.DeleteEntry(generatedId);
 
-        result.Should().BeOfType<OkObjectResult>();
+        AssertDeleteStatus(result, 1);
+    }
+
+    [Fact]
+    public async Task DeleteEntry_UnknownId_AnswersOkWithNoneDeleted()
+    {
+        const string unknownId = "0123456789abcdef01234567";
+
+        _mockEntryService
+            .Setup(x => x.DeleteEntryAsync(unknownId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await _controller.DeleteEntry(unknownId);
+
+        AssertDeleteStatus(result, 0);
+    }
+
+    [Theory]
+    [InlineData("sgv")]
+    [InlineData("0123456789abcdef0123456")]
+    public async Task DeleteEntry_NonIdSpec_AnswersBadRequestWithoutDeleting(string spec)
+    {
+        var result = await _controller.DeleteEntry(spec);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        _mockEntryService.Verify(
+            x => x.DeleteEntryAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
+    }
+
+    private static void AssertDeleteStatus(ActionResult result, long count)
+    {
+        var body = JsonSerializer.SerializeToElement(result.Should().BeOfType<OkObjectResult>().Subject.Value);
+        body.GetProperty("acknowledged").GetBoolean().Should().BeTrue();
+        body.GetProperty("deletedCount").GetInt64().Should().Be(count);
+        body.GetProperty("n").GetInt64().Should().Be(count);
     }
 
     [Fact]

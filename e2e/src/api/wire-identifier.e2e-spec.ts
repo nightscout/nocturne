@@ -68,15 +68,8 @@ describe("one wire identifier for entries and devicestatus", () => {
     const listed = await tenant.api.ok<Doc[]>("GET", `/api/v1/entries.json?find[date][$eq]=${entry!.date}`);
     expect(listed.map((e) => e._id)).toEqual([id]);
 
-    // workaround: #1808 - v1 and v3 do not resolve an id-less upload by the _id REST serves, so it
-    // is deleted by its v4 id; the delete event must still carry the REST _id.
-    const readings = await tenant.api.ok<{ data: Doc[] }>(
-      "GET",
-      `/api/v4/glucose/sensor?from=${encodeURIComponent(new Date(entry!.date).toISOString())}&limit=50`,
-    );
-    const reading = readings.data.find((g) => g.mills === entry!.date);
-    expect(reading).toBeDefined();
-    expect((await tenant.api.delete(`/api/v4/glucose/sensor/${reading!.id}`)).status).toBeLessThan(300);
+    const del = await tenant.api.delete(`/api/v1/entries/${id}`);
+    expect(del.status, del.text).toBeLessThan(300);
     const [deleted] = await hub.waitFor("delete", (a) => storage(a).colName === "entries" && (storage(a).identifier === id || storage(a).doc?.date === entry!.date), {
       what: "the entry's delete event",
     });
