@@ -382,6 +382,18 @@ struct PresentPipeline {
     cached: Arc<Mutex<Vec<(wgpu::TextureFormat, wgpu::RenderPipeline)>>>,
 }
 
+/// The crop window of an uncropped render.
+const WHOLE_PAINTING: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
+
+/// The whole painting's pixel size when `width` x `height` shows only `crop`
+/// of it; paper grain and its band limit are scaled to this size.
+fn virtual_size(width: u32, height: u32, crop: [f32; 4]) -> (u32, u32) {
+    (
+        (width as f32 / crop[2]).round() as u32,
+        (height as f32 / crop[3]).round() as u32,
+    )
+}
+
 /// What a render-resolution paper field is a function of.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct PaperKey {
@@ -395,7 +407,14 @@ struct PaperKey {
 }
 
 impl PaperKey {
-    fn new(paper: &Paper, width: u32, height: u32, aspect: f32, pixel_scale: f32) -> PaperKey {
+    fn new(
+        paper: &Paper,
+        width: u32,
+        height: u32,
+        aspect: f32,
+        pixel_scale: f32,
+        crop: [f32; 4],
+    ) -> PaperKey {
         PaperKey {
             seed: paper.seed.0,
             paper: [
@@ -409,12 +428,7 @@ impl PaperKey {
             height,
             aspect: aspect.to_bits(),
             pixel_scale: pixel_scale.to_bits(),
-            crop: [
-                0.0f32.to_bits(),
-                0.0f32.to_bits(),
-                1.0f32.to_bits(),
-                1.0f32.to_bits(),
-            ],
+            crop: crop.map(f32::to_bits),
         }
     }
 }
@@ -445,10 +459,11 @@ impl PaperUniform {
         let (width, height) = (key.width, key.height);
         let (ax, ay) = isotropic_scale(f32::from_bits(key.aspect));
         let crop = key.crop.map(f32::from_bits);
+        let (virtual_width, virtual_height) = virtual_size(width, height, crop);
         let t = PaperTerms::new(
             paper,
             f32::from_bits(key.pixel_scale),
-            grain_band_window((width as f32 / crop[2]).max(height as f32 / crop[3])),
+            grain_band_window(virtual_width.max(virtual_height) as f32),
         );
         let mut seeds = [[0u32; 4]; 4];
         for (i, seed) in t.seeds.iter().enumerate() {
@@ -965,7 +980,7 @@ impl GpuEngine {
             timers,
             blend: BlendPipelines::default(),
             interpolation: None,
-            crop: [0.0, 0.0, 1.0, 1.0],
+            crop: WHOLE_PAINTING,
         };
         (engine, validation)
     }
@@ -986,7 +1001,7 @@ impl GpuEngine {
             loaded: None,
             blend: self.blend.clone(),
             interpolation: None,
-            crop: [0.0, 0.0, 1.0, 1.0],
+            crop: WHOLE_PAINTING,
             next_checkpoint: 1,
             checkpoint_budget: self.checkpoint_budget,
             in_flight: Mutex::new(VecDeque::new()),
@@ -1577,8 +1592,7 @@ impl GpuEngine {
                 (l.paper, l.paper_sim.aspect)
             };
             let pixel_scale = if band_limit {
-                let virtual_width = (width as f32 / self.crop[2]).round() as u32;
-                let virtual_height = (height as f32 / self.crop[3]).round() as u32;
+                let (virtual_width, virtual_height) = virtual_size(width, height, self.crop);
                 render_pixel_scale(virtual_width, virtual_height, aspect)
             } else {
                 0.0
@@ -1600,9 +1614,10 @@ impl GpuEngine {
             std::mem::size_of::<RenderUniform>() as u64,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         )?;
-        let mut paper_key = PaperKey::new(&paper, width, height, aspect, pixel_scale);
-        paper_key.crop = self.crop.map(f32::to_bits);
-        let paper_buf = self.paper_buffer(paper_key, &paper)?;
+        let paper_buf = self.paper_buffer(
+            PaperKey::new(&paper, width, height, aspect, pixel_scale, self.crop),
+            &paper,
+        )?;
         let (presence_len, pigments) = {
             let l = self.loaded()?;
             (
@@ -1784,7 +1799,7 @@ impl GpuEngine {
         aspect: f32,
         pixel_scale: f32,
     ) -> Result<Vec<f32>, EngineError> {
-        let key = PaperKey::new(paper, width, height, aspect, pixel_scale);
+        let key = PaperKey::new(paper, width, height, aspect, pixel_scale, WHOLE_PAINTING);
         let buffer = self.paper_buffer(key, paper)?;
         let staging = self.buffer(
             "paper-readback",
