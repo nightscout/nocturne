@@ -62,30 +62,29 @@
     painted = target;
     const position = target / HUB_PAINTING_STOPS;
 
+    let frame: number;
+    const watchSeek = () => {
+      if (!current.state.seeking) { reached(); return; }
+      frame = requestAnimationFrame(watchSeek);
+    };
     if (previous === undefined || previous >= target || motion === "reduced") {
       current.pause();
       current.seekTo(position);
-      let frame = requestAnimationFrame(function watchSeek() {
-        if (!current.state.seeking) { reached(); return; }
-        frame = requestAnimationFrame(watchSeek);
-      });
-      return () => cancelAnimationFrame(frame);
-    }
-
-    current.seekTo(previous / HUB_PAINTING_STOPS);
-    current.play();
-    let frame = requestAnimationFrame(function watch() {
-      if (!current.state.seeking && (current.state.progress >= position || !current.state.playing)) {
-        current.pause();
-        current.seekTo(position);
-        frame = requestAnimationFrame(function watchSeek() {
-          if (!current.state.seeking) { reached(); return; }
+      frame = requestAnimationFrame(watchSeek);
+    } else {
+      current.seekTo(previous / HUB_PAINTING_STOPS);
+      current.play();
+      frame = requestAnimationFrame(function watch() {
+        const state = current.state;
+        if (!state.seeking && (state.progress >= position || !state.playing)) {
+          current.pause();
+          current.seekTo(position);
           frame = requestAnimationFrame(watchSeek);
-        });
-        return;
-      }
-      frame = requestAnimationFrame(watch);
-    });
+          return;
+        }
+        frame = requestAnimationFrame(watch);
+      });
+    }
     return () => cancelAnimationFrame(frame);
   });
 </script>
