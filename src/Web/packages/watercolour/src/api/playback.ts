@@ -25,7 +25,7 @@ export interface PlayerState {
   motion: 'full' | 'reduced';
   playing: boolean;
   finished: boolean;
-  /** Live only: the latest seek target has not yet been presented. */
+  /** The latest seek target has not yet been presented. */
   seeking?: boolean;
   /** Raw wall-clock fraction: linear elapsed, or the engine's own curve. */
   progress: number;
@@ -532,6 +532,7 @@ class LiveBackend implements Backend {
       const started = this.scheduler.now();
       let reached = false;
       this.step(() => { reached = this.instance.seekTowardsProgress(target, ticks); });
+      if (this.disposed || this.released) return;
       this.scheduler.slices.record(ticks, this.scheduler.now() - started);
       this.scheduler.chargeGpuMs(ticks * (gpuTickMs ?? 0));
       if (this.easing) this.elapsedMs = invertEasing(this.easing, this.instance.progress()) * this.durationMs;
@@ -610,7 +611,7 @@ class LiveBackend implements Backend {
         return;
       }
       // No swapchain texture this frame; a still released now would keep a blank canvas.
-      if (presented === false && ++this.unpresented < MAX_UNPRESENTED_RENDERS) return;
+      if (presented === false && (this.seekPresentPending || ++this.unpresented < MAX_UNPRESENTED_RENDERS)) return;
       this.unpresented = 0;
       this.dirty = false;
       if (this.seekTarget === undefined) this.seekPresentPending = false;
@@ -724,6 +725,10 @@ class BakedBackend implements Backend {
       render: () => this.render(),
     });
     this.handle.setActive(true);
+  }
+
+  get seeking(): boolean {
+    return this.dirty;
   }
 
   get playing(): boolean {
