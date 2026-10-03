@@ -1,6 +1,7 @@
 import { DEFAULT_INTENSITY } from '../types';
 import type { WasmModule } from './wasm-types';
 import { dropSimResolution } from './drop-scene';
+import { seededRandom } from './random';
 
 export interface BloomSceneOptions {
   seed?: number;
@@ -51,17 +52,6 @@ function bodyColour(colour: readonly [number, number, number]) {
 
 const easeOut = (t: number) => 1 - (1 - t) ** 2.2;
 
-function mulberry(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 /**
  * A charge of pigment dropped into a wetted sheet that blooms outward to cover the whole canvas:
  * the gesture of touching a loaded brush into wet paper. Coordinates run 0..1 over each canvas
@@ -80,7 +70,7 @@ export function bloomScene(
     module.catalogueScene(DONOR, seed, 'slate', DEFAULT_INTENSITY, 'large', 'light', simResolution),
   ) as SceneDocument;
   const short = Math.min(width, height);
-  const random = mulberry(seed || 1);
+  const random = seededRandom(seed || 1);
   const jitter = (spread: number) => (random() - 0.5) * spread;
   const events: { at_tick: number; op: unknown }[] = [];
 

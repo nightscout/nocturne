@@ -64,7 +64,7 @@ const BLOOM_PAD = 1.2;
  * then spreads along the stroke rather than across it, and a thin edge shows
  * as blocks. The frame is padded on its short side to keep that in check.
  */
-const MAX_FRAME_ASPECT = 3;
+export const MAX_FRAME_ASPECT = 3;
 /**
  * Grid cells per device pixel of the canvas's long edge, and the largest grid
  * a drop runs on, on either ground. A light hero is capped at 256; a drop's
