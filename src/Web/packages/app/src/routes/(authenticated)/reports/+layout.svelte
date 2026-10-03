@@ -15,7 +15,7 @@
     import Filter from "@lucide/svelte/icons/funnel";
     import Calendar from "@lucide/svelte/icons/calendar";
     import ChevronDown from "@lucide/svelte/icons/chevron-down";
-    import {HeaderMotif} from "@nocturne/watercolour";
+    import {ReportStrokes} from "@nocturne/watercolour";
     import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
     import {createResourceContext} from "$lib/hooks/resource-context.svelte";
 
@@ -116,25 +116,26 @@
                 class="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
         >
             <div class="flex h-14 items-center justify-between gap-2 px-3 @md:px-6">
-                <div class="flex h-full items-center gap-2">
-                    <!-- Report info -->
-                    <div class="flex items-center gap-3">
-                        <h1 class="text-lg font-semibold text-foreground">{reportName}</h1>
-                        {#if showFilters}
-                            <Button
-                                    variant="outline"
-                                    size="sm"
-                                    class="hidden sm:inline-flex"
-                                    onclick={() => (filterSidebarOpen = true)}
-                                    aria-label="Change date range"
-                            >
-                                <Calendar class="h-3.5 w-3.5"/>
-                                <span>{dateRangeDisplay}</span>
-                                <ChevronDown class="h-3 w-3 opacity-60"/>
-                            </Button>
-                        {/if}
-                    </div>
-                    <HeaderMotif class="hidden self-end lg:block"/>
+                <!-- Report info -->
+                <div class="flex items-center gap-3">
+                    <h1 class="text-lg font-semibold text-foreground">{reportName}</h1>
+                    {#if showFilters}
+                        <Button
+                                variant="outline"
+                                size="sm"
+                                class="hidden sm:inline-flex"
+                                onclick={() => (filterSidebarOpen = true)}
+                                aria-label="Change date range"
+                        >
+                            <Calendar class="h-3.5 w-3.5"/>
+                            <span>{dateRangeDisplay}</span>
+                            <ChevronDown class="h-3 w-3 opacity-60"/>
+                        </Button>
+                    {/if}
+                </div>
+
+                <div class="@container h-10 min-w-0 flex-1 px-2">
+                    <ReportStrokes name={page.url.pathname} class="hidden size-full @[8rem]:block"/>
                 </div>
 
                 <div class="flex items-center gap-2">
