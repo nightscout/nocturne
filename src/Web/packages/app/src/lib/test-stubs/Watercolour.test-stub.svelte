@@ -17,6 +17,8 @@
     /** `artwork` for an `Artwork`, `scene` for a scene-built player. */
     artwork?: string;
     scene?: unknown;
+    /** Whether the player asked the engine to interpolate between simulation ticks. */
+    blendTicks?: boolean;
     paint(progress: number, finished?: boolean): void;
   }
 
@@ -42,7 +44,11 @@
   }
 
   export const mountPlayer: typeof MountPlayer = (_frame, _canvas, options) =>
-    start({ scene: options.scene?.({} as WasmModule, 300, 100, 1) }, options.onStateChange, options.onProgress);
+    start(
+      { scene: options.scene?.({} as WasmModule, 300, 100, 1), blendTicks: options.blendTicks },
+      options.onStateChange,
+      options.onProgress,
+    );
 
   export const bloomScene = (_module: unknown, _width: number, _height: number, options: unknown) => options;
 </script>

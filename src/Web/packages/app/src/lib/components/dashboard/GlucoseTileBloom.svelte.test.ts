@@ -39,6 +39,12 @@ describe("GlucoseTileBloom", () => {
     expect(engine.live()[0]!.scene).toMatchObject({ seed: 7, slope: -0.5, colour: [1, 0, 0] });
   });
 
+  it("blends the engine's simulation ticks so the bloom spreads smoothly between them", async () => {
+    bloom();
+
+    await expect.poll(() => engine.live()[0]?.blendTicks).toBe(true);
+  });
+
   it("caps the line's angle at a 15 mg/dL change", async () => {
     bloom({ delta: 40 });
 
