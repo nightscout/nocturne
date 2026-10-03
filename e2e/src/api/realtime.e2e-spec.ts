@@ -91,7 +91,6 @@ describe("realtime data hub", () => {
     expect(again.body).toMatchObject({ n: 0, deletedCount: 0 });
   });
 
-  // workaround: #1809 - the create event is not compared with REST; see the specs expected to fail below.
   it("pushes a treatment create and delete", async () => {
     const notes = `e2e realtime ${Date.now()}`;
     await postTreatments(tenant.api, [{ eventType: "Note", created_at: minutesAgo(15), notes, enteredBy: "e2e" }]);
@@ -109,8 +108,7 @@ describe("realtime data hub", () => {
     expect(storage([deleted]).identifier).toBe(rest!._id);
   });
 
-  // Bug #1809: the create event carries a different _id than REST. Flip to `it` once fixed.
-  it.fails("carries the REST _id on a treatment create", async () => {
+  it("carries the REST _id on a treatment create", async () => {
     const notes = `e2e realtime id ${Date.now()}`;
     await postTreatments(tenant.api, [{ eventType: "Note", created_at: minutesAgo(25), notes, enteredBy: "e2e" }]);
     const [created] = await hub.waitFor("create", (a) => storage(a).colName === "treatments" && storage(a).doc?.notes === notes, {

@@ -72,25 +72,28 @@ public class SleepSessionRepository : ISleepSessionRepository
         {
             var entity = SleepSessionMapper.ToEntity(session, ctx.TenantId);
 
-            // Dedup by Source + OriginalId. When a prior sync of the same source
-            // record exists, replace its contents in place: keep its primary key
-            // so re-syncs don't churn the session id (and any reference to it).
-            // Soft-deleted rows are read too: a user tombstone forbids re-creating
-            // the session, and a system-swept one is replaced like a live row. The
-            // unique (tenant, source, original_id) index counts soft-deleted rows,
-            // so inserting beside a tombstone would violate it.
-            SleepSessionEntity? existing = null;
+            // Dedup by Source + OriginalId first: a re-sync of the same source record replaces
+            // that row and keeps its primary key, so the session id (and any reference to it)
+            // does not churn. Otherwise dedup by the primary key, which the mapper derives from
+            // an incoming session Id, so an upsert carrying an existing session's Id (with a null
+            // or different OriginalId) replaces that row rather than inserting a duplicate key.
+            // Both lookups read soft-deleted rows: a user tombstone forbids re-creating the
+            // session, and a system-swept one is replaced like a live row. The unique
+            // (tenant, source, original_id) index counts soft-deleted rows, so inserting beside
+            // a tombstone would violate it.
             if (!string.IsNullOrEmpty(entity.OriginalId))
             {
-                existing = await WithSoftDeleted(ctx)
-                    .FirstOrDefaultAsync(s => s.Source == entity.Source && s.OriginalId == entity.OriginalId, token);
+                await LockSourceRecordAsync(ctx, entity, token);
+                var bySourceRecord = await WithSoftDeleted(ctx)
+                    .AsNoTracking()
+                    .Where(s => s.Source == entity.Source && s.OriginalId == entity.OriginalId)
+                    .Select(s => (Guid?)s.Id)
+                    .FirstOrDefaultAsync(token);
+                entity.Id = bySourceRecord ?? entity.Id;
             }
 
-            // Dedup by primary key. The mapper derives a deterministic entity Id
-            // from an incoming session Id, so an upsert carrying an existing
-            // session's Id (with a null or different OriginalId) must replace
-            // that row rather than insert a duplicate key.
-            existing ??= await WithSoftDeleted(ctx).FirstOrDefaultAsync(s => s.Id == entity.Id, token);
+            await LockIdAsync(ctx, entity.Id, token);
+            var existing = await WithSoftDeleted(ctx).FirstOrDefaultAsync(s => s.Id == entity.Id, token);
 
             if (existing is { DeletedAt: not null } && ctx.Entry(existing).Property<bool>("DeletedByUser").CurrentValue)
             {
@@ -100,7 +103,6 @@ public class SleepSessionRepository : ISleepSessionRepository
 
             if (existing is not null)
             {
-                entity.Id = existing.Id;
                 ctx.SleepBiometricSamples.RemoveRange(existing.BiometricSamples);
                 ctx.SleepStages.RemoveRange(existing.Stages);
                 ctx.SleepSessions.Remove(existing);
@@ -113,12 +115,51 @@ public class SleepSessionRepository : ISleepSessionRepository
         }, ct: cancellationToken);
     }
 
+    /// <summary>
+    /// First key of the two-key advisory lock form for the source-record key. Each key kind has its
+    /// own class, so a source-record hash colliding with an id hash is not the same lock.
+    /// </summary>
+    private const int SourceRecordLockClass = 0x534C_5352;
+
+    /// <summary>First key of the two-key advisory lock form for the primary-key key.</summary>
+    private const int IdLockClass = 0x534C_4944;
+
+    /// <summary>
+    /// Serialises writers of one sleep-session key, so a concurrent duplicate waits for the first
+    /// to commit and then replaces its row rather than failing a unique index or deleting a row
+    /// already gone. A PostgreSQL transaction-scoped advisory lock; other providers take nothing.
+    /// Two keys of one kind whose hashes collide only wait for each other. A writer takes the
+    /// source-record key before the primary-key key and never the reverse, so two writers cannot
+    /// deadlock.
+    /// </summary>
+    private static async Task LockAsync(NocturneDbContext ctx, int lockClass, string key, CancellationToken ct)
+    {
+        if (!ctx.Database.IsNpgsql())
+            return;
+
+        await ctx.Database.ExecuteSqlAsync(
+            $"SELECT pg_advisory_xact_lock({lockClass}, hashtext({key}))", ct);
+    }
+
+    /// <summary>The source-record half of <see cref="LockAsync"/>, taken first.</summary>
+    private static Task LockSourceRecordAsync(NocturneDbContext ctx, SleepSessionEntity entity, CancellationToken ct) =>
+        LockAsync(ctx, SourceRecordLockClass, $"{ctx.TenantId}|{entity.Source}|{entity.OriginalId}", ct);
+
+    /// <summary>The primary-key half of <see cref="LockAsync"/>, taken last.</summary>
+    private static Task LockIdAsync(NocturneDbContext ctx, Guid id, CancellationToken ct) =>
+        LockAsync(ctx, IdLockClass, $"{ctx.TenantId}|{id}", ct);
+
     /// <inheritdoc />
     public async Task<SleepSession?> UpdateSessionAsync(Guid id, SleepSession session, CancellationToken cancellationToken = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
         return await ctx.ExecuteInTransactionAsync<SleepSession?>(async token =>
         {
+            var entity = SleepSessionMapper.ToEntity(session, ctx.TenantId);
+            entity.Id = id;
+            if (!string.IsNullOrEmpty(entity.OriginalId))
+                await LockSourceRecordAsync(ctx, entity, token);
+            await LockIdAsync(ctx, id, token);
             var existing = await ctx.SleepSessions
                 .Include(s => s.Stages)
                 .Include(s => s.BiometricSamples)
@@ -126,9 +167,6 @@ public class SleepSessionRepository : ISleepSessionRepository
 
             if (existing is null)
                 return null;
-
-            var entity = SleepSessionMapper.ToEntity(session, ctx.TenantId);
-            entity.Id = id;
 
             // The unique (tenant, source, original_id) index counts soft-deleted rows, so a move onto
             // a key another row holds must settle that row first. A live row or a user tombstone keeps
@@ -174,14 +212,18 @@ public class SleepSessionRepository : ISleepSessionRepository
     public async Task<bool> DeleteSessionAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
-        var existing = await ctx.SleepSessions.FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+        return await ctx.ExecuteInTransactionAsync(async token =>
+        {
+            await LockIdAsync(ctx, id, token);
+            var existing = await ctx.SleepSessions.FirstOrDefaultAsync(s => s.Id == id, token);
 
-        if (existing is null)
-            return false;
+            if (existing is null)
+                return false;
 
-        existing.DeletedAt = DateTime.UtcNow;
-        await ctx.SaveChangesAsync(cancellationToken);
-        return true;
+            existing.DeletedAt = DateTime.UtcNow;
+            await ctx.SaveChangesAsync(token);
+            return true;
+        }, ct: cancellationToken);
     }
 
     /// <summary>

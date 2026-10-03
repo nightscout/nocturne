@@ -62,6 +62,9 @@ public class ActivityServiceTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<SleepSessionType?>(),
                 It.IsAny<SleepSource?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
+            .Returns((IEnumerable<Activity> a) => a);
 
         _activityService = new ActivityService(
             _mockStateSpanService.Object,
@@ -365,6 +368,81 @@ public class ActivityServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task CreateActivitiesAsync_DecompositionFails_ThrowsWithoutStoringOrBroadcasting()
+    {
+        var activities = new List<Activity>
+        {
+            new() { Type = "hr-bpm", Mills = 1_780_000_000_123, AdditionalProperties = new() { ["bpm"] = 72 } },
+            new() { Type = "exercise", Mills = 1_780_000_000_000 },
+        };
+        var failure = new InvalidOperationException("decomposition failed");
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
+            .Returns((IEnumerable<Activity> docs) => docs);
+        _mockActivityDecomposer
+            .Setup(d => d.IsSensorData(It.IsAny<Activity>()))
+            .Returns((Activity a) => a.Type == "hr-bpm");
+        _mockActivityDecomposer
+            .Setup(d => d.DecomposeAsync(It.IsAny<Activity>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var act = () => _activityService.CreateActivitiesAsync(activities, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(failure);
+        _mockStateSpanService.Verify(
+            x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _mockSignalRBroadcastService.Verify(
+            x => x.BroadcastStorageCreateAsync(It.IsAny<string>(), It.IsAny<object>()),
+            Times.Never);
+        _mockLogger.Verify(
+            l => l.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                failure,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CreateActivitiesAsync_SleepWriteFails_ThrowsWithoutStoringOrBroadcasting()
+    {
+        var activities = new List<Activity>
+        {
+            new() { Id = "5f0c0c0c0c0c0c0c0c0c0c01", Type = "sleep", Mills = 1_780_000_000_000, Duration = 420 },
+            new() { Type = "exercise", Mills = 1_780_000_000_000 },
+        };
+        var failure = new InvalidOperationException("sleep write failed");
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
+            .Returns((IEnumerable<Activity> docs) => docs);
+        _mockSleepService
+            .Setup(x => x.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var act = () => _activityService.CreateActivitiesAsync(activities, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(failure);
+        _mockStateSpanService.Verify(
+            x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _mockSignalRBroadcastService.Verify(
+            x => x.BroadcastStorageCreateAsync(It.IsAny<string>(), It.IsAny<object>()),
+            Times.Never);
+        _mockLogger.Verify(
+            l => l.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                failure,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task CreateActivitiesAsync_ClientTimestamp_OutranksCreatedAtThroughDocumentProcessing()
     {
         var activities = System.Text.Json.JsonSerializer.Deserialize<List<Activity>>(
@@ -451,6 +529,42 @@ public class ActivityServiceTests
             x => x.BroadcastStorageUpdateAsync("activity", It.IsAny<object>()),
             Times.Once
         );
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task UpdateActivityAsync_SanitisesAndHonoursTheClientTimestamp_AsCreateDoes()
+    {
+        const string activityId = "507f1f77bcf86cd799439011";
+        var activity = System.Text.Json.JsonSerializer.Deserialize<Activity>(
+            """
+            {"_id":"507f1f77bcf86cd799439011","type":"exercise","timestamp":1780000000123,
+             "created_at":"2026-05-28T20:26:40Z","notes":"<script>alert(1)</script>ran"}
+            """)!;
+        Activity? stored = null;
+        _mockStateSpanService
+            .Setup(x => x.UpdateActivityAsync(activityId, It.IsAny<Activity>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Activity, CancellationToken>((_, a, _) => stored = a)
+            .ReturnsAsync((string _, Activity a, CancellationToken _) => a);
+        var service = new ActivityService(
+            _mockStateSpanService.Object,
+            _mockSleepService.Object,
+            new Nocturne.API.Services.Legacy.DocumentProcessingService(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<
+                    Nocturne.API.Services.Legacy.DocumentProcessingService>.Instance),
+            _mockSignalRBroadcastService.Object,
+            Mock.Of<IDataEventSink<Activity>>(),
+            _mockActivityDecomposer.Object,
+            _mockHeartRateService.Object,
+            _mockStepCountService.Object,
+            _mockLogger.Object
+        );
+
+        await service.UpdateActivityAsync(activityId, activity, CancellationToken.None);
+
+        stored.Should().NotBeNull();
+        stored!.Notes.Should().NotContain("<script").And.Contain("ran");
+        (stored.Mills, stored.CreatedAt).Should().Be((1_780_000_000_123L, "2026-05-28T20:26:40.123Z"));
     }
 
     [Fact]

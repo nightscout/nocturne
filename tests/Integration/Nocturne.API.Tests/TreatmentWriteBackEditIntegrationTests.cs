@@ -96,9 +96,9 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
     };
 
     /// <summary>
-    /// A treatment uploaded through v1 is served back under the coercion of its key, the id a client
-    /// edits it by, and an earlier write-back left its copy upstream under that key as both
-    /// <c>_id</c> and <c>identifier</c>. A v1 edit of it, years later, lands on that copy.
+    /// A treatment uploaded through v1 is answered with the id reads serve it by, the id a client
+    /// edits it by, and an earlier write-back left its copy upstream under the coercion of its key as
+    /// both <c>_id</c> and <c>identifier</c>. A v1 edit of it, years later, lands on that copy.
     /// </summary>
     [Theory]
     [MemberData(nameof(KeyShapes))]
@@ -111,8 +111,9 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
 
         var created = await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", new[] { upload });
         created.IsSuccessStatusCode.Should().BeTrue();
-        (await created.Content.ReadFromJsonAsync<JsonElement>())[0].GetProperty("_id").GetString().Should().Be(wire);
         var bolus = (await LiveBolusesAsync(slot)).Single().Id;
+        (await created.Content.ReadFromJsonAsync<JsonElement>())[0].GetProperty("_id").GetString()
+            .Should().Be(MongoObjectId.FromGuid(bolus));
 
         var upstream = new FakeNightscoutTreatments("15.0.8");
         using (var client = new HttpClient(upstream, disposeHandler: false))

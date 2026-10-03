@@ -161,8 +161,83 @@ public class ActivityDecomposerTombstoneTests : IDisposable
         _context.StepCounts.IgnoreQueryFilters().Should().HaveCount(2);
     }
 
+    [Fact]
+    public async Task DecomposeAsync_DoesNotRecreateAnXDripHeartRateTheUserDeleted()
+    {
+        await SeedXDripHeartRateTombstoneAsync(byUser: true);
+
+        var result = await _decomposer.DecomposeAsync(XDripHeartRate(), WriteOrigin.Live);
+
+        result.SkippedDeleted.Should().Be(1);
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.Should().BeEmpty();
+        _context.ChangeTracker.Clear();
+        _context.HeartRates.Should().BeEmpty();
+        _context.HeartRates.IgnoreQueryFilters().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_WritesAnXDripHeartRateBesideASystemSweep()
+    {
+        await SeedXDripHeartRateTombstoneAsync(byUser: false);
+
+        var result = await _decomposer.DecomposeAsync(XDripHeartRate(), WriteOrigin.Live);
+
+        result.SkippedDeleted.Should().Be(0);
+        result.CreatedRecords.Should().ContainSingle();
+        _context.ChangeTracker.Clear();
+        _context.HeartRates.Should().ContainSingle().Which.SyncIdentifier.Should().Be(XDripHeartRateSyncKey);
+        _context.HeartRates.IgnoreQueryFilters().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_SkipsAnXDripHeartRateTheUserDeleted()
+    {
+        await SeedXDripHeartRateTombstoneAsync(byUser: true);
+
+        var result = await _decomposer.DecomposeBatchAsync([XDripHeartRate()], WriteOrigin.Live);
+
+        result.SkippedDeleted.Should().Be(1);
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.Should().BeEmpty();
+        _context.ChangeTracker.Clear();
+        _context.HeartRates.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_WritesAnXDripHeartRateBesideASystemSweep()
+    {
+        await SeedXDripHeartRateTombstoneAsync(byUser: false);
+
+        var result = await _decomposer.DecomposeBatchAsync([XDripHeartRate()], WriteOrigin.Live);
+
+        result.SkippedDeleted.Should().Be(0);
+        result.CreatedRecords.Should().ContainSingle();
+        _context.ChangeTracker.Clear();
+        _context.HeartRates.Should().ContainSingle();
+        _context.HeartRates.IgnoreQueryFilters().Should().HaveCount(2);
+    }
+
     private const long XDripMills = 1_700_000_000_000;
     private const string XDripSyncKey = "steps-total:1700000000000";
+    private const string XDripHeartRateSyncKey = "hr-bpm:1700000000000";
+
+    private async Task SeedXDripHeartRateTombstoneAsync(bool byUser)
+    {
+        await _decomposer.DecomposeAsync(XDripHeartRate(), WriteOrigin.Live);
+        var row = _context.HeartRates.Single(h => h.SyncIdentifier == XDripHeartRateSyncKey);
+        row.DeletedAt = DateTime.UtcNow;
+        _context.Entry(row).Property("DeletedByUser").CurrentValue = byUser;
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+    }
+
+    private static Activity XDripHeartRate() => new()
+    {
+        Type = "hr-bpm",
+        Mills = XDripMills,
+        AdditionalProperties = new Dictionary<string, object> { ["bpm"] = 72 },
+    };
 
     private async Task SeedXDripStepsTombstoneAsync(bool byUser)
     {

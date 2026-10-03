@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
@@ -260,6 +261,98 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().FirstOrDefaultAsync(e => e.LegacyId == legacyId, ct);
         return entity is null ? null : ToDomain(entity);
+    }
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetByLegacyIdUuidPrefixAsync" />
+    /// <remarks>
+    /// Each range spans one case of one form, so it is correct under any collation that orders
+    /// same-case hex digits in hex order (C, libc and ICU all do). The ILIKE only re-checks the
+    /// rows a range admitted.
+    /// </remarks>
+    public async Task<TModel?> GetByLegacyIdUuidPrefixAsync(string objectId, CancellationToken ct = default)
+    {
+        if (!MongoObjectId.IsObjectId(objectId))
+            return null;
+
+        var dashed = string.Join('-', objectId[..8], objectId[8..12], objectId[12..16], objectId[16..20], objectId[20..]);
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        IQueryable<TEntity> InRange(string prefix, string lowSuffix, string highSuffix, int length)
+        {
+            var (low, high, pattern) = (prefix + lowSuffix, prefix + highSuffix, prefix + "%");
+            return ctx.Set<TEntity>().Where(e => e.LegacyId != null
+                && string.Compare(e.LegacyId, low) >= 0
+                && string.Compare(e.LegacyId, high) <= 0
+                && e.LegacyId.Length == length
+                && EF.Functions.ILike(e.LegacyId, pattern));
+        }
+
+        var entity = await InRange(dashed, "00000000", "ffffffff", 36)
+            .Concat(InRange(dashed.ToUpperInvariant(), "00000000", "FFFFFFFF", 36))
+            .Concat(InRange(objectId, "00000000", "ffffffff", 32))
+            .Concat(InRange(objectId.ToUpperInvariant(), "00000000", "FFFFFFFF", 32))
+            .OrderBy(e => e.Id)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : ToDomain(entity);
+    }
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetByLegacyIdHashAsync" />
+    /// <remarks>
+    /// Mirrors <see cref="MongoObjectId.Coerce"/> in SQL: the first 12 bytes of the SHA-256 of the
+    /// UTF-8 legacy id, as lowercase hex.
+    /// </remarks>
+    public async Task<TModel?> GetByLegacyIdHashAsync(string objectId, CancellationToken ct = default)
+    {
+        if (!MongoObjectId.IsObjectId(objectId))
+            return null;
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = await WhereLegacyIdHashesTo(ctx, objectId)
+            .OrderBy(e => e.Id)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : ToDomain(entity);
+    }
+
+    /// <summary>
+    /// The rows whose legacy id <see cref="MongoObjectId.Coerce"/> hashes into
+    /// <paramref name="objectId"/>, under the context's query filters.
+    /// </summary>
+    private static IQueryable<TEntity> WhereLegacyIdHashesTo(NocturneDbContext ctx, string objectId)
+    {
+        var entityType = ctx.Model.FindEntityType(typeof(TEntity))!;
+        var tableName = SqlIdentifier.Require(entityType.GetTableName()!, nameof(TEntity));
+        var schema = entityType.GetSchema();
+        var table = schema is null ? tableName : SqlIdentifier.Require(schema, nameof(TEntity)) + "." + tableName;
+        var column = SqlIdentifier.Require(
+            entityType.FindProperty(nameof(IV4Entity.LegacyId))!
+                .GetColumnName(StoreObjectIdentifier.Table(tableName, schema))!,
+            nameof(IV4Entity.LegacyId));
+
+        var sql = "SELECT * FROM " + table + " WHERE "
+            + "encode(substring(sha256(convert_to(" + column + ", 'UTF8')) FROM 1 FOR 12), 'hex') = {0}";
+
+        return ctx.Set<TEntity>().FromSqlRaw(sql, objectId);
+    }
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.IsDeletedByUserAsync" />
+    public async Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var tombstones = ctx.Set<TEntity>().UserTombstones(ctx);
+
+        if (Guid.TryParse(id, out var guid))
+            return await tombstones.AnyAsync(e => e.Id == guid || e.LegacyId == id, ct);
+
+        if (!MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+            return await tombstones.AnyAsync(e => e.LegacyId == id, ct);
+
+        var dashed = string.Join('-', id[..8], id[8..12], id[12..16], id[16..20], id[20..]) + "%";
+        var dashless = id + "%";
+        return await tombstones.AnyAsync(e => e.LegacyId == id
+                || (e.Id >= low && e.Id <= high)
+                || (e.LegacyId != null && e.LegacyId.Length == 36 && EF.Functions.ILike(e.LegacyId, dashed))
+                || (e.LegacyId != null && e.LegacyId.Length == 32 && EF.Functions.ILike(e.LegacyId, dashless)), ct)
+            || await WhereLegacyIdHashesTo(ctx, id).UserTombstones(ctx).AnyAsync(ct);
     }
 
     /// <inheritdoc cref="ILegacyKeyedRepository{T}.GetCorrelationIdsByLegacyIdAsync" />

@@ -128,21 +128,19 @@ public class TreatmentReadService : ITreatmentStore
     /// <inheritdoc />
     public async Task<Treatment?> GetByIdAsync(string id, CancellationToken ct = default)
     {
-        if (Guid.TryParse(id, out var guid))
-            return await GetByGuidAsync(guid, ct);
-
-        // A non-UUID id is either a legacy/AAPS-supplied ObjectId (stored as LegacyId) or a 24-hex
-        // ObjectId we derived from the record's UUID for the wire. Try the exact LegacyId match
-        // first, then resolve a derived ObjectId via its uuid prefix range.
-        var byLegacy = await GetByLegacyIdAsync(id, ct);
-        if (byLegacy != null)
-            return byLegacy;
-
-        if (MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
-            return await ResolveByGuidRangeAsync(low, high, ct);
-
-        return null;
+        var stored = await FindStoredRecordAsync(id, ct);
+        return stored is null ? null : await ProjectAsync(stored.Record, ct);
     }
+
+    /// <inheritdoc />
+    public async Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default)
+        => await _tempBasalRepo.IsDeletedByUserAsync(id, ct)
+            || await _bolusRepo.IsDeletedByUserAsync(id, ct)
+            || await _carbIntakeRepo.IsDeletedByUserAsync(id, ct)
+            || await _bgCheckRepo.IsDeletedByUserAsync(id, ct)
+            || await _deviceEventRepo.IsDeletedByUserAsync(id, ct)
+            || await _bolusCalcRepo.IsDeletedByUserAsync(id, ct)
+            || await _noteRepo.IsDeletedByUserAsync(id, ct);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Treatment>> GetByRangeAsync(
@@ -180,21 +178,12 @@ public class TreatmentReadService : ITreatmentStore
             {
                 var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
                 skippedDeleted += result.SkippedDeleted;
-                var tempBasal = result.CreatedRecords
-                    .OfType<Core.Models.V4.TempBasal>()
-                    .FirstOrDefault();
-                if (tempBasal != null)
-                    results.Add(TempBasalToTreatmentMapper.ToTreatment(tempBasal));
-                else
-                    results.Add(treatment);
+                results.Add(ToCreated(treatment, result));
             }
             catch (OperationCanceledException)
             {
-                // A canceled request (client disconnect, shutdown) is control flow,
-                // not a bad treatment. Let it abort the batch — swallowing it here
-                // turns one cancellation into a per-record "failure" logged for every
-                // remaining treatment, since each subsequent DB call on the canceled
-                // token throws too.
+                // Every later call on a canceled token throws too, so catching it here would log
+                // each remaining treatment as a failure instead of ending the batch.
                 throw;
             }
             catch (Exception ex)
@@ -210,22 +199,21 @@ public class TreatmentReadService : ITreatmentStore
     /// <inheritdoc />
     public async Task<Treatment?> UpdateAsync(string id, Treatment treatment, CancellationToken ct = default)
     {
-        var existing = await GetByIdAsync(id, ct);
-        if (existing == null) return null;
+        var stored = await FindStoredRecordAsync(id, ct);
+        if (stored is null || await ProjectAsync(stored.Record, ct) is not { } existing)
+            return null;
 
         TreatmentClientId.KeepStored(treatment, existing);
 
-        // Re-key to the stored LegacyId so the decomposer upserts the existing record in place
-        // rather than creating a duplicate when the client sends a derived ObjectId.
-        treatment.Id = await ResolveCanonicalIdAsync(id, ct) ?? id;
+        treatment.Id = await UpsertKeyAsync(stored, ct);
         try
         {
             await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
-            return await GetByIdAsync(id, ct);
+            return await GetByIdAsync(stored.Record.Id.ToString(), ct);
         }
         catch (OperationCanceledException)
         {
-            // Canceled request is control flow, not an update failure — propagate.
+            // Canceled request is control flow, not an update failure: propagate.
             throw;
         }
         catch (Exception ex)
@@ -236,57 +224,24 @@ public class TreatmentReadService : ITreatmentStore
     }
 
     /// <inheritdoc />
-    public async Task<bool> DeleteAsync(string id, CancellationToken ct = default)
+    public async Task<TreatmentDeletion?> DeleteAsync(string id, CancellationToken ct = default)
     {
-        var deleted = await _pipeline.DeleteByLegacyIdAsync<Treatment>(id, WriteOrigin.Live, ct);
+        var stored = await FindStoredRecordAsync(id, ct);
+        if (stored is null)
+            return null;
 
-        // Also check TempBasal (not covered by the pipeline's LegacyId delete)
-        var tempBasal = await _tempBasalRepo.GetByLegacyIdAsync(id, ct);
-        if (tempBasal == null && Guid.TryParse(id, out var guid))
-            tempBasal = await _tempBasalRepo.GetByIdAsync(guid, ct);
+        var served = await ProjectAsync(stored.Record, ct);
 
-        if (tempBasal != null)
-        {
-            try
-            {
-                await _tempBasalRepo.DeleteAsync(tempBasal.Id, WriteOrigin.Live, ct);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to delete TempBasal record {Id}", tempBasal.Id);
-                return false;
-            }
-        }
+        // Every record one treatment decomposed into (a meal bolus's carb, a bolus wizard's
+        // calculation) shares its legacy id, so deleting by it leaves no sibling behind as a
+        // phantom treatment of its own.
+        if (!string.IsNullOrEmpty(stored.Record.LegacyId))
+            return await _pipeline.DeleteByLegacyIdAsync<Treatment>(stored.Record.LegacyId, WriteOrigin.Live, ct) > 0
+                ? new TreatmentDeletion(served)
+                : null;
 
-        // Projected treatments for V4 rows carry the raw record UUID as their id (the 24-hex
-        // ObjectId form only exists on the wire), so the filtered bulk-delete path and direct
-        // by-UUID deletes arrive here with a Guid string. Resolve it across the repos, preferring
-        // the stored LegacyId so correlated siblings (e.g. a meal bolus's carb) go together.
-        if (deleted == 0 && Guid.TryParse(id, out var recordId)
-            && await DeleteByRecordIdAsync(recordId, ct))
-            return true;
-
-        // A 24-hex ObjectId AAPS derived from the record's UUID: resolve it via the uuid prefix
-        // range. Prefer deleting by the resolved record's LegacyId so correlated siblings (e.g. a
-        // meal bolus's carb, a bolus wizard's calculation) are removed together — DeleteByGuidRange
-        // only deletes the single matched row, which would orphan the sibling into a phantom.
-        if (deleted == 0 && MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
-        {
-            var legacyId = await FindLegacyIdByGuidRangeAsync(low, high, ct);
-            if (!string.IsNullOrEmpty(legacyId))
-            {
-                deleted = await _pipeline.DeleteByLegacyIdAsync<Treatment>(legacyId, WriteOrigin.Live, ct);
-                if (deleted > 0)
-                    return true;
-            }
-
-            // Native row with no LegacyId (no correlated sibling to worry about): delete by UUID.
-            if (await DeleteByGuidRangeAsync(low, high, ct))
-                return true;
-        }
-
-        return deleted > 0;
+        await stored.DeleteAsync(ct);
+        return new TreatmentDeletion(served);
     }
 
     /// <inheritdoc />
@@ -323,257 +278,168 @@ public class TreatmentReadService : ITreatmentStore
              + deviceEventCount + tempBasalCount + bolusCalcCount;
     }
 
-    #region Private — GetById helpers
+    #region Private - stored record resolution
 
-    private async Task<Treatment?> GetByGuidAsync(Guid id, CancellationToken ct)
+    /// <summary>
+    /// The create response for a decomposed treatment. It carries the id every read serves for the
+    /// treatment, so a client that keeps the response id (Loop's objectIdCache, AAPS's nightscoutId)
+    /// can edit and delete by it later; the client's own id stays stored as the records' LegacyId.
+    /// That legacy id rides along as <see cref="Treatment.LegacyId"/>, the key write-back sends the
+    /// treatment upstream under. A treatment that wrote none of the projected tables keeps the id it
+    /// was sent with.
+    /// </summary>
+    private static Treatment ToCreated(Treatment treatment, DecompositionResult result)
     {
-        var idStr = id.ToString();
+        var written = result.CreatedRecords.Concat(result.UpdatedRecords).ToList();
+        if (written.OfType<Core.Models.V4.TempBasal>().FirstOrDefault() is { } tempBasal)
+            return TempBasalToTreatmentMapper.ToTreatment(tempBasal);
 
-        // Search across all V4 repos by ID, project at that timestamp with a
-        // reasonable limit, and find the projected treatment that contains this ID.
-        var bolus = await _bolusRepo.GetByIdAsync(id, ct);
-        if (bolus != null)
-            return await FindProjectedTreatmentAsync(bolus.Mills, idStr, ct);
-
-        var carbIntake = await _carbIntakeRepo.GetByIdAsync(id, ct);
-        if (carbIntake != null)
+        var served = ServedRecordTypes
+            .Select(type => written.OfType<IV4Record>().FirstOrDefault(type.IsInstanceOfType))
+            .FirstOrDefault(record => record is not null);
+        if (served is not null)
         {
-            // CarbIntake paired into a Meal Bolus gets the Bolus's ID as the projected Treatment.Id.
-            if (carbIntake.CorrelationId.HasValue)
-            {
-                var pairedBoluses = await _bolusRepo.GetByCorrelationIdAsync(carbIntake.CorrelationId.Value, ct);
-                var pairedBolus = pairedBoluses.FirstOrDefault();
-                if (pairedBolus != null)
-                    return await FindProjectedTreatmentAsync(pairedBolus.Mills, pairedBolus.Id.ToString(), ct);
-            }
-            // Unpaired carb correction: the projected Treatment.Id is the CarbIntake's ID
-            return await FindProjectedTreatmentAsync(carbIntake.Mills, idStr, ct);
+            treatment.LegacyId = served.LegacyId;
+            treatment.Id = served.Id.ToString();
         }
 
-        var bgCheck = await _bgCheckRepo.GetByIdAsync(id, ct);
-        if (bgCheck != null)
-            return await FindProjectedTreatmentAsync(bgCheck.Mills, idStr, ct);
-
-        var note = await _noteRepo.GetByIdAsync(id, ct);
-        if (note != null)
-            return await FindProjectedTreatmentAsync(note.Mills, idStr, ct);
-
-        var deviceEvent = await _deviceEventRepo.GetByIdAsync(id, ct);
-        if (deviceEvent != null)
-            return await FindProjectedTreatmentAsync(deviceEvent.Mills, idStr, ct);
-
-        var bolusCalc = await _bolusCalcRepo.GetByIdAsync(id, ct);
-        if (bolusCalc != null)
-            return await FindProjectedTreatmentAsync(bolusCalc.Mills, idStr, ct);
-
-        var tempBasal = await _tempBasalRepo.GetByIdAsync(id, ct);
-        if (tempBasal != null)
-            return TempBasalToTreatmentMapper.ToTreatment(tempBasal);
-
-        return null;
+        return treatment;
     }
 
     /// <summary>
-    /// Resolves a UUID prefix range (from a derived 24-hex ObjectId) to a projected treatment by
-    /// finding which V4 table holds the record, then reusing the by-UUID projection logic so meal
-    /// pairing and temp-basal mapping are handled identically to a normal lookup.
+    /// The record a decomposed treatment is read back under: a bolus heads a Meal Bolus, and a note
+    /// is only its own treatment when nothing else was written.
     /// </summary>
-    private async Task<Treatment?> ResolveByGuidRangeAsync(Guid low, Guid high, CancellationToken ct)
-    {
-        var bolus = await _bolusRepo.GetByGuidRangeAsync(low, high, ct);
-        if (bolus != null)
-            return await GetByGuidAsync(bolus.Id, ct);
-
-        var carbIntake = await _carbIntakeRepo.GetByGuidRangeAsync(low, high, ct);
-        if (carbIntake != null)
-            return await GetByGuidAsync(carbIntake.Id, ct);
-
-        var bgCheck = await _bgCheckRepo.GetByGuidRangeAsync(low, high, ct);
-        if (bgCheck != null)
-            return await GetByGuidAsync(bgCheck.Id, ct);
-
-        var note = await _noteRepo.GetByGuidRangeAsync(low, high, ct);
-        if (note != null)
-            return await GetByGuidAsync(note.Id, ct);
-
-        var deviceEvent = await _deviceEventRepo.GetByGuidRangeAsync(low, high, ct);
-        if (deviceEvent != null)
-            return await GetByGuidAsync(deviceEvent.Id, ct);
-
-        var bolusCalc = await _bolusCalcRepo.GetByGuidRangeAsync(low, high, ct);
-        if (bolusCalc != null)
-            return await GetByGuidAsync(bolusCalc.Id, ct);
-
-        var tempBasal = await _tempBasalRepo.GetByGuidRangeAsync(low, high, ct);
-        if (tempBasal != null)
-            return TempBasalToTreatmentMapper.ToTreatment(tempBasal);
-
-        return null;
-    }
+    private static readonly Type[] ServedRecordTypes =
+    [
+        typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(DeviceEvent), typeof(BolusCalculation), typeof(Note),
+    ];
 
     /// <summary>
-    /// Maps a wire id (a 24-hex ObjectId derived from a record's UUID) to the <c>LegacyId</c> the
-    /// decomposer upserts on, so an update re-decomposes the existing record in place instead of
-    /// creating a duplicate. Returns null for a raw UUID or an id that is already the stored key
-    /// (the caller falls back to the existing id in that case).
+    /// Resolves a client-sent treatment id to the stored record it names. Each key is tried against
+    /// every table before the next, looser one, so an exact match always wins over a prefix or hash
+    /// match. The records of one treatment share its legacy id, so the tables are tried in the order
+    /// <see cref="ToCreated"/> names a treatment by: a legacy id resolves to the record the create
+    /// returned, not to the note any treatment with notes also writes.
     /// </summary>
-    public async Task<string?> ResolveCanonicalIdAsync(string id, CancellationToken ct = default)
+    private async Task<StoredRecord?> FindStoredRecordAsync(string id, CancellationToken ct)
     {
-        if (Guid.TryParse(id, out _))
-            return null;
-
-        if (!MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
-            return null;
-
-        // Return the decomposer's upsert key (LegacyId). A native V4 row has no LegacyId, so the
-        // decomposer can't match it and would insert a duplicate; backfill it with the derived
-        // ObjectId (which is what the wire already shows for this record) so the update lands in
-        // place. Short-circuits on the first repo that owns the record.
-        return await ResolveOrBackfillLegacyIdAsync(_bolusRepo, low, high, ct)
-            ?? await ResolveOrBackfillLegacyIdAsync(_carbIntakeRepo, low, high, ct)
-            ?? await ResolveOrBackfillLegacyIdAsync(_bgCheckRepo, low, high, ct)
-            ?? await ResolveOrBackfillLegacyIdAsync(_noteRepo, low, high, ct)
-            ?? await ResolveOrBackfillLegacyIdAsync(_deviceEventRepo, low, high, ct)
-            ?? await ResolveOrBackfillLegacyIdAsync(_bolusCalcRepo, low, high, ct)
-            ?? await ResolveOrBackfillLegacyIdAsync(_tempBasalRepo, low, high, ct);
-    }
-
-    private static async Task<string?> ResolveOrBackfillLegacyIdAsync<T>(
-        IV4Repository<T> repo, Guid low, Guid high, CancellationToken ct) where T : class, IV4Record
-    {
-        var entity = await repo.GetByGuidRangeAsync(low, high, ct);
-        if (entity is null) return null;
-        if (!string.IsNullOrEmpty(entity.LegacyId)) return entity.LegacyId;
-
-        var objectId = MongoObjectId.FromGuid(entity.Id);
-        entity.LegacyId = objectId;
-        await repo.UpdateAsync(entity.Id, entity, WriteOrigin.Live, ct);
-        return objectId;
-    }
-
-    private async Task<string?> FindLegacyIdByGuidRangeAsync(Guid low, Guid high, CancellationToken ct)
-    {
-        var bolus = await _bolusRepo.GetByGuidRangeAsync(low, high, ct);
-        if (bolus != null) return bolus.LegacyId;
-
-        var carbIntake = await _carbIntakeRepo.GetByGuidRangeAsync(low, high, ct);
-        if (carbIntake != null) return carbIntake.LegacyId;
-
-        var bgCheck = await _bgCheckRepo.GetByGuidRangeAsync(low, high, ct);
-        if (bgCheck != null) return bgCheck.LegacyId;
-
-        var note = await _noteRepo.GetByGuidRangeAsync(low, high, ct);
-        if (note != null) return note.LegacyId;
-
-        var deviceEvent = await _deviceEventRepo.GetByGuidRangeAsync(low, high, ct);
-        if (deviceEvent != null) return deviceEvent.LegacyId;
-
-        var bolusCalc = await _bolusCalcRepo.GetByGuidRangeAsync(low, high, ct);
-        if (bolusCalc != null) return bolusCalc.LegacyId;
-
-        var tempBasal = await _tempBasalRepo.GetByGuidRangeAsync(low, high, ct);
-        if (tempBasal != null) return tempBasal.LegacyId;
-
-        return null;
-    }
-
-    /// <summary>
-    /// Deletes the record with the given UUID from whichever repo owns it, via LegacyId when one
-    /// is stored (so correlated siblings are removed together). TempBasal is handled by the
-    /// caller before this runs.
-    /// </summary>
-    private async Task<bool> DeleteByRecordIdAsync(Guid id, CancellationToken ct)
-    {
-        return await TryDeleteFromRepoAsync(_bolusRepo, id, ct)
-            || await TryDeleteFromRepoAsync(_carbIntakeRepo, id, ct)
-            || await TryDeleteFromRepoAsync(_bgCheckRepo, id, ct)
-            || await TryDeleteFromRepoAsync(_noteRepo, id, ct)
-            || await TryDeleteFromRepoAsync(_deviceEventRepo, id, ct)
-            || await TryDeleteFromRepoAsync(_bolusCalcRepo, id, ct);
-    }
-
-    private async Task<bool> TryDeleteFromRepoAsync<T>(
-        IV4Repository<T> repo, Guid id, CancellationToken ct) where T : class, IV4Record
-    {
-        var record = await repo.GetByIdAsync(id, ct);
-        if (record is null)
-            return false;
-
-        if (!string.IsNullOrEmpty(record.LegacyId))
-            return await _pipeline.DeleteByLegacyIdAsync<Treatment>(record.LegacyId, WriteOrigin.Live, ct) > 0;
-
-        // Native row with no LegacyId (no correlated sibling to worry about): delete directly.
-        await repo.DeleteAsync(id, WriteOrigin.Live, ct);
-        return true;
-    }
-
-    /// <summary>Deletes the record inside a UUID prefix range (derived ObjectId) by its real UUID.</summary>
-    private async Task<bool> DeleteByGuidRangeAsync(Guid low, Guid high, CancellationToken ct)
-    {
-        var bolus = await _bolusRepo.GetByGuidRangeAsync(low, high, ct);
-        if (bolus != null) { await _bolusRepo.DeleteAsync(bolus.Id, WriteOrigin.Live, ct); return true; }
-
-        var carbIntake = await _carbIntakeRepo.GetByGuidRangeAsync(low, high, ct);
-        if (carbIntake != null) { await _carbIntakeRepo.DeleteAsync(carbIntake.Id, WriteOrigin.Live, ct); return true; }
-
-        var bgCheck = await _bgCheckRepo.GetByGuidRangeAsync(low, high, ct);
-        if (bgCheck != null) { await _bgCheckRepo.DeleteAsync(bgCheck.Id, WriteOrigin.Live, ct); return true; }
-
-        var note = await _noteRepo.GetByGuidRangeAsync(low, high, ct);
-        if (note != null) { await _noteRepo.DeleteAsync(note.Id, WriteOrigin.Live, ct); return true; }
-
-        var deviceEvent = await _deviceEventRepo.GetByGuidRangeAsync(low, high, ct);
-        if (deviceEvent != null) { await _deviceEventRepo.DeleteAsync(deviceEvent.Id, WriteOrigin.Live, ct); return true; }
-
-        var bolusCalc = await _bolusCalcRepo.GetByGuidRangeAsync(low, high, ct);
-        if (bolusCalc != null) { await _bolusCalcRepo.DeleteAsync(bolusCalc.Id, WriteOrigin.Live, ct); return true; }
-
-        var tempBasal = await _tempBasalRepo.GetByGuidRangeAsync(low, high, ct);
-        if (tempBasal != null) { await _tempBasalRepo.DeleteAsync(tempBasal.Id, WriteOrigin.Live, ct); return true; }
-
-        return false;
-    }
-
-    private async Task<Treatment?> GetByLegacyIdAsync(string legacyId, CancellationToken ct)
-    {
-        var bolus = await _bolusRepo.GetByLegacyIdAsync(legacyId, ct);
-        if (bolus != null)
-            return await FindProjectedTreatmentAsync(bolus.Mills, bolus.Id.ToString(), ct);
-
-        var carbIntake = await _carbIntakeRepo.GetByLegacyIdAsync(legacyId, ct);
-        if (carbIntake != null)
+        foreach (var key in RecordKeysFor(id))
         {
-            if (carbIntake.CorrelationId.HasValue)
-            {
-                var pairedBoluses = await _bolusRepo.GetByCorrelationIdAsync(carbIntake.CorrelationId.Value, ct);
-                var pairedBolus = pairedBoluses.FirstOrDefault();
-                if (pairedBolus != null)
-                    return await FindProjectedTreatmentAsync(pairedBolus.Mills, pairedBolus.Id.ToString(), ct);
-            }
-            return await FindProjectedTreatmentAsync(carbIntake.Mills, carbIntake.Id.ToString(), ct);
+            var stored = await FindAsync(_tempBasalRepo, key, ct)
+                ?? await FindAsync(_bolusRepo, key, ct)
+                ?? await FindAsync(_carbIntakeRepo, key, ct)
+                ?? await FindAsync(_bgCheckRepo, key, ct)
+                ?? await FindAsync(_deviceEventRepo, key, ct)
+                ?? await FindAsync(_bolusCalcRepo, key, ct)
+                ?? await FindAsync(_noteRepo, key, ct);
+            if (stored is not null)
+                return stored;
         }
 
-        var bgCheck = await _bgCheckRepo.GetByLegacyIdAsync(legacyId, ct);
-        if (bgCheck != null)
-            return await FindProjectedTreatmentAsync(bgCheck.Mills, bgCheck.Id.ToString(), ct);
+        return null;
+    }
 
-        var noteRecord = await _noteRepo.GetByLegacyIdAsync(legacyId, ct);
-        if (noteRecord != null)
-            return await FindProjectedTreatmentAsync(noteRecord.Mills, noteRecord.Id.ToString(), ct);
+    /// <summary>
+    /// A UUID is a record's own id or a client's legacy id. A 24-hex id is a client's legacy id, the
+    /// prefix of a record's own id (the id reads serve), or the coerced legacy id an older create
+    /// echoed.
+    /// </summary>
+    private static IEnumerable<RecordKey> RecordKeysFor(string id)
+    {
+        if (Guid.TryParse(id, out var guid))
+        {
+            yield return new RecordKey.RecordId(guid);
+            yield return new RecordKey.LegacyId(id);
+            yield break;
+        }
 
-        var deviceEvent = await _deviceEventRepo.GetByLegacyIdAsync(legacyId, ct);
-        if (deviceEvent != null)
-            return await FindProjectedTreatmentAsync(deviceEvent.Mills, deviceEvent.Id.ToString(), ct);
+        yield return new RecordKey.LegacyId(id);
 
-        var bolusCalc = await _bolusCalcRepo.GetByLegacyIdAsync(legacyId, ct);
-        if (bolusCalc != null)
-            return await FindProjectedTreatmentAsync(bolusCalc.Mills, bolusCalc.Id.ToString(), ct);
+        if (MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+        {
+            yield return new RecordKey.RecordIdPrefix(low, high);
+            yield return new RecordKey.LegacyIdUuidPrefix(id);
+            yield return new RecordKey.LegacyIdHash(id);
+        }
+    }
 
-        var tempBasal = await _tempBasalRepo.GetByLegacyIdAsync(legacyId, ct);
-        if (tempBasal != null)
+    private static async Task<StoredRecord?> FindAsync<T>(
+        ILegacyKeyedRepository<T> repo, RecordKey key, CancellationToken ct) where T : class, IV4Record
+    {
+        var record = key switch
+        {
+            RecordKey.RecordId k => await repo.GetByIdAsync(k.Id, ct),
+            RecordKey.LegacyId k => await repo.GetByLegacyIdAsync(k.Id, ct),
+            RecordKey.RecordIdPrefix k => await repo.GetByGuidRangeAsync(k.Low, k.High, ct),
+            RecordKey.LegacyIdUuidPrefix k => await repo.GetByLegacyIdUuidPrefixAsync(k.ObjectId, ct),
+            RecordKey.LegacyIdHash k => await repo.GetByLegacyIdHashAsync(k.ObjectId, ct),
+            _ => throw new ArgumentOutOfRangeException(nameof(key)),
+        };
+
+        return record is null
+            ? null
+            : new StoredRecord(
+                record,
+                c => repo.DeleteAsync(record.Id, WriteOrigin.Live, c),
+                c => repo.UpdateAsync(record.Id, record, WriteOrigin.Live, c));
+    }
+
+    private async Task<Treatment?> ProjectAsync(IV4Record record, CancellationToken ct)
+    {
+        if (record is Core.Models.V4.TempBasal tempBasal)
             return TempBasalToTreatmentMapper.ToTreatment(tempBasal);
 
-        return null;
+        // A carb intake paired into a Meal Bolus is served under the bolus's id.
+        if (record is CarbIntake { CorrelationId: { } correlationId }
+            && (await _bolusRepo.GetByCorrelationIdAsync(correlationId, ct)).FirstOrDefault() is { } pairedBolus)
+            return await FindProjectedTreatmentAsync(pairedBolus.Mills, pairedBolus.Id.ToString(), ct);
+
+        return await FindProjectedTreatmentAsync(record.Mills, record.Id.ToString(), ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<Treatment?> GetForUpdateAsync(string id, CancellationToken ct = default)
+    {
+        var stored = await FindStoredRecordAsync(id, ct);
+        if (stored is null || await ProjectAsync(stored.Record, ct) is not { } existing)
+            return null;
+
+        existing.Id = await UpsertKeyAsync(stored, ct);
+        return existing;
+    }
+
+    /// <summary>
+    /// The LegacyId the decomposer upserts a stored record on. A native V4 row has none, so the
+    /// decomposer could not match it and would insert a duplicate; it is given the id the wire
+    /// already shows for it.
+    /// </summary>
+    private static async Task<string> UpsertKeyAsync(StoredRecord stored, CancellationToken ct)
+    {
+        if (!string.IsNullOrEmpty(stored.Record.LegacyId))
+            return stored.Record.LegacyId;
+
+        stored.Record.LegacyId = MongoObjectId.FromGuid(stored.Record.Id);
+        await stored.SaveAsync(ct);
+        return stored.Record.LegacyId;
+    }
+
+    private sealed record StoredRecord(
+        IV4Record Record,
+        Func<CancellationToken, Task> DeleteAsync,
+        Func<CancellationToken, Task> SaveAsync);
+
+    private abstract record RecordKey
+    {
+        public sealed record RecordId(Guid Id) : RecordKey;
+
+        public sealed record LegacyId(string Id) : RecordKey;
+
+        public sealed record RecordIdPrefix(Guid Low, Guid High) : RecordKey;
+
+        public sealed record LegacyIdUuidPrefix(string ObjectId) : RecordKey;
+
+        public sealed record LegacyIdHash(string ObjectId) : RecordKey;
     }
 
     private async Task<Treatment?> FindProjectedTreatmentAsync(

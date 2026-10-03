@@ -114,19 +114,18 @@ public class TreatmentServiceTests
     public async Task DeleteTreatmentAsync_ShouldInvalidateCacheAndPublishEvent()
     {
         var existing = new Treatment { Id = "id" };
-        _mockStore.Setup(x => x.GetByIdAsync("id", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
-        _mockStore.Setup(x => x.DeleteAsync("id", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _mockStore.Setup(x => x.DeleteAsync("id", It.IsAny<CancellationToken>())).ReturnsAsync(new TreatmentDeletion(existing));
         var result = await _treatmentService.DeleteTreatmentAsync("id", CancellationToken.None);
         result.Should().BeTrue();
         _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
         _mockEvents.Verify(x => x.OnDeletedAsync(existing, It.IsAny<CancellationToken>()), Times.Once);
+        _mockStore.Verify(x => x.GetByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task DeleteTreatmentAsync_WhenNotFound_ShouldNotInvalidateOrPublish()
     {
-        _mockStore.Setup(x => x.GetByIdAsync("x", It.IsAny<CancellationToken>())).ReturnsAsync((Treatment?)null);
-        _mockStore.Setup(x => x.DeleteAsync("x", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _mockStore.Setup(x => x.DeleteAsync("x", It.IsAny<CancellationToken>())).ReturnsAsync((TreatmentDeletion?)null);
         var result = await _treatmentService.DeleteTreatmentAsync("x", CancellationToken.None);
         result.Should().BeFalse();
         _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -154,7 +153,7 @@ public class TreatmentServiceTests
     public async Task PatchTreatmentAsync_WhenExists_AppliesPatchAndDecomposes()
     {
         var existing = new Treatment { Id = "t1", Mills = 1000, EventType = "Note", Notes = "old" };
-        _mockStore.Setup(x => x.GetByIdAsync("t1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        _mockStore.Setup(x => x.GetForUpdateAsync("t1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
         _mockDecomposer.Setup(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult());
 
@@ -166,20 +165,21 @@ public class TreatmentServiceTests
         _mockDecomposer.Verify(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
         _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
         _mockEvents.Verify(x => x.OnUpdatedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockStore.Verify(x => x.GetForUpdateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockStore.Verify(x => x.GetByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>
-    /// A PATCH by the raw legacy id resolves no canonical id. The edit is decomposed under the legacy
-    /// id, so it updates the stored record in place, and raised with it, the key write-back sends the
-    /// edit under, although the merge round trips through JSON, where the legacy id is not carried.
+    /// A PATCH by the raw legacy id is decomposed under the legacy id, so it updates the stored record
+    /// in place, and raised with it, the key write-back sends the edit under, although the merge round
+    /// trips through JSON, where the legacy id is not carried.
     /// </summary>
     [Fact]
     public async Task PatchTreatmentAsync_ByTheRawLegacyId_DecomposesAndRaisesTheEditUnderItsLegacyId()
     {
         const string legacyId = "65a1b2c3d4e5f60718293a4b";
-        const string uuid = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
-        _mockStore.Setup(x => x.GetByIdAsync(legacyId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Treatment { Id = uuid, LegacyId = legacyId, Mills = 1000, EventType = "Correction Bolus", Insulin = 1 });
+        _mockStore.Setup(x => x.GetForUpdateAsync(legacyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Treatment { Id = legacyId, LegacyId = legacyId, Mills = 1000, EventType = "Correction Bolus", Insulin = 1 });
         _mockDecomposer.Setup(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult());
 
@@ -196,7 +196,7 @@ public class TreatmentServiceTests
     [Fact]
     public async Task PatchTreatmentAsync_WhenNotFound_ReturnsNull()
     {
-        _mockStore.Setup(x => x.GetByIdAsync("x", It.IsAny<CancellationToken>())).ReturnsAsync((Treatment?)null);
+        _mockStore.Setup(x => x.GetForUpdateAsync("x", It.IsAny<CancellationToken>())).ReturnsAsync((Treatment?)null);
 
         var patchJson = JsonSerializer.Deserialize<JsonElement>("{\"notes\":\"updated\"}");
         var result = await _treatmentService.PatchTreatmentAsync("x", patchJson, CancellationToken.None);
