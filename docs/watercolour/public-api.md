@@ -61,11 +61,10 @@ player.dispose();
 
 Use `seekTo(progress)` for interaction-driven progress. Requests coalesce to the latest target;
 live checkpoint replay advances in bounded slices through the shared frame budget. Baked frames
-seek directly. `state.seeking` remains true until the live target is presented. Calling `play()`
+seek directly. `state.seeking` remains true until the target is presented. Live `play()`
 while seeking waits for that target, then continues the reveal. `pause()` cancels that continuation;
 `reset()`, immediate `seek()`, and `finishImmediately()` replace pending work. Immediate `seek()`
 is for authoring and export code that needs the simulation at the target before returning.
-
 
 `state` is a snapshot (`mode`, `motion`, `playing`, `finished`, `progress`,
 `error`, `fallbackReason`); it is never pushed per frame. Events:
