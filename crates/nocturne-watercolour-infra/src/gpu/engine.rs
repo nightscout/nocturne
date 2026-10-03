@@ -20,7 +20,8 @@ use nocturne_watercolour_core::domain::scene::isotropic_scale;
 use nocturne_watercolour_core::domain::sim::{self, PigmentCoefficients, SimParams};
 use nocturne_watercolour_core::domain::swirl;
 use nocturne_watercolour_core::domain::{
-    Image, MAX_SETTLE_SHARE, Operation, Paper, PaperField, Scene, Seed, SimulationGrid, StrokeSpan,
+    Dab, Image, MAX_SETTLE_SHARE, Operation, Paper, PaperField, Scene, Seed, SimulationGrid,
+    StrokeSpan,
 };
 
 use super::context::GpuContext;
@@ -59,6 +60,10 @@ const WORKGROUP: u32 = 256;
 /// `BLUR_MAX_RADIUS` in `flow.wgsl`: the widest blur the one-dispatch `blur`
 /// holds in workgroup memory; a wider one runs as `blur_h` then `blur_v`.
 pub const BLUR_MAX_RADIUS: u32 = 8;
+
+/// `Stroke.kind` for a dab, whose coverage `apply.wgsl` evaluates from its
+/// `DabStamp` instead of reading an uploaded stamp.
+pub const STROKE_DAB: u32 = 3;
 
 /// Stroke uniforms one batch can hold (see [`Pending`]), each at its own
 /// dynamic offset; a batch with more events is submitted and a new one begun.
@@ -1466,11 +1471,7 @@ impl GpuEngine {
         self.dispatch_apply(pipeline, rect.w * rect.h, slot)
     }
 
-    fn dab_uniform(
-        &self,
-        dab: &nocturne_watercolour_core::domain::Dab,
-        seed: Seed,
-    ) -> Result<StrokeUniform, EngineError> {
+    fn dab_uniform(&self, dab: &Dab, seed: Seed) -> Result<StrokeUniform, EngineError> {
         let l = self.loaded()?;
         let geometry = paint::DabStamp::new(
             dab,
@@ -1481,7 +1482,7 @@ impl GpuEngine {
             self.params.stamp,
         );
         Ok(StrokeUniform {
-            kind: 3,
+            kind: STROKE_DAB,
             pigment: dab.pigment as u32,
             concentration: dab.concentration,
             water: dab.water,

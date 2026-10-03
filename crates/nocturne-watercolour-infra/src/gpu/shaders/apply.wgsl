@@ -16,7 +16,7 @@ fn stamp_at(x: u32, y: u32) -> f32 {
     let lx = x - stroke.rect_x;
     let ly = y - stroke.rect_y;
     if lx >= stroke.rect_w || ly >= stroke.rect_h { return 0.0; }
-    if stroke.kind == 3u {
+    if stroke.kind == STROKE_DAB {
         let pu = (f32(x) + 0.5) / f32(P.width) * stroke.scale_x;
         let pv = (f32(y) + 0.5) / f32(P.height) * stroke.scale_y;
         let dx = pu - stroke.center_x;

@@ -45,7 +45,7 @@
 
 use crate::domain::{Operation, Scene, SubSeed};
 
-use super::ports::{CheckpointId, EngineError, Simulator};
+use super::ports::{CheckpointId, DabCharge, EngineError, Simulator};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackState {
@@ -519,7 +519,7 @@ impl<S: Simulator> Playback<S> {
                     .enumerate()
                     .filter(|(_, e)| e.at_tick >= self.tick && e.at_tick < self.tick + ticks)
                     .filter_map(|(index, e)| match &e.op {
-                        Operation::Dab(dab) => Some(super::ports::DabCharge {
+                        Operation::Dab(dab) => Some(DabCharge {
                             at_tick: e.at_tick - self.tick,
                             dab,
                             seed: self.scene.seed.derive(SubSeed::Brush(index as u32)),

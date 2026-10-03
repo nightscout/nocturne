@@ -138,7 +138,7 @@ fn dab_matches_point_brush_deposits_and_paper_driven_flow() {
                         water: 0.5,
                         softness: 0.85,
                     };
-                    let op = nocturne_watercolour_core::domain::Operation::Dab(dab.clone());
+                    let op = Operation::Dab(dab.clone());
                     analytic.load(&scene).unwrap();
                     stamped.load(&scene).unwrap();
                     cpu.load(&scene).unwrap();

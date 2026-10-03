@@ -97,6 +97,9 @@ struct Stroke {
     edge_roughness: f32,
 };
 
+// Stroke.kind of a dab; mirrors gpu::STROKE_DAB.
+const STROKE_DAB: u32 = 3u;
+
 struct PigmentCoef {
     density: f32,
     staining_power: f32,
