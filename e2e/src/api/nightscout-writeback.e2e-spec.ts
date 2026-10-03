@@ -97,6 +97,15 @@ async function upstreamPost(path: string, docs: Record<string, unknown>[]): Prom
   return (await response.json()) as UpstreamDoc[];
 }
 
+/**
+ * Stores treatments straight in the fake Nightscout as they are, every `_id` a string: what a
+ * Nightscout before 15.0.7 kept of a POST, and what a migration's original stays after an upgrade.
+ */
+async function upstreamSeed(docs: Record<string, unknown>[]): Promise<void> {
+  const response = await fetch(`${VENDOR}/__seed/treatments`, { method: "POST", headers: upstreamHeaders, body: JSON.stringify(docs) });
+  expect(response.status).toBe(200);
+}
+
 async function upstreamRead(path: string, query: Record<string, string>): Promise<UpstreamDoc[]> {
   const response = await fetch(`${VENDOR}${path}?${new URLSearchParams({ count: "1000", ...query })}`, { headers: upstreamHeaders });
   expect(response.status).toBe(200);
@@ -519,6 +528,77 @@ describe("Nightscout connector write-back round trip", () => {
     expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t.identifier, t.insulin])).toEqual([[legacyId, 0.6]]);
     expect((await sync()).success).toBe(true);
     expect((await bolusesAround(at)).data.map((b) => b.insulin)).toEqual([0.6]);
+  });
+
+  // An upload of a treatment Nocturne already stores updates it, and goes upstream as the edit it
+  // is: looked for first. Sent as a create, under both keys, 15.0.8 would match neither the original
+  // it holds under its ObjectId with no identifier nor a copy under another form, and store a second.
+  it("writes a re-upload of a treatment upstream holds under its ObjectId alone onto that treatment", async () => {
+    const legacyId = objectId();
+    const at = new Date(Date.now() - 210 * MINUTE).toISOString();
+    const upload = { _id: legacyId, eventType: "Correction Bolus", insulin: 0.4, created_at: at, enteredBy: `e2e-writeback-reupload-${run}` };
+    await upstreamPost("/api/v1/treatments", [upload]);
+    await uploadWithoutWriteBack(upload);
+
+    await tenant.api.ok("POST", "/api/v1/treatments", [{ ...upload, insulin: 0.8 }]);
+
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[legacyId, undefined, 0.8]]);
+    expect((await sync()).success).toBe(true);
+    expect((await bolusesAround(at)).data.map((b) => b.insulin)).toEqual([0.8]);
+  });
+
+  // The original of a treatment a Nightscout migration imported from an uploader that sent its own
+  // id is held under that id as a string `_id`, with no identifier. An edit sent under the create's
+  // keys matched neither arm of 15.0.8's identifier `$or` and stored a second copy.
+  it("writes an edit of a treatment upstream holds under a string _id alone onto that treatment", async () => {
+    const legacyId = `e2e-imported-${crypto.randomUUID()}`;
+    const at = new Date(Date.now() - 220 * MINUTE).toISOString();
+    const upload = { _id: legacyId, eventType: "Correction Bolus", insulin: 0.4, created_at: at, enteredBy: `e2e-writeback-imported-${run}` };
+    await upstreamSeed([upload]);
+    await uploadWithoutWriteBack(upload);
+    const [bolus] = (await bolusesAround(at)).data;
+
+    await tenant.api.ok("PUT", `/api/v1/treatments/${uuidPrefix(bolus!.id)}`, { ...upload, insulin: 0.7 });
+
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[legacyId, legacyId, 0.7]]);
+    expect((await sync()).success).toBe(true);
+    expect((await bolusesAround(at)).data.map((b) => [b.id, b.insulin])).toEqual([[bolus!.id, 0.7]]);
+  });
+
+  // A Nightscout that was 15.0.6 when write-back POSTed the copy holds it under its 24-hex key as a
+  // string, which `find[_id]` casts past. The edit goes onto it by its identifier.
+  it("writes an edit onto a copy held under its 24-hex key as a string since before 15.0.7", async () => {
+    const legacyId = objectId();
+    const at = new Date(Date.now() - 230 * MINUTE).toISOString();
+    const upload = { _id: legacyId, eventType: "Correction Bolus", insulin: 0.4, created_at: at, enteredBy: `e2e-writeback-string-hex-${run}` };
+    await uploadWithoutWriteBack(upload);
+    await upstreamSeed([{ ...upload, identifier: legacyId }]);
+    expect(await upstreamRead("/api/v1/treatments.json", { "find[_id]": legacyId })).toEqual([]);
+
+    await tenant.api.ok("PUT", `/api/v1/treatments/${legacyId}`, { ...upload, insulin: 0.6 });
+
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[legacyId, legacyId, 0.6]]);
+    expect((await sync()).success).toBe(true);
+    expect((await bolusesAround(at)).data.map((b) => b.insulin)).toEqual([0.6]);
+  });
+
+  // Up to v0.2.3 an edit went upstream under the record's full uuid, whatever its legacy id, and
+  // 15.0.7+ kept that uuid as the identifier of a copy under a minted ObjectId. A later edit lands
+  // on that copy, and the copy pulled back lands on the treatment rather than beside it.
+  it("writes an edit onto the copy a v0.2.3 edit left under the record's uuid and pulls it back onto the treatment", async () => {
+    const legacyId = objectId();
+    const at = new Date(Date.now() - 240 * MINUTE).toISOString();
+    const upload = { _id: legacyId, eventType: "Correction Bolus", insulin: 0.4, created_at: at, enteredBy: `e2e-writeback-v023-edit-${run}` };
+    await uploadWithoutWriteBack(upload);
+    const [bolus] = (await bolusesAround(at)).data;
+    const [copy] = await upstreamPost("/api/v1/treatments", [{ ...upload, _id: bolus!.id, identifier: bolus!.id }]);
+    expect(copy!._id).not.toBe(bolus!.id);
+
+    await tenant.api.ok("PUT", `/api/v1/treatments/${legacyId}`, { ...upload, insulin: 0.9 });
+
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[copy!._id, bolus!.id, 0.9]]);
+    expect((await sync()).success).toBe(true);
+    expect((await bolusesAround(at)).data.map((b) => [b.id, b.insulin])).toEqual([[bolus!.id, 0.9]]);
   });
 
   it("does not write back an upload of a treatment the user deleted", async () => {
