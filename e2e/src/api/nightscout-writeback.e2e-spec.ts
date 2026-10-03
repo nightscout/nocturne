@@ -385,9 +385,10 @@ describe("Nightscout connector write-back round trip", () => {
       await writeBack(true);
     }
 
+    const sentBefore = (await writtenBack("/api/v1/treatments")).length;
     await tenant.api.ok("PUT", `/api/v1/treatments/${legacyId}`, { ...upload, insulin: 0.9 });
 
-    const sent = (await writtenBack("/api/v1/treatments")).filter((t) => t._id === legacyId);
+    const sent = (await writtenBack("/api/v1/treatments")).slice(sentBefore).filter((t) => t._id === legacyId);
     expect(sent.map((t) => t.identifier)).toEqual([undefined]);
     expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[legacyId, undefined, 0.9]]);
 
