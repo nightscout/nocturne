@@ -1,4 +1,9 @@
 <script lang="ts">
+  import {
+    a1cLabel,
+    a1cUnitLabel,
+    formatA1cValue,
+  } from "$lib/utils/a1c-formatting";
   import { Button } from "$lib/components/ui/button";
   import Gauge from "@lucide/svelte/icons/gauge";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -6,7 +11,7 @@
   import BarChart3 from "@lucide/svelte/icons/chart-column";
   import Calendar from "@lucide/svelte/icons/calendar";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "$lib/components/ui/card";
+  import { Card, CardContent, CardHeader, CardTitle, CardDescription, } from "$lib/components/ui/card";
   import { page } from "$app/state";
   import {
     reportsOverviewScopes,
@@ -19,7 +24,7 @@
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { formatGlucoseRange, formatGlucoseValue, formatLocale, formatNumber, formatShortDate, getUnitLabel } from "$lib/utils/formatting";
+  import { formatGlucoseRange, formatGlucoseValue, formatLocale, formatNumber, formatShortDate, getUnitLabel, } from "$lib/utils/formatting";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { remoteErrorMessage } from "$lib/api/remote-error";
@@ -51,7 +56,7 @@
     () =>
       canLoadSummary
         ? getReportsData(reportsParams.dateRangeInput)
-        : { loading: false, error: null, current: undefined, refresh: () => {} },
+        : { loading: false, error: null, current: undefined, refresh: () => {}, },
     { errorTitle: "Error Loading Reports", dateParams: reportsParams }
   );
 
@@ -191,21 +196,24 @@
                 </dd>
               </div>
               <div class="flex items-baseline justify-between gap-4 px-6 py-4">
-                <dt class="text-sm text-muted-foreground">Estimated A1C</dt>
+                <dt class="text-sm text-muted-foreground">{a1cLabel(true)}</dt>
                 <dd class="m-0 text-lg font-semibold tabular-nums">
-                  {variability?.estimatedA1c?.toFixed(1) ?? "–"}<span class="text-sm font-normal text-muted-foreground">%</span>
+                  {formatA1cValue(variability?.estimatedA1cDisplay)}<span class="text-sm font-normal text-muted-foreground">
+                    {a1cUnitLabel()}</span>
                 </dd>
               </div>
               <div class="flex items-baseline justify-between gap-4 px-6 py-4">
                 <dt class="text-sm text-muted-foreground">Coefficient of variation</dt>
                 <dd class="m-0 text-lg font-semibold tabular-nums">
-                  {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}<span class="text-sm font-normal text-muted-foreground">%</span>
+                  {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}<span class="text-sm font-normal text-muted-foreground">
+                    {a1cUnitLabel()}</span>
                 </dd>
               </div>
               <div class="flex items-baseline justify-between gap-4 px-6 py-4">
                 <dt class="text-sm text-muted-foreground">Time below range</dt>
                 <dd class="m-0 text-lg font-semibold tabular-nums">
-                  {((tir?.low ?? 0) + (tir?.veryLow ?? 0)).toFixed(1)}<span class="text-sm font-normal text-muted-foreground">%</span>
+                  {((tir?.low ?? 0) + (tir?.veryLow ?? 0)).toFixed(1)}<span class="text-sm font-normal text-muted-foreground">
+                    {a1cUnitLabel()}</span>
                 </dd>
               </div>
             </dl>

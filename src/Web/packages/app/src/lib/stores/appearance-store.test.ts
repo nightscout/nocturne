@@ -14,6 +14,8 @@ vi.mock("mode-watcher", () => ({
 
 const {
   glucoseUnits,
+  a1cName,
+  a1cUnits,
   timeFormat,
   colorTheme,
   predictionMinutes,
@@ -33,6 +35,8 @@ describe("appearance-store preference sync", () => {
     // Reset to defaults between tests (module-level singletons).
     applyPreferences({
       glucoseUnits: "mg/dl",
+      a1cName: "HbA1c",
+      a1cUnits: "percent",
       timeFormat: "12",
       colorTheme: "nocturne",
       prediction: { enabled: true, minutes: 30 },
@@ -43,6 +47,8 @@ describe("appearance-store preference sync", () => {
   it("collectPreferences reflects the current store values", () => {
     const prefs = collectPreferences();
     expect(prefs.glucoseUnits).toBe("mg/dl");
+    expect(prefs.a1cName).toBe("HbA1c");
+    expect(prefs.a1cUnits).toBe("percent");
     expect(prefs.timeFormat).toBe("12");
     expect(prefs.colorTheme).toBe("nocturne");
     expect(prefs.prediction?.minutes).toBe(30);
@@ -75,6 +81,17 @@ describe("appearance-store preference sync", () => {
     expect(predictionEnabled.current).toBe(true); // untouched
   });
 
+  it("syncs independent A1c naming and units and preserves them across partial updates", () => {
+    applyPreferences({ a1cName: "A1c", a1cUnits: "mmol/mol" });
+    applyPreferences({ glucoseUnits: "mmol" });
+    expect(a1cName.current).toBe("A1c");
+    expect(a1cUnits.current).toBe("mmol/mol");
+    expect(collectPreferences()).toMatchObject({
+      a1cName: "A1c",
+      a1cUnits: "mmol/mol",
+    });
+  });
+
   it("applyPreferences ignores null/undefined input", () => {
     applyPreferences(null);
     applyPreferences(undefined);
@@ -88,7 +105,7 @@ describe("appearance-store preference sync", () => {
       colorTheme: "aaps",
       nightModeSchedule: true,
       prediction: { enabled: false, minutes: 60, displayMode: "lines" },
-      chart: { lineColor: "#000000", pointColor: "#ffffff", showPoints: false, lookback: 4 },
+      chart: { lineColor: "#000000", pointColor: "#ffffff", showPoints: false, lookback: 4, },
     };
 
     applyPreferences(source);
@@ -147,7 +164,7 @@ describe("preferenceCookieWrites", () => {
 
   it("carries the name, value and lifetime it was given", () => {
     expect(preferenceCookieWrites("nocturne-language", "fr", 31536000, null)).toEqual([
-      "nocturne-language=fr;path=/;max-age=31536000;SameSite=Lax",
+      "nocturne-language=fr;path=/;max-age=31536000;SameSite=Lax"
     ]);
   });
 });

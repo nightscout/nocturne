@@ -1,3 +1,4 @@
+import { a1cLabel } from "$lib/utils/a1c-formatting";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type IconComponent = any;
 import Activity from "@lucide/svelte/icons/activity";
@@ -120,9 +121,9 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Estimated HbA1c",
-          sidebarTitle: "eHbA1c",
-          description: "How your estimated HbA1c has trended over the years",
+          get title() { return `Estimated ${a1cLabel()}`; },
+          get sidebarTitle() { return a1cLabel(true); },
+          get description() { return `How your ${a1cLabel(true)} has trended over the years`; },
           href: "/reports/ehba1c",
           scopes: [READ.glucose, READ.reports],
           icon: Activity,

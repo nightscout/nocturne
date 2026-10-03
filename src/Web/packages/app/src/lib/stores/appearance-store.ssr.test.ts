@@ -19,6 +19,14 @@ async function ssr(
 }
 
 describe("appearance-store SSR resolution", () => {
+  it("keeps A1c names and units isolated between concurrent requests", async () => {
+    const [custom, defaults] = await Promise.all([
+      ssr([{ a1cName: "A1c", a1cUnits: "mmol/mol" }]),
+      ssr([]),
+    ]);
+    expect(custom).toContain("A1c / eA1c: 53 mmol/mol");
+    expect(defaults).toContain("HbA1c / eHbA1c: 7.0%");
+  });
   it("renders the request's units, not the module default", async () => {
     const body = await ssr([mmol]);
 
@@ -50,7 +58,7 @@ describe("appearance-store SSR resolution", () => {
   });
 
   it("resolves each field from the highest-precedence layer that defines it", async () => {
-    const body = await ssr([{ timeFormat: "24" }, { glucoseUnits: "mmol", timeFormat: "12" }]);
+    const body = await ssr([{ timeFormat: "24" }, { glucoseUnits: "mmol", timeFormat: "12" },]);
 
     expect(body).toContain("mmol/L");
     expect(body).toContain(">24<");
@@ -116,8 +124,8 @@ describe("resolveLanguage", () => {
 it("keeps year color preferences scoped to the SSR request", async () => {
   const first = await ssr([{ yearOverviewColors: { tdd: [10, 70] } }]);
   const second = await ssr([{ yearOverviewColors: { tdd: [20, 60] } }]);
-  expect(first).toContain('[10,70]');
-  expect(second).toContain('[20,60]');
-  expect(second).not.toContain('[10,70]');
-  expect(await ssr([])).not.toContain('[20,60]');
+  expect(first).toContain("[10,70]");
+  expect(second).toContain("[20,60]");
+  expect(second).not.toContain("[10,70]");
+  expect(await ssr([])).not.toContain("[20,60]");
 });

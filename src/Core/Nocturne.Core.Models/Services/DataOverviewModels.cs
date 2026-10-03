@@ -73,6 +73,7 @@ public class DailySummaryResponse
 /// </summary>
 public class EHbA1cTimelineResponse
 {
+    public A1cDisplayReferences A1cReferences => new();
     [JsonPropertyName("year")]
     public int Year { get; set; }
 
@@ -92,6 +93,8 @@ public class EHbA1cPoint
 
     [JsonPropertyName("estimatedA1cPercent")]
     public double EstimatedA1cPercent { get; set; }
+
+    public A1cDisplayValue A1cDisplay => A1cDisplayValue.FromPercent(EstimatedA1cPercent);
 
     [JsonPropertyName("weightedAverageGlucoseMgdl")]
     public double WeightedAverageGlucoseMgdl { get; set; }

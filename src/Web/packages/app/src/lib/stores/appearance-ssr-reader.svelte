@@ -9,7 +9,8 @@
     formatWeekdayDate,
     minutesAgo,
   } from "$lib/utils/formatting";
-  import { preferredLanguage, timeFormat, yearOverviewColors } from "./appearance-store.svelte";
+  import { preferredLanguage, timeFormat, yearOverviewColors, } from "./appearance-store.svelte";
+  import { a1cLabel, formatA1c } from "$lib/utils/a1c-formatting";
 
   const derivedValue = $derived(bg(100));
 
@@ -27,3 +28,6 @@
 <span id="minutes-ago">{minutesAgo(SAMPLE_DATE.getTime() - 300000, SAMPLE_DATE.getTime())}</span>
 
 <span id="year-colors">{JSON.stringify(yearOverviewColors.current)}</span>
+<span id="a1c">
+  {a1cLabel()} / {a1cLabel(true)}: {formatA1c({ percent: 7, mmolMol: 53 })}
+</span>

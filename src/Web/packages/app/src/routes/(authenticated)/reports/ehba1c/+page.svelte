@@ -7,7 +7,6 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import * as Card from "$lib/components/ui/card";
-  import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -17,7 +16,20 @@
     getEHbA1cTimeline,
   } from "$api/generated/dataOverviews.generated.remote";
   import * as labResultsApi from "$api/generated/labHbA1cs.generated.remote";
-  import type { EHbA1cPoint, LabHbA1cResult } from "$api/generated/nocturne-api-client";
+  import type {
+    EHbA1cPoint,
+    LabHbA1cResult,
+    A1cDisplayValue,
+    A1cDisplayReferences,
+  } from "$api/generated/nocturne-api-client";
+  import { a1cUnits } from "$lib/stores/appearance-store.svelte";
+  import {
+    a1cLabel,
+    a1cUnitLabel,
+    a1cDisplayValue,
+    formatA1c,
+    formatA1cNumber,
+  } from "$lib/utils/a1c-formatting";
   import { bg, bgLabel, formatLongDate } from "$lib/utils/formatting";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
@@ -31,81 +43,74 @@
   type ChartPoint = {
     date: Date;
     estimatedA1cPercent: number;
+    a1cDisplay?: A1cDisplayValue;
     weightedAverageGlucoseMgdl: number;
     readingCount: number;
     daysWithData: number;
   };
 
-  type A1cUnit = "percent" | "mmol";
-
-  /**
-   * No lab reference range for a non-diabetic adult goes below this, so the chart neither
-   * draws nor colors that region — it would only be empty space.
-   */
-  const MIN_A1C_PERCENT = 4.0;
-
-  /**
-   * Reference zones for the legend/bands, in DCCT/NGSP %. Bounds are the widely-cited ADA
-   * thresholds (normal < 5.7%, prediabetes 5.7–6.4%, diabetes ≥ 6.5%); "Type 1 diabetes
-   * target" uses the general ADA adult target of < 7.0%, and "Elevated"/"Very high" split the
-   * range above that at 9.0%, where complication risk rises sharply. Swatches reuse the GRI
-   * report's green/yellow-green/orange/red severity scale; band fills use dedicated,
-   * dark-mode-tuned tokens (the swatch colors are too subtle at chart-fill opacity, and
-   * --glucose-in-range/--chart-2 turned out to be the same color when tried here).
-   */
-  const A1C_ZONES: { key: string; label: string; maxPercent: number; swatch: string; texture: Extract<TextureKey, `ehba1c-zone-${string}`> }[] = [
-    { key: "healthy", label: "Non-diabetic range", maxPercent: 5.7, swatch: "var(--gri-zone-a)", texture: "ehba1c-zone-healthy" },
-    { key: "target", label: "Type 1 diabetes target", maxPercent: 7.0, swatch: "var(--gri-zone-b)", texture: "ehba1c-zone-target" },
-    { key: "high", label: "Elevated", maxPercent: 9.0, swatch: "var(--gri-zone-d)", texture: "ehba1c-zone-high" },
-    { key: "veryHigh", label: "Very high", maxPercent: 14.0, swatch: "var(--gri-zone-e)", texture: "ehba1c-zone-very-high" },
+  // Display bounds come from the same backend conversion as the plotted values.
+  const A1C_ZONES: {
+    key: string;
+    label: string;
+    swatch: string;
+    texture: Extract<TextureKey, `ehba1c-zone-${string}`>;
+  }[] = [
+    {
+      key: "healthy",
+      label: "Non-diabetic range",
+      swatch: "var(--gri-zone-a)",
+      texture: "ehba1c-zone-healthy",
+    },
+    {
+      key: "target",
+      label: "Type 1 diabetes target",
+      swatch: "var(--gri-zone-b)",
+      texture: "ehba1c-zone-target",
+    },
+    {
+      key: "high",
+      label: "Elevated",
+      swatch: "var(--gri-zone-d)",
+      texture: "ehba1c-zone-high",
+    },
+    {
+      key: "veryHigh",
+      label: "Very high",
+      swatch: "var(--gri-zone-e)",
+      texture: "ehba1c-zone-very-high",
+    },
   ];
 
   let loading = $state(true);
   let error = $state<unknown>(null);
   let pointsByYear = $state<Map<number, EHbA1cPoint[]>>(new Map());
-  let a1cUnit = $state<A1cUnit>("percent");
+  let references = $state<A1cDisplayReferences>();
 
   let labResults = $state<LabHbA1cResult[]>([]);
   let newLabDate = $state("");
   let newLabValue = $state("");
   let newLabNote = $state("");
+
+  // A draft entered in the previous unit must not be submitted in the new unit.
+  $effect(() => {
+    void a1cUnits.current;
+    newLabValue = "";
+  });
   let savingLabResult = $state(false);
   let labResultError = $state<string | null>(null);
   let pendingDeleteLabResult = $state<LabHbA1cResult | null>(null);
 
-  /** NGSP % to IFCC mmol/mol, the standard dual-reporting conversion for HbA1c. */
-  function toIfccMmolMol(percent: number): number {
-    return (percent - 2.15) * 10.929;
-  }
-
-  function toDisplayUnit(percent: number): number {
-    return a1cUnit === "percent" ? percent : toIfccMmolMol(percent);
-  }
-
-  /** Normalizes a lab result's measuredAt (Date instance or ISO string) to a Date. */
+  /**
+   * Normalizes a lab result's measuredAt (Date instance or ISO string) to a
+   * Date.
+   */
   function toDate(value: Date | string | undefined): Date {
     return value instanceof Date ? value : new Date(value ?? 0);
   }
 
   function dateKey(date: Date): string {
     return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-  }
-
-  /** IFCC mmol/mol to NGSP %, the inverse of toIfccMmolMol — used to store a mmol/mol entry as %. */
-  function toPercentFromDisplayUnit(value: number): number {
-    return a1cUnit === "percent" ? value : value / 10.929 + 2.15;
-  }
-
-  function formatA1c(percent: number): string {
-    return a1cUnit === "percent"
-      ? `${percent.toFixed(1)}%`
-      : `${Math.round(toIfccMmolMol(percent))} mmol/mol`;
-  }
-
-  function formatDisplayValue(value: number): string {
-    return a1cUnit === "percent"
-      ? `${value.toFixed(1)}%`
-      : `${Math.round(value)} mmol/mol`;
   }
 
   function toChartPoints(pointsMap: Map<number, EHbA1cPoint[]>): ChartPoint[] {
@@ -117,6 +122,7 @@
         all.push({
           date: new Date(y, m - 1, d),
           estimatedA1cPercent: point.estimatedA1cPercent ?? 0,
+          a1cDisplay: point.a1cDisplay,
           weightedAverageGlucoseMgdl: point.weightedAverageGlucoseMgdl ?? 0,
           readingCount: point.readingCount ?? 0,
           daysWithData: point.daysWithData ?? 0,
@@ -134,11 +140,15 @@
       .map((p) => p.date)
       .filter((d): d is string => !!d)
       .sort();
-    return dates.length > 0 ? { from: dates[0], to: dates[dates.length - 1] } : null;
+    return dates.length > 0
+      ? { from: dates[0], to: dates[dates.length - 1] }
+      : null;
   });
 
   setReportPrintMeta(() => (timelineBounds ? { period: timelineBounds } : {}));
-  const latest = $derived(chartData.length > 0 ? chartData[chartData.length - 1] : undefined);
+  const latest = $derived(
+    chartData.length > 0 ? chartData[chartData.length - 1] : undefined
+  );
 
   const extremes = $derived.by(() => {
     if (chartData.length === 0) return undefined;
@@ -153,32 +163,51 @@
 
   const zoneBands = $derived(
     A1C_ZONES.map((zone, i) => {
-      const minPercent = i === 0 ? MIN_A1C_PERCENT : A1C_ZONES[i - 1].maxPercent;
       return {
         ...zone,
-        minPercent,
         isLast: i === A1C_ZONES.length - 1,
-        yMin: toDisplayUnit(minPercent),
-        yMax: toDisplayUnit(zone.maxPercent),
+        yMin:
+          a1cDisplayValue(
+            i === 0
+              ? references?.minimum
+              : [references?.healthy, references?.target, references?.elevated][
+                  i - 1
+                ]
+          ) ?? 0,
+        yMax:
+          a1cDisplayValue(
+            [
+              references?.healthy,
+              references?.target,
+              references?.elevated,
+              references?.veryHigh,
+            ][i]
+          ) ?? 0,
       };
     })
   );
 
   function formatZoneRange(band: (typeof zoneBands)[number]): string {
-    const unit = a1cUnit === "percent" ? "%" : " mmol/mol";
-    const fmt = (p: number) => (a1cUnit === "percent" ? p.toFixed(1) : `${Math.round(toIfccMmolMol(p))}`);
-    if (band.isLast) return `> ${fmt(band.minPercent)}${unit}`;
-    return `${fmt(band.minPercent)}–${fmt(band.maxPercent)}${unit}`;
+    const unit = `${a1cUnits.current === "percent" ? "" : " "}${a1cUnitLabel()}`;
+    if (band.isLast) return `> ${formatA1cNumber(band.yMin)}${unit}`;
+    return `${formatA1cNumber(band.yMin)}–${formatA1cNumber(band.yMax)}${unit}`;
   }
 
-  /** Fixed floor at the never-goes-lower bound; auto-scaled ceiling with a little headroom. */
+  /**
+   * Fixed floor at the never-goes-lower bound; auto-scaled ceiling with a
+   * little headroom.
+   */
   const yDomain = $derived.by((): [number, number] => {
-    const dataMaxPercent =
+    const dataMax =
       chartData.length > 0
-        ? Math.max(...chartData.map((p) => p.estimatedA1cPercent))
-        : A1C_ZONES[1].maxPercent;
-    const maxPercent = Math.max(dataMaxPercent + 0.5, A1C_ZONES[1].maxPercent);
-    return [toDisplayUnit(MIN_A1C_PERCENT), toDisplayUnit(maxPercent)];
+        ? Math.max(...chartData.map((p) => a1cDisplayValue(p.a1cDisplay) ?? 0))
+        : (a1cDisplayValue(references?.target) ?? 0);
+    const padding =
+      a1cUnits.current === "percent" ? 0.5 : (references?.mmolMolPadding ?? 0);
+    return [
+      a1cDisplayValue(references?.minimum) ?? 0,
+      Math.max(dataMax + padding, a1cDisplayValue(references?.target) ?? 0),
+    ];
   });
 
   // Clamped to yDomain so a band never computes to a pixel position outside the plot area —
@@ -212,10 +241,13 @@
       ]);
       labResults = results ?? [];
       const pointResults = await Promise.all(
-        (years ?? []).map(async (year) => {
-          const response = await getEHbA1cTimeline({ year }).run();
-          return [year, response.points ?? []] as const;
-        })
+        (years?.length ? years : [new Date().getFullYear()]).map(
+          async (year) => {
+            const response = await getEHbA1cTimeline({ year }).run();
+            references = response.a1cReferences;
+            return [year, response.points ?? []] as const;
+          }
+        )
       );
       pointsByYear = new Map(pointResults);
     } catch (err) {
@@ -226,14 +258,18 @@
     }
   }
 
-  /** Lab draws are shown as standalone markers — never connected by a line and never fed back
-   * into the eHbA1c calculation, which only ever reads SensorGlucose/MeterGlucose. */
+  /**
+   * Lab draws are shown as standalone markers — never connected by a line and
+   * never fed back into the eHbA1c calculation, which only ever reads
+   * SensorGlucose/MeterGlucose.
+   */
   const labChartPoints = $derived(
     labResults.map((r) => ({
       id: r.id,
       date: toDate(r.measuredAt),
       valuePercent: r.valuePercent ?? 0,
-      displayValue: toDisplayUnit(r.valuePercent ?? 0),
+      a1cDisplay: r.a1cDisplay,
+      displayValue: a1cDisplayValue(r.a1cDisplay) ?? 0,
       note: r.note,
     }))
   );
@@ -247,16 +283,24 @@
     ) {
       return null;
     }
-    const nextIndex = chartData.findIndex((point) => point.date.getTime() >= timestamp);
-    if (nextIndex === 0) return toDisplayUnit(chartData[0].estimatedA1cPercent);
-    if (nextIndex === -1) return toDisplayUnit(chartData[chartData.length - 1].estimatedA1cPercent);
+    const nextIndex = chartData.findIndex(
+      (point) => point.date.getTime() >= timestamp
+    );
+    if (nextIndex === 0)
+      return a1cDisplayValue(chartData[0].a1cDisplay) ?? null;
+    if (nextIndex === -1)
+      return (
+        a1cDisplayValue(chartData[chartData.length - 1].a1cDisplay) ?? null
+      );
 
     const previous = chartData[nextIndex - 1];
     const next = chartData[nextIndex];
-    const progress = (timestamp - previous.date.getTime()) / (next.date.getTime() - previous.date.getTime());
-    const value = previous.estimatedA1cPercent +
-      (next.estimatedA1cPercent - previous.estimatedA1cPercent) * progress;
-    return toDisplayUnit(value);
+    const progress =
+      (timestamp - previous.date.getTime()) /
+      (next.date.getTime() - previous.date.getTime());
+    const previousValue = a1cDisplayValue(previous.a1cDisplay) ?? 0;
+    const nextValue = a1cDisplayValue(next.a1cDisplay) ?? 0;
+    return previousValue + (nextValue - previousValue) * progress;
   }
 
   const displayChartData = $derived.by(() => {
@@ -264,7 +308,7 @@
     for (const point of chartData) {
       rows.set(point.date.getTime(), {
         date: point.date,
-        displayValue: toDisplayUnit(point.estimatedA1cPercent),
+        displayValue: a1cDisplayValue(point.a1cDisplay) ?? 0,
       });
     }
     // A lab-only date gets a synthetic row with the interpolated estimate solely to give the tooltip
@@ -276,11 +320,16 @@
       if (!rows.has(labPoint.date.getTime())) {
         const displayValue = displayValueForChartDate(labPoint.date);
         if (displayValue !== null) {
-          rows.set(labPoint.date.getTime(), { date: labPoint.date, displayValue });
+          rows.set(labPoint.date.getTime(), {
+            date: labPoint.date,
+            displayValue,
+          });
         }
       }
     }
-    return [...rows.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
+    return [...rows.values()].sort(
+      (a, b) => a.date.getTime() - b.date.getTime()
+    );
   });
 
   async function addLabResult() {
@@ -291,7 +340,8 @@
     try {
       await labResultsApi.create({
         measuredAt: new Date(`${newLabDate}T00:00:00.000Z`).toISOString(),
-        valuePercent: toPercentFromDisplayUnit(value),
+        value,
+        unit: a1cUnits.current,
         note: newLabNote || undefined,
       });
       labResults = (await labResultsApi.getAll().run()) ?? [];
@@ -324,75 +374,76 @@
 
 <div class="@container space-y-6">
   <Card.Root>
-    <Card.Header class="flex flex-row flex-wrap items-start justify-between gap-4">
+    <Card.Header
+      class="flex flex-row flex-wrap items-start justify-between gap-4"
+    >
       <div>
         <Card.Title class="flex items-center gap-2">
           <Activity class="h-5 w-5 text-muted-foreground" />
-          Estimated HbA1c (eHbA1c)
+          Estimated {a1cLabel()} ({a1cLabel(true)})
         </Card.Title>
         <Card.Description>
-          eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it
-          takes the average glucose from every reading in the trailing 90 days and weights each
-          day's contribution by recency — the most recent ~30 days count for roughly half the
-          estimate, tapering off exponentially for older days, similar to how glycated hemoglobin
-          reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted
-          average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average
-          glucose in mg/dL + 46.7) / 28.7.
+          {a1cLabel(true)} estimates what a lab {a1cLabel()} test would read on a
+          given day. For each day, it takes the average glucose from every reading
+          in the trailing 90 days and weights each day's contribution by recency —
+          the most recent ~30 days count for roughly half the estimate, tapering off
+          exponentially for older days, similar to how glycated hemoglobin reflects
+          glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted
+          average glucose is then converted to NGSP percent with the ADAG formula:
+          {a1cLabel(true)} (%) = (average glucose in mg/dL + 46.7) / 28.7.
         </Card.Description>
       </div>
-      <ToggleGroup.Root
-        type="single"
-        value={a1cUnit}
-        onValueChange={(next: string) => {
-          if (next === "percent" || next === "mmol") a1cUnit = next;
-        }}
-        variant="segmented"
-        size="xs"
-        class="shrink-0 print:hidden"
-      >
-        <ToggleGroup.Item value="percent" aria-label="Show as percent">
-          %
-        </ToggleGroup.Item>
-        <ToggleGroup.Item value="mmol" aria-label="Show as mmol/mol">
-          mmol/mol
-        </ToggleGroup.Item>
-      </ToggleGroup.Root>
       <p class="hidden shrink-0 text-sm text-muted-foreground print:block">
-        {a1cUnit === "percent" ? "Shown in % (NGSP)" : "Shown in mmol/mol (IFCC)"}
+        {a1cUnits.current === "percent"
+          ? "Shown in % (NGSP)"
+          : "Shown in mmol/mol (IFCC)"}
       </p>
     </Card.Header>
     <Card.Content>
       {#if loading}
-        <div class="flex h-[320px] items-center justify-center text-muted-foreground">
-          <Loader2 class="h-5 w-5 animate-spin mr-2" /> Loading eHbA1c timeline...
+        <div
+          class="flex h-[320px] items-center justify-center text-muted-foreground"
+        >
+          <Loader2 class="h-5 w-5 animate-spin mr-2" /> Loading {a1cLabel(true)} timeline...
         </div>
       {:else if error}
-        <div class="flex h-[320px] items-center justify-center text-destructive">
-          Failed to load eHbA1c data. Please try again later.
+        <div
+          class="flex h-[320px] items-center justify-center text-destructive"
+        >
+          Failed to load {a1cLabel(true)} data. Please try again later.
         </div>
       {:else if chartData.length === 0}
-        <div class="flex h-[320px] items-center justify-center text-muted-foreground">
-          Not enough glucose history yet — each point needs at least a month of readings within
-          the trailing 90 days.
+        <div
+          class="flex h-[320px] items-center justify-center text-muted-foreground"
+        >
+          Not enough glucose history yet — each point needs at least a month of
+          readings within the trailing 90 days.
         </div>
       {:else}
         {#if latest && extremes}
           <div class="mb-4 flex flex-wrap items-baseline gap-x-6 gap-y-1">
             <div>
-              <span class="text-3xl font-semibold tabular-nums">{formatA1c(latest.estimatedA1cPercent)}</span>
+              <span class="text-3xl font-semibold tabular-nums">
+                {formatA1c(latest.a1cDisplay)}
+              </span>
               <span class="ml-2 text-sm text-muted-foreground">
                 latest estimate ({formatLongDate(latest.date)})
               </span>
             </div>
             <div class="text-sm text-muted-foreground">
-              Weighted mean glucose: {bg(latest.weightedAverageGlucoseMgdl)} {bgLabel()}
+              Weighted mean glucose: {bg(latest.weightedAverageGlucoseMgdl)}
+              {bgLabel()}
             </div>
             <div class="text-sm text-muted-foreground">
-              Highest: <span class="font-medium text-foreground">{formatA1c(extremes.highest.estimatedA1cPercent)}</span>
+              Highest: <span class="font-medium text-foreground">
+                {formatA1c(extremes.highest.a1cDisplay)}
+              </span>
               ({formatLongDate(extremes.highest.date)})
             </div>
             <div class="text-sm text-muted-foreground">
-              Lowest: <span class="font-medium text-foreground">{formatA1c(extremes.lowest.estimatedA1cPercent)}</span>
+              Lowest: <span class="font-medium text-foreground">
+                {formatA1c(extremes.lowest.a1cDisplay)}
+              </span>
               ({formatLongDate(extremes.lowest.date)})
             </div>
           </div>
@@ -408,41 +459,84 @@
             series={[
               {
                 key: "displayValue",
-                label: a1cUnit === "percent" ? "eHbA1c %" : "eHbA1c mmol/mol",
+                label: `${a1cLabel(true)} ${a1cUnitLabel()}`,
                 color: "var(--ehba1c-line)",
               },
             ]}
-            props={{ spline: { "stroke-width": 3, "stroke-linecap": "round", "data-testid": "ehba1c-line" } }}
-            points={{ data: labChartPoints, x: (d) => d.date, y: (d) => d.displayValue, children: labMarkers }}
+            props={{
+              spline: {
+                "stroke-width": 3,
+                "stroke-linecap": "round",
+                "data-testid": "ehba1c-line",
+              },
+            }}
+            points={{
+              data: labChartPoints,
+              x: (d) => d.date,
+              y: (d) => d.displayValue,
+              children: labMarkers,
+            }}
             {annotations}
           >
             {#snippet tooltip({ context })}
-              <Tooltip.Root {context} class="bg-popover text-popover-foreground rounded-md border p-3 shadow-lg">
+              <Tooltip.Root
+                {context}
+                class="bg-popover text-popover-foreground rounded-md border p-3 shadow-lg"
+              >
                 {#snippet children({ data })}
                   {@const hoveredDate = context.x(data)}
                   {@const hoveredDateKey = dateKey(hoveredDate)}
-                  {@const eHbA1cPoint = chartData.find((point) => dateKey(point.date) === hoveredDateKey)}
-                  {@const labResultsForDate = labChartPoints.filter((point) => dateKey(point.date) === hoveredDateKey)}
-                  <div class="mb-2 text-sm font-semibold">{formatLongDate(hoveredDate)}</div>
-                  <div class="min-w-56 space-y-1.5 text-sm" data-testid="ehba1c-tooltip">
+                  {@const eHbA1cPoint = chartData.find(
+                    (point) => dateKey(point.date) === hoveredDateKey
+                  )}
+                  {@const labResultsForDate = labChartPoints.filter(
+                    (point) => dateKey(point.date) === hoveredDateKey
+                  )}
+                  <div class="mb-2 text-sm font-semibold">
+                    {formatLongDate(hoveredDate)}
+                  </div>
+                  <div
+                    class="min-w-56 space-y-1.5 text-sm"
+                    data-testid="ehba1c-tooltip"
+                  >
                     {#if eHbA1cPoint}
-                      <div class="grid grid-cols-[1fr_auto] items-center gap-x-4">
-                        <span class="flex min-w-0 items-center gap-2 text-muted-foreground">
-                          <span class="h-2 w-2 shrink-0 rounded-full bg-(--ehba1c-line)"></span>
-                          <span>eHbA1c</span>
+                      <div
+                        class="grid grid-cols-[1fr_auto] items-center gap-x-4"
+                      >
+                        <span
+                          class="flex min-w-0 items-center gap-2 text-muted-foreground"
+                        >
+                          <span
+                            class="h-2 w-2 shrink-0 rounded-full bg-(--ehba1c-line)"
+                          ></span>
+                          <span>{a1cLabel(true)}</span>
                         </span>
-                        <span class="font-mono font-medium tabular-nums">{formatDisplayValue(toDisplayUnit(eHbA1cPoint.estimatedA1cPercent))}</span>
+                        <span class="font-mono font-medium tabular-nums">
+                          {formatA1c(eHbA1cPoint.a1cDisplay)}
+                        </span>
                       </div>
                     {/if}
                     {#each labResultsForDate as labResult (labResult.id)}
-                      <div class="grid grid-cols-[1fr_auto] items-center gap-x-4">
-                        <span class="flex min-w-0 items-center gap-2 text-muted-foreground">
-                          <span class="h-0 w-0 shrink-0 border-x-4 border-b-8 border-x-transparent border-b-foreground"></span>
+                      <div
+                        class="grid grid-cols-[1fr_auto] items-center gap-x-4"
+                      >
+                        <span
+                          class="flex min-w-0 items-center gap-2 text-muted-foreground"
+                        >
+                          <span
+                            class="h-0 w-0 shrink-0 border-x-4 border-b-8 border-x-transparent border-b-foreground"
+                          ></span>
                           <span>Lab result</span>
                         </span>
-                        <span class="font-mono font-medium tabular-nums">{formatA1c(labResult.valuePercent)}</span>
+                        <span class="font-mono font-medium tabular-nums">
+                          {formatA1c(labResult.a1cDisplay)}
+                        </span>
                         {#if labResult.note}
-                          <span class="col-span-2 truncate text-xs text-muted-foreground">{labResult.note}</span>
+                          <span
+                            class="col-span-2 truncate text-xs text-muted-foreground"
+                          >
+                            {labResult.note}
+                          </span>
                         {/if}
                       </div>
                     {/each}
@@ -453,7 +547,9 @@
           </LineChart>
         </div>
 
-        <div class="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm">
+        <div
+          class="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm"
+        >
           <ChartKey
             class="text-sm text-foreground"
             items={zoneBands.map((band) => ({
@@ -464,7 +560,8 @@
           />
           {#if labChartPoints.length > 0}
             <div class="flex items-center gap-1.5">
-              <span class="inline-block h-0 w-0 border-x-4 border-b-7 border-x-transparent border-b-foreground"
+              <span
+                class="inline-block h-0 w-0 border-x-4 border-b-7 border-x-transparent border-b-foreground"
               ></span>
               <span>Lab result (not included in the calculation)</span>
             </div>
@@ -478,14 +575,16 @@
     <Card.Header>
       <Card.Title>Lab results</Card.Title>
       <p class="hidden text-sm text-muted-foreground print:block">
-        Lab HbA1c draws, shown as triangles on the chart above. They are not included in the
-        eHbA1c calculation.
+        Lab {a1cLabel()} draws, shown as triangles on the chart above. They are not
+        included in the
+        {a1cLabel(true)} calculation.
       </p>
       <Card.Description class="print:hidden">
-        Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you
-        can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not
-        included in the eHbA1c calculation itself. The date below is the date the blood was
-        drawn, not the date you enter it here.
+        Enter a lab {a1cLabel()} result here — shown as a triangle marker on the chart
+        above, so you can see how closely the {a1cLabel(true)} estimate tracks an
+        actual lab draw. Lab results are not included in the {a1cLabel(true)} calculation
+        itself. The date below is the date the blood was drawn, not the date you enter
+        it here.
       </Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">
@@ -497,8 +596,12 @@
             <li class="flex items-center justify-between gap-3 py-2">
               <div>
                 <div class="text-sm font-medium">
-                  {formatA1c(result.valuePercent ?? 0)}
-                  {#if result.note}<span class="text-muted-foreground font-normal"> — {result.note}</span>{/if}
+                  {formatA1c(result.a1cDisplay)}
+                  {#if result.note}<span
+                      class="text-muted-foreground font-normal"
+                    >
+                      — {result.note}
+                    </span>{/if}
                 </div>
                 <div class="text-xs text-muted-foreground">
                   {formatLongDate(toDate(result.measuredAt))}
@@ -524,12 +627,27 @@
           <Input id="lab-date" type="date" bind:value={newLabDate} />
         </div>
         <div class="space-y-1.5">
-          <Label for="lab-value">Result ({a1cUnit === "percent" ? "%" : "mmol/mol"})</Label>
-          <Input id="lab-value" type="number" step="0.1" bind:value={newLabValue} placeholder={a1cUnit === "percent" ? "e.g. 7.0" : "e.g. 53"} />
+          <Label for="lab-value">
+            Result ({a1cUnits.current === "percent" ? "%" : "mmol/mol"})
+          </Label>
+          <Input
+            id="lab-value"
+            type="number"
+            step={a1cUnits.current === "percent" ? "0.1" : "1"}
+            bind:value={newLabValue}
+            placeholder={a1cUnits.current === "percent"
+              ? "e.g. 7.0"
+              : "e.g. 53"}
+          />
         </div>
         <div class="space-y-1.5">
           <Label for="lab-note">Note (optional)</Label>
-          <Input id="lab-note" type="text" bind:value={newLabNote} placeholder="e.g. GP lab" />
+          <Input
+            id="lab-note"
+            type="text"
+            bind:value={newLabNote}
+            placeholder="e.g. GP lab"
+          />
         </div>
       </div>
 
@@ -553,30 +671,41 @@
   </Card.Root>
 </div>
 
-{#snippet labMarkers({ points }: { points: { x: number; y: number; data: (typeof labChartPoints)[number] }[] })}
+{#snippet labMarkers({
+  points,
+}: {
+  points: { x: number; y: number; data: (typeof labChartPoints)[number] }[];
+})}
   {#each points as point (point.data.id)}
     <polygon
       data-testid="lab-marker"
-      points="{point.x},{point.y - 7} {point.x - 6},{point.y + 5} {point.x + 6},{point.y + 5}"
+      points="{point.x},{point.y - 7} {point.x - 6},{point.y + 5} {point.x +
+        6},{point.y + 5}"
       class="fill-foreground stroke-background"
       stroke-width="1"
       pointer-events="none"
     >
-      <title>Lab result: {formatA1c(point.data.valuePercent)} ({formatLongDate(point.data.date)}){point.data.note ? ` — ${point.data.note}` : ""}</title>
+      <title>
+        Lab result: {formatA1c(point.data.a1cDisplay)} ({formatLongDate(
+          point.data.date
+        )}){point.data.note ? ` — ${point.data.note}` : ""}
+      </title>
     </polygon>
   {/each}
 {/snippet}
 
 <ConfirmDialog
   open={pendingDeleteLabResult !== null}
-  onOpenChange={(o) => { if (!o) pendingDeleteLabResult = null; }}
+  onOpenChange={(o) => {
+    if (!o) pendingDeleteLabResult = null;
+  }}
   title="Delete this lab result?"
   confirmLabel="Delete"
   onConfirm={confirmDeleteLabResult}
 >
   {#snippet description()}
     {#if pendingDeleteLabResult}
-      Delete the {formatA1c(pendingDeleteLabResult.valuePercent ?? 0)} lab result from
+      Delete the {formatA1c(pendingDeleteLabResult.a1cDisplay)} lab result from
       {formatLongDate(toDate(pendingDeleteLabResult.measuredAt))}.
     {/if}
   {/snippet}

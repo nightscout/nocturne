@@ -1,3 +1,4 @@
+import { a1cLabel } from "$lib/utils/a1c-formatting";
 import type { Component } from "svelte";
 import Activity from "@lucide/svelte/icons/activity";
 import Apple from "@lucide/svelte/icons/apple";
@@ -122,9 +123,9 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "stat-a1c",
-		label: "eHbA1c",
+		get label() { return a1cLabel(true); },
 		group: "stats",
-		description: "Estimated HbA1c",
+		get description() { return `Estimated ${a1cLabel()}`; },
 		keywords: ["estimated a1c", "hba1c", "glycated hemoglobin"],
 		icon: Activity,
 		linkedHref: "/reports/executive-summary",
