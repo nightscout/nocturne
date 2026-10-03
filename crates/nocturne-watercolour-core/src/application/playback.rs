@@ -42,6 +42,19 @@
 //! taken and seeks replay further. Memory is therefore
 //! `capacity * checkpoint_bytes`, where the backend derives capacity from
 //! its own budget.
+//!
+//! # Live sessions
+//!
+//! A finished playback can go on as a live session ([`Playback::go_live`]):
+//! operations are appended at the current tick as they happen, and the clock
+//! runs a fixed number of ticks per second of wall clock rather than mapping
+//! a duration. Each append moves the end of the timeline to an idle window
+//! past its last operation, so the session reaches the end, dries and
+//! finishes once nothing new has arrived for that long, and the next append
+//! starts it again. Appends queue: each starts after everything appended
+//! before it, so a caller can time its operations as one sequence. A live
+//! session only moves forward: its checkpoints are released, no more are
+//! taken, and a seek or reset is refused.
 
 use crate::domain::{Operation, Scene, SubSeed};
 
@@ -205,8 +218,21 @@ struct Checkpoint {
 /// thirteen times larger.
 pub const DEFAULT_TICK_BUDGET: u32 = 6;
 
+/// The clock of a live session; see the module docs.
+#[derive(Debug, Clone, Copy)]
+struct LiveClock {
+    ticks_per_second: f32,
+    idle_ticks: u32,
+    /// Wall clock not yet run, in ticks; below one between advances.
+    owed: f32,
+}
+
 pub struct Playback<S: Simulator> {
     sim: S,
+    live: Option<LiveClock>,
+    /// The tick whose events reaching the end applied; a live session that
+    /// resumes from there must not apply them again.
+    ended_at: Option<u32>,
     scene: Scene,
     tick: u32,
     state: PlaybackState,
@@ -230,6 +256,8 @@ impl<S: Simulator> Playback<S> {
         let curve = ProgressCurve::reveal_for(&scene, DEFAULT_PAINT_WALL_FRACTION);
         let mut pb = Playback {
             sim,
+            live: None,
+            ended_at: None,
             scene,
             tick: 0,
             state: PlaybackState::Paused,
@@ -266,7 +294,10 @@ impl<S: Simulator> Playback<S> {
         if self.state != PlaybackState::Playing || !elapsed_seconds.is_finite() {
             return 0;
         }
-        let target = self.tick_for_progress(self.progress_after(elapsed_seconds));
+        let target = match self.live {
+            Some(clock) => self.live_target(clock, elapsed_seconds).0,
+            None => self.tick_for_progress(self.progress_after(elapsed_seconds)),
+        };
         self.budgeted(target).saturating_sub(self.tick)
     }
 
@@ -335,6 +366,9 @@ impl<S: Simulator> Playback<S> {
         if self.state != PlaybackState::Playing {
             return 1.0;
         }
+        if let Some(clock) = self.live {
+            return clock.owed;
+        }
         (self.fractional_tick(self.elapsed_progress) - self.tick as f32 + 0.5).clamp(0.0, 1.0)
     }
 
@@ -391,6 +425,17 @@ impl<S: Simulator> Playback<S> {
         if self.state != PlaybackState::Playing || !elapsed_seconds.is_finite() {
             return Ok(());
         }
+        if let Some(clock) = self.live {
+            let (target, owed) = self.live_target(clock, elapsed_seconds);
+            let reached = self.budgeted(target);
+            self.run_to(reached)?;
+            // A session that falls behind its clock slows down rather than
+            // catching up: only the fraction of a tick is carried.
+            if let Some(clock) = self.live.as_mut() {
+                clock.owed = if reached < target { 0.0 } else { owed };
+            }
+            return Ok(());
+        }
         self.elapsed_progress = self.progress_after(elapsed_seconds);
         let target = self.tick_for_progress(self.elapsed_progress);
         if target > self.tick {
@@ -420,6 +465,73 @@ impl<S: Simulator> Playback<S> {
             self.seek_tick(target)?;
         }
         self.elapsed_progress = p;
+        Ok(())
+    }
+
+    /// The tick a live session's clock reaches after `elapsed_seconds`, and
+    /// the fraction of a tick it then owes.
+    fn live_target(&self, clock: LiveClock, elapsed_seconds: f32) -> (u32, f32) {
+        let due = clock.owed + elapsed_seconds.max(0.0) * clock.ticks_per_second;
+        let whole = due.floor();
+        let target = self
+            .tick
+            .saturating_add(whole as u32)
+            .min(self.total_ticks());
+        (target, due - whole)
+    }
+
+    /// Ends the reveal and carries on as a live session: see the module docs.
+    /// Runs whatever is left of the timeline first. `idle_ticks` is how long
+    /// the session keeps simulating after its last appended operation.
+    pub fn go_live(&mut self, ticks_per_second: f32, idle_ticks: u32) -> Result<(), EngineError> {
+        if !ticks_per_second.is_finite() || ticks_per_second <= 0.0 {
+            return Err(EngineError::new("ticks_per_second must be positive"));
+        }
+        self.finish_immediately()?;
+        for checkpoint in self.checkpoints.drain(..) {
+            self.sim.release(checkpoint.id);
+        }
+        self.live = Some(LiveClock {
+            ticks_per_second,
+            idle_ticks,
+            owed: 0.0,
+        });
+        Ok(())
+    }
+
+    /// Schedules `events`, each `after` ticks from where the session's queue
+    /// ends: the next tick, or the tick after the last operation appended
+    /// before them. Plays unless `events` is empty. Nothing is appended unless
+    /// every operation is valid. Only a live session takes appends, and the
+    /// timeline's tick cap for authored scenes does not apply to it.
+    pub fn append(&mut self, events: Vec<(u32, Operation)>) -> Result<(), EngineError> {
+        let clock = self
+            .live
+            .ok_or_else(|| EngineError::new("append needs a live session; call go_live first"))?;
+        if events.is_empty() {
+            return Ok(());
+        }
+        self.scene
+            .validate_operations(events.iter().map(|(_, op)| op))
+            .map_err(|errors| {
+                EngineError::new(format!("invalid appended operations: {errors:?}"))
+            })?;
+        let queued = self
+            .scene
+            .timeline
+            .events
+            .last()
+            .map_or(0, |e| e.at_tick + 1);
+        let from = (self.tick + 1).max(queued);
+        let timeline = &mut self.scene.timeline;
+        for (after, op) in events {
+            let at = from.saturating_add(after);
+            timeline.total_ticks = timeline
+                .total_ticks
+                .max(at.saturating_add(clock.idle_ticks));
+            timeline.push(at, op);
+        }
+        self.state = PlaybackState::Playing;
         Ok(())
     }
 
@@ -465,6 +577,10 @@ impl<S: Simulator> Playback<S> {
     }
 
     fn restore_for_seek(&mut self, target: u32) -> Result<(), EngineError> {
+        if self.live.is_some() {
+            return Err(EngineError::new("a live session only moves forward"));
+        }
+        self.ended_at = None;
         let cp = self
             .checkpoints
             .iter()
@@ -513,7 +629,7 @@ impl<S: Simulator> Playback<S> {
             .min()
             .unwrap_or(u32::MAX);
         let mut stop = target.min(next_event);
-        if self.sim.checkpoint_capacity() > 0 {
+        if self.live.is_none() && self.sim.checkpoint_capacity() > 0 {
             let every = self.policy.every_ticks;
             stop = stop.min((self.tick / every + 1).saturating_mul(every));
         }
@@ -535,6 +651,7 @@ impl<S: Simulator> Playback<S> {
                     .iter()
                     .enumerate()
                     .filter(|(_, e)| e.at_tick >= self.tick && e.at_tick < self.tick + ticks)
+                    .filter(|(_, e)| Some(e.at_tick) != self.ended_at)
                     .filter_map(|(index, e)| match &e.op {
                         Operation::Dab(dab) => Some(DabCharge {
                             at_tick: e.at_tick - self.tick,
@@ -575,11 +692,15 @@ impl<S: Simulator> Playback<S> {
             self.apply_events_at(self.tick)?;
             self.sim.apply(&Operation::DryAll, self.scene.seed)?;
             self.state = PlaybackState::Finished;
+            self.ended_at = Some(self.tick);
         }
         Ok(())
     }
 
     fn apply_events_at(&mut self, tick: u32) -> Result<(), EngineError> {
+        if self.ended_at == Some(tick) {
+            return Ok(());
+        }
         let events: Vec<(usize, Operation)> = self
             .scene
             .timeline
@@ -594,7 +715,7 @@ impl<S: Simulator> Playback<S> {
     }
 
     fn take_checkpoint(&mut self, at_event: bool) -> Result<(), EngineError> {
-        if self.checkpoints.iter().any(|c| c.tick == self.tick) {
+        if self.live.is_some() || self.checkpoints.iter().any(|c| c.tick == self.tick) {
             return Ok(());
         }
         let capacity = self.sim.checkpoint_capacity();
@@ -1027,5 +1148,256 @@ mod tests {
         pb.advance_by_elapsed(2.4).unwrap();
         assert_eq!(pb.current_tick(), pb.total_ticks());
         assert_eq!(pb.state(), PlaybackState::Finished);
+    }
+
+    /// What a live session asked of its simulator, in order.
+    #[derive(Debug, PartialEq)]
+    enum Call {
+        Apply(&'static str),
+        Step(u32),
+    }
+
+    struct Calls {
+        inner: CpuEngine,
+        log: Vec<Call>,
+    }
+
+    impl Simulator for Calls {
+        fn load(&mut self, scene: &Scene) -> Result<(), EngineError> {
+            self.inner.load(scene)
+        }
+        fn apply(&mut self, op: &Operation, seed: crate::domain::Seed) -> Result<(), EngineError> {
+            self.log.push(Call::Apply(match op {
+                Operation::Brush(_) => "brush",
+                Operation::Dry { .. } => "dry",
+                Operation::DryAll => "dry_all",
+                _ => "other",
+            }));
+            self.inner.apply(op, seed)
+        }
+        fn tick(&mut self) -> Result<(), EngineError> {
+            self.step(1)
+        }
+        fn step(&mut self, ticks: u32) -> Result<(), EngineError> {
+            self.log.push(Call::Step(ticks));
+            self.inner.step(ticks)
+        }
+        fn snapshot(&mut self) -> Result<Option<CheckpointId>, EngineError> {
+            self.inner.snapshot()
+        }
+        fn restore(&mut self, id: CheckpointId) -> Result<(), EngineError> {
+            self.inner.restore(id)
+        }
+        fn release(&mut self, id: CheckpointId) {
+            self.inner.release(id)
+        }
+        fn checkpoint_capacity(&self) -> usize {
+            self.inner.checkpoint_capacity()
+        }
+    }
+
+    fn stroke() -> Operation {
+        Operation::Brush(BrushStroke {
+            path: vec![Point::new(0.2, 0.5), Point::new(0.8, 0.5)],
+            radius: RadiusProfile::uniform(0.1),
+            pigment: 0,
+            concentration: 0.5,
+            water: 0.8,
+            softness: 0.4,
+            span: StrokeSpan::FULL,
+        })
+    }
+
+    /// A finished reveal gone live, with an empty log and no tick budget.
+    fn live(idle_ticks: u32) -> Playback<Calls> {
+        let sim = Calls {
+            inner: CpuEngine::default(),
+            log: Vec::new(),
+        };
+        let mut pb = Playback::new(sim, budget_scene(), 1000.0)
+            .unwrap()
+            .with_tick_budget(0);
+        pb.go_live(30.0, idle_ticks).unwrap();
+        pb.simulator().log.clear();
+        pb
+    }
+
+    #[test]
+    fn appended_operations_land_from_the_next_tick_at_the_session_rate() {
+        let mut pb = live(100);
+        let start = pb.current_tick();
+        pb.append(vec![(0, stroke()), (5, Operation::Dry { rate: 2.0 })])
+            .unwrap();
+        pb.advance_by_elapsed(1.0).unwrap();
+        assert_eq!(pb.current_tick(), start + 30);
+        assert_eq!(
+            pb.simulator().log,
+            [
+                Call::Step(1),
+                Call::Apply("brush"),
+                Call::Step(5),
+                Call::Apply("dry"),
+                Call::Step(24),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_session_dries_and_finishes_its_idle_window_after_the_last_operation_and_an_append_restarts_it()
+     {
+        let mut pb = live(40);
+        let start = pb.current_tick();
+        pb.append(vec![(0, stroke())]).unwrap();
+        pb.advance_by_elapsed(100.0).unwrap();
+        assert_eq!(pb.current_tick(), start + 1 + 40);
+        assert_eq!(pb.state(), PlaybackState::Finished);
+        assert_eq!(pb.simulator().log.last(), Some(&Call::Apply("dry_all")));
+
+        pb.append(vec![(0, stroke())]).unwrap();
+        assert_eq!(pb.state(), PlaybackState::Playing);
+        pb.advance_by_elapsed(0.5).unwrap();
+        assert_eq!(pb.current_tick(), start + 1 + 40 + 15);
+    }
+
+    #[test]
+    fn a_fraction_of_a_tick_carries_to_the_next_advance() {
+        let mut pb = live(100);
+        let start = pb.current_tick();
+        pb.append(vec![(0, stroke())]).unwrap();
+        for _ in 0..4 {
+            pb.advance_by_elapsed(0.02).unwrap();
+        }
+        assert_eq!(
+            pb.current_tick(),
+            start + 2,
+            "four 0.6-tick frames make 2.4 ticks"
+        );
+    }
+
+    #[test]
+    fn a_late_frame_does_not_make_the_session_catch_up() {
+        let mut pb = live(1000).with_tick_budget(3);
+        let start = pb.current_tick();
+        pb.append(vec![(0, stroke())]).unwrap();
+        pb.advance_by_elapsed(10.0).unwrap();
+        assert_eq!(pb.current_tick(), start + 3);
+        pb.advance_by_elapsed(1.0 / 30.0).unwrap();
+        assert_eq!(pb.current_tick(), start + 4);
+    }
+
+    #[test]
+    fn a_live_session_keeps_no_checkpoints() {
+        let mut pb = live(100);
+        assert!(pb.checkpoint_ticks().is_empty());
+        pb.append(vec![(0, stroke()), (50, stroke())]).unwrap();
+        pb.advance_by_elapsed(10.0).unwrap();
+        assert!(pb.checkpoint_ticks().is_empty());
+    }
+
+    #[test]
+    fn only_a_live_session_takes_appends() {
+        let mut pb = Playback::new(CpuEngine::default(), budget_scene(), 1000.0).unwrap();
+        assert!(pb.append(vec![(0, stroke())]).is_err());
+        assert_eq!(pb.scene().timeline.events.len(), 2);
+    }
+
+    #[test]
+    fn an_invalid_operation_appends_nothing() {
+        let mut pb = live(100);
+        let events = pb.scene().timeline.events.len();
+        let total = pb.total_ticks();
+        let bad = Operation::Brush(BrushStroke {
+            pigment: 99,
+            ..match stroke() {
+                Operation::Brush(b) => b,
+                _ => unreachable!(),
+            }
+        });
+        assert!(pb.append(vec![(0, stroke()), (1, bad)]).is_err());
+        assert_eq!(pb.scene().timeline.events.len(), events);
+        assert_eq!(pb.total_ticks(), total);
+        assert_eq!(pb.state(), PlaybackState::Finished);
+    }
+
+    #[test]
+    fn a_live_session_outruns_the_authored_tick_cap() {
+        let mut pb = live(0);
+        pb.append(vec![(crate::domain::scene::MAX_TOTAL_TICKS, stroke())])
+            .unwrap();
+        assert!(pb.total_ticks() > crate::domain::scene::MAX_TOTAL_TICKS);
+    }
+
+    #[test]
+    fn resuming_a_parked_session_does_not_apply_its_end_events_again() {
+        let mut timeline = Timeline::new(40);
+        timeline.push(40, Operation::Dry { rate: 2.0 });
+        let sim = Calls {
+            inner: CpuEngine::default(),
+            log: Vec::new(),
+        };
+        let mut pb = Playback::new(sim, reveal_scene(timeline), 1000.0)
+            .unwrap()
+            .with_tick_budget(0);
+        pb.go_live(30.0, 10).unwrap();
+        pb.simulator().log.clear();
+        pb.append(vec![(0, stroke())]).unwrap();
+        pb.advance_by_elapsed(10.0).unwrap();
+        assert_eq!(
+            pb.simulator().log,
+            [
+                Call::Step(1),
+                Call::Apply("brush"),
+                Call::Step(10),
+                Call::Apply("dry_all"),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_empty_append_leaves_a_parked_session_parked() {
+        let mut pb = live(10);
+        let total = pb.total_ticks();
+        pb.append(Vec::new()).unwrap();
+        assert_eq!(pb.state(), PlaybackState::Finished);
+        assert_eq!(pb.total_ticks(), total);
+    }
+
+    #[test]
+    fn an_append_queues_behind_the_operations_already_waiting() {
+        let mut pb = live(10);
+        pb.append(vec![(0, stroke()), (10, Operation::Dry { rate: 2.0 })])
+            .unwrap();
+        pb.append(vec![(0, Operation::DryAll)]).unwrap();
+        pb.advance_by_elapsed(1.0).unwrap();
+        assert_eq!(
+            pb.simulator().log[..6],
+            [
+                Call::Step(1),
+                Call::Apply("brush"),
+                Call::Step(10),
+                Call::Apply("dry"),
+                Call::Step(1),
+                Call::Apply("dry_all"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_live_session_refuses_to_seek_or_reset() {
+        let mut pb = live(10);
+        pb.append(vec![(0, stroke())]).unwrap();
+        pb.advance_by_elapsed(0.5).unwrap();
+        let tick = pb.current_tick();
+        assert!(pb.seek_tick(0).is_err());
+        assert!(pb.reset().is_err());
+        assert_eq!(pb.current_tick(), tick);
+    }
+
+    #[test]
+    fn a_live_frame_blends_by_the_share_of_a_tick_its_clock_owes() {
+        let mut pb = live(100);
+        pb.append(vec![(0, stroke())]).unwrap();
+        pb.advance_by_elapsed(0.05).unwrap();
+        assert!((pb.tick_blend() - 0.5).abs() < 1e-4);
     }
 }

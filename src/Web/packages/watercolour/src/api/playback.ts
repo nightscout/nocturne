@@ -1,4 +1,4 @@
-import type { ArtworkAutoplay, ArtworkOptions, CropWindow, DetailLevel, Surface } from '../types';
+import type { ArtworkAutoplay, ArtworkOptions, CropWindow, DetailLevel, LiveClock, Surface, TimedOp } from '../types';
 import { DEFAULT_DURATION_MS, DEFAULT_TAIL, detailForEdge } from '../types';
 import { type AssetKey, type AssetOptions, type AssetVariant, assetAvailable, assetUrl, iconAssetKey, loadManifest } from './assets';
 import { bakedServesEdge, type BakedManifest, type StripBitmap, drawStill, drawStripFrame, parseBakedManifest, sharedStill, sharedStrip } from './baked';
@@ -106,6 +106,17 @@ export interface ArtworkPlayer {
   /** Latest target wins; live replay is spread over admitted display frames. */
   seekTo(progress: number): void;
   finishImmediately(): void;
+  /**
+   * Live mode only: carries the artwork on as a live session that `clock`
+   * runs, and queues `ops` in it after everything painted before. A reveal
+   * still running is finished first, a budgeted slice per frame. The session
+   * plays until `clock.idleTicks` after its last operation, dries and stops;
+   * the next `paint` starts it again. It only moves forward: once live, seek
+   * and reset are ignored, and the instance is kept through every stop. A
+   * `releaseAfterFinish` player that let go before its first paint has
+   * nothing left to paint on. Other modes ignore it.
+   */
+  paint(ops: readonly TimedOp[], clock: LiveClock): void;
   resize(width: number, height: number, dpr?: number): void;
   dispose(): void;
   on(event: 'fallback', listener: (detail: FallbackDetail) => void): () => void;
@@ -157,6 +168,7 @@ interface Backend {
   seekTo(progress: number): void;
   /** `sliced`: run the rest of the reveal over the coming frames rather than in this call. */
   finish(sliced?: boolean): void;
+  paint?(ops: readonly TimedOp[], clock: LiveClock): void;
   resize(size: PixelSize): void;
   dispose(): void;
   exportPng?(width: number, height: number): Promise<Uint8Array>;
@@ -258,6 +270,10 @@ class LiveBackend implements Backend {
   private handle: SchedulerHandle;
   private disposed = false;
   private released = false;
+  /** Carried on as a live session by `paint`: its clock runs the ticks, not the reveal's easing. */
+  private live = false;
+  /** Painted while the reveal is still finishing. */
+  private queued: { ops: readonly TimedOp[]; clock: LiveClock }[] = [];
   private readonly releaseAfterFinish: boolean;
   private readonly unsubscribeLost: () => void;
   private readonly easing?: (t: number) => number;
@@ -384,13 +400,13 @@ class LiveBackend implements Backend {
 
   get progress(): number {
     if (this.released) return 1;
-    if (this.easing) return Math.min(1, this.elapsedMs / this.durationMs);
+    if (this.easing && !this.live) return Math.min(1, this.elapsedMs / this.durationMs);
     return this.guarded(() => this.instance.progress(), 0);
   }
 
   get easedProgress(): number {
     if (this.released) return 1;
-    if (this.easing) return this.easing(Math.min(1, this.elapsedMs / this.durationMs));
+    if (this.easing && !this.live) return this.easing(Math.min(1, this.elapsedMs / this.durationMs));
     return this.guarded(() => this.instance.progress(), 0);
   }
 
@@ -432,6 +448,8 @@ class LiveBackend implements Backend {
   }
 
   reset(): void {
+    if (this.live) return;
+    this.queued = [];
     this.seekTick = undefined;
     this.seekPresentPending = false;
     this.playAfterSeek = false;
@@ -442,6 +460,7 @@ class LiveBackend implements Backend {
   }
 
   seek(progress: number): void {
+    if (this.live) return;
     this.seekTick = undefined;
     this.seekPresentPending = false;
     this.playAfterSeek = false;
@@ -459,7 +478,7 @@ class LiveBackend implements Backend {
   }
 
   seekTo(progress: number): void {
-    if (this.disposed || this.released) return;
+    if (this.disposed || this.released || this.live) return;
     this.seekTick = this.instance.tickForProgress(Math.min(1, Math.max(0, progress)));
     this.seekPresentPending = true;
     this.playAfterSeek = false;
@@ -470,6 +489,8 @@ class LiveBackend implements Backend {
 
   finish(sliced = false): void {
     if (this.disposed || this.released) return;
+    // Finishing outright finishes what was painted too; a sliced finish goes live once its slices are done.
+    if (!sliced) this.flushPaints();
     this.seekTick = undefined;
     this.seekPresentPending = false;
     this.playAfterSeek = false;
@@ -485,9 +506,43 @@ class LiveBackend implements Backend {
     this.settling = false;
     this.step(() => this.instance.finishImmediately());
     this.callbacks.onFinished();
+    this.flushPaints();
     // Presented now rather than on the scheduler's next visible frame, so a
     // host finishing an off-screen still does not leave it holding its slot.
     if (this.releaseAfterFinish) this.render();
+  }
+
+  paint(ops: readonly TimedOp[], clock: LiveClock): void {
+    if (this.disposed || this.released) return;
+    this.queued.push({ ops, clock });
+    if (this.live || this.finished) {
+      this.flushPaints();
+      return;
+    }
+    if (!this.settling) this.finish(true);
+  }
+
+  /** Appends what was painted, going live first; the reveal must have finished or be finishable at once. */
+  private flushPaints(): void {
+    const queued = this.queued.splice(0);
+    if (queued.length === 0) return;
+    this.seekTick = undefined;
+    this.seekPresentPending = false;
+    this.playAfterSeek = false;
+    this.settling = false;
+    this.step(() => {
+      if (!this.live) {
+        const { ticksPerSecond, idleTicks } = queued[0]!.clock;
+        this.instance.goLive(ticksPerSecond, idleTicks);
+        this.live = true;
+      }
+      for (const { ops } of queued) {
+        this.instance.appendOperations(JSON.stringify(ops.map(({ afterTicks, op }) => ({ after_ticks: afterTicks, op }))));
+      }
+    });
+    if (this.disposed || this.released || !this.live) return;
+    this.isPlaying = true;
+    this.handle.setActive(true);
   }
 
   resize(size: PixelSize): void {
@@ -562,7 +617,7 @@ class LiveBackend implements Backend {
     this.step(() => {
       const before = this.instance.currentTick();
       let changed: boolean | void;
-      if (this.easing) {
+      if (this.easing && !this.live) {
         this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt * 1000);
         changed = this.instance.advanceToProgress(this.easing(this.elapsedMs / this.durationMs));
       } else {
@@ -588,7 +643,7 @@ class LiveBackend implements Backend {
   }
 
   private ticksDue(elapsedSeconds: number): number {
-    if (!this.easing) return this.instance.ticksDue(elapsedSeconds);
+    if (!this.easing || this.live) return this.instance.ticksDue(elapsedSeconds);
     const elapsedMs = Math.min(this.durationMs, this.elapsedMs + elapsedSeconds * 1000);
     return this.instance.ticksDueAtProgress(this.easing(elapsedMs / this.durationMs));
   }
@@ -628,6 +683,7 @@ class LiveBackend implements Backend {
     if (!done || !this.settling) return;
     this.settling = false;
     this.callbacks.onFinished();
+    this.flushPaints();
     if (!inFrame) this.render();
   }
 
@@ -659,7 +715,7 @@ class LiveBackend implements Backend {
         this.isPlaying = false;
         this.callbacks.onFinished();
       }
-      if (this.releaseAfterFinish && this.guarded(() => this.instance.isFinished(), true)) {
+      if (this.releaseAfterFinish && !this.live && this.guarded(() => this.instance.isFinished(), true)) {
         // The canvas keeps the presented frame; free the slot and checkpoints.
         this.releaseResources();
         return;
@@ -1174,6 +1230,11 @@ class Player implements ArtworkPlayer {
 
   finishImmediately(): void {
     this.backend?.finish();
+    this.emit('statechange');
+  }
+
+  paint(ops: readonly TimedOp[], clock: LiveClock): void {
+    this.backend?.paint?.(ops, clock);
     this.emit('statechange');
   }
 
