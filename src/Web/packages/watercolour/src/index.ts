@@ -94,5 +94,5 @@ export type { WatercolourErrorCode } from './api/errors';
 export { bloomScene } from './api/bloom-scene';
 export type { BloomSceneOptions } from './api/bloom-scene';
 
-export { reportStrokesScene, reportStripCrop } from './api/report-header-scene';
+export { reportStrokesScene, reportWashScene, reportStripCrop } from './api/report-header-scene';
 export type { ReportSceneOptions } from './api/report-header-scene';

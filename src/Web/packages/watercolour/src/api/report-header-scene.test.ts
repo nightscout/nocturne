@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_FRAME_ASPECT } from './drop-scene';
-import { reportStripCrop, reportStrokesScene } from './report-header-scene';
+import { reportStripCrop, reportStrokesScene, reportWashScene } from './report-header-scene';
 import { parseSceneDocument } from './scenes';
 
 const module = {
@@ -19,10 +19,11 @@ const module = {
 };
 
 type Brush = { path: [number, number][]; radius: [number, number]; pigment: number };
+type Dab = { center: [number, number]; radius: number; pigment: number };
 type StrokesDocument = {
   size_hint: [number, number];
   palette: { entries: unknown[] };
-  timeline: { total_ticks: number; events: { at_tick: number; op: { brush?: Brush } | string }[] };
+  timeline: { total_ticks: number; events: { at_tick: number; op: { brush?: Brush; dab?: Dab; water?: Brush } | string }[] };
 };
 
 const document = (width: number, height: number, seed: number) =>
@@ -114,3 +115,54 @@ describe('reportStrokesScene', () => {
   });
 });
 
+const wash = (width: number, height: number, seed: number) =>
+  JSON.parse(reportWashScene(module, width, height, { seed })) as StrokesDocument;
+
+describe('reportWashScene', () => {
+  it('keeps every mark within the engine bounds and inside the shown band', () => {
+    const invalid: unknown[] = [];
+    for (const [width, height] of [[1100, 56], [1100, 14], [600, 40], [120, 40], [80, 120]]) {
+      const crop = reportStripCrop(width!, height!);
+      for (let seed = 0; seed < 24; seed++) {
+        const json = reportWashScene(module, width!, height!, { seed, dpr: 2 });
+        expect(parseSceneDocument(json).version).toBe(1);
+        const scene = JSON.parse(json) as StrokesDocument;
+        expect(scene.size_hint[0] / scene.size_hint[1]).toBeLessThanOrEqual(MAX_FRAME_ASPECT + 0.01);
+        for (const event of scene.timeline.events) {
+          if (event.at_tick < 0 || event.at_tick > scene.timeline.total_ticks) invalid.push(event);
+          if (typeof event.op === 'string') continue;
+          const mark = event.op.brush ?? event.op.water;
+          const points = mark ? mark.path : event.op.dab ? [event.op.dab.center] : [];
+          const radii = mark ? mark.radius : event.op.dab ? [event.op.dab.radius] : [];
+          for (const [x, y] of points) {
+            if (!(x >= 0 && x <= 1 && y >= crop.y - 1e-9 && y <= crop.y + crop.height + 1e-9)) invalid.push(event);
+          }
+          for (const radius of radii) {
+            if (!(radius > 0 && radius <= 1)) invalid.push(event);
+          }
+        }
+      }
+    }
+    expect(invalid).toEqual([]);
+  });
+
+  it('lays pigment over most of the strip from the left and leaves the right clear', () => {
+    const crop = reportStripCrop(1100, 56);
+    for (let seed = 0; seed < 24; seed++) {
+      const laid = brushes(wash(1100, 56, seed));
+      const xs = laid.flatMap((brush) => brush.path.map(([x]) => x));
+      expect(Math.min(...xs)).toBeLessThan(0.04);
+      expect(Math.max(...xs)).toBeGreaterThanOrEqual(0.7);
+      expect(Math.max(...xs)).toBeLessThanOrEqual(0.85);
+      const heights = laid.map((brush) => (brush.path[0]![1] - crop.y) / crop.height);
+      expect(Math.min(...heights)).toBeLessThan(0.2);
+      expect(Math.max(...heights)).toBeGreaterThan(0.8);
+    }
+  });
+
+  it('reproduces a seed and paints another seed differently', () => {
+    const options = { seed: 7, dpr: 2 };
+    expect(reportWashScene(module, 1100, 56, options)).toBe(reportWashScene(module, 1100, 56, options));
+    expect(wash(1100, 56, 7).timeline).not.toEqual(wash(1100, 56, 8).timeline);
+  });
+});

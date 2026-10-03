@@ -113,33 +113,41 @@ player; a finished reveal does not replay. `onStateChange` also reports `none`,
 which has no `ready` event. `crop` may be a function of the measured box, for a
 `scene` authored to match it.
 
-## Generated report strokes
+## Generated report headers
 
-`reportStrokesScene(module, width, height, { seed?, surface?, dpr? })` authors
-three tapered brush strokes in the `moonlight` palette, laid wet left to right
-across the whole `width` x `height` strip: a thin one, a broad one and a darker
-one crossing it, each ending in split dry streaks. The seed sets their heights,
-weights, curvature, overlap and order. Stroke weights follow the strip's height,
-down to a 28 px floor, so a rule-thin strip still gets brush-weight strokes.
+Two seeded paintings for a report's header strip, both in the `moonlight`
+palette and taking `(module, width, height, { seed?, surface?, dpr? })`:
+
+- `reportStrokesScene` lays three tapered brush strokes wet left to right
+  across the whole strip: a thin one, a broad one and a darker one crossing it,
+  each ending in split dry streaks. The seed sets their heights, weights,
+  curvature, overlap and order. Stroke weights follow the strip's height, down
+  to a 28 px floor, so a rule-thin strip still gets brush-weight strokes.
+- `reportWashScene` lays one loose wash wet into wet in five or six
+  overlapping horizontal passes from the left, over nearly the full height and
+  70-85% of the width. The brush runs out toward the right, water dropped back
+  into the drying edge blooms it, and it dries to a hard line where it stops; a
+  few heavier drops pool along the bottom. The seed sets its reach, the edge and
+  the passes.
 
 The simulation grid is square and stretched to the painting, so a long strip
 painted on a canvas of its own shape would get cells many times wider than they
 are tall. A strip longer than 3:1 is instead painted on a 3:1 canvas at the
-strip's width, with the strokes in the band through its middle, and
-`reportStripCrop(width, height)` is the window that shows that band. Mount the
-two together, as `ReportStrokes` does:
+strip's width, in the band through its middle, and `reportStripCrop(width,
+height)` is the window that shows that band. Mount a scene with it, as
+`ReportStrokes` does:
 
 ```ts
 mountPlayer(frame, canvas, {
-  scene: (module, width, height, dpr) => reportStrokesScene(module, width, height, { seed, surface, dpr }),
+  scene: (module, width, height, dpr) => reportWashScene(module, width, height, { seed, surface, dpr }),
   crop: reportStripCrop,
   fit: 'fill',
   releaseAfterFinish: true,
 });
 ```
 
-It is live only, with no baked or static fallback: presentation `off` paints
-nothing, and reduced motion or `still` paints the finished strokes.
+Both are live only, with no baked or static fallback: presentation `off`
+paints nothing, and reduced motion or `still` paints the finished painting.
 
 ## `detectCapabilities`
 
@@ -272,7 +280,7 @@ disposal.
 | `AvatarWash` | `avatar-wash` | `name: string`, `size = 32` | Seed derives from `name` via `seedFromName` unless given. Defaults to `motion: 'reduced'` with `releaseAfterFinish`, so each head paints one frame live once it nears the viewport, spread over a few frames, and releases the engine (the canvas keeps the pixels) - a member list holds dozens of avatars and a live slot per head would exhaust the cap. |
 | `ConfirmationBackground` | `confirmation-background` | - | Fills its container only when it is within 20% of the artwork's 3:1 aspect, else `contain` anchored bottom-left. On dark surfaces the canvas runs at CSS opacity 0.45 because Luminous alpha saturates. Plays once, then releases its live slot. |
 | `HeaderMotif` | `header-motif` | - | Three loose horizontal brush strokes, pulled left to right. Fixed `aspect-ratio: 5/1; width: 10rem` (160x32); plays once, then releases its live slot. |
-| `ReportStrokes` | a scene generated for the box (`reportStrokesScene`) | `name: string`, `position = 'relative'` | Takes only `name`, `position` and `class`. Fills its box; the seed derives from `name` via `seedFromName`, so one name always paints the same strokes. Repaints on a theme change; plays once, then releases its live slot. |
+| `ReportStrokes` | a scene generated for the box (`reportStrokesScene`, or `reportWashScene` with `gesture="wash"`) | `name: string`, `gesture = 'strokes'`, `position = 'relative'` | Takes only `name`, `gesture`, `position` and `class`. Fills its box; the seed derives from `name` via `seedFromName`, so one name always paints the same. Repaints on a theme change; plays once, then releases its live slot. |
 | `DropSurface` | a stroke generated for the surface (`fitStroke`, `dropScene`) | see [Paint drops](#paint-drops) | Wraps arbitrary content and paints one brush stroke in its empty space on hover, selection or focus. Live only. |
 | `DropGroup` | - | `name?: string` | Hands each `DropSurface` inside it an index and a shared seed, so a run varies by seed. |
 
