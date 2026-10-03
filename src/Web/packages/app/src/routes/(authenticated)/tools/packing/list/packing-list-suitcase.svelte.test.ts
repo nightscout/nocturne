@@ -1,5 +1,5 @@
 import { render } from "vitest-browser-svelte";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import { encodeBase64Utf8 } from "$lib/utils";
@@ -7,16 +7,27 @@ import type { LiveClock, MountOptions, PlayerState, TimedOp, WasmModule } from "
 
 const reducedMotion = vi.hoisted(() => ({ current: false }));
 
-/** The live suitcase's player, as the page drives it. */
+/**
+ * The live suitcase's engine, as the page drives it. Like the real player it
+ * builds the scene once the engine has loaded, then reports ready, then live;
+ * `build` and `ready` let a test hold either step back.
+ */
 const live = vi.hoisted(() => ({
-  /** The mode the fake engine settles on: `live`, or `none` where nothing can paint. */
+  /** The mode the engine settles on: `live`, or `none` where nothing can paint. */
   mode: "live" as "live" | "none",
-  /** Whether the player is ready as soon as it mounts; otherwise `ready()` hands it over. */
-  readyAtMount: true,
+  /** The player's resolved motion: reduced under the OS setting or the app's "still" presentation. */
+  motion: "full" as "full" | "reduced",
+  autoBuild: true,
+  autoReady: true,
   scenes: [] as string[],
   paints: [] as { ops: readonly TimedOp[]; clock: LiveClock }[],
   calls: [] as string[],
+  build: () => {},
   ready: () => {},
+  /** Tears the player down and mounts a new one, as a presentation change does. */
+  rebuild: () => {},
+  /** The live backend fails mid-session and the player settles on `none`. */
+  fault: () => {},
 }));
 
 vi.mock("$app/navigation", () => ({
@@ -50,6 +61,9 @@ vi.mock("@nocturne/watercolour", async (importOriginal) => {
   });
   const module = { catalogueScene: () => donor } as unknown as WasmModule;
   const player = {
+    get state() {
+      return { mode: "live", motion: live.motion } as PlayerState;
+    },
     play: () => live.calls.push("play"),
     finishImmediately: () => live.calls.push("finishImmediately"),
     paint: (ops: readonly TimedOp[], clock: LiveClock) => {
@@ -57,22 +71,45 @@ vi.mock("@nocturne/watercolour", async (importOriginal) => {
       live.paints.push({ ops, clock });
     },
   };
+  const later = (step: () => void) => queueMicrotask(step);
+
+  function mount(options: MountOptions) {
+    let cleanup: (() => void) | void;
+    let disposed = false;
+    if (live.mode === "none") {
+      later(() => options.onStateChange?.({ mode: "none" } as PlayerState));
+      return { dispose: () => {} };
+    }
+    live.ready = () => {
+      if (disposed) return;
+      cleanup = options.onReady?.(player as never);
+      options.onStateChange?.({ mode: "live", motion: live.motion } as PlayerState);
+    };
+    live.build = () => {
+      if (disposed) return;
+      live.scenes.push(options.scene!(module, 120, 120, 2));
+      if (live.autoReady) live.ready();
+    };
+    live.fault = () => options.onStateChange?.({ mode: "none" } as PlayerState);
+    if (live.autoBuild) later(() => live.build());
+    return {
+      dispose: () => {
+        disposed = true;
+        cleanup?.();
+      },
+    };
+  }
+
   return {
     ...watercolour,
     Artwork: (await import("./SpyArtwork.test.svelte")).default,
     mountPlayer: (_frame: HTMLElement, _canvas: HTMLCanvasElement, options: MountOptions) => {
-      if (live.mode === "none") {
-        queueMicrotask(() => options.onStateChange?.({ mode: "none" } as PlayerState));
-        return () => {};
-      }
-      live.scenes.push(options.scene!(module, 120, 120, 2));
-      let cleanup: (() => void) | void;
-      live.ready = () => {
-        cleanup = options.onReady?.(player as never);
+      let current = mount(options);
+      live.rebuild = () => {
+        current.dispose();
+        current = mount(options);
       };
-      options.onStateChange?.({ mode: "live" } as PlayerState);
-      if (live.readyAtMount) live.ready();
-      return () => cleanup?.();
+      return () => current.dispose();
     },
   };
 });
@@ -88,20 +125,24 @@ function listUrl(items: Array<{ c: string; l: string; q: number; p?: 1 }>) {
 const packed = (label: string) => page.getByRole("checkbox", { name: `Packed: ${label}` });
 const removeButton = (label: string) => page.getByRole("button", { name: `Remove ${label}` });
 
-type Op = Record<string, Record<string, unknown>> | string;
+type Brush = { brush: { pigment: number; concentration: number } };
 const kinds = (ops: readonly TimedOp[]) => ops.map(({ op }) => (typeof op === "string" ? op : Object.keys(op)[0]));
 const lastPaint = () => live.paints.at(-1)!.ops;
-const brushes = (ops: readonly TimedOp[]) =>
-  ops.flatMap(({ op }) => (typeof op === "object" && "brush" in op ? [(op as Op & { brush: { pigment: number } }).brush] : []));
+const brushes = (ops: readonly { op: unknown }[]) =>
+  ops.flatMap(({ op }) => (typeof op === "object" && op !== null && "brush" in op ? [(op as Brush).brush] : []));
 /** Indigo, the donor's `shadow`: only the strap and handle are painted in it. */
 const HARDWARE = 1;
-const hasHardware = (ops: readonly TimedOp[]) => brushes(ops).some((b) => b.pigment === HARDWARE);
+const hasHardware = (ops: readonly { op: unknown }[]) => brushes(ops).some((b) => b.pigment === HARDWARE);
+const sceneEvents = (index: number) => (JSON.parse(live.scenes[index]!) as { timeline: { events: { op: unknown }[] } }).timeline.events;
+/** Each replayed pack starts by restoring the silhouette. */
+const replayedBands = (index: number) =>
+  sceneEvents(index).filter(({ op }) => typeof op === "object" && op !== null && "set_mask" in op).length;
 
 describe("packing list suitcase", () => {
   beforeEach(() => {
     reducedMotion.current = false;
     vi.clearAllMocks();
-    Object.assign(live, { mode: "live", readyAtMount: true, scenes: [], paints: [], calls: [] });
+    Object.assign(live, { mode: "live", motion: "full", autoBuild: true, autoReady: true, scenes: [], paints: [], calls: [] });
     pageState.url = listUrl([
       { c: "Supplies", l: "Test strips", q: 2, p: 1 },
       { c: "Supplies", l: "Pen needles", q: 10 },
@@ -109,11 +150,23 @@ describe("packing list suitcase", () => {
     ]);
   });
 
-  it("replays what is already packed and plays it in", async () => {
+  it("replays what is already packed and leaves the reveal to the player", async () => {
     render(PackingListPage, {});
-    await expect.poll(() => live.calls).toEqual(["play"]);
-    const { timeline } = JSON.parse(live.scenes[0]!) as { timeline: { events: { op: Op }[] } };
-    expect(timeline.events.filter(({ op }) => op === "dry_all")).toHaveLength(1);
+    await expect.poll(() => live.scenes.length).toBe(1);
+    expect(replayedBands(0)).toBe(1);
+    expect(hasHardware(sceneEvents(0))).toBe(false);
+    expect(live.calls).toEqual([]);
+  });
+
+  it("replays a fully packed list with its hardware on", async () => {
+    pageState.url = listUrl([
+      { c: "Supplies", l: "Test strips", q: 2, p: 1 },
+      { c: "Clothes", l: "Socks", q: 3, p: 1 },
+    ]);
+    render(PackingListPage, {});
+    await expect.poll(() => live.scenes.length).toBe(1);
+    expect(replayedBands(0)).toBe(2);
+    expect(hasHardware(sceneEvents(0))).toBe(true);
   });
 
   it("paints a band for each pack and lifts the lowest on an unpack, on the suitcase's clock", async () => {
@@ -154,8 +207,33 @@ describe("packing list suitcase", () => {
     expect(kinds(lastPaint())).toEqual(["lift"]);
   });
 
-  it("hands over packs made before the player was ready once it is", async () => {
-    live.readyAtMount = false;
+  it("glazes the full suitcase for an item added and packed after it was complete", async () => {
+    render(PackingListPage, {});
+    await packed("Pen needles").click();
+    await packed("Socks").click();
+    await expect.poll(() => live.paints.length).toBe(2);
+
+    await page.getByRole("button", { name: "Add custom item" }).click();
+    await page.getByPlaceholder("Item name...").fill("Charger");
+    await userEvent.keyboard("{Enter}");
+    await packed("Charger").click();
+    await expect.poll(() => live.paints.length).toBe(3);
+    expect(hasHardware(lastPaint())).toBe(false);
+    expect(Math.max(...brushes(lastPaint()).map((b) => b.concentration))).toBeLessThan(0.2);
+  });
+
+  it("replays a pack made before the scene was built, rather than painting it", async () => {
+    live.autoBuild = false;
+    render(PackingListPage, {});
+    await packed("Pen needles").click();
+    await expect.element(packed("Pen needles")).toBeChecked();
+    live.build();
+    expect(replayedBands(0)).toBe(2);
+    expect(live.paints).toEqual([]);
+  });
+
+  it("hands over packs made while the player was getting ready once it is", async () => {
+    live.autoReady = false;
     render(PackingListPage, {});
     await expect.poll(() => live.scenes.length).toBe(1);
     await packed("Pen needles").click();
@@ -167,23 +245,35 @@ describe("packing list suitcase", () => {
     expect(kinds(live.paints[0]!.ops)).toContain("brush");
   });
 
-  it("finishes each paint at once under reduced motion", async () => {
-    reducedMotion.current = true;
+  it("rebuilds from what is still packed, without painting it twice", async () => {
     render(PackingListPage, {});
-    await expect.poll(() => live.calls).toEqual(["finishImmediately"]);
     await packed("Pen needles").click();
-    await expect.poll(() => live.calls).toEqual(["finishImmediately", "paint", "finishImmediately"]);
+    await packed("Pen needles").click();
+    await expect.poll(() => live.paints.length).toBe(2);
+
+    live.rebuild();
+    await expect.poll(() => live.scenes.length).toBe(2);
+    expect(replayedBands(1)).toBe(1);
+    expect(live.paints).toHaveLength(2);
+
+    await packed("Socks").click();
+    await expect.poll(() => live.paints.length).toBe(3);
+  });
+
+  it("finishes each paint at once when the player's motion is reduced", async () => {
+    live.motion = "reduced";
+    render(PackingListPage, {});
+    await expect.poll(() => live.scenes.length).toBe(1);
+    await packed("Pen needles").click();
+    await expect.poll(() => live.calls).toEqual(["paint", "finishImmediately"]);
   });
 
   describe("without a live engine", () => {
     const seeks = () => spyPlayer.seekTo.mock.calls.map(([at]) => at);
     const PAINT_END = 0.2;
 
-    beforeEach(() => {
-      live.mode = "none";
-    });
-
     it("seeks the catalogue suitcase's reveal by the share packed, and plays the settle when complete", async () => {
+      live.mode = "none";
       render(PackingListPage, {});
       await expect.poll(() => seeks().at(-1)).toBeCloseTo(PAINT_END / 3, 10);
       await packed("Pen needles").click();
@@ -194,7 +284,20 @@ describe("packing list suitcase", () => {
       expect(live.paints).toEqual([]);
     });
 
+    it("takes over at the packed share when the live suitcase fails mid-session, and paints nothing more live", async () => {
+      render(PackingListPage, {});
+      await packed("Pen needles").click();
+      await expect.poll(() => live.paints.length).toBe(1);
+
+      live.fault();
+      await expect.poll(() => seeks().at(-1)).toBeCloseTo((PAINT_END * 2) / 3, 10);
+      await packed("Socks").click();
+      await expect.poll(() => spyPlayer.play.mock.calls.length).toBe(1);
+      expect(live.paints).toHaveLength(1);
+    });
+
     it("shows the plain icon when the catalogue suitcase cannot paint either", async () => {
+      live.mode = "none";
       render(PackingListPage, {});
       await expect.poll(() => spyPlayer.seekTo.mock.calls.length).toBeGreaterThan(0);
       await expect.element(page.getByTestId("packing-icon")).not.toBeInTheDocument();

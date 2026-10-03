@@ -16,9 +16,10 @@
 
   /**
    * The suitcase painted one band per packed item. The page reports each pack
-   * and unpack as it happens through `pack` and `unpack`, and the removal of
-   * an unpacked item through `countChanged`; `packed` is the list as the
-   * suitcase mounts, `total` as it stands.
+   * and unpack as it happens through `pack` and `unpack`, and every removal
+   * through `countChanged`, after an `unpack` when the item was packed.
+   * `packed` is the list as the suitcase mounts and is not read again;
+   * `total` is the list as it stands.
    */
   interface Props {
     /** Categories of the packed items when the suitcase mounts, in list order. Read once. */
@@ -63,7 +64,7 @@
       return;
     }
     player.paint(ops, PACKING_LIVE_CLOCK);
-    if (prefersReducedMotion.current) player.finishImmediately();
+    if (player.state.motion === "reduced") player.finishImmediately();
   }
 
   let canvas: HTMLCanvasElement | undefined = $state();
@@ -72,7 +73,7 @@
     const el = canvas;
     const container = frame;
     if (!el || !container || !live) return;
-    return mountPlayer(container, el, {
+    const unmount = mountPlayer(container, el, {
       scene: (module, width, height, dpr) => {
         const scene = packingSuitcaseScene(module, width, height, {
           packed: stack,
@@ -84,12 +85,9 @@
         return scene.sceneJson;
       },
       mode: "live",
-      autoplay: "never",
       durationMs: 1500,
       onReady: (ready) => {
         player = ready;
-        if (prefersReducedMotion.current) ready.finishImmediately();
-        else ready.play();
         for (const ops of pending.splice(0)) paint(ops);
         return () => (player = undefined);
       },
@@ -99,6 +97,11 @@
           else live = false;
         }),
     });
+    return () => {
+      unmount();
+      painter = undefined;
+      pending = [];
+    };
   });
 
   // Without a live engine the catalogue suitcase stands in, seeking its reveal
