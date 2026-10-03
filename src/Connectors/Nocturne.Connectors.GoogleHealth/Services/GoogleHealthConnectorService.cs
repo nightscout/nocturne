@@ -48,10 +48,12 @@ public sealed class GoogleHealthConnectorService(
         CancellationToken cancellationToken = default,
         DateTime? since = null,
         ISyncProgressReporter? progressReporter = null) =>
-        // The managed backfill/live window resolved inside PerformSyncInternalAsync now owns
-        // Google Health's resume point entirely; the value passed through here is never read, it
-        // only needs to be non-null so the base class skips its own (glucose/treatment-only) watermark.
-        base.SyncDataAsync(config, cancellationToken, since ?? DateTime.UtcNow, progressReporter);
+        since is { } requestedFrom
+            ? base.SyncDataAsync(new SyncRequest { From = requestedFrom }, config, cancellationToken, progressReporter)
+            : base.SyncDataAsync(config, cancellationToken, DateTime.UtcNow, progressReporter);
+
+    // Google Health owns its health cursors; a base glucose watermark must not become a repair bound.
+    protected override SyncRequest CreateBackgroundSyncRequest(DateTime? since) => new();
 
     // Matches GoogleHealthConnectorConfiguration's own validation floor for an explicit ImportFrom.
     private static readonly DateTimeOffset EarliestSupportedDate = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -81,9 +83,11 @@ public sealed class GoogleHealthConnectorService(
         SyncRequest request, GoogleHealthConnectorConfiguration config, DateTimeOffset now, CancellationToken ct)
     {
         var today = new DateTimeOffset(DateTime.SpecifyKind(now.UtcDateTime.Date, DateTimeKind.Utc));
-        if (request.To is { } requestedTo)
+        if (request.From is not null || request.To is not null)
         {
-            var explicitTo = new DateTimeOffset(DateTime.SpecifyKind(requestedTo, DateTimeKind.Utc));
+            var explicitTo = request.To is { } requestedTo
+                ? new DateTimeOffset(DateTime.SpecifyKind(requestedTo, DateTimeKind.Utc))
+                : now;
             var explicitFrom = request.From is { } requestedFrom
                 ? new DateTimeOffset(DateTime.SpecifyKind(requestedFrom, DateTimeKind.Utc))
                 : EarliestSupportedDate;
@@ -287,6 +291,8 @@ public sealed class GoogleHealthConnectorService(
             if (active.Length == 0)
                 throw new GoogleHealthException("permission_denied", stage: "scope_validation");
             var missingConsent = selected.Except(active, StringComparer.Ordinal).ToArray();
+            var coversConfiguredTypes = ResolveActiveTypes(new SyncRequest(), config)
+                .All(type => GoogleHealthClient.TryGetDataType(type, out var name) && active.Contains(name, StringComparer.Ordinal));
 
             var now = clock.GetUtcNow();
             var window = await ResolveWindowAsync(request, config, now, cancellationToken);
@@ -299,7 +305,7 @@ public sealed class GoogleHealthConnectorService(
                     tenantId, window.From, window.To, string.Join(',', active));
                 await ReadWithRefreshAsync(
                     config, session.AccessToken!, active, window.From, window.To, tenantId, result, cancellationToken);
-                if (missingConsent.Length == 0)
+                if (coversConfiguredTypes)
                     await PersistWatermarkAsync(window.To, cancellationToken);
                 return Complete(result, missingConsent.Length == 0
                     ? string.Empty
@@ -312,7 +318,7 @@ public sealed class GoogleHealthConnectorService(
                 tenantId, liveFrom, now, string.Join(',', active));
             var accessToken = await ReadWithRefreshAsync(
                 config, session.AccessToken!, active, liveFrom, now, tenantId, result, cancellationToken);
-            if (missingConsent.Length == 0)
+            if (coversConfiguredTypes)
                 await PersistWatermarkAsync(now, cancellationToken);
 
             if (window.IsBackfillDay && window.From < window.To)
@@ -342,7 +348,7 @@ public sealed class GoogleHealthConnectorService(
                     throw;
                 }
             }
-            if (missingConsent.Length == 0)
+            if (coversConfiguredTypes)
             {
                 var justCompletedBackfill = await AdvanceBackfillStateAsync(window, config, cancellationToken);
                 if (justCompletedBackfill && !string.IsNullOrWhiteSpace(config.ImportFrom))

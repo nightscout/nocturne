@@ -303,8 +303,10 @@ public class GoogleHealthConnectorServiceTests
         Assert.False(stored.RootElement.TryGetProperty("lastSyncedTo", out _));
     }
 
-    [Fact]
-    public async Task Requested_data_types_narrow_the_configured_selection()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Requested_data_types_do_not_advance_shared_progress(bool bounded)
     {
         var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
         {
@@ -315,8 +317,14 @@ public class GoogleHealthConnectorServiceTests
         var config = fixture.Configuration();
         config.SyncSteps = true;
 
+        var originalState = fixture.StoredConfiguration;
         var result = await fixture.Service.SyncDataAsync(
-            new SyncRequest { DataTypes = [SyncDataType.BodyWeight] },
+            new SyncRequest
+            {
+                DataTypes = [SyncDataType.BodyWeight],
+                From = bounded ? new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc) : null,
+                To = bounded ? new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc) : null,
+            },
             config,
             CancellationToken.None);
 
@@ -325,7 +333,31 @@ public class GoogleHealthConnectorServiceTests
             It.IsAny<IReadOnlyCollection<GoogleHealthReading>>(),
             It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
             It.IsAny<int>(),
-            It.IsAny<CancellationToken>()), Times.Exactly(2));
+            It.IsAny<CancellationToken>()), Times.Exactly(bounded ? 1 : 2));
+        Assert.Equal(originalState, fixture.StoredConfiguration);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Open_ended_repairs_use_the_requested_from_through_now(bool sinceOverload)
+    {
+        var now = new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero);
+        var from = now.AddMonths(-2);
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath == "/token"
+            ? Json($$"""{"access_token":"access","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}""")
+            : Json("{\"dataPoints\":[]}"), new MidnightTimeProvider(now));
+        var config = fixture.Configuration();
+        var result = sinceOverload
+            ? await fixture.Service.SyncDataAsync(config, default, from.UtcDateTime)
+            : await fixture.Service.SyncDataAsync(new SyncRequest { From = from.UtcDateTime }, config, default);
+
+        Assert.True(result.Success);
+        fixture.Writer.Verify(writer => writer.BeginReconciliationAsync(
+            It.IsAny<IReadOnlyCollection<string>>(), from, now, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.False(fixture.ImportFromWasConsumed);
+        using var state = JsonDocument.Parse(fixture.StoredConfiguration);
+        Assert.False(state.RootElement.TryGetProperty("backfillCursorDate", out _));
     }
 
     [Fact]
