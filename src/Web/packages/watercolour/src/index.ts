@@ -28,6 +28,9 @@ export type {
   IconHints,
   IconArtworkSource,
   PigmentRole,
+  SceneOp,
+  TimedOp,
+  LiveClock,
 } from './types';
 export { ARTWORK_IDS, PALETTE_IDS, DEFAULT_INTENSITY, DEFAULT_DURATION_MS, DEFAULT_TAIL, DEFAULT_REVEAL_MS, REVEAL_SETTLE_RATIO, ARTWORK_ASPECT, artworkAspect, seedFromName, detailForEdge } from './types';
 
@@ -81,8 +84,8 @@ export type { DropMark, DropKind, MarkOptions, DropStroke, StrokeOptions, Stroke
 export { dropScene, strokeFrame } from './api/drop-scene';
 export type { DropScene, DropSceneOptions, DropDeposit } from './api/drop-scene';
 
-export { PackingSuitcase, packingSuitcaseScene, LIVE_TICKS_PER_SECOND, LIVE_SETTLE_SHARE } from './api/packing-suitcase';
-export type { PackingSuitcaseScene, SuitcaseGeometry, TimedOp, SceneOp } from './api/packing-suitcase';
+export { PackingSuitcase, packingSuitcaseScene, PACKING_LIVE_CLOCK } from './api/packing-suitcase';
+export type { PackingSuitcaseScene, SuitcaseGeometry } from './api/packing-suitcase';
 
 export { measureObstacles, textBoxes, DROP_TEXT_PAD } from './api/drop-text';
 export type { DropFont, DropFonts } from './api/drop-text';

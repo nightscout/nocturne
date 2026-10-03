@@ -1,3 +1,4 @@
+import type { LiveClock, SceneOp, TimedOp } from '../types';
 import { DEFAULT_INTENSITY } from '../types';
 import type { WasmModule } from './wasm-types';
 
@@ -13,14 +14,6 @@ import type { WasmModule } from './wasm-types';
  * A full body gets indigo hardware; a pack beyond full lays a thin glaze.
  */
 
-export type SceneOp = Record<string, unknown> | string;
-
-/** An operation and the tick it lands on, counted from the call that produced it. */
-export interface TimedOp {
-  afterTicks: number;
-  op: SceneOp;
-}
-
 export interface SuitcaseGeometry {
   /** The body silhouette in normalised canvas units. */
   outline: readonly (readonly [number, number])[];
@@ -28,13 +21,15 @@ export interface SuitcaseGeometry {
   pigments: { bands: readonly number[]; hardware: number; clasp: number };
 }
 
-/** Ticks of simulation per second of wall clock in a live session. */
-export const LIVE_TICKS_PER_SECOND = 30;
+const LIVE_TICKS_PER_SECOND = 30;
 /**
  * Share of each wet cell's film a live tick evaporates. At 30 ticks a second
  * a band can still bleed at about 4 s and is close to dry by 8 s.
  */
-export const LIVE_SETTLE_SHARE = 0.009;
+const LIVE_SETTLE_SHARE = 0.009;
+
+/** The session the painter's operations are timed for: dry, and stopped, 8 s after the last. */
+export const PACKING_LIVE_CLOCK: LiveClock = { ticksPerSecond: LIVE_TICKS_PER_SECOND, idleTicks: 8 * LIVE_TICKS_PER_SECOND };
 
 const OVERLAP = 0.25;
 /** Spacing of hatch rows inside a band; a thinner band is a single row. */

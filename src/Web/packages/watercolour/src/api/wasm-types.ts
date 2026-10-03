@@ -38,6 +38,11 @@ export interface WasmInstance {
   /** Steps replayed towards `target`; the seek has arrived once `currentTick()` is `target`. */
   seekTowardsTick(target: number, ticks: number): number;
   finishImmediately(): void;
+  /** Finishes the reveal and carries on as a live session; see `Playback::go_live`. */
+  goLive(ticksPerSecond: number, idleTicks: number): void;
+  isLive(): boolean;
+  /** A JSON array of `{ after_ticks, op }`, appended from the next tick; plays. */
+  appendOperations(json: string): void;
   progress(): number;
   isFinished(): boolean;
   isPlaying(): boolean;

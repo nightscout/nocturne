@@ -114,6 +114,22 @@ export type Surface = 'light' | 'dark';
 /** How much of an artwork the catalogue draws for the size it is shown at. */
 export type DetailLevel = 'small' | 'medium' | 'large' | 'extraLarge';
 
+/** A scene-document operation, as the timeline's `op` field carries it. */
+export type SceneOp = Record<string, unknown> | string;
+
+/** An operation and the tick it lands on, counted from when it is handed over. */
+export interface TimedOp {
+  afterTicks: number;
+  op: SceneOp;
+}
+
+/** The clock of a live session: see `ArtworkPlayer.paint`. */
+export interface LiveClock {
+  ticksPerSecond: number;
+  /** Ticks the session keeps simulating after its last operation, then dries and stops. */
+  idleTicks: number;
+}
+
 export interface ArtworkOptions {
   /** Default: the palette the artwork is baked in (`DEFAULT_PALETTE`), else moonlight. */
   palette?: PaletteId;

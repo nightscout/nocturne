@@ -1,4 +1,4 @@
-import type { ArtworkAutoplay, ArtworkOptions, CropWindow, DetailLevel, Surface } from '../types';
+import type { ArtworkAutoplay, ArtworkOptions, CropWindow, DetailLevel, LiveClock, Surface, TimedOp } from '../types';
 import { DEFAULT_DURATION_MS, DEFAULT_TAIL, detailForEdge } from '../types';
 import { type AssetKey, type AssetOptions, type AssetVariant, assetAvailable, assetUrl, iconAssetKey, loadManifest } from './assets';
 import { bakedServesEdge, type BakedManifest, type StripBitmap, drawStill, drawStripFrame, parseBakedManifest, sharedStill, sharedStrip } from './baked';
@@ -106,6 +106,15 @@ export interface ArtworkPlayer {
   /** Latest target wins; live replay is spread over admitted display frames. */
   seekTo(progress: number): void;
   finishImmediately(): void;
+  /**
+   * Live mode only: lays `ops` from the next tick, carrying the artwork on as
+   * a live session that `clock` runs. A reveal still running is finished
+   * first. The session plays until `clock.idleTicks` after its last
+   * operation, dries and stops; the next `paint` starts it again. It only
+   * moves forward, so a seek after it replays the whole history. Other modes
+   * ignore it.
+   */
+  paint(ops: readonly TimedOp[], clock: LiveClock): void;
   resize(width: number, height: number, dpr?: number): void;
   dispose(): void;
   on(event: 'fallback', listener: (detail: FallbackDetail) => void): () => void;
@@ -157,6 +166,7 @@ interface Backend {
   seekTo(progress: number): void;
   /** `sliced`: run the rest of the reveal over the coming frames rather than in this call. */
   finish(sliced?: boolean): void;
+  paint?(ops: readonly TimedOp[], clock: LiveClock): void;
   resize(size: PixelSize): void;
   dispose(): void;
   exportPng?(width: number, height: number): Promise<Uint8Array>;
@@ -258,6 +268,8 @@ class LiveBackend implements Backend {
   private handle: SchedulerHandle;
   private disposed = false;
   private released = false;
+  /** Carried on as a live session by `paint`: its clock runs the ticks, not the reveal's easing. */
+  private live = false;
   private readonly releaseAfterFinish: boolean;
   private readonly unsubscribeLost: () => void;
   private readonly easing?: (t: number) => number;
@@ -384,13 +396,13 @@ class LiveBackend implements Backend {
 
   get progress(): number {
     if (this.released) return 1;
-    if (this.easing) return Math.min(1, this.elapsedMs / this.durationMs);
+    if (this.easing && !this.live) return Math.min(1, this.elapsedMs / this.durationMs);
     return this.guarded(() => this.instance.progress(), 0);
   }
 
   get easedProgress(): number {
     if (this.released) return 1;
-    if (this.easing) return this.easing(Math.min(1, this.elapsedMs / this.durationMs));
+    if (this.easing && !this.live) return this.easing(Math.min(1, this.elapsedMs / this.durationMs));
     return this.guarded(() => this.instance.progress(), 0);
   }
 
@@ -490,6 +502,24 @@ class LiveBackend implements Backend {
     if (this.releaseAfterFinish) this.render();
   }
 
+  paint(ops: readonly TimedOp[], clock: LiveClock): void {
+    if (this.disposed || this.released) return;
+    this.seekTick = undefined;
+    this.seekPresentPending = false;
+    this.playAfterSeek = false;
+    this.settling = false;
+    this.step(() => {
+      if (!this.live) {
+        this.instance.goLive(clock.ticksPerSecond, clock.idleTicks);
+        this.live = true;
+      }
+      this.instance.appendOperations(JSON.stringify(ops.map(({ afterTicks, op }) => ({ after_ticks: afterTicks, op }))));
+    });
+    if (this.disposed || this.released || !this.live) return;
+    this.isPlaying = true;
+    this.handle.setActive(true);
+  }
+
   resize(size: PixelSize): void {
     this.step(() => this.instance.resize(size.width, size.height));
   }
@@ -562,7 +592,7 @@ class LiveBackend implements Backend {
     this.step(() => {
       const before = this.instance.currentTick();
       let changed: boolean | void;
-      if (this.easing) {
+      if (this.easing && !this.live) {
         this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt * 1000);
         changed = this.instance.advanceToProgress(this.easing(this.elapsedMs / this.durationMs));
       } else {
@@ -588,7 +618,7 @@ class LiveBackend implements Backend {
   }
 
   private ticksDue(elapsedSeconds: number): number {
-    if (!this.easing) return this.instance.ticksDue(elapsedSeconds);
+    if (!this.easing || this.live) return this.instance.ticksDue(elapsedSeconds);
     const elapsedMs = Math.min(this.durationMs, this.elapsedMs + elapsedSeconds * 1000);
     return this.instance.ticksDueAtProgress(this.easing(elapsedMs / this.durationMs));
   }
@@ -1174,6 +1204,11 @@ class Player implements ArtworkPlayer {
 
   finishImmediately(): void {
     this.backend?.finish();
+    this.emit('statechange');
+  }
+
+  paint(ops: readonly TimedOp[], clock: LiveClock): void {
+    this.backend?.paint?.(ops, clock);
     this.emit('statechange');
   }
 
