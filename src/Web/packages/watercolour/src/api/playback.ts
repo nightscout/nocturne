@@ -142,7 +142,6 @@ interface Backend {
   readonly canvas: HTMLCanvasElement;
   readonly playing: boolean;
   readonly finished: boolean;
-  /** The latest `seekTo` target has not yet been presented. */
   readonly seeking: boolean;
   readonly progress: number;
   /** The eased value fed to the simulation; `progress` is the raw wall fraction. */
@@ -253,7 +252,6 @@ class LiveBackend implements Backend {
   private isPlaying = false;
   /** Running to the end a slice per frame; nothing is presented until it gets there. */
   private settling = false;
-  /** The tick a `seekTo` is replaying towards. */
   private seekTick: number | undefined;
   private playAfterSeek = false;
   private seekPresentPending = false;
