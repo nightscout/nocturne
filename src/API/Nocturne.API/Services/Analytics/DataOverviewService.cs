@@ -901,7 +901,7 @@ public class DataOverviewService : IDataOverviewService
         // Group by date and compute daily averages + time in range
         var grouped = allReadings
             .Where(r => GlucoseStatistics.IsReading(r.Mgdl))
-            .GroupBy(r => TimestampToDateString(r.Timestamp, tz))
+            .GroupBy(r => TimestampToDate(r.Timestamp, tz))
             .Select(g =>
             {
                 var readings = g.ToList();
@@ -910,7 +910,7 @@ public class DataOverviewService : IDataOverviewService
                     r => r.Mgdl >= GlucoseConstants.TargetBottomMgdl && r.Mgdl <= GlucoseConstants.TargetTopMgdl);
                 return new
                 {
-                    Date = g.Key,
+                    Date = g.Key.ToString("yyyy-MM-dd"),
                     AvgMgdl = readings.Average(r => r.Mgdl),
                     TimeInRangePercent = total > 0 ? Math.Round((double)inRange / total * 100.0, 1) : (double?)null
                 };
@@ -960,8 +960,8 @@ public class DataOverviewService : IDataOverviewService
             if (bolusRecords.Count > 0)
             {
                 var grouped = bolusRecords
-                    .GroupBy(r => TimestampToDateString(r.Timestamp, tz))
-                    .Select(g => new { Date = g.Key, BolusUnits = g.Sum(r => r.Insulin) });
+                    .GroupBy(r => TimestampToDate(r.Timestamp, tz))
+                    .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd"), BolusUnits = g.Sum(r => r.Insulin) });
 
                 foreach (var group in grouped)
                 {
@@ -997,8 +997,8 @@ public class DataOverviewService : IDataOverviewService
             if (algorithmBolusRecords.Count > 0)
             {
                 var grouped = algorithmBolusRecords
-                    .GroupBy(r => TimestampToDateString(r.Timestamp, tz))
-                    .Select(g => new { Date = g.Key, TotalBasal = g.Sum(r => r.Insulin) });
+                    .GroupBy(r => TimestampToDate(r.Timestamp, tz))
+                    .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd"), TotalBasal = g.Sum(r => r.Insulin) });
 
                 foreach (var group in grouped)
                 {
@@ -1052,13 +1052,13 @@ public class DataOverviewService : IDataOverviewService
                         var insulin = r.Rate * durationHours;
                         return new
                         {
-                            Date = TimestampToDateString(r.StartTimestamp, tz),
+                            Date = TimestampToDate(r.StartTimestamp, tz),
                             Insulin = insulin,
                         };
                     })
                     .Where(r => r.Insulin > 0)
                     .GroupBy(r => r.Date)
-                    .Select(g => new { Date = g.Key, TotalBasal = g.Sum(r => r.Insulin) });
+                    .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd"), TotalBasal = g.Sum(r => r.Insulin) });
 
                 foreach (var group in grouped)
                 {
@@ -1110,8 +1110,8 @@ public class DataOverviewService : IDataOverviewService
                 return;
 
             var grouped = carbRecords
-                .GroupBy(r => TimestampToDateString(r.Timestamp, tz))
-                .Select(g => new { Date = g.Key, TotalCarbs = g.Sum(r => r.Carbs) });
+                .GroupBy(r => TimestampToDate(r.Timestamp, tz))
+                .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd"), TotalCarbs = g.Sum(r => r.Carbs) });
 
             foreach (var group in grouped)
             {
@@ -1130,14 +1130,11 @@ public class DataOverviewService : IDataOverviewService
         }
     }
 
-    /// <summary>
-    /// Converts a UTC DateTime to a local date string in "yyyy-MM-dd" format using the given timezone.
-    /// </summary>
-    private static string TimestampToDateString(DateTime timestamp, TimeZoneInfo tz)
+    private static DateOnly TimestampToDate(DateTime timestamp, TimeZoneInfo tz)
     {
         var utcDto = new DateTimeOffset(timestamp, TimeSpan.Zero);
         var local = TimeZoneInfo.ConvertTime(utcDto, tz);
-        return local.ToString("yyyy-MM-dd");
+        return DateOnly.FromDateTime(local.DateTime);
     }
 
     /// <summary>
@@ -1156,8 +1153,8 @@ public class DataOverviewService : IDataOverviewService
             var timestampList = await timestampQuery.ToListAsync(cancellationToken);
 
             var grouped = timestampList
-                .GroupBy(t => TimestampToDateString(t, tz))
-                .Select(g => new { Date = g.Key, Count = g.Count() });
+                .GroupBy(t => TimestampToDate(t, tz))
+                .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd"), Count = g.Count() });
 
             foreach (var group in grouped)
             {

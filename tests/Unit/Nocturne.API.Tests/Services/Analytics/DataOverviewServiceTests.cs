@@ -27,6 +27,7 @@ public class DataOverviewServiceTests : IDisposable
     private readonly NocturneDbContext _dbContext;
     private readonly DataOverviewService _service;
     private readonly Mock<ICacheService> _cacheService = new();
+    private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
     private readonly CategoryReadContext _categoryReadContext = new();
     private readonly ListLogger<DataOverviewService> _logger = new();
     private IInterceptor[] _interceptors = [];
@@ -64,14 +65,13 @@ public class DataOverviewServiceTests : IDisposable
                 return ctx;
             });
 
-        var mockTherapySettingsResolver = new Mock<ITherapySettingsResolver>();
-        mockTherapySettingsResolver.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
+        _therapySettings.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         var mockStatisticsService = new Mock<IStatisticsService>();
         var mockTenantAccessor = new Mock<ITenantAccessor>();
         mockTenantAccessor.SetupGet(a => a.Context).Returns(new TenantContext(TenantId, "test-tenant", "Test Tenant", true, false));
         _service = new DataOverviewService(
             mockFactory.Object,
-            mockTherapySettingsResolver.Object,
+            _therapySettings.Object,
             mockStatisticsService.Object,
             _cacheService.Object,
             mockTenantAccessor.Object,
@@ -83,6 +83,54 @@ public class DataOverviewServiceTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
+    }
+
+    [Theory]
+    [InlineData("Australia/Sydney", "2024-02-28T12:59:00Z", "2024-02-28T13:00:00Z", "2024-02-28,2024-02-29", 1, 2.34, 0.21, 2.55, 30.2)]
+    [InlineData("America/New_York", "2024-11-03T05:30:00Z", "2024-11-03T06:30:00Z", "2024-11-03", 2, 4.68, 0.42, 5.1, 60.5)]
+    [InlineData("America/New_York", "2024-03-10T06:30:00Z", "2024-03-10T07:30:00Z", "2024-03-10", 2, 4.68, 0.42, 5.1, 60.5)]
+    [InlineData("Asia/Kathmandu", "2024-02-28T18:14:00Z", "2024-02-28T18:15:00Z", "2024-02-28,2024-02-29", 1, 2.34, 0.21, 2.55, 30.2)]
+    [InlineData("Australia/Sydney", "2023-12-31T12:59:00Z", "2023-12-31T13:00:00Z", "2024-01-01", 1, 2.34, 0.21, 2.55, 30.2)]
+    public async Task DailySummary_GroupsEveryRecordTypeAndMetricByLocalDay(
+        string timezone, string first, string second, string dates, int count,
+        double bolus, double basal, double tdd, double carbs)
+    {
+        _therapySettings.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(timezone);
+        foreach (var timestamp in new[] { DateTimeOffset.Parse(first).UtcDateTime, DateTimeOffset.Parse(second).UtcDateTime })
+        {
+            _dbContext.SensorGlucose.Add(new SensorGlucoseEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Mgdl = 100 });
+            _dbContext.MeterGlucose.Add(new MeterGlucoseEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Mgdl = 200 });
+            _dbContext.Boluses.AddRange(
+                new BolusEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Insulin = 2.34, BolusKind = "Manual" },
+                new BolusEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Insulin = 0.11, BolusKind = "Algorithm" });
+            _dbContext.CarbIntakes.Add(new CarbIntakeEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Carbs = 30.25 });
+            _dbContext.TempBasals.Add(new TempBasalEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Rate = 1.2, EndTimestamp = null, Origin = "Pump" });
+            _dbContext.BolusCalculations.Add(new BolusCalculationEntity { Id = Guid.NewGuid(), Timestamp = timestamp });
+            _dbContext.Notes.Add(new NoteEntity { Id = Guid.NewGuid(), Timestamp = timestamp });
+            _dbContext.DeviceEvents.Add(new DeviceEventEntity { Id = Guid.NewGuid(), Timestamp = timestamp, EventType = "SiteChange" });
+            _dbContext.StateSpans.Add(new StateSpanEntity { Id = Guid.NewGuid(), StartTimestamp = timestamp });
+            _dbContext.ApsSnapshots.Add(new ApsSnapshotEntity { Id = Guid.NewGuid(), Timestamp = timestamp, AidAlgorithm = "Loop" });
+            _dbContext.BGChecks.Add(new BGCheckEntity { Id = Guid.NewGuid(), Timestamp = timestamp });
+        }
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetDailySummaryAsync(2024);
+
+        result.Days.Select(day => day.Date).Should().Equal(dates.Split(','));
+        foreach (var day in result.Days)
+        {
+            day.Counts.Keys.Should().Equal("Glucose", "ManualBG", "Boluses", "CarbIntake", "BolusCalculations", "Notes", "DeviceEvents", "StateSpans", "DeviceStatus", "BGChecks", "TempBasals");
+            day.Counts.Where(pair => pair.Key != "Boluses").Should().OnlyContain(pair => pair.Value == count);
+            day.Counts["Boluses"].Should().Be(count * 2);
+            day.TotalCount.Should().Be(count * 12);
+            day.AverageGlucoseMgdl.Should().Be(150);
+            day.TimeInRangePercent.Should().Be(50);
+            day.TotalBolusUnits.Should().Be(bolus);
+            day.TotalBasalUnits.Should().Be(basal);
+            day.TotalDailyDose.Should().Be(tdd);
+            day.TotalCarbs.Should().Be(carbs);
+        }
     }
 
     #region GetAvailableYearsAsync Tests

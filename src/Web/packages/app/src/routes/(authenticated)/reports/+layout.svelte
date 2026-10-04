@@ -16,6 +16,8 @@
     import Calendar from "@lucide/svelte/icons/calendar";
     import ChevronDown from "@lucide/svelte/icons/chevron-down";
     import Printer from "@lucide/svelte/icons/printer";
+    import { toast } from "svelte-sonner";
+    import { onMount } from "svelte";
     import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
     import {createResourceContext} from "$lib/hooks/resource-context.svelte";
 
@@ -47,6 +49,35 @@
     const useResourceGuard = $derived(page.url.pathname !== "/reports");
 
     const printCtx = createReportPrintContext();
+
+    async function handlePrint() {
+        if (printCtx.printing) return;
+        printCtx.printing = true;
+        const url = page.url.href;
+        const preparationVersion = printCtx.preparationVersion;
+        try {
+            await printReport(
+                () => printCtx.prepare(),
+                () => page.url.href === url && printCtx.preparationVersion === preparationVersion,
+            );
+        } catch (error) {
+            console.error("Failed to prepare report for printing:", error);
+            toast.error("Unable to load the complete report. Please try again before printing.");
+        } finally {
+            printCtx.printing = false;
+        }
+    }
+
+    onMount(() => {
+        const keydown = (event: KeyboardEvent) => {
+            if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "p") {
+                event.preventDefault();
+                void handlePrint();
+            }
+        };
+        window.addEventListener("keydown", keydown);
+        return () => window.removeEventListener("keydown", keydown);
+    });
 
     let reportRoot = $state<HTMLElement | null>(null);
     $effect(() => installPrintFitFallback(() => reportRoot));
@@ -137,7 +168,8 @@
                     <Button
                             variant="outline"
                             size="sm"
-                            onclick={printReport}
+                            onclick={handlePrint}
+                            disabled={printCtx.printing}
                             aria-label="Print report"
                     >
                         <Printer class="w-4 h-4"/>
