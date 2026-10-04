@@ -25,6 +25,7 @@ public class DataOverviewCountTests(ApiIntegrationTestFixture fixture, ITestOutp
     [InlineData("Australia/Sydney", 2024)]
     [InlineData("Asia/Kathmandu", 2024)]
     [InlineData("Europe/Amsterdam", 1937)]
+    [InlineData("America/New_York", 1883)]
     [InlineData("Pacific/Apia", 2011)]
     [InlineData("America/Havana", 2024)]
     public async Task Every_day_count_matches_dotnet_timezone_grouping(string timezone, int year)

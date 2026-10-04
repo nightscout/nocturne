@@ -28,6 +28,17 @@ internal static class LocalDayGrouping
 
         Expression Partition(int first, int last)
         {
+            var offset = boundaries[first].Day - boundaries[first].Utc;
+            if (Enumerable.Range(first, last - first + 2)
+                .All(index => boundaries[index].Day - boundaries[index].Utc == offset))
+            {
+                var local = offset == TimeSpan.Zero
+                    ? (Expression)timestamp
+                    : Expression.Call(timestamp, nameof(DateTime.AddSeconds), Type.EmptyTypes,
+                        Expression.Constant(offset.TotalSeconds));
+                return Expression.Property(local, nameof(DateTime.Date));
+            }
+
             if (first == last)
                 return Expression.Constant(boundaries[first].Day);
 
