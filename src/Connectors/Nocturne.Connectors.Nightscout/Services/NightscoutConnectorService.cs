@@ -923,20 +923,26 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     ///     Nightscout releases that cast the value to an ObjectId. An ObjectId-shaped id is looked up by
     ///     <c>_id</c> and then by <c>id</c>. Either is then looked up by <c>identifier</c>, where
     ///     write-back put the key of a treatment Nocturne stores under it (see the <c>read</c> of
-    ///     <see cref="DeleteTreatmentsGoneUpstreamAsync"/>). None of these fields is indexed, so the lookup is bounded to the
+    ///     <see cref="DeleteTreatmentsGoneUpstreamAsync"/>), in one query: as it is, and as
+    ///     <see cref="MongoObjectId.Coerce"/> of it, the uuid prefix or hash write-back has created under
+    ///     since. A row relabelled to the connector still holds the key it was stored under before. None
+    ///     of these fields is indexed, so the lookup is bounded to the
     ///     created_at range the treatment can sit in: <paramref name="at"/>, give or take
     ///     <see cref="BackwardTimePager.CreatedAtOffsetEnvelope"/> and <see cref="ReconcileReadMargin"/>.
     /// </summary>
     private async Task<bool> TreatmentExistsUpstreamAsync(string id, DateTime at)
     {
         var reach = BackwardTimePager.CreatedAtOffsetEnvelope + ReconcileReadMargin;
-        return (IsObjectId(id) && await AnyAsync("_id")) || await AnyAsync("id") || await AnyAsync("identifier");
+        string[] identifiers = [.. new[] { id, MongoObjectId.Coerce(id)! }.Distinct(StringComparer.Ordinal)];
+        return (IsObjectId(id) && await AnyAsync($"&find[_id]={Uri.EscapeDataString(id)}"))
+            || await AnyAsync($"&find[id]={Uri.EscapeDataString(id)}")
+            || await AnyAsync(string.Concat(identifiers.Select((value, i) =>
+                $"&find[identifier][$in][{i}]={Uri.EscapeDataString(value)}")));
 
-        async Task<bool> AnyAsync(string field)
+        async Task<bool> AnyAsync(string find)
         {
             const string operation = "LookUpTreatment";
-            var url = BuildCreatedAtUrl("treatments", at - reach, at + reach)
-                + $"&find[{field}]={Uri.EscapeDataString(id)}";
+            var url = BuildCreatedAtUrl("treatments", at - reach, at + reach) + find;
 
             var found = await FetchDataAsync<Treatment[]>(url, operation) ?? throw FetchFailed(operation);
             return found.Length > 0;

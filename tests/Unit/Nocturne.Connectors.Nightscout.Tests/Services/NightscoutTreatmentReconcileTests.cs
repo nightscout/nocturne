@@ -99,7 +99,7 @@ public class NightscoutTreatmentReconcileTests
 
         await harness.SyncAsync();
 
-        harness.Lookups.Should().Equal($"find[id]={TrioKept}", $"find[identifier]={TrioKept}");
+        harness.Lookups.Should().Equal($"find[id]={TrioKept}", $"find[identifier][$in]={TrioKept},{MongoObjectId.Coerce(TrioKept)}");
         harness.Deleted.Should().BeEmpty();
     }
 
@@ -336,7 +336,34 @@ public class NightscoutTreatmentReconcileTests
         await harness.SyncAsync();
 
         harness.Deleted.Should().BeEmpty();
-        harness.Lookups.Should().ContainInOrder($"find[id]={missingKey}", $"find[identifier]={missingKey}");
+        harness.Lookups.Should().ContainInOrder(
+            $"find[id]={missingKey}", $"find[identifier][$in]={missingKey},{MongoObjectId.Coerce(missingKey)}");
+    }
+
+    /// <summary>
+    /// A row written before write-back coerced its key is relabelled to the connector under that
+    /// key, while its copy upstream sits under the key's coerced form as <c>identifier</c>, the uuid
+    /// prefix or the hash. Missing from the read, it is looked up under both forms at once, and kept.
+    /// </summary>
+    [Theory]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-0000000000aa")]
+    [InlineData("pump-history-42")]
+    public async Task A_relabelled_row_whose_copy_sits_under_its_coerced_key_is_kept(string storedKey)
+    {
+        var coerced = MongoObjectId.Coerce(storedKey)!;
+        var harness = new Harness
+        {
+            Upstream = [Trio(MongoIdB, TrioKept, Now.AddMinutes(-20))],
+            Stored = [TrioKept, storedKey],
+            AlsoUpstreamByIdentifier = [coerced],
+        };
+
+        await harness.SyncAsync();
+
+        harness.Deleted.Should().BeEmpty();
+        harness.Lookups.Should().Contain($"find[identifier][$in]={storedKey},{coerced}");
+        harness.Lookups.Count(l => l.StartsWith("find[identifier]", StringComparison.Ordinal)).Should().Be(1,
+            "the canary was found by id, and the stored key's forms share one query");
     }
 
     private static string WrittenBack(string mongoId, string identifier, DateTimeOffset at) =>
@@ -400,18 +427,21 @@ public class NightscoutTreatmentReconcileTests
             if (!url.Contains("/api/v1/treatments.json", StringComparison.Ordinal))
                 return Task.FromResult(Json([]));
 
-            var lookup = System.Text.RegularExpressions.Regex.Match(url, @"find\[(_id|id|identifier)\]=(.+)$");
-            if (lookup.Success)
+            var lookup = System.Text.RegularExpressions.Regex.Match(url, @"find\[(_id|id)\]=(.+)$");
+            var byIdentifier = System.Text.RegularExpressions.Regex.Matches(url, @"&find\[identifier\]\[\$in\]\[\d+\]=([^&]+)");
+            if (lookup.Success || byIdentifier.Count > 0)
             {
-                var (field, id) = (lookup.Groups[1].Value, lookup.Groups[2].Value);
-                Lookups.Add($"find[{field}]={id}");
+                var (field, ids) = lookup.Success
+                    ? (lookup.Groups[1].Value, new[] { lookup.Groups[2].Value })
+                    : ("identifier", byIdentifier.Select(m => m.Groups[1].Value).ToArray());
+                Lookups.Add(lookup.Success ? $"find[{field}]={ids[0]}" : $"find[identifier][$in]={string.Join(',', ids)}");
                 LookupUrls.Add(url);
                 if (LookupFails)
                     return Task.FromResult(Failure());
 
-                var found = !LookupFindsNothing
-                    && ((field == "identifier" ? AlsoUpstreamByIdentifier : AlsoUpstream).Contains(id)
-                        || Upstream.Any(doc => doc.Contains($"\"{field}\":\"{id}\"", StringComparison.Ordinal)));
+                var found = !LookupFindsNothing && ids.Any(id =>
+                    (field == "identifier" ? AlsoUpstreamByIdentifier : AlsoUpstream).Contains(id)
+                    || Upstream.Any(doc => doc.Contains($"\"{field}\":\"{id}\"", StringComparison.Ordinal)));
                 return Task.FromResult(Json(found ? [Upstream.FirstOrDefault() ?? "{}"] : []));
             }
 
