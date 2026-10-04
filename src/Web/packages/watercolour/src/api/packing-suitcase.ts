@@ -63,12 +63,14 @@ const GLAZE_WATER = 0.3;
 const MASK_FEATHER = 0.012;
 const HARDWARE_WATER = 0.3;
 /**
- * Ticks a band gets to spread before the sheet is dried: for the next band in
- * a replay, or for the hardware. The hardware goes on as soon as the list is
- * complete, so the sheet is dried under it rather than left to dry: indigo
- * laid into a wet warm band mixes to olive, and gold into wet indigo to green.
+ * Ticks a band gets to spread before the sheet is dried, for the next band in
+ * a replay or for the hardware, while evaporating `SPREAD_SETTLE_SHARE` a
+ * tick so it is mostly dry when the dry lands. The hardware is laid on a dried
+ * sheet: indigo into a wet warm band mixes to olive, gold into wet indigo to
+ * green.
  */
 const SPREAD_TICKS = 6;
+const SPREAD_SETTLE_SHARE = 0.25;
 const STRAP_Y = 0.59;
 const STRAP_RADIUS = 0.05;
 const STRAP_OVERHANG = 0.02;
@@ -282,6 +284,7 @@ export class PackingSuitcase {
     const handleAt = strapAt + 12;
     const claspAt = handleAt + 12;
     return [
+      { afterTicks: BAND_TICKS, op: { settle: { share: SPREAD_SETTLE_SHARE } } },
       { afterTicks: start - 1, op: 'dry_all' },
       ...this.lift([strap], start, CLEARING_STRENGTH),
       ...brush(strap, hardware, 0.5, 12, strapAt),
@@ -290,6 +293,7 @@ export class PackingSuitcase {
       { afterTicks: claspAt - 2, op: 'dry_all' },
       ...this.lift([clasp], claspAt - 1, CLEARING_STRENGTH),
       ...brush(clasp, claspPigment, 0.9, 2, claspAt),
+      { afterTicks: claspAt + 2, op: { settle: { share: LIVE_SETTLE_SHARE } } },
     ];
   }
 
@@ -311,7 +315,6 @@ interface SceneDocument {
 /** The catalogue artwork that donates the paper, the palette and the silhouette. */
 const DONOR = 'suitcase';
 const DONOR_PALETTE = 'dusk';
-const REPLAY_SETTLE_SHARE = 0.25;
 /** Ticks after the last replayed operation for the reveal to come to rest. */
 const REPLAY_TAIL_TICKS = 20;
 /** The grid the prototype was tuned on; a larger one spreads the same strokes over more cells. */
@@ -372,7 +375,7 @@ export function packingSuitcaseScene(
     const end = Math.max(...ops.map((o) => o.afterTicks));
     events.push(
       ...ops.map(({ afterTicks, op }) => ({ at_tick: tick + afterTicks, op })),
-      { at_tick: tick + BAND_TICKS, op: { settle: { share: REPLAY_SETTLE_SHARE } } },
+      { at_tick: tick + BAND_TICKS, op: { settle: { share: SPREAD_SETTLE_SHARE } } },
       { at_tick: tick + end + SPREAD_TICKS, op: 'dry_all' },
     );
     tick += end + SPREAD_TICKS + 1;
