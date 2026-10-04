@@ -116,9 +116,9 @@
     {:else}
       <FigureStrip
         figures={[
-          { label: "Mean", value: String(bg(overallStats.mean)), unit: bgLabel(), },
-          { label: "Median", value: String(bg(overallStats.median)), unit: bgLabel(), },
-          { label: "Std Dev", value: String(bg(overallStats.stdDev)), unit: bgLabel(), },
+          { label: "Mean", value: String(bg(overallStats.mean)), unit: bgLabel() },
+          { label: "Median", value: String(bg(overallStats.median)), unit: bgLabel() },
+          { label: "Std Dev", value: String(bg(overallStats.stdDev)), unit: bgLabel() },
           { label: "Readings", value: String(overallStats.totalReadings) },
         ]}
       />
@@ -171,7 +171,7 @@
                 </div>
                 <ChartKey
                   class="pt-2"
-                  items={rangeStats.map((stat) => ({ texture: stat.texture, label: stat.key, }))}
+                  items={rangeStats.map((stat) => ({ texture: stat.texture, label: stat.key }))}
                 />
               {:else}
                 <div

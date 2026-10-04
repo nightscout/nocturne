@@ -50,36 +50,11 @@
   };
 
   // Display bounds come from the same backend conversion as the plotted values.
-  const A1C_ZONES: {
-    key: string;
-    label: string;
-    swatch: string;
-    texture: Extract<TextureKey, `ehba1c-zone-${string}`>;
-  }[] = [
-    {
-      key: "healthy",
-      label: "Non-diabetic range",
-      swatch: "var(--gri-zone-a)",
-      texture: "ehba1c-zone-healthy",
-    },
-    {
-      key: "target",
-      label: "Type 1 diabetes target",
-      swatch: "var(--gri-zone-b)",
-      texture: "ehba1c-zone-target",
-    },
-    {
-      key: "high",
-      label: "Elevated",
-      swatch: "var(--gri-zone-d)",
-      texture: "ehba1c-zone-high",
-    },
-    {
-      key: "veryHigh",
-      label: "Very high",
-      swatch: "var(--gri-zone-e)",
-      texture: "ehba1c-zone-very-high",
-    },
+  const A1C_ZONES: { key: string; label: string; swatch: string; texture: Extract<TextureKey, `ehba1c-zone-${string}`> }[] = [
+    { key: "healthy", label: "Non-diabetic range", swatch: "var(--gri-zone-a)", texture: "ehba1c-zone-healthy" },
+    { key: "target", label: "Type 1 diabetes target", swatch: "var(--gri-zone-b)", texture: "ehba1c-zone-target" },
+    { key: "high", label: "Elevated", swatch: "var(--gri-zone-d)", texture: "ehba1c-zone-high" },
+    { key: "veryHigh", label: "Very high", swatch: "var(--gri-zone-e)", texture: "ehba1c-zone-very-high" },
   ];
 
   let loading = $state(true);
@@ -101,10 +76,7 @@
   let labResultError = $state<string | null>(null);
   let pendingDeleteLabResult = $state<LabHbA1cResult | null>(null);
 
-  /**
-   * Normalizes a lab result's measuredAt (Date instance or ISO string) to a
-   * Date.
-   */
+  /** Normalizes a lab result's measuredAt (Date instance or ISO string) to a Date. */
   function toDate(value: Date | string | undefined): Date {
     return value instanceof Date ? value : new Date(value ?? 0);
   }
@@ -140,15 +112,11 @@
       .map((p) => p.date)
       .filter((d): d is string => !!d)
       .sort();
-    return dates.length > 0
-      ? { from: dates[0], to: dates[dates.length - 1] }
-      : null;
+    return dates.length > 0 ? { from: dates[0], to: dates[dates.length - 1] } : null;
   });
 
   setReportPrintMeta(() => (timelineBounds ? { period: timelineBounds } : {}));
-  const latest = $derived(
-    chartData.length > 0 ? chartData[chartData.length - 1] : undefined
-  );
+  const latest = $derived(chartData.length > 0 ? chartData[chartData.length - 1] : undefined);
 
   const extremes = $derived.by(() => {
     if (chartData.length === 0) return undefined;
@@ -193,10 +161,7 @@
     return `${formatA1cNumber(band.yMin)}–${formatA1cNumber(band.yMax)}${unit}`;
   }
 
-  /**
-   * Fixed floor at the never-goes-lower bound; auto-scaled ceiling with a
-   * little headroom.
-   */
+  /** Fixed floor at the never-goes-lower bound; auto-scaled ceiling with a little headroom. */
   const yDomain = $derived.by((): [number, number] => {
     const dataMax =
       chartData.length > 0
@@ -258,11 +223,8 @@
     }
   }
 
-  /**
-   * Lab draws are shown as standalone markers — never connected by a line and
-   * never fed back into the eHbA1c calculation, which only ever reads
-   * SensorGlucose/MeterGlucose.
-   */
+  /** Lab draws are shown as standalone markers — never connected by a line and never fed back
+   * into the eHbA1c calculation, which only ever reads SensorGlucose/MeterGlucose. */
   const labChartPoints = $derived(
     labResults.map((r) => ({
       id: r.id,
@@ -283,9 +245,7 @@
     ) {
       return null;
     }
-    const nextIndex = chartData.findIndex(
-      (point) => point.date.getTime() >= timestamp
-    );
+    const nextIndex = chartData.findIndex((point) => point.date.getTime() >= timestamp);
     if (nextIndex === 0)
       return a1cDisplayValue(chartData[0].a1cDisplay) ?? null;
     if (nextIndex === -1)
@@ -295,9 +255,7 @@
 
     const previous = chartData[nextIndex - 1];
     const next = chartData[nextIndex];
-    const progress =
-      (timestamp - previous.date.getTime()) /
-      (next.date.getTime() - previous.date.getTime());
+    const progress = (timestamp - previous.date.getTime()) / (next.date.getTime() - previous.date.getTime());
     const previousValue = a1cDisplayValue(previous.a1cDisplay) ?? 0;
     const nextValue = a1cDisplayValue(next.a1cDisplay) ?? 0;
     return previousValue + (nextValue - previousValue) * progress;
@@ -320,16 +278,11 @@
       if (!rows.has(labPoint.date.getTime())) {
         const displayValue = displayValueForChartDate(labPoint.date);
         if (displayValue !== null) {
-          rows.set(labPoint.date.getTime(), {
-            date: labPoint.date,
-            displayValue,
-          });
+          rows.set(labPoint.date.getTime(), { date: labPoint.date, displayValue });
         }
       }
     }
-    return [...rows.values()].sort(
-      (a, b) => a.date.getTime() - b.date.getTime()
-    );
+    return [...rows.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
   });
 
   async function addLabResult() {
@@ -374,9 +327,7 @@
 
 <div class="@container space-y-6">
   <Card.Root>
-    <Card.Header
-      class="flex flex-row flex-wrap items-start justify-between gap-4"
-    >
+    <Card.Header class="flex flex-row flex-wrap items-start justify-between gap-4">
       <div>
         <Card.Title class="flex items-center gap-2">
           <Activity class="h-5 w-5 text-muted-foreground" />
@@ -401,23 +352,17 @@
     </Card.Header>
     <Card.Content>
       {#if loading}
-        <div
-          class="flex h-[320px] items-center justify-center text-muted-foreground"
-        >
+        <div class="flex h-[320px] items-center justify-center text-muted-foreground">
           <Loader2 class="h-5 w-5 animate-spin mr-2" /> Loading {a1cLabel(true)} timeline...
         </div>
       {:else if error}
-        <div
-          class="flex h-[320px] items-center justify-center text-destructive"
-        >
+        <div class="flex h-[320px] items-center justify-center text-destructive">
           Failed to load {a1cLabel(true)} data. Please try again later.
         </div>
       {:else if chartData.length === 0}
-        <div
-          class="flex h-[320px] items-center justify-center text-muted-foreground"
-        >
-          Not enough glucose history yet — each point needs at least a month of
-          readings within the trailing 90 days.
+        <div class="flex h-[320px] items-center justify-center text-muted-foreground">
+          Not enough glucose history yet — each point needs at least a month of readings within
+          the trailing 90 days.
         </div>
       {:else}
         {#if latest && extremes}
@@ -431,19 +376,14 @@
               </span>
             </div>
             <div class="text-sm text-muted-foreground">
-              Weighted mean glucose: {bg(latest.weightedAverageGlucoseMgdl)}
-              {bgLabel()}
+              Weighted mean glucose: {bg(latest.weightedAverageGlucoseMgdl)} {bgLabel()}
             </div>
             <div class="text-sm text-muted-foreground">
-              Highest: <span class="font-medium text-foreground">
-                {formatA1c(extremes.highest.a1cDisplay)}
-              </span>
+              Highest: <span class="font-medium text-foreground">{formatA1c(extremes.highest.a1cDisplay)}</span>
               ({formatLongDate(extremes.highest.date)})
             </div>
             <div class="text-sm text-muted-foreground">
-              Lowest: <span class="font-medium text-foreground">
-                {formatA1c(extremes.lowest.a1cDisplay)}
-              </span>
+              Lowest: <span class="font-medium text-foreground">{formatA1c(extremes.lowest.a1cDisplay)}</span>
               ({formatLongDate(extremes.lowest.date)})
             </div>
           </div>
@@ -463,80 +403,37 @@
                 color: "var(--ehba1c-line)",
               },
             ]}
-            props={{
-              spline: {
-                "stroke-width": 3,
-                "stroke-linecap": "round",
-                "data-testid": "ehba1c-line",
-              },
-            }}
-            points={{
-              data: labChartPoints,
-              x: (d) => d.date,
-              y: (d) => d.displayValue,
-              children: labMarkers,
-            }}
+            props={{ spline: { "stroke-width": 3, "stroke-linecap": "round", "data-testid": "ehba1c-line" } }}
+            points={{ data: labChartPoints, x: (d) => d.date, y: (d) => d.displayValue, children: labMarkers }}
             {annotations}
           >
             {#snippet tooltip({ context })}
-              <Tooltip.Root
-                {context}
-                class="bg-popover text-popover-foreground rounded-md border p-3 shadow-lg"
-              >
+              <Tooltip.Root {context} class="bg-popover text-popover-foreground rounded-md border p-3 shadow-lg">
                 {#snippet children({ data })}
                   {@const hoveredDate = context.x(data)}
                   {@const hoveredDateKey = dateKey(hoveredDate)}
-                  {@const eHbA1cPoint = chartData.find(
-                    (point) => dateKey(point.date) === hoveredDateKey
-                  )}
-                  {@const labResultsForDate = labChartPoints.filter(
-                    (point) => dateKey(point.date) === hoveredDateKey
-                  )}
-                  <div class="mb-2 text-sm font-semibold">
-                    {formatLongDate(hoveredDate)}
-                  </div>
-                  <div
-                    class="min-w-56 space-y-1.5 text-sm"
-                    data-testid="ehba1c-tooltip"
-                  >
+                  {@const eHbA1cPoint = chartData.find((point) => dateKey(point.date) === hoveredDateKey)}
+                  {@const labResultsForDate = labChartPoints.filter((point) => dateKey(point.date) === hoveredDateKey)}
+                  <div class="mb-2 text-sm font-semibold">{formatLongDate(hoveredDate)}</div>
+                  <div class="min-w-56 space-y-1.5 text-sm" data-testid="ehba1c-tooltip">
                     {#if eHbA1cPoint}
-                      <div
-                        class="grid grid-cols-[1fr_auto] items-center gap-x-4"
-                      >
-                        <span
-                          class="flex min-w-0 items-center gap-2 text-muted-foreground"
-                        >
-                          <span
-                            class="h-2 w-2 shrink-0 rounded-full bg-(--ehba1c-line)"
-                          ></span>
+                      <div class="grid grid-cols-[1fr_auto] items-center gap-x-4">
+                        <span class="flex min-w-0 items-center gap-2 text-muted-foreground">
+                          <span class="h-2 w-2 shrink-0 rounded-full bg-(--ehba1c-line)"></span>
                           <span>{a1cLabel(true)}</span>
                         </span>
-                        <span class="font-mono font-medium tabular-nums">
-                          {formatA1c(eHbA1cPoint.a1cDisplay)}
-                        </span>
+                        <span class="font-mono font-medium tabular-nums">{formatA1c(eHbA1cPoint.a1cDisplay)}</span>
                       </div>
                     {/if}
                     {#each labResultsForDate as labResult (labResult.id)}
-                      <div
-                        class="grid grid-cols-[1fr_auto] items-center gap-x-4"
-                      >
-                        <span
-                          class="flex min-w-0 items-center gap-2 text-muted-foreground"
-                        >
-                          <span
-                            class="h-0 w-0 shrink-0 border-x-4 border-b-8 border-x-transparent border-b-foreground"
-                          ></span>
+                      <div class="grid grid-cols-[1fr_auto] items-center gap-x-4">
+                        <span class="flex min-w-0 items-center gap-2 text-muted-foreground">
+                          <span class="h-0 w-0 shrink-0 border-x-4 border-b-8 border-x-transparent border-b-foreground"></span>
                           <span>Lab result</span>
                         </span>
-                        <span class="font-mono font-medium tabular-nums">
-                          {formatA1c(labResult.a1cDisplay)}
-                        </span>
+                        <span class="font-mono font-medium tabular-nums">{formatA1c(labResult.a1cDisplay)}</span>
                         {#if labResult.note}
-                          <span
-                            class="col-span-2 truncate text-xs text-muted-foreground"
-                          >
-                            {labResult.note}
-                          </span>
+                          <span class="col-span-2 truncate text-xs text-muted-foreground">{labResult.note}</span>
                         {/if}
                       </div>
                     {/each}
@@ -547,9 +444,7 @@
           </LineChart>
         </div>
 
-        <div
-          class="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm"
-        >
+        <div class="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm">
           <ChartKey
             class="text-sm text-foreground"
             items={zoneBands.map((band) => ({
@@ -560,8 +455,7 @@
           />
           {#if labChartPoints.length > 0}
             <div class="flex items-center gap-1.5">
-              <span
-                class="inline-block h-0 w-0 border-x-4 border-b-7 border-x-transparent border-b-foreground"
+              <span class="inline-block h-0 w-0 border-x-4 border-b-7 border-x-transparent border-b-foreground"
               ></span>
               <span>Lab result (not included in the calculation)</span>
             </div>
@@ -597,11 +491,7 @@
               <div>
                 <div class="text-sm font-medium">
                   {formatA1c(result.a1cDisplay)}
-                  {#if result.note}<span
-                      class="text-muted-foreground font-normal"
-                    >
-                      — {result.note}
-                    </span>{/if}
+                  {#if result.note}<span class="text-muted-foreground font-normal"> — {result.note}</span>{/if}
                 </div>
                 <div class="text-xs text-muted-foreground">
                   {formatLongDate(toDate(result.measuredAt))}
@@ -627,9 +517,7 @@
           <Input id="lab-date" type="date" bind:value={newLabDate} />
         </div>
         <div class="space-y-1.5">
-          <Label for="lab-value">
-            Result ({a1cUnits.current === "percent" ? "%" : "mmol/mol"})
-          </Label>
+          <Label for="lab-value">Result ({a1cUnits.current === "percent" ? "%" : "mmol/mol"})</Label>
           <Input
             id="lab-value"
             type="number"
@@ -642,12 +530,7 @@
         </div>
         <div class="space-y-1.5">
           <Label for="lab-note">Note (optional)</Label>
-          <Input
-            id="lab-note"
-            type="text"
-            bind:value={newLabNote}
-            placeholder="e.g. GP lab"
-          />
+          <Input id="lab-note" type="text" bind:value={newLabNote} placeholder="e.g. GP lab" />
         </div>
       </div>
 
@@ -671,34 +554,23 @@
   </Card.Root>
 </div>
 
-{#snippet labMarkers({
-  points,
-}: {
-  points: { x: number; y: number; data: (typeof labChartPoints)[number] }[];
-})}
+{#snippet labMarkers({ points }: { points: { x: number; y: number; data: (typeof labChartPoints)[number] }[] })}
   {#each points as point (point.data.id)}
     <polygon
       data-testid="lab-marker"
-      points="{point.x},{point.y - 7} {point.x - 6},{point.y + 5} {point.x +
-        6},{point.y + 5}"
+      points="{point.x},{point.y - 7} {point.x - 6},{point.y + 5} {point.x + 6},{point.y + 5}"
       class="fill-foreground stroke-background"
       stroke-width="1"
       pointer-events="none"
     >
-      <title>
-        Lab result: {formatA1c(point.data.a1cDisplay)} ({formatLongDate(
-          point.data.date
-        )}){point.data.note ? ` — ${point.data.note}` : ""}
-      </title>
+      <title>Lab result: {formatA1c(point.data.a1cDisplay)} ({formatLongDate(point.data.date)}){point.data.note ? ` — ${point.data.note}` : ""}</title>
     </polygon>
   {/each}
 {/snippet}
 
 <ConfirmDialog
   open={pendingDeleteLabResult !== null}
-  onOpenChange={(o) => {
-    if (!o) pendingDeleteLabResult = null;
-  }}
+  onOpenChange={(o) => { if (!o) pendingDeleteLabResult = null; }}
   title="Delete this lab result?"
   confirmLabel="Delete"
   onConfirm={confirmDeleteLabResult}

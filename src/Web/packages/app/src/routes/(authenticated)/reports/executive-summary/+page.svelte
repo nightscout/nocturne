@@ -31,7 +31,7 @@
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { bg, bgLabel, bgRange, formatMediumDateTime, formatNumber, } from "$lib/utils/formatting";
+  import { bg, bgLabel, bgRange, formatMediumDateTime, formatNumber } from "$lib/utils/formatting";
   import { formatMinutesDuration } from "$lib/utils/duration";
 
   // Format a nullable mg/dL value in the user's preferred units, or em dash if absent.
@@ -76,12 +76,12 @@
 
       <FigureStrip
         figures={[
-          { label: "Time in range", value: tir?.target?.toFixed(0) ?? "–", unit: "%", note: "Target: ≥70%", },
-          { label: "Below range", value: totalLows.toFixed(1), unit: "%", note: "Target: <4%", },
-          { label: "Above range", value: totalHighs.toFixed(1), unit: "%", note: "Target: <25%", },
-          { label: a1cLabel(true), value: formatA1cValue( variability?.estimatedA1cDisplay), unit: a1cUnitLabel(), note: variability?.a1cTarget ? `Target: <${formatA1c(variability.a1cTarget)}` : undefined, },
-          { label: "CV", value: variability?.coefficientOfVariation?.toFixed(0) ?? "–", unit: "%", note: "Target: ≤33%", },
-          { label: "Average", value: String(bgOr(stats?.mean)), unit: bgLabel(), note: `Over ${dayCount} days`, },
+          { label: "Time in range", value: tir?.target?.toFixed(0) ?? "–", unit: "%", note: "Target: ≥70%" },
+          { label: "Below range", value: totalLows.toFixed(1), unit: "%", note: "Target: <4%" },
+          { label: "Above range", value: totalHighs.toFixed(1), unit: "%", note: "Target: <25%" },
+          { label: a1cLabel(true), value: formatA1cValue(variability?.estimatedA1cDisplay), unit: a1cUnitLabel(), note: variability?.a1cTarget ? `Target: <${formatA1c(variability.a1cTarget)}` : undefined, },
+          { label: "CV", value: variability?.coefficientOfVariation?.toFixed(0) ?? "–", unit: "%", note: "Target: ≤33%" },
+          { label: "Average", value: String(bgOr(stats?.mean)), unit: bgLabel(), note: `Over ${dayCount} days` },
         ]}
       />
 
@@ -308,7 +308,7 @@
                 { label: "Average", value: stats?.mean },
                 { label: "Median", value: stats?.median },
                 { label: "Lowest", value: stats?.min },
-                { label: "Highest", value: stats?.max }
+                { label: "Highest", value: stats?.max },
               ] as { label, value } (label)}
                 <div class="flex items-baseline justify-between py-2">
                   <dt class="text-muted-foreground">{label}</dt>

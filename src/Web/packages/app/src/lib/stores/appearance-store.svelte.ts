@@ -351,7 +351,9 @@ export const a1cUnits = new SyncedPref<(typeof A1C_UNITS)[number]>(
   "nocturne-a1c-units", "percent", (p) => p.a1cUnits, oneOfPref(A1C_UNITS)
 );
 
-/** Time format preference (12-hour or 24-hour) */
+/**
+ * Time format preference (12-hour or 24-hour)
+ */
 export const timeFormat = new SyncedPref<TimeFormat>(
   "nocturne-time-format",
   "12",

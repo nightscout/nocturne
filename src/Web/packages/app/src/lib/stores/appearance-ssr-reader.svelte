@@ -9,7 +9,7 @@
     formatWeekdayDate,
     minutesAgo,
   } from "$lib/utils/formatting";
-  import { preferredLanguage, timeFormat, yearOverviewColors, } from "./appearance-store.svelte";
+  import { preferredLanguage, timeFormat, yearOverviewColors } from "./appearance-store.svelte";
   import { a1cLabel, formatA1c } from "$lib/utils/a1c-formatting";
 
   const derivedValue = $derived(bg(100));

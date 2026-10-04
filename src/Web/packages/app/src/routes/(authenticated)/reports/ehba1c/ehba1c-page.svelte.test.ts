@@ -158,16 +158,11 @@ describe("eHbA1c chart tooltips", () => {
 
   it("does not extend the estimate line to a lab result before glucose history", async () => {
     await expect.element(page.getByTestId("lab-marker").first()).toBeVisible();
-    const line = (
-      await page.getByTestId("ehba1c-line").elements()
-    )[0] as SVGPathElement;
+    const line = (await page.getByTestId("ehba1c-line").elements())[0] as SVGPathElement;
     const lineStart = line.getPointAtLength(0);
     const matrix = line.getScreenCTM();
     if (!matrix) throw new Error("eHbA1c curve is not positioned in the chart");
-    const screenLineStart = new DOMPoint(
-      lineStart.x,
-      lineStart.y
-    ).matrixTransform(matrix);
+    const screenLineStart = new DOMPoint(lineStart.x, lineStart.y).matrixTransform(matrix);
 
     const markers = await page.getByTestId("lab-marker").elements();
     const beforeHistoryMarker = markers.find((marker) =>
@@ -175,8 +170,7 @@ describe("eHbA1c chart tooltips", () => {
         .querySelector("title")
         ?.textContent?.includes("Before glucose history")
     ) as SVGPolygonElement | undefined;
-    if (!beforeHistoryMarker)
-      throw new Error("Pre-history lab marker is not rendered");
+    if (!beforeHistoryMarker) throw new Error("Pre-history lab marker is not rendered");
     const markerBounds = beforeHistoryMarker.getBoundingClientRect();
 
     expect(screenLineStart.x).toBeGreaterThan(markerBounds.right);

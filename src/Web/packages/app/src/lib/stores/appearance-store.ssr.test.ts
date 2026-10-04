@@ -58,7 +58,7 @@ describe("appearance-store SSR resolution", () => {
   });
 
   it("resolves each field from the highest-precedence layer that defines it", async () => {
-    const body = await ssr([{ timeFormat: "24" }, { glucoseUnits: "mmol", timeFormat: "12" },]);
+    const body = await ssr([{ timeFormat: "24" }, { glucoseUnits: "mmol", timeFormat: "12" }]);
 
     expect(body).toContain("mmol/L");
     expect(body).toContain(">24<");
@@ -124,8 +124,8 @@ describe("resolveLanguage", () => {
 it("keeps year color preferences scoped to the SSR request", async () => {
   const first = await ssr([{ yearOverviewColors: { tdd: [10, 70] } }]);
   const second = await ssr([{ yearOverviewColors: { tdd: [20, 60] } }]);
-  expect(first).toContain("[10,70]");
-  expect(second).toContain("[20,60]");
-  expect(second).not.toContain("[10,70]");
-  expect(await ssr([])).not.toContain("[20,60]");
+  expect(first).toContain('[10,70]');
+  expect(second).toContain('[20,60]');
+  expect(second).not.toContain('[10,70]');
+  expect(await ssr([])).not.toContain('[20,60]');
 });

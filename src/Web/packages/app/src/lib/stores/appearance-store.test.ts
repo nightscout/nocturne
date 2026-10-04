@@ -105,7 +105,7 @@ describe("appearance-store preference sync", () => {
       colorTheme: "aaps",
       nightModeSchedule: true,
       prediction: { enabled: false, minutes: 60, displayMode: "lines" },
-      chart: { lineColor: "#000000", pointColor: "#ffffff", showPoints: false, lookback: 4, },
+      chart: { lineColor: "#000000", pointColor: "#ffffff", showPoints: false, lookback: 4 },
     };
 
     applyPreferences(source);
@@ -164,7 +164,7 @@ describe("preferenceCookieWrites", () => {
 
   it("carries the name, value and lifetime it was given", () => {
     expect(preferenceCookieWrites("nocturne-language", "fr", 31536000, null)).toEqual([
-      "nocturne-language=fr;path=/;max-age=31536000;SameSite=Lax"
+      "nocturne-language=fr;path=/;max-age=31536000;SameSite=Lax",
     ]);
   });
 });
