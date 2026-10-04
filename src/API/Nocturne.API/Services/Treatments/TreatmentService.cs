@@ -179,7 +179,8 @@ public class TreatmentService : ITreatmentService
     /// The created treatments the store inserted. One the user had deleted is returned to the caller
     /// as before but stored nothing, so no event announces it, and write-back does not put it upstream
     /// again. One that updated a record already stored (<see cref="BulkWrite{TRecord}.Updated"/>: a
-    /// client's resend, the v1 PUT create fallback, a connector republish) is announced as the update
+    /// client's resend, under its id or only its sync key, the v1 PUT create fallback, a connector
+    /// republish, a stored override, temporary target or profile switch sent again) is announced as the update
     /// it is, so write-back looks for the copy upstream holds before writing, as for any edit: sent as
     /// a create, unlooked-for, it would store a second copy beside one held under another form.
     /// </summary>

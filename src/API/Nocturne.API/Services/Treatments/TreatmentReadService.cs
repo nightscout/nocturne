@@ -180,11 +180,12 @@ public class TreatmentReadService : ITreatmentStore
             {
                 var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
                 skippedDeleted += result.SkippedDeleted;
+                var updatedStored = UpdatedStoredRecord(treatment, result);
                 var created = ToCreated(treatment, result);
                 results.Add(created);
                 if (result.SkippedDeleted > 0 && result.CreatedRecords.Count == 0 && result.UpdatedRecords.Count == 0)
                     withheld.Add(created);
-                else if (result.UpdatedRecords.OfType<IV4Record>().Any())
+                else if (updatedStored)
                     updated.Add(created);
             }
             catch (OperationCanceledException)
@@ -286,6 +287,17 @@ public class TreatmentReadService : ITreatmentStore
     }
 
     #region Private - stored record resolution
+
+    /// <summary>
+    /// Whether decomposing <paramref name="treatment"/> updated a record already stored for it: one of
+    /// its records, or the span it is stored as (an override, a temporary target, a profile switch),
+    /// which carries the treatment's id as its original id. Another span the decomposition updated,
+    /// such as the suspension a pump resume closes, belongs to another treatment. Read before
+    /// <see cref="ToCreated"/> rewrites the treatment's id.
+    /// </summary>
+    private static bool UpdatedStoredRecord(Treatment treatment, DecompositionResult result) =>
+        result.UpdatedRecords.Any(r => r is IV4Record
+            || (r is StateSpan { OriginalId: { Length: > 0 } originalId } && originalId == treatment.Id));
 
     /// <summary>
     /// The create response for a decomposed treatment. It carries the id every read serves for the

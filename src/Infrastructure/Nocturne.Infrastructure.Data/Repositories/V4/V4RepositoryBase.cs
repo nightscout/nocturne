@@ -683,6 +683,12 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return await InsertAsync(ctx, ToEntity(model), origin, ct);
     }
 
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.CreateOrUpsertAsync" />
+    /// <remarks>Virtual: <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/> overrides it to upsert in place.</remarks>
+    public virtual async Task<LegacyUpsert<TModel>> CreateOrUpsertAsync(
+        TModel model, WriteOrigin origin, CancellationToken ct = default)
+        => new(await CreateAsync(model, origin, ct), Created: true);
+
     /// <summary>
     /// The insert tail both single-create paths share: the LegacyId guard
     /// <see cref="BulkCreateAsync"/> applies to its insert set, the insert itself, dedup linking,

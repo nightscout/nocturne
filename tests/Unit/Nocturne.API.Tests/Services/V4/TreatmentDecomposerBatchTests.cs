@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Devices;
@@ -89,8 +90,8 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
         // StateSpanService returns a new StateSpan
         _stateSpanServiceMock
-            .Setup(x => x.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((StateSpan span, CancellationToken _) => span);
+            .Setup(x => x.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan span, CancellationToken _) => new StateSpanUpsert(span, StateSpanUpsertOutcome.Inserted));
 
         // UpdateAsync returns the input bolus (for linking pass)
         _bolusRepoMock
@@ -239,7 +240,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
         // Temporary target uses individual state span upsert
         _stateSpanServiceMock.Verify(
-            x => x.UpsertStateSpanAsync(
+            x => x.UpsertStateSpanWithOutcomeAsync(
                 It.Is<StateSpan>(s => s.Category == StateSpanCategory.TemporaryTarget),
                 It.IsAny<CancellationToken>()),
             Times.Once);
@@ -494,7 +495,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
         // Assert — profile switch uses individual upsert, not bulk insert
         _stateSpanServiceMock.Verify(
-            x => x.UpsertStateSpanAsync(
+            x => x.UpsertStateSpanWithOutcomeAsync(
                 It.Is<StateSpan>(s => s.Category == StateSpanCategory.Profile),
                 It.IsAny<CancellationToken>()),
             Times.Once);
@@ -746,7 +747,10 @@ public class TreatmentDecomposerBatchTests : IDisposable
     private static void NothingHeld<TRepo, TRecord>(Mock<TRepo> repo)
         where TRepo : class, ILegacyKeyedRepository<TRecord>
         where TRecord : class, V4Models.IV4Record
-        => repo.Setup(x => x.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+    {
+        repo.Setup(x => x.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HashSet<string>());
+        repo.ForwardCreateOrUpsertToCreate<TRepo, TRecord>();
+    }
 }
 

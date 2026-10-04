@@ -309,6 +309,35 @@ public class TreatmentReadServiceTests
         created.Withheld.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// A treatment stored as a span (an override here) whose re-upload updated that span is marked
+    /// updated. A pump resume that closed another treatment's suspension span created its own record,
+    /// so it is not.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_MarksATreatmentThatUpdatedItsOwnSpanAsUpdated()
+    {
+        var resentOverride = new Treatment { Id = "override-1", Mills = 1000, EventType = "Temporary Override", Duration = 30 };
+        var resume = new Treatment { Id = "resume-1", Mills = 2000, EventType = "Pump Resume" };
+        var overrideResult = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        overrideResult.UpdatedRecords.Add(new StateSpan { Id = Guid.CreateVersion7().ToString(), OriginalId = resentOverride.Id });
+        var resumeResult = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        resumeResult.CreatedRecords.Add(new DeviceEvent { Id = Guid.CreateVersion7(), LegacyId = resume.Id });
+        resumeResult.UpdatedRecords.Add(new StateSpan { Id = Guid.CreateVersion7().ToString(), OriginalId = "pump-suspended-tx:suspend-1" });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(resentOverride, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(overrideResult);
+        _decomposer
+            .Setup(d => d.DecomposeAsync(resume, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(resumeResult);
+
+        var created = await _service.CreateAsync([resentOverride, resume]);
+
+        created.Should().HaveCount(2);
+        created.Updated.Should().ContainSingle().Which.Should().BeSameAs(created[0]);
+        created.Withheld.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task CreateAsync_MealBolus_ReturnsTheBolusIdTheMealIsReadBackUnder()
     {
