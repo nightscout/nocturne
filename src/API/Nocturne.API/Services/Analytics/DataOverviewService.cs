@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Constants;
@@ -160,6 +161,8 @@ public class DataOverviewService : IDataOverviewService
         var tz = await GetUserTimeZoneAsync(cancellationToken);
         var (startUtc, endUtc) = LocalYearBoundsUtc(year, tz);
 
+        var dayGrouping = LocalDayGrouping.Create(year, tz);
+
         var hasFilter = dataSources is { Length: > 0 };
 
         // Dictionary keyed by date string "yyyy-MM-dd" -> DailySummaryDay
@@ -177,6 +180,7 @@ public class DataOverviewService : IDataOverviewService
                 timestamps,
                 dayMap,
                 tz,
+                dayGrouping,
                 cancellationToken
             );
         }
@@ -1137,24 +1141,33 @@ public class DataOverviewService : IDataOverviewService
         return DateOnly.FromDateTime(local.DateTime);
     }
 
-    /// <summary>
-    /// Materializes timestamp values from a V4 table, groups by date in-memory, and merges counts into the dayMap.
-    /// </summary>
     private async Task CollectCountsFromTimestampTable(
         string dataType,
         IQueryable<DateTime> timestampQuery,
         Dictionary<string, DailySummaryDay> dayMap,
         TimeZoneInfo tz,
+        Expression<Func<DateTime, DateTime>>? dayGrouping,
         CancellationToken cancellationToken
     )
     {
         try
         {
-            var timestampList = await timestampQuery.ToListAsync(cancellationToken);
+            var counts = dayGrouping is not null
+                ? await timestampQuery.GroupBy(dayGrouping)
+                    .Select(group => new { Day = group.Key, Count = group.Count() })
+                    .ToListAsync(cancellationToken)
+                : (await timestampQuery.ToListAsync(cancellationToken))
+                    .GroupBy(timestamp => TimestampToDate(timestamp, tz))
+                    .Select(group => new
+                    {
+                        Day = group.Key.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                        Count = group.Count(),
+                    }).ToList();
 
-            var grouped = timestampList
-                .GroupBy(t => TimestampToDate(t, tz))
-                .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd"), Count = g.Count() });
+            var grouped = counts.Select(group => new
+            {
+                Date = group.Day.ToString("yyyy-MM-dd"), group.Count,
+            });
 
             foreach (var group in grouped)
             {
