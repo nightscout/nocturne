@@ -28,6 +28,7 @@ public class DataOverviewServiceTests : IDisposable
     private readonly DataOverviewService _service;
     private readonly Mock<ICacheService> _cacheService = new();
     private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
+    private readonly Mock<ITenantDbContextFactory> _factory = new();
     private readonly CategoryReadContext _categoryReadContext = new();
     private readonly ListLogger<DataOverviewService> _logger = new();
     private IInterceptor[] _interceptors = [];
@@ -56,8 +57,7 @@ public class DataOverviewServiceTests : IDisposable
         _dbContext = TestDbContextFactory.CreateInMemoryContext(_dbName);
         _dbContext.TenantId = TenantId;
 
-        var mockFactory = new Mock<ITenantDbContextFactory>();
-        mockFactory.Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
+        _factory.Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
             {
                 var ctx = TestDbContextFactory.CreateInMemoryContext(_dbName, _interceptors);
@@ -70,7 +70,7 @@ public class DataOverviewServiceTests : IDisposable
         var mockTenantAccessor = new Mock<ITenantAccessor>();
         mockTenantAccessor.SetupGet(a => a.Context).Returns(new TenantContext(TenantId, "test-tenant", "Test Tenant", true, false));
         _service = new DataOverviewService(
-            mockFactory.Object,
+            _factory.Object,
             _therapySettings.Object,
             mockStatisticsService.Object,
             _cacheService.Object,
@@ -83,6 +83,95 @@ public class DataOverviewServiceTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(nameof(SensorGlucoseEntity))]
+    [InlineData(nameof(MeterGlucoseEntity))]
+    [InlineData(nameof(BolusEntity))]
+    [InlineData(nameof(TempBasalEntity))]
+    [InlineData(nameof(CarbIntakeEntity))]
+    public async Task YearSummary_PreservesStandaloneResultsAndSourceFailures(string? failedSource)
+    {
+        var timestamp = new DateTime(2024, 2, 29, 12, 0, 0, DateTimeKind.Utc);
+        for (var i = 0; i < 80; i++)
+        {
+            _dbContext.SensorGlucose.Add(new SensorGlucoseEntity { Id = Guid.NewGuid(), Timestamp = timestamp.AddMinutes(i), Mgdl = 81 + i });
+            _dbContext.MeterGlucose.Add(new MeterGlucoseEntity { Id = Guid.NewGuid(), Timestamp = timestamp.AddMinutes(i), Mgdl = 201 + i });
+            _dbContext.Boluses.AddRange(
+                new BolusEntity { Id = Guid.NewGuid(), Timestamp = timestamp.AddMinutes(i), Insulin = 2.345, BolusKind = "Manual" },
+                new BolusEntity { Id = Guid.NewGuid(), Timestamp = timestamp.AddMinutes(i), Insulin = 0.117, BolusKind = "Algorithm" });
+            _dbContext.TempBasals.Add(new TempBasalEntity { Id = Guid.NewGuid(), Timestamp = timestamp.AddMinutes(i), Rate = 1.13, Origin = "Pump" });
+            _dbContext.CarbIntakes.Add(new CarbIntakeEntity { Id = Guid.NewGuid(), Timestamp = timestamp.AddMinutes(i), Carbs = 30.257 });
+        }
+        await _dbContext.SaveChangesAsync();
+        if (failedSource is not null)
+            _interceptors = [new EntityQueryFailure(failedSource)];
+
+        var daily = await _service.GetDailySummaryAsync(2024);
+        var gri = await _service.GetGriTimelineAsync(2024);
+        var combined = await _service.GetYearSummaryAsync(2024);
+
+        System.Text.Json.JsonSerializer.Serialize(combined.DailySummary).Should().Be(System.Text.Json.JsonSerializer.Serialize(daily));
+        System.Text.Json.JsonSerializer.Serialize(combined.GriTimeline).Should().Be(System.Text.Json.JsonSerializer.Serialize(gri));
+        if (failedSource is null)
+        {
+            gri.Periods.Should().ContainSingle();
+            gri.Periods[0].AverageDailyCarbs.Should().NotBeNull();
+            gri.Periods[0].TotalDailyDose.Should().NotBeNull();
+        }
+    }
+
+    [Fact]
+    public async Task YearSummary_DoesNotReuseRecordsAcrossRequests()
+    {
+        var timestamp = new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        _dbContext.CarbIntakes.Add(new CarbIntakeEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Carbs = 10 });
+        await _dbContext.SaveChangesAsync();
+        (await _service.GetYearSummaryAsync(2024)).DailySummary!.Days[0].TotalCarbs.Should().Be(10);
+        _dbContext.CarbIntakes.Add(new CarbIntakeEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Carbs = 20 });
+        await _dbContext.SaveChangesAsync();
+        (await _service.GetYearSummaryAsync(2024)).DailySummary!.Days[0].TotalCarbs.Should().Be(30);
+    }
+
+    [Fact]
+    public async Task YearSummary_PropagatesCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var action = () => _service.GetYearSummaryAsync(2024, cancellationToken: cancellation.Token);
+        await action.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task YearSummary_PreservesTheOtherReportWhenOneContextFails(bool dailyFails)
+    {
+        var context = TestDbContextFactory.CreateInMemoryContext(_dbName);
+        context.TenantId = TenantId;
+        var sequence = _factory.SetupSequence(factory => factory.CreateAsync(It.IsAny<CancellationToken>()));
+        if (dailyFails)
+            sequence.ThrowsAsync(new TimeoutException("unavailable")).ReturnsAsync(context);
+        else
+            sequence.ReturnsAsync(context).ThrowsAsync(new TimeoutException("unavailable"));
+
+        var result = await _service.GetYearSummaryAsync(2024);
+        (result.DailySummary is null).Should().Be(dailyFails);
+        (result.GriTimeline is null).Should().Be(!dailyFails);
+    }
+
+    [Fact]
+    public async Task YearSummary_UsesOneTimezoneForBothReports()
+    {
+        _therapySettings.SetupSequence(settings => settings.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Australia/Sydney")
+            .ReturnsAsync("America/New_York");
+
+        await _service.GetYearSummaryAsync(2024);
+
+        _therapySettings.Verify(settings => settings.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]

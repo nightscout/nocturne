@@ -15,11 +15,14 @@ vi.mock("$api/generated/dataOverviews.generated.remote", () => ({
   getAvailableYears: () => ({
     run: () => requests.metadata(),
   }),
-  getDailySummary: (params: { year: number }) => ({
-    run: () => requests.daily(params),
-  }),
-  getGriTimeline: (params: { year: number }) => ({
-    run: () => requests.gri(params),
+  getYearSummary: (params: { year: number }) => ({
+    run: async () => {
+      const [dailySummary, griTimeline] = await Promise.all([
+        requests.daily(params),
+        requests.gri(params),
+      ]);
+      return { dailySummary, griTimeline };
+    },
   }),
 }));
 vi.mock(
@@ -154,12 +157,12 @@ describe("year overview page loading", () => {
         },
       ],
     });
-    await expect
-      .element(page.getByTestId("year-2025"))
-      .toHaveTextContent('"totalCarbs":45');
     enter(2024, 2023);
     expect(requests.daily).toHaveBeenCalledOnce();
     finishGri({ periods: [] });
+    await expect
+      .element(page.getByTestId("year-2025"))
+      .toHaveTextContent('"totalCarbs":45');
     await vi.waitFor(() =>
       expect(document.querySelector("[data-year='2024']")).not.toBeNull()
     );

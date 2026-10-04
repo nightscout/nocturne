@@ -8,8 +8,7 @@
   import { Button } from "$lib/components/ui/button";
   import {
     getAvailableYears,
-    getDailySummary,
-    getGriTimeline,
+    getYearSummary,
   } from "$api/generated/dataOverviews.generated.remote";
   import GlycemicRiskIndexChart from "$lib/components/reports/GlycemicRiskIndexChart.svelte";
   import YearOverviewFilters from "$lib/components/reports/year-overview/YearOverviewFilters.svelte";
@@ -449,13 +448,8 @@
   let disposed = false;
   const yearLoader = new YearLoader(
     {
-      daily: (year, sources) =>
-        getDailySummary({
-          year,
-          dataSources: sources.length ? sources : undefined,
-        }).run(),
-      gri: (year, sources) =>
-        getGriTimeline({
+      summary: (year, sources) =>
+        getYearSummary({
           year,
           dataSources: sources.length ? sources : undefined,
         }).run(),

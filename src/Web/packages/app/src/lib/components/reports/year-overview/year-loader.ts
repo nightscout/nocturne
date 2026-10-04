@@ -1,11 +1,11 @@
 import type {
   DailySummaryResponse,
   GriTimelineResponse,
+  YearSummaryResponse,
 } from "$api/generated/nocturne-api-client";
 
 type Requests = {
-  daily: (year: number, sources: string[]) => Promise<DailySummaryResponse>;
-  gri: (year: number, sources: string[]) => Promise<GriTimelineResponse>;
+  summary: (year: number, sources: string[]) => Promise<YearSummaryResponse>;
 };
 
 type Events = {
@@ -70,23 +70,21 @@ export class YearLoader {
     const run = this.#tail
       .then(async () => {
         if (!current()) return false;
-        const read = async (kind: "daily" | "gri") => {
-          try {
-            if (kind === "daily") {
-              const result = await this.requests.daily(year, sources);
-              if (current()) this.events.daily(year, result);
-            } else {
-              const result = await this.requests.gri(year, sources);
-              if (current()) this.events.gri(year, result);
-            }
-            return true;
-          } catch (error) {
-            if (current()) this.events.error(year, kind, error);
-            return false;
+        try {
+          const result = await this.requests.summary(year, sources);
+          if (!current()) return false;
+          if (result.dailySummary) this.events.daily(year, result.dailySummary);
+          else this.events.error(year, "daily", null);
+          if (result.griTimeline) this.events.gri(year, result.griTimeline);
+          else this.events.error(year, "gri", null);
+          return Boolean(result.dailySummary && result.griTimeline);
+        } catch (error) {
+          if (current()) {
+            this.events.error(year, "daily", error);
+            this.events.error(year, "gri", error);
           }
-        };
-        const results = await Promise.all([read("daily"), read("gri")]);
-        return current() && results.every(Boolean);
+          return false;
+        }
       })
       .finally(() => {
         if (current()) {
