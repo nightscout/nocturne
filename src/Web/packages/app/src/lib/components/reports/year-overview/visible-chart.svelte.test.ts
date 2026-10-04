@@ -50,6 +50,12 @@ describe("chart visibility", () => {
   it("renders the newest chart without waiting for viewport observation", async () => {
     render(Harness, { eager: true });
     await expect.element(page.getByTestId("chart")).toBeInTheDocument();
+    const chart = page.getByTestId("chart").element();
+    await page.getByRole("button", { name: "Update data" }).click();
+    await expect
+      .element(page.getByTestId("chart"))
+      .toHaveTextContent("Updated data");
+    expect(page.getByTestId("chart").element()).toBe(chart);
   });
 
   it("defers creation and uses the latest data when entering the viewport", async () => {

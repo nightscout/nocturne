@@ -5,7 +5,14 @@
   let label = $state("Original data");
 </script>
 
-<Button onclick={() => (label = "Updated data")}>Update data</Button>
+<Button
+  onclick={() => {
+    label = "Updated data";
+    eager = false;
+  }}
+>
+  Update data
+</Button>
 <div class="h-60">
   <VisibleChart label="Year chart" {eager}>
     <div data-testid="chart">{label}</div>

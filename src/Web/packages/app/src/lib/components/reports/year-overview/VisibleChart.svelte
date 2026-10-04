@@ -19,7 +19,10 @@
   const print = new PrintMode();
 
   onMount(() => {
-    if (eager) return;
+    if (eager) {
+      visible = true;
+      return;
+    }
     if (typeof IntersectionObserver === "undefined") {
       visible = true;
       return;
