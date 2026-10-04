@@ -13,7 +13,10 @@
   import { TrackerCompletionDialog } from "$lib/components/trackers";
   import { EntryEditDialog } from "$lib/components/entries";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import {
+    dashboardTopWidgets,
+    glucoseUnits,
+  } from "$lib/stores/appearance-store.svelte";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import {
@@ -25,8 +28,10 @@
   } from "$lib/utils/formatting";
   import Clock from "@lucide/svelte/icons/clock";
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
-  import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
+  import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
+  import GlucoseTileWash, { trackUnwashedFill } from "./GlucoseTileWash.svelte";
+  import { showsCurrentGlucoseWidget } from "./top-widget-ids";
 
   interface ComponentProps {
     /** Show status pills (COB, IOB, CAGE, SAGE, etc.) */
@@ -43,15 +48,19 @@
     settingsStore.features?.trackerPills?.enabled ?? true
   );
 
-  const rawCurrentBG = $derived(realtimeStore.currentBG);
-  const rawBgDelta = $derived(realtimeStore.bgDelta);
+  // The widget carries the reading (and its wash) when it is showing, which frees this row for
+  // the pills; otherwise the tile stays here so the reading never leaves the desktop dashboard.
+  const readingInWidget = $derived(showsCurrentGlucoseWidget(dashboardTopWidgets.current));
+
+  const glucose = displayedGlucose(realtimeStore);
+  const rawCurrentBG = $derived(glucose.currentBG);
+  const rawBgDelta = $derived(glucose.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
   const tileVariant = $derived(
-    getGlucoseTileVariant(currentGlucoseStatus(realtimeStore.currentEntry?.mills))
+    getGlucoseTileVariant(glucose.status)
   );
 
   const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
-
 
   // Format values based on user's unit preference
   const units = $derived(glucoseUnits.current);
@@ -72,6 +81,12 @@
   const isLoading = $derived(
     rawCurrentBG === 0 && realtimeStore.entries.length === 0
   );
+  trackUnwashedFill(() => ({
+    loading: isLoading,
+    stale: isStale,
+    disconnected: isDisconnected,
+    variant: tileVariant,
+  }));
 
   function formatTimeSinceLastReading(): string {
     return minutesAgo(lastUpdated, currentTime.getTime());
@@ -130,25 +145,32 @@
   }
 </script>
 
+{#snippet rangeWash()}
+  <GlucoseTileWash mills={glucose.mills} variant={tileVariant} delta={rawBgDelta} />
+{/snippet}
+
 <!-- Desktop only: on mobile, MobileHeader carries the reading. -->
 <div class="@container">
   <h1 class="sr-only">Nocturne</h1>
   <div class="hidden @md:flex items-center gap-6">
-    <div class="flex shrink-0 items-center gap-3">
-      <GlucoseValueIndicator
-        displayValue={displayCurrentBG}
-        variant={tileVariant}
-        {isLoading}
-        {isStale}
-        {isDisconnected}
-        {statusText}
-        {statusTooltip}
-        size="lg"
-      />
-      <div class="text-sm text-muted-foreground tabular-nums">
-        {displayBgDelta}
+    {#if !readingInWidget}
+      <div class="flex shrink-0 items-center gap-3">
+        <GlucoseValueIndicator
+          displayValue={displayCurrentBG}
+          variant={tileVariant}
+          {isLoading}
+          {isStale}
+          {isDisconnected}
+          {statusText}
+          {statusTooltip}
+          size="lg"
+          background={rangeWash}
+        />
+        <div class="text-sm text-muted-foreground tabular-nums">
+          {displayBgDelta}
+        </div>
       </div>
-    </div>
+    {/if}
 
     <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1" data-testid="status-pills">
       {#if displayDemoMode}

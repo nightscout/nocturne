@@ -10,7 +10,7 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { Artwork } from "@nocturne/watercolour";
+  import { EmptyState } from "$lib/components/shared";
   import { toast } from "svelte-sonner";
   import { useToastSubmission } from "$lib/forms";
   import { remoteErrorMessage } from "$lib/api/remote-error";
@@ -111,21 +111,14 @@
       {@const clockFaces = (await clockFacesQuery) ?? []}
 
       {#if clockFaces.length === 0}
-        <!-- Empty State -->
-        <Card.Root variant="dashed">
-          <Card.Content class="flex flex-col items-center justify-center py-12">
-            <Artwork
-              artwork="clock"
-              palette="slate"
-              motion="auto"
-              autoplay="once"
-              class="mb-4 size-48"
-            />
-            <h3 class="mb-2 text-lg font-semibold">No clock faces yet</h3>
-            <p class="mb-6 max-w-sm text-center text-muted-foreground">
-              Create your first custom clock face to display your glucose data
-              exactly how you want it.
-            </p>
+        <EmptyState
+          art="clock"
+          variant="dashed"
+          title="No clock faces yet"
+          headingLevel={3}
+          body="Create your first custom clock face to display your glucose data exactly how you want it."
+        >
+          {#snippet action()}
             <Button onclick={handleCreate} disabled={creating}>
               {#if creating}
                 <Loader2 class="size-4 animate-spin" />
@@ -134,8 +127,8 @@
               {/if}
               Create Clock Face
             </Button>
-          </Card.Content>
-        </Card.Root>
+          {/snippet}
+        </EmptyState>
       {:else}
         <!-- Clock Face Grid -->
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

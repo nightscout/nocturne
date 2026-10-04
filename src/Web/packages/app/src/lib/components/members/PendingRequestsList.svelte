@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import * as Avatar from "$lib/components/ui/avatar";
+  import UserAvatar from "$lib/components/account/UserAvatar.svelte";
   import * as Card from "$lib/components/ui/card";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
@@ -28,17 +28,6 @@
   let selectedRoles = $state<Record<string, string[]>>({});
   let approvingIds = $state(new Set<string>());
   let denyingIds = $state(new Set<string>());
-
-  function getInitials(name: string | undefined): string {
-    if (!name) return "?";
-    return name
-      .split(" ")
-      .map((part) => part[0])
-      .filter(Boolean)
-      .slice(0, 2)
-      .join("")
-      .toUpperCase();
-  }
 
   function formatRelativeTime(date: string | undefined): string {
     if (!date) return "Unknown";
@@ -104,12 +93,7 @@
       <Card.Content class="@container space-y-4 pt-6">
         <!-- Requester info -->
         <div class="flex items-start gap-3">
-          <Avatar.Root class="h-10 w-10 shrink-0">
-            <Avatar.Image src={request.avatarUrl} alt={request.subjectName} />
-            <Avatar.Fallback variant="primary" class="text-sm">
-              {getInitials(request.subjectName)}
-            </Avatar.Fallback>
-          </Avatar.Root>
+          <UserAvatar name={request.subjectName} src={request.avatarUrl} size="md" />
           <div class="flex-1 min-w-0 space-y-1">
             <p class="text-sm font-medium truncate">
               {request.subjectName ?? "Unknown"}

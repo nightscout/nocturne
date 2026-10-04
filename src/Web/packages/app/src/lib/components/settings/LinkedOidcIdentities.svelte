@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
@@ -8,7 +9,8 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Clock from "@lucide/svelte/icons/clock";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import Check from "@lucide/svelte/icons/check";
+  import { EmptyState } from "$lib/components/shared";
+  import { fingerprintArtwork } from "$lib/watercolour-icons";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     getLinkedIdentities,
@@ -146,14 +148,7 @@
     {/if}
 
     {#if successMessage}
-      <div
-        class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
-      >
-        <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
-        <p class="text-sm text-success">
-          {successMessage}
-        </p>
-      </div>
+      <SuccessBanner wash={false}>{successMessage}</SuccessBanner>
     {/if}
 
     {#if isLoading}
@@ -161,17 +156,11 @@
         <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     {:else if identities.length === 0}
-      <div class="flex flex-col items-center justify-center py-8 text-center">
-        <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-        >
-          <Link2 class="h-6 w-6 text-muted-foreground" />
-        </div>
-        <p class="text-sm text-muted-foreground max-w-sm">
-          No linked sign-in methods. Add one to sign in with an external
-          provider.
-        </p>
-      </div>
+      <EmptyState
+        art={fingerprintArtwork}
+        title="No linked sign-in methods"
+        body="Add one to sign in with an external provider."
+      />
     {:else}
       {#each identities as identity (identity.id)}
         <div
@@ -268,9 +257,11 @@
     </Dialog.Header>
     <div class="space-y-2 py-4">
       {#if availableProviders.length === 0}
-        <p class="text-sm text-muted-foreground">
-          No providers available to link.
-        </p>
+        <EmptyState
+          art={fingerprintArtwork}
+          size="compact"
+          title="No providers available to link"
+        />
       {:else}
         {#each availableProviders as provider (provider.id)}
           <Button

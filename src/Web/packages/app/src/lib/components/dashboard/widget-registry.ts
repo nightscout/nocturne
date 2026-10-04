@@ -11,16 +11,18 @@ import type { TopWidgetId } from "./top-widget-ids";
 
 export {
   DEFAULT_TOP_WIDGETS,
+  MAX_TOP_WIDGETS,
   TOP_WIDGET_IDS,
   isTopWidgetId,
   knownTopWidgets,
+  showsCurrentGlucoseWidget,
   type TopWidgetId,
 } from "./top-widget-ids";
 
 type WidgetLoader = () => Promise<{ default: Component }>;
 
 const TOP_WIDGET_LOADERS: Record<TopWidgetId, WidgetLoader> = {
-  [WidgetId.BgDelta]: () => import("./widgets/BgDeltaWidget.svelte"),
+  [WidgetId.BgDelta]: () => import("./widgets/CurrentGlucoseWidget.svelte"),
   [WidgetId.LastUpdated]: () => import("./widgets/LastUpdatedWidget.svelte"),
   [WidgetId.ConnectionStatus]: () =>
     import("./widgets/ConnectionStatusWidget.svelte"),

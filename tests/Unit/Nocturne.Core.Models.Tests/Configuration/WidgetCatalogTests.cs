@@ -16,7 +16,7 @@ public class WidgetCatalogTests
 
     // Name and default are pinned per id: changing one is a deliberate edit here, never a silent divergence.
     [Theory]
-    [InlineData(WidgetId.BgDelta, "BG Delta", null, WidgetPlacement.Top, true)]
+    [InlineData(WidgetId.BgDelta, "Current Glucose", null, WidgetPlacement.Top, true)]
     [InlineData(WidgetId.LastUpdated, "Last Updated", null, WidgetPlacement.Top, true)]
     [InlineData(WidgetId.ConnectionStatus, "Connection Status", null, WidgetPlacement.Top, true)]
     [InlineData(WidgetId.Meals, "Recent Meals", null, WidgetPlacement.Top, true)]

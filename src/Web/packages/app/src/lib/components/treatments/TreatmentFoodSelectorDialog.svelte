@@ -3,7 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { toast } from "svelte-sonner";
-  import { useToastSubmission } from "$lib/forms";
+  import { toastSaved, useToastSubmission } from "$lib/forms";
   import {
     CarbIntakeFoodInputMode,
     type Food,
@@ -111,7 +111,7 @@
         allFoods = [...allFoods, newFood];
         selectedFood = newFood;
         originalFood = { ...newFood };
-        toast.success("Food created successfully");
+        toastSaved("Food created successfully");
 
         const request = buildFoodRequest();
         request.foodId = newFood._id!;
@@ -127,7 +127,7 @@
           allFoods[idx] = { ...allFoods[idx], ...updated };
         }
         originalFood = { ...selectedFood!, ...updated };
-        toast.success("Food updated successfully");
+        toastSaved("Food updated successfully");
 
         const request = buildFoodRequest();
         request.foodId = selectedFood._id;

@@ -8,21 +8,22 @@
   import { getDirectionInfo } from "$lib/utils";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
-  import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
+  import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseStatusClass } from "$lib/utils/glucose-status";
 
   const realtimeStore = getRealtimeStore();
 
   const units = $derived(glucoseUnits.current);
-  const currentBG = $derived(realtimeStore.currentBG);
-  const bgDelta = $derived(realtimeStore.bgDelta);
+  const glucose = displayedGlucose(realtimeStore);
+  const currentBG = $derived(glucose.currentBG);
+  const bgDelta = $derived(glucose.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
   const currentTime = $derived(realtimeStore.now);
   const timeSince = $derived(realtimeStore.timeSinceReading);
 
   const displayBG = $derived(formatGlucoseValue(currentBG, units));
   const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
-  const directionInfo = $derived(getDirectionInfo(realtimeStore.direction));
+  const directionInfo = $derived(getDirectionInfo(glucose.direction));
 
   const isStale = $derived(currentTime - lastUpdated > STALE_THRESHOLD_MS);
   const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
@@ -31,7 +32,7 @@
   const hasData = $derived(currentBG > 0);
 
   const statusClass = $derived(
-    getGlucoseStatusClass(currentGlucoseStatus(realtimeStore.currentEntry?.mills))
+    getGlucoseStatusClass(glucose.status)
   );
 
   const statusText = $derived(isDisconnected ? "Connection Error" : timeSince);

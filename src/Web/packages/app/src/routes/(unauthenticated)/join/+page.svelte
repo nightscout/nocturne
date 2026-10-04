@@ -36,6 +36,7 @@
   } from "$lib/components/auth/passkey-errors";
   import { FormError, describeSubmitError } from "$lib/forms";
   import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { withWelcome } from "$lib/components/members/welcome";
 
   // ── URL params ────────────────────────────────────────────────────
   const token = $derived(page.url.searchParams.get("token") ?? "");
@@ -79,7 +80,7 @@
     acceptError = null;
     try {
       await acceptInvite(token);
-      await goto(resolve("/"), { replaceState: true });
+      await goHome(true);
     } catch (err) {
       console.error("Accepting the invite failed:", err);
       acceptError = describeSubmitError(
@@ -157,8 +158,10 @@
     }
   }
 
-  function goHome() {
-    goto(resolve("/"), { replaceState: true });
+  function goHome(joined = false) {
+    const home = resolve("/");
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved above; the welcome marker only adds a query
+    return goto(joined ? withWelcome(home) : home, { replaceState: true });
   }
 </script>
 
@@ -207,7 +210,7 @@
       <Card.Content>
         <RecoveryCodes
           codes={recoveryCodes}
-          onContinue={goHome}
+          onContinue={() => goHome(true)}
           continueLabel="Continue to Nocturne"
         />
       </Card.Content>
@@ -227,7 +230,7 @@
       </Card.Header>
 
       <Card.Content>
-        <Button class="w-full" size="lg" onclick={goHome}>
+        <Button class="w-full" size="lg" onclick={() => goHome()}>
           Continue to Nocturne
         </Button>
       </Card.Content>

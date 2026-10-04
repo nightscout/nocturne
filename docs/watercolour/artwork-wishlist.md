@@ -9,10 +9,10 @@ icons, baked into the curated asset set as `lucide-<name>` (see scene-format):
 `weight-scale` -> `scale`, `open-book` -> `book-open`; the other nine keep their
 proposal name (`database`, `fingerprint`, `server`, `syringe`, `sprout`,
 `battery`, `flag`, `megaphone`, `rocket`). `sensor` has no Lucide analogue that
-reads as a CGM disc; `cpu` was baked as a test-set icon, not as the sensor, so
-that one proposal is still open (candidates to try at 48 px: `radio`,
-`circle-dot`). The survey tables below stay as the record of the screens each
-proposal was grounded in.
+reads as a CGM disc, so it is hand-authored as `cgm-sensor`; `insulin-pump`,
+`glucose-gauge` (the units step) and `ringing-bell` (alert setup; `alarm-bell`
+is a still bell) joined it. The survey tables below stay as the record of the
+screens each proposal was grounded in.
 
 ## Where artwork is used today
 

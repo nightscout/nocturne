@@ -136,7 +136,7 @@
       {/if}
 
       {#if totalCarbs > 0 && (foodCount > 1 || (foodCount >= 1 && hasUnattributed))}
-        <CarbBreakdownBar {totalCarbs} foods={breakdown.foods ?? []} />
+        <CarbBreakdownBar {totalCarbs} foods={breakdown.foods ?? []} seedKey={carbIntakeId} />
       {/if}
 
       <div class="flex flex-wrap gap-2 text-xs">

@@ -32,7 +32,7 @@
   import Copy from "@lucide/svelte/icons/copy";
   import Check from "@lucide/svelte/icons/check";
   import KeyRound from "@lucide/svelte/icons/key-round";
-  import { Artwork } from "@nocturne/watercolour";
+  import { EmptyState } from "$lib/components/shared";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
   import type { DataSourceStatus } from "$lib/components/settings/DataSourceRow.svelte";
@@ -421,19 +421,11 @@
       </CardHeader>
       <CardContent>
         {#if !servicesOverview.activeDataSources || servicesOverview.activeDataSources.length === 0}
-          <div class="text-center py-8 text-muted-foreground">
-            <Artwork
-              artwork="plug"
-              palette="slate"
-              motion="auto"
-              autoplay="once"
-              class="mx-auto mb-4 size-48"
-            />
-            <p class="font-medium">No data sources detected</p>
-            <p class="text-sm">
-              Set up an uploader app to start sending data to Nocturne
-            </p>
-          </div>
+          <EmptyState
+            art="plug"
+            title="No data sources detected"
+            body="Set up an uploader app to start sending data to Nocturne"
+          />
         {:else}
           <div class="space-y-3">
             {#each servicesOverview.activeDataSources as source (source.id)}

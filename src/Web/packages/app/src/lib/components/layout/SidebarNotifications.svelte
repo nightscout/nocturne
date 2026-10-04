@@ -17,6 +17,7 @@
     NotificationUrgency,
     type InAppNotificationDto,
   } from "$lib/api/generated/nocturne-api-client";
+  import { EmptyState } from "$lib/components/shared";
   import NotificationItem from "./NotificationItem.svelte";
   import { MealMatchReviewDialog } from "$lib/components/meal-matching";
   import DndPanel from "$lib/components/alerts/DndPanel.svelte";
@@ -182,16 +183,20 @@
       <DndPanel onNavigate={() => (isOpen = false)} />
 
       {#if totalCount === 0}
-        <div class="flex flex-col items-center justify-center py-8 text-center">
-          <Bell class="h-8 w-8 text-muted-foreground/50 mb-2" />
-          <p class="text-sm text-muted-foreground">No active notifications</p>
-          <a
-            href={resolve("/settings/trackers")}
-            class="mt-2 text-xs text-primary hover:underline"
-          >
-            Set up trackers
-          </a>
-        </div>
+        <EmptyState
+          art="chat-bubble"
+          size="compact"
+          title="No active notifications"
+        >
+          {#snippet action()}
+            <a
+              href={resolve("/settings/trackers")}
+              class="text-xs text-primary hover:underline"
+            >
+              Set up trackers
+            </a>
+          {/snippet}
+        </EmptyState>
       {:else}
         <div class="max-h-[350px] overflow-y-auto">
           {#each sortedNotifications as notification (notification.id)}

@@ -319,8 +319,8 @@ public static class WidgetCatalog
     /// </summary>
     public static IReadOnlyList<WidgetDefinition> All { get; } =
     [
-        Top(WidgetId.BgDelta, "BG Delta",
-            "Blood glucose change with connection status and last updated time",
+        Top(WidgetId.BgDelta, "Current Glucose",
+            "The live reading with its trend, change and age",
             "TrendingUp"),
         Top(WidgetId.LastUpdated, "Last Updated",
             "Time since last glucose reading with device info",
