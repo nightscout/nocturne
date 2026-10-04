@@ -44,7 +44,7 @@ public sealed class GoogleHealthWorker(
                     recovery.ServiceProvider.GetRequiredService<ITenantAccessor>()
                         .SetTenant(new(tenantId, "", "", true, false));
                     await recovery.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.Health.IGoogleHealthService>()
-                        .DisconnectAsync(disconnect.SubjectId, ct);
+                        .ResumeDisconnectAsync(disconnect.SubjectId, disconnect.RequestId);
                     return;
                 }
                 if (!await coordinator.StartQueuedAsync(tenantId, ct)) return;

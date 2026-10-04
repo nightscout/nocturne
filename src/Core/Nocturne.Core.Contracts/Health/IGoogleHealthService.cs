@@ -10,6 +10,7 @@ public interface IGoogleHealthService
     Task<GoogleHealthAuthorize> StartAsync(Guid subject, CancellationToken ct);
     Task CompleteAsync(GoogleHealthCallback callback, Guid subject, CancellationToken ct);
     Task DisconnectAsync(Guid subject, CancellationToken ct);
+    Task ResumeDisconnectAsync(Guid subject, Guid requestId);
     Task PurgeAsync(Guid subject, CancellationToken ct);
     Task<GoogleHealthPreview> PreviewAsync(Guid subject, CancellationToken ct);
     Task QueueSyncAsync(CancellationToken ct);

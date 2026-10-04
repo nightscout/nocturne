@@ -1169,6 +1169,7 @@ public class GoogleHealthTests
         var disconnect = service.DisconnectAsync(Guid.NewGuid(), browser.Token);
         browser.Cancel();
         var recoveredDisconnect = service.DisconnectAsync(Guid.NewGuid(), default);
+        var requestId = (await coordinator.DisconnectRequestAsync(tenant, default))!.RequestId;
         try
         {
             await revoking.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -1186,6 +1187,9 @@ public class GoogleHealthTests
         Assert.False((await service.StatusAsync(default)).IsDisconnecting);
         Assert.False(store.Secrets.ContainsKey("refreshToken"));
         Assert.True(store.Secrets.ContainsKey("accountKey"));
+        await ConnectAsync(service);
+        await service.ResumeDisconnectAsync(Guid.NewGuid(), requestId);
+        Assert.True((await service.StatusAsync(default)).Connected);
     }
 
     private sealed class AsyncHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder) : HttpMessageHandler
@@ -1343,6 +1347,7 @@ public class GoogleHealthTests
         public Task CompleteAsync(GoogleHealthCallback callback, Guid subject, CancellationToken ct) =>
             Task.CompletedTask;
         public Task DisconnectAsync(Guid subject, CancellationToken ct) => Task.CompletedTask;
+        public Task ResumeDisconnectAsync(Guid subject, Guid requestId) => Task.CompletedTask;
         public Task PurgeAsync(Guid subject, CancellationToken ct) => Task.CompletedTask;
         public Task<GoogleHealthPreview> PreviewAsync(Guid subject, CancellationToken ct) =>
             Task.FromResult(new GoogleHealthPreview());
