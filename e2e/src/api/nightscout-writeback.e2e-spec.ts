@@ -20,6 +20,7 @@ const MINUTE = 60_000;
 interface VendorRequest {
   method: string;
   path: string;
+  query: Record<string, string>;
   body: string;
 }
 
@@ -136,6 +137,19 @@ async function writtenBack(path: string): Promise<Record<string, unknown>[]> {
       const body = JSON.parse(r.body) as Record<string, unknown> | Record<string, unknown>[];
       return Array.isArray(body) ? body : [body];
     });
+}
+
+/** The forms each `find[identifier][$in]` lookup of the treatments upstream named, in order. */
+async function identifierLookups(): Promise<string[][]> {
+  const requests = (await (await fetch(`${VENDOR}/__requests`)).json()) as VendorRequest[];
+  return requests
+    .filter((r) => r.method === "GET" && r.path === "/api/v1/treatments.json" && "find[identifier][$in][0]" in r.query)
+    .map((r) =>
+      Object.entries(r.query)
+        .filter(([k]) => k.startsWith("find[identifier][$in]["))
+        .sort(([a], [b]) => Number(a.match(/\d+/)![0]) - Number(b.match(/\d+/)![0]))
+        .map(([, v]) => v),
+    );
 }
 
 describe("Nightscout connector write-back round trip", () => {
@@ -294,11 +308,12 @@ describe("Nightscout connector write-back round trip", () => {
   const sentTreatments = async (legacyKey: string) =>
     (await writtenBack("/api/v1/treatments")).filter((t) => t.identifier === wireId(legacyKey)).map((t) => [t._id, t.identifier]);
 
-  // A create goes out under the coerced legacy key, as `_id` and `identifier` both; the upstream
-  // keeps that identifier under an ObjectId it mints. A PUT and a PATCH by the id the create answered
-  // look the copy up by that identifier and are PUT under its ObjectId with the same identifier, so
-  // each lands on the one copy upstream and each pull lands on the stored treatment.
-  it("pulls a v1 treatment it wrote back on create, PUT and PATCH onto that treatment", async () => {
+  // A genuinely new create goes out unprobed under the coerced legacy key, as `_id` and `identifier`
+  // both; the upstream keeps that identifier under an ObjectId it mints. A PUT, a PATCH by the id the
+  // create answered and a re-upload of the same treatment each look the copy up by every form a
+  // release sent (the record's full uuid included) and are PUT under its ObjectId with the same
+  // identifier, so each lands on the one copy upstream and each pull lands on the stored treatment.
+  it("pulls a v1 treatment it wrote back on create, PUT, PATCH and re-upload onto that treatment", async () => {
     const syncIdentifier = crypto.randomUUID();
     const wire = wireId(syncIdentifier);
     const at = new Date(Date.now() - 55 * MINUTE).toISOString();
@@ -307,6 +322,8 @@ describe("Nightscout connector write-back round trip", () => {
     const id = created!._id;
     expect(id).toMatch(/^[0-9a-f]{24}$/);
     expect(await sentTreatments(syncIdentifier)).toEqual([[wire, wire]]);
+    const lookups = async () => (await identifierLookups()).filter((forms) => forms.includes(wire));
+    expect(await lookups()).toEqual([]);
     const [copy] = await upstreamTreatmentsAt(at, "Correction Bolus");
     expect(copy?.identifier).toBe(wire);
 
@@ -320,6 +337,8 @@ describe("Nightscout connector write-back round trip", () => {
 
     await tenant.api.ok("PUT", `/api/v1/treatments/${id}`, { ...upload, insulin: 0.8 });
     expect(await sentTreatments(syncIdentifier)).toEqual([[wire, wire], [copy!._id, wire]]);
+    const forms = [wire, id, syncIdentifier, stored[0]!.id.toLowerCase()];
+    expect(await lookups()).toEqual([forms]);
     expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[copy!._id, wire, 0.8]]);
     expect((await sync()).success).toBe(true);
     expect((await bolusesAround(at)).data.map((b) => [b.id, b.dataSource ?? null])).toEqual(kept);
@@ -327,6 +346,15 @@ describe("Nightscout connector write-back round trip", () => {
     await tenant.api.ok("PATCH", `/api/v3/treatments/${id}`, { insulin: 0.85 });
     expect(await sentTreatments(syncIdentifier)).toEqual([[wire, wire], [copy!._id, wire], [copy!._id, wire]]);
     expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[copy!._id, wire, 0.85]]);
+    expect(await lookups()).toEqual([forms, forms]);
+    expect((await sync()).success).toBe(true);
+    expect((await bolusesAround(at)).data.map((b) => [b.id, b.dataSource ?? null])).toEqual(kept);
+
+    const [resent] = await tenant.api.ok<V1Treatment[]>("POST", "/api/v1/treatments", [{ ...upload, insulin: 0.9 }]);
+    expect(resent!._id).toBe(id);
+    expect(await sentTreatments(syncIdentifier)).toEqual([[wire, wire], [copy!._id, wire], [copy!._id, wire], [copy!._id, wire]]);
+    expect(await lookups()).toEqual([forms, forms, forms]);
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[copy!._id, wire, 0.9]]);
     expect((await sync()).success).toBe(true);
     expect((await bolusesAround(at)).data.map((b) => [b.id, b.dataSource ?? null])).toEqual(kept);
   });

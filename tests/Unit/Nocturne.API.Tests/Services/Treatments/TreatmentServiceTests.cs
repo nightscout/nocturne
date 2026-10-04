@@ -95,7 +95,7 @@ public class TreatmentServiceTests
     /// stored nothing: no event announces it, so write-back does not put the dose back upstream.
     /// </summary>
     [Fact]
-    public async Task CreateTreatmentsAsync_RaisesNoEventForATreatmentTheUsersDeletionWithheld()
+    public async Task CreateTreatmentsAsync_RaisesNoEventForATreatmentTheUsersDeletionRefused()
     {
         var stored = new Treatment { Id = "stored" };
         var withheld = new Treatment { Id = "deleted-by-user" };

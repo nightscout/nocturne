@@ -279,18 +279,30 @@ public class TreatmentSocketIdentityTests : IDisposable
 
     /// <summary>
     /// The identifier lookup an edit sends first: every form a write-back may have left the copy under
-    /// (the coerced key, the record's uuid prefix, the raw key; without repeats, in that order), with
-    /// the <c>created_at</c> bound that lifts Nightscout's four-day default.
+    /// (the coerced key, the record's uuid prefix, the raw key, the record's full uuid; without repeats,
+    /// in that order), with the <c>created_at</c> bound that lifts Nightscout's four-day default.
     /// </summary>
     private static string IdentifierLookup(string legacyKey, Guid recordId)
     {
-        var forms = new[] { MongoObjectId.Coerce(legacyKey)!, MongoObjectId.FromGuid(recordId), legacyKey }.Distinct().ToList();
+        var forms = new[] { MongoObjectId.Coerce(legacyKey)!, MongoObjectId.FromGuid(recordId), legacyKey, recordId.ToString() }
+            .Distinct()
+            .ToList();
         var ins = string.Concat(forms.Select((form, i) => $"find[identifier][$in][{i}]={Uri.EscapeDataString(form)}&"));
         return $"/api/v1/treatments.json?{ins}find[created_at][$gte]=1970-01-01T00%3A00%3A00.000Z&count=10";
     }
 
     private static string IdLookup(string legacyKey) =>
         $"/api/v1/treatments.json?find[_id]={MongoObjectId.Coerce(legacyKey)}&count=1";
+
+    /// <summary>
+    /// The reads an edit held under no identifier sends after <see cref="IdentifierLookup"/>:
+    /// <c>find[_id]</c> = the coerced key, then, for a legacy id that is not an ObjectId and nothing
+    /// held under that <c>_id</c>, <c>find[_id][$in]</c> = the raw legacy id as a string.
+    /// </summary>
+    private static List<string> IdLookups(string legacyKey, bool heldUnderId) =>
+        heldUnderId || MongoObjectId.IsObjectId(legacyKey)
+            ? [IdLookup(legacyKey)]
+            : [IdLookup(legacyKey), $"/api/v1/treatments.json?find[_id][$in][0]={Uri.EscapeDataString(legacyKey)}&count=1"];
 
     /// <summary>
     /// An edit of a treatment whose create left its copy upstream: one identifier lookup, which finds the
@@ -387,7 +399,8 @@ public class TreatmentSocketIdentityTests : IDisposable
     /// <summary>
     /// An edit of a treatment no identifier names upstream reads by <c>_id</c> = the coerced key next:
     /// the original a Nightscout migration imported is PUT under it, keeping the identifier it holds
-    /// (none here); a treatment held nowhere is POSTed as a create, under both keys.
+    /// (none here); a treatment held nowhere is looked for under its raw legacy id as a string
+    /// <c>_id</c> when that is not an ObjectId, then POSTed as a create, under both keys.
     /// </summary>
     [Theory]
     [InlineData(Note, false)]
@@ -415,10 +428,10 @@ public class TreatmentSocketIdentityTests : IDisposable
 
         await _service.PatchTreatmentAsync(restId, JsonSerializer.Deserialize<JsonElement>("""{"enteredBy":"e2e-patch"}"""));
 
-        _upstream.Requests.Select(r => r.Method).Should().Equal(
-            HttpMethod.Get, HttpMethod.Get, heldUnderId ? HttpMethod.Put : HttpMethod.Post);
-        _upstream.Requests[0].PathAndQuery.Should().Be(IdentifierLookup(legacyKey, recordId));
-        _upstream.Requests[1].PathAndQuery.Should().Be(IdLookup(legacyKey));
+        var reads = IdLookups(legacyKey, heldUnderId).Prepend(IdentifierLookup(legacyKey, recordId)).ToList();
+        _upstream.Requests.SkipLast(1).Select(r => (r.Method, r.PathAndQuery)).Should().Equal(
+            reads.Select(read => (HttpMethod.Get, read)));
+        _upstream.Requests[^1].Method.Should().Be(heldUnderId ? HttpMethod.Put : HttpMethod.Post);
         var sent = LastSent();
         sent.GetProperty("_id").GetString().Should().Be(wire);
         if (heldUnderId)
@@ -509,7 +522,9 @@ public class TreatmentSocketIdentityTests : IDisposable
         stored.Insulin.Should().Be(1.75);
         stored.LegacyId.Should().BeOneOf(restId, bolus.Id.ToString());
         _upstream.Requests.Select(r => r.PathAndQuery).Should().Equal(
-            IdentifierLookup(stored.LegacyId!, bolus.Id), IdLookup(stored.LegacyId!), "/api/v1/treatments");
+            IdLookups(stored.LegacyId!, heldUnderId: false)
+                .Prepend(IdentifierLookup(stored.LegacyId!, bolus.Id))
+                .Append("/api/v1/treatments"));
         _upstream.Requests[^1].Method.Should().Be(HttpMethod.Post);
         ShouldCarryTheWireKey(LastSent(), stored.LegacyId!);
     }
@@ -518,7 +533,7 @@ public class TreatmentSocketIdentityTests : IDisposable
     /// The treatments of a Nightscout 15.0.7 or later, as far as write-back reaches them: a document
     /// carrying an <c>identifier</c> is upserted by it and its <c>_id</c> is dropped, so a new copy is
     /// held under a minted ObjectId; one without is replaced by its <c>_id</c>.
-    /// <c>find[identifier][$in]</c> and <c>find[_id]</c> read them back.
+    /// <c>find[identifier][$in]</c>, <c>find[_id]</c> and <c>find[_id][$in]</c> read them back.
     /// </summary>
     private sealed class UpstreamStore : HttpMessageHandler
     {
@@ -556,11 +571,12 @@ public class TreatmentSocketIdentityTests : IDisposable
                 .Select(term => term.Split('=', 2))
                 .Select(kv => (Key: Uri.UnescapeDataString(kv[0]), Value: Uri.UnescapeDataString(kv[1])))
                 .ToList();
-            if (terms.Any(t => t.Key == "find[_id]"))
-            {
-                var id = terms.First(t => t.Key == "find[_id]").Value;
-                return Held.Where(c => c.Id == id);
-            }
+            var ids = terms
+                .Where(t => t.Key == "find[_id]" || t.Key.StartsWith("find[_id][$in]", StringComparison.Ordinal))
+                .Select(t => t.Value)
+                .ToHashSet();
+            if (ids.Count > 0)
+                return Held.Where(c => ids.Contains(c.Id));
 
             var identifiers = terms
                 .Where(t => t.Key.StartsWith("find[identifier][$in]", StringComparison.Ordinal))
@@ -585,6 +601,38 @@ public class TreatmentSocketIdentityTests : IDisposable
             else
                 Held.Add(copy);
         }
+    }
+
+    /// <summary>
+    /// A re-upload of a stored treatment updates it, so it is announced as the update it is, under the
+    /// served id, and written back as an edit: the lookup finds the create's copy and the re-upload is
+    /// PUT onto it, where an unprobed create would leave a second copy upstream.
+    /// </summary>
+    [Theory]
+    [InlineData(Note)]
+    [InlineData(LoopBolus)]
+    [InlineData(ObjectIdCarbs)]
+    [InlineData(TempBasal)]
+    [InlineData(ObjectIdTempBasal)]
+    public async Task ReUpload_OfAStoredTreatment_IsAnnouncedAndWrittenBackAsAnUpdate(string upload)
+    {
+        var submitted = Upload(upload);
+        await _service.CreateTreatmentsAsync([submitted]);
+        var restId = await RestIdAsync();
+        var recordId = await RecordIdAsync();
+
+        var resent = Upload(upload);
+        resent.Id = submitted.Id;
+        resent.EnteredBy = "e2e-resend";
+        var reUpload = await _service.CreateTreatmentsAsync([resent]);
+
+        JsonSerializer.SerializeToElement(reUpload.Should().ContainSingle().Subject)
+            .GetProperty("_id").GetString().Should().Be(restId);
+        (await RestIdAsync()).Should().Be(restId);
+        Events("create").Should().ContainSingle("only the first upload inserted");
+        Events("update").Select(Id).Should().Equal(restId);
+        _upstream.Requests.Should().HaveCount(3);
+        ShouldHaveFoundTheCopyAndPutOntoIt(submitted.Id!, recordId);
     }
 
     [Fact]

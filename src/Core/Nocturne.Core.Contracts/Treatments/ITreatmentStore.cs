@@ -76,6 +76,7 @@ public interface ITreatmentStore
     /// The written <see cref="Treatment"/> records under the id the reads serve them by, carrying how
     /// many of their records were not written because the user had deleted them. A treatment none of
     /// whose records was written is left out, and answered only in <see cref="BulkWrite{TRecord}.Settled"/>.
+    /// One that updated a stored V4 record is also in <see cref="BulkWrite{TRecord}.Updated"/>.
     /// </returns>
     Task<BulkWrite<Treatment>> CreateAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
 
