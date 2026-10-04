@@ -402,6 +402,8 @@ public sealed class GoogleHealthService(
         await using var gate = await coordinator.AcquireAsync(TenantId, ct);
         if (await StoredSessionAsync(ct) is not null)
             throw new GoogleHealthException("disconnect_first");
+        await ClearFlowAsync(ct);
+        oauth.InvalidateToken();
         await coordinator.CompleteAsync(TenantId);
         if (writer is not null) await writer.PurgeAsync(ct);
         await cursorStore.SetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource, new(null, null), ct);

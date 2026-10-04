@@ -12,6 +12,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Health;
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
@@ -591,6 +592,34 @@ public class GoogleHealthTests
         Assert.True((await second.StatusAsync(default)).Connected);
         var error = await Assert.ThrowsAsync<GoogleHealthException>(() => first.CompleteAsync(callback, subject, default));
         Assert.Equal("expired_signin", error.Message);
+    }
+
+    [Fact]
+    public async Task Purge_invalidates_pending_oauth_on_other_replicas_and_allows_a_fresh_signin()
+    {
+        var store = new TestConnectorStore();
+        var tenant = Guid.NewGuid();
+        var subject = Guid.NewGuid();
+        var handler = new StubHandler(_ => throw new InvalidOperationException("No Google request expected"));
+        var tokenCache = new ConnectorTokenCache();
+        var first = Service(store, handler, tenant, new GoogleHealthCoordinator(), tokenCache);
+        await first.SaveAsync(Options(), subject, default);
+        var authorization = await first.StartAsync(subject, default);
+        var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
+
+        await tokenCache.SetAsync("GoogleHealth", tenant, new ConnectorSession("stale-access", DateTime.UtcNow.AddHours(1)));
+        var second = Service(store, handler, tenant, new GoogleHealthCoordinator(), tokenCache);
+        await second.PurgeAsync(subject, default);
+
+        Assert.False(store.Secrets.ContainsKey("oauthFlow"));
+        Assert.Null(await tokenCache.GetAsync("GoogleHealth", tenant));
+        var rejected = await Assert.ThrowsAsync<GoogleHealthException>(() => first.CompleteAsync(
+            new GoogleHealthCallback { State = state, Code = "code" }, subject, default));
+        Assert.Equal("expired_signin", rejected.Message);
+        Assert.False((await first.StatusAsync(default)).Connected);
+        Assert.False(store.IsActive);
+        var fresh = await second.StartAsync(subject, default);
+        Assert.NotEqual(state, QueryHelpers.ParseQuery(new Uri(fresh.Url).Query)["state"].ToString());
     }
 
     [Fact]

@@ -4,6 +4,29 @@ import { googleConsent, googleOptions, googleReadings, waitForGoogleSync } from 
 import { seedTenant } from "../helpers/tenant.ts";
 
 describe("Google Health OAuth security and sleep deletion", () => {
+  it("invalidates a pending OAuth callback on purge and allows a fresh sign-in", async () => {
+    const tenant = await seedTenant();
+    await tenant.api.ok("PUT", "/api/v4/google-health/options", googleOptions(tenant));
+    const pending = await tenant.api.ok<{ url: string }>("POST", "/api/v4/google-health/start");
+    const callback = await googleConsent(pending.url);
+    await tenant.api.ok("DELETE", "/api/v4/google-health/readings");
+    const rejected = await tenant.api.post<{ detail: string }>("/api/v4/google-health/complete", {
+      code: callback.searchParams.get("code"), state: callback.searchParams.get("state"),
+    });
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.detail).toBe("expired_signin");
+    expect((await tenant.api.ok<{ connected: boolean }>("GET", "/api/v4/google-health")).connected).toBe(false);
+    expect(await googleReadings(tenant)).toEqual({ heart: [], steps: [], weight: [], sleep: [] });
+
+    const fresh = await tenant.api.ok<{ url: string }>("POST", "/api/v4/google-health/start");
+    const freshCallback = await googleConsent(fresh.url);
+    expect(freshCallback.searchParams.get("state")).not.toBe(callback.searchParams.get("state"));
+    await tenant.api.ok("POST", "/api/v4/google-health/complete", {
+      code: freshCallback.searchParams.get("code"), state: freshCallback.searchParams.get("state"),
+    });
+    expect((await tenant.api.ok<{ connected: boolean }>("GET", "/api/v4/google-health")).connected).toBe(true);
+  });
+
   it("rejects wrong state and replayed authorization callbacks", async () => {
     const tenant = await seedTenant();
     await tenant.api.ok("PUT", "/api/v4/google-health/options", googleOptions(tenant));
