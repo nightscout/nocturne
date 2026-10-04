@@ -11,6 +11,7 @@
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
   import { yearCalendarBounds } from "./year-bounds";
+  import VisibleChart from "./VisibleChart.svelte";
   import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
   import { patternClass, type TextureKey } from "$lib/components/charts/print/chart-print-patterns";
   import type {
@@ -84,9 +85,10 @@
   });
   const SCREEN_CELL = 24;
   const PRINT_CELL_MAX = 32;
+  const columnCount = $derived(timeWeek.count(bounds.start, bounds.end) + 1);
   const cellSize = $derived(
     print.active && chartWidth > 0
-      ? Math.min(PRINT_CELL_MAX, chartWidth / (timeWeek.count(bounds.start, bounds.end) + 1))
+      ? Math.min(PRINT_CELL_MAX, chartWidth / columnCount)
       : SCREEN_CELL
   );
 </script>
@@ -130,236 +132,239 @@
       class="w-full overflow-x-auto overflow-y-visible rounded-lg border border-border bg-card p-4 print:overflow-visible"
     >
       <div
-        class="h-60 min-w-[900px] print:h-(--print-h) print:min-w-0"
+        class="h-60 min-w-(--screen-w) print:h-(--print-h) print:min-w-0"
+        style:--screen-w="{columnCount * SCREEN_CELL}px"
         style:--print-h="{cellSize * 7 + 20}px"
         bind:clientWidth={chartWidth}
       >
-        <Chart
-          data={chartData}
-          x="date"
-          c="value"
-          cScale={scaleThreshold().unknown("transparent")}
-          cDomain={[54, 70, 180, 250]}
-          cRange={[
-            "var(--glucose-very-low)",
-            "var(--glucose-low)",
-            "var(--glucose-in-range)",
-            "var(--glucose-high)",
-            "var(--glucose-very-high)",
-          ]}
-          tooltipContext={{ mode: "manual" }}
-        >
-          {#snippet children({ context })}
-            <Layer type="svg">
-              <Calendar
-                start={bounds.start}
-                end={bounds.end}
-                {cellSize}
-                monthPath
-                monthLabel={false}
-              >
-                {#snippet children({ cells, cellSize })}
-                  <!-- Month labels (clickable → calendar) -->
-                  {#each timeMonths(bounds.start, bounds.end) as monthDate (monthDate.getTime())}
-                    {@const monthX =
-                      timeWeek.count(
-                        bounds.start,
-                        timeWeek.ceil(monthDate)
-                      ) * cellSize[0]}
-                    <a
-                      href={resolve(
-                        `/calendar?year=${monthDate.getFullYear()}&month=${monthDate.getMonth() + 1}`
-                      )}
-                    >
-                      <text
-                        x={monthX}
-                        y={-5}
-                        font-size="12"
-                        class="fill-muted-foreground hover:fill-primary cursor-pointer"
+        <VisibleChart label={`${year} daily chart`}>
+          <Chart
+            data={chartData}
+            x="date"
+            c="value"
+            cScale={scaleThreshold().unknown("transparent")}
+            cDomain={[54, 70, 180, 250]}
+            cRange={[
+              "var(--glucose-very-low)",
+              "var(--glucose-low)",
+              "var(--glucose-in-range)",
+              "var(--glucose-high)",
+              "var(--glucose-very-high)",
+            ]}
+            tooltipContext={{ mode: "manual" }}
+          >
+            {#snippet children({ context })}
+              <Layer type="svg">
+                <Calendar
+                  start={bounds.start}
+                  end={bounds.end}
+                  {cellSize}
+                  monthPath
+                  monthLabel={false}
+                >
+                  {#snippet children({ cells, cellSize })}
+                    <!-- Month labels (clickable → calendar) -->
+                    {#each timeMonths(bounds.start, bounds.end) as monthDate (monthDate.getTime())}
+                      {@const monthX =
+                        timeWeek.count(
+                          bounds.start,
+                          timeWeek.ceil(monthDate)
+                        ) * cellSize[0]}
+                      <a
+                        href={resolve(
+                          `/calendar?year=${monthDate.getFullYear()}&month=${monthDate.getMonth() + 1}`
+                        )}
                       >
-                        {formatMonthLabel(monthDate)}
-                      </text>
-                    </a>
-                  {/each}
-                  <!-- Native <rect> per cell: layerchart marks each call
-                       registerMark() on mount and every registration re-runs the
-                       chart's mark deriveds over all marks, so ~365 cells/year
-                       (x multiple stacked years) cost O(N^2) and stalled the page.
-                       Cells carry pre-scaled pixel coords and per-cell handlers,
-                       so native <rect> keeps behaviour while registering nothing. -->
-                  {#each cells as cell, i (i)}
-                    {@const padding = 1}
-                    {@const cellDate = cell.data?.dateString}
-                    {@const hatch = getCellHatch?.(cell.data)}
-                    <!-- svelte-ignore a11y_click_events_have_key_events -->
-                    <!-- svelte-ignore a11y_no_static_element_interactions -->
-                    <rect
-                      x={cell.x + padding}
-                      y={cell.y + padding}
-                      width={cellSize[0] - padding * 2}
-                      height={cellSize[1] - padding * 2}
-                      rx={4}
-                      fill={getCellFill(cell.data)}
-                      onpointermove={(e: PointerEvent) =>
-                        context.tooltip?.show(e, cell.data)}
-                      onpointerleave={() => context.tooltip?.hide()}
-                      onclick={() => {
-                        if (cellDate) {
-                          navigateToDayInReview(cellDate);
-                        }
-                      }}
-                    />
-                    {#if hatch}
+                        <text
+                          x={monthX}
+                          y={-5}
+                          font-size="12"
+                          class="fill-muted-foreground hover:fill-primary cursor-pointer"
+                        >
+                          {formatMonthLabel(monthDate)}
+                        </text>
+                      </a>
+                    {/each}
+                    <!-- Native <rect> per cell: layerchart marks each call
+                         registerMark() on mount and every registration re-runs the
+                         chart's mark deriveds over all marks, so ~365 cells/year
+                         (x multiple stacked years) cost O(N^2) and stalled the page.
+                         Cells carry pre-scaled pixel coords and per-cell handlers,
+                         so native <rect> keeps behaviour while registering nothing. -->
+                    {#each cells as cell, i (i)}
+                      {@const padding = 1}
+                      {@const cellDate = cell.data?.dateString}
+                      {@const hatch = getCellHatch?.(cell.data)}
+                      <!-- svelte-ignore a11y_click_events_have_key_events -->
+                      <!-- svelte-ignore a11y_no_static_element_interactions -->
                       <rect
                         x={cell.x + padding}
                         y={cell.y + padding}
                         width={cellSize[0] - padding * 2}
                         height={cellSize[1] - padding * 2}
                         rx={4}
-                        fill="none"
-                        pointer-events="none"
-                        class={patternClass(hatch)}
+                        fill={getCellFill(cell.data)}
+                        onpointermove={(e: PointerEvent) =>
+                          context.tooltip?.show(e, cell.data)}
+                        onpointerleave={() => context.tooltip?.hide()}
+                        onclick={() => {
+                          if (cellDate) {
+                            navigateToDayInReview(cellDate);
+                          }
+                        }}
                       />
-                    {/if}
-                  {/each}
-                  <!-- Week number labels -->
-                  {@const weekCols = getWeekColumns(cells)}
-                  {#each weekCols as wk (wk.x)}
-                    <a
-                      href={resolve(`/reports/week-to-week?from=${wk.from}&to=${wk.to}&isDefault=false`)}
-                    >
-                      <text
-                        x={wk.x + cellSize[0] / 2}
-                        y={7 * cellSize[1] + 14}
-                        text-anchor="middle"
-                        font-size="9"
-                        class="fill-muted-foreground hover:fill-primary cursor-pointer"
+                      {#if hatch}
+                        <rect
+                          x={cell.x + padding}
+                          y={cell.y + padding}
+                          width={cellSize[0] - padding * 2}
+                          height={cellSize[1] - padding * 2}
+                          rx={4}
+                          fill="none"
+                          pointer-events="none"
+                          class={patternClass(hatch)}
+                        />
+                      {/if}
+                    {/each}
+                    <!-- Week number labels -->
+                    {@const weekCols = getWeekColumns(cells)}
+                    {#each weekCols as wk (wk.x)}
+                      <a
+                        href={resolve(`/reports/week-to-week?from=${wk.from}&to=${wk.to}&isDefault=false`)}
                       >
-                        {wk.weekNumber}
-                      </text>
-                    </a>
-                  {/each}
-                {/snippet}
-              </Calendar>
-            </Layer>
-
-            <Tooltip.Root
-              class="rounded-md border bg-popover p-2.5 text-popover-foreground shadow-md"
-            >
-              {#snippet children({ data })}
-                {@const d: YearCalendarDatum | undefined = data}
-                {#if d?.dateString}
-                  <div class="text-xs min-w-40">
-                    <!-- Date header -->
-                    <div class="mb-1.5 font-semibold">
-                      {formatWeekdayDate(d.date)}
-                    </div>
-
-                    <!-- Average glucose -->
-                    {#if d.averageGlucoseMgdl != null}
-                      <div class="mb-2 flex items-baseline gap-1.5">
-                        <span
-                          class="text-sm font-bold tabular-nums text-(--avg-color)"
-                          style:--avg-color={glucoseColorScale(d.averageGlucoseMgdl)}
+                        <text
+                          x={wk.x + cellSize[0] / 2}
+                          y={7 * cellSize[1] + 14}
+                          text-anchor="middle"
+                          font-size="9"
+                          class="fill-muted-foreground hover:fill-primary cursor-pointer"
                         >
-                          {formatGlucoseValue(
-                            d.averageGlucoseMgdl,
-                            units
-                          )}
-                        </span>
-                        <span class="text-muted-foreground">
-                          avg {unitLabel}
-                        </span>
-                      </div>
-                    {/if}
+                          {wk.weekNumber}
+                        </text>
+                      </a>
+                    {/each}
+                  {/snippet}
+                </Calendar>
+              </Layer>
 
-                    <!-- Insulin & Carbs summary -->
-                    {#if d.totalDailyDose != null || d.totalCarbs != null}
-                      <div
-                        class="mb-2 space-y-0.5 border-t border-border/50 pt-1.5"
-                      >
-                        {#if d.totalDailyDose != null}
+              <Tooltip.Root
+                class="rounded-md border bg-popover p-2.5 text-popover-foreground shadow-md"
+              >
+                {#snippet children({ data })}
+                  {@const d: YearCalendarDatum | undefined = data}
+                  {#if d?.dateString}
+                    <div class="text-xs min-w-40">
+                      <!-- Date header -->
+                      <div class="mb-1.5 font-semibold">
+                        {formatWeekdayDate(d.date)}
+                      </div>
+
+                      <!-- Average glucose -->
+                      {#if d.averageGlucoseMgdl != null}
+                        <div class="mb-2 flex items-baseline gap-1.5">
+                          <span
+                            class="text-sm font-bold tabular-nums text-(--avg-color)"
+                            style:--avg-color={glucoseColorScale(d.averageGlucoseMgdl)}
+                          >
+                            {formatGlucoseValue(
+                              d.averageGlucoseMgdl,
+                              units
+                            )}
+                          </span>
+                          <span class="text-muted-foreground">
+                            avg {unitLabel}
+                          </span>
+                        </div>
+                      {/if}
+
+                      <!-- Insulin & Carbs summary -->
+                      {#if d.totalDailyDose != null || d.totalCarbs != null}
+                        <div
+                          class="mb-2 space-y-0.5 border-t border-border/50 pt-1.5"
+                        >
+                          {#if d.totalDailyDose != null}
+                            <div
+                              class="text-2xs font-medium text-muted-foreground"
+                            >
+                              Insulin
+                            </div>
+                            <div class="flex justify-between gap-4">
+                              <span class="text-muted-foreground">
+                                Bolus
+                              </span>
+                              <span class="font-medium tabular-nums">
+                                {formatUnits(d.totalBolusUnits)}
+                              </span>
+                            </div>
+                            <div class="flex justify-between gap-4">
+                              <span class="text-muted-foreground">
+                                Basal
+                              </span>
+                              <span class="font-medium tabular-nums">
+                                {formatUnits(d.totalBasalUnits)}
+                              </span>
+                            </div>
+                            <div
+                              class="flex justify-between gap-4 border-t border-border/30 pt-0.5"
+                            >
+                              <span class="text-muted-foreground">
+                                TDD
+                              </span>
+                              <span class="font-semibold tabular-nums">
+                                {formatUnits(d.totalDailyDose)}
+                              </span>
+                            </div>
+                          {/if}
+                          {#if d.totalCarbs != null}
+                            <div
+                              class="flex justify-between gap-4 {d.totalDailyDose !=
+                              null
+                                ? 'border-t border-border/30 pt-0.5'
+                                : ''}"
+                            >
+                              <span class="text-muted-foreground">
+                                Carbs
+                              </span>
+                              <span class="font-medium tabular-nums">
+                                {d.totalCarbs.toFixed(0)}g
+                              </span>
+                            </div>
+                          {/if}
+                        </div>
+                      {/if}
+
+                      <!-- Record counts -->
+                      {#if getVisibleCounts(d.counts).length > 0}
+                        {@const visibleCounts = getVisibleCounts(
+                          d.counts
+                        )}
+                        <div
+                          class="space-y-0.5 border-t border-border/50 pt-1.5"
+                        >
                           <div
                             class="text-2xs font-medium text-muted-foreground"
                           >
-                            Insulin
+                            Counts
                           </div>
-                          <div class="flex justify-between gap-4">
-                            <span class="text-muted-foreground">
-                              Bolus
-                            </span>
-                            <span class="font-medium tabular-nums">
-                              {formatUnits(d.totalBolusUnits)}
-                            </span>
-                          </div>
-                          <div class="flex justify-between gap-4">
-                            <span class="text-muted-foreground">
-                              Basal
-                            </span>
-                            <span class="font-medium tabular-nums">
-                              {formatUnits(d.totalBasalUnits)}
-                            </span>
-                          </div>
-                          <div
-                            class="flex justify-between gap-4 border-t border-border/30 pt-0.5"
-                          >
-                            <span class="text-muted-foreground">
-                              TDD
-                            </span>
-                            <span class="font-semibold tabular-nums">
-                              {formatUnits(d.totalDailyDose)}
-                            </span>
-                          </div>
-                        {/if}
-                        {#if d.totalCarbs != null}
-                          <div
-                            class="flex justify-between gap-4 {d.totalDailyDose !=
-                            null
-                              ? 'border-t border-border/30 pt-0.5'
-                              : ''}"
-                          >
-                            <span class="text-muted-foreground">
-                              Carbs
-                            </span>
-                            <span class="font-medium tabular-nums">
-                              {d.totalCarbs.toFixed(0)}g
-                            </span>
-                          </div>
-                        {/if}
-                      </div>
-                    {/if}
-
-                    <!-- Record counts -->
-                    {#if getVisibleCounts(d.counts).length > 0}
-                      {@const visibleCounts = getVisibleCounts(
-                        d.counts
-                      )}
-                      <div
-                        class="space-y-0.5 border-t border-border/50 pt-1.5"
-                      >
-                        <div
-                          class="text-2xs font-medium text-muted-foreground"
-                        >
-                          Counts
+                          {#each visibleCounts as [key, count] (key)}
+                            <div class="flex justify-between gap-4">
+                              <span class="text-muted-foreground">
+                                {getDataTypeLabel(key)}
+                              </span>
+                              <span class="font-medium tabular-nums">
+                                {count}
+                              </span>
+                            </div>
+                          {/each}
                         </div>
-                        {#each visibleCounts as [key, count] (key)}
-                          <div class="flex justify-between gap-4">
-                            <span class="text-muted-foreground">
-                              {getDataTypeLabel(key)}
-                            </span>
-                            <span class="font-medium tabular-nums">
-                              {count}
-                            </span>
-                          </div>
-                        {/each}
-                      </div>
-                    {/if}
-                  </div>
-                {/if}
-              {/snippet}
-            </Tooltip.Root>
-          {/snippet}
-        </Chart>
+                      {/if}
+                    </div>
+                  {/if}
+                {/snippet}
+              </Tooltip.Root>
+            {/snippet}
+          </Chart>
+        </VisibleChart>
       </div>
     </div>
   {:else if isYearLoading}

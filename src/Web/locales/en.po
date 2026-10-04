@@ -25825,3 +25825,35 @@ msgstr "For bind-data with the BYO-proxy override:"
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Omitting the bind-data override changes the declared storage back to the named volume."
 msgstr "Omitting the bind-data override changes the declared storage back to the named volume."
+
+#: src/routes/(authenticated)/reports/+layout.svelte
+msgid "Unable to load the complete report. Please try again before printing."
+msgstr "Unable to load the complete report. Please try again before printing."
+
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "Some year data could not be loaded."
+msgstr "Some year data could not be loaded."
+
+#. 0: year
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "Retry {0}"
+msgstr "Retry {0}"
+
+#. 0: year
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "{0} daily chart"
+msgstr "{0} daily chart"
+
+#. 0: year
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "Scroll to load {0} data"
+msgstr "Scroll to load {0} data"
+
+#: src/routes/(authenticated)/reports/year-overview/+page.svelte
+msgid "This overview is incomplete. Use the report's Print button to load all years before printing."
+msgstr "This overview is incomplete. Use the report's Print button to load all years before printing."
+
+#. 0: year
+#: src/routes/(authenticated)/reports/year-overview/+page.svelte
+msgid "{0} monthly GRI chart"
+msgstr "{0} monthly GRI chart"
