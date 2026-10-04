@@ -585,19 +585,41 @@ public class WriteBackEchoIntegrationTests(ApiIntegrationTestFixture fixture, IT
     };
 
     /// <summary>
-    /// An earlier write-back sent an edit under the id the treatment is served by, its own uuid's
-    /// prefix, whatever its legacy id; that copy lands on the treatment too, rather than beside it.
+    /// An earlier write-back sent an edit under the id the treatment was served by, whatever its
+    /// legacy id: its own uuid up to v0.2.3, that uuid's prefix from v0.2.4. That copy lands on the
+    /// treatment too, rather than beside it.
     /// </summary>
-    [Fact]
-    public async Task APulledCopyUnderTheIdATreatmentIsServedBy_LandsOnIt()
+    [Theory]
+    [InlineData("prefix")]
+    [InlineData("uuid")]
+    public async Task APulledCopyUnderTheIdATreatmentIsServedBy_LandsOnIt(string form)
     {
         var slot = UniqueSlot();
         var id = await UploadBolusAsync(slot, $"syn-{Guid.NewGuid():N}");
 
         await PublishAsync(p => p.Treatments.PublishTreatmentsAsync(
-            [PulledBolus(slot, MongoObjectId.NewObjectId(), MongoObjectId.FromGuid(id), insulin: 4)], ConnectorSource, WriteOrigin.Live));
+            [PulledBolus(slot, MongoObjectId.NewObjectId(), WireId(id, form), insulin: 4)], ConnectorSource, WriteOrigin.Live));
 
         (await LiveBolusesAsync(slot)).Should().Equal((id, 2.5d));
+    }
+
+    /// <summary>
+    /// The copy of a treatment the user deleted, under the id it was served by, finds the user's
+    /// deletion: the treatment stays deleted.
+    /// </summary>
+    [Theory]
+    [InlineData("prefix")]
+    [InlineData("uuid")]
+    public async Task APulledCopyUnderTheIdATreatmentTheUserDeletedIsServedBy_StaysDeleted(string form)
+    {
+        var slot = UniqueSlot();
+        var id = await UploadBolusAsync(slot, $"syn-{Guid.NewGuid():N}");
+        (await AuthenticatedClient.DeleteAsync($"/api/v1/treatments/{MongoObjectId.FromGuid(id)}")).IsSuccessStatusCode.Should().BeTrue();
+
+        await PublishAsync(p => p.Treatments.PublishTreatmentsAsync(
+            [PulledBolus(slot, MongoObjectId.NewObjectId(), WireId(id, form), insulin: 4)], ConnectorSource, WriteOrigin.Live));
+
+        (await LiveBolusesAsync(slot)).Should().BeEmpty();
     }
 
     /// <summary>

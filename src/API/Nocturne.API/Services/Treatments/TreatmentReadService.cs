@@ -171,6 +171,7 @@ public class TreatmentReadService : ITreatmentStore
     {
         var written = new List<Treatment>();
         var settled = new List<Treatment>();
+        var updated = new List<Treatment>();
         var skippedDeleted = 0;
 
         foreach (var treatment in treatments)
@@ -181,8 +182,11 @@ public class TreatmentReadService : ITreatmentStore
                 skippedDeleted += result.SkippedDeleted;
                 var served = ToCreated(treatment, result);
                 settled.Add(served);
-                if (!IsRefused(result))
-                    written.Add(served);
+                if (IsRefused(result))
+                    continue;
+                written.Add(served);
+                if (result.UpdatedRecords.OfType<IV4Record>().Any())
+                    updated.Add(served);
             }
             catch (OperationCanceledException)
             {
@@ -197,7 +201,7 @@ public class TreatmentReadService : ITreatmentStore
         }
 
         _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
-        return new BulkWrite<Treatment>(written, skippedDeleted) { Settled = settled };
+        return new BulkWrite<Treatment>(written, skippedDeleted) { Settled = settled, Updated = updated };
     }
 
     /// <inheritdoc />

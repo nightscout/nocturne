@@ -69,8 +69,10 @@ internal static class UpstreamIdentityJson
     /// basals from v0.2.4 to v0.2.7, whose legacy id was not an ObjectId
     /// (<c>TempBasalToTreatmentMapper</c> served the uuid), and every create on main after #1960,
     /// which answered with the uuid;</item>
-    /// <item>its key as it is, which v0.0.1 to v0.2.3 sent with no coercion: the legacy id, else
-    /// the record's uuid.</item>
+    /// <item>its key as it is, which v0.0.1 to v0.2.3 sent a create under with no coercion: the
+    /// legacy id, else the record's uuid;</item>
+    /// <item>its record's uuid in full, which v0.0.1 to v0.2.3 sent every edit under, legacy id or
+    /// not: the edit carried the projection the update read back, served by that uuid.</item>
     /// </list>
     /// These are the forms the connector's pull resolves back to the record
     /// (<c>DecomposerBase.PlanStoredIdentitiesAsync</c>).
@@ -82,6 +84,7 @@ internal static class UpstreamIdentityJson
             TreatmentWireKey(treatment),
             treatment.RecordId is { } recordId ? MongoObjectId.FromGuid(recordId) : null,
             treatment.LegacyId ?? treatment.RecordId?.ToString() ?? treatment.Id,
+            treatment.RecordId?.ToString(),
         ];
         return forms.OfType<string>().Where(f => f.Length > 0).Distinct(StringComparer.Ordinal).ToList();
     }

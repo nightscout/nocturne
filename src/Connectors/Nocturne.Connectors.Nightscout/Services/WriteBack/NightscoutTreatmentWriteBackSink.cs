@@ -34,13 +34,24 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 /// <c>eventType</c>, and an edit that moved either is refused as a duplicate key rather than
 /// stored twice, where a PUT, saving under <c>new ObjectID(_id)</c>, would store a second
 /// copy.</item>
-/// <item>Under any other string <c>_id</c>: a POST without one, upserted as above.</item>
+/// <item>Under any other string <c>_id</c>: a POST under that <c>_id</c>, upserted as above. An
+/// edit that moved the time or event type is refused up to 15.0.6 rather than inserted beside it;
+/// 15.0.7 and later drop the <c>_id</c> and match the identifier.</item>
 /// </list></item>
 /// <item>Failing that, under <c>_id</c> = the wire key, as the original of a record a Nightscout
-/// migration imported is. <c>find[_id]</c> names <c>_id</c>, so it skips the four-day window. The
-/// edit is PUT under that <c>_id</c>, which every version saves by it, with the identifier the
-/// copy holds if it has one: a PUT replaces the whole document, and a v3 client such as AAPS
-/// matches its records by it.</item>
+/// migration imported is when its id is an ObjectId. <c>find[_id]</c> names <c>_id</c>, so it skips
+/// the four-day window. The edit is PUT under that <c>_id</c>, which every version saves by it, with
+/// the identifier the copy holds if it has one: a PUT replaces the whole document, and a v3 client
+/// such as AAPS matches its records by it.</item>
+/// <item>Failing that, for a legacy id that is not an ObjectId, under <c>_id</c> = that legacy id as
+/// a string, as the original of a record a Nightscout migration imported from an uploader that sent
+/// its own id is. It is asked as <c>find[_id][$in]</c>, which no version casts to an ObjectId when
+/// the value is not 24-hex (15.0.6 casts only a plain <c>find[_id]</c>, and refuses a non-hex one),
+/// and which skips the four-day window as well. The edit is POSTed under that <c>_id</c>, with the
+/// identifier the original holds, else the legacy id: up to 15.0.6 the POST matches it by
+/// <c>created_at</c> and <c>eventType</c> and keeps its <c>_id</c>, and 15.0.7 and later match its
+/// string <c>_id</c> through the identifier's <c>$or</c>. The create's <c>_id</c> would be an
+/// immutable-field error on every edit up to 15.0.6, and a second copy from 15.0.7.</item>
 /// <item>Held nowhere: the create's POST. An edit PUT under its <c>_id</c> alone would be stored by
 /// 15.0.7 and later under an ObjectId with no identifier, which a later create's identifier upsert
 /// never matches: a second copy.</item>
@@ -84,8 +95,7 @@ public class NightscoutTreatmentWriteBackSink(
             // A read serves an ObjectId as lowercase hex, so any other _id is a string.
             if (!MongoObjectId.IsObjectId(copy.Id))
             {
-                var stringId = copy.Id == identifier ? identifier : null;
-                await PostAsync(config, item, stringId, identifier, ct);
+                await PostAsync(config, item, copy.Id, identifier, ct);
                 return;
             }
 
@@ -110,9 +120,24 @@ public class NightscoutTreatmentWriteBackSink(
             return;
 
         if (byId.FirstOrDefault() is { } original)
+        {
             await PutAsync(config, item, key, original.Identifier, ct);
-        else
-            await PostAsync(config, item, key, key, ct);
+            return;
+        }
+
+        if (item.LegacyId is { Length: > 0 } legacyId && !MongoObjectId.IsObjectId(legacyId))
+        {
+            var byStringId = await FindAsync(config, StringIdQuery(legacyId), ct);
+            if (byStringId is null)
+                return;
+            if (byStringId.FirstOrDefault(c => c.Id == legacyId) is { } imported)
+            {
+                await PostAsync(config, item, legacyId, imported.Identifier ?? legacyId, ct);
+                return;
+            }
+        }
+
+        await PostAsync(config, item, key, key, ct);
     }
 
     private Task PostAsync(NightscoutConnectorConfiguration config, Treatment item, string? id, string identifier, CancellationToken ct)
@@ -144,6 +169,8 @@ public class NightscoutTreatmentWriteBackSink(
     }
 
     private string IdQuery(string objectId) => $"{Endpoint}.json?find[_id]={Uri.EscapeDataString(objectId)}&count=1";
+
+    private string StringIdQuery(string id) => $"{Endpoint}.json?find[_id][$in][0]={Uri.EscapeDataString(id)}&count=1";
 
     /// <summary>The copy held under the earliest of <paramref name="forms"/> any copy is held under.</summary>
     private static UpstreamCopy? Preferred(IReadOnlyList<UpstreamCopy> copies, IReadOnlyList<string> forms) =>

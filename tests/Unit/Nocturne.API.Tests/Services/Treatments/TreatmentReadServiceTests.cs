@@ -421,6 +421,38 @@ public class TreatmentReadServiceTests
             .Should().Be(MongoObjectId.FromGuid(carb.Id));
     }
 
+    /// <summary>
+    /// A create whose decomposition updated a stored record rather than inserting one is marked, so
+    /// it is announced as an update; one that inserted is not, and one the user's deletion refused is
+    /// neither written nor marked.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_MarksATreatmentThatUpdatedAStoredRecordAsUpdated()
+    {
+        var resent = new Treatment { Id = "65a1b2c3d4e5f60718293a4b", Mills = 1000, EventType = "Correction Bolus", Insulin = 1 };
+        var fresh = new Treatment { Id = "65a1b2c3d4e5f60718293a4c", Mills = 2000, EventType = "Note", Notes = "kept" };
+        var refused = new Treatment { Id = "65a1b2c3d4e5f60718293a4d", Mills = 3000, EventType = "Correction Bolus", Insulin = 2 };
+        var resentResult = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        resentResult.UpdatedRecords.Add(new Bolus { Id = Guid.CreateVersion7(), LegacyId = resent.Id });
+        var freshResult = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        freshResult.CreatedRecords.Add(new Note { Id = Guid.CreateVersion7(), LegacyId = fresh.Id });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(resent, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(resentResult);
+        _decomposer
+            .Setup(d => d.DecomposeAsync(fresh, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(freshResult);
+        _decomposer
+            .Setup(d => d.DecomposeAsync(refused, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult { SkippedDeleted = 1 });
+
+        var created = await _service.CreateAsync([resent, fresh, refused]);
+
+        created.Should().HaveCount(2);
+        created.Settled.Should().HaveCount(3);
+        created.Updated.Should().ContainSingle().Which.Should().BeSameAs(created[0]);
+    }
+
     [Fact]
     public async Task CreateAsync_MealBolus_ReturnsTheBolusIdTheMealIsReadBackUnder()
     {

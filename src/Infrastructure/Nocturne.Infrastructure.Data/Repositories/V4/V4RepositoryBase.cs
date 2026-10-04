@@ -457,11 +457,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     public async Task<IEnumerable<WireLegacyId>> ResolveKeyedOwnIdsAsync(
         IReadOnlyCollection<string> ids, CancellationToken ct = default)
     {
-        var ranges = OwnIdRanges(ids, (id, out low, out high) =>
-        {
-            low = high = default;
-            return MongoObjectId.IsGuidPrefixShaped(id) && MongoObjectId.TryGetGuidPrefixRange(id, out low, out high);
-        });
+        var ranges = OwnIdRanges(ids, MongoObjectId.TryGetOwnIdRange);
         if (ranges.Count == 0)
             return [];
 

@@ -154,7 +154,7 @@ public abstract class DecomposerBase
         /// <summary>Any other non-ObjectId legacy id as its hash (<see cref="MongoObjectId.Coerce"/>).</summary>
         Hashed = 2,
 
-        /// <summary>A record that carries a legacy id, under its own uuid's 24-hex prefix.</summary>
+        /// <summary>A record that carries a legacy id, under its own uuid or that uuid's 24-hex prefix.</summary>
         KeyedOwnId = 4,
     }
 
@@ -169,11 +169,14 @@ public abstract class DecomposerBase
 
     /// <summary>
     /// One <see cref="WireForms"/> lookup. <paramref name="PulledOnly"/> keeps it to the ids of
-    /// documents the Nightscout connector pulled, the only ones that carry that form.
+    /// documents the Nightscout connector pulled, the only ones that carry that form;
+    /// <paramref name="TakesUuids"/> offers it a canonical uuid besides the ObjectIds every lookup
+    /// takes.
     /// </summary>
     protected readonly record struct WireIdResolver(
         Func<IReadOnlyCollection<string>, CancellationToken, Task<IEnumerable<WireLegacyId>>> Resolve,
-        bool PulledOnly);
+        bool PulledOnly,
+        bool TakesUuids = false);
 
     protected static KeyedTable Table<TRecord>(ILegacyKeyedRepository<TRecord> repository, WireForms forms)
         where TRecord : class, IV4Record
@@ -184,7 +187,7 @@ public abstract class DecomposerBase
         if (forms.HasFlag(WireForms.Hashed))
             resolvers.Add(new(repository.ResolveHashedLegacyIdsAsync, PulledOnly: true));
         if (forms.HasFlag(WireForms.KeyedOwnId))
-            resolvers.Add(new(repository.ResolveKeyedOwnIdsAsync, PulledOnly: false));
+            resolvers.Add(new(repository.ResolveKeyedOwnIdsAsync, PulledOnly: false, TakesUuids: true));
 
         return new(
             repository.GetHeldLegacyIdsAsync,
@@ -287,13 +290,17 @@ public abstract class DecomposerBase
             .SelectMany(NamesOf)
             .Where(n => names.Contains(n) && !held.Contains(n))
             .ToHashSet(StringComparer.Ordinal);
-        var wireIds = unsettled.Where(MongoObjectId.IsObjectId).ToHashSet(StringComparer.Ordinal);
+        var wireIds = unsettled
+            .Where(n => MongoObjectId.IsObjectId(n) || MongoObjectId.TryGetOwnIdRange(n, out _, out _))
+            .ToHashSet(StringComparer.Ordinal);
         foreach (var table in tables)
         {
-            foreach (var (resolve, pulledOnly) in table.Resolvers)
+            foreach (var (resolve, pulledOnly, takesUuids) in table.Resolvers)
             {
                 var candidates = wireIds
-                    .Where(n => !resolved.ContainsKey(n) && (!pulledOnly || pulledNames.Contains(n)))
+                    .Where(n => !resolved.ContainsKey(n)
+                                && (!pulledOnly || pulledNames.Contains(n))
+                                && (takesUuids || MongoObjectId.IsObjectId(n)))
                     .ToHashSet(StringComparer.Ordinal);
                 if (candidates.Count == 0)
                     continue;

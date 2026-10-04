@@ -132,13 +132,14 @@ public class UpstreamIdentityJsonTests
 
     /// <summary>
     /// Every identifier a released or merged write-back left a treatment's copy under: this release's
-    /// coerced key, the record's own uuid prefix (v0.2.4 to v0.2.7 temp basals, main after #1960), and
-    /// the raw key (v0.0.1 to v0.2.3), most current first and without repeats.
+    /// coerced key, the record's own uuid prefix (v0.2.4 to v0.2.7 edits and temp basals, main after
+    /// #1960), the raw key (v0.0.1 to v0.2.3 creates) and the record's full uuid (v0.0.1 to v0.2.3
+    /// edits), most current first and without repeats.
     /// </summary>
     [Theory]
-    [InlineData("65a1b2c3d4e5f60718293a4b", new[] { "65a1b2c3d4e5f60718293a4b", "@prefix" })]
-    [InlineData("syn-3a7c0e9f1b2d4c6e", new[] { "@coerced", "@prefix", "syn-3a7c0e9f1b2d4c6e" })]
-    [InlineData("4F1C1D2E-3A4B-4C5D-8E6F-7A8B9C0D1E2F", new[] { "4f1c1d2e3a4b4c5d8e6f7a8b", "@prefix", "4F1C1D2E-3A4B-4C5D-8E6F-7A8B9C0D1E2F" })]
+    [InlineData("65a1b2c3d4e5f60718293a4b", new[] { "65a1b2c3d4e5f60718293a4b", "@prefix", RecordUuid })]
+    [InlineData("syn-3a7c0e9f1b2d4c6e", new[] { "@coerced", "@prefix", "syn-3a7c0e9f1b2d4c6e", RecordUuid })]
+    [InlineData("4F1C1D2E-3A4B-4C5D-8E6F-7A8B9C0D1E2F", new[] { "4f1c1d2e3a4b4c5d8e6f7a8b", "@prefix", "4F1C1D2E-3A4B-4C5D-8E6F-7A8B9C0D1E2F", RecordUuid })]
     [InlineData(null, new[] { "@prefix", RecordUuid })]
     public void A_treatment_is_looked_for_under_every_form_a_write_back_sent_it_under(string? legacyId, string[] expected)
     {

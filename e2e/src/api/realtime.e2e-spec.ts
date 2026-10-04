@@ -136,6 +136,22 @@ describe("realtime data hub", () => {
     expect(storage([updated]).doc?._id).toBe(rest!._id);
   });
 
+  it("pushes a re-upload of a stored treatment as an update under the REST _id", async () => {
+    const upload = { eventType: "Correction Bolus", insulin: 0.45, created_at: minutesAgo(55), enteredBy: "loop://e2e-iphone", syncIdentifier: randomUUID() };
+    const isThis = (a: unknown[]) => storage(a).colName === "treatments" && storage(a).doc?.insulin === 0.45;
+    await tenant.api.ok("POST", "/api/v1/treatments", [upload]);
+    await hub.waitFor("create", isThis, { what: "the treatment's create event" });
+    const rest = (await tenant.api.ok<V1Treatment[]>("GET", "/api/v1/treatments.json?count=20")).find((t) => t.insulin === 0.45);
+    expect(rest).toBeDefined();
+
+    const response = await tenant.api.ok<V1Treatment[]>("POST", "/api/v1/treatments", [upload]);
+    const [updated] = await hub.waitFor("update", isThis, { what: "the re-upload's update event" });
+
+    expect(storage([updated]).doc?._id).toBe(rest!._id);
+    expect(response.map((t) => t._id)).toEqual([rest!._id]);
+    expect(hub.events.filter((e) => e.target === "create" && isThis(e.args))).toHaveLength(1);
+  });
+
   it("pushes no create when an uploader re-sends a treatment the user deleted", async () => {
     const upload = [{ eventType: "Correction Bolus", insulin: 0.65, created_at: minutesAgo(35), enteredBy: "loop://e2e-iphone", syncIdentifier: randomUUID() }];
     const isThis = (a: unknown[]) => storage(a).colName === "treatments" && storage(a).doc?.insulin === 0.65;

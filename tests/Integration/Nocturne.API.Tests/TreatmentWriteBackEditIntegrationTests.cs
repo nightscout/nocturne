@@ -281,6 +281,109 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
     }
 
     /// <summary>
+    /// A treatment upstream holds under its ObjectId with no identifier (the original a Nightscout
+    /// migration imported, or the same record uploaded to both), or under the raw key v0.2.3 sent,
+    /// is uploaded to Nocturne again. The upload updates the stored record, so it is written back as
+    /// the edit it is, onto that copy: sent as a create, 15.0.8 would match neither and store a second
+    /// copy, and 15.0.6 would refuse the raw-key copy's changed <c>_id</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("15.0.8", "objectid")]
+    [InlineData("15.0.6", "objectid")]
+    [InlineData("15.0.8", "v0.2.3")]
+    [InlineData("15.0.6", "v0.2.3")]
+    public async Task AReuploadOfAStoredTreatment_LandsOnTheCopyUpstreamHolds(string version, string held)
+    {
+        var slot = UniqueSlot();
+        var legacyId = held == "objectid" ? MongoObjectId.NewObjectId() : $"integration-tr-{Guid.NewGuid():N}";
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", new[]
+        {
+            new { _id = legacyId, eventType = "Correction Bolus", insulin = 0.7, created_at = At(slot) },
+        })).IsSuccessStatusCode.Should().BeTrue();
+        var bolus = (await LiveBolusesAsync(slot)).Single().Id;
+        var upstream = new FakeNightscoutTreatments(version);
+        var original = new JsonObject { ["_id"] = legacyId, ["eventType"] = "Correction Bolus", ["insulin"] = 0.7, ["created_at"] = At(slot) };
+        if (held == "objectid")
+            upstream.Seed(original, asObjectId: true);
+        else
+        {
+            original["identifier"] = legacyId;
+            await PostUpstreamAsync(upstream, original);
+        }
+
+        await WithWriteBackAsync(upstream, service => service.CreateTreatmentsAsync(
+            [new Treatment { Id = legacyId, EventType = "Correction Bolus", Insulin = 1.1, CreatedAt = At(slot) }]));
+
+        Copies(upstream).Should().Equal((held == "objectid" ? null : legacyId, 1.1));
+        if (held == "objectid")
+            upstream.Documents.Single().Should().Match<FakeNightscoutTreatments.Stored>(d => d.Id == legacyId && d.IsObjectId);
+        upstream.Refusals.Should().Be(0);
+        (await LiveBolusesAsync(slot)).Should().Equal((bolus, 1.1));
+    }
+
+    /// <summary>
+    /// The original of a treatment a Nightscout migration imported from an uploader that sent its own
+    /// id, held under that id as a string <c>_id</c> with no identifier, is edited in Nocturne: the
+    /// edit lands on it, on 15.0.8 and 15.0.6, with no refusal.
+    /// </summary>
+    [Theory]
+    [InlineData("15.0.8")]
+    [InlineData("15.0.6")]
+    public async Task AnEditOfAnOriginalHeldUnderAStringId_LandsOnIt(string version)
+    {
+        var slot = UniqueSlot();
+        var legacyId = $"integration-imported-{Guid.NewGuid():N}";
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", new[]
+        {
+            new { _id = legacyId, eventType = "Correction Bolus", insulin = 0.7, created_at = At(slot) },
+        })).IsSuccessStatusCode.Should().BeTrue();
+        var bolus = (await LiveBolusesAsync(slot)).Single().Id;
+        var upstream = new FakeNightscoutTreatments(version);
+        upstream.Seed(new JsonObject { ["_id"] = legacyId, ["eventType"] = "Correction Bolus", ["insulin"] = 0.7, ["created_at"] = At(slot) }, asObjectId: false);
+
+        await WithWriteBackAsync(upstream, service => service.PatchTreatmentAsync(
+            MongoObjectId.FromGuid(bolus), JsonSerializer.Deserialize<JsonElement>("""{"insulin":1.2}""")));
+        await WithWriteBackAsync(upstream, service => service.PatchTreatmentAsync(
+            MongoObjectId.FromGuid(bolus), JsonSerializer.Deserialize<JsonElement>("""{"insulin":1.3}""")));
+
+        upstream.Documents.Select(d => (d.Id, d.IsObjectId, (string?)d.Document["identifier"], (double)d.Document["insulin"]!))
+            .Should().Equal((legacyId, false, legacyId, 1.3));
+        upstream.Refusals.Should().Be(0);
+        (await LiveBolusesAsync(slot)).Should().Equal((bolus, 1.3));
+    }
+
+    /// <summary>
+    /// Up to v0.2.3 an edit went upstream under the record's full uuid, which 15.0.7 and later kept
+    /// as the identifier of a copy under a minted ObjectId. A later edit lands on that copy.
+    /// </summary>
+    [Fact]
+    public async Task AnEditLandsOnTheCopyAV023EditLeftUnderTheRecordsFullUuid()
+    {
+        var slot = UniqueSlot();
+        var legacyId = MongoObjectId.NewObjectId();
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", new[]
+        {
+            new { _id = legacyId, eventType = "Correction Bolus", insulin = 0.7, created_at = At(slot) },
+        })).IsSuccessStatusCode.Should().BeTrue();
+        var bolus = (await LiveBolusesAsync(slot)).Single().Id;
+        var upstream = new FakeNightscoutTreatments("15.0.8");
+        using (var client = new HttpClient(upstream, disposeHandler: false))
+        {
+            (await client.PutAsJsonAsync($"{UpstreamUrl}/api/v1/treatments", new JsonObject
+            {
+                ["_id"] = bolus.ToString(), ["identifier"] = bolus.ToString(), ["eventType"] = "Correction Bolus", ["insulin"] = 0.7, ["created_at"] = At(slot),
+            })).IsSuccessStatusCode.Should().BeTrue();
+        }
+
+        await WithWriteBackAsync(upstream, service => service.UpdateTreatmentAsync(
+            MongoObjectId.FromGuid(bolus),
+            new Treatment { Id = legacyId, EventType = "Correction Bolus", Insulin = 1.4, CreatedAt = At(slot) }));
+
+        Copies(upstream).Should().Equal((bolus.ToString(), 1.4));
+        (await LiveBolusesAsync(slot)).Should().Equal((bolus, 1.4));
+    }
+
+    /// <summary>
     /// A treatment the user deleted, uploaded again, is not stored, and so is not written back:
     /// upstream would otherwise hold a dose Nocturne does not.
     /// </summary>
