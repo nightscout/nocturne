@@ -26543,3 +26543,7 @@ msgstr "Google Health 目前未为此类型提供只读权限。"
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Not exposed as a readable Google Health API data type."
 msgstr "Google Health API 未提供此可读取数据类型。"
+
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
+msgid "Status unavailable"
+msgstr "状态不可用"

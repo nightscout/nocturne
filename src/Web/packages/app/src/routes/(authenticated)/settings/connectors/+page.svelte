@@ -76,9 +76,14 @@
     connectorStatusesQuery.current ?? [],
   );
   const googleHealth = $derived(googleHealthQuery?.current ?? null);
+  const googleHealthLoading = $derived(googleHealthQuery?.loading ?? false);
+  const googleHealthFailed = $derived(!!googleHealthQuery?.error);
+  const hasGoogleHealthStatus = $derived(
+    !!googleHealth?.configured && !googleHealthLoading && !googleHealthFailed,
+  );
   const otherDataSources = $derived(
     (servicesOverview?.activeDataSources ?? []).filter(
-      (source) => !canManage || (source.sourceType !== "google-health-connector" && source.deviceId !== "google-health-connector"),
+      (source) => !hasGoogleHealthStatus || (source.sourceType !== "google-health-connector" && source.deviceId !== "google-health-connector"),
     ),
   );
   const isLoading = $derived(
@@ -441,7 +446,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {#if !googleHealth?.configured && otherDataSources.length === 0}
+        {#if !hasGoogleHealthStatus && otherDataSources.length === 0}
           <div class="text-center py-8 text-muted-foreground">
             <WifiOff class="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p class="font-medium">No data sources detected</p>
@@ -451,7 +456,7 @@
           </div>
         {:else}
           <div class="space-y-3">
-            {#if googleHealth?.configured}
+            {#if hasGoogleHealthStatus && googleHealth}
               <GoogleHealthSourceRow connection={googleHealth} />
             {/if}
             {#each otherDataSources as source (source.id)}
@@ -519,6 +524,8 @@
           showConnectorDialog = true;
         }}
         {googleHealth}
+        {googleHealthLoading}
+        {googleHealthFailed}
       />
     </div>
 

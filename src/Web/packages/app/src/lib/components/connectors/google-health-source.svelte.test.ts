@@ -62,6 +62,8 @@ describe("Google Health source presentation", () => {
   it("uses the same active styling as other connectors and opens its settings", async () => {
     render(ServerConnectorsCard, {
       googleHealth: connected,
+      googleHealthLoading: false,
+      googleHealthFailed: false,
       availableConnectors: [
         { id: "dexcom", name: "Dexcom" },
         { id: "googlehealth", name: "Google Health" },
@@ -158,6 +160,8 @@ describe("Google Health source presentation", () => {
     const refresh = vi.fn();
     render(ServerConnectorsCard, {
       googleHealth: connected,
+      googleHealthLoading: false,
+      googleHealthFailed: false,
       availableConnectors: [],
       connectorStatuses: [],
       connectorCapabilitiesById: {},
@@ -250,12 +254,18 @@ describe("Google Health source presentation", () => {
   );
 
   it.each([false, true])(
-    "shows the empty state when no configured or visible sources remain (stale source: %s)",
-    async (staleSource) => {
+    "preserves generic history without connection settings (existing source: %s)",
+    async (existingSource) => {
       overviewMocks.services.mockReturnValue({
         current: {
-          activeDataSources: staleSource
-            ? [{ id: "google", sourceType: "google-health-connector" }]
+          activeDataSources: existingSource
+            ? [
+                {
+                  id: "google",
+                  name: "Generic Google history",
+                  sourceType: "google-health-connector",
+                },
+              ]
             : undefined,
         },
       });
@@ -264,9 +274,18 @@ describe("Google Health source presentation", () => {
       });
       render(ConnectorsPage);
 
-      await expect
-        .element(page.getByText("No data sources detected"))
-        .toBeVisible();
+      if (existingSource) {
+        await expect
+          .element(page.getByText("Generic Google history", { exact: true }))
+          .toBeVisible();
+        await expect
+          .element(page.getByText("No data sources detected"))
+          .not.toBeInTheDocument();
+      } else {
+        await expect
+          .element(page.getByText("No data sources detected"))
+          .toBeVisible();
+      }
       await expect
         .element(page.getByText("Reconnect to resume importing"))
         .not.toBeInTheDocument();

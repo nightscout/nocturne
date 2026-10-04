@@ -25,6 +25,8 @@ const cursorResetFailureCopy =
   "One or more connectors failed; review the connector details and retry the failed range.";
 const representativeCopy = [
   "Google Health",
+  "Status unavailable",
+  "Loading...",
   "Import recovery",
   "Open connector reset",
   "Save and connect",
@@ -86,7 +88,7 @@ function isGoogleHealthEntry(entry) {
     googleHealthReference.test(reference) ||
     entry.msgid === cursorResetFailureCopy ||
     (serverConnectorsReference.test(reference) &&
-      /Google Health|Import steps, heart rate, weight, and sleep from Google Health/.test(
+      /Google Health|Status unavailable|Import steps, heart rate, weight, and sleep from Google Health/.test(
         entry.msgid
       ))
   );

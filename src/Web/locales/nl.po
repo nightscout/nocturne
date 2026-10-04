@@ -26543,3 +26543,7 @@ msgstr "Google Health biedt momenteel geen alleen-lezenmachtiging voor dit type.
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Not exposed as a readable Google Health API data type."
 msgstr "Niet beschikbaar als leesbaar gegevenstype in de Google Health API."
+
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
+msgid "Status unavailable"
+msgstr "Status niet beschikbaar"

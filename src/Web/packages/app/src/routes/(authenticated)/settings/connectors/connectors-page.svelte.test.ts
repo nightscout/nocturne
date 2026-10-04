@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   refreshGoogleHealth: vi.fn().mockResolvedValue(undefined),
   refreshOverview: vi.fn().mockResolvedValue(undefined),
   refreshStatuses: vi.fn().mockResolvedValue(undefined),
+  overview: vi.fn(),
 }));
 
 vi.mock("$api/generated/googleHealths.generated.remote", () => ({
@@ -21,11 +22,8 @@ vi.mock("$api/generated/services.generated.remote", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("$api/generated/services.generated.remote")
   >()),
-  getServicesOverview: () => ({
-    current: null,
-    refresh: mocks.refreshOverview,
-  }),
-  getConnectorCapabilities: vi.fn(),
+  getServicesOverview: mocks.overview,
+  getConnectorCapabilities: () => ({ current: null }),
   triggerConnectorSync: vi.fn(),
 }));
 vi.mock("$lib/stores/realtime-store.svelte", () => ({
@@ -35,10 +33,120 @@ vi.mock("$lib/stores/realtime-store.svelte", () => ({
 describe("connector overview Google Health authorization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.overview.mockReturnValue({
+      current: null,
+      refresh: mocks.refreshOverview,
+    });
     mocks.googleHealth.mockReturnValue({
       current: null,
       refresh: mocks.refreshGoogleHealth,
     });
+  });
+
+  it.each([
+    { loading: true, error: undefined, cached: false, label: "Loading..." },
+    {
+      loading: false,
+      error: new Error("status failed"),
+      cached: false,
+      label: "Status unavailable",
+    },
+    { loading: true, error: undefined, cached: true, label: "Loading..." },
+    {
+      loading: false,
+      error: new Error("status failed"),
+      cached: true,
+      label: "Status unavailable",
+    },
+  ])(
+    "preserves the generic source during $label (cached=$cached)",
+    async ({ loading, error, cached, label }) => {
+      page.data.effectivePermissions = ["tenant.settings"];
+      page.data.refusedAsDemoSubject = false;
+      mocks.overview.mockReturnValue({
+        current: {
+          availableConnectors: [{ id: "googlehealth", name: "Google Health" }],
+          activeDataSources: [
+            {
+              id: "google",
+              name: "Existing Google records",
+              sourceType: "google-health-connector",
+              deviceId: "google-health-connector",
+            },
+          ],
+        },
+        refresh: mocks.refreshOverview,
+      });
+      mocks.googleHealth.mockReturnValue({
+        current: cached ? { configured: true, connected: true } : undefined,
+        loading,
+        error,
+        refresh: mocks.refreshGoogleHealth,
+      });
+      render(ConnectorsPage);
+      await expect
+        .element(
+          browserPage.getByText("Existing Google records", { exact: true })
+        )
+        .toBeVisible();
+      await expect
+        .element(
+          browserPage.getByText("No data sources detected", { exact: true })
+        )
+        .not.toBeInTheDocument();
+      await expect
+        .element(
+          browserPage
+            .getByRole("link", { name: /Google Health/ })
+            .getByText(label, { exact: true })
+        )
+        .toBeVisible();
+      await expect
+        .element(browserPage.getByText("Not Configured", { exact: true }))
+        .not.toBeInTheDocument();
+    }
+  );
+
+  it("replaces the generic source only after configured status loads", async () => {
+    page.data.effectivePermissions = ["tenant.settings"];
+    page.data.refusedAsDemoSubject = false;
+    mocks.overview.mockReturnValue({
+      current: {
+        availableConnectors: [{ id: "googlehealth", name: "Google Health" }],
+        activeDataSources: [
+          {
+            id: "google",
+            name: "Existing Google records",
+            sourceType: "google-health-connector",
+            deviceId: "google-health-connector",
+          },
+        ],
+      },
+      refresh: mocks.refreshOverview,
+    });
+    mocks.googleHealth.mockReturnValue({
+      current: { configured: true, connected: true, selectedTypes: ["steps"] },
+      loading: false,
+      error: undefined,
+      refresh: mocks.refreshGoogleHealth,
+    });
+    render(ConnectorsPage);
+    await expect
+      .element(browserPage.getByText("Google Health", { exact: true }).first())
+      .toBeVisible();
+    await expect
+      .element(
+        browserPage.getByText("Existing Google records", { exact: true })
+      )
+      .not.toBeInTheDocument();
+    await expect
+      .element(
+        browserPage.getByText("No data sources detected", { exact: true })
+      )
+      .not.toBeInTheDocument();
+    await expect
+      .element(browserPage.getByText("Not Configured", { exact: true }))
+      .not.toBeInTheDocument();
   });
 
   it.each([

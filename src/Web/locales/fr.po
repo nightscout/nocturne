@@ -26546,3 +26546,7 @@ msgstr "Google Health ne propose actuellement aucune autorisation en lecture seu
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Not exposed as a readable Google Health API data type."
 msgstr "Non disponible comme type de données lisible dans l’API Google Health."
+
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
+msgid "Status unavailable"
+msgstr "Statut indisponible"

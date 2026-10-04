@@ -56,6 +56,8 @@
       connectorId?: string
     ) => void;
     googleHealth: GoogleHealthStatus | null;
+    googleHealthLoading: boolean;
+    googleHealthFailed: boolean;
   }
 
   let {
@@ -72,6 +74,8 @@
     onQuickSync,
     onConnectorClick,
     googleHealth,
+    googleHealthLoading,
+    googleHealthFailed,
   }: Props = $props();
 
   const canManage = $derived(
@@ -125,7 +129,7 @@
         </CardDescription>
       </div>
       <div class="flex gap-2">
-        {#if connectorStatuses.length > 0 || googleHealth?.configured || googleHealth?.connected}
+        {#if connectorStatuses.length > 0 || googleHealth?.configured || googleHealth?.connected || googleHealthLoading || googleHealthFailed}
           <Button
             variant="outline"
             size="sm"
@@ -161,7 +165,7 @@
     <div class="grid gap-3 @xl:grid-cols-2">
       {#each visibleConnectors as connector (connector.id)}
         {#if connector.id === "googlehealth"}
-          {#if googleHealth?.connected || googleHealth?.configured}
+          {#if googleHealth && !googleHealthLoading && !googleHealthFailed && (googleHealth.connected || googleHealth.configured)}
             <GoogleHealthSourceRow connection={googleHealth} />
           {:else}
             <a
@@ -174,7 +178,15 @@
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="font-medium">Google Health</span>
-                  <Badge variant="outline">Not Configured</Badge>
+                  <Badge variant="outline">
+                    {#if googleHealthFailed}
+                      Status unavailable
+                    {:else if googleHealthLoading}
+                      Loading...
+                    {:else}
+                      Not Configured
+                    {/if}
+                  </Badge>
                 </div>
                 <p class="text-sm text-muted-foreground">
                   Import steps, heart rate, weight, and sleep from Google Health
