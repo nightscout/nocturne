@@ -1134,6 +1134,63 @@ public class GoogleHealthTests
         await service.CompleteAsync(new GoogleHealthCallback { State = state, Code = "code" }, subject, default);
     }
 
+    [Fact]
+    public async Task Disconnect_interrupts_preview_and_survives_browser_cancellation_before_google_revocation()
+    {
+        var scanning = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var revoking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRevoke = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var scanCancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new AsyncHandler(async (request, ct) =>
+        {
+            switch (request.RequestUri!.AbsolutePath)
+            {
+                case "/token": return Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"openid {{GoogleHealthClient.MetricsScope}}"}""");
+                case "/v1/userinfo": return Json("""{"sub":"account"}""");
+                case "/revoke":
+                    revoking.TrySetResult();
+                    await releaseRevoke.Task.WaitAsync(ct);
+                    return Json("{}");
+                default:
+                    scanning.TrySetResult();
+                    try { await Task.Delay(Timeout.Infinite, ct); }
+                    catch (OperationCanceledException) { scanCancelled.TrySetResult(); throw; }
+                    return Json("{}");
+            }
+        });
+        var store = new TestConnectorStore();
+        var coordinator = new GoogleHealthCoordinator();
+        var tenant = Guid.NewGuid();
+        var service = Service(store, handler, tenant, coordinator);
+        await ConnectAsync(service);
+        var preview = service.PreviewAsync(Guid.NewGuid(), default);
+        await scanning.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        using var browser = new CancellationTokenSource();
+        var disconnect = service.DisconnectAsync(Guid.NewGuid(), browser.Token);
+        browser.Cancel();
+        try
+        {
+            await revoking.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await scanCancelled.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => preview);
+            var status = await service.StatusAsync(default);
+            Assert.False(status.Connected);
+            Assert.True(status.IsDisconnecting);
+            Assert.False(store.IsActive);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.PreviewAsync(Guid.NewGuid(), default));
+        }
+        finally { releaseRevoke.TrySetResult(); }
+        await disconnect.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False((await service.StatusAsync(default)).IsDisconnecting);
+        Assert.False(store.Secrets.ContainsKey("refreshToken"));
+        Assert.True(store.Secrets.ContainsKey("accountKey"));
+    }
+
+    private sealed class AsyncHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => responder(request, ct);
+    }
+
     private static GoogleHealthService Service(
         TestConnectorStore store,
         HttpMessageHandler handler,

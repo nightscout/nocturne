@@ -26547,3 +26547,15 @@ msgstr "Google Health API 未提供此可读取数据类型。"
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 msgid "Status unavailable"
 msgstr "状态不可用"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnecting…"
+msgstr "正在断开连接…"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnecting Google Health. The current scan or import is being stopped."
+msgstr "正在断开 Google Health 连接，并停止当前扫描或导入。"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is disconnected. Your imported data has been kept."
+msgstr "Google Health 已断开连接。已保留导入的数据。"

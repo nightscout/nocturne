@@ -37,7 +37,17 @@ public sealed class GoogleHealthWorker(
                 async (tenantId, ct) =>
             {
                 await using var claim = await coordinator.ClaimWorkerAsync(tenantId, ct);
-                if (claim is null || !await coordinator.StartQueuedAsync(tenantId, ct)) return;
+                if (claim is null) return;
+                if (await coordinator.DisconnectRequestAsync(tenantId, ct) is { } disconnect)
+                {
+                    using var recovery = scopes.CreateScope();
+                    recovery.ServiceProvider.GetRequiredService<ITenantAccessor>()
+                        .SetTenant(new(tenantId, "", "", true, false));
+                    await recovery.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.Health.IGoogleHealthService>()
+                        .DisconnectAsync(disconnect.SubjectId, ct);
+                    return;
+                }
+                if (!await coordinator.StartQueuedAsync(tenantId, ct)) return;
                 var completed = false;
                 try
                 {

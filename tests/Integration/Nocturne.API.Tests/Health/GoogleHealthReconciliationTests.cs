@@ -375,6 +375,29 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
     }
 
     [Fact]
+    public async Task Disconnect_interrupts_other_replicas_and_survives_restart()
+    {
+        await SeedConnectorAsync();
+        await using var provider = ReplicaServices();
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        var first = new GoogleHealthCoordinator(scopes);
+        var second = new GoogleHealthCoordinator(scopes);
+        var subject = Guid.NewGuid();
+        await using var reader = await first.WatchReadsAsync(tenantId, default);
+        var request = await second.RequestDisconnectAsync(tenantId, subject, default);
+        await Task.Delay(Timeout.Infinite, reader.Token).ContinueWith(task => Assert.True(task.IsCanceled)).WaitAsync(TimeSpan.FromSeconds(5));
+        var restarted = new GoogleHealthCoordinator(scopes);
+        Assert.Equal(subject, (await restarted.DisconnectRequestAsync(tenantId, default))!.SubjectId);
+        await using var requests = restarted.ReadRequestsAsync(default).GetAsyncEnumerator();
+        Assert.True(await requests.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(tenantId, requests.Current);
+        await restarted.FinishDisconnectAsync(tenantId, Guid.NewGuid());
+        Assert.NotNull(await first.DisconnectRequestAsync(tenantId, default));
+        await restarted.FinishDisconnectAsync(tenantId, request);
+        Assert.Null(await first.DisconnectRequestAsync(tenantId, default));
+    }
+
+    [Fact]
     public async Task Durable_queue_notifications_dispatch_without_repeated_tenant_sweeps()
     {
         await SeedConnectorAsync();

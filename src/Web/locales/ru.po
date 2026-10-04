@@ -26547,3 +26547,15 @@ msgstr "Недоступно как тип данных для чтения в A
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 msgid "Status unavailable"
 msgstr "Статус недоступен"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnecting…"
+msgstr "Отключение…"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnecting Google Health. The current scan or import is being stopped."
+msgstr "Google Health отключается. Текущее сканирование или импорт останавливается."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is disconnected. Your imported data has been kept."
+msgstr "Google Health отключён. Импортированные данные сохранены."

@@ -15,6 +15,7 @@ const codes = new Map<string, Account>();
 const refreshTokens = new Map<string, Account>();
 const accessTokens = new Map<string, Account>();
 const fixtureAnchors = new Map<string, number>();
+const controls = new Map<string, { scanDelayMs: number; revokeDelayMs: number; reads: number; revocations: number }>();
 const failure = (error: string): VendorReply => ({ status: 400, body: { error } });
 const secret = () => randomBytes(24).toString("base64url");
 
@@ -48,7 +49,15 @@ function points(type: string, account: Account): Record<string, unknown>[] {
 }
 
 export const googleHealth: Vendor = {
-  handle(request: VendorRequest): VendorReply {
+  async handle(request: VendorRequest): Promise<VendorReply> {
+    if (request.path === "/__controls") {
+      if (request.method === "POST") {
+        const input = JSON.parse(request.body) as { clientId: string; scanDelayMs: number; revokeDelayMs: number };
+        controls.set(input.clientId, { scanDelayMs: input.scanDelayMs, revokeDelayMs: input.revokeDelayMs, reads: 0, revocations: 0 });
+        return { status: 200, body: {} };
+      }
+      return { status: 200, body: controls.get(request.query.clientId!) ?? { reads: 0, revocations: 0 } };
+    }
     if (request.method === "GET" && request.path === "/authorize") {
       const q = request.query;
       if (q.response_type !== "code" || q.code_challenge_method !== "S256" || !q.state ||
@@ -92,6 +101,11 @@ export const googleHealth: Vendor = {
     if (request.method === "POST" && request.path === "/oauth2.googleapis.com/revoke") {
       const account = refreshTokens.get(new URLSearchParams(request.body).get("token") ?? "");
       if (!account) return failure("invalid_token");
+      const control = controls.get(account.clientId);
+      if (control) {
+        ++control.revocations;
+        await new Promise((resolve) => setTimeout(resolve, control.revokeDelayMs));
+      }
       account.revoked = true;
       return { status: 200, body: {} };
     }
@@ -103,6 +117,11 @@ export const googleHealth: Vendor = {
 
     const match = /^\/health.googleapis.com\/v4\/users\/me\/dataTypes\/([^/]+)\/dataPoints:reconcile$/.exec(request.path);
     if (request.method === "GET" && match) {
+      const control = controls.get(account.clientId);
+      if (control) {
+        ++control.reads;
+        await new Promise((resolve) => setTimeout(resolve, control.scanDelayMs));
+      }
       const data = points(match[1]!, account);
       const times = [...(request.query.filter ?? "").matchAll(/"([^\"]+)"/g)].map((m) => Date.parse(m[1]!));
       if (times.length !== 2 || times.some(Number.isNaN)) return failure("invalid_request");

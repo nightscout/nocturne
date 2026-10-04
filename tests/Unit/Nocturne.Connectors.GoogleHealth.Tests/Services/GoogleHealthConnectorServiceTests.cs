@@ -902,6 +902,8 @@ public class GoogleHealthConnectorServiceTests
                     RuntimeStateOverride = null;
                 }).Returns(Task.CompletedTask);
             var coordinator = Coordinator;
+            coordinator.Setup(value => value.WatchReadsAsync(tenantId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Guid _, CancellationToken ct) => new TestReadLease(ct));
             coordinator.Setup(value => value.AcquireAsync(tenantId, It.IsAny<CancellationToken>(), null))
                 .Returns(async (Guid _, CancellationToken ct, TimeSpan? _) =>
                 {
@@ -985,6 +987,12 @@ public class GoogleHealthConnectorServiceTests
     private sealed class TestLease(SemaphoreSlim gate) : IAsyncDisposable
     {
         public ValueTask DisposeAsync() { gate.Release(); return ValueTask.CompletedTask; }
+    }
+
+    private sealed class TestReadLease(CancellationToken token) : IGoogleHealthReadLease
+    {
+        public CancellationToken Token => token;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private static HttpResponseMessage Json(string text) => new(HttpStatusCode.OK)

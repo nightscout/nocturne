@@ -42,6 +42,7 @@ public class GoogleHealthStatus
     public GoogleHealthCapability[] Capabilities { get; set; } = [];
     public bool Configured { get; set; }
     public bool Connected { get; set; }
+    public bool IsDisconnecting { get; set; }
     public string ClientId { get; set; } = "";
     public string CallbackUrl { get; set; } = "";
     public string[] SelectedTypes { get; set; } = [];

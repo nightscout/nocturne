@@ -60,6 +60,92 @@ function status(
 }
 
 describe("Google Health connector page", () => {
+  it("loads connection status without automatically scanning inventory", async () => {
+    googleHealthMocks.status.mockResolvedValue(
+      status({ configured: true, connected: true })
+    );
+    render(GoogleHealthPage);
+    await expect
+      .element(page.getByRole("button", { name: "Disconnect", exact: true }))
+      .toBeEnabled();
+    await expect
+      .poll(() => googleHealthMocks.status.mock.calls.length, {
+        timeout: 10000,
+      })
+      .toBeGreaterThan(1);
+    expect(googleHealthMocks.preview).not.toHaveBeenCalled();
+    await page
+      .getByRole("button", { name: "Refresh inventory", exact: true })
+      .click();
+    await expect
+      .poll(() => googleHealthMocks.preview.mock.calls.length)
+      .toBe(1);
+  });
+
+  it("shows disconnect progress during a scan and discards its late failure", async () => {
+    googleHealthMocks.status.mockResolvedValue(
+      status({ configured: true, connected: true })
+    );
+    let finishDisconnect!: (value: GoogleHealthStatus) => void;
+    let failPreview!: (error: unknown) => void;
+    googleHealthMocks.disconnect.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishDisconnect = resolve;
+        })
+    );
+    googleHealthMocks.preview.mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          failPreview = reject;
+        })
+    );
+    render(GoogleHealthPage);
+    await page
+      .getByRole("button", { name: "Refresh inventory", exact: true })
+      .click();
+    await page.getByRole("button", { name: "Disconnect", exact: true }).click();
+    await expect
+      .element(
+        page.getByRole("button", { name: "Disconnecting…", exact: true })
+      )
+      .toBeDisabled();
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveTextContent("The current scan or import is being stopped.");
+    const disconnected = status({ configured: true, connected: false });
+    googleHealthMocks.status.mockResolvedValue(disconnected);
+    finishDisconnect(disconnected);
+    failPreview(new Error("cancelled scan"));
+    await expect
+      .element(
+        page.getByRole("button", { name: "Sign in with Google", exact: true })
+      )
+      .toBeEnabled();
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveTextContent("Your imported data has been kept.");
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+    expect(googleHealthMocks.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the server's pending disconnect after remounting without starting another scan", async () => {
+    googleHealthMocks.status.mockResolvedValue(
+      status({ configured: true, connected: false, isDisconnecting: true })
+    );
+    render(GoogleHealthPage);
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveTextContent("Disconnecting Google Health");
+    await expect
+      .element(
+        page.getByRole("button", { name: "Sign in with Google", exact: true })
+      )
+      .toBeDisabled();
+    expect(googleHealthMocks.preview).not.toHaveBeenCalled();
+    expect(googleHealthMocks.disconnect).not.toHaveBeenCalled();
+  });
+
   it.each(["Sync now", "Save selection and import"])(
     "treats %s scheduling conflicts as coordination and polls completion",
     async (action) => {
@@ -257,6 +343,9 @@ describe("Google Health connector page", () => {
       ],
     });
     render(GoogleHealthPage);
+    await page
+      .getByRole("button", { name: "Refresh inventory", exact: true })
+      .click();
 
     const vitals = page.getByTestId("google-health-category-Vitals");
     await expect.element(vitals).toHaveAttribute("open");
@@ -383,6 +472,9 @@ describe("Google Health connector page", () => {
       ],
     });
     render(GoogleHealthPage);
+    await page
+      .getByRole("button", { name: "Refresh inventory", exact: true })
+      .click();
     await expect
       .element(page.getByRole("heading", { name: "Google Health" }))
       .toBeVisible();
@@ -412,6 +504,9 @@ describe("Google Health connector page", () => {
       ],
     });
     render(GoogleHealthPage);
+    await page
+      .getByRole("button", { name: "Refresh inventory", exact: true })
+      .click();
 
     await expect
       .element(page.getByTestId("google-health-category-Vitals"))
@@ -440,6 +535,9 @@ describe("Google Health connector page", () => {
       body: { message: "already_running" },
     });
     render(GoogleHealthPage);
+    await page
+      .getByRole("button", { name: "Refresh inventory", exact: true })
+      .click();
 
     await expect
       .element(page.getByTestId("google-health-category-Vitals"))
@@ -474,6 +572,9 @@ describe("Google Health connector page", () => {
           ],
         });
       render(GoogleHealthPage);
+      await page
+        .getByRole("button", { name: "Refresh inventory", exact: true })
+        .click();
       const feedback = page.getByRole(
         errorCode === "already_running" ? "status" : "alert"
       );
@@ -510,6 +611,9 @@ describe("Google Health connector page", () => {
       ],
     });
     render(GoogleHealthPage);
+    await page
+      .getByRole("button", { name: "Refresh inventory", exact: true })
+      .click();
     await page.getByRole("checkbox", { name: "Import Heart rate" }).click();
     await page.getByText("Body measurement", { exact: true }).click();
     await page.getByRole("checkbox", { name: "Import Weight" }).click();
@@ -600,6 +704,9 @@ describe("Google Health connector page", () => {
       ],
     });
     render(GoogleHealthPage);
+    await page
+      .getByRole("button", { name: "Refresh inventory", exact: true })
+      .click();
     await page.getByRole("checkbox", { name: "Import Heart rate" }).click();
     await page.getByLabelText("Import data from").fill("2020-01-01");
     await page
@@ -638,6 +745,9 @@ describe("Google Health connector page", () => {
       ],
     });
     render(GoogleHealthPage);
+    await page
+      .getByRole("button", { name: "Refresh inventory", exact: true })
+      .click();
     await page.getByRole("checkbox", { name: "Import Heart rate" }).click();
     await expect
       .element(page.getByRole("checkbox", { name: "Import Heart rate" }))
@@ -652,6 +762,9 @@ describe("Google Health connector page", () => {
       items: [{ dataType: "steps", granted: true, count: 42, supported: true }],
     });
     render(GoogleHealthPage);
+    await page
+      .getByRole("button", { name: "Refresh inventory", exact: true })
+      .click();
 
     await expect
       .element(
@@ -681,6 +794,9 @@ describe("Google Health connector page", () => {
       ],
     });
     render(GoogleHealthPage);
+    await page
+      .getByRole("button", { name: "Refresh inventory", exact: true })
+      .click();
     const steps = page.getByRole("row", { name: /Steps/ });
     const weight = page.getByRole("row", { name: /Weight/ });
 
@@ -718,6 +834,9 @@ describe("Google Health connector page", () => {
       ],
     });
     render(GoogleHealthPage);
+    await page
+      .getByRole("button", { name: "Refresh inventory", exact: true })
+      .click();
 
     await expect
       .element(page.getByText("Import needs attention", { exact: true }))
@@ -798,6 +917,9 @@ describe("Google Health connector page", () => {
     );
     googleHealthMocks.preview.mockResolvedValue({ items: [] });
     render(GoogleHealthPage);
+    await page
+      .getByRole("button", { name: "Refresh inventory", exact: true })
+      .click();
 
     await expect
       .element(page.getByText("Import recovery", { exact: true }))

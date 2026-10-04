@@ -17,6 +17,7 @@ public interface IGoogleHealthService
 
 public interface IGoogleHealthSyncCoordinator
 {
+    Task<IGoogleHealthReadLease> WatchReadsAsync(Guid tenantId, CancellationToken ct);
     Task<IAsyncDisposable?> AcquireAsync(Guid tenantId, CancellationToken ct, TimeSpan? timeout = null);
     Task ReportAsync(
         Guid tenantId,
@@ -26,6 +27,11 @@ public interface IGoogleHealthSyncCoordinator
         int? totalDataTypes = null,
         int? pagesRead = null);
     Task CompleteScheduledAsync(Guid tenantId);
+}
+
+public interface IGoogleHealthReadLease : IAsyncDisposable
+{
+    CancellationToken Token { get; }
 }
 
 public interface IGoogleHealthReadingWriter

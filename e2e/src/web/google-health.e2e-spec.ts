@@ -3,6 +3,7 @@ import { googleConsent, googleOptions, googleReadings, googleRecordSnapshot, wai
 import { env } from "../helpers/env.ts";
 import type { Page } from "@playwright/test";
 import type { Tenant } from "../helpers/tenant.ts";
+import { eventually } from "../helpers/http.ts";
 
 async function connectGoogle(page: Page, seeded: Tenant) {
   const webUrl = env.tenantSecureWebUrl(seeded.slug);
@@ -23,6 +24,7 @@ async function connectGoogle(page: Page, seeded: Tenant) {
   await page.getByLabel("Callback URL", { exact: true }).fill(options.callbackUrl);
   await page.getByRole("button", { name: "Save and connect", exact: true }).click();
   await expect(page).toHaveURL(/google-health\?connection=connected$/);
+  await page.getByRole("button", { name: "Refresh inventory", exact: true }).click();
   const connected = await tenant.api.ok<{ historyDays: number; importFrom: string | null }>("GET", "/api/v4/google-health");
   expect(connected.historyDays).toBe(7);
   expect(connected.importFrom).toBeNull();
@@ -60,6 +62,43 @@ test("Google OAuth callback, preview, paginated import, repeat sync and disconne
   await expect(page.getByRole("button", { name: "Sign in with Google", exact: true })).toBeVisible();
   expect((await tenant.api.ok<{ connected: boolean }>("GET", "/api/v4/google-health")).connected).toBe(false);
   for (const readings of Object.values(await googleReadings(tenant))) expect(readings).toHaveLength(2);
+});
+
+test("one disconnect cancels a slow inventory, survives refresh and does not wait for Google revocation", async ({ page, seed }) => {
+  test.setTimeout(120_000);
+  const { tenant } = await connectGoogle(page, await seed());
+  await expect(page.getByRole("button", { name: "Refresh inventory", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Save selection and import", exact: true }).click();
+  await waitForGoogleSync(tenant);
+  const before = googleRecordSnapshot(await googleReadings(tenant));
+  const clientId = googleOptions(tenant).clientId;
+  const controlUrl = `${env.mocksUrl}/googlehealth/__controls`;
+  expect((await fetch(controlUrl, { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ clientId, scanDelayMs: 20_000, revokeDelayMs: 20_000 }) })).ok).toBe(true);
+  const counts = async () => await (await fetch(`${controlUrl}?clientId=${encodeURIComponent(clientId)}`)).json() as { reads: number; revocations: number };
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Refresh inventory", exact: true })).toBeEnabled();
+  expect((await counts()).reads).toBe(0);
+  await page.getByRole("button", { name: "Refresh inventory", exact: true }).click();
+  await eventually(async () => (await counts()).reads > 0, { timeoutMs: 5_000, what: "delayed inventory request" });
+  await page.getByRole("button", { name: "Disconnect", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Disconnecting Google Health" })).toBeVisible();
+  await eventually(async () => {
+    const status = await tenant.api.ok<{ connected: boolean; isDisconnecting: boolean }>("GET", "/api/v4/google-health");
+    return !status.connected && status.isDisconnecting;
+  }, { timeoutMs: 4_000, what: "local disconnection while Google is still waiting" });
+  const readsAtDisconnect = (await counts()).reads;
+  await page.reload();
+  await expect(page.getByRole("status").filter({ hasText: "Disconnecting Google Health" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in with Google", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Sign in with Google", exact: true })).toBeEnabled({ timeout: 8_000 });
+  const disconnected = await tenant.api.ok<{ connected: boolean; isDisconnecting: boolean; errorCode: string }>("GET", "/api/v4/google-health");
+  expect(disconnected.connected).toBe(false);
+  expect(disconnected.isDisconnecting).toBe(false);
+  expect(disconnected.errorCode).toBe("revoke_in_google");
+  expect(await counts()).toMatchObject({ reads: readsAtDisconnect, revocations: 1 });
+  expect(googleRecordSnapshot(await googleReadings(tenant))).toEqual(before);
 });
 
 test("disconnect Google Health, sign in again and sync without losing or duplicating records", async ({ page, seed }) => {

@@ -26547,3 +26547,15 @@ msgstr "Google Health API で読み取り可能なデータの種類として提
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 msgid "Status unavailable"
 msgstr "状態を取得できません"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnecting…"
+msgstr "接続を解除中…"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnecting Google Health. The current scan or import is being stopped."
+msgstr "Google Health の接続を解除しています。実行中のスキャンまたはインポートを停止しています。"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is disconnected. Your imported data has been kept."
+msgstr "Google Health の接続を解除しました。インポート済みのデータは保持されています。"

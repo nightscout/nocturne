@@ -104,7 +104,11 @@ redirect URIs and one-use codes, serves account identity, refresh/revocation and
 steps, heart rate, weight and sleep. The browser spec intercepts only Google's external consent
 navigation; the real web callback, API, encrypted credential store, worker and PostgreSQL handle
 the rest. API specs reject incorrect/replayed state and preserve a user-deleted sleep session on
-repeat import. These tests do not verify Google's real consent policy or API availability.
+repeat import. A delayed-vendor browser regression disconnects during inventory scanning,
+reloads while revocation is pending, and verifies one request stops the scan, preserves imported
+records and completes local disconnection despite a slow Google revocation response. Opening
+or reloading the settings page must not automatically scan inventory.
+These tests do not verify Google's real consent policy or API availability.
 Only `e2e/docker-compose.yml` sets `NOCTURNE_GOOGLE_HEALTH_MOCK=true`; the fixed fake-vendor
 transport also requires dev-only endpoints to be enabled. Production defaults keep Google's
 HTTPS destinations unchanged.

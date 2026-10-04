@@ -371,30 +371,34 @@ public sealed class GoogleHealthService(
 
     public async Task DisconnectAsync(Guid subject, CancellationToken ct)
     {
-        await using var gate = await coordinator.AcquireAsync(TenantId, ct);
+        var request = await coordinator.RequestDisconnectAsync(TenantId, subject, ct);
+        // Once accepted, refreshing the browser must not cancel local disconnection.
+        await using var gate = await coordinator.AcquireAsync(TenantId, CancellationToken.None);
         await coordinator.CompleteAsync(TenantId);
-        var token = await StoredSessionAsync(ct);
-        await ClearFlowAsync(ct);
+        var token = await StoredSessionAsync(CancellationToken.None);
+        await ClearFlowAsync(CancellationToken.None);
         oauth.InvalidateToken();
+        await RemoveSessionAsync(subject, removeAccount: false, CancellationToken.None);
         var revokeFailed = false;
         if (token is not null)
         {
             try
             {
-                revokeFailed = !await oauth.RevokeAsync(token.RefreshToken, ct);
+                using var revokeCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                revokeFailed = !await oauth.RevokeAsync(token.RefreshToken, revokeCancellation.Token);
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or Polly.ExecutionRejectedException)
             {
                 revokeFailed = true;
             }
         }
-        await RemoveSessionAsync(subject, removeAccount: false, CancellationToken.None);
         await connectorConfigurations.UpdateHealthStateAsync(
             ConnectorName,
             lastErrorMessage: revokeFailed ? "revoke_in_google" : string.Empty,
             lastErrorAt: revokeFailed ? DateTime.UtcNow : DateTime.MinValue,
             isHealthy: !revokeFailed,
             ct: CancellationToken.None);
+        await coordinator.FinishDisconnectAsync(TenantId, request);
     }
 
     public async Task PurgeAsync(Guid subject, CancellationToken ct)
@@ -422,6 +426,8 @@ public sealed class GoogleHealthService(
 
     public async Task<GoogleHealthPreview> PreviewAsync(Guid subject, CancellationToken ct)
     {
+        await using var reader = await coordinator.WatchReadsAsync(TenantId, ct);
+        ct = reader.Token;
         await using var gate = await coordinator.AcquireAsync(TenantId, ct, PreviewGateTimeout);
         if (gate is null)
             throw new GoogleHealthException("already_running", stage: "preview");
@@ -524,6 +530,8 @@ public sealed class GoogleHealthService(
     {
         try
         {
+            if (await coordinator.DisconnectRequestAsync(TenantId, ct) is not null)
+                throw new GoogleHealthException("disconnect_first");
             var settings = await StoredOptionsAsync(ct);
             if (await StoredSessionAsync(ct) is null)
                 throw new GoogleHealthException("configure_first");
@@ -540,6 +548,7 @@ public sealed class GoogleHealthService(
 
     private async Task<GoogleHealthStatus> WithProgressAsync(GoogleHealthStatus status)
     {
+        status.IsDisconnecting = await coordinator.DisconnectRequestAsync(TenantId, CancellationToken.None) is not null;
         var progress = await coordinator.ProgressAsync(TenantId, CancellationToken.None);
         if (progress is null) return status;
         status.IsSyncing = true;

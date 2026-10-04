@@ -53,6 +53,11 @@
     inventoryBusy = $state(false),
     message = $state(""),
     notice = $state("");
+  let localDisconnecting = $state(false);
+  const disconnecting = $derived(
+    localDisconnecting || !!status?.isDisconnecting
+  );
+  let inventoryGeneration = 0;
   let expandedGroups = $state<Record<string, boolean>>({});
   let purgeDialogOpen = $state(false);
   const patientRecordQuery = getPatientRecord();
@@ -245,13 +250,26 @@
     previewOnly,
   });
   async function loadPreview() {
-    if (inventoryBusy) return;
+    if (inventoryBusy || disconnecting || !status?.connected) return;
+    const generation = ++inventoryGeneration;
     message = "";
     notice = "";
     inventoryBusy = true;
     try {
-      preview = await previewGoogleHealth();
+      const result = await previewGoogleHealth();
+      if (
+        generation === inventoryGeneration &&
+        !disconnecting &&
+        status?.connected
+      )
+        preview = result;
     } catch (error) {
+      if (
+        generation !== inventoryGeneration ||
+        disconnecting ||
+        !status?.connected
+      )
+        return;
       if (isGoogleHealthAlreadyRunningError(error)) {
         message = "";
         notice = errors.already_running;
@@ -259,10 +277,10 @@
         message = describeGoogleHealthError(error, "readings", errors);
       }
     } finally {
-      inventoryBusy = false;
+      if (generation === inventoryGeneration) inventoryBusy = false;
     }
   }
-  async function refresh(loadInventory = true) {
+  async function refresh() {
     operation = "status";
     status = await getGoogleHealth().run();
     clientId = status.clientId ?? "";
@@ -272,8 +290,6 @@
     selected = status.configured ? (status.selectedTypes ?? []) : selected;
     historyDays = status.historyDays ?? 7;
     importFrom = day(status.importFrom);
-    if (status.connected && loadInventory && !status.isSyncing)
-      void loadPreview();
   }
   async function run(action: () => Promise<unknown>) {
     busy = true;
@@ -328,7 +344,7 @@
       // A scheduled run can win the tenant slot after the page's last status refresh.
       message = "";
       try {
-        await refresh(false);
+        await refresh();
         notice =
           "The import is running in the background. You can leave this page and return later.";
       } catch {
@@ -338,9 +354,18 @@
   }
   async function disconnect() {
     operation = "disconnect";
-    await disconnectGoogleHealth();
+    localDisconnecting = true;
+    ++inventoryGeneration;
+    inventoryBusy = false;
     preview = null;
-    await refresh();
+    notice = "";
+    try {
+      status = await disconnectGoogleHealth();
+      notice =
+        "Google Health is disconnected. Your imported data has been kept.";
+    } finally {
+      localDisconnecting = false;
+    }
   }
   function itemStatus(
     item: NonNullable<GoogleHealthPreview["items"]>[number],
@@ -398,12 +423,13 @@
     let timer: ReturnType<typeof setTimeout>;
     async function pollStatus() {
       try {
-        if (!busy) {
+        if (!busy || localDisconnecting) {
           const wasSyncing = status?.isSyncing;
           const previousImportFrom = status?.importFrom;
           const next = await getGoogleHealth().run();
           if (disposed) return;
           status = next;
+          if (!next.connected) preview = null;
           if (
             wasSyncing &&
             !next.isSyncing &&
@@ -412,7 +438,12 @@
             importFrom = day(next.importFrom);
           if (notice === "Import status is temporarily unavailable. Retrying.")
             notice = "";
-          if (wasSyncing && !next.isSyncing) {
+          if (
+            wasSyncing &&
+            !next.isSyncing &&
+            next.connected &&
+            !disconnecting
+          ) {
             notice = next.errorCode ? "" : "Google Health import completed.";
           }
         }
@@ -475,6 +506,12 @@
   </header>
   {#if message}<p role="alert" class="rounded-lg border border-destructive p-4">
       {message}
+    </p>{/if}
+  {#if disconnecting}<p
+      role="status"
+      class="rounded-lg border border-primary/40 p-4"
+    >
+      Disconnecting Google Health. The current scan or import is being stopped.
     </p>{/if}
   {#if notice}<p role="status" class="rounded-lg border border-primary/40 p-4">
       {notice}
@@ -589,13 +626,15 @@
               Nocturne retrieves every available page from this date. An early
               start date can make the first import take longer.
             </p>
-            <Button type="submit" disabled={busy}>Save and connect</Button>
+            <Button type="submit" disabled={busy || disconnecting}>
+              Save and connect
+            </Button>
           </form>{:else}<p>
             The encrypted Google Cloud configuration is saved.
           </p>
           <div class="flex gap-2">
             <Button
-              disabled={busy}
+              disabled={busy || disconnecting}
               onclick={() =>
                 void run(async () => {
                   operation = "signin";
@@ -606,10 +645,12 @@
               Sign in with Google
             </Button><Button
               variant="outline"
-              disabled={busy}
+              disabled={busy || disconnecting}
               onclick={() => void run(disconnect)}
             >
-              <Unplug class="mr-2 h-4 w-4" />Disconnect
+              <Unplug class="mr-2 h-4 w-4" />{disconnecting
+                ? "Disconnecting…"
+                : "Disconnect"}
             </Button>
           </div>
           <details>
@@ -655,7 +696,9 @@
                   bind:value={importFrom}
                 />
               </label>
-              <Button type="submit" disabled={busy}>Save and reconnect</Button>
+              <Button type="submit" disabled={busy || disconnecting}>
+                Save and reconnect
+              </Button>
             </form>
           </details>{/if}
       {:else}
@@ -674,6 +717,7 @@
           <Button
             variant="outline"
             disabled={busy ||
+              disconnecting ||
               status.isSyncing ||
               status.previewRequired ||
               !status.selectedTypes?.length}
@@ -682,10 +726,12 @@
             <RefreshCw class="mr-2 h-4 w-4" />Sync now
           </Button><Button
             variant="outline"
-            disabled={busy || status.isSyncing}
+            disabled={busy || disconnecting}
             onclick={() => void run(disconnect)}
           >
-            <Unplug class="mr-2 h-4 w-4" />Disconnect
+            <Unplug class="mr-2 h-4 w-4" />{disconnecting
+              ? "Disconnecting…"
+              : "Disconnect"}
           </Button>
         </div>
       {/if}
@@ -715,7 +761,7 @@
               type="date"
               min="2000-01-01"
               max={day(new Date())}
-              disabled={busy || status.isSyncing}
+              disabled={busy || disconnecting || status.isSyncing}
               bind:value={importFrom}
             />
           </label>
@@ -779,6 +825,7 @@
                                       );
                                 }}
                                 disabled={busy ||
+                                  disconnecting ||
                                   status.isSyncing ||
                                   (!selected.includes(item.dataType ?? "") &&
                                     (!item.supported ||
@@ -826,18 +873,27 @@
               </p>
             </div>{:else}<p>No inventory has been loaded yet.</p>{/if}
           <div class="flex flex-wrap gap-2">
-            <Button type="submit" disabled={busy || status.isSyncing}>
+            <Button
+              type="submit"
+              disabled={busy || disconnecting || status.isSyncing}
+            >
               Save import settings
             </Button><Button
               type="submit"
               value="sync"
-              disabled={busy || status.isSyncing || selected.length === 0}
+              disabled={busy ||
+                disconnecting ||
+                status.isSyncing ||
+                selected.length === 0}
             >
               Save selection and import
             </Button><Button
               type="button"
               variant="outline"
-              disabled={busy || inventoryBusy || status.isSyncing}
+              disabled={busy ||
+                disconnecting ||
+                inventoryBusy ||
+                status.isSyncing}
               onclick={() => void loadPreview()}
             >
               <RefreshCw class="mr-2 h-4 w-4" />{inventoryBusy
@@ -890,7 +946,11 @@
         Nocturne. Data stored by Google is unchanged.
       {/snippet}
       {#snippet trigger(props)}
-        <Button variant="destructive" disabled={busy} {...props}>
+        <Button
+          variant="destructive"
+          disabled={busy || disconnecting}
+          {...props}
+        >
           Delete imported Google Health data
         </Button>
       {/snippet}

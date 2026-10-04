@@ -268,6 +268,8 @@ public sealed class GoogleHealthConnectorService(
     {
         var result = new SyncResult();
         var tenantId = tenantAccessor.TenantId;
+        await using var reader = await coordinator.WatchReadsAsync(tenantId, cancellationToken);
+        cancellationToken = reader.Token;
         await using var gate = await coordinator.AcquireAsync(tenantId, cancellationToken);
         try
         {

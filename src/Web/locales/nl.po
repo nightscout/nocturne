@@ -26547,3 +26547,15 @@ msgstr "Niet beschikbaar als leesbaar gegevenstype in de Google Health API."
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 msgid "Status unavailable"
 msgstr "Status niet beschikbaar"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnecting…"
+msgstr "Verbinding verbreken…"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnecting Google Health. The current scan or import is being stopped."
+msgstr "De verbinding met Google Health wordt verbroken. De huidige scan of import wordt gestopt."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is disconnected. Your imported data has been kept."
+msgstr "De verbinding met Google Health is verbroken. Je geïmporteerde gegevens zijn behouden."

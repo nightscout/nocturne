@@ -26547,3 +26547,15 @@ msgstr "Non disponibile come tipo di dati leggibile nell’API Google Health."
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 msgid "Status unavailable"
 msgstr "Stato non disponibile"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnecting…"
+msgstr "Disconnessione in corso…"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnecting Google Health. The current scan or import is being stopped."
+msgstr "Disconnessione di Google Health. La scansione o l’importazione in corso viene interrotta."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is disconnected. Your imported data has been kept."
+msgstr "Google Health è disconnesso. I dati importati sono stati conservati."
