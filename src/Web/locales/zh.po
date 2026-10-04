@@ -26559,3 +26559,7 @@ msgstr "正在断开 Google Health 连接，并停止当前扫描或导入。"
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is disconnected. Your imported data has been kept."
 msgstr "Google Health 已断开连接。已保留导入的数据。"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "<0/>Disconnecting…"
+msgstr "<0/>正在断开连接…"

@@ -26562,3 +26562,7 @@ msgstr "Déconnexion de Google Health. L’analyse ou l’importation en cours e
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is disconnected. Your imported data has been kept."
 msgstr "Google Health est déconnecté. Vos données importées ont été conservées."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "<0/>Disconnecting…"
+msgstr "<0/>Déconnexion en cours…"

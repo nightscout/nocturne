@@ -26559,3 +26559,7 @@ msgstr "Google Health 연결을 해제하고 있습니다. 현재 스캔 또는 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is disconnected. Your imported data has been kept."
 msgstr "Google Health 연결이 해제되었습니다. 가져온 데이터는 유지됩니다."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "<0/>Disconnecting…"
+msgstr "<0/>연결 해제 중…"

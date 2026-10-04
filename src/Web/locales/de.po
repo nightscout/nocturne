@@ -26559,3 +26559,7 @@ msgstr "Die Verbindung zu Google Health wird getrennt. Der laufende Scan oder Im
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is disconnected. Your imported data has been kept."
 msgstr "Die Verbindung zu Google Health wurde getrennt. Ihre importierten Daten bleiben erhalten."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "<0/>Disconnecting…"
+msgstr "<0/>Verbindung wird getrennt…"

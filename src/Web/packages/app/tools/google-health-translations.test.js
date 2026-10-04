@@ -101,6 +101,7 @@ describe("Google Health production translations", () => {
   let root;
   let messageIds;
   let expectedPlaceholders;
+  let disconnectMessageIds;
 
   beforeAll(async () => {
     root = await mkdtemp(
@@ -163,6 +164,29 @@ describe("Google Health production translations", () => {
     );
     expect(messageIds).toHaveLength(representativeCopy.length);
     expect(code).toMatch(/errorCode\s*===\s*["']connector_reset_failed["']/);
+    const pageSource = await readFile(
+      new URL(
+        "../src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte",
+        import.meta.url
+      ),
+      "utf8"
+    );
+    const buttons = [...pageSource.matchAll(/<Button\b[\s\S]*?<\/Button>/g)]
+      .map(([button]) => button)
+      .filter((button) => button.includes("run(disconnect)"));
+    expect(buttons).toHaveLength(2);
+    const transformed = await plugin.transform.handler(
+      buttons.join(""),
+      join(
+        root,
+        "src/routes/(authenticated)/settings/connectors/google-health/disconnect-buttons.svelte"
+      ),
+      { ssr: false }
+    );
+    disconnectMessageIds = [
+      ...transformed.code.matchAll(/_w_runtime_\.c\((\d+)/g),
+    ].map((match) => Number(match[1]));
+    expect(disconnectMessageIds).toHaveLength(4);
   });
 
   afterAll(async () => {
@@ -182,6 +206,16 @@ describe("Google Health production translations", () => {
           .map((id) => runtime(id))
           .every((text) => text.trim().length > 0)
       ).toBe(true);
+      for (const id of disconnectMessageIds) {
+        expect(
+          runtime
+            .c(id)
+            .flat(Infinity)
+            .filter((part) => typeof part === "string")
+            .join("")
+            .trim().length
+        ).toBeGreaterThan(0);
+      }
     }
   );
 

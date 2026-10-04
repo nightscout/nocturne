@@ -648,9 +648,11 @@
               disabled={busy || disconnecting}
               onclick={() => void run(disconnect)}
             >
-              <Unplug class="mr-2 h-4 w-4" />{disconnecting
-                ? "Disconnecting…"
-                : "Disconnect"}
+              {#if disconnecting}<Unplug
+                  class="mr-2 h-4 w-4"
+                />Disconnecting…{:else}<Unplug
+                  class="mr-2 h-4 w-4"
+                />Disconnect{/if}
             </Button>
           </div>
           <details>
@@ -729,9 +731,11 @@
             disabled={busy || disconnecting}
             onclick={() => void run(disconnect)}
           >
-            <Unplug class="mr-2 h-4 w-4" />{disconnecting
-              ? "Disconnecting…"
-              : "Disconnect"}
+            {#if disconnecting}<Unplug
+                class="mr-2 h-4 w-4"
+              />Disconnecting…{:else}<Unplug
+                class="mr-2 h-4 w-4"
+              />Disconnect{/if}
           </Button>
         </div>
       {/if}
