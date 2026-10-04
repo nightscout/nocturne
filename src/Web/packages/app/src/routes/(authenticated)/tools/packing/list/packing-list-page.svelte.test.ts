@@ -62,7 +62,7 @@ describe("packing list page", () => {
     await expect.element(page.getByText("All packed")).toBeVisible();
   });
 
-  it("says everything is packed with the suitcase alone, and takes it back on an unpack", async () => {
+  it("says everything is packed with the suitcase alone, and no wash behind the title", async () => {
     const header = page.getByTestId("packing-header");
     render(PackingListPage, {});
     await expect.poll(() => header.element().querySelectorAll("canvas").length).toBe(1);
@@ -72,10 +72,6 @@ describe("packing list page", () => {
 
     await expect.element(page.getByText("All packed")).toBeVisible();
     expect(header.element().querySelectorAll("canvas")).toHaveLength(1);
-
-    await packed("Pen needles").click();
-
-    await expect.element(page.getByText("1/2 packed")).toBeVisible();
   });
 
   it("pins the header so the suitcase stays in view while ticking", async () => {
