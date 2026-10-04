@@ -88,4 +88,8 @@ public class CompressionLowSuggestionEntity : ITenantScoped
     /// </summary>
     [Column("recovery_minutes")]
     public int? RecoveryMinutes { get; set; }
+
+    [Column("data_source")]
+    [MaxLength(100)]
+    public string? DataSource { get; set; }
 }

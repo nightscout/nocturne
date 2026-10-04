@@ -73,6 +73,9 @@ public class SampleDataSeeder
     private readonly IDeviceStatusDecomposer _deviceStatusDecomposer;
     private readonly ITreatmentDecomposer _treatmentDecomposer;
     private readonly ITreatmentCache _treatmentCache;
+    private readonly ICompressionLowDetectionService _compressionLowDetectionService;
+    private readonly ICompressionLowService _compressionLowService;
+    private readonly ICompressionLowRepository _compressionLowRepository;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<SampleDataSeeder> _logger;
 
@@ -110,6 +113,9 @@ public class SampleDataSeeder
         IDeviceStatusDecomposer deviceStatusDecomposer,
         ITreatmentDecomposer treatmentDecomposer,
         ITreatmentCache treatmentCache,
+        ICompressionLowDetectionService compressionLowDetectionService,
+        ICompressionLowService compressionLowService,
+        ICompressionLowRepository compressionLowRepository,
         ILoggerFactory loggerFactory,
         ILogger<SampleDataSeeder> logger)
     {
@@ -126,6 +132,9 @@ public class SampleDataSeeder
         _deviceStatusDecomposer = deviceStatusDecomposer;
         _treatmentDecomposer = treatmentDecomposer;
         _treatmentCache = treatmentCache;
+        _compressionLowDetectionService = compressionLowDetectionService;
+        _compressionLowService = compressionLowService;
+        _compressionLowRepository = compressionLowRepository;
         _loggerFactory = loggerFactory;
         _logger = logger;
     }
@@ -164,6 +173,8 @@ public class SampleDataSeeder
         // history matches the lows/highs actually visible on the chart.
         var episodeTracker = new DemoAlertSeeds.GlucoseEpisodeTracker(DemoAlertSeeds.Defaults);
 
+        await SeedPatientProfileAsync(ct);
+
         // Seed the therapy profile before glucose so scheduled-basal context
         // exists from the first record.
         var profilesCreated = await SeedProfileAsync(config, ct);
@@ -195,9 +206,6 @@ public class SampleDataSeeder
                 entryBatch.Clear();
             }
 
-            // The batch decomposer a migration backfills treatments through, rather than the
-            // service's one-at-a-time live path. That path's insulin-context stamping has nothing
-            // to stamp yet: the patient's insulins are seeded after the timeline.
             async Task FlushTreatmentsAsync()
             {
                 if (treatmentBatch.Count == 0) return;
@@ -231,10 +239,19 @@ public class SampleDataSeeder
             {
                 ct.ThrowIfCancellationRequested();
 
+                var comparison = step.Time.Minute % 10 == 0
+                    ? DemoCoverageSeeds.CreateComparisonReading(step.Entry)
+                    : null;
+                DemoCoverageSeeds.ApplyCompressionArtifact(step.Entry, step.Time);
                 step.Entry.DataSource = dataSource;
                 episodeTracker.Observe(
                     DateTimeOffset.FromUnixTimeMilliseconds(step.Entry.Mills).UtcDateTime, step.Entry.Sgv);
                 entryBatch.Add(step.Entry);
+                if (comparison is not null)
+                {
+                    comparison.DataSource = dataSource;
+                    entryBatch.Add(comparison);
+                }
                 foreach (var extra in step.ExtraEntries)
                 {
                     extra.DataSource = dataSource;
@@ -323,16 +340,18 @@ public class SampleDataSeeder
             await SeedTrackersAsync(deviceSchedule, ownerSubjectId, ct);
         var (alertRules, alertExcursions) =
             await SeedAlertsAsync(tenant.TenantId, episodeTracker.Episodes, ct);
+        if (includeGlucose && dataSource == Nocturne.Core.Constants.DataSources.DemoService)
+            await SeedCompressionLowReviewsAsync(localToday, days, ct);
 
         var foodCount = await SeedFoodsAsync(mealCarbLinks, ownerSubjectId, ct);
         var stateSpanCount = await SeedStateSpansAsync(localToday, days, dataSource, ct);
-        await SeedPatientProfileAsync(ct);
         await SeedBodyWeightAsync(localToday, days, dataSource, ct);
         await SeedTimezoneTimelineAsync(localToday, days, ct);
         await SeedDndWindowAsync(localToday, ct);
         var clockFaces = await SeedClockFacesAsync(ownerSubjectId, ct);
         var notificationCount = await SeedNotificationsAsync(
             ownerSubjectId, tenant.TenantId, episodeTracker.Episodes, ct);
+        await SeedLabHbA1cAsync(localToday, dataSource, ct);
 
         _logger.LogInformation(
             "Seeded tenant {Slug} ({Days} days): {Entries} entries, {Treatments} treatments, "
@@ -783,17 +802,18 @@ public class SampleDataSeeder
         record.DateOfBirth ??= new DateOnly(1992, 4, 17);
         record.Timezone ??= DemoTherapyProfile.LocalIanaTimezone();
 
-        var deviceSeeds = new (string Category, string Manufacturer, string Model, string? Aid)[]
+        var deviceSeeds = new (string Category, string Manufacturer, string Model, string? Aid, string? Serial)[]
         {
-            ("cgm", "Dexcom", "G7", null),
-            ("pump", "Insulet", "Omnipod DASH", DemoDeviceStatusGenerator.DeviceName),
-            ("meter", "Ascensia", "Contour Next One", null),
+            ("cgm", "Dexcom", "G7", null, DemoCoverageSeeds.PrimaryCgmSerial),
+            ("cgm", "Dexcom", "G6", null, DemoCoverageSeeds.ComparisonCgmSerial),
+            ("pump", "Insulet", "Omnipod DASH", DemoDeviceStatusGenerator.DeviceName, null),
+            ("meter", "Ascensia", "Contour Next One", null, null),
         };
-        foreach (var (category, manufacturer, model, aid) in deviceSeeds)
+        foreach (var (category, manufacturer, model, aid, serial) in deviceSeeds)
         {
-            var exists = await _db.PatientDevices
-                .AnyAsync(d => d.Manufacturer == manufacturer && d.Model == model, ct);
-            if (!exists)
+            var existing = await _db.PatientDevices
+                .FirstOrDefaultAsync(d => d.Manufacturer == manufacturer && d.Model == model, ct);
+            if (existing is null)
             {
                 _db.PatientDevices.Add(new PatientDeviceEntity
                 {
@@ -802,11 +822,14 @@ public class SampleDataSeeder
                     DeviceCategory = category,
                     Manufacturer = manufacturer,
                     Model = model,
+                    SerialNumber = serial,
                     AidAlgorithm = aid,
                     StartDate = DateOnly.FromDateTime(DateTime.Today.AddMonths(-8)),
                     IsCurrent = true,
                 });
             }
+            else if (existing.SerialNumber is null && serial is not null)
+                existing.SerialNumber = serial;
         }
 
         if (!await _db.PatientInsulins.AnyAsync(ct))
@@ -827,6 +850,96 @@ public class SampleDataSeeder
             });
         }
 
+        await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task SeedCompressionLowReviewsAsync(DateTime localToday, int days, CancellationToken ct)
+    {
+        var nights = Enumerable.Range(0, days)
+            .Select(offset => DateOnly.FromDateTime(localToday.AddDays(-offset)))
+            .Where(date => date.DayOfWeek is DayOfWeek.Sunday or DayOfWeek.Tuesday or DayOfWeek.Thursday)
+            .Take(3)
+            .ToList();
+        var pendingByNight = new Dictionary<DateOnly, List<CompressionLowSuggestion>>();
+        foreach (var night in nights)
+        {
+            var existing = (await _compressionLowService.GetSuggestionsAsync(null, night, ct))
+                .ToList();
+            var existingDemo = existing
+                .Where(suggestion => suggestion.DataSource == Nocturne.Core.Constants.DataSources.DemoService)
+                .ToList();
+            if (existingDemo.Count > 0)
+            {
+                pendingByNight[night] = existingDemo
+                    .Where(suggestion => suggestion.Status == CompressionLowStatus.Pending)
+                    .OrderBy(suggestion => suggestion.StartMills)
+                    .ToList();
+                continue;
+            }
+
+            var existingIds = existing.Select(suggestion => suggestion.Id).ToHashSet();
+            await _compressionLowDetectionService.DetectForNightAsync(night, ct);
+            var detected = (await _compressionLowService.GetSuggestionsAsync(
+                    CompressionLowStatus.Pending, night, ct))
+                .Where(suggestion => !existingIds.Contains(suggestion.Id))
+                .OrderBy(suggestion => suggestion.StartMills)
+                .ToList();
+            foreach (var suggestion in detected)
+            {
+                var readings = await _entryService.GetEntriesAsync(
+                    find: $"{{\"mills\":{{\"$gte\":{suggestion.StartMills - 900_000},\"$lte\":{suggestion.EndMills + 900_000}}}}}",
+                    count: 1000,
+                    skip: 0,
+                    cancellationToken: ct);
+                var candidateReadings = readings.Where(entry => entry.Sgv.HasValue).ToList();
+                if (candidateReadings.Count == 0 || candidateReadings.Any(entry =>
+                        entry.DataSource != Nocturne.Core.Constants.DataSources.DemoService))
+                    continue;
+
+                suggestion.DataSource = Nocturne.Core.Constants.DataSources.DemoService;
+                await _compressionLowRepository.UpdateAsync(suggestion, ct);
+            }
+            pendingByNight[night] = detected
+                .Where(suggestion => suggestion.DataSource == Nocturne.Core.Constants.DataSources.DemoService)
+                .ToList();
+        }
+
+        foreach (var (night, index) in nights.Select((night, index) => (night, index)))
+        {
+            var pending = pendingByNight[night];
+            if (pending.Count == 0 || index == 0)
+                continue;
+
+            var suggestion = pending[0];
+            if (index == 1)
+                await _compressionLowService.AcceptSuggestionAsync(
+                    suggestion.Id, suggestion.StartMills, suggestion.EndMills, ct, demoSeed: true);
+            else
+                await _compressionLowService.DismissSuggestionAsync(suggestion.Id, ct);
+        }
+    }
+
+    private async Task SeedLabHbA1cAsync(DateTime localToday, string dataSource, CancellationToken ct)
+    {
+        if (dataSource != Nocturne.Core.Constants.DataSources.DemoService)
+            return;
+
+        const string note = "Demo lab result";
+        if (await _db.LabHbA1cResults.AnyAsync(result => result.Note == note, ct))
+            return;
+
+        foreach (var (monthsAgo, value) in new[] { (12, 7.2), (6, 6.9), (0, 6.8) })
+        {
+            _db.LabHbA1cResults.Add(new LabHbA1cResultEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = _db.TenantId,
+                MeasuredAt = DateTime.SpecifyKind(localToday.AddMonths(-monthsAgo), DateTimeKind.Utc),
+                ValuePercent = value,
+                Note = note,
+                CreatedAt = DateTime.UtcNow,
+            });
+        }
         await _db.SaveChangesAsync(ct);
     }
 

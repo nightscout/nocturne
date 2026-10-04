@@ -1,5 +1,10 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using Nocturne.API.Services.BackgroundServices;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Constants;
+using Nocturne.Core.Models;
 using Nocturne.Services.Demo.Services;
 using Xunit;
 
@@ -32,6 +37,59 @@ public class DemoGenerationTests
 
         counts[DayScenario.Normal].Should().BeGreaterThan(
             counts.Where(kv => kv.Key != DayScenario.Normal).Max(kv => kv.Value));
+    }
+
+    [Fact]
+    public void CoverageSeeds_CreateOverlappingCgmReadingsAndACompressionArtifact()
+    {
+        var night = new DateTime(2026, 3, 18, 4, 0, 0, DateTimeKind.Local);
+        var values = new[] { 0, 5, 10, 15, 20 }
+            .Select(minutes =>
+            {
+                var time = night.AddMinutes(minutes);
+                var entry = new Entry { Mills = new DateTimeOffset(time).ToUnixTimeMilliseconds(), Mgdl = 120, Sgv = 120 };
+                return DemoCoverageSeeds.ApplyCompressionArtifact(entry, time);
+            })
+            .ToList();
+
+        values.Select(entry => entry.Sgv).Should().Equal(110, 90, 58, 82, 108);
+
+        var comparison = DemoCoverageSeeds.CreateComparisonReading(new Entry
+        {
+            Mills = values[0].Mills,
+            Sgv = 120,
+            Mgdl = 120,
+        });
+        comparison.Device.Should().Be(DemoCoverageSeeds.ComparisonCgmSerial);
+        comparison.Mills.Should().Be(values[0].Mills + 120_000);
+        comparison.Sgv.Should().BeInRange(118, 122);
+    }
+
+    [Fact]
+    public void CoverageSeeds_CompressionArtifactIsRecognisedByTheDetector()
+    {
+        var start = new DateTime(2026, 3, 18, 3, 55, 0, DateTimeKind.Utc);
+        var entries = new[] { 0, 5, 10, 15, 20, 25, 30 }
+            .Select(minutes =>
+            {
+                var time = start.AddMinutes(minutes);
+                var entry = new Entry
+                {
+                    Mills = new DateTimeOffset(time).ToUnixTimeMilliseconds(),
+                    Date = time,
+                    Mgdl = 110,
+                    Sgv = 110,
+                };
+                return DemoCoverageSeeds.ApplyCompressionArtifact(entry, time);
+            })
+            .ToList();
+        var detector = new CompressionLowDetectionService(
+            Mock.Of<IServiceProvider>(),
+            ActiveTenantSnapshotTestDoubles.Unread(),
+            NullLogger<CompressionLowDetectionService>.Instance);
+
+        detector.DetectVShapeCandidates(entries).Should().ContainSingle(candidate =>
+            candidate.LowestGlucose == 58 && candidate.RecoveryMinutes == 10);
     }
 
     [Fact]
