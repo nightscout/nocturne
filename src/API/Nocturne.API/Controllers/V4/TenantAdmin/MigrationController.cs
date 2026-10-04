@@ -115,17 +115,13 @@ public class MigrationController : ControllerBase
     public async Task<ActionResult<MigrationJobInfo>> StartFromConnector(
         string connectorName, CancellationToken ct)
     {
-        var config = await _connectorConfigService.GetConfigurationAsync(connectorName, ct);
-        if (config is null)
+        var source = await NightscoutConnectorSource.ReadAsync(_connectorConfigService, connectorName, ct);
+        if (source is null)
         {
             return Problem(detail: $"No saved configuration found for connector '{connectorName}'", statusCode: 400, title: "Bad Request");
         }
 
-        var secrets = await _connectorConfigService.GetSecretsAsync(connectorName, ct);
-
-        var configJson = config.Configuration?.RootElement;
-        var url = configJson?.GetProperty("url").GetString();
-        var apiSecret = secrets.TryGetValue("apiSecret", out var s) ? s : null;
+        var (url, apiSecret) = source;
 
         if (string.IsNullOrEmpty(url))
         {

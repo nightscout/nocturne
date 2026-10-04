@@ -49,7 +49,6 @@
   import { describeSubmitError } from "$lib/forms/submit-error";
   import { toast } from "svelte-sonner";
   import { getUploaderName } from "$lib/utils/uploader-labels";
-  import { coachmark } from "@nocturne/coach";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import { createTerminalRunTracker } from "./terminal-run-tracker";
@@ -405,11 +404,7 @@
     </Card>
   {:else if servicesOverview}
     <!-- Active Data Sources -->
-    <Card {@attach coachmark({
-      key: "setup-connectors.sources",
-      title: "Waiting for data",
-      description: "Once you set up an uploader app or cloud connector below, your data source will appear here automatically.",
-    })}>
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Wifi class="h-5 w-5" />
@@ -470,11 +465,7 @@
     />
 
     <!-- Server-Side Connectors -->
-    <div {@attach coachmark({
-      key: "setup-connectors.server-connectors",
-      title: "Cloud connectors",
-      description: "Pull data directly from Dexcom, LibreLink, or Glooko \u2014 no uploader app needed.",
-    })}>
+    <div>
       <ServerConnectorsCard
         availableConnectors={servicesOverview.availableConnectors ?? []}
         {connectorStatuses}

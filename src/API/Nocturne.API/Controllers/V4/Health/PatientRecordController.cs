@@ -83,7 +83,7 @@ public class PatientRecordController : ControllerBase
     /// </summary>
     [HttpPut]
     [RequireScope(Scope.TherapyReadWrite)]
-    [RemoteForm(Invalidates = ["GetPatientRecord"])]
+    [RemoteForm(Invalidates = ["GetPatientRecord", "TenantSettings_GetPatientRelationship"])]
     [ProducesResponseType(typeof(PatientRecord), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientRecord>> UpdatePatientRecord(
         [FromBody] PatientRecord model,
