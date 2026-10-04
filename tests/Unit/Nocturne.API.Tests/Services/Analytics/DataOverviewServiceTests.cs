@@ -107,7 +107,7 @@ public class DataOverviewServiceTests : IDisposable
         }
         await _dbContext.SaveChangesAsync();
         if (failedSource is not null)
-            _interceptors = [new EntityQueryFailure(failedSource)];
+            _interceptors = [EntityQueryFailure.For(failedSource)];
 
         var daily = await _service.GetDailySummaryAsync(2024);
         var gri = await _service.GetGriTimelineAsync(2024);
@@ -1682,7 +1682,7 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetEHbA1cTimelineAsync_MeterGlucoseQueryFails_ReturnsSensorPointsUncached()
     {
-        _interceptors = [new EntityQueryFailure(nameof(MeterGlucoseEntity))];
+        _interceptors = [EntityQueryFailure.For(nameof(MeterGlucoseEntity))];
         await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
 
         var result = await _service.GetEHbA1cTimelineAsync(2025);
@@ -1696,7 +1696,7 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetEHbA1cTimelineAsync_SensorGlucoseQueryFails_ThrowsRatherThanUsingFingersticks()
     {
-        _interceptors = [new EntityQueryFailure(nameof(SensorGlucoseEntity))];
+        _interceptors = [EntityQueryFailure.For(nameof(SensorGlucoseEntity))];
         await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
 
         var timeline = () => _service.GetEHbA1cTimelineAsync(2025);
@@ -1738,7 +1738,7 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetDailySummaryAsync_SensorGlucoseQueryFails_WithholdsAveragesAndKeepsTheRest()
     {
-        _interceptors = [new EntityQueryFailure(nameof(SensorGlucoseEntity))];
+        _interceptors = [EntityQueryFailure.For(nameof(SensorGlucoseEntity))];
         await using var seed = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
         seed.Boluses.Add(new BolusEntity
         {
@@ -1761,7 +1761,7 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetDailySummaryAsync_MeterGlucoseQueryFails_KeepsSensorAveragesAndTimeInRange()
     {
-        _interceptors = [new EntityQueryFailure(nameof(MeterGlucoseEntity))];
+        _interceptors = [EntityQueryFailure.For(nameof(MeterGlucoseEntity))];
         await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
 
         var result = await _service.GetDailySummaryAsync(2025);
@@ -1774,7 +1774,7 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetGriTimelineAsync_MeterGlucoseQueryFails_KeepsSensorPeriods()
     {
-        _interceptors = [new EntityQueryFailure(nameof(MeterGlucoseEntity))];
+        _interceptors = [EntityQueryFailure.For(nameof(MeterGlucoseEntity))];
         await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0, readings: 72);
 
         var result = await _service.GetGriTimelineAsync(2025);
@@ -1787,7 +1787,7 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetGriTimelineAsync_SensorGlucoseQueryFails_WithholdsEveryPeriod()
     {
-        _interceptors = [new EntityQueryFailure(nameof(SensorGlucoseEntity))];
+        _interceptors = [EntityQueryFailure.For(nameof(SensorGlucoseEntity))];
         await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0, readings: 72);
 
         var result = await _service.GetGriTimelineAsync(2025);
@@ -1891,6 +1891,11 @@ public class DataOverviewServiceTests : IDisposable
 
     private sealed class EntityQueryFailure(string entityName) : IQueryExpressionInterceptor
     {
+        // Query interceptors participate in EF''s internal service-provider identity.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, EntityQueryFailure> Failures = new();
+
+        public static EntityQueryFailure For(string name) => Failures.GetOrAdd(name, key => new EntityQueryFailure(key));
+
         public Expression QueryCompilationStarting(
             Expression queryExpression, QueryExpressionEventData eventData) =>
             new ExpressionPrinter().PrintExpression(queryExpression).Contains(entityName)

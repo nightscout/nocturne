@@ -15,7 +15,9 @@ function deferred<T>() {
 describe("year overview loading", () => {
   it("loads both reports through one request and retries partial responses", async () => {
     const response = deferred<YearSummaryResponse>();
-    const summary = vi.fn(() => response.promise);
+    const summary = vi.fn<
+      (year: number, sources: string[]) => Promise<YearSummaryResponse>
+    >(() => response.promise);
     const events = {
       daily: vi.fn(),
       gri: vi.fn(),
@@ -42,7 +44,9 @@ describe("year overview loading", () => {
 
   it("suppresses a superseded combined response and reports transport failures for both parts", async () => {
     const response = deferred<YearSummaryResponse>();
-    const summary = vi.fn(() => response.promise);
+    const summary = vi.fn<
+      (year: number, sources: string[]) => Promise<YearSummaryResponse>
+    >(() => response.promise);
     const events = {
       daily: vi.fn(),
       gri: vi.fn(),
@@ -70,7 +74,9 @@ describe("year overview loading", () => {
 
   it("finishes one year before reading another and caches completed results", async () => {
     const response = deferred<YearSummaryResponse>();
-    const summary = vi.fn(() => response.promise);
+    const summary = vi.fn<
+      (year: number, sources: string[]) => Promise<YearSummaryResponse>
+    >(() => response.promise);
     const events = {
       daily: vi.fn(),
       gri: vi.fn(),
@@ -94,7 +100,9 @@ describe("year overview loading", () => {
 
   it("drops superseded queued years and keeps outstanding work bounded", async () => {
     const response = deferred<YearSummaryResponse>();
-    const summary = vi.fn(() => response.promise);
+    const summary = vi.fn<
+      (year: number, sources: string[]) => Promise<YearSummaryResponse>
+    >(() => response.promise);
     const events = {
       daily: vi.fn(),
       gri: vi.fn(),
@@ -125,7 +133,9 @@ describe("year overview loading", () => {
 
   it("does not publish or start queued work after disposal", async () => {
     const response = deferred<YearSummaryResponse>();
-    const summary = vi.fn(() => response.promise);
+    const summary = vi.fn<
+      (year: number, sources: string[]) => Promise<YearSummaryResponse>
+    >(() => response.promise);
     const events = {
       daily: vi.fn(),
       gri: vi.fn(),
@@ -150,7 +160,9 @@ describe("year overview loading", () => {
 
   it("waits for a pending attempt before explicitly retrying", async () => {
     const response = deferred<YearSummaryResponse>();
-    const summary = vi.fn(() => response.promise);
+    const summary = vi.fn<
+      (year: number, sources: string[]) => Promise<YearSummaryResponse>
+    >(() => response.promise);
     const events = {
       daily: vi.fn(),
       gri: vi.fn(),
