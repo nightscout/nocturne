@@ -142,7 +142,7 @@ export class RealtimeStore {
    *  silently-stalled ("zombie") socket the browser still believes is connected. */
   private foregroundPollInterval: ReturnType<typeof setInterval> | null = null;
   private static readonly FOREGROUND_POLL_MS = 60_000; // re-check staleness every 60s while visible
-  private static readonly FOREGROUND_STALE_MS = 5 * 60_000; // no data for 5 min: refetch, in either visibility state
+  private static readonly DATA_STALE_MS = 5 * 60_000;
 
   /** Pending refetch of the records the backend derives from devicestatus. */
   private decompositionRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -952,7 +952,8 @@ export class RealtimeStore {
    * Start polling for data while the tab is hidden.
    * Browsers throttle setInterval in background tabs (Chrome: ~60s minimum),
    * so we set a 30s interval knowing it'll fire roughly once per minute.
-   * This ensures glucose values stay current even when the tab isn't focused.
+   * Each tick backfills only when the socket is down or data is stale, so a
+   * connected-but-silent socket is caught within about 5-6 minutes.
    */
   private startBackgroundPolling(): void {
     if (this.backgroundPollInterval) return;
@@ -967,7 +968,7 @@ export class RealtimeStore {
   }
 
   private isDataStale(): boolean {
-    return Date.now() - this.lastDataReceived > RealtimeStore.FOREGROUND_STALE_MS;
+    return Date.now() - this.lastDataReceived > RealtimeStore.DATA_STALE_MS;
   }
 
   /** Stop background polling (called when tab becomes visible again) */

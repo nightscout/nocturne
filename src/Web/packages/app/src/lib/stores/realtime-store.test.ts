@@ -796,7 +796,6 @@ describe("RealtimeStore merging", () => {
     const store = makeStore();
     const now = Date.now();
     store.boluses = [{ id: "b1", mills: now - 1_000 }] as typeof store.boluses;
-    api.emptyPage.mockImplementation(async () => ({ data: [] }));
     const pages = [{ id: "b1", mills: now - 1_000 }, { id: "b2", mills: now - 500 }];
     api.emptyPage.mockImplementation(async (_from, _to, limit) => ({ data: limit === 500 ? pages : [] }));
 

@@ -1,5 +1,5 @@
 import { render } from "vitest-browser-svelte";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { flushSync } from "svelte";
 import Harness from "./realtime-store-harness.svelte";
 import { RealtimeStore } from "./realtime-store.svelte";
@@ -28,6 +28,10 @@ describe("createRealtimeStore singleton lifecycle", () => {
 });
 
 describe("RealtimeStore recentEntries", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("recomputes once a minute, not on every clock tick", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:10Z"));
@@ -61,6 +65,5 @@ describe("RealtimeStore recentEntries", () => {
 
     cleanup();
     store.destroy();
-    vi.useRealTimers();
   });
 });
