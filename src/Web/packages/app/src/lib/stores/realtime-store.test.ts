@@ -247,6 +247,52 @@ describe("RealtimeStore connection presentation", () => {
     store.destroy();
   });
 
+  describe("background polling", () => {
+    let initial = 0;
+    const rangeQueries = () => api.emptyPage.mock.calls.length - initial;
+    const hiddenTab = async () => {
+      const page = await onPage();
+      connected(page.store);
+      await vi.advanceTimersByTimeAsync(0);
+      initial = api.emptyPage.mock.calls.length;
+      page.hide();
+      return page;
+    };
+
+    it("does not poll while a live socket keeps delivering", async () => {
+      const { store } = await hiddenTab();
+
+      for (let minute = 0; minute < 20; minute += 4) {
+        store.handleCreate({ colName: "entries", doc: { _id: `e${minute}`, type: "sgv", sgv: 100, mills: Date.now() } });
+        await vi.advanceTimersByTimeAsync(4 * 60_000);
+      }
+
+      expect(rangeQueries()).toBe(0);
+      store.destroy();
+    });
+
+    it("polls a connected but silent socket once the data is stale", async () => {
+      const { store } = await hiddenTab();
+
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(rangeQueries()).toBe(0);
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(rangeQueries()).toBeGreaterThan(0);
+      store.destroy();
+    });
+
+    it("polls while the socket is down", async () => {
+      const { store } = await hiddenTab();
+      dropped(store);
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(rangeQueries()).toBeGreaterThan(0);
+      store.destroy();
+    });
+  });
+
   it("presents a resumed tab whose socket stays down", async () => {
     const { store, show, hide } = await onPage();
     connected(store);

@@ -142,7 +142,7 @@ export class RealtimeStore {
    *  silently-stalled ("zombie") socket the browser still believes is connected. */
   private foregroundPollInterval: ReturnType<typeof setInterval> | null = null;
   private static readonly FOREGROUND_POLL_MS = 60_000; // re-check staleness every 60s while visible
-  private static readonly FOREGROUND_STALE_MS = 5 * 60_000; // refetch if no data for 5 min while visible
+  private static readonly FOREGROUND_STALE_MS = 5 * 60_000; // no data for 5 min: refetch, in either visibility state
 
   /** Pending refetch of the records the backend derives from devicestatus. */
   private decompositionRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -323,7 +323,7 @@ export class RealtimeStore {
       // only recovers on refocus/reload. Re-check periodically; backfill once data is stale.
       this.foregroundPollInterval = setInterval(() => {
         if (document.visibilityState !== 'visible') return;
-        if (Date.now() - this.lastDataReceived > RealtimeStore.FOREGROUND_STALE_MS) {
+        if (this.isDataStale()) {
           this.performBackfillIfNeeded(true);
         }
       }, RealtimeStore.FOREGROUND_POLL_MS);
@@ -962,8 +962,16 @@ export class RealtimeStore {
     if (this.backgroundPollInterval) return;
 
     this.backgroundPollInterval = setInterval(() => {
-      this.performBackfillIfNeeded(true);
+      // A live socket that delivered within the stale window needs no poll; a dropped or
+      // silent one does, since hidden tabs may never see the socket's own disconnect.
+      if (!this.websocketClient.isConnected || this.isDataStale()) {
+        this.performBackfillIfNeeded(true);
+      }
     }, RealtimeStore.BACKGROUND_POLL_MS);
+  }
+
+  private isDataStale(): boolean {
+    return Date.now() - this.lastDataReceived > RealtimeStore.FOREGROUND_STALE_MS;
   }
 
   /** Stop background polling (called when tab becomes visible again) */
