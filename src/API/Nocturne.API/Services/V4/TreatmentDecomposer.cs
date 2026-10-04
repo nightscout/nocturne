@@ -765,7 +765,11 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 _patientDeviceStamper, model, existing, V4Models.DeviceAttributionCategories.TempBasal, ct));
     }
 
-    private async Task DecomposeProfileSwitchAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    /// <returns>
+    /// False when the user deleted the switch's span: the treatment is withheld whole, so its inline
+    /// profile writes no therapy settings either.
+    /// </returns>
+    private async Task<bool> DecomposeProfileSwitchAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var stateSpan = new StateSpan
         {
@@ -780,7 +784,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             Metadata = BuildProfileMetadata(treatment)
         };
 
-        await UpsertTreatmentSpanAsync(stateSpan, result, ct);
+        if (!await UpsertTreatmentSpanAsync(stateSpan, result, ct))
+            return false;
         Logger.LogDebug("Delegated ProfileSwitch treatment {LegacyId} to IStateSpanService", treatment.Id);
 
         // If the treatment carries inline profile JSON, decompose it into V4 schedule records
@@ -818,6 +823,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                     treatment.Id);
             }
         }
+
+        return true;
     }
 
     private async Task DecomposeOverrideAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
@@ -870,7 +877,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// write-back looks for the copy upstream holds before it writes; a span the user deleted is
     /// counted in <see cref="V4Models.DecompositionResult.SkippedDeleted"/>.
     /// </summary>
-    private async Task UpsertTreatmentSpanAsync(StateSpan span, V4Models.DecompositionResult result, CancellationToken ct)
+    /// <returns>False when the user deleted the span, so nothing was written.</returns>
+    private async Task<bool> UpsertTreatmentSpanAsync(StateSpan span, V4Models.DecompositionResult result, CancellationToken ct)
     {
         var written = await _stateSpanService.UpsertStateSpanWithOutcomeAsync(span, ct);
         switch (written.Outcome)
@@ -883,8 +891,10 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 break;
             default:
                 result.SkippedDeleted++;
-                break;
+                return false;
         }
+
+        return true;
     }
 
     #endregion
@@ -1302,8 +1312,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         // State span treatments are upserted individually (idempotent semantics)
         var stateSpanTreatments = new List<(Treatment Treatment, Guid CorrelationId, bool IsProfileSwitch, bool IsOverride, bool IsTemporaryTarget)>();
 
-        // Track treatments that produce both bolus AND bolusCalculation for post-insert linking
-        var bolusCalcLinkTreatmentIds = new HashSet<string>();
+        // The bolus and calculation each treatment producing both sent, for post-insert linking
+        var bolusCalcLinks = new List<(V4Models.Bolus Bolus, V4Models.BolusCalculation Calculation)>();
 
         // Carb-producing treatments by correlation id, for the post-insert TreatmentFood pass
         var foodLineTreatments = new Dictionary<Guid, Treatment>();
@@ -1341,8 +1351,12 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 }
             }
 
+            V4Models.Bolus? sentBolus = null;
             if (c.ProduceBolus)
-                bolusList.Add(await BuildBolusAsync(treatment, correlationId, ct));
+            {
+                sentBolus = await BuildBolusAsync(treatment, correlationId, ct);
+                bolusList.Add(sentBolus);
+            }
 
             if (c.ProduceCarbIntake)
             {
@@ -1359,7 +1373,12 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 noteList.Add(MapToNote(treatment, correlationId, c.IsAnnouncement));
 
             if (c.ProduceBolusCalc)
-                bolusCalcList.Add(MapToBolusCalculation(treatment, correlationId));
+            {
+                var sentCalculation = MapToBolusCalculation(treatment, correlationId);
+                bolusCalcList.Add(sentCalculation);
+                if (sentBolus is not null)
+                    bolusCalcLinks.Add((sentBolus, sentCalculation));
+            }
 
             if (c.ProduceDeviceEvent)
             {
@@ -1371,10 +1390,6 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                     pumpSuspendResumeTreatments.Add((treatment, c.ParsedDeviceEventType));
                 }
             }
-
-            // Track for post-insert linking
-            if (c.ProduceBolus && c.ProduceBolusCalc && treatment.Id != null)
-                bolusCalcLinkTreatmentIds.Add(treatment.Id);
         }
 
         if (result.SkippedUnsupported > 0)
@@ -1396,9 +1411,12 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         foreach (var (treatment, correlationId, _, _, _) in stateSpanTreatments.Where(t => t.IsProfileSwitch))
         {
             var spanResult = new V4Models.DecompositionResult { CorrelationId = correlationId };
-            await DecomposeProfileSwitchAsync(treatment, spanResult, origin, ct);
+            var spanWritten = await DecomposeProfileSwitchAsync(treatment, spanResult, origin, ct);
             result.CreatedRecords.AddRange(spanResult.CreatedRecords);
             result.UpdatedRecords.AddRange(spanResult.UpdatedRecords);
+            result.SkippedDeleted += spanResult.SkippedDeleted;
+            if (!spanWritten)
+                continue;
 
             var icfg = ExtractAapsIcfg(treatment);
             if (icfg is not null)
@@ -1478,31 +1496,61 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
             result.CreatedRecords.AddRange(spanResult.CreatedRecords);
             result.UpdatedRecords.AddRange(spanResult.UpdatedRecords);
+            result.SkippedDeleted += spanResult.SkippedDeleted;
         }
 
-        // Post-insert linking: Bolus → BolusCalculation by matching LegacyId
-        if (bolusCalcLinkTreatmentIds.Count > 0)
-        {
-            var persisted = result.CreatedRecords.Concat(result.UpdatedRecords).ToList();
-            var persistedBoluses = persisted.OfType<V4Models.Bolus>()
-                .Where(b => b.LegacyId != null && bolusCalcLinkTreatmentIds.Contains(b.LegacyId))
-                .ToList();
-            var persistedCalcs = persisted.OfType<V4Models.BolusCalculation>()
-                .Where(c => c.LegacyId != null && bolusCalcLinkTreatmentIds.Contains(c.LegacyId))
-                .ToDictionary(c => c.LegacyId!);
-
-            foreach (var bolus in persistedBoluses)
-            {
-                if (persistedCalcs.TryGetValue(bolus.LegacyId!, out var calc)
-                    && bolus.BolusCalculationId != calc.Id)
-                {
-                    bolus.BolusCalculationId = calc.Id;
-                    await _bolusRepository.UpdateAsync(bolus.Id, bolus, origin, ct);
-                }
-            }
-        }
+        if (bolusCalcLinks.Count > 0)
+            await LinkBolusCalculationsAsync(bolusCalcLinks, result, origin, ct);
 
         return result;
+    }
+
+    /// <summary>
+    /// Points each persisted bolus at the calculation its treatment produced, as the single path does
+    /// from its own result. A persisted record is found by the key the write matched it on: a bolus
+    /// upserted onto a stored row by its sync key keeps that row's legacy id, so a resend under
+    /// another id is only found by (DataSource, SyncIdentifier).
+    /// </summary>
+    private async Task LinkBolusCalculationsAsync(
+        List<(V4Models.Bolus Bolus, V4Models.BolusCalculation Calculation)> links,
+        V4Models.DecompositionResult result,
+        WriteOrigin origin,
+        CancellationToken ct)
+    {
+        var persisted = result.CreatedRecords.Concat(result.UpdatedRecords).ToList();
+        var bolusesBySyncKey = new Dictionary<(string, string), V4Models.Bolus>();
+        var bolusesByLegacyId = new Dictionary<string, V4Models.Bolus>(StringComparer.Ordinal);
+        foreach (var bolus in persisted.OfType<V4Models.Bolus>())
+        {
+            if (!string.IsNullOrEmpty(bolus.DataSource) && !string.IsNullOrEmpty(bolus.SyncIdentifier))
+                bolusesBySyncKey[(bolus.DataSource, bolus.SyncIdentifier)] = bolus;
+            if (bolus.LegacyId is { } legacyId)
+                bolusesByLegacyId[legacyId] = bolus;
+        }
+
+        var calculationsByLegacyId = new Dictionary<string, V4Models.BolusCalculation>(StringComparer.Ordinal);
+        foreach (var calculation in persisted.OfType<V4Models.BolusCalculation>())
+        {
+            if (calculation.LegacyId is { } legacyId)
+                calculationsByLegacyId[legacyId] = calculation;
+        }
+
+        foreach (var (sentBolus, sentCalculation) in links)
+        {
+            var bolus = !string.IsNullOrEmpty(sentBolus.DataSource) && !string.IsNullOrEmpty(sentBolus.SyncIdentifier)
+                && bolusesBySyncKey.TryGetValue((sentBolus.DataSource, sentBolus.SyncIdentifier), out var bySyncKey)
+                    ? bySyncKey
+                    : sentBolus.LegacyId is { } bolusLegacyId ? bolusesByLegacyId.GetValueOrDefault(bolusLegacyId) : null;
+            var calculation = sentCalculation.LegacyId is { } calculationLegacyId
+                ? calculationsByLegacyId.GetValueOrDefault(calculationLegacyId)
+                : null;
+
+            if (bolus != null && calculation != null && bolus.BolusCalculationId != calculation.Id)
+            {
+                bolus.BolusCalculationId = calculation.Id;
+                await _bolusRepository.UpdateAsync(bolus.Id, bolus, origin, ct);
+            }
+        }
     }
 
     /// <inheritdoc />

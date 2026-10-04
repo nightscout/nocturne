@@ -12,6 +12,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Connectors.Nightscout.Tests.TestSupport;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -322,15 +323,15 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
     }
 
     /// <summary>
-    /// A treatment written back on its create is sent again under another id, naming its stored
-    /// record only by its sync key (a Loop-style resend). The resend updates that record, which keeps
+    /// A connector treatment written back on its create is republished under another id, naming its
+    /// stored record only by its sync key. The republish updates that record, which keeps
     /// the key it went upstream under, so write-back looks the copy up before writing and lands on
     /// it: sent as a create under the new id, 15.0.8 would store a second copy beside it.
     /// </summary>
     [Theory]
     [InlineData("15.0.8")]
     [InlineData("15.0.6")]
-    public async Task ASyncKeyReupload_IsLookedUpBeforeItIsWritten_AndLeavesOneCopy(string version)
+    public async Task AConnectorRepublishMatchedBySyncKey_IsLookedUpBeforeItIsWritten_AndLeavesOneCopy(string version)
     {
         var slot = UniqueSlot();
         var legacyId = MongoObjectId.NewObjectId();
@@ -342,7 +343,7 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
             new Treatment
             {
                 Id = legacyId, EventType = "Correction Bolus", Insulin = 0.7, CreatedAt = At(slot),
-                DataSource = "loop", SyncIdentifier = syncIdentifier,
+                DataSource = DataSources.GlookoConnector, SyncIdentifier = syncIdentifier,
             },
         ]));
         var bolus = (await LiveBolusesAsync(slot)).Single().Id;
@@ -354,7 +355,7 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
             new Treatment
             {
                 Id = MongoObjectId.NewObjectId(), EventType = "Correction Bolus", Insulin = 1.1, CreatedAt = At(slot),
-                DataSource = "loop", SyncIdentifier = syncIdentifier,
+                DataSource = DataSources.GlookoConnector, SyncIdentifier = syncIdentifier,
             },
         ]));
 

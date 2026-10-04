@@ -173,6 +173,49 @@ public class TreatmentDecomposerTests : IDisposable
             Times.Once);
     }
 
+    /// <summary>
+    /// A profile switch the user deleted is withheld whole: its inline profile writes no therapy
+    /// settings, which would otherwise report the create as an update and write it back as an edit.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeAsync_AReuploadOfADeletedProfileSwitchWithInlineProfile_WritesNoTherapySettings()
+    {
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan ss, CancellationToken _) => new StateSpanUpsert(ss, StateSpanUpsertOutcome.Blocked));
+        var treatment = SpanTreatment("Profile Switch");
+        treatment.ProfileJson = """{"dia":3,"units":"mg/dl"}""";
+
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.Should().BeEmpty();
+        result.SkippedDeleted.Should().Be(1);
+        _profileDecomposerMock.Verify(
+            p => p.DecomposeProfileSwitchAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    /// <inheritdoc cref="DecomposeAsync_AReuploadOfADeletedProfileSwitchWithInlineProfile_WritesNoTherapySettings"/>
+    [Fact]
+    public async Task DecomposeBatchAsync_AReuploadOfADeletedProfileSwitchWithInlineProfile_WritesNoTherapySettings()
+    {
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan ss, CancellationToken _) => new StateSpanUpsert(ss, StateSpanUpsertOutcome.Blocked));
+        var treatment = SpanTreatment("Profile Switch");
+        treatment.ProfileJson = """{"dia":3,"units":"mg/dl"}""";
+
+        var result = await _decomposer.DecomposeBatchAsync([treatment], WriteOrigin.Live);
+
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.Should().BeEmpty();
+        result.SkippedDeleted.Should().Be(1);
+        _profileDecomposerMock.Verify(
+            p => p.DecomposeProfileSwitchAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     #endregion
 
     #region Meal Bolus → Bolus + CarbIntake

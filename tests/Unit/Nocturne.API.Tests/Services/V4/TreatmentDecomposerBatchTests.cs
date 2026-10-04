@@ -300,6 +300,58 @@ public class TreatmentDecomposerBatchTests : IDisposable
         bolus.BolusCalculationId.Should().Be(calc.Id);
     }
 
+    /// <summary>
+    /// A resend under another id whose bolus the bulk write upserts onto a stored row by its sync
+    /// key gets that row back under the row's own legacy id, so the link cannot go by the incoming id.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_LinksASyncUpsertedBolusKeepingItsStoredLegacyIdToItsCalculation()
+    {
+        var storedBolusId = Guid.CreateVersion7();
+        _bolusRepoMock
+            .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.Bolus> records, WriteOrigin _, CancellationToken _) =>
+            {
+                var stored = records.Select(r => new V4Models.Bolus
+                {
+                    Id = storedBolusId,
+                    LegacyId = "stored-1",
+                    DataSource = r.DataSource,
+                    SyncIdentifier = r.SyncIdentifier,
+                    Insulin = r.Insulin,
+                    Timestamp = r.Timestamp,
+                }).ToList();
+                return new BulkWrite<V4Models.Bolus>(stored, 0) { Updated = stored };
+            });
+
+        var treatments = new List<Treatment>
+        {
+            new()
+            {
+                Id = "resent-1",
+                EventType = "Bolus Wizard",
+                Mills = 1700000000000,
+                Insulin = 3.0,
+                Carbs = 30,
+                BloodGlucoseInput = 150,
+                CR = 10,
+                SyncIdentifier = "sync-1",
+                DataSource = "dexcom-connector",
+            },
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
+
+        var calc = result.CreatedRecords.OfType<V4Models.BolusCalculation>().Single();
+        _bolusRepoMock.Verify(
+            x => x.UpdateAsync(
+                storedBolusId,
+                It.Is<V4Models.Bolus>(b => b.BolusCalculationId == calc.Id),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        result.UpdatedRecords.OfType<V4Models.Bolus>().Single().BolusCalculationId.Should().Be(calc.Id);
+    }
+
     [Fact]
     public async Task DecomposeBatchAsync_GivesEachTreatmentItsOwnCorrelationId()
     {
