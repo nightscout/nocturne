@@ -80,7 +80,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
             var existing = await FindGoverningRowAsync(ctx, dataSource, syncIdentifier, ct);
 
             if (existing?.DeletedAt != null)
-                throw RecreationBlockedException.ForSyncKey(typeof(TModel).Name, dataSource, syncIdentifier);
+                throw RecreationBlockedException.ForSyncKey(typeof(TModel).Name, dataSource, syncIdentifier, existing.Id);
 
             if (existing != null)
             {

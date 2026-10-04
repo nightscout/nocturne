@@ -22,9 +22,13 @@ public sealed class RecreationBlockedException : Exception
     }
 
     /// <summary>The sync key's phrasing, shared by every path that refuses one.</summary>
+    /// <param name="recordType">The refused record's type name.</param>
+    /// <param name="dataSource">The sync key's data source.</param>
+    /// <param name="syncIdentifier">The sync key's identifier.</param>
+    /// <param name="heldBy">The stored row holding the key, when the refusing path read it (<see cref="HeldBy"/>).</param>
     public static RecreationBlockedException ForSyncKey(
-        string recordType, string dataSource, string syncIdentifier)
-        => new(recordType, SyncKeyIdentity(dataSource, syncIdentifier));
+        string recordType, string dataSource, string syncIdentifier, Guid? heldBy = null)
+        => new(recordType, SyncKeyIdentity(dataSource, syncIdentifier)) { HeldBy = heldBy };
 
     public static RecreationBlockedException ForRestore(string recordType, string heldIdentity)
         => new($"A newer version of this {recordType} exists: a live {recordType} already holds {heldIdentity}, so this one cannot be restored.");
