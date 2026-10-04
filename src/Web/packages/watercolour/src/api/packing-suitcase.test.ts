@@ -76,12 +76,20 @@ describe('PackingSuitcase', () => {
     expect(brushes(packs.at(-1)!).some((b) => b.pigment === PIGMENTS.clasp && b.path.length === 1)).toBe(true);
   });
 
-  it('starts the hardware within a second of the completing pack, on a sheet dried for it', () => {
+  it('starts the hardware within a second of the completing pack, each part on a sheet dried for it', () => {
     const last = packAll(suitcase(), 3).at(-1)!;
+    const ticks = (match: (op: TimedOp['op']) => boolean) => last.filter(({ op }) => match(op)).map((o) => o.afterTicks);
+    const isBrush = (pigment: number) => (op: TimedOp['op']) => typeof op === 'object' && 'brush' in op && (op.brush as Brush).pigment === pigment;
+    const [strapLift, claspLift] = ticks((op) => typeof op === 'object' && 'lift' in op);
+    const [beforeStrap, beforeClasp] = ticks((op) => op === 'dry_all');
+    const lastBandSpan = Math.max(...ticks((op) => typeof op === 'object' && 'brush' in op && PIGMENTS.bands.includes((op.brush as Brush).pigment)));
+    const lastHandleSpan = Math.max(...ticks(isBrush(PIGMENTS.hardware)));
+    expect(lastBandSpan).toBeLessThan(beforeStrap!);
+    expect(beforeStrap).toBeLessThan(strapLift!);
+    expect(lastHandleSpan).toBeLessThan(beforeClasp!);
+    expect(beforeClasp).toBeLessThan(claspLift!);
+    expect(strapLift).toBeLessThan(30);
     expect(Math.max(...last.map((o) => o.afterTicks))).toBeLessThan(60);
-    const strapAt = Math.min(...last.filter(({ op }) => typeof op === 'object' && 'brush' in op && (op.brush as Brush).pigment === PIGMENTS.hardware).map((o) => o.afterTicks));
-    expect(strapAt).toBeLessThan(30);
-    expect(last.some(({ op, afterTicks }) => op === 'dry_all' && afterTicks < strapAt)).toBe(true);
   });
 
   it('glazes the whole body for an item packed after it is full, without new hardware', () => {
@@ -223,6 +231,12 @@ describe('packingSuitcaseScene', () => {
     const lastBandTick = Math.max(...before.filter((e) => typeof e.op === 'object' && e.op !== null && 'brush' in e.op).map((e) => e.at_tick));
     const dried = before.filter((e) => e.op === 'dry_all').at(-1)!;
     expect(dried.at_tick - lastBandTick).toBeGreaterThanOrEqual(6);
+  });
+
+  it('replays a completed list in well under the ticks of a catalogue reveal', () => {
+    const { sceneJson } = packingSuitcaseScene(module, 120, 120, { packed: ['a', 'b'], unpacked: 0 });
+    const { timeline } = JSON.parse(sceneJson) as Doc;
+    expect(timeline.total_ticks).toBeLessThan(120);
   });
 
   it('refuses a donor without the pigments it paints with', () => {
