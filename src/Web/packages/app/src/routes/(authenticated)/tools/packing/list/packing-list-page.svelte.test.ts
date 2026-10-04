@@ -62,22 +62,20 @@ describe("packing list page", () => {
     await expect.element(page.getByText("All packed")).toBeVisible();
   });
 
-  it("washes the header once everything is packed, and drops the wash on an unpack", async () => {
+  it("says everything is packed with the suitcase alone, and takes it back on an unpack", async () => {
     const header = page.getByTestId("packing-header");
     render(PackingListPage, {});
-    // The suitcase is the header's only canvas until the confirmation wash joins it.
     await expect.poll(() => header.element().querySelectorAll("canvas").length).toBe(1);
 
     await packed("Test strips").click();
     await packed("Pen needles").click();
 
     await expect.element(page.getByText("All packed")).toBeVisible();
-    await expect.poll(() => header.element().querySelectorAll("canvas").length).toBe(2);
+    expect(header.element().querySelectorAll("canvas")).toHaveLength(1);
 
     await packed("Pen needles").click();
 
     await expect.element(page.getByText("1/2 packed")).toBeVisible();
-    await expect.poll(() => header.element().querySelectorAll("canvas").length).toBe(1);
   });
 
   it("pins the header so the suitcase stays in view while ticking", async () => {
