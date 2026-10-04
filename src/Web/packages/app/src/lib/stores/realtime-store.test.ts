@@ -45,6 +45,7 @@ interface StoreInternals {
   handleUpdate(event: StorageEvent): void;
   handleDelete(event: StorageEvent): void;
   performBackfillIfNeeded(force?: boolean): Promise<void>;
+  handleDataUpdate(event: { data: unknown[] }): void;
   handleVisibilityChange: (() => void) | null;
   websocketClient: {
     connectionStatus: WebSocketConnectionStatus;
@@ -66,6 +67,7 @@ type TestStore = StoreInternals &
     | "connectionPresentation"
     | "currentReservoir"
     | "entries"
+    | "boluses"
     | "currentEntry"
     | "bgDelta"
     | "direction"
@@ -756,6 +758,51 @@ describe("RealtimeStore tracker updates", () => {
 
     expect(store.trackerInstances.map((i) => i.id)).toEqual(["sensor"]);
 
+    store.destroy();
+  });
+});
+
+describe("RealtimeStore merging", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    api.getCurrentTherapyState.mockResolvedValue({ reservoir: null });
+    api.apsGetAll.mockResolvedValue({ data: [] });
+    api.emptyPage.mockResolvedValue({ data: [] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it("keeps a reading already held under another id, and adds only the new one", async () => {
+    const store = makeStore();
+    store.entries = [{ _id: "socket-id", type: "sgv", sgv: 120, mills: 1_000 }];
+
+    store.handleDataUpdate({
+      data: [
+        { _id: "uuid-id", type: "sgv", sgv: 120, mills: 1_000 },
+        { _id: "socket-id", type: "sgv", sgv: 99, mills: 2_000 },
+        { _id: "fresh", type: "sgv", sgv: 130, mills: 3_000 },
+        { _id: "fresh", type: "sgv", sgv: 130, mills: 3_000 },
+      ],
+    });
+
+    expect(store.entries.map((entry) => entry._id)).toEqual(["fresh", "socket-id"]);
+    store.destroy();
+  });
+
+  it("backfills only boluses it does not already hold", async () => {
+    const store = makeStore();
+    const now = Date.now();
+    store.boluses = [{ id: "b1", mills: now - 1_000 }] as typeof store.boluses;
+    api.emptyPage.mockImplementation(async () => ({ data: [] }));
+    const pages = [{ id: "b1", mills: now - 1_000 }, { id: "b2", mills: now - 500 }];
+    api.emptyPage.mockImplementation(async (_from, _to, limit) => ({ data: limit === 500 ? pages : [] }));
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(store.boluses.map((bolus) => bolus.id)).toEqual(["b2", "b1"]);
     store.destroy();
   });
 });

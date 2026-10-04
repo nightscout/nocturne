@@ -20,7 +20,7 @@
 
   // Calculate daily stats from today's entries
   const dailyStats = $derived.by(() => {
-    const now = realtimeStore.now;
+    const now = realtimeStore.nowMinute;
     const startOfDayMs = timeDay.floor(new Date(now)).getTime();
 
     const todayEntries = realtimeStore.entries.filter(

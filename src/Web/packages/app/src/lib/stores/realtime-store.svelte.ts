@@ -247,9 +247,12 @@ export class RealtimeStore {
     return `${mins} min ago`;
   });
 
+  /** `now` at minute resolution, so windows cut from it re-evaluate once a minute rather than every tick. */
+  nowMinute = $derived(Math.floor(this.now / 60_000) * 60_000);
+
   /** Recent v4 entries — merged boluses + carb intakes + bg checks + notes + device events */
   recentEntries = $derived.by((): EntryRecord[] => {
-    const oneDayAgo = this.now - 24 * 60 * 60 * 1000;
+    const oneDayAgo = this.nowMinute - 24 * 60 * 60 * 1000;
     return mergeEntryRecords({
       boluses: this.boluses.filter((b) => (b.mills ?? 0) > oneDayAgo),
       carbIntakes: this.carbIntakes.filter((c) => (c.mills ?? 0) > oneDayAgo),
@@ -568,14 +571,7 @@ export class RealtimeStore {
     this.updateLastDataReceived();
 
     // Merge new entries with existing ones, avoiding duplicates
-    const newEntries = event.data.filter(
-      (newEntry) =>
-        !this.entries.some(
-          (existing) =>
-            existing._id === newEntry._id ||
-            (existing.mills === newEntry.mills && existing.sgv === newEntry.sgv)
-        )
-    );
+    const newEntries = unseenEntries(this.entries, event.data);
 
     if (newEntries.length > 0) {
       this.entries = [...this.entries, ...newEntries]
@@ -1016,9 +1012,7 @@ export class RealtimeStore {
       const result = await apiClient.apsSnapshot.getAll(from, to, 5);
       const snapshots = result.data ?? [];
       if (snapshots.length === 0) return;
-      const added = snapshots.filter(
-        (s: ApsSnapshot) => !this.apsSnapshots.some((existing) => existing.id === s.id)
-      );
+      const added = unseenById(this.apsSnapshots, snapshots);
       if (added.length > 0) {
         this.apsSnapshots = [...added, ...this.apsSnapshots]
           .sort((a, b) => (b.mills || 0) - (a.mills || 0))
@@ -1079,12 +1073,7 @@ export class RealtimeStore {
 
       // Merge entries
       if (entries && entries.length > 0) {
-        const newEntries = entries.filter(
-          (newEntry: Entry) => !this.entries.some(
-            (existing) => existing._id === newEntry._id ||
-              (existing.mills === newEntry.mills && existing.sgv === newEntry.sgv)
-          )
-        );
+        const newEntries = unseenEntries(this.entries, entries);
         if (newEntries.length > 0) {
           this.entries = [...this.entries, ...newEntries]
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
@@ -1110,9 +1099,7 @@ export class RealtimeStore {
 
       // Merge v4 records
       if (boluses && boluses.length > 0) {
-        const newBoluses = boluses.filter(
-          (b: Bolus) => !this.boluses.some((existing) => existing.id === b.id)
-        );
+        const newBoluses = unseenById(this.boluses, boluses);
         if (newBoluses.length > 0) {
           this.boluses = [...this.boluses, ...newBoluses]
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
@@ -1121,9 +1108,7 @@ export class RealtimeStore {
         }
       }
       if (carbIntakes && carbIntakes.length > 0) {
-        const newCarbs = carbIntakes.filter(
-          (c: CarbIntake) => !this.carbIntakes.some((existing) => existing.id === c.id)
-        );
+        const newCarbs = unseenById(this.carbIntakes, carbIntakes);
         if (newCarbs.length > 0) {
           this.carbIntakes = [...this.carbIntakes, ...newCarbs]
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
@@ -1132,9 +1117,7 @@ export class RealtimeStore {
         }
       }
       if (bgChecks && bgChecks.length > 0) {
-        const newBg = bgChecks.filter(
-          (b: BGCheck) => !this.bgChecks.some((existing) => existing.id === b.id)
-        );
+        const newBg = unseenById(this.bgChecks, bgChecks);
         if (newBg.length > 0) {
           this.bgChecks = [...this.bgChecks, ...newBg]
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
@@ -1143,9 +1126,7 @@ export class RealtimeStore {
         }
       }
       if (notes && notes.length > 0) {
-        const newNotes = notes.filter(
-          (n: Note) => !this.notes.some((existing) => existing.id === n.id)
-        );
+        const newNotes = unseenById(this.notes, notes);
         if (newNotes.length > 0) {
           this.notes = [...this.notes, ...newNotes]
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
@@ -1154,9 +1135,7 @@ export class RealtimeStore {
         }
       }
       if (devEvents && devEvents.length > 0) {
-        const newDevEvents = devEvents.filter(
-          (d: DeviceEvent) => !this.deviceEvents.some((existing) => existing.id === d.id)
-        );
+        const newDevEvents = unseenById(this.deviceEvents, devEvents);
         if (newDevEvents.length > 0) {
           this.deviceEvents = [...this.deviceEvents, ...newDevEvents]
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
@@ -1166,9 +1145,7 @@ export class RealtimeStore {
       }
 
       if (newApsSnapshots && newApsSnapshots.length > 0) {
-        const addedSnapshots = newApsSnapshots.filter(
-          (s: ApsSnapshot) => !this.apsSnapshots.some((existing) => existing.id === s.id)
-        );
+        const addedSnapshots = unseenById(this.apsSnapshots, newApsSnapshots);
         if (addedSnapshots.length > 0) {
           this.apsSnapshots = [...this.apsSnapshots, ...addedSnapshots]
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
@@ -1200,6 +1177,12 @@ export class RealtimeStore {
   private updateLastDataReceived(): void {
     this.lastDataReceived = Date.now();
   }
+}
+
+/** The pending records whose `id` is not among the known ones. */
+function unseenById<T extends { id?: string }>(known: readonly T[], pending: readonly T[]): T[] {
+  const ids = new Set(known.map((record) => record.id));
+  return pending.filter((record) => !ids.has(record.id));
 }
 
 /** Creates a realtime store and sets it in context (singleton - only creates once) */
