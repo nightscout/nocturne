@@ -143,11 +143,63 @@ public class DataOverviewService : IDataOverviewService
         };
     }
 
+    public async Task<YearSummaryResponse> GetYearSummaryAsync(
+        int year,
+        string[]? dataSources = null,
+        CancellationToken cancellationToken = default)
+    {
+        var reads = new YearMetricReads();
+        dataSources = dataSources?.ToArray();
+        var result = new YearSummaryResponse();
+        try
+        {
+            reads.TimeZone = await GetUserTimeZoneAsync(cancellationToken);
+        }
+        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
+        {
+            _logger.LogWarning(ex, "Failed to resolve timezone for year {Year}", year);
+            return result;
+        }
+
+        async Task ReadDailyAsync()
+        {
+            try
+            {
+                result.DailySummary = await GetDailySummaryAsync(year, dataSources, reads, cancellationToken);
+            }
+            catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
+            {
+                _logger.LogWarning(ex, "Failed to build daily summary for year {Year}", year);
+            }
+        }
+
+        async Task ReadGriAsync()
+        {
+            try
+            {
+                result.GriTimeline = await GetGriTimelineAsync(year, dataSources, reads, cancellationToken);
+            }
+            catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
+            {
+                _logger.LogWarning(ex, "Failed to build GRI timeline for year {Year}", year);
+            }
+        }
+        await Task.WhenAll(ReadDailyAsync(), ReadGriAsync());
+        return result;
+    }
+
     /// <inheritdoc />
-    public async Task<DailySummaryResponse> GetDailySummaryAsync(
+    public Task<DailySummaryResponse> GetDailySummaryAsync(
         int year,
         string[]? dataSources = null,
         CancellationToken cancellationToken = default
+    ) => GetDailySummaryAsync(year, dataSources, null, cancellationToken);
+
+    private async Task<DailySummaryResponse> GetDailySummaryAsync(
+        int year,
+        string[]? dataSources,
+        YearMetricReads? reads,
+        CancellationToken cancellationToken
     )
     {
         _logger.LogDebug(
@@ -158,7 +210,9 @@ public class DataOverviewService : IDataOverviewService
 
         await using var context = await _factory.CreateAsync(cancellationToken);
 
-        var tz = await GetUserTimeZoneAsync(cancellationToken);
+        var tz = reads?.TimeZone ?? await GetUserTimeZoneAsync(cancellationToken);
+        if (reads is not null)
+            reads.TimeZone = tz;
         var (startUtc, endUtc) = LocalYearBoundsUtc(year, tz);
 
         var dayGrouping = LocalDayGrouping.Create(year, tz);
@@ -194,6 +248,7 @@ public class DataOverviewService : IDataOverviewService
             hasFilter,
             dayMap,
             tz,
+            reads,
             cancellationToken
         );
 
@@ -206,6 +261,7 @@ public class DataOverviewService : IDataOverviewService
             hasFilter,
             dayMap,
             tz,
+            reads,
             cancellationToken
         );
 
@@ -218,6 +274,7 @@ public class DataOverviewService : IDataOverviewService
             hasFilter,
             dayMap,
             tz,
+            reads,
             cancellationToken
         );
 
@@ -241,10 +298,17 @@ public class DataOverviewService : IDataOverviewService
     }
 
     /// <inheritdoc />
-    public async Task<GriTimelineResponse> GetGriTimelineAsync(
+    public Task<GriTimelineResponse> GetGriTimelineAsync(
         int year,
         string[]? dataSources = null,
         CancellationToken cancellationToken = default
+    ) => GetGriTimelineAsync(year, dataSources, null, cancellationToken);
+
+    private async Task<GriTimelineResponse> GetGriTimelineAsync(
+        int year,
+        string[]? dataSources,
+        YearMetricReads? reads,
+        CancellationToken cancellationToken
     )
     {
         _logger.LogDebug(
@@ -255,7 +319,9 @@ public class DataOverviewService : IDataOverviewService
 
         await using var context = await _factory.CreateAsync(cancellationToken);
 
-        var tz = await GetUserTimeZoneAsync(cancellationToken);
+        var tz = reads?.TimeZone ?? await GetUserTimeZoneAsync(cancellationToken);
+        if (reads is not null)
+            reads.TimeZone = tz;
         var hasFilter = dataSources is { Length: > 0 };
         var periods = new List<GriTimelinePeriod>();
 
@@ -277,7 +343,7 @@ public class DataOverviewService : IDataOverviewService
                 .ExcludeNonPrimary(context, RecordType.SensorGlucose)
                 .Select(e => new { e.Timestamp, e.Mgdl }),
             r => r.Timestamp, r => r.Mgdl, allGlucoseByMonth, tz,
-            "Failed to collect SensorGlucose for GRI year {Year}", year, cancellationToken);
+            "Failed to collect SensorGlucose for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.Sensor);
         if (!sensorRead)
             return new GriTimelineResponse { Year = year };
 
@@ -289,7 +355,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Select(e => new { e.Timestamp, e.Mgdl }),
             r => r.Timestamp, r => r.Mgdl, allGlucoseByMonth, tz,
-            "Failed to collect MeterGlucose for GRI year {Year}", year, cancellationToken);
+            "Failed to collect MeterGlucose for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.Meter);
 
         // --- Collect insulin totals by month (manual bolus, algorithm bolus, temp basal) ---
         // Manual boluses
@@ -302,7 +368,7 @@ public class DataOverviewService : IDataOverviewService
                 .ExcludeNonPrimary(context, RecordType.Bolus)
                 .Select(e => new { e.Timestamp, e.Insulin }),
             r => r.Timestamp, r => r.Insulin, manualBolusByMonth, tz,
-            "Failed to collect manual bolus totals for GRI year {Year}", year, cancellationToken);
+            "Failed to collect manual bolus totals for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.ManualBolus);
 
         // Algorithm boluses (APS SMBs -> basal)
         var algorithmBolusByMonth = new Dictionary<int, double>();
@@ -314,7 +380,7 @@ public class DataOverviewService : IDataOverviewService
                 .ExcludeNonPrimary(context, RecordType.Bolus)
                 .Select(e => new { e.Timestamp, e.Insulin }),
             r => r.Timestamp, r => r.Insulin, algorithmBolusByMonth, tz,
-            "Failed to collect algorithm bolus totals for GRI year {Year}", year, cancellationToken);
+            "Failed to collect algorithm bolus totals for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.AlgorithmBolus);
 
         // TempBasals (pump basal delivery): insulin = rate * duration, defaulting to a 5-minute span.
         var tempBasalByMonth = new Dictionary<int, double>();
@@ -329,7 +395,7 @@ public class DataOverviewService : IDataOverviewService
                 ? (r.EndTimestamp.Value - r.StartTimestamp).TotalHours
                 : 5.0 / 60.0),
             tempBasalByMonth, tz,
-            "Failed to collect TempBasal totals for GRI year {Year}", year, cancellationToken);
+            "Failed to collect TempBasal totals for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.TempBasal);
 
         // --- Collect carb totals by month ---
         var carbsByMonth = new Dictionary<int, double>();
@@ -340,7 +406,7 @@ public class DataOverviewService : IDataOverviewService
                 .ExcludeNonPrimary(context, RecordType.CarbIntake)
                 .Select(e => new { e.Timestamp, e.Carbs }),
             r => r.Timestamp, r => r.Carbs, carbsByMonth, tz,
-            "Failed to collect carb totals for GRI year {Year}", year, cancellationToken);
+            "Failed to collect carb totals for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.Carbs);
 
         // --- Group by month and compute GRI, TDD, carbs per period ---
         for (var month = 1; month <= 12; month++)
@@ -626,11 +692,13 @@ public class DataOverviewService : IDataOverviewService
         TimeZoneInfo tz,
         string failureMessage,
         int year,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        YearMetricReads? reads,
+        YearMetricSource source)
     {
         try
         {
-            var rows = await query.ToListAsync(cancellationToken);
+            var rows = await query.ReadMetricRowsAsync(reads, source, cancellationToken);
             foreach (var row in rows)
             {
                 var month = TimestampToMonth(timestampSelector(row), tz);
@@ -662,11 +730,13 @@ public class DataOverviewService : IDataOverviewService
         TimeZoneInfo tz,
         string failureMessage,
         int year,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        YearMetricReads? reads,
+        YearMetricSource source)
     {
         try
         {
-            var rows = await query.ToListAsync(cancellationToken);
+            var rows = await query.ReadMetricRowsAsync(reads, source, cancellationToken);
             foreach (var row in rows)
             {
                 var value = valueSelector(row);
@@ -850,6 +920,7 @@ public class DataOverviewService : IDataOverviewService
         bool hasFilter,
         Dictionary<string, DailySummaryDay> dayMap,
         TimeZoneInfo tz,
+        YearMetricReads? reads,
         CancellationToken cancellationToken
     )
     {
@@ -865,7 +936,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .ExcludeNonPrimary(context, RecordType.SensorGlucose)
                 .Select(e => new { e.Timestamp, e.Mgdl })
-                .ToListAsync(cancellationToken);
+                .ReadMetricRowsAsync(reads, YearMetricSource.Sensor, cancellationToken);
 
             allReadings.AddRange(sensorReadings.Select(r => (r.Timestamp, r.Mgdl)));
         }
@@ -883,7 +954,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Select(e => new { e.Timestamp, e.Mgdl })
-                .ToListAsync(cancellationToken);
+                .ReadMetricRowsAsync(reads, YearMetricSource.Meter, cancellationToken);
 
             allReadings.AddRange(meterReadings.Select(r => (r.Timestamp, r.Mgdl)));
         }
@@ -945,6 +1016,7 @@ public class DataOverviewService : IDataOverviewService
         bool hasFilter,
         Dictionary<string, DailySummaryDay> dayMap,
         TimeZoneInfo tz,
+        YearMetricReads? reads,
         CancellationToken cancellationToken
     )
     {
@@ -959,7 +1031,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .ExcludeNonPrimary(context, RecordType.Bolus)
                 .Select(e => new { e.Timestamp, e.Insulin })
-                .ToListAsync(cancellationToken);
+                .ReadMetricRowsAsync(reads, YearMetricSource.ManualBolus, cancellationToken);
 
             if (bolusRecords.Count > 0)
             {
@@ -996,7 +1068,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .ExcludeNonPrimary(context, RecordType.Bolus)
                 .Select(e => new { e.Timestamp, e.Insulin })
-                .ToListAsync(cancellationToken);
+                .ReadMetricRowsAsync(reads, YearMetricSource.AlgorithmBolus, cancellationToken);
 
             if (algorithmBolusRecords.Count > 0)
             {
@@ -1039,7 +1111,7 @@ public class DataOverviewService : IDataOverviewService
                     e.Rate,
                     e.EndTimestamp,
                 })
-                .ToListAsync(cancellationToken);
+                .ReadMetricRowsAsync(reads, YearMetricSource.TempBasal, cancellationToken);
 
             if (tempBasalRecords.Count > 0)
             {
@@ -1096,6 +1168,7 @@ public class DataOverviewService : IDataOverviewService
         bool hasFilter,
         Dictionary<string, DailySummaryDay> dayMap,
         TimeZoneInfo tz,
+        YearMetricReads? reads,
         CancellationToken cancellationToken
     )
     {
@@ -1108,7 +1181,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .ExcludeNonPrimary(context, RecordType.CarbIntake)
                 .Select(e => new { e.Timestamp, e.Carbs })
-                .ToListAsync(cancellationToken);
+                .ReadMetricRowsAsync(reads, YearMetricSource.Carbs, cancellationToken);
 
             if (carbRecords.Count == 0)
                 return;
