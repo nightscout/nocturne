@@ -76,6 +76,22 @@ describe('PackingSuitcase', () => {
     expect(brushes(packs.at(-1)!).some((b) => b.pigment === PIGMENTS.clasp && b.path.length === 1)).toBe(true);
   });
 
+  it('starts the hardware within a second of the completing pack, each part on a sheet dried for it', () => {
+    const last = packAll(suitcase(), 3).at(-1)!;
+    const ticks = (match: (op: TimedOp['op']) => boolean) => last.filter(({ op }) => match(op)).map((o) => o.afterTicks);
+    const isBrush = (pigment: number) => (op: TimedOp['op']) => typeof op === 'object' && 'brush' in op && (op.brush as Brush).pigment === pigment;
+    const [strapLift, claspLift] = ticks((op) => typeof op === 'object' && 'lift' in op);
+    const [beforeStrap, beforeClasp] = ticks((op) => op === 'dry_all');
+    const lastBandSpan = Math.max(...ticks((op) => typeof op === 'object' && 'brush' in op && PIGMENTS.bands.includes((op.brush as Brush).pigment)));
+    const lastHandleSpan = Math.max(...ticks(isBrush(PIGMENTS.hardware)));
+    expect(lastBandSpan).toBeLessThan(beforeStrap!);
+    expect(beforeStrap).toBeLessThan(strapLift!);
+    expect(lastHandleSpan).toBeLessThan(beforeClasp!);
+    expect(beforeClasp).toBeLessThan(claspLift!);
+    expect(strapLift).toBeLessThan(30);
+    expect(Math.max(...last.map((o) => o.afterTicks))).toBeLessThan(60);
+  });
+
   it('glazes the whole body for an item packed after it is full, without new hardware', () => {
     const painter = suitcase();
     packAll(painter, 3);
@@ -217,15 +233,15 @@ describe('packingSuitcaseScene', () => {
     expect(dried.at_tick - lastBandTick).toBeGreaterThanOrEqual(6);
   });
 
-  it('refuses a donor without the pigments it paints with', () => {
-    const noShadow = { catalogueScene: () => donor.replace('"shadow"', '"other"') };
-    expect(() => packingSuitcaseScene(noShadow, 120, 120, { packed: [], unpacked: 1 })).toThrow(/shadow/);
-  });
-
-  it('lays a completed list’s hardware without the live drying waits', () => {
+  it('replays a completed list in well under the ticks of a catalogue reveal', () => {
     const { sceneJson } = packingSuitcaseScene(module, 120, 120, { packed: ['a', 'b'], unpacked: 0 });
     const { timeline } = JSON.parse(sceneJson) as Doc;
     expect(timeline.total_ticks).toBeLessThan(120);
+  });
+
+  it('refuses a donor without the pigments it paints with', () => {
+    const noShadow = { catalogueScene: () => donor.replace('"shadow"', '"other"') };
+    expect(() => packingSuitcaseScene(noShadow, 120, 120, { packed: [], unpacked: 1 })).toThrow(/shadow/);
   });
 
   it('hands over a painter that continues from the replayed bands', () => {
