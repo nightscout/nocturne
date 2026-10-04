@@ -21,6 +21,8 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
     private readonly IMemoryCache _cache;
     private readonly ILogger<TherapySettingsResolver> _logger;
 
+    private bool? _hasData;
+
     private const int CacheTtlSeconds = 5;
     private const double DefaultDia = 3.0;
     private const double DefaultCarbsHr = 20.0;
@@ -108,8 +110,8 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
 
     public async Task<bool> HasDataAsync(CancellationToken ct = default)
     {
-        var count = await _repo.CountAsync(null, null, ct);
-        return count > 0;
+        // Scoped resolver: the memo lives for one request and never crosses tenants.
+        return _hasData ??= await _repo.CountAsync(null, null, ct) > 0;
     }
 
     private async Task<Core.Models.V4.TherapySettings?> GetCachedSettingsAsync(

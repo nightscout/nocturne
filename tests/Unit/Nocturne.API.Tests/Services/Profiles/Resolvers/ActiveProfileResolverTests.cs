@@ -402,6 +402,33 @@ public class ActiveProfileResolverTests : IDisposable
         }
 
         [Fact]
+        public async Task BoundsQueryByOverlapWindow_AndKeepsLongRunningSpan()
+        {
+            var longRunning = MakeProfileSpan(
+                startMills: MorningMills - 90L * 24 * 3_600_000,
+                endMills: null,
+                profileName: "Winter");
+            SetupSpans(longRunning);
+
+            var result = await _sut.GetActiveProfileSpansForRangeAsync(MorningMills, EveningMills);
+
+            result.Should().ContainSingle().Which.ProfileName.Should().Be("Winter");
+            _stateSpanService.Verify(
+                s => s.GetStateSpansAsync(
+                    StateSpanCategory.Profile,
+                    It.IsAny<string?>(),
+                    DateTimeOffset.FromUnixTimeMilliseconds(MorningMills).UtcDateTime,
+                    DateTimeOffset.FromUnixTimeMilliseconds(EveningMills).UtcDateTime,
+                    It.IsAny<string?>(),
+                    It.IsAny<bool?>(),
+                    It.IsAny<int>(),
+                    It.IsAny<int>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+
+        [Fact]
         public async Task IssuesOneDbQuery_RegardlessOfRangeSize()
         {
             SetupSpans();
