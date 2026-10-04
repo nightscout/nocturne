@@ -91,6 +91,31 @@ public class TreatmentServiceTests
     }
 
     /// <summary>
+    /// A batch that failed part-way fails the request, as Nightscout's does, but the treatments
+    /// written before the failure stay stored, so they are announced like any write.
+    /// </summary>
+    [Fact]
+    public async Task CreateTreatmentsAsync_WhenTheBatchFails_AnnouncesWhatItWroteAndRethrows()
+    {
+        var stored = new Treatment { Id = "stored" };
+        var failure = new TreatmentBatchFailedException(
+            new BulkWrite<Treatment>([stored], skippedDeleted: 0) { Settled = [stored] },
+            new InvalidOperationException("boom"));
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+        IReadOnlyList<Treatment>? raised = null;
+        _mockEvents.Setup(x => x.OnCreatedAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<Treatment>, CancellationToken>((items, _) => raised = items)
+            .Returns(Task.CompletedTask);
+
+        var act = () => _treatmentService.CreateTreatmentsAsync([new Treatment(), new Treatment()], CancellationToken.None);
+
+        (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which.Should().BeSameAs(failure);
+        raised.Should().Equal(stored);
+        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
     /// A create the user's deletion refused is answered in <see cref="BulkWrite{TRecord}.Settled"/>, but
     /// stored nothing: no event announces it, so write-back does not put the dose back upstream.
     /// </summary>

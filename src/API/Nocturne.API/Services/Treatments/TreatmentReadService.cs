@@ -183,7 +183,7 @@ public class TreatmentReadService : ITreatmentStore
                 var updatedStored = UpdatedStoredRecord(treatment, result);
                 var served = ToCreated(treatment, result);
                 settled.Add(served);
-                if (IsRefused(result))
+                if (IsRefused(result) || result.SkippedUnsupported > 0)
                     continue;
                 written.Add(served);
                 if (updatedStored)
@@ -191,13 +191,14 @@ public class TreatmentReadService : ITreatmentStore
             }
             catch (OperationCanceledException)
             {
-                // Every later call on a canceled token throws too, so catching it here would log
-                // each remaining treatment as a failure instead of ending the batch.
+                // A canceled request ends as canceled, not as a treatment that failed to write.
                 throw;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to decompose treatment {Id}", treatment.Id);
+                throw new TreatmentBatchFailedException(
+                    new BulkWrite<Treatment>(written, skippedDeleted) { Settled = settled, Updated = updated }, ex);
             }
         }
 
@@ -308,7 +309,8 @@ public class TreatmentReadService : ITreatmentStore
     /// treatment upstream under, and the record's uuid as <see cref="Treatment.RecordId"/>, whose
     /// prefix earlier write-backs used. A treatment the user's deletion refused (<see cref="IsRefused"/>) is
     /// named by the deleted record, as it was served before the delete. A treatment that wrote none
-    /// of the projected tables keeps the id it was sent with.
+    /// of the projected tables keeps the id it was sent with: for one stored as a span, the span's
+    /// original id, which is also the id a span the user deleted was answered by.
     /// </summary>
     internal static Treatment ToCreated(Treatment treatment, DecompositionResult result)
     {
