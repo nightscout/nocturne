@@ -229,7 +229,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
         => PublishUnheldAsync(
-            activities, a => a.Id,
+            activities,
             unheld => WriteActivityAsync(unheld, source, cancellationToken),
             source,
             ids => _db.GetHeldOriginalIdsAsync<StateSpanEntity>(ids, cancellationToken),

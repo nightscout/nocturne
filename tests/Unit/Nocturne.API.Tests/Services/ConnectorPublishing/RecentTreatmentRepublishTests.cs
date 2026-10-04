@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -178,13 +179,13 @@ public class RecentTreatmentRepublishTests : IDisposable
         var calculations = new BolusCalculationRepository(ctxFactory, dedup, audit, NullLogger<BolusCalculationRepository>.Instance);
 
         var decomposer = new TreatmentDecomposer(
-            _context, bolus, Mock.Of<ITempBasalRepository>(), carbs, bgChecks, notes, deviceEvents, calculations,
+            _context, bolus, EmptyLegacyKeyed.Of<ITempBasalRepository, Nocturne.Core.Models.V4.TempBasal>(), carbs, bgChecks, notes, deviceEvents, calculations,
             Mock.Of<IStateSpanService>(), Mock.Of<ITreatmentFoodService>(), Mock.Of<IDeviceService>(),
             Mock.Of<IPatientDeviceStamper>(), Mock.Of<IProfileDecomposer>(), Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(), audit, dedup, NullLogger<TreatmentDecomposer>.Instance);
         var store = new TreatmentReadService(
             Mock.Of<IV4ToLegacyProjectionService>(), decomposer, Mock.Of<IDecompositionPipeline>(),
-            Mock.Of<ITempBasalRepository>(), bolus, carbs, bgChecks, notes, deviceEvents, calculations,
+            EmptyLegacyKeyed.Of<ITempBasalRepository, Nocturne.Core.Models.V4.TempBasal>(), bolus, carbs, bgChecks, notes, deviceEvents, calculations,
             NullLogger<TreatmentReadService>.Instance);
         var service = new TreatmentService(
             store, decomposer, Mock.Of<ITreatmentCache>(), Mock.Of<IDataEventSink<Treatment>>(),
@@ -192,7 +193,7 @@ public class RecentTreatmentRepublishTests : IDisposable
 
         return new TreatmentPublisher(
             ctxFactory, service, decomposer, Mock.Of<ITreatmentCache>(),
-            bolus, carbs, bgChecks, calculations, Mock.Of<ITempBasalRepository>(),
+            bolus, carbs, bgChecks, calculations, EmptyLegacyKeyed.Of<ITempBasalRepository, Nocturne.Core.Models.V4.TempBasal>(),
             Mock.Of<IBasalInjectionRepository>(), notes, deviceEvents,
             Mock.Of<IPatientInsulinRepository>(), Mock.Of<IBasalRateResolver>(), Mock.Of<ITherapySettingsResolver>(),
             Mock.Of<IPatientDeviceStamper>(), audit, _tally, NullLogger<TreatmentPublisher>.Instance);

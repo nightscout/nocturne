@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
@@ -70,6 +71,8 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     public async Task<V4Models.DecompositionResult> DecomposeAsync(DeviceStatus ds, string? source, WriteOrigin origin, CancellationToken ct = default)
     {
         NormalizeMills(ds);
+        if ((await PointAtStoredStatusesAsync([ds], source, ct)).Count > 0)
+            return new V4Models.DecompositionResult();
 
         var legacyId = ds.Id;
         var storedCorrelationIds = await GetStoredCorrelationIdsAsync([ds], ct);
@@ -776,11 +779,12 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         var uploaderList = new List<V4Models.UploaderSnapshot>();
         var extrasList = new List<V4Models.DeviceStatusExtras>();
         var overrideSpans = new List<(StateSpan Span, Guid CorrelationId)>();
+        var echoes = await PointAtStoredStatusesAsync(statuses, source, ct);
         var correlationIds = await GetStoredCorrelationIdsAsync(statuses, ct);
 
         await using (_deviceService.DeferLastSeen(ct))
         {
-            foreach (var ds in statuses)
+            foreach (var ds in statuses.Where(s => !echoes.Contains(s)))
             {
                 NormalizeMills(ds);
 
@@ -891,6 +895,28 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
         return result;
     }
+
+    /// <summary>
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> across the snapshot tables. A status
+    /// with no legacy id is named by its anchor snapshot's id, as <see cref="StoredKey"/> puts it on
+    /// the wire, and the anchor's siblings follow it through their shared correlation id.
+    /// </summary>
+    /// <remarks>
+    /// An override uploaded with such a status is stored under that same <see cref="StoredKey"/>, so
+    /// the adopted legacy id is the override's key too, and its upsert updates the span in place.
+    /// </remarks>
+    /// <returns>The write-back echoes, which store nothing.</returns>
+    private Task<IReadOnlySet<DeviceStatus>> PointAtStoredStatusesAsync(
+        IEnumerable<DeviceStatus> statuses, string? source, CancellationToken ct)
+        => PointAtStoredRecordsAsync(
+            statuses,
+            [
+                Table(_apsRepo, WireForms.UuidPrefix),
+                Table(_pumpRepo, WireForms.UuidPrefix),
+                Table(_uploaderRepo, WireForms.UuidPrefix),
+            ],
+            _ => source == DataSources.NightscoutConnector,
+            ct);
 
     /// <summary>
     /// The correlation id each re-sent status's stored group already carries, preferring the APS,

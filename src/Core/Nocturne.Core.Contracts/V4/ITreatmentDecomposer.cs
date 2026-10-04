@@ -74,6 +74,18 @@ public interface ITreatmentDecomposer
     Task<int> RekeyClientIdRecordsAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
 
+    /// <summary>
+    /// Rewrites each treatment's id to the legacy id of the stored record it names, as decomposing
+    /// it would, so what is keyed by that id before the decomposition (upstream fingerprints, the
+    /// republish rule) is keyed as the decomposition will write it.
+    /// </summary>
+    /// <returns>
+    /// The write-back echoes among <paramref name="treatments"/>: treatments the Nightscout
+    /// connector pulled that name a record write-back may have sent upstream. Decomposing one stores nothing.
+    /// </returns>
+    Task<IEnumerable<Treatment>> ResolveStoredIdentitiesAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
+
     /// <summary>Of treatments <paramref name="source"/> delivered again, the ones to decompose again.</summary>
     Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default);

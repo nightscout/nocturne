@@ -114,12 +114,12 @@ internal sealed class DevicePublisher : ConnectorPublisherBase, IDevicePublisher
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
         => PublishUnheldAsync(
-            deviceStatuses.Where(_decomposer.HasLegacyKeyedSnapshot), d => d.Id,
+            deviceStatuses.Where(_decomposer.HasLegacyKeyedSnapshot),
             unheld => PublishDeviceStatusAsync(unheld, source, origin, cancellationToken),
             source,
-            ids => _apsSnapshotRepository.GetHeldLegacyIdsAsync(ids, cancellationToken),
-            ids => _pumpSnapshotRepository.GetHeldLegacyIdsAsync(ids, cancellationToken),
-            ids => _uploaderSnapshotRepository.GetHeldLegacyIdsAsync(ids, cancellationToken));
+            ids => HeldAsync(_apsSnapshotRepository, ids, cancellationToken),
+            ids => HeldAsync(_pumpSnapshotRepository, ids, cancellationToken),
+            ids => HeldAsync(_uploaderSnapshotRepository, ids, cancellationToken));
 
     public Task<bool> PublishDeviceEventsAsync(
         IEnumerable<DeviceEvent> records,

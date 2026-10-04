@@ -51,6 +51,13 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
     /// </summary>
     protected virtual JsonSerializerOptions? SerializerOptions => null;
 
+    /// <summary>
+    /// Whether the body a write was refused with says the upstream already stores what it was sent.
+    /// A batch refused that way is sent again one record at a time, and a lone record refused that
+    /// way counts as written.
+    /// </summary>
+    protected virtual bool IsAlreadyStored(string refusal) => false;
+
     public async Task OnCreatedAsync(IReadOnlyList<T> items, CancellationToken ct = default)
     {
         var config = await ResolveIfReadyAsync(ct);
@@ -70,7 +77,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         for (var i = 0; i < filtered.Count; i += batchSize)
         {
             var batch = filtered.Skip(i).Take(batchSize).ToList();
-            await SendAsync(config, HttpMethod.Post, Endpoint, batch, ct);
+            await SendCreatedAsync(config, batch, ct);
         }
     }
 
@@ -80,7 +87,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         if (config is null || ShouldSkip(item))
             return;
 
-        await SendAsync(config, HttpMethod.Post, Endpoint, new[] { item }, ct);
+        await SendCreatedAsync(config, [item], ct);
     }
 
     public async Task OnUpdatedAsync(T item, CancellationToken ct = default)
@@ -89,7 +96,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         if (config is null || ShouldSkip(item))
             return;
 
-        await SendAsync(config, HttpMethod.Put, Endpoint, item, ct);
+        await SendUpdatedAsync(config, item, ct);
     }
 
     public Task OnDeletedAsync(T? item, CancellationToken ct = default)
@@ -99,6 +106,49 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         // we skip write-back for deletes. The bidirectional sync handles this
         // through the connector's next poll cycle.
         return Task.CompletedTask;
+    }
+
+    /// <summary>Sends an updated record upstream: a PUT of it, unless a sink writes it otherwise.</summary>
+    protected virtual Task SendUpdatedAsync(NightscoutConnectorConfiguration config, T item, CancellationToken ct)
+        => SendAsync(config, HttpMethod.Put, item, SerializerOptions, ct);
+
+    /// <summary>Sends <paramref name="payload"/> to <see cref="Endpoint"/>, recording the outcome on the circuit breaker.</summary>
+    protected async Task SendAsync<TPayload>(
+        NightscoutConnectorConfiguration config,
+        HttpMethod method,
+        TPayload payload,
+        JsonSerializerOptions? options,
+        CancellationToken ct)
+    {
+        if (await TrySendAsync(config, method, payload, options, ct) is { Refusal: not null })
+            RecordFailure(method, null);
+    }
+
+    /// <summary>
+    /// Reads <paramref name="pathAndQuery"/> from the upstream, for a sink that must know what the
+    /// upstream holds before it writes. A read that fails counts against the circuit breaker, as a
+    /// failed write does: the sink cannot write without its answer.
+    /// </summary>
+    /// <returns>The response body, or null when the read failed.</returns>
+    protected async Task<string?> GetAsync(
+        NightscoutConnectorConfiguration config, string pathAndQuery, CancellationToken ct)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, ResolveAbsoluteUrl(config.Url, pathAndQuery));
+            request.Headers.Add("api-secret", NightscoutConnectorService.ComputeApiSecretHash(config.ApiSecret));
+            using var response = await _httpClient.SendAsync(request, ct);
+            if (response.IsSuccessStatusCode)
+                return await response.Content.ReadAsStringAsync(ct);
+
+            RecordFailure(HttpMethod.Get, null);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            RecordFailure(HttpMethod.Get, ex);
+            return null;
+        }
     }
 
     private async Task<NightscoutConnectorConfiguration?> ResolveIfReadyAsync(CancellationToken ct)
@@ -134,35 +184,69 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         return filtered;
     }
 
-    private async Task SendAsync<TPayload>(
+    private async Task SendCreatedAsync(NightscoutConnectorConfiguration config, List<T> batch, CancellationToken ct)
+    {
+        if (await TrySendAsync(config, HttpMethod.Post, batch, SerializerOptions, ct) is not { Refusal: { } refusal })
+            return;
+
+        if (!IsAlreadyStored(refusal))
+        {
+            RecordFailure(HttpMethod.Post, null);
+            return;
+        }
+
+        if (batch.Count == 1)
+        {
+            _circuitBreaker.RecordSuccess();
+            return;
+        }
+
+        foreach (var item in batch)
+            await SendCreatedAsync(config, [item], ct);
+    }
+
+    /// <summary>What an upstream write came to; a transport failure is recorded where it happens.</summary>
+    /// <param name="Refusal">The body a non-success response carried, or null when it was accepted.</param>
+    private readonly record struct SendOutcome(string? Refusal);
+
+    /// <returns>The outcome of a write the upstream answered, or null when the request failed.</returns>
+    private async Task<SendOutcome?> TrySendAsync<TPayload>(
         NightscoutConnectorConfiguration config,
         HttpMethod method,
-        string endpoint,
         TPayload payload,
+        JsonSerializerOptions? options,
         CancellationToken ct)
     {
         try
         {
-            var absoluteUrl = ResolveAbsoluteUrl(config.Url, endpoint);
-            using var request = new HttpRequestMessage(method, absoluteUrl);
+            using var request = new HttpRequestMessage(method, ResolveAbsoluteUrl(config.Url, Endpoint));
             request.Headers.Add(
                 "api-secret",
                 NightscoutConnectorService.ComputeApiSecretHash(config.ApiSecret));
-            request.Content = JsonContent.Create(payload, options: SerializerOptions);
+            request.Content = JsonContent.Create(payload, options: options);
 
             using var response = await _httpClient.SendAsync(request, ct);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+                return new SendOutcome(await response.Content.ReadAsStringAsync(ct));
 
             _circuitBreaker.RecordSuccess();
+            return new SendOutcome(null);
         }
         catch (Exception ex)
         {
-            _circuitBreaker.RecordFailure();
-            _logger.LogWarning(
-                ex,
-                "Nightscout write-back failed for {Method} {Endpoint}",
-                method,
-                endpoint);
+            RecordFailure(method, ex);
+            return null;
         }
+    }
+
+    /// <summary>Counts a failed exchange with the upstream against the circuit breaker, and logs it.</summary>
+    protected void RecordFailure(HttpMethod method, Exception? ex)
+    {
+        _circuitBreaker.RecordFailure();
+        _logger.LogWarning(
+            ex,
+            "Nightscout write-back failed for {Method} {Endpoint}",
+            method,
+            Endpoint);
     }
 }

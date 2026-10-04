@@ -10,8 +10,13 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.Bolus
 /// </summary>
 [Table("boluses")]
-public class BolusEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IUpstreamFingerprinted
+public class BolusEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IUpstreamFingerprinted, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <inheritdoc />
     [AuditIgnored]
     [Column("upstream_fingerprint")]
