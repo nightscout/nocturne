@@ -17,7 +17,7 @@
   import X from "@lucide/svelte/icons/x";
   import { EmptyState } from "$lib/components/shared";
   import PackingSuitcase from "$lib/components/tools/packing/packing-suitcase.svelte";
-  import { ConfirmationBackground, type PlayerState } from "@nocturne/watercolour";
+  import type { PlayerState } from "@nocturne/watercolour";
   import { decodeBase64Utf8, encodeBase64Utf8 } from "$lib/utils";
 
   interface PackingItem {
@@ -126,10 +126,7 @@
       class="sticky top-(--app-sticky-top,0px) z-10 -mx-6 space-y-2 border-b bg-background/95 px-6 py-2 backdrop-blur lg:top-[calc(var(--app-sticky-top,0px)_+_1.5rem)] lg:mx-0 lg:space-y-3 lg:border-b-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none"
       data-testid="packing-header"
     >
-      <div class="relative -mx-3 flex items-center gap-4 rounded-xl px-3 py-1 lg:mx-0 lg:flex-col lg:items-start lg:gap-3 lg:p-0">
-        {#if complete}
-          <ConfirmationBackground />
-        {/if}
+      <div class="flex items-center gap-4 py-1 lg:flex-col lg:items-start lg:gap-3 lg:p-0">
         {#if showSuitcase}
           <PackingSuitcase
             bind:this={suitcase}
@@ -139,7 +136,7 @@
             class="size-16 shrink-0 lg:size-48 lg:self-center"
           />
         {/if}
-        <div class="relative flex flex-1 items-center justify-between gap-2 lg:w-full lg:flex-none lg:flex-col lg:items-start lg:justify-start">
+        <div class="flex flex-1 items-center justify-between gap-2 lg:w-full lg:flex-none lg:flex-col lg:items-start lg:justify-start">
           <h1 class="text-2xl lg:text-xl font-bold tracking-tight flex items-center gap-2">
             {#if !showSuitcase}
               <ListChecks class="h-6 w-6" data-testid="packing-icon" />
