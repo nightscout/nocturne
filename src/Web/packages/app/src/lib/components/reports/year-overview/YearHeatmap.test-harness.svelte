@@ -5,11 +5,13 @@
 
   let {
     year = 2024,
+    yearIndex = 0,
     yearData,
     onNavigate = () => {},
     cellFill = "var(--fixture-cell-fill)",
   }: {
     year?: number;
+    yearIndex?: number;
     yearData: Map<number, DailySummaryDay[]>;
     onNavigate?: (date: string) => void;
     cellFill?: string;
@@ -59,7 +61,7 @@
 
 <YearHeatmap
   {year}
-  yearIndex={0}
+  {yearIndex}
   loadingYears={new Set()}
   {yearData}
   {transformYearData}

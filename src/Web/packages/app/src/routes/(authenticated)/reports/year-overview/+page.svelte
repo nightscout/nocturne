@@ -808,7 +808,7 @@
           {@const griPeriods = griTimelineData.get(year) ?? []}
           {#if griPeriods.length > 1}
             <div class="@container mt-4 border-t border-border pt-4">
-              <VisibleChart label={`${year} monthly GRI chart`} placeholderClass="h-[calc(100cqw+15rem)] @md:h-[250px]">
+              <VisibleChart label={`${year} monthly GRI chart`} eager={yearIndex === 0} placeholderClass="h-[calc(100cqw+15rem)] @md:h-[250px]">
                 <GlycemicRiskIndexChart
                   gri={griPeriods[griPeriods.length - 1]?.gri ?? { score: 0 }}
                   timeSeriesData={griPeriods}

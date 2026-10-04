@@ -137,7 +137,7 @@
         style:--print-h="{cellSize * 7 + 20}px"
         bind:clientWidth={chartWidth}
       >
-        <VisibleChart label={`${year} daily chart`}>
+        <VisibleChart label={`${year} daily chart`} eager={yearIndex === 0}>
           <Chart
             data={chartData}
             x="date"

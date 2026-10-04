@@ -175,7 +175,7 @@ describe("YearHeatmap", () => {
       }
     );
     try {
-      const { container } = render(Harness, { yearData });
+      const { container } = render(Harness, { yearData, yearIndex: 1 });
       expect(dayCells(container)).toHaveLength(0);
       document.documentElement.classList.add(PRINT_LAYOUT_CLASS);
       await waitForCells(container, 335);

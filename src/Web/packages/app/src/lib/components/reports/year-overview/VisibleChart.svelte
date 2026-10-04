@@ -5,10 +5,12 @@
   let {
     children,
     label,
+    eager = false,
     placeholderClass = "h-full",
   }: {
     children: Snippet;
     label: string;
+    eager?: boolean;
     placeholderClass?: string;
   } = $props();
 
@@ -17,6 +19,7 @@
   const print = new PrintMode();
 
   onMount(() => {
+    if (eager) return;
     if (typeof IntersectionObserver === "undefined") {
       visible = true;
       return;
@@ -41,10 +44,10 @@
   bind:this={element}
   role="region"
   aria-label={label}
-  tabindex={visible || print.active ? -1 : 0}
+  tabindex={eager || visible || print.active ? -1 : 0}
   onfocus={() => (visible = true)}
 >
-  {#if visible || print.active}
+  {#if eager || visible || print.active}
     {@render children()}
   {:else}
     <div class={placeholderClass} aria-hidden="true"></div>

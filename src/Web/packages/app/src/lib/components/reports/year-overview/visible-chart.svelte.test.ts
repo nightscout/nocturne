@@ -47,6 +47,11 @@ describe("chart visibility", () => {
     vi.unstubAllGlobals();
   });
 
+  it("renders the newest chart without waiting for viewport observation", async () => {
+    render(Harness, { eager: true });
+    await expect.element(page.getByTestId("chart")).toBeInTheDocument();
+  });
+
   it("defers creation and uses the latest data when entering the viewport", async () => {
     render(Harness);
     await expect.element(page.getByTestId("chart")).not.toBeInTheDocument();
