@@ -44,7 +44,7 @@ public static class SensorGlucoseMapper
             PatientDeviceId = entity.PatientDeviceId,
             SyncIdentifier = entity.SyncIdentifier,
             Mgdl = entity.Mgdl,
-            Direction = Enum.TryParse<GlucoseDirection>(entity.Direction, out var dir) ? dir : null,
+            Direction = ParseDirection(entity.Direction),
             TrendRate = entity.TrendRate,
             Noise = entity.Noise,
             Filtered = entity.Filtered,
@@ -55,6 +55,9 @@ public static class SensorGlucoseMapper
             UnsmoothedMgdl = entity.UnsmoothedMgdl,
         }.WithHeaderFrom(entity);
     }
+
+    internal static GlucoseDirection? ParseDirection(string? direction) =>
+        Enum.TryParse<GlucoseDirection>(direction, out var parsed) ? parsed : null;
 
     /// <summary>
     /// Update existing entity with data from domain model
