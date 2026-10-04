@@ -374,6 +374,7 @@ public sealed class GoogleHealthService(
         var request = await coordinator.RequestDisconnectAsync(TenantId, subject, ct);
         // Once accepted, refreshing the browser must not cancel local disconnection.
         await using var gate = await coordinator.AcquireAsync(TenantId, CancellationToken.None);
+        if ((await coordinator.DisconnectRequestAsync(TenantId, CancellationToken.None))?.RequestId != request) return;
         await coordinator.CompleteAsync(TenantId);
         var token = await StoredSessionAsync(CancellationToken.None);
         await ClearFlowAsync(CancellationToken.None);

@@ -54,6 +54,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
     internal async Task<Guid> RequestDisconnectAsync(Guid tenantId, Guid subject, CancellationToken ct)
     {
         await using var state = await AcquireKeyAsync(tenantId, StateLock, ct);
+        if (await DisconnectRequestAsync(tenantId, ct) is { } pending) return pending.RequestId;
         var request = new DisconnectRequest(Guid.NewGuid(), subject);
         if (scopes is null) disconnects[tenantId] = request;
         else
@@ -68,6 +69,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
                 WHERE tenant_id = {tenantId} AND connector_name = 'googlehealth'
                 """, ct);
         }
+        await NotifyRequestAsync(tenantId, CancellationToken.None);
         return request.RequestId;
     }
 
@@ -269,6 +271,12 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
         if (await DisconnectRequestAsync(tenantId, ct) is not null) return false;
         if (await ReadProgressAsync(tenantId, ct) is { WorkerOwned: true }) return false;
         await WriteProgressAsync(tenantId, new(GoogleHealthSyncPhase.Queued, null, 0, totalDataTypes, 0, true), ct);
+        await NotifyRequestAsync(tenantId, ct);
+        return true;
+    }
+
+    private async Task NotifyRequestAsync(Guid tenantId, CancellationToken ct)
+    {
         if (scopes is null) requests.Writer.TryWrite(tenantId);
         else
         {
@@ -277,7 +285,6 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
             await db.Database.ExecuteSqlInterpolatedAsync(
                 $"SELECT pg_notify({RequestChannel}, {tenantId.ToString()})", ct);
         }
-        return true;
     }
 
     internal async IAsyncEnumerable<Guid> ReadRequestsAsync([EnumeratorCancellation] CancellationToken ct)

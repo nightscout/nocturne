@@ -1168,6 +1168,7 @@ public class GoogleHealthTests
         using var browser = new CancellationTokenSource();
         var disconnect = service.DisconnectAsync(Guid.NewGuid(), browser.Token);
         browser.Cancel();
+        var recoveredDisconnect = service.DisconnectAsync(Guid.NewGuid(), default);
         try
         {
             await revoking.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -1181,6 +1182,7 @@ public class GoogleHealthTests
         }
         finally { releaseRevoke.TrySetResult(); }
         await disconnect.WaitAsync(TimeSpan.FromSeconds(5));
+        await recoveredDisconnect.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.False((await service.StatusAsync(default)).IsDisconnecting);
         Assert.False(store.Secrets.ContainsKey("refreshToken"));
         Assert.True(store.Secrets.ContainsKey("accountKey"));

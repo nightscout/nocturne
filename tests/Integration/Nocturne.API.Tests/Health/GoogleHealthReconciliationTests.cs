@@ -423,6 +423,15 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         Assert.Equal(tenantId, requests.Current);
         tenants.Verify(service => service.GetAllAsync(It.IsAny<CancellationToken>()), Times.Once);
         await sender.CompleteAsync(tenantId);
+        next = requests.MoveNextAsync().AsTask();
+        var subject = Guid.NewGuid();
+        var disconnect = await sender.RequestDisconnectAsync(tenantId, subject, cancellation.Token);
+        Assert.True(await next.WaitAsync(cancellation.Token));
+        Assert.Equal(tenantId, requests.Current);
+        Assert.Equal(subject, (await listener.DisconnectRequestAsync(tenantId, cancellation.Token))!.SubjectId);
+        Assert.Equal(disconnect, await listener.RequestDisconnectAsync(tenantId, Guid.NewGuid(), cancellation.Token));
+        tenants.Verify(service => service.GetAllAsync(It.IsAny<CancellationToken>()), Times.Once);
+        await sender.FinishDisconnectAsync(tenantId, disconnect);
     }
 
     [Fact]
