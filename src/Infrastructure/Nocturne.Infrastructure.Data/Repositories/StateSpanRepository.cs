@@ -205,6 +205,12 @@ public class StateSpanRepository : IStateSpanRepository
     public async Task<StateSpan> UpsertStateSpanAsync(
         StateSpan stateSpan,
         CancellationToken cancellationToken = default
+    ) => (await UpsertBatchAsync([stateSpan], cancellationToken))[0].Span;
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.UpsertStateSpanWithOutcomeAsync" />
+    public async Task<StateSpanUpsert> UpsertStateSpanWithOutcomeAsync(
+        StateSpan stateSpan,
+        CancellationToken cancellationToken = default
     ) => (await UpsertBatchAsync([stateSpan], cancellationToken))[0];
 
     /// <summary>
@@ -229,8 +235,8 @@ public class StateSpanRepository : IStateSpanRepository
     /// <param name="stateSpans">The spans to write.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="omitBlocked">Leave out the spans a soft-deleted row blocked instead of returning that row.</param>
-    /// <returns>Per input span, the row it wrote or the soft-deleted row that blocked it.</returns>
-    private async Task<List<StateSpan>> UpsertBatchAsync(
+    /// <returns>Per input span, the row it wrote or the soft-deleted row that blocked it, and which.</returns>
+    private async Task<List<StateSpanUpsert>> UpsertBatchAsync(
         IReadOnlyList<StateSpan> stateSpans,
         CancellationToken cancellationToken,
         bool omitBlocked = false)
@@ -245,18 +251,19 @@ public class StateSpanRepository : IStateSpanRepository
         var loaded = new HashSet<StateSpanEntity>(governingRows, ReferenceEqualityComparer.Instance);
         loaded.UnionWith(await LoadSupersedableSpansAsync(stateSpans, cancellationToken));
 
-        var written = new List<StateSpanEntity>(stateSpans.Count);
+        var written = new List<(StateSpanEntity Row, StateSpanUpsertOutcome Outcome)>(stateSpans.Count);
         var inserted = new List<StateSpanEntity>();
         foreach (var stateSpan in stateSpans)
         {
             var hasOriginalId = !string.IsNullOrEmpty(stateSpan.OriginalId);
             if (hasOriginalId && governingByOriginalId.TryGetValue(stateSpan.OriginalId!, out var governing))
             {
-                if (governing.DeletedAt == null)
+                var blocked = governing.DeletedAt != null;
+                if (!blocked)
                     StateSpanMapper.UpdateEntity(governing, stateSpan);
                 else if (omitBlocked)
                     continue;
-                written.Add(governing);
+                written.Add((governing, blocked ? StateSpanUpsertOutcome.Blocked : StateSpanUpsertOutcome.Updated));
                 continue;
             }
 
@@ -266,7 +273,7 @@ public class StateSpanRepository : IStateSpanRepository
             await EndAtSuccessorAsync(entity, stateSpan.Metadata, loaded, cancellationToken);
             loaded.Add(entity);
             inserted.Add(entity);
-            written.Add(entity);
+            written.Add((entity, StateSpanUpsertOutcome.Inserted));
             if (hasOriginalId)
                 governingByOriginalId[stateSpan.OriginalId!] = entity;
         }
@@ -294,7 +301,9 @@ public class StateSpanRepository : IStateSpanRepository
             }
         }
 
-        var results = written.Select(StateSpanMapper.ToDomainModel).ToList();
+        var results = written
+            .Select(w => new StateSpanUpsert(StateSpanMapper.ToDomainModel(w.Row), w.Outcome))
+            .ToList();
         foreach (var entity in loaded)
             _context.Entry(entity).State = EntityState.Detached;
 
@@ -820,7 +829,7 @@ public class StateSpanRepository : IStateSpanRepository
     public async Task<IEnumerable<StateSpan>> CreateActivitiesAsStateSpansAsync(
         IEnumerable<StateSpan> stateSpans,
         CancellationToken cancellationToken = default
-    ) => await UpsertBatchAsync(stateSpans.ToList(), cancellationToken, omitBlocked: true);
+    ) => (await UpsertBatchAsync(stateSpans.ToList(), cancellationToken, omitBlocked: true)).Select(w => w.Span);
 
     /// <summary>
     /// Update an existing Activity state span

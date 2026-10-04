@@ -322,6 +322,98 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
     }
 
     /// <summary>
+    /// A treatment written back on its create is sent again under another id, naming its stored
+    /// record only by its sync key (a Loop-style resend). The resend updates that record, which keeps
+    /// the key it went upstream under, so write-back looks the copy up before writing and lands on
+    /// it: sent as a create under the new id, 15.0.8 would store a second copy beside it.
+    /// </summary>
+    [Theory]
+    [InlineData("15.0.8")]
+    [InlineData("15.0.6")]
+    public async Task ASyncKeyReupload_IsLookedUpBeforeItIsWritten_AndLeavesOneCopy(string version)
+    {
+        var slot = UniqueSlot();
+        var legacyId = MongoObjectId.NewObjectId();
+        var syncIdentifier = $"integration-sync-{Guid.NewGuid():N}";
+        var upstream = new FakeNightscoutTreatments(version);
+
+        await WithWriteBackAsync(upstream, service => service.CreateTreatmentsAsync(
+        [
+            new Treatment
+            {
+                Id = legacyId, EventType = "Correction Bolus", Insulin = 0.7, CreatedAt = At(slot),
+                DataSource = "loop", SyncIdentifier = syncIdentifier,
+            },
+        ]));
+        var bolus = (await LiveBolusesAsync(slot)).Single().Id;
+        var readsBefore = upstream.Reads.Count;
+        var writesBefore = upstream.Writes.Count;
+
+        await WithWriteBackAsync(upstream, service => service.CreateTreatmentsAsync(
+        [
+            new Treatment
+            {
+                Id = MongoObjectId.NewObjectId(), EventType = "Correction Bolus", Insulin = 1.1, CreatedAt = At(slot),
+                DataSource = "loop", SyncIdentifier = syncIdentifier,
+            },
+        ]));
+
+        upstream.Reads.Count.Should().BeGreaterThan(readsBefore);
+        upstream.Writes.Count.Should().Be(writesBefore + 1);
+        Copies(upstream).Should().Equal((legacyId, 1.1));
+        upstream.Refusals.Should().Be(0);
+        (await LiveBolusesAsync(slot)).Should().Equal((bolus, 1.1));
+    }
+
+    public static TheoryData<string, string> SpanReuploads => new()
+    {
+        { "15.0.8", "Temporary Override" },
+        { "15.0.6", "Temporary Override" },
+        { "15.0.8", "Temporary Target" },
+        { "15.0.6", "Temporary Target" },
+        { "15.0.8", "Profile Switch" },
+        { "15.0.6", "Profile Switch" },
+    };
+
+    /// <summary>
+    /// A treatment Nocturne stores as a span (an override, a temporary target, a profile switch),
+    /// whose original upstream holds under its ObjectId with no identifier, is uploaded again with a
+    /// change. The upload updates the span, so it is written back as the edit it is, looked up first
+    /// and onto that original: sent as a create, 15.0.8 would store a second copy and 15.0.6 would
+    /// refuse the changed <c>_id</c>.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(SpanReuploads))]
+    public async Task AReuploadOfAStoredSpanTreatment_LandsOnTheCopyUpstreamHolds(string version, string eventType)
+    {
+        var slot = UniqueSlot();
+        var legacyId = MongoObjectId.NewObjectId();
+        JsonObject Document(double duration) => new()
+        {
+            ["_id"] = legacyId, ["eventType"] = eventType, ["duration"] = duration, ["created_at"] = At(slot),
+            ["profile"] = "Default", ["targetTop"] = 120.0, ["targetBottom"] = 100.0,
+        };
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", new JsonArray(Document(30))))
+            .IsSuccessStatusCode.Should().BeTrue();
+        var upstream = new FakeNightscoutTreatments(version);
+        upstream.Seed(Document(30), asObjectId: true);
+
+        await WithWriteBackAsync(upstream, service => service.CreateTreatmentsAsync(
+        [
+            new Treatment
+            {
+                Id = legacyId, EventType = eventType, Duration = 45, CreatedAt = At(slot),
+                Profile = "Default", TargetTop = 120, TargetBottom = 100,
+            },
+        ]));
+
+        upstream.Reads.Should().NotBeEmpty();
+        upstream.Documents.Select(d => (d.Id, d.IsObjectId, (double)d.Document["duration"]!))
+            .Should().Equal((legacyId, true, 45d));
+        upstream.Refusals.Should().Be(0);
+    }
+
+    /// <summary>
     /// The original of a treatment a Nightscout migration imported from an uploader that sent its own
     /// id, held under that id as a string <c>_id</c> with no identifier, is edited in Nocturne: the
     /// edit lands on it, on 15.0.8 and 15.0.6, with no refusal.

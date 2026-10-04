@@ -1342,6 +1342,27 @@ public class StateSpanRepositoryTests : IDisposable
         (await RowsForAsync("ov-new")).Should().ContainSingle();
     }
 
+    /// <summary>
+    /// The outcome names what the upsert did: an insert, an update of the live span holding the
+    /// original id, and a refusal by the span the user deleted, which writes nothing.
+    /// </summary>
+    [Fact]
+    public async Task UpsertStateSpanWithOutcomeAsync_SaysWhetherItInsertedUpdatedOrWasBlocked()
+    {
+        var inserted = await _repository.UpsertStateSpanWithOutcomeAsync(Span(StateSpanCategory.Override, "Custom", 9, "ov-outcome"));
+        var updated = await _repository.UpsertStateSpanWithOutcomeAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-outcome"));
+        (await _repository.DeleteStateSpanAsync("ov-outcome")).Should().BeTrue();
+        var blocked = await _repository.UpsertStateSpanWithOutcomeAsync(Span(StateSpanCategory.Override, "Custom", 11, "ov-outcome"));
+
+        inserted.Outcome.Should().Be(StateSpanUpsertOutcome.Inserted);
+        updated.Outcome.Should().Be(StateSpanUpsertOutcome.Updated);
+        updated.Span.Id.Should().Be(inserted.Span.Id);
+        blocked.Outcome.Should().Be(StateSpanUpsertOutcome.Blocked);
+        var row = (await RowsForAsync("ov-outcome")).Should().ContainSingle().Subject;
+        row.DeletedAt.Should().NotBeNull();
+        row.StartTimestamp.Should().Be(updated.Span.StartTimestamp);
+    }
+
     [Fact]
     public async Task BulkUpsertAsync_LeavesNoStateSpanTracked_EvenForEveryTombstoneItLoaded()
     {

@@ -83,10 +83,10 @@ public abstract class DecomposerBase
 
         if (existing is null)
         {
-            TRecord created;
+            LegacyUpsert<TRecord> written;
             try
             {
-                created = await repository.CreateAsync(model, origin, ct);
+                written = await repository.CreateOrUpsertAsync(model, origin, ct);
             }
             catch (RecreationBlockedException blocked)
             {
@@ -98,9 +98,14 @@ public abstract class DecomposerBase
                 return null;
             }
 
-            result.CreatedRecords.Add(created);
-            Logger.LogDebug("Created {RecordType} from legacy record {LegacyId}", recordType, legacyId);
-            return (created, true);
+            // A create its sync key matched to a stored row updated that row: it is reported as the
+            // update it is, so it is announced as an edit and write-back looks for the copy upstream
+            // holds before it writes.
+            (written.Created ? result.CreatedRecords : result.UpdatedRecords).Add(written.Record);
+            Logger.LogDebug(
+                "{Outcome} {RecordType} from legacy record {LegacyId}",
+                written.Created ? "Created" : "Updated by sync key", recordType, legacyId);
+            return (written.Record, written.Created);
         }
 
         if (preserveStoredCorrelationId
@@ -495,7 +500,9 @@ public abstract class DecomposerBase
             return;
 
         var written = await repository.BulkCreateAsync(records, origin, ct);
-        result.CreatedRecords.AddRange(written);
+        var updated = new HashSet<TRecord>(written.Updated, ReferenceEqualityComparer.Instance);
+        result.CreatedRecords.AddRange(written.Where(r => !updated.Contains(r)));
+        result.UpdatedRecords.AddRange(written.Updated);
         result.SkippedDeleted += written.SkippedDeleted;
     }
 }

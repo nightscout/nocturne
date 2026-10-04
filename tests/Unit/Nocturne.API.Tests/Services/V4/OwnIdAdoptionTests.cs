@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
@@ -72,6 +73,7 @@ public class OwnIdAdoptionTests : IDisposable
             .ReturnsAsync((TRecord?)null);
         repo.Setup(r => r.CreateAsync(It.IsAny<TRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((TRecord record, WriteOrigin _, CancellationToken _) => record);
+        repo.ForwardCreateOrUpsertToCreate<TRepo, TRecord>();
         repo.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<TRecord>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback(() => _calls.Add($"{name}.upsert"))
             .ReturnsAsync((IEnumerable<TRecord> records, WriteOrigin _, CancellationToken _) => [.. records]);

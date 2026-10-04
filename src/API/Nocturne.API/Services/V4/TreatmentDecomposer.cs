@@ -600,9 +600,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// These rows are also the user-editable food-breakdown surface
     /// (<see cref="ITreatmentFoodService"/>, <c>/carbs/{id}/foods</c>), so re-decomposing a
     /// treatment must neither duplicate the line nor overwrite what a user has since attributed to
-    /// it. A stored carb intake can still reach this: a single-path create that matches on the
-    /// sync key upserts the stored row in place through <c>CreateAsync</c> and reports as created.
-    /// The existence check is what makes this write idempotent there, and there is no
+    /// it. Only a created carb intake reaches this, but the existence check is what makes the
+    /// write idempotent, and there is no
     /// unique index to lean on because a carb intake legitimately holds many lines once a user has
     /// attributed several foods to it.
     /// </remarks>
@@ -688,8 +687,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 OriginalId = $"pump-suspended-tx:{treatment.Id}",
             };
 
-            var upserted = await _stateSpanService.UpsertStateSpanAsync(span, ct);
-            result.CreatedRecords.Add(upserted);
+            await UpsertTreatmentSpanAsync(span, result, ct);
             Logger.LogDebug(
                 "Opened PumpMode/Suspended StateSpan from treatment {LegacyId}",
                 treatment.Id);
@@ -782,8 +780,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             Metadata = BuildProfileMetadata(treatment)
         };
 
-        var upserted = await _stateSpanService.UpsertStateSpanAsync(stateSpan, ct);
-        result.CreatedRecords.Add(upserted);
+        await UpsertTreatmentSpanAsync(stateSpan, result, ct);
         Logger.LogDebug("Delegated ProfileSwitch treatment {LegacyId} to IStateSpanService", treatment.Id);
 
         // If the treatment carries inline profile JSON, decompose it into V4 schedule records
@@ -838,8 +835,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             Metadata = BuildOverrideMetadata(treatment)
         };
 
-        var upserted = await _stateSpanService.UpsertStateSpanAsync(stateSpan, ct);
-        result.CreatedRecords.Add(upserted);
+        await UpsertTreatmentSpanAsync(stateSpan, result, ct);
         Logger.LogDebug("Delegated Temporary Override treatment {LegacyId} to IStateSpanService", treatment.Id);
     }
 
@@ -863,9 +859,32 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             Metadata = BuildTemporaryTargetMetadata(treatment)
         };
 
-        var upserted = await _stateSpanService.UpsertStateSpanAsync(stateSpan, ct);
-        result.CreatedRecords.Add(upserted);
+        await UpsertTreatmentSpanAsync(stateSpan, result, ct);
         Logger.LogDebug("Delegated Temporary Target treatment {LegacyId} to IStateSpanService", treatment.Id);
+    }
+
+    /// <summary>
+    /// Upserts the span a treatment decomposes into by its original id and files it by what that
+    /// did, as <see cref="DecomposerBase.UpsertByLegacyIdAsync{TRecord}"/> files a record: a span
+    /// already stored is reported updated, so a re-upload is announced as the edit it is and
+    /// write-back looks for the copy upstream holds before it writes; a span the user deleted is
+    /// counted in <see cref="V4Models.DecompositionResult.SkippedDeleted"/>.
+    /// </summary>
+    private async Task UpsertTreatmentSpanAsync(StateSpan span, V4Models.DecompositionResult result, CancellationToken ct)
+    {
+        var written = await _stateSpanService.UpsertStateSpanWithOutcomeAsync(span, ct);
+        switch (written.Outcome)
+        {
+            case StateSpanUpsertOutcome.Inserted:
+                result.CreatedRecords.Add(written.Span);
+                break;
+            case StateSpanUpsertOutcome.Updated:
+                result.UpdatedRecords.Add(written.Span);
+                break;
+            default:
+                result.SkippedDeleted++;
+                break;
+        }
     }
 
     #endregion

@@ -46,8 +46,9 @@ public interface IBulkUpsertRepository<TRecord>
 }
 
 /// <summary>
-/// One record's outcome from <see cref="ILegacyKeyedRepository{TRecord}.BulkUpsertByLegacyIdAsync"/>:
-/// the persisted record and whether it was inserted rather than updated in place.
+/// One record's outcome from <see cref="ILegacyKeyedRepository{TRecord}.BulkUpsertByLegacyIdAsync"/>
+/// or <see cref="ILegacyKeyedRepository{TRecord}.CreateOrUpsertAsync"/>: the persisted record and
+/// whether it was inserted rather than updated in place.
 /// </summary>
 /// <typeparam name="TRecord">The V4 record type.</typeparam>
 public sealed record LegacyUpsert<TRecord>(TRecord Record, bool Created);
@@ -115,6 +116,13 @@ public interface ILegacyKeyedRepository<TRecord>
         CancellationToken ct = default);
 
     Task<TRecord?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="IV4Repository{T}.CreateAsync"/>, saying whether the record was inserted or, for a
+    /// type whose creates upsert on the sync key, updated in place the stored row that key matched.
+    /// </summary>
+    /// <exception cref="RecreationBlockedException">As <see cref="IV4Repository{T}.CreateAsync"/>.</exception>
+    Task<LegacyUpsert<TRecord>> CreateOrUpsertAsync(TRecord model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// The record whose UUID <see cref="IV4Record.LegacyId"/> <see cref="Nocturne.Core.Models.MongoObjectId.Coerce"/>
