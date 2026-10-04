@@ -30,7 +30,6 @@ class SignalRClient {
   private alarmConnection: HubConnection | null = null;
   private configConnection: HubConnection | null = null;
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number;
   private reconnectDelay: number;
   private maxReconnectDelay: number;
   private hubUrl: string;
@@ -54,7 +53,6 @@ class SignalRClient {
     this.hubUrl = config.hubUrl;
     this.alarmHubUrl = config.alarmHubUrl;
     this.configHubUrl = config.configHubUrl;
-    this.maxReconnectAttempts = config.reconnectAttempts;
     this.reconnectDelay = config.reconnectDelay;
     this.maxReconnectDelay = config.maxReconnectDelay;
     this.instanceKey = config.instanceKey;
@@ -63,6 +61,8 @@ class SignalRClient {
 
   async connect(): Promise<void> {
     if (this.disconnectRequested) return;
+    if (this.connectionLossPromise) await this.connectionLossPromise;
+    if (this.disconnectRequested || this.isConnected()) return;
 
     if (this.connectPromise) {
       await this.connectPromise;
@@ -445,13 +445,6 @@ class SignalRClient {
     if (this.disconnectRequested || this.isCleaningUpConnections) return;
     if (this.reconnectTimer) return;
 
-    if (!isSetupRequired && this.reconnectAttempts >= this.maxReconnectAttempts) {
-      logger.error(
-        `Maximum reconnection attempts (${this.maxReconnectAttempts}) exceeded`,
-      );
-      return;
-    }
-
     this.reconnectAttempts++;
     const delay = Math.min(
       this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1),
@@ -460,7 +453,7 @@ class SignalRClient {
 
     const attemptLabel = isSetupRequired
       ? `setup pending, attempt ${this.reconnectAttempts}`
-      : `attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`;
+      : `attempt ${this.reconnectAttempts}`;
     logger.info(
       `Attempting to reconnect to SignalR hub in ${delay}ms (${attemptLabel})`,
     );
@@ -490,10 +483,8 @@ class SignalRClient {
     }
 
     await this.connectPromise;
-
-    await this.stopConnection(this.dataConnection, "DataHub");
-    await this.stopConnection(this.alarmConnection, "AlarmHub");
-    await this.stopConnection(this.configConnection, "ConfigHub");
+    await this.connectionLossPromise;
+    await this.cleanupFailedConnections();
   }
 
   private async stopConnection(

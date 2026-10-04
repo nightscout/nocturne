@@ -12,6 +12,9 @@ overrides:
 packageExtensionsChecksum: sha256-+J/i+JN9q0i27S6jHAFCNlPAOZNxqln6DUYUOcBUKZM=
 
 patchedDependencies:
+  '@microsoft/signalr@8.0.17':
+    hash: ef9f75c2512afa4a1a74495b74e8df0a917cbaf70b29dab58fb4a7dbebec4111
+    path: patches/@microsoft__signalr@8.0.17.patch
   bits-ui@2.18.1:
     hash: d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07
     path: patches/bits-ui@2.18.1.patch
@@ -340,7 +343,7 @@ importers:
     dependencies:
       '@microsoft/signalr':
         specifier: ^8.0.0
-        version: 8.0.17(encoding@0.1.13)
+        version: 8.0.17(patch_hash=ef9f75c2512afa4a1a74495b74e8df0a917cbaf70b29dab58fb4a7dbebec4111)(encoding@0.1.13)
       socket.io:
         specifier: ^4.7.5
         version: 4.8.1
@@ -351,6 +354,15 @@ importers:
         specifier: ^3.11.0
         version: 3.18.3
     devDependencies:
+      socket.io-client:
+        specifier: 4.8.3
+        version: 4.8.3
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
+      ws:
+        specifier: 8.20.1
+        version: 8.20.1
       '@nocturne/eslint-config':
         specifier: workspace:*
         version: link:../eslint-config
@@ -7829,7 +7841,7 @@ snapshots:
     dependencies:
       svelte: 5.55.5(@typescript-eslint/types@8.59.3)
 
-  '@microsoft/signalr@8.0.17(encoding@0.1.13)':
+  '@microsoft/signalr@8.0.17(patch_hash=ef9f75c2512afa4a1a74495b74e8df0a917cbaf70b29dab58fb4a7dbebec4111)(encoding@0.1.13)':
     dependencies:
       abort-controller: 3.0.0
       eventsource: 2.0.2

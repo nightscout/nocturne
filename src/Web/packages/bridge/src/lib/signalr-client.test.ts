@@ -236,4 +236,38 @@ describe("SignalRClient connection lifecycle", () => {
     expect(signalr.buildConnection).toHaveBeenCalledTimes(1);
     expect(client.isConnected()).toBe(false);
   });
+
+  it("keeps retrying past the configured attempt limit, caps backoff and resets it after recovery", async () => {
+    const failures = Array.from(
+      { length: 9 },
+      () =>
+        new FakeHubConnection(async () => {
+          throw new Error("API unavailable");
+        }),
+    );
+    const recovered = new FakeHubConnection();
+    const reconnected = new FakeHubConnection();
+    queueConnections(...failures, recovered, reconnected);
+    const client = createClient();
+    await client.connect();
+
+    for (const delay of [100, 200, 400, 800, 1000, 1000, 1000, 1000, 1000]) {
+      const attempts = signalr.buildConnection.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(signalr.buildConnection).toHaveBeenCalledTimes(attempts);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(signalr.buildConnection).toHaveBeenCalledTimes(attempts + 1);
+    }
+    expect(client.isConnected()).toBe(true);
+    recovered.emitClose();
+    await vi.advanceTimersByTimeAsync(99);
+    expect(reconnected.start).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(client.isConnected()).toBe(true);
+
+    reconnected.emitClose();
+    await client.disconnect();
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(signalr.buildConnection).toHaveBeenCalledTimes(11);
+  });
 });
