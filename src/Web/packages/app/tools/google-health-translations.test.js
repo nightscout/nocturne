@@ -227,11 +227,11 @@ describe("Google Health production translations", () => {
           new URL(`../../../locales/${locale}.po`, import.meta.url)
         )
       );
-      const missing = entries(catalog).filter(
-        (entry) =>
-          entry.msgid &&
-          isGoogleHealthEntry(entry) &&
-          !entry.msgstr?.[0]?.trim()
+      const localized = new Map(
+        entries(catalog).map((entry) => [entry.msgid, entry])
+      );
+      const missing = [...expectedPlaceholders.keys()].filter(
+        (id) => !localized.get(id)?.msgstr?.[0]?.trim()
       );
       expect(missing).toEqual([]);
       const mismatches = entries(catalog).filter(

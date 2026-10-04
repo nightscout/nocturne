@@ -172,6 +172,33 @@ public class GoogleHealthConnectorServiceTests
     }
 
     [Fact]
+    public async Task Google_revoked_refresh_token_disables_further_polls_and_preserves_import_settings()
+    {
+        var calls = 0;
+        var fixture = new Fixture(_ =>
+        {
+            ++calls;
+            return new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent("""{"error":"invalid_grant"}""", Encoding.UTF8, "application/json")
+            };
+        });
+        fixture.SetSession("revoked-refresh", GoogleHealthClient.MetricsScope);
+        fixture.StoredConfiguration = """{"enabled":true,"importFrom":"2026-01-01T00:00:00Z","historyDays":14,"sentinel":"kept"}""";
+        var config = fixture.Configuration();
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
+        Assert.Equal("reconnect_required", result.Message);
+        Assert.False(fixture.Secrets.ContainsKey("refreshToken"));
+        using var saved = JsonDocument.Parse(fixture.StoredConfiguration);
+        Assert.False(saved.RootElement.GetProperty("enabled").GetBoolean());
+        Assert.Equal("2026-01-01T00:00:00Z", saved.RootElement.GetProperty("importFrom").GetString());
+        Assert.Equal(14, saved.RootElement.GetProperty("historyDays").GetInt32());
+        Assert.Equal("kept", saved.RootElement.GetProperty("sentinel").GetString());
+        Assert.True((await fixture.Service.SyncDataAsync(new SyncRequest(), config, default)).Success);
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
     public async Task Sync_fetches_selected_data_and_publishes_to_native_health_services()
     {
         var sampleTime = DateTimeOffset.UtcNow.AddMinutes(-10);
@@ -778,6 +805,10 @@ public class GoogleHealthConnectorServiceTests
         Assert.False(result.Success);
         Assert.Equal("reconnect_required", result.Message);
         Assert.False(fixture.Secrets.ContainsKey("refreshToken"));
+        using var saved = JsonDocument.Parse(fixture.StoredConfiguration);
+        Assert.False(saved.RootElement.GetProperty("enabled").GetBoolean());
+        var skipped = await fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
+        Assert.True(skipped.Success);
     }
 
     [Fact]
@@ -887,6 +918,8 @@ public class GoogleHealthConnectorServiceTests
                     ImportFromWasConsumed = document.RootElement.GetProperty("importFrom").ValueKind == JsonValueKind.Null;
                     LastSavedConfiguration = document.RootElement.GetRawText();
                     StoredConfiguration = LastSavedConfiguration;
+                    if (currentConfiguration is not null && document.RootElement.TryGetProperty("enabled", out var enabled))
+                        currentConfiguration.Enabled = enabled.GetBoolean();
                 })
                 .ReturnsAsync(() => new ConnectorConfigurationResponse());
             var cursorStore = new Mock<IConnectorSyncCursorStore>();

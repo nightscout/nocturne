@@ -609,6 +609,12 @@ public sealed class GoogleHealthConnectorService(
         secrets.Remove("refreshToken");
         secrets.Remove("grantedScopes");
         await connectorConfigurations.SaveSecretsAsync(ConnectorName, secrets, ct: ct);
+        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
+        if (stored is null) return;
+        var configuration = stored.Configuration.RootElement.Deserialize<Dictionary<string, JsonElement>>() ?? [];
+        configuration["enabled"] = JsonSerializer.SerializeToElement(false);
+        using var updated = JsonSerializer.SerializeToDocument(configuration);
+        await connectorConfigurations.SaveConfigurationAsync(ConnectorName, updated, ct: ct);
     }
 
     private async Task ConsumeImportFromAsync(CancellationToken ct)
