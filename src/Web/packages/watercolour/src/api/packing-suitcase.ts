@@ -63,14 +63,14 @@ const GLAZE_WATER = 0.3;
 const MASK_FEATHER = 0.012;
 const HARDWARE_WATER = 0.3;
 /**
- * The hardware waits for the last band to lose most of its water, and the
- * clasp for the strap: indigo laid into a wet warm band mixes to olive, gold
- * into wet indigo to green.
+ * Ticks a band gets to spread before the sheet is dried, for the next band in
+ * a replay or for the hardware, while evaporating `SPREAD_SETTLE_SHARE` a
+ * tick so it is mostly dry when the dry lands. The hardware is laid on a dried
+ * sheet: indigo into a wet warm band mixes to olive, gold into wet indigo to
+ * green.
  */
-const HARDWARE_WAIT_TICKS = 4 * LIVE_TICKS_PER_SECOND;
-/** Ticks a replayed band gets to spread before the sheet is dried for the next, or for the hardware. */
-const REPLAY_SPREAD_TICKS = 6;
-const CLASP_WAIT_TICKS = 2 * LIVE_TICKS_PER_SECOND;
+const SPREAD_TICKS = 6;
+const SPREAD_SETTLE_SHARE = 0.25;
 const STRAP_Y = 0.59;
 const STRAP_RADIUS = 0.05;
 const STRAP_OVERHANG = 0.02;
@@ -141,10 +141,9 @@ export class PackingSuitcase {
   /**
    * One item packed, with `stillUnpacked` items left after it. Returns its
    * band, or a glaze when the body is already full, and the hardware when
-   * this pack completes the list. `replay` lays the hardware for a sheet the
-   * caller dries itself, with a `dry_all` in place of the live waits.
+   * this pack completes the list.
    */
-  pack(category: string, stillUnpacked: number, replay = false): TimedOp[] {
+  pack(category: string, stillUnpacked: number): TimedOp[] {
     const filled = this.bands.at(-1)?.bottom ?? this.y0;
     const pigment = this.bandPigment(category);
     let paint: TimedOp[];
@@ -159,7 +158,7 @@ export class PackingSuitcase {
     const ops = [{ afterTicks: 0, op: this.mask() }, ...paint];
     if (stillUnpacked === 0 && !this.hardware) {
       this.hardware = true;
-      ops.push(...this.hardwareOps(replay));
+      ops.push(...this.hardwareOps());
     }
     return ops;
   }
@@ -178,7 +177,7 @@ export class PackingSuitcase {
       last.bottom = this.y1;
     }
     this.hardware = true;
-    ops.push(...this.hardwareOps(false));
+    ops.push(...this.hardwareOps());
     return ops;
   }
 
@@ -270,7 +269,7 @@ export class PackingSuitcase {
     ];
   }
 
-  private hardwareOps(replay: boolean): TimedOp[] {
+  private hardwareOps(): TimedOp[] {
     const [strap, handle, clasp] = this.hardwarePaths();
     const { hardware, clasp: claspPigment } = this.geometry.pigments;
     const brush = (s: Stroke, pigment: number, concentration: number, ticks: number, at: number) =>
@@ -280,19 +279,21 @@ export class PackingSuitcase {
         ticks,
         at,
       );
-    const start = BAND_TICKS + (replay ? REPLAY_SPREAD_TICKS : HARDWARE_WAIT_TICKS);
+    const start = BAND_TICKS + SPREAD_TICKS;
     const strapAt = start + LIFT_STAGGER_TICKS;
     const handleAt = strapAt + 12;
-    const claspAt = handleAt + 10 + (replay ? 2 : CLASP_WAIT_TICKS);
+    const claspAt = handleAt + 12;
     return [
-      ...(replay ? [{ afterTicks: start - 1, op: 'dry_all' }] : []),
+      { afterTicks: BAND_TICKS, op: { settle: { share: SPREAD_SETTLE_SHARE } } },
+      { afterTicks: start - 1, op: 'dry_all' },
       ...this.lift([strap], start, CLEARING_STRENGTH),
       ...brush(strap, hardware, 0.5, 12, strapAt),
       { afterTicks: handleAt, op: 'clear_mask' },
       ...brush(handle, hardware, 0.85, 10, handleAt),
-      ...(replay ? [{ afterTicks: claspAt - 2, op: 'dry_all' }] : []),
+      { afterTicks: claspAt - 2, op: 'dry_all' },
       ...this.lift([clasp], claspAt - 1, CLEARING_STRENGTH),
       ...brush(clasp, claspPigment, 0.9, 2, claspAt),
+      { afterTicks: claspAt + 2, op: { settle: { share: LIVE_SETTLE_SHARE } } },
     ];
   }
 
@@ -314,7 +315,6 @@ interface SceneDocument {
 /** The catalogue artwork that donates the paper, the palette and the silhouette. */
 const DONOR = 'suitcase';
 const DONOR_PALETTE = 'dusk';
-const REPLAY_SETTLE_SHARE = 0.25;
 /** Ticks after the last replayed operation for the reveal to come to rest. */
 const REPLAY_TAIL_TICKS = 20;
 /** The grid the prototype was tuned on; a larger one spreads the same strokes over more cells. */
@@ -371,14 +371,14 @@ export function packingSuitcaseScene(
   const events: { at_tick: number; op: SceneOp }[] = [];
   let tick = 0;
   packed.forEach((category, i) => {
-    const ops = painter.pack(category, packed.length - 1 - i + unpacked, true);
+    const ops = painter.pack(category, packed.length - 1 - i + unpacked);
     const end = Math.max(...ops.map((o) => o.afterTicks));
     events.push(
       ...ops.map(({ afterTicks, op }) => ({ at_tick: tick + afterTicks, op })),
-      { at_tick: tick + BAND_TICKS, op: { settle: { share: REPLAY_SETTLE_SHARE } } },
-      { at_tick: tick + end + REPLAY_SPREAD_TICKS, op: 'dry_all' },
+      { at_tick: tick + BAND_TICKS, op: { settle: { share: SPREAD_SETTLE_SHARE } } },
+      { at_tick: tick + end + SPREAD_TICKS, op: 'dry_all' },
     );
-    tick += end + REPLAY_SPREAD_TICKS + 1;
+    tick += end + SPREAD_TICKS + 1;
   });
   events.push({ at_tick: tick, op: { settle: { share: LIVE_SETTLE_SHARE } } });
   events.sort((a, b) => a.at_tick - b.at_tick);
