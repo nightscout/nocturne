@@ -58,6 +58,16 @@ public interface ISensorGlucoseRepository
         int limit, int offset, bool descending, CancellationToken ct)
         => GetAsync(from, to, device, source, limit, offset, descending, false, null, null, ct);
 
+    /// <summary>
+    /// Partial readings for canonical selection and <see cref="EntryProjection.FromSensorGlucose"/>
+    /// only; omitted V4 fields must not leak into raw record responses.
+    /// </summary>
+    Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit = 100, int offset = 0, bool descending = true, bool nativeOnly = false,
+        DateTime? afterTimestamp = null, Guid? afterId = null,
+        CancellationToken ct = default, Guid? patientDeviceId = null);
+
     /// <summary>Retrieve all <see cref="SensorGlucose"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records.</param>
     /// <param name="ct">Cancellation token.</param>

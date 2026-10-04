@@ -150,7 +150,7 @@ public class EntryReadService : IEntryStore
         // when a losing stream reported last — a 1-minute losing cadence can outnumber the
         // winner five to one on a descending page.
         const int fetchLimit = 60;
-        var results = await _sgRepo.GetAsync(
+        var results = await _sgRepo.GetForEntriesAsync(
             from: null, to: null, device: null, source: source,
             limit: fetchLimit, offset: 0, descending: true, nativeOnly: false, ct: ct);
 
@@ -431,7 +431,7 @@ public class EntryReadService : IEntryStore
         var window = new Dictionary<Guid, SensorGlucose>();
         foreach (var (from, to) in CanonicalBucketRuns(readings))
         {
-            var stored = await _sgRepo.GetAsync(from, to, device: null, source, MaxFilterFetch, 0, false, false, null, null, ct);
+            var stored = await _sgRepo.GetForEntriesAsync(from, to, device: null, source, MaxFilterFetch, 0, false, false, null, null, ct);
             foreach (var reading in ExcludeDemoIfNeeded(stored, excludeDemo))
                 window.TryAdd(reading.Id, reading);
         }
@@ -501,7 +501,7 @@ public class EntryReadService : IEntryStore
 
         while (true)
         {
-            var results = (await _sgRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, false, null, null, ct)).ToList();
+            var results = (await _sgRepo.GetForEntriesAsync(from, to, device: null, source, fetchCount, 0, descending, false, null, null, ct)).ToList();
             var visible = ExcludeDemoIfNeeded(results, excludeDemo).ToList();
             var canonical = await _canonicalGlucose.SelectAsync(visible, ct);
 
