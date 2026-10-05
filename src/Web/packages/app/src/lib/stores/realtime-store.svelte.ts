@@ -2,7 +2,7 @@
 import { WebSocketClient } from "$lib/websocket/websocket-client.svelte";
 import { entryIdentity, isSameEntry, unseenEntries } from "./entry-identity";
 import { markedRead } from "./notification-read";
-import { untilNow } from "$lib/utils/now";
+import { startOfLocalDay, untilNow } from "$lib/utils/now";
 import { toDate } from "$lib/utils/formatting";
 import type {
   Entry,
@@ -81,6 +81,34 @@ export function sensorGlucoseToEntry(sg: SensorGlucose): Entry {
     sgv: sg.mgdl,
     data_source: sg.dataSource,
   };
+}
+
+/** How many readings the recent-readings list shows, and so the fewest the store starts from. */
+export const RECENT_READINGS = 5;
+
+/**
+ * The readings the store starts from: those since `from`, which the caller sets to cover today and
+ * the last day. The window is left open-ended so a reading stamped ahead of the browser's clock is
+ * still the current one. An uploader that has been quiet for most of the window still has a
+ * current reading, delta and recent list to show, so a sparse window is topped up with the newest
+ * readings.
+ */
+export async function loadInitialGlucose(
+  apiClient: ReturnType<typeof getApiClient>,
+  from: string
+): Promise<Entry[]> {
+  try {
+    const recent = ((await apiClient.sensorGlucose.getAll(from, undefined, 1000)).data ?? []).map(
+      sensorGlucoseToEntry
+    );
+    if (recent.length >= RECENT_READINGS) return recent;
+    const latest = ((await apiClient.sensorGlucose.getAll(undefined, undefined, RECENT_READINGS)).data ?? []).map(
+      sensorGlucoseToEntry
+    );
+    return [...recent, ...unseenEntries(recent, latest)];
+  } catch {
+    return [];
+  }
 }
 
 const REALTIME_STORE_KEY = Symbol("realtime-store");
@@ -367,6 +395,9 @@ export class RealtimeStore {
       // Fetch historical data using the properly configured API client
       const apiClient = getApiClient();
       const { from: oneDayAgo, to: now } = untilNow(Date.now() - 24 * 60 * 60 * 1000);
+      const glucoseFrom = untilNow(
+        Math.min(startOfLocalDay(Date.now()), Date.parse(oneDayAgo))
+      ).from;
       const [
         historicalEntries,
         deviceStatusData,
@@ -382,7 +413,7 @@ export class RealtimeStore {
         historicalApsSnapshots,
         currentTherapyState,
       ] = await Promise.all([
-        apiClient.sensorGlucose.getAll(undefined, undefined, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch((): Entry[] => []),
+        loadInitialGlucose(apiClient, glucoseFrom),
         Promise.resolve<DeviceStatus[]>([]),
         apiClient.profile.getProfileSummary().catch(() => null),
         apiClient.trackers.getDefinitions().catch(() => []),

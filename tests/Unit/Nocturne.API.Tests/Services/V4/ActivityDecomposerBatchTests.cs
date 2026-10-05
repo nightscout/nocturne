@@ -368,6 +368,148 @@ public class ActivityDecomposerBatchTests : IDisposable
 
     #endregion
 
+    #region Resent xDrip heart rates
+
+    [Fact]
+    public void MapToHeartRate_XDripHeartRateWithoutId_KeysItByTimeAndKeepsItsType()
+    {
+        var activity = CreateXDripHeartRateUpload(1_780_000_000_123, 72);
+        ActivityDecomposer.NormalizeMills(activity);
+
+        var heartRate = ActivityDecomposer.MapToHeartRate(activity);
+
+        heartRate.Id.Should().BeNull();
+        heartRate.Type.Should().Be("hr-bpm");
+        heartRate.Bpm.Should().Be(72);
+        heartRate.DataSource.Should().Be("xdrip");
+        heartRate.SyncIdentifier.Should().Be("hr-bpm:1780000000123");
+    }
+
+    [Fact]
+    public void MapToHeartRate_XDripHeartRateWithId_KeepsTheIdAsKey()
+    {
+        var activity = CreateXDripHeartRateUpload(1_780_000_000_123, 72);
+        activity.Id = "hr1";
+
+        var heartRate = ActivityDecomposer.MapToHeartRate(activity);
+
+        heartRate.Id.Should().Be("hr1");
+        heartRate.DataSource.Should().BeNull();
+        heartRate.SyncIdentifier.Should().BeNull();
+    }
+
+    [Fact]
+    public void MapToHeartRate_XDripHeartRateFromAConnector_KeepsTheConnectorSource()
+    {
+        var activity = CreateXDripHeartRateUpload(1_780_000_000_123, 72);
+        activity.DataSource = "nightscout-connector";
+        ActivityDecomposer.NormalizeMills(activity);
+
+        var heartRate = ActivityDecomposer.MapToHeartRate(activity);
+
+        heartRate.DataSource.Should().Be("nightscout-connector");
+        heartRate.SyncIdentifier.Should().Be("hr-bpm:1780000000123");
+    }
+
+    [Theory]
+    [InlineData(null, 1_780_000_000_123)]
+    [InlineData("heart", 1_780_000_000_123)]
+    [InlineData("hr-bpm", 0)]
+    public void MapToHeartRate_NotAnXDripHeartRateOrWithoutTime_GetsNoKey(string? type, long mills)
+    {
+        var activity = new Activity
+        {
+            Type = type,
+            Mills = mills,
+            AdditionalProperties = new Dictionary<string, object> { ["bpm"] = 72 },
+        };
+
+        var heartRate = ActivityDecomposer.MapToHeartRate(activity);
+
+        heartRate.Type.Should().Be(type);
+        heartRate.DataSource.Should().BeNull();
+        heartRate.SyncIdentifier.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_XDripHeartRateResentWithoutId_StoresEachSampleOnce()
+    {
+        const long at = 1_780_000_000_123;
+        const long nextAt = at + 300_000;
+
+        await _decomposer.DecomposeAsync(CreateXDripHeartRateUpload(at, 70), WriteOrigin.Live);
+        var resent = await _decomposer.DecomposeAsync(CreateXDripHeartRateUpload(at, 70), WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(CreateXDripHeartRateUpload(nextAt, 88), WriteOrigin.Live);
+
+        resent.CreatedRecords.Should().BeEmpty();
+        resent.UpdatedRecords.Should().ContainSingle().Which.As<HeartRate>().Bpm.Should().Be(70);
+        _context.HeartRates.OrderBy(h => h.Timestamp)
+            .Select(h => new { h.Timestamp, h.Bpm, h.Type, h.DataSource, h.SyncIdentifier })
+            .Should().Equal(
+                new
+                {
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(at).UtcDateTime,
+                    Bpm = 70,
+                    Type = (string?)"hr-bpm",
+                    DataSource = (string?)"xdrip",
+                    SyncIdentifier = (string?)$"hr-bpm:{at}",
+                },
+                new
+                {
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(nextAt).UtcDateTime,
+                    Bpm = 88,
+                    Type = (string?)"hr-bpm",
+                    DataSource = (string?)"xdrip",
+                    SyncIdentifier = (string?)$"hr-bpm:{nextAt}",
+                });
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_XDripHeartRateResentWithoutId_UpdatesStoredRowAndKeepsTheLastOfEachTime()
+    {
+        const long at = 1_780_000_000_123;
+        const long nextAt = at + 300_000;
+        await _decomposer.DecomposeAsync(CreateXDripHeartRateUpload(at, 70), WriteOrigin.Live);
+
+        var result = await _decomposer.DecomposeBatchAsync(
+            [CreateXDripHeartRateUpload(at, 71), CreateXDripHeartRateUpload(nextAt, 80), CreateXDripHeartRateUpload(nextAt, 88)],
+            WriteOrigin.Live);
+
+        result.UpdatedRecords.Should().ContainSingle().Which.As<HeartRate>().Bpm.Should().Be(71);
+        result.CreatedRecords.Should().ContainSingle().Which.As<HeartRate>().Bpm.Should().Be(88);
+        _context.HeartRates.OrderBy(h => h.Timestamp)
+            .Select(h => new { h.SyncIdentifier, h.Bpm })
+            .Should().Equal(
+                new { SyncIdentifier = (string?)$"hr-bpm:{at}", Bpm = 71 },
+                new { SyncIdentifier = (string?)$"hr-bpm:{nextAt}", Bpm = 88 });
+    }
+
+    #endregion
+
+    #region Reverse mapping
+
+    [Fact]
+    public void HeartRateToActivity_CarriesTheUploadedType()
+    {
+        var activity = ActivityDecomposer.HeartRateToActivity(new HeartRate { Type = "hr-bpm", Bpm = 72 });
+
+        activity.Type.Should().Be("hr-bpm");
+        activity.AdditionalProperties!["bpm"].Should().Be(72);
+    }
+
+    [Fact]
+    public void StepCountToActivity_CarriesTheUploadedType()
+    {
+        var stepCount = ActivityDecomposer.MapToStepCount(CreateXDripUpload(1_780_000_000_123, 400));
+
+        var activity = ActivityDecomposer.StepCountToActivity(stepCount);
+
+        activity.Type.Should().Be("steps-total");
+        activity.AdditionalProperties!["metric"].Should().Be(400);
+    }
+
+    #endregion
+
     #region IsStepCount
 
     [Theory]
@@ -549,6 +691,13 @@ public class ActivityDecomposerBatchTests : IDisposable
         var createdAt = DateTimeOffset.FromUnixTimeMilliseconds(timeStamp).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
         return System.Text.Json.JsonSerializer.Deserialize<Activity>(
             $$"""{"type":"steps-total","timeStamp":{{timeStamp}},"created_at":"{{createdAt}}","steps":{{steps}}}""")!;
+    }
+
+    private static Activity CreateXDripHeartRateUpload(long timeStamp, int bpm)
+    {
+        var createdAt = DateTimeOffset.FromUnixTimeMilliseconds(timeStamp).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+        return System.Text.Json.JsonSerializer.Deserialize<Activity>(
+            $$"""{"type":"hr-bpm","timeStamp":{{timeStamp}},"created_at":"{{createdAt}}","bpm":{{bpm}}}""")!;
     }
 
     private static Activity CreateRegularActivity(string id, string type)

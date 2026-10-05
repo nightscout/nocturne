@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Attributes;
 using Nocturne.Core.Models.Serializers;
@@ -369,11 +370,34 @@ public class Treatment : ProcessableDocumentBase
     private double? _rate;
 
     /// <summary>
-    /// Gets or sets the timestamp as an ISO 8601 string - optional field
+    /// The <c>timestamp</c> exactly as uploaded, a JSON string or number, served back with the same
+    /// JSON type as Nightscout does. AAPS's v1 client uploads a temporary target's as epoch
+    /// milliseconds; LoopFollow reads <c>timestamp as? String ?? created_at</c>, so a number falls back
+    /// to <c>created_at</c> while the same digits as a string fail its date parse.
     /// </summary>
     [JsonPropertyName("timestamp")]
-    [JsonConverter(typeof(FlexibleStringConverter))]
-    public string? Timestamp { get; set; }
+    public JsonElement? RawTimestamp { get; set; }
+
+    /// <summary>
+    /// <see cref="RawTimestamp"/> as text: a string's value, or a number's or boolean's literal.
+    /// Setting the text it already holds keeps the uploaded JSON type, so a property-by-property copy
+    /// does not turn a number into a string.
+    /// </summary>
+    [JsonIgnore]
+    public string? Timestamp
+    {
+        get => RawTimestamp switch
+        {
+            { ValueKind: JsonValueKind.String } s => s.GetString(),
+            { ValueKind: JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False } v => v.GetRawText(),
+            _ => null,
+        };
+        set
+        {
+            if (value != Timestamp)
+                RawTimestamp = value is null ? null : JsonSerializer.SerializeToElement(value);
+        }
+    }
 
     /// <summary>
     /// Calculates Mills from Created_at if Mills is not set - for API compatibility

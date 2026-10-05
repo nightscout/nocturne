@@ -192,6 +192,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.FreeSty
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Infrastructure.Data.Migrations", "src\Infrastructure\Nocturne.Infrastructure.Data.Migrations\Nocturne.Infrastructure.Data.Migrations.csproj", "{23FE1B13-6715-4CB2-B921-C82D72586273}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Performance", "Performance", "{D4B74A0E-1C52-E2FD-154E-FB64CAA65177}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Performance.Tests.Shared", "tests\Performance\Nocturne.Performance.Tests.Shared\Nocturne.Performance.Tests.Shared.csproj", "{0C6FF919-ED2C-4583-8220-383E2CEB0321}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1018,6 +1022,18 @@ Global
 		{23FE1B13-6715-4CB2-B921-C82D72586273}.Release|x64.Build.0 = Release|Any CPU
 		{23FE1B13-6715-4CB2-B921-C82D72586273}.Release|x86.ActiveCfg = Release|Any CPU
 		{23FE1B13-6715-4CB2-B921-C82D72586273}.Release|x86.Build.0 = Release|Any CPU
+		{0C6FF919-ED2C-4583-8220-383E2CEB0321}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0C6FF919-ED2C-4583-8220-383E2CEB0321}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0C6FF919-ED2C-4583-8220-383E2CEB0321}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0C6FF919-ED2C-4583-8220-383E2CEB0321}.Debug|x64.Build.0 = Debug|Any CPU
+		{0C6FF919-ED2C-4583-8220-383E2CEB0321}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0C6FF919-ED2C-4583-8220-383E2CEB0321}.Debug|x86.Build.0 = Debug|Any CPU
+		{0C6FF919-ED2C-4583-8220-383E2CEB0321}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0C6FF919-ED2C-4583-8220-383E2CEB0321}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0C6FF919-ED2C-4583-8220-383E2CEB0321}.Release|x64.ActiveCfg = Release|Any CPU
+		{0C6FF919-ED2C-4583-8220-383E2CEB0321}.Release|x64.Build.0 = Release|Any CPU
+		{0C6FF919-ED2C-4583-8220-383E2CEB0321}.Release|x86.ActiveCfg = Release|Any CPU
+		{0C6FF919-ED2C-4583-8220-383E2CEB0321}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1102,5 +1118,6 @@ Global
 		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 		{35F8047B-084E-4517-B4AC-6768B55DD0ED} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 		{23FE1B13-6715-4CB2-B921-C82D72586273} = {9048EB7F-3875-A59E-E36B-5BD4C6F2A282}
+		{0C6FF919-ED2C-4583-8220-383E2CEB0321} = {D4B74A0E-1C52-E2FD-154E-FB64CAA65177}
 	EndGlobalSection
 EndGlobal

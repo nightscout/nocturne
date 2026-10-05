@@ -39,6 +39,7 @@ public abstract class TimeSeriesEntityService<TDomain, TEntity>(
     )
     {
         var query = EntitySet
+            .AsNoTracking()
             .Where(e => e.Timestamp >= from && e.Timestamp < to)
             .OrderBy(e => e.Timestamp)
             .Skip(skip);

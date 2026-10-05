@@ -24,6 +24,8 @@ namespace Nocturne.API.Services.V4;
 /// <seealso cref="IDecomposer{T}"/>
 public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 {
+    private const string XDripHeartRateType = "hr-bpm";
+
     private readonly NocturneDbContext _dbContext;
     private readonly IStateSpanRepository _stateSpanRepository;
     private readonly ILogger<ActivityDecomposer> _logger;
@@ -224,6 +226,24 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         return result;
     }
 
+    private static readonly List<string> ActivityCategoryNames =
+        ActivityStateSpanMapper.ActivityCategories.Select(c => c.ToString()).ToList();
+
+    /// <inheritdoc/>
+    public async Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default)
+    {
+        Guid? recordId = Guid.TryParse(id, out var parsed) ? parsed : null;
+
+        return await _dbContext.UserTombstones<StateSpanEntity>().AnyAsync(
+                s => ActivityCategoryNames.Contains(s.Category) && (s.OriginalId == id || s.Id == recordId), ct)
+            || await _dbContext.UserTombstones<SleepSessionEntity>().AnyAsync(
+                s => s.OriginalId == id || s.Id == recordId, ct)
+            || await _dbContext.UserTombstones<HeartRateEntity>().AnyAsync(
+                h => h.OriginalId == id || h.Id == recordId, ct)
+            || await _dbContext.UserTombstones<StepCountEntity>().AnyAsync(
+                s => s.OriginalId == id || s.Id == recordId, ct);
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// Soft-deletes, as <c>SimpleEntityService.DeleteOneAsync</c> does: the tombstone a user's delete
@@ -281,6 +301,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         var activity = new Activity
         {
             Id = heartRate.Id,
+            Type = heartRate.Type,
             Mills = heartRate.Mills,
             CreatedAt = heartRate.CreatedAt,
             UtcOffset = heartRate.UtcOffset,
@@ -309,6 +330,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         var activity = new Activity
         {
             Id = stepCount.Id,
+            Type = stepCount.Type,
             Mills = stepCount.Mills,
             CreatedAt = stepCount.CreatedAt,
             UtcOffset = stepCount.UtcOffset,
@@ -330,7 +352,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 
     /// <summary>
     /// Create-or-update keyed on the legacy <c>OriginalId</c>, or, for a record with no id, on its
-    /// sync key when <see cref="MapToStepCount"/> gave it one. Heart rates and step counts have no
+    /// sync key when <see cref="MapToHeartRate"/> or <see cref="MapToStepCount"/> gave it one. Heart rates and step counts have no
     /// V4 repository, so unlike its <see cref="DecomposerBase.UpsertByLegacyIdAsync"/> siblings this
     /// writes the entity through the context. The <c>OriginalId</c> resolves as
     /// <see cref="ResolveByOriginalIdAsync{TEntity}"/> describes, the sync key as
@@ -552,13 +574,19 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 
     // --- Mapping helpers ---
 
+    /// <summary>
+    /// Maps a heart-rate activity. An xDrip <c>hr-bpm</c> record without an id gets a sync key built
+    /// from its time: xDrip keeps one reading per timestamp and resends the newest reading of each
+    /// sync cycle, so a resend updates the stored row.
+    /// </summary>
     internal static HeartRate MapToHeartRate(Activity activity)
     {
         var props = activity.AdditionalProperties ?? new Dictionary<string, object>();
 
-        return new HeartRate
+        var heartRate = new HeartRate
         {
             Id = activity.Id,
+            Type = activity.Type,
             Mills = activity.Mills,
             Bpm = GetIntValue(props, "bpm"),
             Accuracy = GetIntValue(props, "accuracy"),
@@ -568,6 +596,15 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
             UtcOffset = activity.UtcOffset,
             DataSource = activity.DataSource,
         };
+
+        if (activity.Id is null && activity.Mills > 0
+            && string.Equals(activity.Type, XDripHeartRateType, StringComparison.OrdinalIgnoreCase))
+        {
+            heartRate.DataSource ??= DataSources.XDrip;
+            heartRate.SyncIdentifier = $"{XDripHeartRateType}:{activity.Mills}";
+        }
+
+        return heartRate;
     }
 
     /// <summary>
@@ -586,6 +623,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         var stepCount = new StepCount
         {
             Id = activity.Id,
+            Type = activity.Type,
             Mills = activity.Mills,
             Metric = hasMetric ? GetIntValue(props, "metric") : GetIntValue(props, "steps"),
             // StepCount.Source is the absolute/delta bitmask, not provenance — that is DataSource.

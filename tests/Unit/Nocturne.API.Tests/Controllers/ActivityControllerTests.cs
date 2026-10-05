@@ -7,6 +7,7 @@ using Moq;
 using Nocturne.API.Controllers.V1;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
@@ -533,28 +534,201 @@ public class ActivityControllerTests
     }
 
     [Fact]
-    public async Task UpdateActivity_WhenActivityDoesNotExist_ShouldReturnNotFound()
+    public async Task UpdateActivity_WhenActivityDoesNotExist_InsertsUnderThatId()
     {
-        // Arrange
-        var activityId = "507f1f77bcf86cd799439011";
-        var inputActivity = new Activity { Type = "Exercise", Description = "Test" };
+        const string activityId = "507f1f77bcf86cd799439011";
+        CreateEchoesInput();
 
-        _mockActivityService
-            .Setup(x =>
-                x.UpdateActivityAsync(activityId, inputActivity, It.IsAny<CancellationToken>())
-            )
-            .ReturnsAsync((Activity?)null);
-
-        // Act
         var result = await _controller.UpdateActivity(
             activityId,
-            inputActivity,
+            new Activity { Type = "Exercise", Description = "Test" },
             CancellationToken.None
         );
 
-        // Assert
-        result.Should().NotBeNull();
-        result.Result.Should().BeOfType<NotFoundObjectResult>();
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<Activity>().Which.Id.Should().Be(activityId);
+    }
+
+    [Fact]
+    public async Task SaveActivities_WithAStoredId_UpdatesThatRecord()
+    {
+        const string activityId = "507f1f77bcf86cd799439011";
+        var stored = new Activity { Id = activityId, Type = "Exercise", Duration = 45 };
+        _mockActivityService
+            .Setup(x => x.UpdateActivityAsync(activityId, It.IsAny<Activity>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(stored);
+
+        var result = await _controller.SaveActivities(
+            JsonSerializer.SerializeToElement(new { _id = activityId, type = "Exercise", duration = 45 }),
+            CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(stored);
+        _mockActivityService.Verify(
+            x => x.UpdateActivityAsync(
+                activityId, It.Is<Activity>(a => a.Duration == 45), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _mockActivityService.Verify(
+            x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SaveActivities_WithAnUnknownId_InsertsUnderTheClientsId()
+    {
+        const string activityId = "507f1f77bcf86cd799439011";
+        CreateEchoesInput();
+
+        var result = await _controller.SaveActivities(
+            JsonSerializer.SerializeToElement(new { _id = activityId, type = "Exercise", duration = 45 }),
+            CancellationToken.None);
+
+        var saved = result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<Activity>().Subject;
+        saved.Id.Should().Be(activityId);
+        saved.Duration.Should().Be(45);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("[{\"_id\":\"507f1f77bcf86cd799439011\",\"type\":\"Exercise\"}]")]
+    [InlineData("42")]
+    public async Task SaveActivities_WithAnythingButAnObject_IsRefused(string json)
+    {
+        var result = await _controller.SaveActivities(
+            JsonDocument.Parse(json).RootElement, CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        _mockActivityService.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task SaveActivities_WithoutAnId_CreatesWithoutLookingUp()
+    {
+        CreateEchoesInput();
+
+        var result = await _controller.SaveActivities(
+            JsonSerializer.SerializeToElement(new { type = "Walking", duration = 20 }),
+            CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<Activity>().Which.Type.Should().Be("Walking");
+        _mockActivityService.Verify(
+            x => x.GetActivityByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mockActivityService.Verify(
+            x => x.UpdateActivityAsync(It.IsAny<string>(), It.IsAny<Activity>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SaveActivities_WhenTheStoreKeepsNothing_Answers500()
+    {
+        _mockActivityService
+            .Setup(x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var result = await _controller.SaveActivities(
+            JsonSerializer.SerializeToElement(new { type = "Walking" }),
+            CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+    }
+
+    [Fact]
+    public async Task SaveActivities_WhenTheServiceThrows_LeavesItToTheExceptionHandler()
+    {
+        _mockActivityService
+            .Setup(x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("store down"));
+
+        var save = () => _controller.SaveActivities(
+            JsonSerializer.SerializeToElement(new { type = "Walking" }),
+            CancellationToken.None);
+
+        await save.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task SaveActivities_WithTheIdOfAnActivityTheUserDeleted_IsRefusedWithoutCreating()
+    {
+        const string activityId = "507f1f77bcf86cd799439011";
+        CreateEchoesInput();
+        _mockActivityDecomposer
+            .Setup(d => d.IsDeletedByUserAsync(activityId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var save = () => _controller.SaveActivities(
+            JsonSerializer.SerializeToElement(new { _id = activityId, type = "Exercise", duration = 45 }),
+            CancellationToken.None);
+
+        await save.Should().ThrowAsync<RecreationBlockedException>();
+        _mockActivityService.Verify(
+            x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateActivity_WithTheIdOfAnActivityTheUserDeleted_IsRefusedWithoutCreating()
+    {
+        const string activityId = "0b8f0a52-5d0c-4d43-9a8e-1f2b9c6d7e10";
+        CreateEchoesInput();
+        _mockActivityDecomposer
+            .Setup(d => d.IsDeletedByUserAsync(activityId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var update = () => _controller.UpdateActivity(
+            activityId, new Activity { Type = "Exercise", Duration = 30 }, CancellationToken.None);
+
+        await update.Should().ThrowAsync<RecreationBlockedException>();
+        _mockActivityService.Verify(
+            x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SaveActivities_WithoutAnId_DoesNotLookForATombstone()
+    {
+        CreateEchoesInput();
+
+        await _controller.SaveActivities(
+            JsonSerializer.SerializeToElement(new { type = "Walking", duration = 20 }),
+            CancellationToken.None);
+
+        _mockActivityDecomposer.Verify(
+            d => d.IsDeletedByUserAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SaveActivities_StoredRecordIsSleep_WithoutSleepScope_ReturnsForbidden()
+    {
+        const string id = "sleep-session-1";
+        GrantScopes(Scope.TreatmentsReadWrite);
+        _mockActivityService
+            .Setup(x => x.GetActivityByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Activity { Id = id, Type = "sleep" });
+        _mockActivityDecomposer
+            .Setup(d => d.RequiredWriteScope(It.Is<Activity>(a => a.Type == "sleep")))
+            .Returns(Scope.SleepReadWrite);
+
+        var result = await _controller.SaveActivities(
+            JsonSerializer.SerializeToElement(new { _id = id, type = "exercise" }),
+            CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        _mockActivityService.Verify(
+            x => x.UpdateActivityAsync(It.IsAny<string>(), It.IsAny<Activity>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    private void CreateEchoesInput()
+    {
+        _mockActivityService
+            .Setup(x => x.UpdateActivityAsync(It.IsAny<string>(), It.IsAny<Activity>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Activity?)null);
+        _mockActivityService
+            .Setup(x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Activity> a, CancellationToken _) => a.ToList());
     }
 
     [Fact]

@@ -29,8 +29,11 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// <see cref="ChartDataContext.DisplayCarbIntakes"/> are derived subsets trimmed to the display window.
 /// </para>
 /// <para>
-/// TempBasal records are fetched in ascending order because basal series construction
-/// (in <see cref="IobCobComputeStage"/>) walks them forward in time.
+/// TempBasal records are fetched from <see cref="ChartDataContext.BufferStartTime"/> like boluses so
+/// basal IOB sees temp basals that began before the window, under the same cap as
+/// <see cref="Nocturne.API.Services.Analytics.ChartDataService"/> because the ascending read truncates the newest
+/// rows. Consumers sort for themselves. <see cref="ChartDataContext.DisplayTempBasals"/> is the
+/// display-window subset.
 /// </para>
 /// <para>
 /// All <see cref="StateSpanCategory"/> variants are fetched in one call to
@@ -84,7 +87,7 @@ internal sealed class DataFetchStage(
         // stream, not blended concurrent CGMs.
         var sensorGlucoseList = (
             await canonicalGlucose.SelectAsync(
-                (await sensorGlucoseRepository.GetAsync(
+                (await sensorGlucoseRepository.GetForAnalyticsAsync(
                     from: MillsToDateTime(startTime),
                     to: MillsToDateTime(endTime),
                     device: null,
@@ -167,13 +170,12 @@ internal sealed class DataFetchStage(
             )
         ).ToList();
 
-        // Fetch TempBasal records from v4 table (ascending — needed for basal series building)
         var tempBasalList = (await tempBasalRepository.GetAsync(
-            from: MillsToDateTime(startTime),
+            from: MillsToDateTime(bufferStartTime),
             to: MillsToDateTime(endTime),
             device: null,
             source: null,
-            limit: displayRangeLimit,
+            limit: Nocturne.API.Services.Analytics.ChartDataService.TempBasalQueryLimit,
             offset: 0,
             descending: false,
             ct: cancellationToken
@@ -226,19 +228,22 @@ internal sealed class DataFetchStage(
             cancellationToken: cancellationToken
         );
 
-        // Heart rate data
-        var heartRateList = (await heartRateService.GetHeartRatesByDateRangeAsync(
-            MillsToDateTime(startTime)!.Value,
-            MillsToDateTime(endTime)!.Value,
-            cancellationToken: cancellationToken
-        )).ToList();
+        List<HeartRate> heartRateList = [];
+        List<StepCount> stepCountList = [];
+        if (context.IncludeHealthSeries)
+        {
+            heartRateList = (await heartRateService.GetHeartRatesByDateRangeAsync(
+                MillsToDateTime(startTime)!.Value,
+                MillsToDateTime(endTime)!.Value,
+                cancellationToken: cancellationToken
+            )).ToList();
 
-        // Step count data
-        var stepCountList = (await stepCountService.GetStepCountsByDateRangeAsync(
-            MillsToDateTime(startTime)!.Value,
-            MillsToDateTime(endTime)!.Value,
-            cancellationToken: cancellationToken
-        )).ToList();
+            stepCountList = (await stepCountService.GetStepCountsByDateRangeAsync(
+                MillsToDateTime(startTime)!.Value,
+                MillsToDateTime(endTime)!.Value,
+                cancellationToken: cancellationToken
+            )).ToList();
+        }
 
         // Sleep sessions
         var sleepSessionList = (await sleepService.GetSessionsAsync(
@@ -254,6 +259,9 @@ internal sealed class DataFetchStage(
             .ToList();
         var displayCarbIntakes = carbIntakeList
             .Where(c => c.Mills >= startTime && c.Mills <= endTime)
+            .ToList();
+        var displayTempBasals = tempBasalList
+            .Where(tb => tb.StartMills >= startTime && tb.StartMills <= endTime)
             .ToList();
 
         logger.LogDebug(
@@ -286,6 +294,7 @@ internal sealed class DataFetchStage(
             BgCheckList = bgCheckList,
             DeviceEventList = deviceEventList,
             TempBasalList = tempBasalList,
+            DisplayTempBasals = displayTempBasals,
             ApsSnapshotList = apsSnapshotList,
             BasalInjectionList = basalInjectionList,
             StateSpans = stateSpansReadOnly,

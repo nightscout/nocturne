@@ -114,6 +114,11 @@ public class TreatmentService : ITreatmentService
     }
 
     /// <inheritdoc />
+    public Task<bool> IsTreatmentDeletedByUserAsync(
+        string id, CancellationToken cancellationToken = default)
+        => _store.IsDeletedByUserAsync(id, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<IEnumerable<Treatment>> GetTreatmentsWithAdvancedFilterAsync(
         int count, int skip, string? findQuery, bool reverseResults,
         CancellationToken cancellationToken = default)
@@ -185,12 +190,8 @@ public class TreatmentService : ITreatmentService
     public async Task<Treatment?> PatchTreatmentAsync(
         string id, JsonElement patchData, CancellationToken cancellationToken = default)
     {
-        var existing = await _store.GetByIdAsync(id, cancellationToken);
+        var existing = await _store.GetForUpdateAsync(id, cancellationToken);
         if (existing is null) return null;
-
-        // Re-key to the stored LegacyId so re-decomposition upserts this record in place instead
-        // of creating a duplicate when AAPS patches by a derived ObjectId.
-        existing.Id = await _store.ResolveCanonicalIdAsync(id, cancellationToken) ?? existing.Id;
 
         // Apply patch fields to existing treatment
         ApplyJsonPatch(existing, patchData);
@@ -247,17 +248,14 @@ public class TreatmentService : ITreatmentService
     public async Task<bool> DeleteTreatmentAsync(
         string id, CancellationToken cancellationToken = default)
     {
-        var existing = await _store.GetByIdAsync(id, cancellationToken);
-        var deleted = await _store.DeleteAsync(id, cancellationToken);
+        if (await _store.DeleteAsync(id, cancellationToken) is not { } deletion)
+            return false;
 
-        if (deleted)
-        {
-            await _cache.InvalidateAsync(cancellationToken);
-            if (existing is not null)
-                await _events.OnDeletedAsync(existing, cancellationToken);
-        }
+        await _cache.InvalidateAsync(cancellationToken);
+        if (deletion.Served is not null)
+            await _events.OnDeletedAsync(deletion.Served, cancellationToken);
 
-        return deleted;
+        return true;
     }
 
     /// <inheritdoc />
@@ -286,7 +284,7 @@ public class TreatmentService : ITreatmentService
         long deleted = 0;
         foreach (var treatment in matching.Where(t => !string.IsNullOrEmpty(t.Id)))
         {
-            if (await _store.DeleteAsync(treatment.Id!, ct))
+            if (await _store.DeleteAsync(treatment.Id!, ct) is not null)
             {
                 deleted++;
                 await _events.OnDeletedAsync(treatment, ct);

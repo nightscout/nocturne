@@ -48,15 +48,11 @@ msgstr ""
 msgid "Establishing connection"
 msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Reconnecting..."
-msgstr ""
+#~ msgid "Reconnecting..."
+#~ msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Attempting to reconnect"
-msgstr ""
+#~ msgid "Attempting to reconnect"
+#~ msgstr ""
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -68,12 +64,10 @@ msgstr ""
 msgid "Using cached data"
 msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/lib/components/settings/DataSourceRow.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
@@ -84,8 +78,6 @@ msgstr ""
 msgid "Error"
 msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Connection failed"
 msgstr ""
@@ -344,13 +336,11 @@ msgstr ""
 #~ msgid "Connected to real-time data"
 #~ msgstr ""
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Real-time data disconnected"
-msgstr ""
+#~ msgid "Real-time data disconnected"
+#~ msgstr ""
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Failed to connect to real-time data"
-msgstr ""
+#~ msgid "Failed to connect to real-time data"
+#~ msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
@@ -22917,15 +22907,11 @@ msgstr ""
 msgid "Charlie target"
 msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Starting"
-msgstr ""
+#~ msgid "Starting"
+#~ msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Waiting to connect"
-msgstr ""
+#~ msgid "Waiting to connect"
+#~ msgstr ""
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -25911,3 +25897,7 @@ msgstr "实验室 {0} 检测值以三角形显示在上方图表中，不参与 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Enter a lab {0} result here — shown as a triangle marker on the chart above, so you can see how closely the {1} estimate tracks an actual lab draw. Lab results are not included in the {2} calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
 msgstr "在此输入实验室 {0} 检测结果。结果将以三角形显示在上方图表中，便于比较 {1} 估算值与实际实验室检测值的接近程度。实验室结果不参与 {2} 的计算。下方日期是采血日期，而非输入结果的日期。"
+
+#: src/lib/stores/realtime-store.svelte.ts
+msgid "Real-time data unavailable"
+msgstr ""

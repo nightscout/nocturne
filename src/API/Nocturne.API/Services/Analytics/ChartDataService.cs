@@ -26,7 +26,7 @@ namespace Nocturne.API.Services.Analytics;
 /// <seealso cref="ChartDataContext"/>
 public class ChartDataService : IChartDataService
 {
-    private const int TempBasalQueryLimit = 131072;
+    internal const int TempBasalQueryLimit = 131072;
 
     private readonly IEnumerable<IChartDataStage> _pipeline;
     private readonly IChartDataAssembler _assembler;
@@ -74,6 +74,7 @@ public class ChartDataService : IChartDataService
         long startTime,
         long endTime,
         int intervalMinutes,
+        bool includeHealthSeries,
         CancellationToken cancellationToken = default
     )
     {
@@ -84,6 +85,7 @@ public class ChartDataService : IChartDataService
             EndTime = endTime,
             IntervalMinutes = intervalMinutes,
             BufferStartTime = startTime - bufferMs,
+            IncludeHealthSeries = includeHealthSeries,
         };
 
         foreach (var stage in _pipeline)

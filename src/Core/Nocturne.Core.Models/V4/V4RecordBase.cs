@@ -21,7 +21,17 @@ public abstract class V4RecordBase : IV4Record
     public DateTime Timestamp { get; set; }
 
     /// <inheritdoc />
-    public long Mills => new DateTimeOffset(Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+    /// <remarks>
+    /// Read millions of times per analytics report, so a UTC or unspecified timestamp is converted
+    /// by arithmetic, which is exactly what <see cref="DateTimeOffset.ToUnixTimeMilliseconds"/>
+    /// computes for a zero offset. A local timestamp keeps the <see cref="DateTimeOffset"/> path and
+    /// its exception for an offset that is not zero.
+    /// </remarks>
+    public long Mills => Timestamp.Kind == DateTimeKind.Local
+        ? new DateTimeOffset(Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds()
+        : Timestamp.Ticks / TimeSpan.TicksPerMillisecond - UnixEpochMilliseconds;
+
+    private const long UnixEpochMilliseconds = 62_135_596_800_000;
 
     /// <inheritdoc />
     public int? UtcOffset { get; set; }

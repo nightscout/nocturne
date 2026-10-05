@@ -528,9 +528,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         [.. V4LegacyIdRecordEntities, typeof(DeviceStatusExtrasEntity)];
 
     /// <summary>
-    /// Tables a v3 history endpoint pages through <see cref="HistoryPage"/>: the treatment
-    /// projection's <c>LegacyTreatmentTables.All</c>, the device-status projection's APS snapshots,
-    /// the three glucose types the entry projection reads and the five profile-decomposition tables.
+    /// Tables a v3 history endpoint pages through <see cref="HistoryPage"/> on <c>sys_updated_at</c>:
+    /// the V4 record tables of the treatment projection's <c>LegacyTreatmentTables.All</c> (its state
+    /// spans page on <c>ix_state_spans_tenant_category_updated_at</c>), the device-status
+    /// projection's APS snapshots, the three glucose types the entry projection reads and the five
+    /// profile-decomposition tables.
     /// </summary>
     internal static readonly Type[] V4HistoryPagedEntities =
     [
@@ -1291,6 +1293,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(s => new { s.TenantId, s.Source, s.Category, s.StartTimestamp })
             .HasDatabaseName("ix_state_spans_tenant_source_category_start")
             .IsDescending(false, false, false, true);
+
+        // HistoryPage's (updated_at, id) order for the legacy treatment projection's state-span
+        // categories, as the sys_updated_at history index serves the V4 record tables.
+        modelBuilder
+            .Entity<StateSpanEntity>()
+            .HasIndex(s => new { s.TenantId, s.Category, s.UpdatedAt, s.Id })
+            .HasDatabaseName("ix_state_spans_tenant_category_updated_at")
+            .HasFilter("deleted_at IS NULL");
 
         modelBuilder
             .Entity<StateSpanEntity>()

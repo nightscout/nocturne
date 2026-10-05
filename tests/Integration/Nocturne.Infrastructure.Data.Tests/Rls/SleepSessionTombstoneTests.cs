@@ -14,6 +14,48 @@ namespace Nocturne.Infrastructure.Data.Tests.Rls;
 [Collection("RLS completeness")]
 public class SleepSessionTombstoneTests(RlsCompletenessFixture fx)
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Replacement_CascadesOldStagesAndSamples(bool update)
+    {
+        await using var conn = await OpenForNewTenantAsync();
+        var repository = new SleepSessionRepository(new TestTenantDbContextFactory(Context(conn)));
+        var original = Session("sleep-original");
+        original.Stages = [new SleepStageInterval
+        {
+            StartTime = original.StartTime, EndTime = original.StartTime.AddHours(1), Stage = SleepStageType.Light,
+        }];
+        original.BiometricSamples = [new SleepBiometricSample
+        {
+            Timestamp = original.StartTime, HeartRate = 60,
+        }];
+        var created = await repository.UpsertSessionAsync(original);
+        var replacement = Session("sleep-different-source-key");
+        replacement.Id = created.Id;
+        replacement.Stages = [new SleepStageInterval
+        {
+            StartTime = original.StartTime.AddHours(1), EndTime = original.StartTime.AddHours(2), Stage = SleepStageType.Deep,
+        }];
+        replacement.BiometricSamples = [new SleepBiometricSample
+        {
+            Timestamp = original.StartTime.AddHours(1), HeartRate = 55,
+        }];
+
+        if (update)
+            await repository.UpdateSessionAsync(Guid.Parse(created.Id!), replacement);
+        else
+            await repository.UpsertSessionAsync(replacement);
+
+        var persisted = await repository.GetSessionByIdAsync(Guid.Parse(created.Id!));
+        persisted!.Stages.Should().ContainSingle().Which.Stage.Should().Be(SleepStageType.Deep);
+        persisted.BiometricSamples.Should().ContainSingle().Which.HeartRate.Should().Be(55);
+        (await repository.CountSessionsAsync()).Should().Be(1);
+        await using var command = conn.CreateCommand();
+        command.CommandText = "SELECT (SELECT count(*) FROM sleep_stages) + (SELECT count(*) FROM sleep_biometric_samples)";
+        ((long)(await command.ExecuteScalarAsync())!).Should().Be(2);
+    }
+
     [Fact]
     public async Task UserTombstone_RefusesTheUpsertAndKeepsTheSessionDeleted()
     {

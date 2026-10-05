@@ -57,11 +57,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
 
     public TreatmentDecomposerDeleteTests()
     {
-        _db = TestDbContextFactory.CreateSqlite();
-
-        using var db = NewContext();
-        db.Tenants.Add(new TenantEntity { Id = TenantId, Slug = "test" });
-        db.SaveChanges();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
     }
 
     public void Dispose()
@@ -239,6 +235,49 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(["bolus-1"])).Held.Should().BeEmpty();
         (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>(["tempbasal-1"])).Held.Should().BeEmpty();
         (await assertCtx.MutationAuditLog.AnyAsync()).Should().BeFalse();
+    }
+
+    private void SeedStateSpan(string originalId, string category, string source, string? metadataJson, DateTime start)
+    {
+        using var db = NewContext();
+        db.StateSpans.Add(new StateSpanEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantId,
+            OriginalId = originalId,
+            Category = category,
+            State = "Active",
+            StartTimestamp = start,
+            Source = source,
+            MetadataJson = metadataJson,
+        });
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task BulkDelete_UserContext_TombstonesTheServedStateSpansInTheWindowOnly()
+    {
+        SeedOneOfEachType();
+        SeedStateSpan("override-1", "Override", "loop", """{"collection":"treatments","utcOffset":0}""", Inside);
+        SeedStateSpan("tt-1", "TemporaryTarget", "aaps", """{"utcOffset":0}""", Inside);
+        SeedStateSpan("ps-1", "Profile", "aaps", """{"profileName":"Weekend","utcOffset":0}""", Inside);
+        SeedStateSpan("ps-outside", "Profile", "aaps", """{"utcOffset":0}""", Outside);
+        SeedStateSpan("glooko-profile", "Profile", "glooko-connector", """{"profileName":"Unknown"}""", Inside);
+        SeedStateSpan("devicestatus-override", "Override", "loop", """{"collection":"devicestatus"}""", Inside);
+
+        var count = await BulkDeleteAsync(_userAuditContext);
+
+        await using var assertCtx = NewContext();
+        var deleted = await assertCtx.StateSpans.IgnoreQueryFilters()
+            .Where(s => s.DeletedAt != null)
+            .Select(s => new { s.OriginalId, ByUser = EF.Property<bool>(s, "DeletedByUser") })
+            .ToListAsync();
+        deleted.Select(s => s.OriginalId).Should().BeEquivalentTo(new[] { "override-1", "tt-1", "ps-1" });
+        count.Should().Be(10);
+        deleted.Should().OnlyContain(s => s.ByUser);
+        (await assertCtx.MutationAuditLog.Where(a => a.Action == "bulk_delete" && a.EntityType == "StateSpan")
+                .Select(a => a.ChangesJson).SingleAsync())
+            .Should().Contain("\"count\":3");
     }
 
     private async Task<int> DeleteByLegacyIdAsync(IAuditContext auditContext)

@@ -49,6 +49,12 @@ public class HeartRateEntity
     public int Accuracy { get; set; }
 
     /// <summary>
+    /// Legacy activity <c>type</c> as uploaded
+    /// </summary>
+    [Column("type")]
+    public string? Type { get; set; }
+
+    /// <summary>
     /// Device identifier that recorded this reading
     /// </summary>
     [Column("device")]

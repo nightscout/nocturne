@@ -37,6 +37,39 @@ public class CanonicalGlucoseStreamTests
         CanonicalGlucoseStream.Select([], []).Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(null, null, "", "")]
+    [InlineData("a|b", "c", "a", "b|c")]
+    [InlineData("", "|", "|", "")]
+    public void PseudoDeviceKeyAliases_ReturnInputUnchanged(
+        string? firstSource, string? firstDevice, string? secondSource, string? secondDevice)
+    {
+        var readings = new[]
+        {
+            Reading(0, source: firstSource, device: firstDevice),
+            Reading(1, source: secondSource, device: secondDevice),
+        };
+
+        CanonicalGlucoseStream.Select(readings, []).Should().BeSameAs(readings);
+    }
+
+    [Fact]
+    public void PseudoDeviceSourceCase_RemainsDistinct()
+    {
+        var readings = new[] { Reading(0, source: "a"), Reading(1, source: "A") };
+
+        CanonicalGlucoseStream.Select(readings, []).Should().ContainSingle().Which.Should().BeSameAs(readings[1]);
+    }
+
+    [Fact]
+    public void RegisteredAndPseudoDeviceWithGuidSource_RemainDistinct()
+    {
+        var device = Cgm(rank: 1);
+        var readings = new[] { Reading(0, device.Id), Reading(1, source: device.Id.ToString()) };
+
+        CanonicalGlucoseStream.Select(readings, [device]).Should().ContainSingle().Which.Should().BeSameAs(readings[0]);
+    }
+
     [Fact]
     public void SingleStream_ReturnsInputUnchanged()
     {

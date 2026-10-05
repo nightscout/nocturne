@@ -48,15 +48,11 @@ msgstr "Verbinde..."
 msgid "Establishing connection"
 msgstr "Verbindung wird hergestellt"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Reconnecting..."
-msgstr "Verbinde erneut..."
+#~ msgid "Reconnecting..."
+#~ msgstr "Verbinde erneut..."
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Attempting to reconnect"
-msgstr "Versuche erneut zu verbinden"
+#~ msgid "Attempting to reconnect"
+#~ msgstr "Versuche erneut zu verbinden"
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -68,12 +64,10 @@ msgstr "Getrennt"
 msgid "Using cached data"
 msgstr "Verwende zwischengespeicherte Daten"
 
-#: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/lib/components/settings/DataSourceRow.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
@@ -84,8 +78,6 @@ msgstr "Verwende zwischengespeicherte Daten"
 msgid "Error"
 msgstr "Fehler"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Connection failed"
 msgstr "Verbindung fehlgeschlagen"
@@ -344,13 +336,11 @@ msgstr "Fehler beim Laden der Verlaufsdaten"
 #~ msgid "Connected to real-time data"
 #~ msgstr ""
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Real-time data disconnected"
-msgstr "Verbindung zu Echtzeitdaten getrennt"
+#~ msgid "Real-time data disconnected"
+#~ msgstr "Verbindung zu Echtzeitdaten getrennt"
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Failed to connect to real-time data"
-msgstr "Fehler beim Verbinden mit Echtzeitdaten"
+#~ msgid "Failed to connect to real-time data"
+#~ msgstr "Fehler beim Verbinden mit Echtzeitdaten"
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
@@ -22917,15 +22907,11 @@ msgstr ""
 msgid "Charlie target"
 msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Starting"
-msgstr ""
+#~ msgid "Starting"
+#~ msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Waiting to connect"
-msgstr ""
+#~ msgid "Waiting to connect"
+#~ msgstr ""
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -25911,3 +25897,7 @@ msgstr "Labormessungen von {0}, dargestellt als Dreiecke in der Grafik oben. Sie
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Enter a lab {0} result here — shown as a triangle marker on the chart above, so you can see how closely the {1} estimate tracks an actual lab draw. Lab results are not included in the {2} calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
 msgstr "Gib hier einen Laborwert für {0} ein. Er erscheint als Dreieck in der Grafik oben, damit du vergleichen kannst, wie gut die {1}-Schätzung einem tatsächlichen Laborwert entspricht. Laborwerte werden nicht in die Berechnung von {2} einbezogen. Das Datum unten ist das Datum der Blutentnahme, nicht das Datum der Eingabe."
+
+#: src/lib/stores/realtime-store.svelte.ts
+msgid "Real-time data unavailable"
+msgstr ""

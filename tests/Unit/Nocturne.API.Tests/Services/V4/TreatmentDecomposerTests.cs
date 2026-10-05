@@ -1906,6 +1906,61 @@ public class TreatmentDecomposerTests : IDisposable
 
     #endregion
 
+    #region Served span fields
+
+    [Theory]
+    [InlineData("Temporary Override")]
+    [InlineData("Temporary Target")]
+    [InlineData("Profile Switch")]
+    public async Task DecomposeAsync_SpanTreatmentWithNotes_KeepsThemOnTheSpanAndWritesNoNote(string eventType)
+    {
+        var treatment = new Treatment
+        {
+            Id = $"span-notes-{eventType}",
+            EventType = eventType,
+            Mills = 1700000000000,
+            Duration = 30,
+            Profile = "Weekend",
+            Reason = "Synthetic",
+            Notes = "Synthetic note",
+            SyncIdentifier = "synthetic-sync",
+        };
+        StateSpan? written = null;
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .Callback<StateSpan, CancellationToken>((span, _) => written = span)
+            .ReturnsAsync((StateSpan span, CancellationToken _) => span);
+
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+
+        result.CreatedRecords.Should().ContainSingle().Which.Should().BeOfType<StateSpan>();
+        result.CreatedRecords.OfType<V4Models.Note>().Should().BeEmpty();
+        written!.Metadata!["notes"].Should().Be("Synthetic note");
+        written.Metadata!["syncIdentifier"].Should().Be("synthetic-sync");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_LoopOverride_KeepsCorrectionRangeAndRemoteAddressAsUploaded()
+    {
+        var treatment = JsonSerializer.Deserialize<Treatment>(
+            """
+            {"_id":"loop-override","eventType":"Temporary Override","mills":1700000000000,"duration":60,
+             "reason":"Running","correctionRange":[140,160],"remoteAddress":"synthetic-remote"}
+            """)!;
+        StateSpan? written = null;
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .Callback<StateSpan, CancellationToken>((span, _) => written = span)
+            .ReturnsAsync((StateSpan span, CancellationToken _) => span);
+
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+
+        JsonSerializer.Serialize(written!.Metadata!["correctionRange"]).Should().Be("[140,160]");
+        JsonSerializer.Serialize(written.Metadata!["remoteAddress"]).Should().Be("\"synthetic-remote\"");
+    }
+
+    #endregion
+
     #region Parse Helpers - Unknown Values
 
     [Fact]

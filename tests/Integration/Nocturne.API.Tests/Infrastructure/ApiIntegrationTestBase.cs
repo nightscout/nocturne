@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -224,6 +226,19 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
     protected async Task<string?> GetPostgresConnectionStringAsync()
     {
         return await Fixture.GetConnectionStringAsync(ServiceNames.PostgreSql);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="action"/> on the API's services in a scope pinned to the seeded tenant,
+    /// as a request on its host would be.
+    /// </summary>
+    protected async Task<T> WithTenantScopeAsync<T>(Func<IServiceProvider, Task<T>> action)
+    {
+        using var scope = Fixture.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
+            new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
+        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = Fixture.TenantId;
+        return await action(scope.ServiceProvider);
     }
 
     /// <summary>

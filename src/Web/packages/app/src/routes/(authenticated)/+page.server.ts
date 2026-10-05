@@ -37,22 +37,14 @@ export const load: PageServerLoad = async ({ locals, request, parent }) => {
 	const initialStartTime = endTime - INITIAL_HOURS * 60 * 60 * 1000;
 	const fullStartTime = endTime - TOTAL_HOURS * 60 * 60 * 1000;
 
-	// Fetch initial recent data immediately (blocking)
-	let initialChartData: TransformedChartData | null = null;
-	try {
-		const data = await apiClient.chartData.getDashboardChartData(initialStartTime, endTime, 5);
-		initialChartData = transformChartData(data);
-	} catch (err) {
-		console.error('Error loading initial chart data:', err);
-	}
-
-	// Create a promise for historical data that will stream in
+	// Started before the initial window is awaited so both pipelines run concurrently.
 	const historicalDataPromise = (async (): Promise<TransformedChartData | null> => {
 		try {
 			const data = await apiClient.chartData.getDashboardChartData(
 				fullStartTime,
 				initialStartTime,
-				5
+				5,
+				false
 			);
 			return transformChartData(data);
 		} catch (err) {
@@ -60,6 +52,14 @@ export const load: PageServerLoad = async ({ locals, request, parent }) => {
 			return null;
 		}
 	})();
+
+	let initialChartData: TransformedChartData | null = null;
+	try {
+		const data = await apiClient.chartData.getDashboardChartData(initialStartTime, endTime, 5, false);
+		initialChartData = transformChartData(data);
+	} catch (err) {
+		console.error('Error loading initial chart data:', err);
+	}
 
 	return {
 		initialChartData,

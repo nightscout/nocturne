@@ -134,7 +134,7 @@ public class DtoMappingStageTests
             DisplayCarbIntakes = [carbIntake],
             BgCheckList = [bgCheck],
             DeviceEventList = [deviceEvent],
-            TempBasalList = [tempBasal],
+            DisplayTempBasals = [tempBasal],
             SystemEvents = [systemEvent],
             TrackerDefinitions = [trackerDef],
             TrackerInstances = [trackerInstance],

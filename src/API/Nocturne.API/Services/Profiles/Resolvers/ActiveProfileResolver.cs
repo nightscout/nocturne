@@ -20,6 +20,7 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
     private readonly IStateSpanService _stateSpanService;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IMemoryCache _cache;
+    private readonly ICategoryReadContext _categoryReadContext;
     private readonly ILogger<ActiveProfileResolver> _logger;
 
     private const int CacheTtlSeconds = 5;
@@ -29,11 +30,13 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
         IStateSpanService stateSpanService,
         ITenantAccessor tenantAccessor,
         IMemoryCache cache,
+        ICategoryReadContext categoryReadContext,
         ILogger<ActiveProfileResolver> logger)
     {
         _stateSpanService = stateSpanService;
         _tenantAccessor = tenantAccessor;
         _cache = cache;
+        _categoryReadContext = categoryReadContext;
         _logger = logger;
     }
 
@@ -80,13 +83,18 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
         return ExtractInsulinContext(span);
     }
 
+    /// <remarks>
+    /// The cache is keyed by tenant, not history window, so a history-clamped request, which sees
+    /// only the last 24 hours of <c>state_spans</c>, neither reads nor writes it.
+    /// </remarks>
     private async Task<StateSpan?> GetActiveProfileSpanAsync(long timeMills, CancellationToken ct)
     {
         var minuteRounded = timeMills / MillisPerMinute * MillisPerMinute;
         var tenantId = _tenantAccessor.TenantId;
         var cacheKey = $"ActiveProfile:{tenantId}:{minuteRounded}";
+        var useCache = !_categoryReadContext.IsHistoryClamped;
 
-        if (_cache.TryGetValue(cacheKey, out StateSpan? cached))
+        if (useCache && _cache.TryGetValue(cacheKey, out StateSpan? cached))
             return cached;
 
         var queryTime = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
@@ -106,7 +114,8 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
             .OrderByDescending(s => s.StartMills)
             .FirstOrDefault();
 
-        _cache.Set(cacheKey, activeSpan, TimeSpan.FromSeconds(CacheTtlSeconds));
+        if (useCache)
+            _cache.Set(cacheKey, activeSpan, TimeSpan.FromSeconds(CacheTtlSeconds));
 
         return activeSpan;
     }

@@ -420,6 +420,9 @@ public class SleepSessionRepositoryTests : IDisposable
     [Fact]
     public async Task UpsertSessionAsync_replaces_by_id_when_original_id_differs()
     {
+        using var database = TestDbContextFactory.CreateSqliteWithTenant(TenantA);
+        await using var context = database.CreateContext();
+        var repository = new SleepSessionRepository(new TestTenantDbContextFactory(context));
         var existing = CreateEntity(TenantA,
             new DateTime(2026, 1, 1, 22, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 1, 2, 6, 0, 0, DateTimeKind.Utc),
@@ -439,7 +442,8 @@ public class SleepSessionRepositoryTests : IDisposable
             },
         ];
 
-        await SeedAsync(existing);
+        context.SleepSessions.Add(existing);
+        await context.SaveChangesAsync();
 
         var incoming = new SleepSession
         {
@@ -464,15 +468,15 @@ public class SleepSessionRepositoryTests : IDisposable
             ],
         };
 
-        var result = await _repository.UpsertSessionAsync(incoming);
+        var result = await repository.UpsertSessionAsync(incoming);
 
         result.Id.Should().Be(existing.Id.ToString());
         result.Stages.Should().ContainSingle().Which.Stage.Should().Be(SleepStageType.Deep);
 
-        var count = await _repository.CountSessionsAsync();
+        var count = await repository.CountSessionsAsync();
         count.Should().Be(1);
 
-        var persisted = await _repository.GetSessionByIdAsync(existing.Id);
+        var persisted = await repository.GetSessionByIdAsync(existing.Id);
         persisted!.Stages.Should().ContainSingle().Which.Stage.Should().Be(SleepStageType.Deep);
     }
 

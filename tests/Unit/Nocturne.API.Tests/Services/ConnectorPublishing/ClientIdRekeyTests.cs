@@ -222,6 +222,7 @@ public class ClientIdRekeyTests : IDisposable
         var store = new TreatmentReadService(
             Mock.Of<IV4ToLegacyProjectionService>(), decomposer, Mock.Of<IDecompositionPipeline>(),
             Mock.Of<ITempBasalRepository>(), bolus, carbs, bgChecks, notes, deviceEvents, calculations,
+            Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
         var service = new TreatmentService(
             store, decomposer, Mock.Of<ITreatmentCache>(), Mock.Of<IDataEventSink<Treatment>>(),

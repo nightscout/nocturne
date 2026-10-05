@@ -21,6 +21,7 @@ public static class StepCountMapper
             Timestamp = stepCount.Timestamp,
             Metric = stepCount.Metric,
             Source = stepCount.Source,
+            Type = stepCount.Type,
             Device = stepCount.Device,
             EnteredBy = stepCount.EnteredBy,
             UtcOffset = stepCount.UtcOffset,
@@ -40,6 +41,7 @@ public static class StepCountMapper
             Timestamp = entity.Timestamp,
             Metric = entity.Metric,
             Source = entity.Source,
+            Type = entity.Type,
             Device = entity.Device,
             EnteredBy = entity.EnteredBy,
             UtcOffset = entity.UtcOffset,
@@ -56,6 +58,7 @@ public static class StepCountMapper
         entity.Timestamp = stepCount.Timestamp;
         entity.Metric = stepCount.Metric;
         entity.Source = stepCount.Source;
+        entity.Type = stepCount.Type;
         entity.Device = stepCount.Device;
         entity.EnteredBy = stepCount.EnteredBy;
         entity.UtcOffset = stepCount.UtcOffset;
