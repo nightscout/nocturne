@@ -2,7 +2,7 @@
   import type { Entry } from "$lib/api";
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
 
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { getRealtimeStore, RECENT_READINGS } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import {
     formatGlucoseValue,
@@ -17,7 +17,7 @@
     maxEntries?: number;
   }
 
-  let { entries, maxEntries = 5 }: ComponentProps = $props();
+  let { entries, maxEntries = RECENT_READINGS }: ComponentProps = $props();
 
   const realtimeStore = getRealtimeStore();
 

@@ -21,8 +21,8 @@ public class SensorGlucoseQueryBenchmarks
         _fixture = new PostgresFixture();
         await _fixture.InitializeAsync();
 
-        _tenantId = Guid.CreateVersion7();
-        await using var ctx = _fixture.CreateContext();
+        _tenantId = await _fixture.CreateTenantAsync();
+        await using var ctx = _fixture.CreateContext(_tenantId);
         await DataSeeder.SeedSensorGlucoseAsync(ctx, _tenantId, RowCount);
 
         // Seed 1% linked records for dedup filtering
@@ -30,6 +30,8 @@ public class SensorGlucoseQueryBenchmarks
             .Where(sg => sg.TenantId == _tenantId)
             .Select(sg => sg.Id)
             .ToListAsync();
+        if (ids.Count != RowCount)
+            throw new InvalidOperationException($"Expected {RowCount} sensor glucose rows, found {ids.Count}.");
         await DataSeeder.SeedLinkedRecordsAsync(ctx, _tenantId, "sensorglucose", ids, 0.01);
     }
 
@@ -43,7 +45,7 @@ public class SensorGlucoseQueryBenchmarks
     public async Task<List<SensorGlucoseEntity>> GetAsync_24h_Latest100()
     {
         if (!_fixture.IsInitialized) return [];
-        await using var ctx = _fixture.CreateContext();
+        await using var ctx = _fixture.CreateContext(_tenantId);
         var now = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(RowCount * 5);
         var from = now.AddHours(-24);
 
@@ -62,7 +64,7 @@ public class SensorGlucoseQueryBenchmarks
     public async Task<List<SensorGlucoseEntity>> GetAsync_7d_Latest100()
     {
         if (!_fixture.IsInitialized) return [];
-        await using var ctx = _fixture.CreateContext();
+        await using var ctx = _fixture.CreateContext(_tenantId);
         var now = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(RowCount * 5);
         var from = now.AddDays(-7);
 
@@ -81,7 +83,7 @@ public class SensorGlucoseQueryBenchmarks
     public async Task<List<SensorGlucoseEntity>> GetAsync_NoRange_Latest100()
     {
         if (!_fixture.IsInitialized) return [];
-        await using var ctx = _fixture.CreateContext();
+        await using var ctx = _fixture.CreateContext(_tenantId);
 
         var query = ctx.SensorGlucose.AsNoTracking()
             .Where(e => e.TenantId == _tenantId)

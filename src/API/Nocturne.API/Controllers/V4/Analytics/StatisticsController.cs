@@ -784,7 +784,7 @@ public class StatisticsController : ControllerBase
 
     /// <summary>
     /// Gets comprehensive statistics for multiple time periods (1, 3, 7, 30, and 90 days).
-    /// Fetches sensor glucose, bolus, carb, and temp-basal data from the database for each period,
+    /// Reads sensor glucose, bolus, carb, and temp-basal data for the 90-day window once and slices each period from it,
     /// computes <see cref="GlucoseAnalytics"/>, <see cref="TreatmentSummary"/>, and
     /// <see cref="InsulinDeliveryStatistics"/>, and caches the result for 5 minutes.
     /// </summary>
@@ -824,18 +824,26 @@ public class StatisticsController : ControllerBase
 
         var periodResults = new List<(int Days, PeriodStatistics Statistics)>();
 
+        // Every window ends at `now`, so the 90-day read contains every shorter window and the repositories'
+        // inclusive lower bound on Timestamp is reproduced by the slices below.
+        var widestStart = now.AddDays(-periods.Max());
+        var glucoseTask = _sensorGlucoseRepository.GetForAnalyticsAsync(from: (DateTime?)widestStart, to: (DateTime?)now, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
+        var carbTask    = _carbIntakeRepository.GetAsync(from: (DateTime?)widestStart, to: (DateTime?)now, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
+        var insulin = await FetchInsulinRecordsAsync(widestStart, now, int.MaxValue, cancellationToken, glucoseTask, carbTask);
+        var allGlucose = (await glucoseTask).ToList();
+        var allCarbs = (await carbTask).ToList();
+
         foreach (var days in periods)
         {
             var startDate = now.AddDays(-days);
             var endDate = now;
 
-            var glucoseTask = _sensorGlucoseRepository.GetForAnalyticsAsync(from: (DateTime?)startDate, to: (DateTime?)endDate, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
-            var carbTask    = _carbIntakeRepository.GetAsync(from: (DateTime?)startDate, to: (DateTime?)endDate, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
-
-            var (filteredBoluses, algorithmBoluses, tempBasals, basalInjections) =
-                await FetchInsulinRecordsAsync(startDate, endDate, int.MaxValue, cancellationToken, glucoseTask, carbTask);
-            var filteredEntries = (await _canonicalGlucose.SelectAsync((await glucoseTask).ToList(), cancellationToken)).ToList();
-            var filteredCarbs   = (await carbTask).ToList();
+            var filteredBoluses  = insulin.ManualBoluses.Where(b => b.Timestamp >= startDate).ToList();
+            var algorithmBoluses = insulin.AlgorithmBoluses.Where(b => b.Timestamp >= startDate).ToList();
+            var tempBasals       = insulin.TempBasals.Where(t => t.StartTimestamp >= startDate).ToList();
+            var basalInjections  = insulin.BasalInjections.Where(i => i.Timestamp >= startDate).ToList();
+            var filteredEntries  = (await _canonicalGlucose.SelectAsync(allGlucose.Where(g => g.Timestamp >= startDate).ToList(), cancellationToken)).ToList();
+            var filteredCarbs    = allCarbs.Where(c => c.Timestamp >= startDate).ToList();
 
             // Calculate analytics if we have sufficient data
             GlucoseAnalytics? analytics = null;

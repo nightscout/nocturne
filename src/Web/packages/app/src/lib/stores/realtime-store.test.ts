@@ -29,7 +29,12 @@ vi.mock("svelte-sonner", () => ({
 }));
 
 import { toast } from "svelte-sonner";
-import { RealtimeStore, sensorGlucoseToEntry } from "./realtime-store.svelte";
+import {
+  RECENT_READINGS,
+  RealtimeStore,
+  loadInitialGlucose,
+  sensorGlucoseToEntry,
+} from "./realtime-store.svelte";
 import type {
   ConnectionInfo,
   StorageEvent,
@@ -803,5 +808,65 @@ describe("RealtimeStore merging", () => {
 
     expect(store.boluses.map((bolus) => bolus.id)).toEqual(["b2", "b1"]);
     store.destroy();
+  });
+});
+
+describe("loadInitialGlucose", () => {
+  const FROM = "2026-10-04T00:00:00.000Z";
+
+  function clientWith(getAll: ReturnType<typeof vi.fn>) {
+    return { sensorGlucose: { getAll } } as unknown as Parameters<typeof loadInitialGlucose>[0];
+  }
+
+  const readings = (...mgdl: number[]) => ({
+    data: mgdl.map((value, i) => ({ id: `r${value}`, mills: 1000 - i, mgdl: value })),
+  });
+
+  it("asks only for the given window when it holds a full recent list", async () => {
+    const window = readings(100, 101, 102, 103, 104, 105).data.slice(0, RECENT_READINGS);
+    const getAll = vi.fn().mockResolvedValue({ data: window });
+
+    const entries = await loadInitialGlucose(clientWith(getAll), FROM);
+
+    expect(getAll).toHaveBeenCalledTimes(1);
+    expect(getAll).toHaveBeenCalledWith(FROM, undefined, 1000);
+    expect(entries).toHaveLength(RECENT_READINGS);
+  });
+
+  it("tops up a window holding a single reading so the delta has a previous reading", async () => {
+    const getAll = vi
+      .fn()
+      .mockResolvedValueOnce(readings(120))
+      .mockResolvedValueOnce(readings(120, 115, 110));
+
+    const entries = await loadInitialGlucose(clientWith(getAll), FROM);
+
+    expect(getAll).toHaveBeenLastCalledWith(undefined, undefined, RECENT_READINGS);
+    expect(entries.map((e) => e.sgv)).toEqual([120, 115, 110]);
+  });
+
+  it("keeps every window reading when the newest include ones outside it", async () => {
+    const getAll = vi
+      .fn()
+      .mockResolvedValueOnce(readings(120, 118))
+      .mockResolvedValueOnce(readings(130, 125, 122, 120, 118));
+
+    const entries = await loadInitialGlucose(clientWith(getAll), FROM);
+
+    expect(entries.map((e) => e.sgv).sort()).toEqual([118, 120, 122, 125, 130]);
+  });
+
+  it("falls back to the newest readings when the window is empty", async () => {
+    const getAll = vi.fn().mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce(readings(140));
+
+    const entries = await loadInitialGlucose(clientWith(getAll), FROM);
+
+    expect(entries.map((e) => e.sgv)).toEqual([140]);
+  });
+
+  it("returns no readings when the request fails", async () => {
+    const getAll = vi.fn().mockRejectedValue(new Error("offline"));
+
+    await expect(loadInitialGlucose(clientWith(getAll), FROM)).resolves.toEqual([]);
   });
 });

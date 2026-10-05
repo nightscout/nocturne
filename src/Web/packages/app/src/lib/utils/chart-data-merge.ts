@@ -59,8 +59,6 @@ export function mergeChartData(
 		cobSeries: mergeByTime(initial.cobSeries, historical.cobSeries, (p) => p.time),
 		basalSeries: mergeByTime(initial.basalSeries, historical.basalSeries, (p) => p.timestamp),
 		glucoseData: mergeByTime(initial.glucoseData, historical.glucoseData, (p) => p.time),
-		heartRateSeries: mergeByTime(initial.heartRateSeries, historical.heartRateSeries, (p) => p.time),
-		stepSeries: mergeByTime(initial.stepSeries, historical.stepSeries, (p) => p.time),
 
 		// Merge markers (keyed by time)
 		bolusMarkers: mergeByTime(initial.bolusMarkers, historical.bolusMarkers, (p) => p.time),

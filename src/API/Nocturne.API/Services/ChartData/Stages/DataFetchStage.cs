@@ -226,19 +226,22 @@ internal sealed class DataFetchStage(
             cancellationToken: cancellationToken
         );
 
-        // Heart rate data
-        var heartRateList = (await heartRateService.GetHeartRatesByDateRangeAsync(
-            MillsToDateTime(startTime)!.Value,
-            MillsToDateTime(endTime)!.Value,
-            cancellationToken: cancellationToken
-        )).ToList();
+        List<HeartRate> heartRateList = [];
+        List<StepCount> stepCountList = [];
+        if (context.IncludeHealthSeries)
+        {
+            heartRateList = (await heartRateService.GetHeartRatesByDateRangeAsync(
+                MillsToDateTime(startTime)!.Value,
+                MillsToDateTime(endTime)!.Value,
+                cancellationToken: cancellationToken
+            )).ToList();
 
-        // Step count data
-        var stepCountList = (await stepCountService.GetStepCountsByDateRangeAsync(
-            MillsToDateTime(startTime)!.Value,
-            MillsToDateTime(endTime)!.Value,
-            cancellationToken: cancellationToken
-        )).ToList();
+            stepCountList = (await stepCountService.GetStepCountsByDateRangeAsync(
+                MillsToDateTime(startTime)!.Value,
+                MillsToDateTime(endTime)!.Value,
+                cancellationToken: cancellationToken
+            )).ToList();
+        }
 
         // Sleep sessions
         var sleepSessionList = (await sleepService.GetSessionsAsync(

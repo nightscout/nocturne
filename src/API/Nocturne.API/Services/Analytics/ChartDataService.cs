@@ -74,6 +74,7 @@ public class ChartDataService : IChartDataService
         long startTime,
         long endTime,
         int intervalMinutes,
+        bool includeHealthSeries,
         CancellationToken cancellationToken = default
     )
     {
@@ -84,6 +85,7 @@ public class ChartDataService : IChartDataService
             EndTime = endTime,
             IntervalMinutes = intervalMinutes,
             BufferStartTime = startTime - bufferMs,
+            IncludeHealthSeries = includeHealthSeries,
         };
 
         foreach (var stage in _pipeline)

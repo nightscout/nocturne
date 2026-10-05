@@ -35,6 +35,12 @@ public sealed record ChartDataContext
     /// <summary>StartTime minus 8 hours, used for buffered IOB/COB fetches.</summary>
     public long BufferStartTime { get; init; }
 
+    /// <summary>
+    /// Whether to fetch and map <see cref="HeartRateSeries"/> and <see cref="StepSeries"/>, both raw
+    /// high-density readings.
+    /// </summary>
+    public bool IncludeHealthSeries { get; init; } = true;
+
     // === Profile-derived config (set by ProfileLoadStage) ===
 
     /// <summary>IANA timezone string from the active profile, or null if no profile is loaded.</summary>

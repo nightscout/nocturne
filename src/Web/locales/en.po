@@ -48,15 +48,11 @@ msgstr "Connecting..."
 msgid "Establishing connection"
 msgstr "Establishing connection"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Reconnecting..."
-msgstr "Reconnecting..."
+#~ msgid "Reconnecting..."
+#~ msgstr "Reconnecting..."
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Attempting to reconnect"
-msgstr "Attempting to reconnect"
+#~ msgid "Attempting to reconnect"
+#~ msgstr "Attempting to reconnect"
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -68,12 +64,10 @@ msgstr "Disconnected"
 msgid "Using cached data"
 msgstr "Using cached data"
 
-#: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/lib/components/settings/DataSourceRow.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
@@ -84,8 +78,6 @@ msgstr "Using cached data"
 msgid "Error"
 msgstr "Error"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Connection failed"
 msgstr "Connection failed"
@@ -344,13 +336,11 @@ msgstr "Failed to load historical data"
 #~ msgid "Connected to real-time data"
 #~ msgstr "Connected to real-time data"
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Real-time data disconnected"
-msgstr "Real-time data disconnected"
+#~ msgid "Real-time data disconnected"
+#~ msgstr "Real-time data disconnected"
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Failed to connect to real-time data"
-msgstr "Failed to connect to real-time data"
+#~ msgid "Failed to connect to real-time data"
+#~ msgstr "Failed to connect to real-time data"
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
@@ -22918,15 +22908,11 @@ msgstr "Bravo target"
 msgid "Charlie target"
 msgstr "Charlie target"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Starting"
-msgstr "Starting"
+#~ msgid "Starting"
+#~ msgstr "Starting"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Waiting to connect"
-msgstr "Waiting to connect"
+#~ msgid "Waiting to connect"
+#~ msgstr "Waiting to connect"
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -25825,3 +25811,7 @@ msgstr "For bind-data with the BYO-proxy override:"
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Omitting the bind-data override changes the declared storage back to the named volume."
 msgstr "Omitting the bind-data override changes the declared storage back to the named volume."
+
+#: src/lib/stores/realtime-store.svelte.ts
+msgid "Real-time data unavailable"
+msgstr "Real-time data unavailable"

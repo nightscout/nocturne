@@ -14,9 +14,10 @@
     entries: Entry[];
     options: ChartDataEngineOptions;
     onengine: (engine: ChartDataEngine) => void;
+    onstore?: (store: ReturnType<typeof createRealtimeStore>) => void;
   }
 
-  let { entries, options, onengine }: Props = $props();
+  let { entries, options, onengine, onstore }: Props = $props();
 
   const store = createRealtimeStore({
     url: "",
@@ -30,6 +31,9 @@
   // and never changes them, so there is nothing for a closure to track.
   // svelte-ignore state_referenced_locally
   store.entries = entries;
+
+  // svelte-ignore state_referenced_locally
+  onstore?.(store);
 
   // svelte-ignore state_referenced_locally
   onengine(createChartDataEngine(options));

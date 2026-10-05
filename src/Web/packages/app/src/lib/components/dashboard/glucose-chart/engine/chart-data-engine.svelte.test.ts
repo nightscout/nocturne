@@ -164,3 +164,30 @@ describe("chart data engine — refused fetch", () => {
     );
   });
 });
+
+describe("chart data engine — fetch range", () => {
+  it("does not refetch when the clock moves within the same five-minute bucket", async () => {
+    let store!: { now: number };
+    const bucket = Math.floor(Date.now() / (5 * MINUTE)) * 5 * MINUTE;
+    vi.mocked(getChartData).mockClear();
+    render(Harness, {
+      props: {
+        entries: [],
+        options: { enablePredictions: false, focusHours: 3 },
+        onengine: () => {},
+        onstore: (s: { now: number }) => {
+          store = s;
+          s.now = bucket + 1 * MINUTE;
+        },
+      },
+    });
+    await vi.waitFor(() => expect(getChartData).toHaveBeenCalledTimes(1));
+
+    store.now = bucket + 2 * MINUTE;
+    await new Promise((r) => setTimeout(r, 50));
+    expect(getChartData).toHaveBeenCalledTimes(1);
+
+    store.now = bucket + 6 * MINUTE;
+    await vi.waitFor(() => expect(getChartData).toHaveBeenCalledTimes(2));
+  });
+});

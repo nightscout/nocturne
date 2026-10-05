@@ -978,7 +978,7 @@ public class StatisticsControllerTests
     [Fact]
     public async Task GetMultiPeriodStatistics_WithTempBasals_DoesNotFallBackToProfileBasal()
     {
-        var start = DateTime.UtcNow.AddDays(-1);
+        var start = DateTime.UtcNow.AddHours(-23);
         SetupMultiPeriodWithProfile(
             [new BasalSegment(Mills(start), Mills(start.AddDays(1)), 1.0, 1.0, "Default")]);
         _tempBasalRepoMock
@@ -1632,6 +1632,75 @@ public class StatisticsControllerTests
         var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var payload = ok.Value.Should().BeOfType<AidSystemMetrics>().Subject;
         payload.PumpDeviceNames.Should().Be("YpsoPump");
+    }
+
+    [Fact]
+    public async Task GetMultiPeriodStatistics_ReadsTheWidestWindowOnce_AndSlicesEachPeriodFromIt()
+    {
+        var now = DateTime.UtcNow;
+        SetupGlucose(new[] { TimeSpan.FromHours(1), TimeSpan.FromHours(2), TimeSpan.FromDays(2),
+                TimeSpan.FromDays(5), TimeSpan.FromDays(20), TimeSpan.FromDays(60) }
+            .Concat(Enumerable.Range(1, 10).Select(i => TimeSpan.FromMinutes(5 * i)))
+            .Select(age => new SensorGlucose { Timestamp = now - age, Mgdl = 120 }).ToList());
+        SetupEmptyTreatments();
+        var ages = new[] { TimeSpan.FromHours(1), TimeSpan.FromDays(2), TimeSpan.FromDays(60) };
+        SetupBoluses(BolusKind.Manual, ages.Select(a => new Bolus { Timestamp = now - a, Insulin = 1 }));
+        SetupBoluses(BolusKind.Algorithm, ages.Select(a => new Bolus { Timestamp = now - a, Insulin = 1, Kind = BolusKind.Algorithm }));
+        _carbIntakeRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ages.Select(a => new CarbIntake { Timestamp = now - a, Carbs = 10 }).ToList());
+        _tempBasalRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ages.Select(a => new TempBasal
+            {
+                StartTimestamp = now - a,
+                EndTimestamp = now - a + TimeSpan.FromHours(1),
+                Rate = 1,
+                Origin = TempBasalOrigin.Manual,
+            }).ToList());
+        _basalInjectionRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ages.Select(a => new BasalInjection { Timestamp = now - a, Units = 10 }).ToList());
+
+        var result = await CreateController(statisticsService: new StatisticsService()).GetMultiPeriodStatistics();
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<MultiPeriodStatistics>().Subject;
+        var periods = new[] { payload.LastDay, payload.Last3Days, payload.LastWeek, payload.LastMonth, payload.Last90Days };
+        periods.Select(p => p!.EntryCount).Should().Equal(12, 13, 14, 15, 16);
+        periods.Select(p => p!.TreatmentCount).Should().Equal(2, 4, 4, 4, 6);
+        periods.Select(p => p!.InsulinDelivery!.TotalCarbs).Should().Equal(10, 20, 20, 20, 30);
+        periods.Select(p => p!.InsulinDelivery!.BasalCount).Should().Equal(2, 4, 4, 4, 6);
+        periods.Select(p => p!.InsulinDelivery!.BolusCount).Should().Equal(1, 2, 2, 2, 3);
+        periods.Select(p => p!.InsulinDelivery!.TotalBasal).Should().Equal(12, 24, 24, 24, 36);
+
+        _glucoseRepoMock.Verify(r => r.GetForAnalyticsAsync(
+            It.Is<DateTime?>(d => d < now.AddDays(-89)), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
+            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>()),
+            Times.Once);
+        _glucoseRepoMock.Verify(r => r.GetForAnalyticsAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
+            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>()),
+            Times.Once);
+        _tempBasalRepoMock.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

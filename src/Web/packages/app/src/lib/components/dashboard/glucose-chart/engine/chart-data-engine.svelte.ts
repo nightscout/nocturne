@@ -71,6 +71,8 @@ function hoursEndingAt(endMs: number, hours: number): { from: Date; to: Date } {
   };
 }
 
+const FETCH_INTERVAL_MS = 5 * 60 * 1000;
+
 function shiftDate(date: Date, ms: number): Date {
   return new Date(date.getTime() + ms);
 }
@@ -155,9 +157,9 @@ export function createChartDataEngine(
 
   // ---- Data range ----
   // How far the realtime merge may reach: the window the consumer draws, per
-  // `dataWindow`. The realtime store holds the last 1000 readings — several days
-  // of them — so merging over `fullDataRange` for a consumer that draws only the
-  // visible window hands its chart points it will never render.
+  // `dataWindow`. The realtime store holds the last day's readings, at most 1000, so merging
+  // over `fullDataRange` for a consumer that draws only the visible window hands
+  // its chart points it will never render.
   const dataRange = $derived(
     options.dataWindow === "display" ? displayDateRange : fullDataRange
   );
@@ -167,17 +169,20 @@ export function createChartDataEngine(
   // `fullDataRange` (48h) is used by the MiniOverview on the dashboard, which
   // preloads data via SSR — so consumers that hit this fetch path (sidebar
   // widget, clock face) don't need the full buffer.
-  const stableFetchRange = $derived.by(() => {
-    if (!isBrowser) return null;
-    const range = options.dateRange ? fullDataRange : displayDateRange;
-    const fromTime = range.from.getTime();
-    const toTime = range.to.getTime();
-    if (isNaN(fromTime) || isNaN(toTime)) return null;
-    const intervalMs = 5 * 60 * 1000;
-    const startRounded = Math.floor(fromTime / intervalMs) * intervalMs;
-    const endRounded = Math.ceil(toTime / intervalMs) * intervalMs;
-    return { startTime: startRounded, endTime: endRounded };
-  });
+  // Primitive deriveds, so the range object below is rebuilt only when a
+  // rounded bound moves: `displayDateRange` is a fresh object every minute.
+  const fetchRange = $derived(options.dateRange ? fullDataRange : displayDateRange);
+  const fetchStart = $derived(
+    Math.floor(fetchRange.from.getTime() / FETCH_INTERVAL_MS) * FETCH_INTERVAL_MS
+  );
+  const fetchEnd = $derived(
+    Math.ceil(fetchRange.to.getTime() / FETCH_INTERVAL_MS) * FETCH_INTERVAL_MS
+  );
+  const stableFetchRange = $derived(
+    !isBrowser || isNaN(fetchStart) || isNaN(fetchEnd)
+      ? null
+      : { startTime: fetchStart, endTime: fetchEnd }
+  );
 
   // ---- Effects: data fetching ----
 

@@ -241,4 +241,52 @@ public class DataFetchStageTests
         result.EndTime.Should().Be(EndTime);
         result.BufferStartTime.Should().Be(BufferStartTime);
     }
+
+    [Fact]
+    public async Task ExecuteAsync_WithHealthSeries_LoadsHeartRateAndSteps()
+    {
+        _mockHeartRateService
+            .Setup(s => s.GetHeartRatesByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int?>(), It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new HeartRate { Mills = StartTime, Bpm = 70 }]);
+        _mockStepCountService
+            .Setup(s => s.GetStepCountsByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int?>(), It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new StepCount { Mills = StartTime, Metric = 120 }]);
+
+        var result = await _stage.ExecuteAsync(Window(includeHealthSeries: true), CancellationToken.None);
+
+        result.HeartRateList.Should().ContainSingle();
+        result.StepCountList.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithoutHealthSeries_NeverQueriesHeartRateOrSteps()
+    {
+        var result = await _stage.ExecuteAsync(Window(includeHealthSeries: false), CancellationToken.None);
+
+        result.HeartRateList.Should().BeEmpty();
+        result.StepCountList.Should().BeEmpty();
+        _mockHeartRateService.Verify(
+            s => s.GetHeartRatesByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int?>(), It.IsAny<int>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        _mockStepCountService.Verify(
+            s => s.GetStepCountsByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int?>(), It.IsAny<int>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    private static ChartDataContext Window(bool includeHealthSeries) => new()
+    {
+        StartTime = StartTime,
+        EndTime = EndTime,
+        IntervalMinutes = 5,
+        BufferStartTime = BufferStartTime,
+        IncludeHealthSeries = includeHealthSeries,
+    };
 }
