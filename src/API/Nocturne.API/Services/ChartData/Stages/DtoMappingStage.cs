@@ -64,8 +64,8 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
         // Project sleep sessions into activity spans
         activitySpans.AddRange(MapSleepSessions(context.SleepSessions));
 
-        var basalDeliverySpans = ChartDataService.MapBasalDeliverySpans(context.TempBasalList.ToList());
-        var tempBasalSpans = ChartDataService.MapTempBasalSpans(context.TempBasalList.ToList());
+        var basalDeliverySpans = ChartDataService.MapBasalDeliverySpans(context.DisplayTempBasals.ToList());
+        var tempBasalSpans = ChartDataService.MapTempBasalSpans(context.DisplayTempBasals.ToList());
         var systemEventMarkers = ChartDataService.MapSystemEvents(context.SystemEvents);
         var basalInjectionMarkers = context.BasalInjectionList
             .Select(bi => new BasalInjectionMarkerDto

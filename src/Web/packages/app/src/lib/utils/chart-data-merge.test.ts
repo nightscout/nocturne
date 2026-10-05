@@ -21,8 +21,6 @@ function chartData(
     cobSeries: [],
     basalSeries: [],
     glucoseData: [],
-    heartRateSeries: [],
-    stepSeries: [],
     bolusMarkers: [],
     carbMarkers: [],
     deviceEventMarkers: [],
@@ -89,21 +87,6 @@ describe("mergeChartData basal injections", () => {
       "early",
       "late",
     ]);
-  });
-});
-
-describe("mergeChartData wearable series", () => {
-  it("keeps heart-rate and step samples from the historical half", () => {
-    const merged = mergeChartData(
-      chartData(),
-      chartData({
-        heartRateSeries: [{ time: new Date("2026-08-29T01:00:00Z"), bpm: 58 }],
-        stepSeries: [{ time: new Date("2026-08-29T01:00:00Z"), steps: 120 }],
-      })
-    );
-
-    expect(merged.heartRateSeries).toHaveLength(1);
-    expect(merged.stepSeries).toHaveLength(1);
   });
 });
 

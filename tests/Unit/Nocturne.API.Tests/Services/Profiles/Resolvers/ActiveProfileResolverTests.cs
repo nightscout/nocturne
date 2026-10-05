@@ -32,6 +32,7 @@ public class ActiveProfileResolverTests : IDisposable
             _stateSpanService.Object,
             _tenantAccessor.Object,
             _cache,
+            Mock.Of<ICategoryReadContext>(),
             NullLogger<ActiveProfileResolver>.Instance);
     }
 
@@ -454,6 +455,40 @@ public class ActiveProfileResolverTests : IDisposable
                     It.IsAny<bool>(),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
+        }
+
+        /// <summary>
+        /// A history-clamped request reads only the last 24 hours of state spans, so it must not
+        /// serve, or leave behind, the tenant-keyed result another caller reads.
+        /// </summary>
+        [Fact]
+        public async Task HistoryClampedRequest_NeitherReadsNorWritesTheCache()
+        {
+            SetupSpans(MakeProfileSpan(startMills: NoonMills - 3_600_000, endMills: null, profileName: "Cached"));
+            var clamped = new ActiveProfileResolver(
+                _stateSpanService.Object,
+                _tenantAccessor.Object,
+                _cache,
+                Mock.Of<ICategoryReadContext>(c => c.IsHistoryClamped),
+                NullLogger<ActiveProfileResolver>.Instance);
+
+            await clamped.GetActiveProfileNameAsync(NoonMills);
+            await _sut.GetActiveProfileNameAsync(NoonMills);
+            await clamped.GetActiveProfileNameAsync(NoonMills);
+
+            _stateSpanService.Verify(
+                s => s.GetStateSpansAsync(
+                    It.IsAny<StateSpanCategory?>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<DateTime?>(),
+                    It.IsAny<DateTime?>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<bool?>(),
+                    It.IsAny<int>(),
+                    It.IsAny<int>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Exactly(3));
         }
 
         [Fact]

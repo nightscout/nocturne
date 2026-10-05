@@ -33,6 +33,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
     private readonly ITherapySettingsRepository _therapyRepo;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IMemoryCache _cache;
+    private readonly ICategoryReadContext _categoryReadContext;
 
     private const string DefaultProfileName = "Default";
     private const int CacheTtlSeconds = 5;
@@ -42,13 +43,15 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         IBasalScheduleRepository scheduleRepo,
         ITherapySettingsRepository therapyRepo,
         ITenantAccessor tenantAccessor,
-        IMemoryCache cache)
+        IMemoryCache cache,
+        ICategoryReadContext categoryReadContext)
     {
         _stateSpanService = stateSpanService;
         _scheduleRepo = scheduleRepo;
         _therapyRepo = therapyRepo;
         _tenantAccessor = tenantAccessor;
         _cache = cache;
+        _categoryReadContext = categoryReadContext;
     }
 
     public async IAsyncEnumerable<BasalSegment> GetSegmentsAsync(
@@ -69,10 +72,17 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         }
     }
 
+    /// <remarks>
+    /// A history-clamped request neither reads nor writes the cache, per
+    /// <see cref="ActiveProfileResolver"/>.
+    /// </remarks>
     private async Task<IReadOnlyList<ScheduleAssignment>> GetAssignmentsAsync(
         BasalWindow window,
         CancellationToken ct)
     {
+        if (_categoryReadContext.IsHistoryClamped)
+            return await BuildAssignmentsAsync(window, ct);
+
         var cacheKey = $"BasalAssignments:{_tenantAccessor.TenantId}:{window.StartMills}:{window.EndMills}";
         if (_cache.TryGetValue(cacheKey, out IReadOnlyList<ScheduleAssignment>? cached) && cached is not null)
             return cached;

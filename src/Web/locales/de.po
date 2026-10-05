@@ -48,15 +48,11 @@ msgstr "Verbinde..."
 msgid "Establishing connection"
 msgstr "Verbindung wird hergestellt"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Reconnecting..."
-msgstr "Verbinde erneut..."
+#~ msgid "Reconnecting..."
+#~ msgstr "Verbinde erneut..."
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Attempting to reconnect"
-msgstr "Versuche erneut zu verbinden"
+#~ msgid "Attempting to reconnect"
+#~ msgstr "Versuche erneut zu verbinden"
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -68,12 +64,10 @@ msgstr "Getrennt"
 msgid "Using cached data"
 msgstr "Verwende zwischengespeicherte Daten"
 
-#: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/lib/components/settings/DataSourceRow.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
@@ -84,8 +78,6 @@ msgstr "Verwende zwischengespeicherte Daten"
 msgid "Error"
 msgstr "Fehler"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Connection failed"
 msgstr "Verbindung fehlgeschlagen"
@@ -344,13 +336,11 @@ msgstr "Fehler beim Laden der Verlaufsdaten"
 #~ msgid "Connected to real-time data"
 #~ msgstr ""
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Real-time data disconnected"
-msgstr "Verbindung zu Echtzeitdaten getrennt"
+#~ msgid "Real-time data disconnected"
+#~ msgstr "Verbindung zu Echtzeitdaten getrennt"
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Failed to connect to real-time data"
-msgstr "Fehler beim Verbinden mit Echtzeitdaten"
+#~ msgid "Failed to connect to real-time data"
+#~ msgstr "Fehler beim Verbinden mit Echtzeitdaten"
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
@@ -22918,15 +22908,11 @@ msgstr ""
 msgid "Charlie target"
 msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Starting"
-msgstr ""
+#~ msgid "Starting"
+#~ msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Waiting to connect"
-msgstr ""
+#~ msgid "Waiting to connect"
+#~ msgstr ""
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -26563,3 +26549,7 @@ msgstr "Die Verbindung zu Google Health wurde getrennt. Ihre importierten Daten 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "<0/>Disconnecting…"
 msgstr "<0/>Verbindung wird getrennt…"
+
+#: src/lib/stores/realtime-store.svelte.ts
+msgid "Real-time data unavailable"
+msgstr ""

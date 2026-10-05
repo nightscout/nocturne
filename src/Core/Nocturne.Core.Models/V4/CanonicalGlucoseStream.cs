@@ -41,17 +41,7 @@ public static class CanonicalGlucoseStream
         IReadOnlyList<SensorGlucose> readings,
         IReadOnlyList<PatientDevice> devices)
     {
-        if (readings.Count == 0)
-            return readings;
-
-        // Fast path: one stream present → canonical view is the input itself.
-        var firstKey = StreamKey(readings[0]);
-        var multiStream = false;
-        for (var i = 1; i < readings.Count; i++)
-        {
-            if (StreamKey(readings[i]) != firstKey) { multiStream = true; break; }
-        }
-        if (!multiStream)
+        if (!HasMultipleStreams(readings))
             return readings;
 
         var priority = BuildPriorityMap(readings, devices);
@@ -75,6 +65,33 @@ public static class CanonicalGlucoseStream
                 result.Add(reading);
         }
         return result;
+    }
+
+    public static bool HasMultipleStreams(IReadOnlyList<SensorGlucose> readings)
+    {
+        if (readings.Count < 2)
+            return false;
+
+        var first = readings[0];
+        string? firstKey = null;
+        for (var i = 1; i < readings.Count; i++)
+        {
+            var reading = readings[i];
+            if (first.PatientDeviceId != reading.PatientDeviceId)
+                return true;
+            if (first.PatientDeviceId.HasValue)
+                continue;
+
+            if (string.Equals(first.DataSource ?? "", reading.DataSource ?? "", StringComparison.Ordinal)
+                && string.Equals(first.Device ?? "", reading.Device ?? "", StringComparison.Ordinal))
+                continue;
+
+            // Delimiters in source fields can make different pairs share the same legacy key.
+            firstKey ??= StreamKey(first);
+            if (!string.Equals(firstKey, StreamKey(reading), StringComparison.Ordinal))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

@@ -420,6 +420,9 @@ public class SleepSessionRepositoryTests : IDisposable
     [Fact]
     public async Task UpsertSessionAsync_replaces_by_id_when_original_id_differs()
     {
+        using var database = TestDbContextFactory.CreateSqliteWithTenant(TenantA);
+        await using var context = database.CreateContext();
+        var repository = new SleepSessionRepository(new TestTenantDbContextFactory(context));
         var existing = CreateEntity(TenantA,
             new DateTime(2026, 1, 1, 22, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 1, 2, 6, 0, 0, DateTimeKind.Utc),
@@ -439,7 +442,8 @@ public class SleepSessionRepositoryTests : IDisposable
             },
         ];
 
-        await SeedAsync(existing);
+        context.SleepSessions.Add(existing);
+        await context.SaveChangesAsync();
 
         var incoming = new SleepSession
         {
@@ -464,15 +468,15 @@ public class SleepSessionRepositoryTests : IDisposable
             ],
         };
 
-        var result = await _repository.UpsertSessionAsync(incoming);
+        var result = await repository.UpsertSessionAsync(incoming);
 
         result.Id.Should().Be(existing.Id.ToString());
         result.Stages.Should().ContainSingle().Which.Stage.Should().Be(SleepStageType.Deep);
 
-        var count = await _repository.CountSessionsAsync();
+        var count = await repository.CountSessionsAsync();
         count.Should().Be(1);
 
-        var persisted = await _repository.GetSessionByIdAsync(existing.Id);
+        var persisted = await repository.GetSessionByIdAsync(existing.Id);
         persisted!.Stages.Should().ContainSingle().Which.Stage.Should().Be(SleepStageType.Deep);
     }
 
@@ -506,6 +510,53 @@ public class SleepSessionRepositoryTests : IDisposable
         var second = await _repository.UpsertSessionAsync(session2);
 
         second.Id.Should().Be(first.Id);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Replacement_preserves_identity_and_creation_time_and_replaces_children(bool updateById)
+    {
+        using var database = TestDbContextFactory.CreateSqliteWithTenant(TenantA);
+        await using var context = database.CreateContext();
+        var repository = new SleepSessionRepository(new TestTenantDbContextFactory(context));
+        var original = Session("sleep-replacement");
+        original.CreatedAt = new DateTime(2025, 12, 1, 0, 0, 0, DateTimeKind.Utc);
+        original.Stages = [new SleepStageInterval
+        {
+            StartTime = original.StartTime, EndTime = original.EndTime, Stage = SleepStageType.Light,
+        }];
+        original.BiometricSamples = [new SleepBiometricSample
+        {
+            Timestamp = original.StartTime, HeartRate = 60,
+        }];
+        var created = await repository.UpsertSessionAsync(original);
+        context.ChangeTracker.Clear();
+
+        var replacement = Session("sleep-replacement");
+        replacement.CreatedAt = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc);
+        replacement.Stages = [new SleepStageInterval
+        {
+            StartTime = replacement.StartTime, EndTime = replacement.EndTime, Stage = SleepStageType.Deep,
+        }];
+        replacement.BiometricSamples = [new SleepBiometricSample
+        {
+            Timestamp = replacement.StartTime, HeartRate = 55,
+        }];
+        var updated = updateById
+            ? await repository.UpdateSessionAsync(Guid.Parse(created.Id!), replacement)
+            : await repository.UpsertSessionAsync(replacement);
+
+        updated!.Id.Should().Be(created.Id);
+        updated.CreatedAt.Should().Be(created.CreatedAt);
+        context.ChangeTracker.Clear();
+        var stored = await repository.GetSessionByIdAsync(Guid.Parse(created.Id!));
+        stored!.CreatedAt.Should().Be(created.CreatedAt);
+        stored.Stages.Should().ContainSingle().Which.Stage.Should().Be(SleepStageType.Deep);
+        stored.BiometricSamples.Should().ContainSingle().Which.HeartRate.Should().Be(55);
+        (await repository.CountSessionsAsync()).Should().Be(1);
+        (await context.SleepStages.CountAsync()).Should().Be(1);
+        (await context.SleepBiometricSamples.CountAsync()).Should().Be(1);
     }
 
     // --- UpdateSessionAsync ---

@@ -48,15 +48,11 @@ msgstr "Conectando..."
 msgid "Establishing connection"
 msgstr "Estableciendo conexión"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Reconnecting..."
-msgstr "Reconectando..."
+#~ msgid "Reconnecting..."
+#~ msgstr "Reconectando..."
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Attempting to reconnect"
-msgstr "Intentando reconectar"
+#~ msgid "Attempting to reconnect"
+#~ msgstr "Intentando reconectar"
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -68,12 +64,10 @@ msgstr "Desconectado"
 msgid "Using cached data"
 msgstr "Usando datos almacenados"
 
-#: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/lib/components/settings/DataSourceRow.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
@@ -84,8 +78,6 @@ msgstr "Usando datos almacenados"
 msgid "Error"
 msgstr "Error"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Connection failed"
 msgstr "Error de conexión"
@@ -344,13 +336,11 @@ msgstr "No se pudieron cargar los datos históricos"
 #~ msgid "Connected to real-time data"
 #~ msgstr ""
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Real-time data disconnected"
-msgstr "Datos en tiempo real desconectados"
+#~ msgid "Real-time data disconnected"
+#~ msgstr "Datos en tiempo real desconectados"
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Failed to connect to real-time data"
-msgstr "No se pudo conectar con los datos en tiempo real"
+#~ msgid "Failed to connect to real-time data"
+#~ msgstr "No se pudo conectar con los datos en tiempo real"
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
@@ -22918,15 +22908,11 @@ msgstr "Objetivo Bravo"
 msgid "Charlie target"
 msgstr "Objetivo Charlie"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Starting"
-msgstr "Iniciando"
+#~ msgid "Starting"
+#~ msgstr "Iniciando"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Waiting to connect"
-msgstr "Esperando conexión"
+#~ msgid "Waiting to connect"
+#~ msgstr "Esperando conexión"
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -26563,3 +26549,7 @@ msgstr "Google Health está desconectado. Se han conservado tus datos importados
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "<0/>Disconnecting…"
 msgstr "<0/>Desconectando…"
+
+#: src/lib/stores/realtime-store.svelte.ts
+msgid "Real-time data unavailable"
+msgstr ""

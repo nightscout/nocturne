@@ -88,6 +88,34 @@ public class ShareRlsPolicyTests
     }
 
     [Fact]
+    public void BuildPolicySql_SpanEndColumn_ClampsByOverlapSoARunningSpanStaysVisible()
+    {
+        var sql = ShareRlsPolicy.BuildPolicySql("state_spans", null, spanEndColumn: "end_timestamp");
+
+        sql.Should().Contain(
+            "USING (current_setting('app.is_share', true) IS DISTINCT FROM 'true'" +
+            " AND ((\"end_timestamp\" IS NULL OR \"end_timestamp\" >= now() - interval '24 hours')" +
+            " OR NOT ((current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'" +
+            " AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true')" +
+            " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true')));");
+        sql.Should().NotContain("visible_categories");
+    }
+
+    [Fact]
+    public void BuildPolicySql_RecencyAndSpanEndColumn_Throws()
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql("state_spans", null, "start_timestamp", "end_timestamp");
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void BuildPolicySql_UnsafeSpanEndColumn_Throws()
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql("state_spans", null, spanEndColumn: "end\"; DROP TABLE x");
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void BuildPolicySql_UnsafeRecencyColumn_Throws()
     {
         var act = () => ShareRlsPolicy.BuildPolicySql("boluses", Scope.TreatmentsRead, "timestamp\"; DROP TABLE x");

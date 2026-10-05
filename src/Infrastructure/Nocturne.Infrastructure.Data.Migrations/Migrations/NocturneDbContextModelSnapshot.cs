@@ -4229,6 +4229,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_state_spans_category_start");
 
+                    b.HasIndex("TenantId", "Category", "UpdatedAt", "Id")
+                        .HasDatabaseName("ix_state_spans_tenant_category_updated_at")
+                        .HasFilter("deleted_at IS NULL");
+
                     b.HasIndex("TenantId", "Source", "Category", "StartTimestamp")
                         .IsDescending(false, false, false, true)
                         .HasDatabaseName("ix_state_spans_tenant_source_category_start");

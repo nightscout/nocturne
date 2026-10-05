@@ -374,7 +374,6 @@ public partial class TenantService : ITenantService
         await using var context = await _factory.CreateSubjectPinnedContextAsync(subjectId, ct);
         return await context.TenantMembers.AsNoTracking()
             .Where(tm => tm.SubjectId == subjectId)
-            .Include(tm => tm.Tenant)
             .OrderByDescending(tm => tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
             .ThenBy(tm => tm.SysCreatedAt)
             .ThenBy(tm => tm.Tenant!.Slug)

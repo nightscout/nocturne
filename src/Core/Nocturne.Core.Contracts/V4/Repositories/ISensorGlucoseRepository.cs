@@ -52,6 +52,16 @@ public interface ISensorGlucoseRepository
         Guid? patientDeviceId = null
     );
 
+    /// <summary>
+    /// Partial readings for statistics and canonical selection only; these must not be returned
+    /// as raw records or projected into legacy entries. Includes the per-reading UTC offset.
+    /// </summary>
+    Task<IEnumerable<SensorGlucose>> GetForAnalyticsAsync(
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit = 100, int offset = 0, bool descending = true, bool nativeOnly = false,
+        DateTime? afterTimestamp = null, Guid? afterId = null,
+        CancellationToken ct = default, Guid? patientDeviceId = null);
+
     // Explicit base-interface bridge — delegates to the extended overload
     Task<IEnumerable<SensorGlucose>> IV4Repository<SensorGlucose>.GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,

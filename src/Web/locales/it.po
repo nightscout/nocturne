@@ -48,15 +48,11 @@ msgstr ""
 msgid "Establishing connection"
 msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Reconnecting..."
-msgstr ""
+#~ msgid "Reconnecting..."
+#~ msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Attempting to reconnect"
-msgstr ""
+#~ msgid "Attempting to reconnect"
+#~ msgstr ""
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -68,12 +64,10 @@ msgstr ""
 msgid "Using cached data"
 msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/lib/components/settings/DataSourceRow.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
@@ -84,8 +78,6 @@ msgstr ""
 msgid "Error"
 msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Connection failed"
 msgstr ""
@@ -344,13 +336,11 @@ msgstr ""
 #~ msgid "Connected to real-time data"
 #~ msgstr ""
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Real-time data disconnected"
-msgstr ""
+#~ msgid "Real-time data disconnected"
+#~ msgstr ""
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Failed to connect to real-time data"
-msgstr ""
+#~ msgid "Failed to connect to real-time data"
+#~ msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
@@ -22918,15 +22908,11 @@ msgstr ""
 msgid "Charlie target"
 msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Starting"
-msgstr ""
+#~ msgid "Starting"
+#~ msgstr ""
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Waiting to connect"
-msgstr ""
+#~ msgid "Waiting to connect"
+#~ msgstr ""
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -26563,3 +26549,7 @@ msgstr "Google Health è disconnesso. I dati importati sono stati conservati."
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "<0/>Disconnecting…"
 msgstr "<0/>Disconnessione in corso…"
+
+#: src/lib/stores/realtime-store.svelte.ts
+msgid "Real-time data unavailable"
+msgstr ""

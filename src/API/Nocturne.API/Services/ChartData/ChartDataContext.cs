@@ -35,6 +35,12 @@ public sealed record ChartDataContext
     /// <summary>StartTime minus 8 hours, used for buffered IOB/COB fetches.</summary>
     public long BufferStartTime { get; init; }
 
+    /// <summary>
+    /// Whether to fetch and map <see cref="HeartRateSeries"/> and <see cref="StepSeries"/>, both raw
+    /// high-density readings.
+    /// </summary>
+    public bool IncludeHealthSeries { get; init; } = true;
+
     // === Profile-derived config (set by ProfileLoadStage) ===
 
     /// <summary>IANA timezone string from the active profile, or null if no profile is loaded.</summary>
@@ -62,6 +68,9 @@ public sealed record ChartDataContext
     public IReadOnlyList<BGCheck> BgCheckList { get; init; } = [];
     public IReadOnlyList<DeviceEvent> DeviceEventList { get; init; } = [];
     public IReadOnlyList<TempBasal> TempBasalList { get; init; } = [];
+
+    /// <summary>Temp basals starting in the display window (StartTime..EndTime).</summary>
+    public IReadOnlyList<TempBasal> DisplayTempBasals { get; init; } = [];
 
     /// <summary>
     /// APS snapshot IOB/COB points covering the buffer window, ascending by timestamp. Carries the

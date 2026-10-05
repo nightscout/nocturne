@@ -119,7 +119,7 @@ public abstract class SimpleEntityService<TDomain, TEntity>
                 skip
             );
 
-            var entities = await OrderByTimestamp(EntitySet)
+            var entities = await OrderByTimestamp(EntitySet.AsNoTracking())
                 .Skip(skip)
                 .Take(count)
                 .ToListAsync(cancellationToken);
@@ -210,13 +210,19 @@ public abstract class SimpleEntityService<TDomain, TEntity>
             // This makes repeated uploads of the same measurement idempotent.
             //
             // The existing rows for the whole batch are pre-loaded in ONE query
-            // keyed on the sync identifiers present (the
-            // (tenant_id, data_source, sync_identifier) index keeps it cheap) —
-            // one round trip instead of one per record, which matters for the
-            // historical backfill on a first permission grant.
+            // keyed on the data sources and sync identifiers present — one round
+            // trip instead of one per record, which matters for the historical
+            // backfill on a first permission grant. The data source is the middle
+            // column of the (tenant_id, data_source, sync_identifier) index; without
+            // it the lookup cannot seek that index and scans the table instead.
             var syncIdentifiers = entities
                 .Select(e => (e as ISyncDedupable)?.SyncIdentifier)
                 .Where(id => !string.IsNullOrEmpty(id))
+                .Distinct()
+                .ToList();
+            var dataSources = entities
+                .Select(e => (e as ISyncDedupable)?.DataSource)
+                .Where(source => !string.IsNullOrEmpty(source))
                 .Distinct()
                 .ToList();
 
@@ -224,8 +230,10 @@ public abstract class SimpleEntityService<TDomain, TEntity>
             if (syncIdentifiers.Count > 0)
             {
                 var candidates = await EntitySet
-                    .Where(e => syncIdentifiers.Contains(
-                        EF.Property<string>(e, nameof(ISyncDedupable.SyncIdentifier))))
+                    .Where(e => dataSources.Contains(
+                            EF.Property<string>(e, nameof(ISyncDedupable.DataSource)))
+                        && syncIdentifiers.Contains(
+                            EF.Property<string>(e, nameof(ISyncDedupable.SyncIdentifier))))
                     .ToListAsync(cancellationToken);
                 foreach (var candidate in candidates)
                 {

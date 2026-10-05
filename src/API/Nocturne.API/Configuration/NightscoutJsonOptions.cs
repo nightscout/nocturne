@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Attributes;
 
 namespace Nocturne.API.Configuration;
@@ -25,7 +26,7 @@ public static class NightscoutJsonOptions
             WriteIndented = false,
             TypeInfoResolver = new DefaultJsonTypeInfoResolver
             {
-                Modifiers = { ExcludeNocturneOnlyProperties, RemoveDuplicateIdProperty }
+                Modifiers = { ExcludeNocturneOnlyProperties, RemoveDuplicateIdProperty, OmitIndefiniteDuration }
             }
         };
     }
@@ -71,5 +72,24 @@ public static class NightscoutJsonOptions
                 idProperty.ShouldSerialize = (_, _) => false;
             }
         }
+    }
+
+    /// <summary>
+    /// Modifier that leaves <c>duration</c> out of a treatment with <c>durationType: "indefinite"</c> and
+    /// no duration. Loop uploads an open-ended override that way and Nightscout stores it as sent;
+    /// NightscoutKit reads any numeric <c>duration</c>, 0 included, as a finite override, and
+    /// <see cref="Treatment.Duration"/> otherwise serializes an unset duration as 0.
+    /// </summary>
+    public static void OmitIndefiniteDuration(JsonTypeInfo typeInfo)
+    {
+        if (typeInfo.Kind != JsonTypeInfoKind.Object || !typeof(Treatment).IsAssignableFrom(typeInfo.Type))
+            return;
+
+        var duration = typeInfo.Properties.FirstOrDefault(p => p.Name == "duration");
+        if (duration is null)
+            return;
+
+        duration.ShouldSerialize = (treatment, value) =>
+            !(((Treatment)treatment).DurationType == "indefinite" && value is null or 0.0);
     }
 }

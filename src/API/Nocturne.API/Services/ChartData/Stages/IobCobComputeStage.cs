@@ -85,7 +85,7 @@ internal sealed class IobCobComputeStage(
             context.ApsSnapshotList, cancellationToken
         );
 
-        var basalSeries = await basalSeriesBuilder.BuildAsync(tempBasalList, startTime, endTime, defaultBasalRate, timeline, cancellationToken);
+        var basalSeries = await basalSeriesBuilder.BuildAsync(context.DisplayTempBasals.ToList(), startTime, endTime, defaultBasalRate, timeline, cancellationToken);
 
         var maxBasalRate = Math.Max(
             defaultBasalRate * 2.5,

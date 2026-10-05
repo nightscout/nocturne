@@ -27,26 +27,25 @@ public class PaginationBenchmarks
         _fixture = new PostgresFixture();
         await _fixture.InitializeAsync();
 
-        _tenantId = Guid.CreateVersion7();
-        await using var seedCtx = _fixture.CreateContext();
+        _tenantId = await _fixture.CreateTenantAsync();
+        await using var seedCtx = _fixture.CreateContext(_tenantId);
         await DataSeeder.SeedSensorGlucoseAsync(seedCtx, _tenantId, RowCount);
 
         // Pre-compute cursor for the given offset position
         if (Offset > 0)
         {
-            await using var cursorCtx = _fixture.CreateContext();
+            await using var cursorCtx = _fixture.CreateContext(_tenantId);
             var cursorRow = await cursorCtx.SensorGlucose.AsNoTracking()
                 .Where(e => e.TenantId == _tenantId)
                 .OrderByDescending(e => e.Timestamp)
                 .ThenByDescending(e => e.Id)
-                .Skip(Offset)
+                .Skip(Offset - 1)
                 .Select(e => new { e.Timestamp, e.Id })
                 .FirstOrDefaultAsync();
-            if (cursorRow != null)
-            {
-                _cursorTimestamp = cursorRow.Timestamp;
-                _cursorId = cursorRow.Id;
-            }
+            if (cursorRow is null)
+                throw new InvalidOperationException($"No pagination cursor found for offset {Offset}.");
+            _cursorTimestamp = cursorRow.Timestamp;
+            _cursorId = cursorRow.Id;
         }
     }
 
@@ -60,7 +59,7 @@ public class PaginationBenchmarks
     public async Task<List<SensorGlucoseEntity>> OffsetPagination()
     {
         if (!_fixture.IsInitialized) return [];
-        await using var ctx = _fixture.CreateContext();
+        await using var ctx = _fixture.CreateContext(_tenantId);
 
         return await ctx.SensorGlucose.AsNoTracking()
             .Where(e => e.TenantId == _tenantId)
@@ -75,7 +74,7 @@ public class PaginationBenchmarks
     public async Task<List<SensorGlucoseEntity>> KeysetPagination()
     {
         if (!_fixture.IsInitialized) return [];
-        await using var ctx = _fixture.CreateContext();
+        await using var ctx = _fixture.CreateContext(_tenantId);
 
         if (Offset == 0)
         {

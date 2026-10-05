@@ -43,7 +43,7 @@ public class SensorIntegrityService : ISensorIntegrityService
         var fromUtc = AsUtc(from);
         var toUtc = AsUtc(to);
 
-        var glucoseTask = _sensorGlucoseRepository.GetAsync(
+        var glucoseTask = _sensorGlucoseRepository.GetForAnalyticsAsync(
             fromUtc, toUtc, device: null, source: source, limit: int.MaxValue, descending: false, ct: ct);
         // All bolus kinds (manual + APS micro-boluses) count toward insulin-during-cluster.
         var bolusTask = _bolusRepository.GetAsync(
