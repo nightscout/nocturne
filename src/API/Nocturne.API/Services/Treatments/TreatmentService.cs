@@ -165,30 +165,43 @@ public class TreatmentService : ITreatmentService
 
         await PopulateInsulinContextAsync(treatmentList, cancellationToken);
 
-        var created = await _store.CreateAsync(treatmentList, cancellationToken);
+        BulkWrite<Treatment> created;
+        try
+        {
+            created = await _store.CreateAsync(treatmentList, cancellationToken);
+        }
+        catch (TreatmentBatchFailedException failed)
+        {
+            // The treatments before the failing one stay stored, so they are announced like any write.
+            await AnnounceAsync(failed.Written, cancellationToken);
+            throw;
+        }
 
+        await AnnounceAsync(created, cancellationToken);
+        return created;
+    }
+
+    private async Task AnnounceAsync(BulkWrite<Treatment> created, CancellationToken cancellationToken)
+    {
         await _cache.InvalidateAsync(cancellationToken);
         await _events.OnCreatedAsync(Inserted(created), cancellationToken);
         foreach (var reupload in created.Updated)
             await _events.OnUpdatedAsync(reupload, cancellationToken);
-
-        return created;
     }
 
     /// <summary>
-    /// The created treatments the store inserted. One the user had deleted is returned to the caller
-    /// as before but stored nothing, so no event announces it, and write-back does not put it upstream
-    /// again. One that updated a record already stored (<see cref="BulkWrite{TRecord}.Updated"/>: a
-    /// client's resend, under its id or only its sync key, the v1 PUT create fallback, a connector
-    /// republish, a stored override, temporary target or profile switch sent again) is announced as the update
-    /// it is, so write-back looks for the copy upstream holds before writing, as for any edit: sent as
-    /// a create, unlooked-for, it would store a second copy beside one held under another form.
+    /// The created treatments the store inserted. One that updated a record already stored
+    /// (<see cref="BulkWrite{TRecord}.Updated"/>: a client's resend, under its id or only its sync key,
+    /// the v1 PUT create fallback, a connector republish, a stored override, temporary target or
+    /// profile switch sent again) is announced as the update it is, so write-back looks for the copy
+    /// upstream holds before writing, as for any edit: sent as a create, unlooked-for, it would store a
+    /// second copy beside one held under another form. One the user had deleted is not written at all,
+    /// so it is not among them.
     /// </summary>
     private static IReadOnlyList<Treatment> Inserted(BulkWrite<Treatment> created) =>
-        created.Withheld.Count == 0 && created.Updated.Count == 0
+        created.Updated.Count == 0
             ? created
-            : created.Where(t => !created.Withheld.Contains(t, ReferenceEqualityComparer.Instance)
-                                 && !created.Updated.Contains(t, ReferenceEqualityComparer.Instance)).ToList();
+            : created.Where(t => !created.Updated.Contains(t, ReferenceEqualityComparer.Instance)).ToList();
 
     /// <inheritdoc />
     /// <returns>The updated <see cref="Treatment"/>, or <see langword="null"/> if not found.</returns>
@@ -216,12 +229,13 @@ public class TreatmentService : ITreatmentService
         ApplyJsonPatch(existing, patchData);
 
         // Re-decompose (idempotent upsert via LegacyId matching)
-        await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
+        var result = await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
+        var patched = TreatmentReadService.ToCreated(existing, result);
 
         await _cache.InvalidateAsync(cancellationToken);
-        await _events.OnUpdatedAsync(existing, cancellationToken);
+        await _events.OnUpdatedAsync(patched, cancellationToken);
 
-        return existing;
+        return patched;
     }
 
     private static void ApplyJsonPatch(Treatment treatment, JsonElement patchData)

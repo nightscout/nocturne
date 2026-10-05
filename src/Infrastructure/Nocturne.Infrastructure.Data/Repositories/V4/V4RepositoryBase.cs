@@ -706,7 +706,17 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         if (!string.IsNullOrEmpty(entity.LegacyId)
             && (await ctx.GetBlockingLegacyIdsAsync<TEntity>([entity], ct)).Held.Count > 0)
         {
-            throw new RecreationBlockedException(typeof(TModel).Name, RecreationBlockedException.LegacyIdIdentity(entity.LegacyId));
+            var heldBy = await ctx.Set<TEntity>().IgnoreQueryFilters().AsNoTracking()
+                .Where(e => e.TenantId == ctx.TenantId && e.LegacyId == entity.LegacyId)
+                .WhereBlocksRecreation()
+                .OrderBy(e => e.DeletedAt != null)
+                .Select(e => (Guid?)e.Id)
+                .FirstOrDefaultAsync(ct);
+
+            throw new RecreationBlockedException(typeof(TModel).Name, RecreationBlockedException.LegacyIdIdentity(entity.LegacyId))
+            {
+                HeldBy = heldBy,
+            };
         }
 
         ctx.Set<TEntity>().Add(entity);

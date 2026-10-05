@@ -110,7 +110,9 @@ describe("realtime data hub", () => {
 
   it("carries the REST _id on a treatment create", async () => {
     const notes = `e2e realtime id ${Date.now()}`;
-    await postTreatments(tenant.api, [{ eventType: "Note", created_at: minutesAgo(25), notes, enteredBy: "e2e" }]);
+    const response = await tenant.api.ok<V1Treatment[]>("POST", "/api/v1/treatments", [
+      { eventType: "Note", created_at: minutesAgo(25), notes, enteredBy: "e2e" },
+    ]);
     const [created] = await hub.waitFor("create", (a) => storage(a).colName === "treatments" && storage(a).doc?.notes === notes, {
       what: "the treatment's create event",
     });
@@ -118,6 +120,36 @@ describe("realtime data hub", () => {
     const rest = (await tenant.api.ok<V1Treatment[]>("GET", "/api/v1/treatments.json?count=20")).find((t) => t.notes === notes);
     expect(rest).toBeDefined();
     expect(storage([created]).doc?._id).toBe(rest!._id);
+    expect(response.map((t) => t._id)).toEqual([rest!._id]);
+  });
+
+  it("carries the REST _id on a treatment update", async () => {
+    const upload = { eventType: "Correction Bolus", insulin: 0.35, created_at: minutesAgo(45), enteredBy: "loop://e2e-iphone", syncIdentifier: randomUUID() };
+    await tenant.api.ok("POST", "/api/v1/treatments", [upload]);
+    const rest = (await tenant.api.ok<V1Treatment[]>("GET", "/api/v1/treatments.json?count=20")).find((t) => t.insulin === 0.35);
+    expect(rest).toBeDefined();
+
+    await tenant.api.ok("PUT", `/api/v1/treatments/${rest!._id}`, { ...upload, insulin: 0.4 });
+    const [updated] = await hub.waitFor("update", (a) => storage(a).colName === "treatments" && storage(a).doc?.insulin === 0.4, {
+      what: "the treatment's update event",
+    });
+    expect(storage([updated]).doc?._id).toBe(rest!._id);
+  });
+
+  it("pushes a re-upload of a stored treatment as an update under the REST _id", async () => {
+    const upload = { eventType: "Correction Bolus", insulin: 0.45, created_at: minutesAgo(55), enteredBy: "loop://e2e-iphone", syncIdentifier: randomUUID() };
+    const isThis = (a: unknown[]) => storage(a).colName === "treatments" && storage(a).doc?.insulin === 0.45;
+    await tenant.api.ok("POST", "/api/v1/treatments", [upload]);
+    await hub.waitFor("create", isThis, { what: "the treatment's create event" });
+    const rest = (await tenant.api.ok<V1Treatment[]>("GET", "/api/v1/treatments.json?count=20")).find((t) => t.insulin === 0.45);
+    expect(rest).toBeDefined();
+
+    const response = await tenant.api.ok<V1Treatment[]>("POST", "/api/v1/treatments", [upload]);
+    const [updated] = await hub.waitFor("update", isThis, { what: "the re-upload's update event" });
+
+    expect(storage([updated]).doc?._id).toBe(rest!._id);
+    expect(response.map((t) => t._id)).toEqual([rest!._id]);
+    expect(hub.events.filter((e) => e.target === "create" && isThis(e.args))).toHaveLength(1);
   });
 
   it("pushes no create when an uploader re-sends a treatment the user deleted", async () => {

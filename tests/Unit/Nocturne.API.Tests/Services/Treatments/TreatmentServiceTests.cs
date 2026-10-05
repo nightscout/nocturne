@@ -91,16 +91,41 @@ public class TreatmentServiceTests
     }
 
     /// <summary>
-    /// A create the user's deletion withheld is returned to the caller as before, but stored nothing:
-    /// no event announces it, so write-back does not put the dose back upstream.
+    /// A batch that failed part-way fails the request, as Nightscout's does, but the treatments
+    /// written before the failure stay stored, so they are announced like any write.
     /// </summary>
     [Fact]
-    public async Task CreateTreatmentsAsync_RaisesNoEventForATreatmentTheUsersDeletionWithheld()
+    public async Task CreateTreatmentsAsync_WhenTheBatchFails_AnnouncesWhatItWroteAndRethrows()
+    {
+        var stored = new Treatment { Id = "stored" };
+        var failure = new TreatmentBatchFailedException(
+            new BulkWrite<Treatment>([stored], skippedDeleted: 0) { Settled = [stored] },
+            new InvalidOperationException("boom"));
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+        IReadOnlyList<Treatment>? raised = null;
+        _mockEvents.Setup(x => x.OnCreatedAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<Treatment>, CancellationToken>((items, _) => raised = items)
+            .Returns(Task.CompletedTask);
+
+        var act = () => _treatmentService.CreateTreatmentsAsync([new Treatment(), new Treatment()], CancellationToken.None);
+
+        (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which.Should().BeSameAs(failure);
+        raised.Should().Equal(stored);
+        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// A create the user's deletion refused is answered in <see cref="BulkWrite{TRecord}.Settled"/>, but
+    /// stored nothing: no event announces it, so write-back does not put the dose back upstream.
+    /// </summary>
+    [Fact]
+    public async Task CreateTreatmentsAsync_RaisesNoEventForATreatmentTheUsersDeletionRefused()
     {
         var stored = new Treatment { Id = "stored" };
         var withheld = new Treatment { Id = "deleted-by-user" };
         _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new BulkWrite<Treatment>([stored, withheld], skippedDeleted: 1) { Withheld = [withheld] });
+            .ReturnsAsync(new BulkWrite<Treatment>([stored], skippedDeleted: 1) { Settled = [stored, withheld] });
         IReadOnlyList<Treatment>? raised = null;
         _mockEvents.Setup(x => x.OnCreatedAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
             .Callback<IReadOnlyList<Treatment>, CancellationToken>((items, _) => raised = items)
@@ -108,7 +133,7 @@ public class TreatmentServiceTests
 
         var result = await _treatmentService.CreateTreatmentsAsync([new Treatment(), new Treatment()], CancellationToken.None);
 
-        result.Should().Equal(stored, withheld);
+        result.Settled.Should().Equal(stored, withheld);
         raised.Should().Equal(stored);
     }
 
@@ -240,6 +265,27 @@ public class TreatmentServiceTests
         _mockEvents.Verify(x => x.OnUpdatedAsync(
             It.Is<Treatment>(t => t.Id == legacyId && t.LegacyId == legacyId && t.RecordId == recordId && t.Insulin == 2),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PatchTreatmentAsync_BroadcastsAndReturnsTheIdTheReadServes()
+    {
+        var note = new V4Models.Note { Id = Guid.NewGuid() };
+        var existing = new Treatment { Id = "legacy-1", LegacyId = "legacy-1", Mills = 1000, EventType = "Note", Notes = "old" };
+        var wireId = MongoObjectId.FromGuid(note.Id);
+        _mockStore.Setup(x => x.GetForUpdateAsync(wireId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        var result = new DecompositionResult();
+        result.UpdatedRecords.Add(note);
+        _mockDecomposer
+            .Setup(x => x.DecomposeAsync(It.Is<Treatment>(t => t.Id == "legacy-1"), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(result);
+
+        var patched = await _treatmentService.PatchTreatmentAsync(
+            wireId, JsonSerializer.Deserialize<JsonElement>("{\"notes\":\"updated\"}"), CancellationToken.None);
+
+        patched!.Id.Should().Be(note.Id.ToString());
+        _mockEvents.Verify(x => x.OnUpdatedAsync(
+            It.Is<Treatment>(t => t.Id == note.Id.ToString() && t.Notes == "updated"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
