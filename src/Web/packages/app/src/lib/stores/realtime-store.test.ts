@@ -50,6 +50,7 @@ interface StoreInternals {
   handleUpdate(event: StorageEvent): void;
   handleDelete(event: StorageEvent): void;
   performBackfillIfNeeded(force?: boolean): Promise<void>;
+  handleDataUpdate(event: { data: unknown[] }): void;
   handleVisibilityChange: (() => void) | null;
   websocketClient: {
     connectionStatus: WebSocketConnectionStatus;
@@ -71,6 +72,7 @@ type TestStore = StoreInternals &
     | "connectionPresentation"
     | "currentReservoir"
     | "entries"
+    | "boluses"
     | "currentEntry"
     | "bgDelta"
     | "direction"
@@ -250,6 +252,52 @@ describe("RealtimeStore connection presentation", () => {
     expect(store.connectionUnavailable).toBe(false);
     expect(toast.warning).not.toHaveBeenCalled();
     store.destroy();
+  });
+
+  describe("background polling", () => {
+    let initial = 0;
+    const rangeQueries = () => api.emptyPage.mock.calls.length - initial;
+    const hiddenTab = async () => {
+      const page = await onPage();
+      connected(page.store);
+      await vi.advanceTimersByTimeAsync(0);
+      initial = api.emptyPage.mock.calls.length;
+      page.hide();
+      return page;
+    };
+
+    it("does not poll while a live socket keeps delivering", async () => {
+      const { store } = await hiddenTab();
+
+      for (let minute = 0; minute < 20; minute += 4) {
+        store.handleCreate({ colName: "entries", doc: { _id: `e${minute}`, type: "sgv", sgv: 100, mills: Date.now() } });
+        await vi.advanceTimersByTimeAsync(4 * 60_000);
+      }
+
+      expect(rangeQueries()).toBe(0);
+      store.destroy();
+    });
+
+    it("polls a connected but silent socket once the data is stale", async () => {
+      const { store } = await hiddenTab();
+
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(rangeQueries()).toBe(0);
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(rangeQueries()).toBeGreaterThan(0);
+      store.destroy();
+    });
+
+    it("polls while the socket is down", async () => {
+      const { store } = await hiddenTab();
+      dropped(store);
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(rangeQueries()).toBeGreaterThan(0);
+      store.destroy();
+    });
   });
 
   it("presents a resumed tab whose socket stays down", async () => {
@@ -715,6 +763,50 @@ describe("RealtimeStore tracker updates", () => {
 
     expect(store.trackerInstances.map((i) => i.id)).toEqual(["sensor"]);
 
+    store.destroy();
+  });
+});
+
+describe("RealtimeStore merging", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    api.getCurrentTherapyState.mockResolvedValue({ reservoir: null });
+    api.apsGetAll.mockResolvedValue({ data: [] });
+    api.emptyPage.mockResolvedValue({ data: [] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it("keeps a reading already held under another id, and adds only the new one", async () => {
+    const store = makeStore();
+    store.entries = [{ _id: "socket-id", type: "sgv", sgv: 120, mills: 1_000 }];
+
+    store.handleDataUpdate({
+      data: [
+        { _id: "uuid-id", type: "sgv", sgv: 120, mills: 1_000 },
+        { _id: "socket-id", type: "sgv", sgv: 99, mills: 2_000 },
+        { _id: "fresh", type: "sgv", sgv: 130, mills: 3_000 },
+        { _id: "fresh", type: "sgv", sgv: 130, mills: 3_000 },
+      ],
+    });
+
+    expect(store.entries.map((entry) => entry._id)).toEqual(["fresh", "socket-id"]);
+    store.destroy();
+  });
+
+  it("backfills only boluses it does not already hold", async () => {
+    const store = makeStore();
+    const now = Date.now();
+    store.boluses = [{ id: "b1", mills: now - 1_000 }] as typeof store.boluses;
+    const pages = [{ id: "b1", mills: now - 1_000 }, { id: "b2", mills: now - 500 }];
+    api.emptyPage.mockImplementation(async (_from, _to, limit) => ({ data: limit === 500 ? pages : [] }));
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(store.boluses.map((bolus) => bolus.id)).toEqual(["b2", "b1"]);
     store.destroy();
   });
 });
