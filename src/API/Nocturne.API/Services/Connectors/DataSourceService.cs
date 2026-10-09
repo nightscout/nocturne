@@ -1077,8 +1077,8 @@ public class DataSourceService : IDataSourceService
 
         try
         {
-            var glucoseDeleted = await DemoDataPurge.PurgeEntriesAsync(_context, cancellationToken);
             var treatmentsDeleted = await DemoDataPurge.PurgeTreatmentsAsync(_context, cancellationToken);
+            var glucoseDeleted = await DemoDataPurge.PurgeEntriesAsync(_context, cancellationToken);
             var deviceStatusDeleted = await DemoDataPurge.PurgeDeviceStatusAsync(_context, cancellationToken);
 
             var deletedCounts = new Dictionary<string, long>();

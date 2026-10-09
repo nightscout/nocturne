@@ -114,7 +114,8 @@ public class CompressionLowService : ICompressionLowService
         Guid id,
         long startMills,
         long endMills,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool demoSeed = false)
     {
         var suggestion = await _repository.GetByIdAsync(id, cancellationToken);
         if (suggestion == null)
@@ -138,6 +139,8 @@ public class CompressionLowService : ICompressionLowService
                 ["SuggestionId"] = suggestion.Id.ToString()
             }
         };
+        if (demoSeed)
+            stateSpan.Metadata["DemoSeed"] = true;
 
         var createdSpan = await _stateSpanService.UpsertStateSpanAsync(stateSpan, cancellationToken);
 
