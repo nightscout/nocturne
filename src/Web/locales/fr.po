@@ -2095,15 +2095,14 @@ msgstr ""
 msgid "{0} hour{1}"
 msgstr ""
 
-#: src/lib/components/clock-builder/ElementInspector.svelte
-msgid "Format"
-msgstr ""
+#~ msgid "Format"
+#~ msgstr ""
 
-#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 msgid "12-hour"
 msgstr ""
 
-#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "24-hour"
 msgstr ""
@@ -6357,6 +6356,7 @@ msgstr ""
 #~ msgstr ""
 
 #: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -10638,6 +10638,7 @@ msgid "Mmol"
 msgstr ""
 
 #: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "mmol/L"
@@ -13009,6 +13010,7 @@ msgstr ""
 msgid "Blood glucose units"
 msgstr ""
 
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Time format"
 msgstr ""
@@ -15948,6 +15950,14 @@ msgid "Hyper Events"
 msgstr ""
 
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Hypo Duration"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Hypo Events"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
 msgid "Preset"
 msgstr ""
 
@@ -18236,7 +18246,11 @@ msgstr ""
 #. 0: e.event.timeToNadirHours.toFixed(1)
 #. 0: v.toFixed(1)
 #. 0: signed(d)
+#. 0: v.toFixed(1)
+#. 0: signed(d)
 #: src/lib/components/reports/sensor-integrity/HypoAfterNoiseLog.svelte
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
 msgid "{0} h"
@@ -21616,10 +21630,8 @@ msgstr ""
 msgid "Copy link"
 msgstr ""
 
-#: src/lib/components/clock-builder/ElementInspector.svelte
-#: src/lib/components/clock-builder/ElementInspector.svelte
-msgid "Match my preference"
-msgstr ""
+#~ msgid "Match my preference"
+#~ msgstr ""
 
 #~ msgid "Couldn't copy the code to the clipboard. Copy it manually instead."
 #~ msgstr ""
@@ -25817,4 +25829,46 @@ msgstr ""
 
 #: src/lib/stores/realtime-store.svelte.ts
 msgid "Real-time data unavailable"
+msgstr ""
+
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "Glucose units"
+msgstr ""
+
+#: src/lib/components/meals/MealBolusDialog.svelte
+msgid "Edit bolus"
+msgstr ""
+
+#: src/lib/components/meals/MealBolusDialog.svelte
+msgid "Delete bolus"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/+layout.svelte
+msgid "Unable to load the complete report. Please try again before printing."
+msgstr ""
+
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "Some year data could not be loaded."
+msgstr ""
+
+#. 0: year
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "Retry {0}"
+msgstr ""
+
+#. 0: year
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "Scroll to load {0} data"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/year-overview/+page.svelte
+msgid "This overview is incomplete. Use the report's Print button to load all years before printing."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/year-overview/YearOverview.test-harness.svelte
+msgid "Prepare print"
+msgstr ""
+
+#: src/routes/(authenticated)/clock/config/[id]/+page.svelte
+msgid "Failed to reset clock face"
 msgstr ""

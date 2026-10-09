@@ -25,4 +25,20 @@ public static class ReadVisibilityFilter
         return query.Where(e =>
             !ctx.LinkedRecords.Any(lr => lr.RecordType == key && !lr.IsPrimary && lr.RecordId == e.Id));
     }
+
+    /// <summary>
+    /// <see cref="ExcludeNonPrimary{TEntity}"/> over live rows only. A soft-deleted row always passes:
+    /// a v3 history read has to deliver its delete whatever deduplication later decided about it.
+    /// </summary>
+    public static IQueryable<TEntity> ExcludeNonPrimaryKeepingDeleted<TEntity>(
+        this IQueryable<TEntity> query,
+        NocturneDbContext ctx,
+        RecordType recordType)
+        where TEntity : IIdentified, ISoftDeletable
+    {
+        var key = RecordTypeKeys.Key(recordType);
+        return query.Where(e =>
+            e.DeletedAt != null
+            || !ctx.LinkedRecords.Any(lr => lr.RecordType == key && !lr.IsPrimary && lr.RecordId == e.Id));
+    }
 }

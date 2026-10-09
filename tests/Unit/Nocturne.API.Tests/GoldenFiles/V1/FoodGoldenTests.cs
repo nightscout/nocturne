@@ -73,7 +73,7 @@ public class FoodGoldenTests : GoldenFileTestBase
         var response = await Client.GetAsync("/api/v1/food");
         var captured = await CaptureResponse(response);
 
-        await Verify(captured);
+        await Verify(captured).ScrubMembers("srvModified", "srvCreated");
     }
 
     #endregion

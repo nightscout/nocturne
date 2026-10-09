@@ -6,6 +6,7 @@ using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -44,9 +45,9 @@ public class EntryReadServiceHistoryTests
         var backfilled = Sg(Cursor.AddDays(-2), written: Cursor.AddMinutes(1), source: "cgm");
         var edited = Mg(Cursor.AddHours(-6), written: Cursor.AddMinutes(2));
         _sgRepo.Setup(r => r.GetModifiedSinceAsync(CursorMills, 1000, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([backfilled]);
+            .ReturnsAsync([Live(backfilled)]);
         _mgRepo.Setup(r => r.GetModifiedSinceAsync(CursorMills, 1000, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([edited]);
+            .ReturnsAsync([Live(edited)]);
 
         var page = await CreateSut(TestDoubles.CanonicalGlucosePassThrough.Create())
             .GetModifiedSinceAsync(CursorMills, 1000);
@@ -79,7 +80,7 @@ public class EntryReadServiceHistoryTests
         var loser = Sg(at.AddMinutes(1), written: Cursor.AddMinutes(5), source: "b-cgm");
 
         _sgRepo.Setup(r => r.GetModifiedSinceAsync(CursorMills, 1000, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([loser]);
+            .ReturnsAsync([Live(loser)]);
         _sgRepo.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
@@ -96,6 +97,58 @@ public class EntryReadServiceHistoryTests
 
         page.Records.Should().BeEmpty();
         page.CursorMills.Should().Be(Mills(loser.ModifiedAt));
+    }
+
+    [Fact]
+    public async Task DeletedCanonicalReading_SendsItsBucketsNewCanonicalReadingAgain_StampedWithTheDelete()
+    {
+        // Two streams reported into one bucket; "a-cgm" won and was delivered, then the user deleted
+        // it. "b-cgm" wins the bucket now, but its row is older than the cursor.
+        var at = Cursor.AddHours(-3);
+        var deletedAt = Cursor.AddMinutes(2);
+        var winner = Sg(at, written: deletedAt, source: "a-cgm");
+        var successor = Sg(at.AddMinutes(1), written: Cursor.AddHours(-3), source: "b-cgm");
+        ServeHistory(_sgRepo, new[] { winner }, deleted: [winner.Id]);
+        _sgRepo.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+            .ReturnsAsync((DateTime? from, DateTime? to, string? _, string? _, int _, int _, bool _, bool _,
+                DateTime? _, Guid? _, CancellationToken _, Guid? _) =>
+                new[] { successor }.Where(r => r.Timestamp >= from && r.Timestamp <= to).ToList());
+
+        var page = await CreateSut(TestDoubles.CanonicalGlucosePassThrough.Create())
+            .GetModifiedSinceAsync(CursorMills, 1000);
+
+        page.Records.Select(e => (e.Id, e.IsValid, e.SrvModified)).Should().Equal(
+            (winner.Id.ToString(), (bool?)false, Mills(deletedAt)),
+            (successor.Id.ToString(), (bool?)true, Mills(deletedAt)));
+        page.CursorMills.Should().Be(Mills(deletedAt));
+    }
+
+    [Fact]
+    public async Task DeletedReadings_AreDeliveredWithIsValidFalse_WhateverTheCanonicalSelection()
+    {
+        var deletedSg = Sg(Cursor.AddHours(-3), written: Cursor.AddMinutes(1), source: "b-cgm");
+        var liveSg = Sg(Cursor.AddHours(-2), written: Cursor.AddMinutes(2), source: "a-cgm");
+        var deletedMg = Mg(Cursor.AddHours(-1), written: Cursor.AddMinutes(3));
+        ServeHistory(_sgRepo, new[] { deletedSg, liveSg }, deleted: [deletedSg.Id]);
+        ServeHistory(_mgRepo, new[] { deletedMg }, deleted: [deletedMg.Id]);
+
+        var canonical = new Mock<Core.Contracts.Glucose.ICanonicalGlucoseService>();
+        IReadOnlyList<SensorGlucose>? judged = null;
+        canonical
+            .Setup(c => c.SelectAsync(It.IsAny<IReadOnlyList<SensorGlucose>>(), It.IsAny<CancellationToken>()))
+            .Callback((IReadOnlyList<SensorGlucose> readings, CancellationToken _) => judged = readings)
+            .ReturnsAsync([]);
+
+        var page = await CreateSut(canonical.Object).GetModifiedSinceAsync(CursorMills, 1000);
+
+        page.Records.Select(e => (e.Id, e.IsValid, e.SrvModified)).Should().Equal(
+            (deletedSg.Id.ToString(), (bool?)false, Mills(deletedSg.ModifiedAt)),
+            (deletedMg.Id.ToString(), (bool?)false, Mills(deletedMg.ModifiedAt)));
+        judged.Should().NotBeNull().And.NotContain(r => r.Id == deletedSg.Id);
+        page.CursorMills.Should().Be(Mills(deletedMg.ModifiedAt));
     }
 
     [Fact]
@@ -153,10 +206,12 @@ public class EntryReadServiceHistoryTests
     /// millisecond.
     /// </summary>
     private static void ServeHistory<TRecord, TRepo>(
-        Mock<TRepo> repo, IReadOnlyList<TRecord> rows, List<long>? cursors = null)
+        Mock<TRepo> repo, IReadOnlyList<TRecord> rows, List<long>? cursors = null, HashSet<Guid>? deleted = null)
         where TRecord : class, IV4Record
         where TRepo : class, ILegacyKeyedRepository<TRecord>
     {
+        HistoryRecord<TRecord> Row(TRecord r) => new(r, deleted?.Contains(r.Id) == true);
+
         repo.Setup(r => r.GetModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((long cursor, int limit, CancellationToken _) =>
             {
@@ -164,16 +219,18 @@ public class EntryReadServiceHistoryTests
                 var after = rows.Where(r => Mills(r.ModifiedAt) > cursor)
                     .OrderBy(r => r.ModifiedAt).ThenBy(r => r.Id).ToList();
                 if (after.Count <= limit)
-                    return after;
+                    return after.Select(Row).ToList();
 
                 var lastMills = Mills(after[limit - 1].ModifiedAt);
-                return after.Where((r, i) => i < limit || Mills(r.ModifiedAt) == lastMills).ToList();
+                return after.Where((r, i) => i < limit || Mills(r.ModifiedAt) == lastMills).Select(Row).ToList();
             });
     }
 
     private EntryReadService CreateSut(Core.Contracts.Glucose.ICanonicalGlucoseService canonical) =>
         new(_sgRepo.Object, _mgRepo.Object, _calRepo.Object, canonical, _demoMode.Object,
             NullLogger<EntryReadService>.Instance);
+
+    private static HistoryRecord<T> Live<T>(T record) => new(record, Deleted: false);
 
     private static long Mills(DateTime value) => new DateTimeOffset(value, TimeSpan.Zero).ToUnixTimeMilliseconds();
 

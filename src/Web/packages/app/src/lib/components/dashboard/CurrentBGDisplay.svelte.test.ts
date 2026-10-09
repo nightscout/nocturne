@@ -1,10 +1,10 @@
 import { render } from "vitest-browser-svelte";
 import { describe, expect, it, vi } from "vitest";
 
-const now = Date.UTC(2026, 5, 14, 9, 30, 0);
+const { now } = vi.hoisted(() => ({ now: Date.UTC(2026, 5, 14, 9, 30, 0) }));
 
-vi.mock("$lib/stores/realtime-store.svelte", () => ({
-  getRealtimeStore: () => ({
+vi.mock("$lib/stores/realtime-store.svelte", () => {
+  const store = {
     currentBG: 123,
     currentEntry: { mills: now, sgv: 123 },
     bgDelta: 4,
@@ -18,8 +18,10 @@ vi.mock("$lib/stores/realtime-store.svelte", () => ({
     trackerInstances: [],
     trackerDefinitions: [],
     timeSinceReading: Symbol("derived sentinel"),
-  }),
-}));
+    noteTreatmentWrite: () => {},
+  };
+  return { getRealtimeStore: () => store, tryGetRealtimeStore: () => store };
+});
 
 vi.mock("$lib/stores/settings-store.svelte", () => ({
   getSettingsStore: () => ({

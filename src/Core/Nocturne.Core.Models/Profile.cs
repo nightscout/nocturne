@@ -79,6 +79,14 @@ public class Profile
     public string? CreatedAt { get; set; }
 
     /// <summary>
+    /// <c>false</c> on a deleted document, which a v3 history read still returns so a syncing client
+    /// learns of the delete; unset on a live one, as Nightscout leaves it.
+    /// </summary>
+    [JsonPropertyName("isValid")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsValid { get; set; }
+
+    /// <summary>
     /// Gets or sets the units used for blood glucose values (mg/dL or mmol/L)
     /// </summary>
     [JsonPropertyName("units")]

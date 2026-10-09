@@ -1537,17 +1537,13 @@ internal class MigrationJob
             {
                 try
                 {
-                    var exists = await dbContext.Foods.AnyAsync(
-                        f => f.Name == (food.Name ?? "") && f.Type == (food.Type ?? "food"),
-                        ct
-                    );
-
-                    if (!exists)
+                    if (!await FoodImportBlockedAsync(dbContext, food.Id, food.Name ?? "", food.Type ?? "food", ct))
                     {
                         dbContext.Foods.Add(
                             new Infrastructure.Data.Entities.FoodEntity
                             {
                                 Id = Guid.CreateVersion7(),
+                                OriginalId = food.Id,
                                 Type = food.Type ?? "food",
                                 Category = food.Category ?? "",
                                 Subcategory = food.Subcategory ?? "",
@@ -1942,14 +1938,7 @@ internal class MigrationJob
         var type = doc.Contains("type") ? doc["type"].AsString : "food";
 
         var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
-        var exists = await dbContext.Foods.AnyAsync(
-            f =>
-                (originalId != null && f.OriginalId == originalId)
-                || (f.Name == name && f.Type == type),
-            ct
-        );
-
-        if (exists)
+        if (await FoodImportBlockedAsync(dbContext, originalId, name, type, ct))
             return;
 
         var entity = new Infrastructure.Data.Entities.FoodEntity
@@ -1975,6 +1964,17 @@ internal class MigrationJob
 
         dbContext.Foods.Add(entity);
     }
+
+    /// <summary>
+    /// Whether a migrated food is already held: live, or deleted by the user, whose delete a
+    /// re-import must not undo (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>).
+    /// </summary>
+    internal static Task<bool> FoodImportBlockedAsync(
+        NocturneDbContext dbContext, string? originalId, string name, string type, CancellationToken ct) =>
+        dbContext.Foods.IncludingDeleted()
+            .Where(f => (originalId != null && f.OriginalId == originalId) || (f.Name == name && f.Type == type))
+            .WhereBlocksRecreation()
+            .AnyAsync(ct);
 
     /// <summary>
     /// Nightscout expects the api-secret header to be the SHA1 hash of the

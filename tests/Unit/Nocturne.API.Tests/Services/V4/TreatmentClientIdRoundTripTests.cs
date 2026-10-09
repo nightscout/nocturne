@@ -103,7 +103,6 @@ public class TreatmentClientIdRoundTripTests : IDisposable
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
             apiSecretCaller,
-            dedup,
             NullLogger<TreatmentDecomposer>.Instance);
 
         var projection = new V4ToLegacyProjectionService(

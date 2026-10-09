@@ -7,8 +7,8 @@ namespace Nocturne.API.Services.V4;
 
 /// <summary>
 /// Unified orchestration layer that dispatches decomposition to the appropriate
-/// <see cref="IDecomposer{T}"/> for a given record type, and absorbs errors internally
-/// (try-catch-log). Callers never need their own try-catch around decomposition.
+/// <see cref="IDecomposer{T}"/> for a given record type. Decomposition errors are absorbed
+/// (try-catch-log); delete errors propagate, see <see cref="DeleteByLegacyIdAsync{T}"/>.
 /// </summary>
 /// <remarks>
 /// Decomposers are resolved from a child <see cref="IServiceProvider"/> scope per invocation
@@ -82,16 +82,7 @@ public class DecompositionPipeline : IDecompositionPipeline
     public async Task<int> DeleteByLegacyIdAsync<T>(string legacyId, WriteOrigin origin, CancellationToken ct = default) where T : class
     {
         var decomposer = ResolveDecomposer<T>();
-
-        try
-        {
-            return await decomposer.DeleteByLegacyIdAsync(legacyId, origin, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to delete v4 records for legacy {RecordType} {LegacyId}", typeof(T).Name, legacyId);
-            return 0;
-        }
+        return await decomposer.DeleteByLegacyIdAsync(legacyId, origin, ct);
     }
 
     private IDecomposer<T> ResolveDecomposer<T>() where T : class

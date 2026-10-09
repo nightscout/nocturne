@@ -184,6 +184,14 @@ export class RealtimeStore {
   trackerDefinitions = $state.raw<TrackerDefinitionDto[]>([]);
   inAppNotifications = $state.raw<InAppNotificationDto[]>([]);
 
+  /** Bumped on every treatments create/update/delete event, which the store does not otherwise apply. */
+  treatmentRevision = $state(0);
+
+  /** App-originated v4 writes reach no socket the store listens to; the writing form calls this. */
+  noteTreatmentWrite(): void {
+    this.treatmentRevision++;
+  }
+
   /** V4 record types — used by dashboard and entry components */
   boluses = $state.raw<Bolus[]>([]);
   carbIntakes = $state.raw<CarbIntake[]>([]);
@@ -618,6 +626,7 @@ export class RealtimeStore {
   /** Handle storage create events */
   private handleCreate(event: StorageEvent): void {
     const { colName, doc } = event;
+    if (colName === "treatments") this.treatmentRevision++;
 
     this.updateLastDataReceived();
 
@@ -671,6 +680,7 @@ export class RealtimeStore {
   /** Handle storage update events */
   private handleUpdate(event: StorageEvent): void {
     const { colName, doc } = event;
+    if (colName === "treatments") this.treatmentRevision++;
 
     if (colName === "entries" && this.isEntry(doc)) {
       const index = this.entries.findIndex((entry) => isSameEntry(entry, doc));
@@ -690,6 +700,7 @@ export class RealtimeStore {
   /** Handle storage delete events */
   private handleDelete(event: StorageEvent): void {
     const { colName, doc } = event;
+    if (colName === "treatments") this.treatmentRevision++;
 
     if (colName === "entries" && isEntryDocument(doc)) {
       this.pendingEntryCreates.delete(entryIdentity(doc));

@@ -640,7 +640,7 @@ public class ActivityServiceTests
 
         _mockStateSpanService
             .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync((IReadOnlyList<string>)[activityId]);
 
         // Act
         var result = await _activityService.DeleteActivityAsync(activityId, CancellationToken.None);
@@ -667,7 +667,7 @@ public class ActivityServiceTests
             .ReturnsAsync(1);
         _mockStateSpanService
             .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+            .ReturnsAsync((IReadOnlyList<string>)[]);
 
         var result = await _activityService.DeleteActivityAsync(activityId, CancellationToken.None);
 
@@ -688,7 +688,7 @@ public class ActivityServiceTests
 
         _mockStateSpanService
             .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+            .ReturnsAsync((IReadOnlyList<string>)[]);
 
         // Act
         var result = await _activityService.DeleteActivityAsync(activityId, CancellationToken.None);
@@ -703,6 +703,26 @@ public class ActivityServiceTests
             x => x.BroadcastStorageDeleteAsync("activity", It.IsAny<object>()),
             Times.Never
         );
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task DeleteActivityAsync_BroadcastsEveryCopyDeletedWithIt()
+    {
+        var activityId = "60a1b2c3d4e5f6789012345";
+        _mockStateSpanService
+            .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<string>)[activityId, "copy-from-another-source"]);
+
+        (await _activityService.DeleteActivityAsync(activityId, CancellationToken.None)).Should().BeTrue();
+
+        _mockSignalRBroadcastService.Verify(
+            x => x.BroadcastStorageDeleteAsync("activity", It.Is<StorageDeleteEvent>(e => e.Identifier == activityId)),
+            Times.Once);
+        _mockSignalRBroadcastService.Verify(
+            x => x.BroadcastStorageDeleteAsync(
+                "activity", It.Is<StorageDeleteEvent>(e => e.Identifier == "copy-from-another-source")),
+            Times.Once);
     }
 
     [Fact]
@@ -739,7 +759,7 @@ public class ActivityServiceTests
             .ReturnsAsync(activities);
         _mockStateSpanService
             .Setup(s => s.DeleteActivityAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync((string id, CancellationToken _) => (IReadOnlyList<string>)[id]);
 
         // Act
         var result = await _activityService.DeleteMultipleActivitiesAsync(
@@ -782,7 +802,7 @@ public class ActivityServiceTests
             .ReturnsAsync(activities);
         _mockStateSpanService
             .Setup(s => s.DeleteActivityAsync("1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync((IReadOnlyList<string>)["1"]);
 
         // Act
         var result = await _activityService.DeleteMultipleActivitiesAsync(

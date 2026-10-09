@@ -14,7 +14,7 @@ import {
   glucoseChartLookback,
   GLUCOSE_CHART_FETCH_HOURS,
 } from "$lib/stores/appearance-store.svelte";
-import { mergeChartData } from "$lib/utils/chart-data-merge";
+import { mergeChartData, replaceWindow } from "$lib/utils/chart-data-merge";
 import type { TransformedChartData } from "$lib/utils/chart-data-transform";
 import { stableBy } from "$lib/utils/stable-by";
 import { mergeRealtimeGlucose } from "./merge-glucose";
@@ -35,6 +35,8 @@ export interface ChartDataEngineOptions {
   dateRange?: { from: Date | string; to: Date | string };
   focusHours?: number;
   initialChartData?: TransformedChartData | null;
+  /** Where `initialChartData`'s window starts, in ms; adopting a reload replaces from here. */
+  initialWindowStart?: number;
   streamedHistoricalData?: Promise<TransformedChartData | null>;
   externalPredictionData?: PredictionData | null;
   enablePredictions?: boolean;
@@ -53,6 +55,18 @@ export interface ChartDataEngineOptions {
   dataWindow?: "buffer" | "display";
   /** Fired once when `serverChartData` first becomes non-null. */
   onDataReady?: () => void;
+}
+
+const FIVE_MINUTES_MS = 5 * 60 * 1000;
+// Equals INITIAL_HOURS in routes/(authenticated)/+page.server.ts.
+const RECENT_REFRESH_HOURS = 6;
+const RECENT_REFRESH_DEBOUNCE_MS = 2000;
+const RECENT_REFRESH_FALLBACK_MS = FIVE_MINUTES_MS;
+
+function fingerprint(rows: readonly { id?: string; _id?: string }[]): string {
+  const first = rows[0];
+  const last = rows[rows.length - 1];
+  return `${rows.length}:${first?.id ?? first?._id ?? ""}:${last?.id ?? last?._id ?? ""}`;
 }
 
 // ===== Date helpers =====
@@ -296,6 +310,113 @@ export function createChartDataEngine(
 
     return () => {
       cancelled = true;
+    };
+  });
+
+  // The effect above never refetches SSR data and realtime streams only glucose,
+  // so IOB, COB, basal and treatment markers are refreshed here. Triggers: realtime
+  // devicestatus creates (the AID cadence), legacy `treatments` socket events and app
+  // writes via `treatmentRevision`, and the store's backfill; the timer covers IOB
+  // decaying with no new data.
+  const hasInitialData = $derived(!!options.initialChartData);
+  const dataFingerprint = $derived(
+    hasInitialData
+      ? [
+          realtimeStore.treatmentRevision,
+          fingerprint(realtimeStore.boluses),
+          fingerprint(realtimeStore.carbIntakes),
+          fingerprint(realtimeStore.bgChecks),
+          fingerprint(realtimeStore.deviceEvents),
+          fingerprint(realtimeStore.deviceStatuses),
+        ].join("|")
+      : null
+  );
+
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+  // A response is applied only while its sequence number is still current; adopting
+  // page data, a newer refresh and teardown all bump it.
+  let refreshSeq = 0;
+  let seenFingerprint: string | null = null;
+  let skippedWhileHidden = false;
+  // svelte-ignore state_referenced_locally
+  let seenInitialData = options.initialChartData;
+
+  function recentWindow() {
+    const endTime = Math.ceil(Date.now() / FIVE_MINUTES_MS) * FIVE_MINUTES_MS;
+    return { startTime: endTime - RECENT_REFRESH_HOURS * 60 * 60 * 1000, endTime };
+  }
+
+  function scheduleRefresh() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(refreshRecent, RECENT_REFRESH_DEBOUNCE_MS);
+  }
+
+  function refreshRecent() {
+    clearTimeout(fallbackTimer);
+    fallbackTimer = setTimeout(refreshRecent, RECENT_REFRESH_FALLBACK_MS);
+
+    if (document.visibilityState === "hidden") {
+      skippedWhileHidden = true;
+      return;
+    }
+    skippedWhileHidden = false;
+
+    const seq = ++refreshSeq;
+    const { startTime, endTime } = recentWindow();
+    getChartData({ startTime, endTime, intervalMinutes: 5 })
+      .run()
+      .then((recent) => {
+        if (seq !== refreshSeq) return;
+        const current = untrack(() => serverChartData);
+        serverChartData = current ? replaceWindow(current, recent, startTime) : recent;
+      })
+      .catch((err) => {
+        if (seq === refreshSeq) console.error("Failed to refresh recent chart data:", err);
+      });
+  }
+
+  // A page-data reload (every successful form submit runs invalidateAll) carries a
+  // freshly computed window; take it rather than discard it.
+  $effect(() => {
+    const next = options.initialChartData;
+    if (!next || next === seenInitialData) return;
+    seenInitialData = next;
+    refreshSeq++;
+    const current = untrack(() => serverChartData);
+    serverChartData = current ? replaceWindow(
+          current,
+          next,
+          options.initialWindowStart ?? recentWindow().startTime
+        ) : next;
+  });
+
+  $effect(() => {
+    if (!isBrowser || dataFingerprint === null || !realtimeStore.isReady) return;
+    // The store's own initial load rewrites these arrays; SSR data predates it by seconds.
+    if (seenFingerprint === null) {
+      seenFingerprint = dataFingerprint;
+      return;
+    }
+    if (dataFingerprint === seenFingerprint) return;
+    seenFingerprint = dataFingerprint;
+    scheduleRefresh();
+  });
+
+  $effect(() => {
+    if (!isBrowser || !hasInitialData) return;
+
+    fallbackTimer = setTimeout(refreshRecent, RECENT_REFRESH_FALLBACK_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && skippedWhileHidden) scheduleRefresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      refreshSeq++;
+      clearTimeout(debounceTimer);
+      clearTimeout(fallbackTimer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   });
 
