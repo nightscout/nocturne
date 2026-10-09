@@ -55,13 +55,13 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
     public async Task<IReadOnlyList<ProfileSpan>> GetActiveProfileSpansForRangeAsync(
         long fromMs, long toMs, CancellationToken ct = default)
     {
+        var fromDateTime = DateTimeOffset.FromUnixTimeMilliseconds(fromMs).UtcDateTime;
         var toDateTime = DateTimeOffset.FromUnixTimeMilliseconds(toMs).UtcDateTime;
 
-        // Fetch all profile spans that started at or before range end.
-        // Includes spans that started before [fromMs] but are still active during the range.
-        // No `from:` filter for this reason — same pattern as TherapyTimelineResolver.
+        // from: is an overlap bound, so spans that started before the range but are still running stay in.
         var rawSpans = await _stateSpanService.GetStateSpansAsync(
             category: StateSpanCategory.Profile,
+            from: fromDateTime,
             to: toDateTime,
             count: 1000,
             cancellationToken: ct);
@@ -99,10 +99,10 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
 
         var queryTime = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
 
-        // Query profile StateSpans that could cover the requested time.
-        // We query with to=queryTime so we get spans that started at or before the time.
+        // from == to == queryTime keeps only spans overlapping that instant.
         var spans = await _stateSpanService.GetStateSpansAsync(
             category: StateSpanCategory.Profile,
+            from: queryTime,
             to: queryTime,
             count: 100,
             cancellationToken: ct);

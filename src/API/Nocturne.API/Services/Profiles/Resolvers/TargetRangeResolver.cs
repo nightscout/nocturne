@@ -55,6 +55,9 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
         return high;
     }
 
+    public Task<(double Low, double High)> GetBGTargetRangeAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
+        => ResolveRangeAsync(timeMills, specProfile, ct);
+
     private async Task<(double Low, double High)> ResolveRangeAsync(
         long timeMills, string? specProfile, CancellationToken ct)
     {

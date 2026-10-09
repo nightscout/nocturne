@@ -45,14 +45,16 @@ internal sealed class ProfileLoadStage(
         {
             timezone = await therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
 
+            var (targetLow, targetHigh) = await targetRangeResolver.GetBGTargetRangeAsync(context.EndTime, ct: cancellationToken);
+
             thresholds = new ChartThresholdsDto
             {
                 VeryLow = DefaultVeryLow,
                 Low = DefaultLow,
                 High = DefaultHigh,
                 VeryHigh = DefaultVeryHigh,
-                TargetLow = await targetRangeResolver.GetLowBGTargetAsync(context.EndTime, ct: cancellationToken),
-                TargetHigh = await targetRangeResolver.GetHighBGTargetAsync(context.EndTime, ct: cancellationToken),
+                TargetLow = targetLow,
+                TargetHigh = targetHigh,
             };
             defaultBasalRate = await basalRateResolver.GetBasalRateAsync(context.EndTime, ct: cancellationToken);
 

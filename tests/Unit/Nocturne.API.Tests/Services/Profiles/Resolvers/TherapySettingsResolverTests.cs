@@ -229,4 +229,16 @@ public class TherapySettingsResolverTests : IDisposable
 
         result.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task HasData_CountsOncePerScope()
+    {
+        _repo.Setup(r => r.CountAsync(null, null, default)).ReturnsAsync(0);
+
+        await _sut.HasDataAsync();
+        await _sut.HasDataAsync();
+        await _sut.HasDataAsync();
+
+        _repo.Verify(r => r.CountAsync(null, null, default), Times.Once);
+    }
 }
