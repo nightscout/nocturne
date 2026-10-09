@@ -27,6 +27,8 @@ public class DataOverviewServiceTests : IDisposable
     private readonly NocturneDbContext _dbContext;
     private readonly DataOverviewService _service;
     private readonly Mock<ICacheService> _cacheService = new();
+    private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
+    private readonly Mock<ITenantDbContextFactory> _factory = new();
     private readonly CategoryReadContext _categoryReadContext = new();
     private readonly ListLogger<DataOverviewService> _logger = new();
     private IInterceptor[] _interceptors = [];
@@ -55,8 +57,7 @@ public class DataOverviewServiceTests : IDisposable
         _dbContext = TestDbContextFactory.CreateInMemoryContext(_dbName);
         _dbContext.TenantId = TenantId;
 
-        var mockFactory = new Mock<ITenantDbContextFactory>();
-        mockFactory.Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
+        _factory.Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
             {
                 var ctx = TestDbContextFactory.CreateInMemoryContext(_dbName, _interceptors);
@@ -64,14 +65,13 @@ public class DataOverviewServiceTests : IDisposable
                 return ctx;
             });
 
-        var mockTherapySettingsResolver = new Mock<ITherapySettingsResolver>();
-        mockTherapySettingsResolver.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
+        _therapySettings.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         var mockStatisticsService = new Mock<IStatisticsService>();
         var mockTenantAccessor = new Mock<ITenantAccessor>();
         mockTenantAccessor.SetupGet(a => a.Context).Returns(new TenantContext(TenantId, "test-tenant", "Test Tenant", true, false));
         _service = new DataOverviewService(
-            mockFactory.Object,
-            mockTherapySettingsResolver.Object,
+            _factory.Object,
+            _therapySettings.Object,
             mockStatisticsService.Object,
             _cacheService.Object,
             mockTenantAccessor.Object,
@@ -83,6 +83,143 @@ public class DataOverviewServiceTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(nameof(SensorGlucoseEntity))]
+    [InlineData(nameof(MeterGlucoseEntity))]
+    [InlineData(nameof(BolusEntity))]
+    [InlineData(nameof(TempBasalEntity))]
+    [InlineData(nameof(CarbIntakeEntity))]
+    public async Task YearSummary_PreservesStandaloneResultsAndSourceFailures(string? failedSource)
+    {
+        var timestamp = new DateTime(2024, 2, 29, 12, 0, 0, DateTimeKind.Utc);
+        for (var i = 0; i < 80; i++)
+        {
+            _dbContext.SensorGlucose.Add(new SensorGlucoseEntity { Id = Guid.NewGuid(), Timestamp = timestamp.AddMinutes(i), Mgdl = 81 + i });
+            _dbContext.MeterGlucose.Add(new MeterGlucoseEntity { Id = Guid.NewGuid(), Timestamp = timestamp.AddMinutes(i), Mgdl = 201 + i });
+            _dbContext.Boluses.AddRange(
+                new BolusEntity { Id = Guid.NewGuid(), Timestamp = timestamp.AddMinutes(i), Insulin = 2.345, BolusKind = "Manual" },
+                new BolusEntity { Id = Guid.NewGuid(), Timestamp = timestamp.AddMinutes(i), Insulin = 0.117, BolusKind = "Algorithm" });
+            _dbContext.TempBasals.Add(new TempBasalEntity { Id = Guid.NewGuid(), Timestamp = timestamp.AddMinutes(i), Rate = 1.13, Origin = "Pump" });
+            _dbContext.CarbIntakes.Add(new CarbIntakeEntity { Id = Guid.NewGuid(), Timestamp = timestamp.AddMinutes(i), Carbs = 30.257 });
+        }
+        await _dbContext.SaveChangesAsync();
+        if (failedSource is not null)
+            _interceptors = [EntityQueryFailure.For(failedSource)];
+
+        var daily = await _service.GetDailySummaryAsync(2024);
+        var gri = await _service.GetGriTimelineAsync(2024);
+        var combined = await _service.GetYearSummaryAsync(2024);
+
+        System.Text.Json.JsonSerializer.Serialize(combined.DailySummary).Should().Be(System.Text.Json.JsonSerializer.Serialize(daily));
+        System.Text.Json.JsonSerializer.Serialize(combined.GriTimeline).Should().Be(System.Text.Json.JsonSerializer.Serialize(gri));
+        if (failedSource is null)
+        {
+            gri.Periods.Should().ContainSingle();
+            gri.Periods[0].AverageDailyCarbs.Should().NotBeNull();
+            gri.Periods[0].TotalDailyDose.Should().NotBeNull();
+        }
+    }
+
+    [Fact]
+    public async Task YearSummary_DoesNotReuseRecordsAcrossRequests()
+    {
+        var timestamp = new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        _dbContext.CarbIntakes.Add(new CarbIntakeEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Carbs = 10 });
+        await _dbContext.SaveChangesAsync();
+        (await _service.GetYearSummaryAsync(2024)).DailySummary!.Days[0].TotalCarbs.Should().Be(10);
+        _dbContext.CarbIntakes.Add(new CarbIntakeEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Carbs = 20 });
+        await _dbContext.SaveChangesAsync();
+        (await _service.GetYearSummaryAsync(2024)).DailySummary!.Days[0].TotalCarbs.Should().Be(30);
+    }
+
+    [Fact]
+    public async Task YearSummary_PropagatesCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var action = () => _service.GetYearSummaryAsync(2024, cancellationToken: cancellation.Token);
+        await action.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task YearSummary_PreservesTheOtherReportWhenOneContextFails(bool dailyFails)
+    {
+        var context = TestDbContextFactory.CreateInMemoryContext(_dbName);
+        context.TenantId = TenantId;
+        var sequence = _factory.SetupSequence(factory => factory.CreateAsync(It.IsAny<CancellationToken>()));
+        if (dailyFails)
+            sequence.ThrowsAsync(new TimeoutException("unavailable")).ReturnsAsync(context);
+        else
+            sequence.ReturnsAsync(context).ThrowsAsync(new TimeoutException("unavailable"));
+
+        var result = await _service.GetYearSummaryAsync(2024);
+        (result.DailySummary is null).Should().Be(dailyFails);
+        (result.GriTimeline is null).Should().Be(!dailyFails);
+    }
+
+    [Fact]
+    public async Task YearSummary_UsesOneTimezoneForBothReports()
+    {
+        _therapySettings.SetupSequence(settings => settings.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Australia/Sydney")
+            .ReturnsAsync("America/New_York");
+
+        await _service.GetYearSummaryAsync(2024);
+
+        _therapySettings.Verify(settings => settings.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("Australia/Sydney", "2024-02-28T12:59:00Z", "2024-02-28T13:00:00Z", "2024-02-28,2024-02-29", 1, 2.34, 0.21, 2.55, 30.2)]
+    [InlineData("America/New_York", "2024-11-03T05:30:00Z", "2024-11-03T06:30:00Z", "2024-11-03", 2, 4.68, 0.42, 5.1, 60.5)]
+    [InlineData("America/New_York", "2024-03-10T06:30:00Z", "2024-03-10T07:30:00Z", "2024-03-10", 2, 4.68, 0.42, 5.1, 60.5)]
+    [InlineData("Asia/Kathmandu", "2024-02-28T18:14:00Z", "2024-02-28T18:15:00Z", "2024-02-28,2024-02-29", 1, 2.34, 0.21, 2.55, 30.2)]
+    [InlineData("Australia/Sydney", "2023-12-31T12:59:00Z", "2023-12-31T13:00:00Z", "2024-01-01", 1, 2.34, 0.21, 2.55, 30.2)]
+    public async Task DailySummary_GroupsEveryRecordTypeAndMetricByLocalDay(
+        string timezone, string first, string second, string dates, int count,
+        double bolus, double basal, double tdd, double carbs)
+    {
+        _therapySettings.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(timezone);
+        foreach (var timestamp in new[] { DateTimeOffset.Parse(first).UtcDateTime, DateTimeOffset.Parse(second).UtcDateTime })
+        {
+            _dbContext.SensorGlucose.Add(new SensorGlucoseEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Mgdl = 100 });
+            _dbContext.MeterGlucose.Add(new MeterGlucoseEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Mgdl = 200 });
+            _dbContext.Boluses.AddRange(
+                new BolusEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Insulin = 2.34, BolusKind = "Manual" },
+                new BolusEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Insulin = 0.11, BolusKind = "Algorithm" });
+            _dbContext.CarbIntakes.Add(new CarbIntakeEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Carbs = 30.25 });
+            _dbContext.TempBasals.Add(new TempBasalEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Rate = 1.2, EndTimestamp = null, Origin = "Pump" });
+            _dbContext.BolusCalculations.Add(new BolusCalculationEntity { Id = Guid.NewGuid(), Timestamp = timestamp });
+            _dbContext.Notes.Add(new NoteEntity { Id = Guid.NewGuid(), Timestamp = timestamp });
+            _dbContext.DeviceEvents.Add(new DeviceEventEntity { Id = Guid.NewGuid(), Timestamp = timestamp, EventType = "SiteChange" });
+            _dbContext.StateSpans.Add(new StateSpanEntity { Id = Guid.NewGuid(), StartTimestamp = timestamp });
+            _dbContext.ApsSnapshots.Add(new ApsSnapshotEntity { Id = Guid.NewGuid(), Timestamp = timestamp, AidAlgorithm = "Loop" });
+            _dbContext.BGChecks.Add(new BGCheckEntity { Id = Guid.NewGuid(), Timestamp = timestamp });
+        }
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetDailySummaryAsync(2024);
+
+        result.Days.Select(day => day.Date).Should().Equal(dates.Split(','));
+        foreach (var day in result.Days)
+        {
+            day.Counts.Keys.Should().Equal("Glucose", "ManualBG", "Boluses", "CarbIntake", "BolusCalculations", "Notes", "DeviceEvents", "StateSpans", "DeviceStatus", "BGChecks", "TempBasals");
+            day.Counts.Where(pair => pair.Key != "Boluses").Should().OnlyContain(pair => pair.Value == count);
+            day.Counts["Boluses"].Should().Be(count * 2);
+            day.TotalCount.Should().Be(count * 12);
+            day.AverageGlucoseMgdl.Should().Be(150);
+            day.TimeInRangePercent.Should().Be(50);
+            day.TotalBolusUnits.Should().Be(bolus);
+            day.TotalBasalUnits.Should().Be(basal);
+            day.TotalDailyDose.Should().Be(tdd);
+            day.TotalCarbs.Should().Be(carbs);
+        }
     }
 
     #region GetAvailableYearsAsync Tests
@@ -1545,7 +1682,7 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetEHbA1cTimelineAsync_MeterGlucoseQueryFails_ReturnsSensorPointsUncached()
     {
-        _interceptors = [new EntityQueryFailure(nameof(MeterGlucoseEntity))];
+        _interceptors = [EntityQueryFailure.For(nameof(MeterGlucoseEntity))];
         await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
 
         var result = await _service.GetEHbA1cTimelineAsync(2025);
@@ -1559,7 +1696,7 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetEHbA1cTimelineAsync_SensorGlucoseQueryFails_ThrowsRatherThanUsingFingersticks()
     {
-        _interceptors = [new EntityQueryFailure(nameof(SensorGlucoseEntity))];
+        _interceptors = [EntityQueryFailure.For(nameof(SensorGlucoseEntity))];
         await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
 
         var timeline = () => _service.GetEHbA1cTimelineAsync(2025);
@@ -1601,7 +1738,7 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetDailySummaryAsync_SensorGlucoseQueryFails_WithholdsAveragesAndKeepsTheRest()
     {
-        _interceptors = [new EntityQueryFailure(nameof(SensorGlucoseEntity))];
+        _interceptors = [EntityQueryFailure.For(nameof(SensorGlucoseEntity))];
         await using var seed = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
         seed.Boluses.Add(new BolusEntity
         {
@@ -1624,7 +1761,7 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetDailySummaryAsync_MeterGlucoseQueryFails_KeepsSensorAveragesAndTimeInRange()
     {
-        _interceptors = [new EntityQueryFailure(nameof(MeterGlucoseEntity))];
+        _interceptors = [EntityQueryFailure.For(nameof(MeterGlucoseEntity))];
         await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
 
         var result = await _service.GetDailySummaryAsync(2025);
@@ -1637,7 +1774,7 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetGriTimelineAsync_MeterGlucoseQueryFails_KeepsSensorPeriods()
     {
-        _interceptors = [new EntityQueryFailure(nameof(MeterGlucoseEntity))];
+        _interceptors = [EntityQueryFailure.For(nameof(MeterGlucoseEntity))];
         await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0, readings: 72);
 
         var result = await _service.GetGriTimelineAsync(2025);
@@ -1650,7 +1787,7 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetGriTimelineAsync_SensorGlucoseQueryFails_WithholdsEveryPeriod()
     {
-        _interceptors = [new EntityQueryFailure(nameof(SensorGlucoseEntity))];
+        _interceptors = [EntityQueryFailure.For(nameof(SensorGlucoseEntity))];
         await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0, readings: 72);
 
         var result = await _service.GetGriTimelineAsync(2025);
@@ -1754,6 +1891,11 @@ public class DataOverviewServiceTests : IDisposable
 
     private sealed class EntityQueryFailure(string entityName) : IQueryExpressionInterceptor
     {
+        // Query interceptors participate in EF''s internal service-provider identity.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, EntityQueryFailure> Failures = new();
+
+        public static EntityQueryFailure For(string name) => Failures.GetOrAdd(name, key => new EntityQueryFailure(key));
+
         public Expression QueryCompilationStarting(
             Expression queryExpression, QueryExpressionEventData eventData) =>
             new ExpressionPrinter().PrintExpression(queryExpression).Contains(entityName)

@@ -19,7 +19,6 @@
     remove as removeClockFace,
   } from "$api/generated/clockFaces.generated.remote";
   import ClockFacePreview from "$lib/components/clock/ClockFacePreview.svelte";
-  import { createDefaultConfig } from "$lib/clock-builder";
 
   const clockFacesQuery = listClockFaces();
 
@@ -31,10 +30,7 @@
   async function handleCreate() {
     creating = true;
     try {
-      const result = await createClockFace({
-        name: "New Clock Face",
-        config: createDefaultConfig(),
-      });
+      const result = await createClockFace({ name: "New Clock Face" });
       if (result.id) {
         goto(resolve("/(authenticated)/clock/config/[id]", { id: result.id }));
       } else {

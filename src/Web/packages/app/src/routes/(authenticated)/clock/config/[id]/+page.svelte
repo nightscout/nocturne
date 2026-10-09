@@ -16,7 +16,10 @@
   } from "$lib/stores/realtime-store.svelte";
   import { getDefinitions } from "$api/generated/trackers.generated.remote";
   import { getByIdForEdit as getClockFaceById } from "$api/clockfaces.remote";
-  import { update as updateClockFace } from "$api/generated/clockFaces.generated.remote";
+  import {
+    getStarter as getStarterClockFace,
+    update as updateClockFace,
+  } from "$api/generated/clockFaces.generated.remote";
   import GlucoseChartCard from "$lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";
   import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
@@ -46,7 +49,7 @@
   } from "$lib/components/clock-builder";
 
   // State
-  let config = $state<InternalConfig>(initializeInternalConfig());
+  let config = $state<InternalConfig>({ rows: [], settings: {} });
   let clockName = $state("My Clock Face");
   const save = useToastSubmission("Failed to save clock face");
   let loading = $state(true);
@@ -327,8 +330,13 @@
     dragOverRowIndex = null;
   }
 
-  function resetToDefault() {
-    config = initializeInternalConfig();
+  async function resetToDefault() {
+    try {
+      config = initializeInternalConfig(await getStarterClockFace().run());
+    } catch (err) {
+      toast.error(remoteErrorMessage(err, "Failed to reset clock face"));
+      return;
+    }
     clockName = "My Clock Face";
     selectedElementId = null;
     history.clear();
@@ -448,6 +456,7 @@
       {:else}
         <ClockElementPreview
           {element}
+          settings={config.settings}
           {glucose}
           now={currentTime}
           {trackerDefinitions}

@@ -5,8 +5,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -14,6 +12,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Platform;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services;
+using Nocturne.API.Tests.TestDoubles;
 
 namespace Nocturne.API.Tests.Controllers.V4.Platform;
 
@@ -76,7 +75,7 @@ public class SupportControllerIssueTests : IDisposable
             Options.Create(new OperatorConfiguration()),
             NullLogger<SupportController>.Instance)
         {
-            ProblemDetailsFactory = new TestProblemDetailsFactory(),
+            ProblemDetailsFactory = new EchoingProblemDetailsFactory(),
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
     }
@@ -477,18 +476,5 @@ public class SupportControllerIssueTests : IDisposable
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken) => respond(request);
-    }
-
-    private sealed class TestProblemDetailsFactory : ProblemDetailsFactory
-    {
-        public override ProblemDetails CreateProblemDetails(
-            HttpContext httpContext, int? statusCode = null, string? title = null,
-            string? type = null, string? detail = null, string? instance = null) =>
-            new() { Status = statusCode, Title = title, Type = type, Detail = detail, Instance = instance };
-
-        public override ValidationProblemDetails CreateValidationProblemDetails(
-            HttpContext httpContext, ModelStateDictionary modelStateDictionary, int? statusCode = null,
-            string? title = null, string? type = null, string? detail = null, string? instance = null) =>
-            new(modelStateDictionary) { Status = statusCode, Title = title, Type = type, Detail = detail, Instance = instance };
     }
 }

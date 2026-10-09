@@ -15945,6 +15945,14 @@ msgid "Hyper Events"
 msgstr "Hyper Events"
 
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Hypo Duration"
+msgstr "Hypo Duration"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Hypo Events"
+msgstr "Hypo Events"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
 msgid "Preset"
 msgstr "Preset"
 

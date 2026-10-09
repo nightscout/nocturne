@@ -420,7 +420,7 @@
                 class="leading-none tabular-nums {getFontClass(element.style?.font)} {getFontWeightClass(element.style?.fontWeight)} {isStale && element.type === 'sg' ? 'line-through opacity-60' : ''}"
                 style={buildStyleString(element, currentBG, scale)}
               >
-                {renderClockElementValue(element, glucose, currentTime)}
+                {renderClockElementValue(element, config.settings, glucose, currentTime)}
               </span>
             {/if}
           {/if}

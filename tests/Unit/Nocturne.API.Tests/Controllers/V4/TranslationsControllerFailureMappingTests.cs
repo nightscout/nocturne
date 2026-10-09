@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -9,6 +7,7 @@ using Nocturne.API.Controllers.V4.Platform;
 using Nocturne.API.Services;
 using Nocturne.Core.Contracts.Translations;
 using Nocturne.Core.Models.Translations;
+using Nocturne.API.Tests.TestDoubles;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
@@ -44,7 +43,7 @@ public class TranslationsControllerFailureMappingTests
             Mock.Of<ITranslationDraftService>(),
             NullLogger<TranslationsController>.Instance)
         {
-            ProblemDetailsFactory = new TestProblemDetailsFactory(),
+            ProblemDetailsFactory = new EchoingProblemDetailsFactory(),
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
     }
@@ -97,18 +96,5 @@ public class TranslationsControllerFailureMappingTests
             .SubmitContribution(Request(), CancellationToken.None);
 
         await act.Should().ThrowAsync<NotSupportedException>();
-    }
-
-    private sealed class TestProblemDetailsFactory : ProblemDetailsFactory
-    {
-        public override ProblemDetails CreateProblemDetails(
-            HttpContext httpContext, int? statusCode = null, string? title = null,
-            string? type = null, string? detail = null, string? instance = null) =>
-            new() { Status = statusCode, Title = title, Type = type, Detail = detail, Instance = instance };
-
-        public override ValidationProblemDetails CreateValidationProblemDetails(
-            HttpContext httpContext, ModelStateDictionary modelStateDictionary, int? statusCode = null,
-            string? title = null, string? type = null, string? detail = null, string? instance = null) =>
-            new(modelStateDictionary) { Status = statusCode, Title = title, Type = type, Detail = detail, Instance = instance };
     }
 }

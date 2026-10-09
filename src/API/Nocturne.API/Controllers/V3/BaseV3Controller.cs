@@ -208,6 +208,57 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     /// <summary>
+    /// Every operator on a field lands in one operator object, as Nightscout's storage layer builds
+    /// it, so <c>date$gte=A&amp;date$lte=B</c> is a closed range.
+    /// </summary>
+    internal static string? ConvertFilterCriteriaToFindQuery(List<V3FilterCriteria>? filterCriteria)
+    {
+        if (filterCriteria == null || filterCriteria.Count == 0)
+            return null;
+
+        var operatorsByField = new Dictionary<string, Dictionary<string, object?>>();
+
+        foreach (var criteria in filterCriteria)
+        {
+            var mongoOp = criteria.Operator switch
+            {
+                "eq" => "$eq",
+                "ne" => "$ne",
+                "gt" => "$gt",
+                "gte" => "$gte",
+                "lt" => "$lt",
+                "lte" => "$lte",
+                "in" => "$in",
+                "nin" => "$nin",
+                "re" => "$regex",
+                _ => null,
+            };
+            if (mongoOp == null)
+                continue;
+
+            if (!operatorsByField.TryGetValue(criteria.Field, out var operators))
+            {
+                operators = new Dictionary<string, object?>();
+                operatorsByField[criteria.Field] = operators;
+            }
+
+            operators[mongoOp] = mongoOp == "$eq" ? criteria.Value ?? "" : criteria.Value;
+        }
+
+        if (operatorsByField.Count == 0)
+            return null;
+
+        var conditions = operatorsByField.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.Count == 1 && pair.Value.TryGetValue("$eq", out var equality)
+                ? equality
+                : pair.Value
+        );
+
+        return JsonSerializer.Serialize(conditions);
+    }
+
+    /// <summary>
     /// Apply field selection to a collection of objects
     /// </summary>
     /// <param name="data">Data to filter</param>

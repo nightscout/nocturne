@@ -123,6 +123,20 @@ public class ClockFacesController : ControllerBase
     }
 
     /// <summary>
+    /// The layout a new face starts from, with the current user's units and time format
+    /// </summary>
+    /// <returns>Starter clock face configuration</returns>
+    [HttpGet("starter")]
+    [RemoteQuery]
+    [Authorize]
+    [ProducesResponseType(typeof(ClockFaceConfig), 200)]
+    public async Task<ActionResult<ClockFaceConfig>> GetStarter()
+    {
+        var userId = HttpContext.GetSubjectIdString()!;
+        return Ok(await _clockFaceService.GetStarterConfigAsync(userId, HttpContext.RequestAborted));
+    }
+
+    /// <summary>
     /// Create a new clock face
     /// </summary>
     /// <param name="request">Clock face creation request</param>
@@ -137,6 +151,11 @@ public class ClockFacesController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             return Problem(detail: "Name is required", statusCode: 400, title: "Bad Request");
+        }
+
+        if (request.Config?.Validate() is { } configError)
+        {
+            return Problem(detail: configError, statusCode: 400, title: "Bad Request");
         }
 
         var userId = HttpContext.GetSubjectIdString()!;
@@ -155,9 +174,15 @@ public class ClockFacesController : ControllerBase
     [RemoteCommand(Invalidates = ["List", "GetById"])]
     [Authorize]
     [ProducesResponseType(typeof(ClockFace), 200)]
+    [ProducesResponseType(400)]
     [ProducesResponseType(404)]
     public async Task<ActionResult<ClockFace>> Update(Guid id, [FromBody] UpdateClockFaceRequest request)
     {
+        if (request.Config?.Validate() is { } configError)
+        {
+            return Problem(detail: configError, statusCode: 400, title: "Bad Request");
+        }
+
         var userId = HttpContext.GetSubjectIdString()!;
         var clockFace = await _clockFaceService.UpdateAsync(id, userId, request, HttpContext.RequestAborted);
 

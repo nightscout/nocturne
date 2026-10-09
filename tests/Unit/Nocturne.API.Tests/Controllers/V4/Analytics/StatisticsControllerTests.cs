@@ -847,9 +847,6 @@ public class StatisticsControllerTests
 
         passedManual.Should().BeEquivalentTo(manual);
         passedAlgorithm.Should().BeEquivalentTo(algorithm);
-
-        VerifyBolusLimit(BolusKind.Manual, 10000);
-        VerifyBolusLimit(BolusKind.Algorithm, 10000);
     }
 
     [Fact]
@@ -868,6 +865,186 @@ public class StatisticsControllerTests
 
         VerifyBolusLimit(BolusKind.Manual, int.MaxValue);
         VerifyBolusLimit(BolusKind.Algorithm, int.MaxValue);
+    }
+
+    private static readonly DateTime DenseDay = new(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime LateRecordAt = new(2026, 4, 3, 12, 0, 0, DateTimeKind.Utc);
+    private const string LateRecordDate = "2026-04-03";
+    private const int OldTreatmentLimit = 10_000;
+    private const int OldGlucoseLimit = 100_000;
+
+    private readonly List<CancellationToken> _repositoryTokens = [];
+
+    /// <summary>
+    /// Fills <see cref="DenseDay"/> with as many records of each kind as the old fixed limits
+    /// returned, then adds one record of each kind at <see cref="LateRecordAt"/>. The repository
+    /// mocks page by limit and direction, so a capped ascending read never sees the late records.
+    /// </summary>
+    private void SetupHistoryPastTheOldLimits(int earlyGlucose = 0)
+    {
+        var glucose = Enumerable.Range(0, earlyGlucose)
+            .Select(i => new SensorGlucose { Timestamp = DenseDay.AddMilliseconds(500 * i), Mgdl = 100 })
+            .Append(new SensorGlucose { Timestamp = LateRecordAt, Mgdl = 150 })
+            .ToList();
+        var manual = Dense(i => new Bolus { Timestamp = DenseDay.AddSeconds(i), Insulin = 0.5 })
+            .Append(new Bolus { Timestamp = LateRecordAt, Insulin = 5 })
+            .ToList();
+        var algorithm = Dense(i => new Bolus { Timestamp = DenseDay.AddSeconds(i), Insulin = 0.1 })
+            .Append(new Bolus { Timestamp = LateRecordAt, Insulin = 0.3 })
+            .ToList();
+        var carbs = Dense(i => new CarbIntake { Timestamp = DenseDay.AddSeconds(i), Carbs = 1 })
+            .Append(new CarbIntake { Timestamp = LateRecordAt, Carbs = 40 })
+            .ToList();
+        var tempBasals = Dense(i => new TempBasal
+            {
+                StartTimestamp = DenseDay.AddSeconds(i),
+                EndTimestamp = DenseDay.AddSeconds(i + 1),
+                Rate = 1,
+                ScheduledRate = 1,
+                Origin = TempBasalOrigin.Algorithm,
+            })
+            .Append(new TempBasal
+            {
+                StartTimestamp = LateRecordAt,
+                EndTimestamp = LateRecordAt.AddHours(1),
+                Rate = 2,
+                ScheduledRate = 1,
+                Origin = TempBasalOrigin.Algorithm,
+            })
+            .ToList();
+        var injections = Dense(i => new BasalInjection { Timestamp = DenseDay.AddSeconds(i), Units = 1 })
+            .Append(new BasalInjection { Timestamp = LateRecordAt, Units = 10 })
+            .ToList();
+
+        _glucoseRepoMock
+            .Setup(r => r.GetForAnalyticsAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+            .Returns((DateTime? _, DateTime? _, string? _, string? _, int limit, int _, bool descending,
+                bool _, DateTime? _, Guid? _, CancellationToken ct, Guid? _) =>
+                Page(glucose, limit, descending, ct));
+        _bolusRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<BolusKind?>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .Returns((DateTime? _, DateTime? _, string? _, string? _, int limit, int _, bool descending,
+                bool _, BolusKind? kind, DateTime? _, Guid? _, CancellationToken ct) =>
+                Page(kind == BolusKind.Algorithm ? algorithm : manual, limit, descending, ct));
+        _carbIntakeRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((DateTime? _, DateTime? _, string? _, string? _, int limit, int _, bool descending,
+                bool _, DateTime? _, Guid? _, CancellationToken ct) =>
+                Page(carbs, limit, descending, ct));
+        _tempBasalRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((DateTime? _, DateTime? _, string? _, string? _, int limit, int _, bool descending,
+                CancellationToken ct) =>
+                Page(tempBasals, limit, descending, ct));
+        _basalInjectionRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((DateTime? _, DateTime? _, string? _, string? _, int limit, int _, bool descending,
+                CancellationToken ct) =>
+                Page(injections, limit, descending, ct));
+
+        static IEnumerable<T> Dense<T>(Func<int, T> create) => Enumerable.Range(0, OldTreatmentLimit).Select(create);
+    }
+
+    private Task<IEnumerable<T>> Page<T>(IEnumerable<T> records, int limit, bool descending, CancellationToken ct)
+        where T : IV4Record
+    {
+        _repositoryTokens.Add(ct);
+        var ordered = descending ? records.OrderByDescending(r => r.Mills) : records.OrderBy(r => r.Mills);
+        return Task.FromResult<IEnumerable<T>>(ordered.Take(limit).ToList());
+    }
+
+    [Fact]
+    public async Task GetDailyBasalBolusRatios_CountsInsulinPastTheOldLimitUnderTheRequestToken()
+    {
+        SetupHistoryPastTheOldLimits();
+        using var cts = new CancellationTokenSource();
+
+        var result = await CreateController(statisticsService: new StatisticsService())
+            .GetDailyBasalBolusRatios(DenseDay, DenseDay.AddDays(4), cts.Token);
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<DailyBasalBolusRatioResponse>().Subject;
+        var lateDay = payload.DailyData.Should().ContainSingle(d => d.Date == LateRecordDate).Subject;
+        lateDay.Bolus.Should().Be(5);
+        lateDay.Basal.Should().BeApproximately(12.3, 1e-9);
+
+        _repositoryTokens.Should().HaveCount(4).And.OnlyContain(t => t == cts.Token);
+        _therapySettingsResolverMock.Verify(r => r.GetTimezoneAsync(null, cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetPunchCardData_IncludesGlucoseCarbsAndInsulinPastTheOldLimits()
+    {
+        SetupHistoryPastTheOldLimits(earlyGlucose: OldGlucoseLimit);
+        var canonicalGlucose = TestDoubles.CanonicalGlucosePassThrough.Create();
+        using var cts = new CancellationTokenSource();
+
+        var result = await CreateController(canonicalGlucose, statisticsService: new StatisticsService())
+            .GetPunchCardData(DateOnly.FromDateTime(DenseDay), DateOnly.FromDateTime(LateRecordAt), cts.Token);
+
+        var lateDay = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<PunchCardResponse>().Subject
+            .Months.Should().ContainSingle().Subject
+            .Days.Should().ContainSingle(d => d.Date == LateRecordDate).Subject;
+        lateDay.TotalReadings.Should().Be(1);
+        lateDay.AverageGlucose.Should().Be(150);
+        lateDay.TotalCarbs.Should().Be(40);
+        lateDay.TotalBolus.Should().Be(5);
+        lateDay.TotalBasal.Should().BeApproximately(12.3, 1e-9);
+
+        _repositoryTokens.Should().HaveCount(6).And.OnlyContain(t => t == cts.Token);
+        _therapySettingsResolverMock.Verify(r => r.GetTimezoneAsync(null, cts.Token), Times.Once);
+        Mock.Get(canonicalGlucose).Verify(
+            s => s.SelectAsync(It.IsAny<IReadOnlyList<SensorGlucose>>(), cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetInsulinDeliveryStatistics_CountsRecordsPastTheOldLimitUnderTheRequestToken()
+    {
+        SetupHistoryPastTheOldLimits();
+        _basalRateResolverMock
+            .Setup(r => r.BuildResolverAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Func<long, double>)(_ => 1.0));
+        using var cts = new CancellationTokenSource();
+
+        var result = await CreateController(statisticsService: new StatisticsService())
+            .GetInsulinDeliveryStatistics(DenseDay, DenseDay.AddDays(4), cts.Token);
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<InsulinDeliveryStatistics>().Subject;
+        payload.CarbCount.Should().Be(OldTreatmentLimit + 1);
+        payload.TotalCarbs.Should().Be(OldTreatmentLimit + 40);
+        payload.BolusCount.Should().Be(OldTreatmentLimit + 1);
+        payload.MicroBolusCount.Should().Be(OldTreatmentLimit + 1);
+        payload.BasalInjectionCount.Should().Be(OldTreatmentLimit + 1);
+        payload.BasalCount.Should().Be(2 * (OldTreatmentLimit + 1));
+
+        _repositoryTokens.Should().HaveCount(5).And.OnlyContain(t => t == cts.Token);
+        _basalRateResolverMock.Verify(
+            r => r.BuildResolverAsync(It.IsAny<long>(), It.IsAny<long>(), cts.Token), Times.Once);
     }
 
     [Fact]

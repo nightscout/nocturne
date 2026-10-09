@@ -2,6 +2,15 @@ using System.Text.Json.Serialization;
 
 namespace Nocturne.Core.Models.Services;
 
+public class YearSummaryResponse
+{
+    [JsonPropertyName("dailySummary")]
+    public DailySummaryResponse? DailySummary { get; set; }
+
+    [JsonPropertyName("griTimeline")]
+    public GriTimelineResponse? GriTimeline { get; set; }
+}
+
 /// <summary>
 /// Response for GET /api/v4/year-overview/gri-timeline
 /// </summary>

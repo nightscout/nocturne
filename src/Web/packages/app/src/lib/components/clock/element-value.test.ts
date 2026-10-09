@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import type { ClockElement } from "$lib/api";
-import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
+import type { ClockElement, ClockSettings } from "$lib/api";
+import type {
+  GlucoseUnits,
+  TimeFormat,
+} from "$lib/stores/appearance-store.svelte";
+import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
 
 // formatting.ts pulls in appearance-store, which pulls in mode-watcher (no node
 // export). Stub the chain, same as formatting.test.ts.
@@ -16,7 +20,7 @@ vi.mock("runed", () => ({
 }));
 vi.mock("$lib/stores/appearance-store.svelte", () => ({
   glucoseUnits: { current: "mg/dl" },
-  timeFormat: { current: "24" },
+  timeFormat: { current: "12" },
   regionFormat: { current: "en-GB" },
   preferredLanguage: { current: "en" },
 }));
@@ -49,162 +53,126 @@ const noReading = {
 
 const el = (element: ClockElement): ClockElement => element;
 
-function withUnits(units: GlucoseUnits, run: () => void) {
-  const previous = store.glucoseUnits.current;
+const mgdl12: ClockSettings = { glucoseUnits: "mg/dl", timeFormat: "12" };
+const mmol24: ClockSettings = { glucoseUnits: "mmol", timeFormat: "24" };
+
+/** The viewer's own preferences, as a signed-in viewer's cookie would set them. */
+function asViewer(
+  units: GlucoseUnits,
+  timeFormat: TimeFormat,
+  run: () => void
+) {
+  const previous = [store.glucoseUnits.current, store.timeFormat.current];
   store.glucoseUnits.current = units;
+  store.timeFormat.current = timeFormat;
   try {
     run();
   } finally {
-    store.glucoseUnits.current = previous;
+    [store.glucoseUnits.current, store.timeFormat.current] = previous as [
+      GlucoseUnits,
+      TimeFormat,
+    ];
   }
 }
 
+const render = (
+  element: ClockElement,
+  settings: ClockSettings | undefined = mgdl12,
+  source: ClockGlucoseSource = glucose
+) => renderClockElementValue(element, settings, source, now);
+
 describe("renderClockElementValue", () => {
-  it("renders glucose in the viewer's units", () => {
-    withUnits("mg/dl", () => {
-      expect(renderClockElementValue(el({ type: "sg" }), glucose, now)).toBe(
-        "120"
-      );
-    });
-    withUnits("mmol", () => {
-      expect(renderClockElementValue(el({ type: "sg" }), glucose, now)).toBe(
-        "6.7"
-      );
+  it("shows a mmol, 24 hour face in mmol/L and 24 hour time to a viewer with no preferences", () => {
+    asViewer("mg/dl", "12", () => {
+      expect(render(el({ type: "sg" }), mmol24)).toBe("6.7 mmol/L");
+      expect(render(el({ type: "delta" }), mmol24)).toBe("+0.3 mmol/L");
+      expect(render(el({ type: "time" }), mmol24)).toBe("14:05");
     });
   });
 
-  it("renders the delta and its unit label in the viewer's units", () => {
-    withUnits("mg/dl", () => {
-      expect(renderClockElementValue(el({ type: "delta" }), glucose, now)).toBe(
-        "+5 mg/dL"
-      );
+  it("shows the face's settings to a viewer whose own preferences differ", () => {
+    asViewer("mmol", "24", () => {
+      expect(render(el({ type: "sg" }), mgdl12)).toBe("120 mg/dL");
+      expect(render(el({ type: "delta" }), mgdl12)).toBe("+5 mg/dL");
+      expect(render(el({ type: "time" }), mgdl12)).toMatch(/^02:05\s?[Pp]/);
     });
-    withUnits("mmol", () => {
-      expect(renderClockElementValue(el({ type: "delta" }), glucose, now)).toBe(
-        "+0.3 mmol/L"
-      );
+    asViewer("mg/dl", "12", () => {
+      expect(render(el({ type: "sg" }), mmol24)).toBe("6.7 mmol/L");
+      expect(render(el({ type: "time" }), mmol24)).toBe("14:05");
     });
   });
 
-  it("omits the unit label only when showUnits is false", () => {
-    withUnits("mmol", () => {
-      expect(
-        renderClockElementValue(
-          el({ type: "delta", showUnits: false }),
-          glucose,
-          now
-        )
-      ).toBe("+0.3");
-      expect(
-        renderClockElementValue(
-          el({ type: "delta", showUnits: true }),
-          glucose,
-          now
-        )
-      ).toBe("+0.3 mmol/L");
-      expect(
-        renderClockElementValue(
-          el({ type: "delta", showUnits: undefined }),
-          glucose,
-          now
-        )
-      ).toBe("+0.3 mmol/L");
+  it("reads a face saved before it carried settings as mg/dL and 12 hour", () => {
+    asViewer("mmol", "24", () => {
+      expect(render(el({ type: "sg" }), {})).toBe("120 mg/dL");
+      expect(render(el({ type: "time" }), {})).toMatch(/^02:05\s?[Pp]/);
+      expect(render(el({ type: "sg" }), undefined)).toBe("120 mg/dL");
     });
+  });
+
+  it("omits the unit label on sg and delta only when showUnits is false", () => {
+    for (const type of ["sg", "delta"]) {
+      const value = type === "sg" ? "6.7" : "+0.3";
+      expect(render(el({ type, showUnits: false }), mmol24)).toBe(value);
+      expect(render(el({ type, showUnits: true }), mmol24)).toBe(
+        `${value} mmol/L`
+      );
+      expect(render(el({ type, showUnits: undefined }), mmol24)).toBe(
+        `${value} mmol/L`
+      );
+    }
   });
 
   it("renders the reading age from the reading, not a sample", () => {
-    expect(renderClockElementValue(el({ type: "age" }), glucose, now)).toBe(
-      "7m ago"
-    );
+    expect(render(el({ type: "age" }))).toBe("7m ago");
   });
 
   it("drops the preposition for a reading under a minute old", () => {
     expect(
-      renderClockElementValue(
-        el({ type: "age" }),
-        { ...glucose, lastUpdated: now.getTime() },
-        now
-      )
+      render(el({ type: "age" }), mgdl12, {
+        ...glucose,
+        lastUpdated: now.getTime(),
+      })
     ).toBe("now");
   });
 
   it("renders a placeholder, not a number, when there is no reading", () => {
-    withUnits("mg/dl", () => {
-      expect(renderClockElementValue(el({ type: "sg" }), noReading, now)).toBe(
-        "--"
-      );
-    });
-    withUnits("mmol", () => {
-      expect(renderClockElementValue(el({ type: "sg" }), noReading, now)).toBe(
-        "--"
-      );
-    });
+    expect(render(el({ type: "sg" }), mgdl12, noReading)).toBe("--");
+    expect(render(el({ type: "sg" }), mmol24, noReading)).toBe("--");
   });
 
   it("renders no delta and no age when there is no reading", () => {
-    expect(renderClockElementValue(el({ type: "delta" }), noReading, now)).toBe(
-      ""
-    );
-    expect(renderClockElementValue(el({ type: "age" }), noReading, now)).toBe(
-      ""
-    );
+    expect(render(el({ type: "delta" }), mgdl12, noReading)).toBe("");
+    expect(render(el({ type: "age" }), mgdl12, noReading)).toBe("");
   });
 
   it("renders no delta from a lone reading", () => {
     expect(
-      renderClockElementValue(
-        el({ type: "delta" }),
-        { ...glucose, bgDelta: null },
-        now
-      )
+      render(el({ type: "delta" }), mgdl12, { ...glucose, bgDelta: null })
     ).toBe("");
   });
 
   it("still renders the wall clock when there is no reading", () => {
-    expect(
-      renderClockElementValue(
-        el({ type: "time", format: "24h" }),
-        noReading,
-        now
-      )
-    ).toBe("14:05");
-  });
-
-  it("renders time in the element's pinned format", () => {
-    expect(
-      renderClockElementValue(el({ type: "time", format: "24h" }), glucose, now)
-    ).toBe("14:05");
+    expect(render(el({ type: "time" }), mmol24, noReading)).toBe("14:05");
   });
 
   it("renders explicit placeholders for insulin and carbs on board", () => {
-    expect(renderClockElementValue(el({ type: "iob" }), glucose, now)).toBe(
-      "--U"
-    );
-    expect(renderClockElementValue(el({ type: "cob" }), glucose, now)).toBe(
-      "--g"
-    );
+    expect(render(el({ type: "iob" }))).toBe("--U");
+    expect(render(el({ type: "cob" }))).toBe("--g");
   });
 
   it("renders nothing for element types with no runtime data source", () => {
     // A saved face may still contain these; they must not print a plausible number.
     for (const type of UNWIRED_ELEMENT_TYPES) {
-      expect(renderClockElementValue(el({ type }), glucose, now)).toBe("");
+      expect(render(el({ type }))).toBe("");
     }
   });
 
   it("renders custom text and nothing for icon-rendered types", () => {
-    expect(
-      renderClockElementValue(el({ type: "text", text: "Hi" }), glucose, now)
-    ).toBe("Hi");
-    expect(renderClockElementValue(el({ type: "text" }), glucose, now)).toBe(
-      ""
-    );
-    expect(renderClockElementValue(el({ type: "arrow" }), glucose, now)).toBe(
-      ""
-    );
-    expect(renderClockElementValue(el({ type: "tracker" }), glucose, now)).toBe(
-      ""
-    );
+    expect(render(el({ type: "text", text: "Hi" }))).toBe("Hi");
+    expect(render(el({ type: "text" }))).toBe("");
+    expect(render(el({ type: "arrow" }))).toBe("");
+    expect(render(el({ type: "tracker" }))).toBe("");
   });
 });
 

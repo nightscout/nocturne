@@ -12,8 +12,10 @@ namespace Nocturne.API.Services.ChartData.Stages;
 
 /// <summary>
 /// Chart data pipeline stage that fetches all raw data required for the dashboard chart.
-/// All repository calls are made sequentially because the underlying EF Core
-/// <see cref="Microsoft.EntityFrameworkCore.DbContext"/> is not thread-safe.
+/// Repositories that open their own context per call through <c>ITenantDbContextFactory</c> run
+/// concurrently; the ones that share the request-scoped
+/// <see cref="Microsoft.EntityFrameworkCore.DbContext"/>, which is not thread-safe, run one after
+/// another alongside them.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -85,92 +87,84 @@ internal sealed class DataFetchStage(
 
         // Fetch glucose data from v4 SensorGlucose table; the dashboard renders the canonical
         // stream, not blended concurrent CGMs.
-        var sensorGlucoseList = (
-            await canonicalGlucose.SelectAsync(
-                (await sensorGlucoseRepository.GetForAnalyticsAsync(
-                    from: MillsToDateTime(startTime),
-                    to: MillsToDateTime(endTime),
-                    device: null,
-                    source: null,
-                    limit: entryLimit,
-                    offset: 0,
-                    descending: true,
-                    ct: cancellationToken
-                )).ToList(),
-                cancellationToken)
-        ).ToList();
+        var sensorGlucoseTask = FetchCanonicalGlucoseAsync();
+        async Task<List<SensorGlucose>> FetchCanonicalGlucoseAsync() =>
+            (
+                await canonicalGlucose.SelectAsync(
+                    (await sensorGlucoseRepository.GetForAnalyticsAsync(
+                        from: MillsToDateTime(startTime),
+                        to: MillsToDateTime(endTime),
+                        device: null,
+                        source: null,
+                        limit: entryLimit,
+                        offset: 0,
+                        descending: true,
+                        ct: cancellationToken
+                    )).ToList(),
+                    cancellationToken)
+            ).ToList();
 
         // Fetch bolus data from v4 Bolus table — extended range for IOB calculation
-        var bolusList = (
-            await bolusRepository.GetAsync(
-                from: MillsToDateTime(bufferStartTime),
-                to: MillsToDateTime(endTime),
-                device: null,
-                source: null,
-                limit: treatmentLimit,
-                offset: 0,
-                descending: true,
-                ct: cancellationToken
-            )
-        ).ToList();
+        var bolusTask = bolusRepository.GetAsync(
+            from: MillsToDateTime(bufferStartTime),
+            to: MillsToDateTime(endTime),
+            device: null,
+            source: null,
+            limit: treatmentLimit,
+            offset: 0,
+            descending: true,
+            ct: cancellationToken
+        );
 
         // Fetch carb data from v4 CarbIntake table — extended range for COB calculation
-        var carbIntakeList = (
-            await carbIntakeRepository.GetAsync(
-                from: MillsToDateTime(bufferStartTime),
-                to: MillsToDateTime(endTime),
-                device: null,
-                source: null,
-                limit: treatmentLimit,
-                offset: 0,
-                descending: true,
-                ct: cancellationToken
-            )
-        ).ToList();
+        var carbIntakeTask = carbIntakeRepository.GetAsync(
+            from: MillsToDateTime(bufferStartTime),
+            to: MillsToDateTime(endTime),
+            device: null,
+            source: null,
+            limit: treatmentLimit,
+            offset: 0,
+            descending: true,
+            ct: cancellationToken
+        );
 
         // Fetch BG checks from v4 BGCheck table (display range only)
-        var bgCheckList = (
-            await bgCheckRepository.GetAsync(
-                from: MillsToDateTime(startTime),
-                to: MillsToDateTime(endTime),
-                device: null,
-                source: null,
-                limit: treatmentLimit,
-                offset: 0,
-                descending: true,
-                ct: cancellationToken
-            )
-        ).ToList();
+        var bgCheckTask = bgCheckRepository.GetAsync(
+            from: MillsToDateTime(startTime),
+            to: MillsToDateTime(endTime),
+            device: null,
+            source: null,
+            limit: treatmentLimit,
+            offset: 0,
+            descending: true,
+            ct: cancellationToken
+        );
 
         // Fetch device events from v4 DeviceEvent table (display range only)
-        var deviceEventList = (
-            await deviceEventRepository.GetAsync(
-                from: MillsToDateTime(startTime),
-                to: MillsToDateTime(endTime),
-                device: null,
-                source: null,
-                limit: displayRangeLimit,
-                offset: 0,
-                descending: true,
-                ct: cancellationToken
-            )
-        ).ToList();
+        var deviceEventTask = deviceEventRepository.GetAsync(
+            from: MillsToDateTime(startTime),
+            to: MillsToDateTime(endTime),
+            device: null,
+            source: null,
+            limit: displayRangeLimit,
+            offset: 0,
+            descending: true,
+            ct: cancellationToken
+        );
 
         // Fetch basal injections from v4 BasalInjection table (display range only)
-        var basalInjectionList = (
-            await basalInjectionRepository.GetAsync(
-                from: MillsToDateTime(startTime),
-                to: MillsToDateTime(endTime),
-                device: null,
-                source: null,
-                limit: displayRangeLimit,
-                offset: 0,
-                descending: true,
-                ct: cancellationToken
-            )
-        ).ToList();
+        var basalInjectionTask = basalInjectionRepository.GetAsync(
+            from: MillsToDateTime(startTime),
+            to: MillsToDateTime(endTime),
+            device: null,
+            source: null,
+            limit: displayRangeLimit,
+            offset: 0,
+            descending: true,
+            ct: cancellationToken
+        );
 
-        var tempBasalList = (await tempBasalRepository.GetAsync(
+        var tempBasalTask = tempBasalRepository.GetAsync(
             from: MillsToDateTime(bufferStartTime),
             to: MillsToDateTime(endTime),
             device: null,
@@ -179,79 +173,113 @@ internal sealed class DataFetchStage(
             offset: 0,
             descending: false,
             ct: cancellationToken
-        )).ToList();
+        );
 
         // Fetch APS snapshot IOB/COB points (ascending) so the IOB/COB series can prefer the
         // values the AID system actually acted on. The buffer start is used so a tick at the very
         // left edge of the window can still resolve a snapshot uploaded just before it. The slim
         // projection is deliberate: full snapshots carry multi-KB JSON blob columns, and a limit
         // heuristic would truncate the newest rows for high-cadence uploaders.
-        var apsSnapshotList = await apsSnapshotRepository.GetIobCobPointsAsync(
+        var apsSnapshotTask = apsSnapshotRepository.GetIobCobPointsAsync(
             from: MillsToDateTime(bufferStartTime)!.Value,
             to: MillsToDateTime(endTime)!.Value,
             ct: cancellationToken
         );
 
-        var stateSpanCategories = new[]
-        {
-            StateSpanCategory.PumpMode,
-            StateSpanCategory.Profile,
-            StateSpanCategory.Override,
-            StateSpanCategory.Exercise,
-            StateSpanCategory.Illness,
-            StateSpanCategory.Travel,
-        };
-
-        var allStateSpans = await stateSpanRepository.GetByCategories(
-            stateSpanCategories,
-            MillsToDateTime(startTime),
-            MillsToDateTime(endTime),
-            cancellationToken
-        );
-
-        // System events
-        var systemEventsResult = await systemEventRepository.GetSystemEventsAsync(
-            eventType: null,
-            category: null,
-            from: startTime,
-            to: endTime,
-            source: null,
-            count: 500,
-            skip: 0,
-            cancellationToken: cancellationToken
-        );
-
-        // Tracker data
-        var trackerDefs = await trackerRepository.GetAllDefinitionsAsync(cancellationToken);
-        var trackerInstances = await trackerRepository.GetActiveInstancesAsync(
-            userId: null,
-            cancellationToken: cancellationToken
-        );
-
-        List<HeartRate> heartRateList = [];
-        List<StepCount> stepCountList = [];
-        if (context.IncludeHealthSeries)
-        {
-            heartRateList = (await heartRateService.GetHeartRatesByDateRangeAsync(
-                MillsToDateTime(startTime)!.Value,
-                MillsToDateTime(endTime)!.Value,
-                cancellationToken: cancellationToken
-            )).ToList();
-
-            stepCountList = (await stepCountService.GetStepCountsByDateRangeAsync(
-                MillsToDateTime(startTime)!.Value,
-                MillsToDateTime(endTime)!.Value,
-                cancellationToken: cancellationToken
-            )).ToList();
-        }
-
-        // Sleep sessions
-        var sleepSessionList = (await sleepService.GetSessionsAsync(
+        var sleepSessionTask = sleepService.GetSessionsAsync(
             from: MillsToDateTime(startTime),
             to: MillsToDateTime(endTime),
             limit: displayRangeLimit,
             cancellationToken: cancellationToken
-        )).ToList();
+        );
+
+        async Task<ChartDataContext> FetchScopedContextReadsAsync()
+        {
+            var stateSpanCategories = new[]
+            {
+                StateSpanCategory.PumpMode,
+                StateSpanCategory.Profile,
+                StateSpanCategory.Override,
+                StateSpanCategory.Exercise,
+                StateSpanCategory.Illness,
+                StateSpanCategory.Travel,
+            };
+
+            var allStateSpans = await stateSpanRepository.GetByCategories(
+                stateSpanCategories,
+                MillsToDateTime(startTime),
+                MillsToDateTime(endTime),
+                cancellationToken
+            );
+
+            var systemEventsResult = await systemEventRepository.GetSystemEventsAsync(
+                eventType: null,
+                category: null,
+                from: startTime,
+                to: endTime,
+                source: null,
+                count: 500,
+                skip: 0,
+                cancellationToken: cancellationToken
+            );
+
+            var trackerDefs = await trackerRepository.GetAllDefinitionsAsync(cancellationToken);
+            var trackerInstances = await trackerRepository.GetActiveInstancesAsync(
+                userId: null,
+                cancellationToken: cancellationToken
+            );
+
+            List<HeartRate> heartRateList = [];
+            List<StepCount> stepCountList = [];
+            if (context.IncludeHealthSeries)
+            {
+                heartRateList = (await heartRateService.GetHeartRatesByDateRangeAsync(
+                    MillsToDateTime(startTime)!.Value,
+                    MillsToDateTime(endTime)!.Value,
+                    cancellationToken: cancellationToken
+                )).ToList();
+
+                stepCountList = (await stepCountService.GetStepCountsByDateRangeAsync(
+                    MillsToDateTime(startTime)!.Value,
+                    MillsToDateTime(endTime)!.Value,
+                    cancellationToken: cancellationToken
+                )).ToList();
+            }
+
+            var stateSpansReadOnly = allStateSpans
+                .ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => (IEnumerable<StateSpan>)kvp.Value
+                );
+
+            return context with
+            {
+                StateSpans = stateSpansReadOnly,
+                SystemEvents = systemEventsResult?.ToList() ?? [],
+                TrackerDefinitions = trackerDefs?.ToList() ?? [],
+                TrackerInstances = trackerInstances?.ToList() ?? [],
+                HeartRateList = heartRateList,
+                StepCountList = stepCountList,
+            };
+        }
+        var scopedTask = FetchScopedContextReadsAsync();
+
+        await Task.WhenAll(
+            sensorGlucoseTask, bolusTask, carbIntakeTask, bgCheckTask, deviceEventTask,
+            basalInjectionTask, tempBasalTask, apsSnapshotTask, sleepSessionTask, scopedTask);
+
+        var sensorGlucoseList = await sensorGlucoseTask;
+        var bolusList = (await bolusTask).ToList();
+        var carbIntakeList = (await carbIntakeTask).ToList();
+        var bgCheckList = (await bgCheckTask).ToList();
+        var deviceEventList = (await deviceEventTask).ToList();
+        var basalInjectionList = (await basalInjectionTask).ToList();
+        var tempBasalList = (await tempBasalTask).ToList();
+        var apsSnapshotList = await apsSnapshotTask;
+        var sleepSessionList = (await sleepSessionTask).ToList();
+        var scopedReads = await scopedTask;
+        var heartRateList = scopedReads.HeartRateList;
+        var stepCountList = scopedReads.StepCountList;
 
         // Display-range subsets for markers
         var displayBoluses = bolusList
@@ -277,14 +305,7 @@ internal sealed class DataFetchStage(
             sleepSessionList.Count
         );
 
-        // Project Dictionary<K, List<V>> to IReadOnlyDictionary<K, IEnumerable<V>>
-        var stateSpansReadOnly = allStateSpans
-            .ToDictionary(
-                kvp => kvp.Key,
-                kvp => (IEnumerable<StateSpan>)kvp.Value
-            );
-
-        return context with
+        return scopedReads with
         {
             SensorGlucoseList = sensorGlucoseList,
             BolusList = bolusList,
@@ -297,12 +318,6 @@ internal sealed class DataFetchStage(
             DisplayTempBasals = displayTempBasals,
             ApsSnapshotList = apsSnapshotList,
             BasalInjectionList = basalInjectionList,
-            StateSpans = stateSpansReadOnly,
-            SystemEvents = systemEventsResult?.ToList() ?? [],
-            TrackerDefinitions = trackerDefs?.ToList() ?? [],
-            TrackerInstances = trackerInstances?.ToList() ?? [],
-            HeartRateList = heartRateList,
-            StepCountList = stepCountList,
             SleepSessions = sleepSessionList,
         };
     }

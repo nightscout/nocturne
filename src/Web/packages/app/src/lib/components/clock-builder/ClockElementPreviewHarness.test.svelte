@@ -22,4 +22,10 @@
   onready((next) => (glucose = next));
 </script>
 
-<ClockElementPreview {element} {glucose} {now} trackerDefinitions={[]} />
+<ClockElementPreview
+  {element}
+  settings={{ glucoseUnits: "mg/dl", timeFormat: "12" }}
+  {glucose}
+  {now}
+  trackerDefinitions={[]}
+/>
