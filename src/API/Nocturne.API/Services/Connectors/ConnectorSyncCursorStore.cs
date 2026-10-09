@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Connectors;
@@ -33,8 +34,9 @@ public class ConnectorSyncCursorStore : IConnectorSyncCursorStore
             .Select(c => c.SyncCursorsJson)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var cursors = Deserialize(json);
-        return cursors.TryGetValue(resource, out var cursor) ? cursor : null;
+        var cursors = ReadObject(json);
+        try { return cursors[resource]?.Deserialize<ConnectorSyncCursor>(); }
+        catch (JsonException) { return null; }
     }
 
     /// <inheritdoc />
@@ -42,6 +44,19 @@ public class ConnectorSyncCursorStore : IConnectorSyncCursorStore
         string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken cancellationToken = default)
     {
         var canonicalName = ConnectorNames.Canonical(connectorName);
+        if (_context.Database.IsNpgsql())
+        {
+            var json = JsonSerializer.Serialize(cursor);
+            await _context.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE connector_configurations
+                SET sync_cursors = jsonb_set(CASE WHEN jsonb_typeof(sync_cursors) = 'object'
+                    THEN sync_cursors ELSE jsonb_build_object() END, ARRAY[{resource}], {json}::jsonb),
+                    sys_updated_at = {DateTime.UtcNow}
+                WHERE tenant_id = {_context.TenantId} AND connector_name = {canonicalName}
+                """, cancellationToken);
+            return;
+        }
+
         var config = await _context.ConnectorConfigurations
             .FirstOrDefaultAsync(c => c.ConnectorName == canonicalName, cancellationToken);
 
@@ -52,28 +67,28 @@ public class ConnectorSyncCursorStore : IConnectorSyncCursorStore
             return;
         }
 
-        var cursors = Deserialize(config.SyncCursorsJson);
-        cursors[resource] = cursor;
-        config.SyncCursorsJson = JsonSerializer.Serialize(cursors);
+        var cursors = ReadObject(config.SyncCursorsJson);
+        cursors[resource] = JsonSerializer.SerializeToNode(cursor);
+        config.SyncCursorsJson = cursors.ToJsonString();
         config.SysUpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
     }
 
-    private static Dictionary<string, ConnectorSyncCursor> Deserialize(string? json)
+    private static JsonObject ReadObject(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
-            return new Dictionary<string, ConnectorSyncCursor>(StringComparer.Ordinal);
+            return new JsonObject();
 
         try
         {
-            return JsonSerializer.Deserialize<Dictionary<string, ConnectorSyncCursor>>(json)
-                   ?? new Dictionary<string, ConnectorSyncCursor>(StringComparer.Ordinal);
+            // Shared keys include progress snapshots, which are not ConnectorSyncCursor values.
+            return JsonNode.Parse(json) as JsonObject ?? new JsonObject();
         }
         catch (JsonException)
         {
             // Corrupt/legacy payload: treat as empty so a bad cursor blob can never wedge a sync.
-            return new Dictionary<string, ConnectorSyncCursor>(StringComparer.Ordinal);
+            return new JsonObject();
         }
     }
 }

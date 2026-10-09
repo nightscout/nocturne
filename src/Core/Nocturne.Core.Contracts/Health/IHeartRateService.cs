@@ -38,6 +38,24 @@ public interface IHeartRateService
     );
 
     /// <summary>
+    /// Get one averaged reading per UTC minute within a date range.
+    /// </summary>
+    /// <remarks>
+    /// This is a presentation query for high-volume reports. It never changes or deletes the
+    /// raw heart-rate records; callers that need the original measurements should use
+    /// <see cref="GetHeartRatesByDateRangeAsync"/> instead.
+    /// </remarks>
+    /// <param name="from">Start of date range (inclusive)</param>
+    /// <param name="to">End of date range (exclusive)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Chronologically ordered minute averages</returns>
+    Task<IEnumerable<HeartRate>> GetHeartRateMinuteAveragesByDateRangeAsync(
+        DateTime from,
+        DateTime to,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Returns the latest heart rate timestamp written by <paramref name="source"/> (a connector's
     /// resume watermark), or <c>null</c> when that source has written none.
     /// </summary>

@@ -129,8 +129,8 @@ public class ActogramReportServiceTests
                 It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { stepRow });
         _heartRates
-            .Setup(h => h.GetHeartRatesByDateRangeAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Setup(h => h.GetHeartRateMinuteAveragesByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { hrRow });
         _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
@@ -299,8 +299,8 @@ public class ActogramReportServiceTests
                 It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<StepCount>());
         _heartRates
-            .Setup(h => h.GetHeartRatesByDateRangeAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Setup(h => h.GetHeartRateMinuteAveragesByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<HeartRate>());
     }
 }

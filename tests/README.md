@@ -99,6 +99,23 @@ and Nightscout's newest-first `created_at` ordering and filters. The job migrate
 under a path is covered.
 To add a vendor, write a module exporting a `Vendor` and list it in `server.ts`.
 
+Google Health (`vendors/google-health.ts`) validates authorization-code PKCE, client credentials,
+redirect URIs and one-use codes, serves account identity, refresh/revocation and two pages of
+steps, heart rate, weight and sleep. The browser spec intercepts only Google's external consent
+navigation; the real web callback, API, encrypted credential store, worker and PostgreSQL handle
+the rest. API specs reject incorrect/replayed state and preserve a user-deleted sleep session on
+repeat import. A delayed-vendor browser regression disconnects during inventory scanning,
+reloads while revocation is pending, and verifies one request stops the scan, preserves imported
+records and completes local disconnection despite a slow Google revocation response. Opening
+or reloading the settings page must not automatically scan inventory.
+These tests do not verify Google's real consent policy or API availability.
+Only `e2e/docker-compose.yml` sets `NOCTURNE_GOOGLE_HEALTH_MOCK=true`; the fixed fake-vendor
+transport also requires dev-only endpoints to be enabled. Production defaults keep Google's
+HTTPS destinations unchanged.
+The Google browser spec uses the test-only Caddy TLS proxy on port 1635 (`E2E_WEB_TLS_PORT`),
+with Chromium accepting its internal CA. This preserves the HTTPS callback requirement for
+tenant hosts; other browser specs retain their HTTP origin. The upgrade stack uses port 1645.
+
 **Migration upgrade.** `pnpm e2e:upgrade` starts the latest release
 (`ghcr.io/nightscout/nocturne/nocturne-api:latest`; override with `E2E_PREVIOUS_API_IMAGE`) on a
 fresh database, seeds three tenants (sample data, uploads, lab results, share links, a connector

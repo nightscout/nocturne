@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -53,6 +54,24 @@ public class ConnectorSyncCursorStoreTests : IDisposable
 
     private ConnectorSyncCursorStore Store(NocturneDbContext db) =>
         new(db, NullLogger<ConnectorSyncCursorStore>.Instance);
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("\"invalid\"")]
+    [InlineData("42")]
+    public async Task Malformed_shared_progress_does_not_hide_or_replace_other_cursors(string progress)
+    {
+        await SeedConnectorAsync("{\"health\":{\"LastGuid\":\"retained\"},\"googleHealthProgress\":" + progress + "}");
+        await using var db = Db();
+        var store = Store(db);
+        (await store.GetAsync("glooko", "health"))!.LastGuid.Should().Be("retained");
+        (await store.GetAsync("glooko", "googleHealthProgress")).Should().BeNull();
+        await store.SetAsync("glooko", "other", new(null, "new"));
+        (await store.GetAsync("glooko", "health"))!.LastGuid.Should().Be("retained");
+        (await store.GetAsync("glooko", "other"))!.LastGuid.Should().Be("new");
+        using var json = JsonDocument.Parse((await db.ConnectorConfigurations.SingleAsync()).SyncCursorsJson!);
+        json.RootElement.GetProperty("googleHealthProgress").GetRawText().Should().Be(progress);
+    }
 
     [Fact]
     public async Task SetThenGet_RoundTripsCursor()

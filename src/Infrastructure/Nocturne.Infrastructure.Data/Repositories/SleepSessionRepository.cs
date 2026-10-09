@@ -108,6 +108,7 @@ public class SleepSessionRepository : ISleepSessionRepository
 
             if (existing is not null)
             {
+                entity.CreatedAt = existing.CreatedAt;
                 ctx.SleepSessions.Remove(existing);
                 await ctx.SaveChangesAsync(token);
             }
@@ -190,7 +191,7 @@ public class SleepSessionRepository : ISleepSessionRepository
                 }
             }
 
-            // Remove old entity, then insert updated version preserving the original ID
+            entity.CreatedAt = existing.CreatedAt;
             ctx.SleepSessions.Remove(existing);
             await ctx.SaveChangesAsync(token);
 

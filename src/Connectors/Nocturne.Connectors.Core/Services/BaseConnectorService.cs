@@ -1406,12 +1406,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             // Determine catch-up timestamp
             var sinceTimestamp = since ?? await CalculateSinceTimestampAsync(config);
 
-            var request = new SyncRequest
-            {
-                From = sinceTimestamp,
-                To = null, // Open-ended for background sync
-                DataTypes = SupportedDataTypes,
-            };
+            var request = CreateBackgroundSyncRequest(sinceTimestamp);
 
             var result = await PerformSyncInternalAsync(request, config, cancellationToken);
 
@@ -1456,6 +1451,12 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             };
         }
     }
+
+    protected virtual SyncRequest CreateBackgroundSyncRequest(DateTime? since) => new()
+    {
+        From = since,
+        DataTypes = SupportedDataTypes,
+    };
 
     protected virtual void Dispose(bool disposing)
     {

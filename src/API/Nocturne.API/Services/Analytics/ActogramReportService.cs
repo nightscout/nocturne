@@ -98,10 +98,10 @@ public sealed class ActogramReportService : IActogramReportService
             cancellationToken: cancellationToken
         )).Where(s => !s.IsPossibleRunningTotal()).ToList();
 
-        var heartRateRecords = await _heartRateService.GetHeartRatesByDateRangeAsync(
+        var heartRateRecords = await _heartRateService.GetHeartRateMinuteAveragesByDateRangeAsync(
             fromDt,
             toDt,
-            cancellationToken: cancellationToken
+            cancellationToken
         );
 
         var thresholdsRaw = await BuildThresholdsAsync(endTime, cancellationToken);
