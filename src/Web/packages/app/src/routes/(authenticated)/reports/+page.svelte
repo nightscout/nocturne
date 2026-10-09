@@ -1,4 +1,9 @@
 <script lang="ts">
+  import {
+    a1cLabel,
+    a1cUnitLabel,
+    formatA1cValue,
+  } from "$lib/utils/a1c-formatting";
   import { Button } from "$lib/components/ui/button";
   import Gauge from "@lucide/svelte/icons/gauge";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -191,9 +196,10 @@
                 </dd>
               </div>
               <div class="flex items-baseline justify-between gap-4 px-6 py-4">
-                <dt class="text-sm text-muted-foreground">Estimated A1C</dt>
+                <dt class="text-sm text-muted-foreground">{a1cLabel(true)}</dt>
                 <dd class="m-0 text-lg font-semibold tabular-nums">
-                  {variability?.estimatedA1c?.toFixed(1) ?? "–"}<span class="text-sm font-normal text-muted-foreground">%</span>
+                  {formatA1cValue(variability?.estimatedA1cDisplay)}<span class="text-sm font-normal text-muted-foreground">
+                    {a1cUnitLabel()}</span>
                 </dd>
               </div>
               <div class="flex items-baseline justify-between gap-4 px-6 py-4">

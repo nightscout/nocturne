@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { a1cLabel } from "$lib/utils/a1c-formatting";
   import { distinct } from "$lib/utils/collections";
   import * as Select from "$lib/components/ui/select";
 
@@ -67,7 +68,7 @@
         { name: "Step Count", description: "Daily step counts from activity trackers", levels: rw("stepcount") },
         { name: "Sleep", description: "Sleep sessions, stages, and overnight biometrics", levels: rw("sleep") },
         { name: "Food & Meals", description: "Food database entries and nutritional information", levels: rw("food") },
-        { name: "Statistics", description: "Time-in-range, A1c estimates, and averages", levels: readOnly("statistics") },
+        { name: "Statistics", get description() { return `Time-in-range, ${a1cLabel(true)} estimates, and averages`; }, levels: readOnly("statistics") },
         { name: "Reports", description: "Generated reports and data exports", levels: readOnly("reports") },
       ],
     },

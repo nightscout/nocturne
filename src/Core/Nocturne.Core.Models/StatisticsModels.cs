@@ -151,6 +151,9 @@ public class GlycemicVariability
     /// </summary>
     public double EstimatedA1c { get; set; }
 
+    public A1cDisplayValue EstimatedA1cDisplay => A1cDisplayValue.FromPercent(EstimatedA1c);
+    public A1cDisplayValue A1cTarget => A1cDisplayValue.FromPercent(7);
+
     /// <summary>
     /// Glucose Management Indicator - modern replacement for estimated A1c
     /// Based on: GMI (%) = 3.31 + (0.02392 x mean glucose in mg/dL)

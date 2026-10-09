@@ -1,5 +1,11 @@
 <script lang="ts">
   import {
+    a1cLabel,
+    a1cUnitLabel,
+    formatA1cValue,
+    formatA1c,
+  } from "$lib/utils/a1c-formatting";
+  import {
     Card,
     CardContent,
     CardDescription,
@@ -73,7 +79,7 @@
           { label: "Time in range", value: tir?.target?.toFixed(0) ?? "–", unit: "%", note: "Target: ≥70%" },
           { label: "Below range", value: totalLows.toFixed(1), unit: "%", note: "Target: <4%" },
           { label: "Above range", value: totalHighs.toFixed(1), unit: "%", note: "Target: <25%" },
-          { label: "Est. A1C", value: variability?.estimatedA1c?.toFixed(1) ?? "–", unit: "%", note: "Target: <7%" },
+          { label: a1cLabel(true), value: formatA1cValue(variability?.estimatedA1cDisplay), unit: a1cUnitLabel(), note: variability?.a1cTarget ? `Target: <${formatA1c(variability.a1cTarget)}` : undefined, },
           { label: "CV", value: variability?.coefficientOfVariation?.toFixed(0) ?? "–", unit: "%", note: "Target: ≤33%" },
           { label: "Average", value: String(bgOr(stats?.mean)), unit: bgLabel(), note: `Over ${dayCount} days` },
         ]}
@@ -130,14 +136,14 @@
           <CardHeader class="pb-2">
             <CardTitle class="flex items-center gap-2 text-base">
               <Gauge class="w-5 h-5" />
-              Estimated A1C
+              {a1cLabel(true)}
             </CardTitle>
           </CardHeader>
           <CardContent class="space-y-4">
             <div>
               {#if variability?.estimatedA1c != null}
                 <p class="text-sm text-muted-foreground">
-                  Target: below 7%. Your care team sets your individual target.
+                  Target: below {formatA1c(variability?.a1cTarget)}. Your care team sets your individual target.
                 </p>
               {:else}
                 <div class="text-lg font-medium text-muted-foreground">
@@ -152,15 +158,15 @@
 
             <div class="text-sm space-y-2 border-t pt-3">
               <p>
-                <strong>What is eA1C?</strong>
-                This estimates what your lab A1C would be based on your average glucose.
+                <strong>What is {a1cLabel(true)}?</strong>
+                This estimates what your lab {a1cLabel()} would be based on your average glucose.
               </p>
               <details class="text-xs">
                 <summary class="cursor-pointer text-primary hover:underline">
                   Clinical details
                 </summary>
                 <p class="mt-2 text-muted-foreground">
-                  Calculated using the ADAG formula: eA1C = (mean glucose in
+                  Calculated using the ADAG formula (NGSP %): {a1cLabel(true)} = (mean glucose in
                   mmol/L + 2.59) / 1.59. Based on mean glucose of {bgOr(stats?.mean)} {bgLabel()} over
                   {dayCount}
                   days.

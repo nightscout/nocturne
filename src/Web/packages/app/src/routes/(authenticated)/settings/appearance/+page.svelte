@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { a1cLabel } from "$lib/utils/a1c-formatting";
   import { time } from "$lib/utils/formatting";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import {
@@ -8,6 +9,8 @@
   } from "$lib/stores/appearance-store.svelte";
   import {
     glucoseUnits,
+    a1cName,
+    a1cUnits,
     timeFormat,
     nightModeSchedule,
     setColorScheme,
@@ -573,6 +576,36 @@
             begin, so pick whichever matches how you read a calendar. Your
             interface stays in the language above.
           </p>
+        </div>
+        <div class="grid gap-4 @sm:grid-cols-2">
+          <div class="space-y-2">
+            <Label for="a1c-name">{a1cLabel()} display name</Label>
+            <!-- @wc-ignore -->
+            <Select type="single" value={a1cName.current} onValueChange={(value) => {
+              if (value === "HbA1c" || value === "A1c") a1cName.current = value;
+            }}>
+              <SelectTrigger id="a1c-name">{a1cName.current}</SelectTrigger>
+              <SelectContent>
+                <SelectItem value="HbA1c">HbA1c</SelectItem>
+                <SelectItem value="A1c">A1c</SelectItem>
+              </SelectContent>
+            </Select>
+            <p class="text-xs text-muted-foreground">Estimated values retain the e prefix: eHbA1c or eA1c.</p>
+          </div>
+          <div class="space-y-2">
+            <Label for="a1c-units">{a1cLabel()} display unit</Label>
+            <!-- @wc-ignore -->
+            <Select type="single" value={a1cUnits.current} onValueChange={(value) => {
+              if (value === "percent" || value === "mmol/mol") a1cUnits.current = value;
+            }}>
+              <SelectTrigger id="a1c-units">{a1cUnits.current === "percent" ? "% (NGSP)" : "mmol/mol (IFCC)"}</SelectTrigger>
+              <SelectContent>
+                <SelectItem value="percent">% (NGSP)</SelectItem>
+                <SelectItem value="mmol/mol">mmol/mol (IFCC)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p class="text-xs text-muted-foreground">Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {a1cLabel()}. Blood glucose units are set separately.</p>
+          </div>
         </div>
       </CardContent>
     </Card>

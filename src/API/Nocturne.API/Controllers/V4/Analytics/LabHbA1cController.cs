@@ -52,8 +52,17 @@ public class LabHbA1cController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        if (request.ValuePercent is < 3.0 or > 20.0)
-            return Problem(detail: "ValuePercent must be between 3.0 and 20.0", statusCode: 400, title: "Bad Request");
+        if (request.Unit is not ("percent" or "mmol/mol"))
+            return Problem(detail: "Unit must be percent or mmol/mol", statusCode: 400, title: "Bad Request");
+        if (request.Value.HasValue == request.ValuePercent.HasValue)
+            return Problem(detail: "Provide either Value or ValuePercent", statusCode: 400, title: "Bad Request");
+        if (request.ValuePercent.HasValue && request.Unit != "percent")
+            return Problem(detail: "ValuePercent must use percent units", statusCode: 400, title: "Bad Request");
+        var valuePercent = request.ValuePercent ?? (request.Unit == "mmol/mol"
+            ? A1cDisplayValue.ToPercent(request.Value!.Value)
+            : request.Value!.Value);
+        if (!double.IsFinite(valuePercent) || valuePercent is < 3.0 or > 20.0)
+            return Problem(detail: "Lab value must be equivalent to 3.0–20.0% (NGSP)", statusCode: 400, title: "Bad Request");
         if (request.MeasuredAt.Date > DateTime.UtcNow.Date.AddDays(1))
             return Problem(detail: "MeasuredAt cannot be in the future", statusCode: 400, title: "Bad Request");
 
@@ -61,7 +70,7 @@ public class LabHbA1cController : ControllerBase
             new LabHbA1cResult
             {
                 MeasuredAt = request.MeasuredAt.Date,
-                ValuePercent = request.ValuePercent,
+                ValuePercent = valuePercent,
                 Note = request.Note,
             },
             cancellationToken
@@ -89,7 +98,10 @@ public class CreateLabHbA1cResultRequest
     public DateTime MeasuredAt { get; set; }
 
     /// <summary>Lab-reported HbA1c in DCCT/NGSP percent (3.0-20.0).</summary>
-    public double ValuePercent { get; set; }
+    public double? ValuePercent { get; set; }
+
+    public double? Value { get; set; }
+    public string Unit { get; set; } = "percent";
 
     /// <summary>Optional free-text note (e.g. lab name).</summary>
     public string? Note { get; set; }
