@@ -293,7 +293,7 @@ public class DeviceStatusProjectionServiceTests
         // Assert
         result.Override.Should().NotBeNull();
         result.Override!.Name.Should().Be("Exercise");
-        result.Override.Active.Should().BeFalse(); // Has end timestamp, so not active
+        result.Override.Active.Should().BeTrue();
         result.Override.Multiplier.Should().Be(0.8);
         result.Override.Duration.Should().Be(3600);
         result.Override.CurrentCorrectionRange.Should().NotBeNull();

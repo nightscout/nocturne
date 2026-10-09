@@ -105,11 +105,29 @@ public class StateSpanRepository : IStateSpanRepository
         var query = BuildFilteredQuery(category, state, from, to, source, active);
 
         var ordered = descending
-            ? query.OrderByDescending(s => s.StartTimestamp)
-            : query.OrderBy(s => s.StartTimestamp);
+            ? query.OrderByDescending(s => s.StartTimestamp).ThenByDescending(s => s.Id)
+            : query.OrderBy(s => s.StartTimestamp).ThenBy(s => s.Id);
 
         var entities = await ordered
             .Skip(skip)
+            .Take(count)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(StateSpanMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
+        StateSpanCategory category,
+        string? source,
+        DateTime from,
+        int count,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var entities = await BuildFilteredQuery(category, null, null, null, source, null)
+            .Where(s => s.StartTimestamp >= from)
+            .OrderBy(s => s.StartTimestamp)
             .Take(count)
             .ToListAsync(cancellationToken);
 
