@@ -2,6 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getOriginalProto } from '$lib/server/request-host';
 import { resolveSingleTenantLanding } from '$lib/utils/tenant-host';
+import { classifyRequestHost } from '$lib/server/tenantless-host';
 import { transformChartData, type TransformedChartData } from '$lib/utils/chart-data-transform';
 
 // Hours of data for initial fast load (most recent)
@@ -11,6 +12,15 @@ const TOTAL_HOURS = 48;
 
 export const load: PageServerLoad = async ({ locals, request, parent }) => {
 	const { apiClient } = locals;
+
+	// Only the apex and a reserved dashboard slug can be tenantless, so on any other host the
+	// chart fetches start now instead of behind the layout chain's status and onboarding calls.
+	// A viewer the layout will redirect to sign-in is left out, so it spends no chart queries.
+	const { kind } = classifyRequestHost(request);
+	const chartData =
+		kind !== 'apex' && kind !== 'dashboard-slug' && (locals.isAuthenticated || locals.isShareHost)
+			? loadChartData(apiClient)
+			: null;
 
 	const { tenantless, baseDomain, dashboardSlugs } = await parent();
 
@@ -29,6 +39,23 @@ export const load: PageServerLoad = async ({ locals, request, parent }) => {
 		return { initialChartData: null };
 	}
 
+	const { initialChartData, initialWindowStart, historicalDataPromise } =
+		chartData ?? loadChartData(apiClient);
+
+	return {
+		initialChartData: await initialChartData,
+		initialWindowStart,
+		streamed: {
+			historicalChartData: historicalDataPromise,
+		},
+	};
+};
+
+/**
+ * Starts the 6h initial window and the 48h historical window concurrently. Each settles to null
+ * on failure, so a promise left unawaited by a redirect never rejects unhandled.
+ */
+function loadChartData(apiClient: App.Locals['apiClient']) {
 	const now = Date.now();
 	const intervalMs = 5 * 60 * 1000;
 
@@ -53,22 +80,18 @@ export const load: PageServerLoad = async ({ locals, request, parent }) => {
 		}
 	})();
 
-	let initialChartData: TransformedChartData | null = null;
-	try {
-		const data = await apiClient.chartData.getDashboardChartData(initialStartTime, endTime, 5, false);
-		initialChartData = transformChartData(data);
-	} catch (err) {
-		console.error('Error loading initial chart data:', err);
-	}
+	const initialChartData = (async (): Promise<TransformedChartData | null> => {
+		try {
+			const data = await apiClient.chartData.getDashboardChartData(initialStartTime, endTime, 5, false);
+			return transformChartData(data);
+		} catch (err) {
+			console.error('Error loading initial chart data:', err);
+			return null;
+		}
+	})();
 
-	return {
-		initialChartData,
-		initialWindowStart: initialStartTime,
-		streamed: {
-			historicalChartData: historicalDataPromise,
-		},
-	};
-};
+	return { initialChartData, initialWindowStart: initialStartTime, historicalDataPromise };
+}
 
 /**
  * The tenants this subject belongs to, or an empty list if the list cannot be fetched.
