@@ -561,7 +561,7 @@ public class StorageDeleteBroadcastContractTests
         var stateSpans = new Mock<IStateSpanService>();
         stateSpans
             .Setup(s => s.DeleteActivityAsync(RecordGuid, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync((IReadOnlyList<string>)[RecordGuid]);
 
         var capture = new BroadcastCapture();
         await CreateActivityService(capture, stateSpans, new Mock<ISleepService>())
@@ -597,7 +597,7 @@ public class StorageDeleteBroadcastContractTests
             .ReturnsAsync([new Activity { Id = RecordGuid, Type = "exercise", Mills = 1 }]);
         stateSpans
             .Setup(s => s.DeleteActivityAsync(RecordGuid, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync((IReadOnlyList<string>)[RecordGuid]);
 
         var capture = new BroadcastCapture();
         await CreateActivityService(capture, stateSpans, new Mock<ISleepService>())

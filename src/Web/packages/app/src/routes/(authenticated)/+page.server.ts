@@ -63,6 +63,7 @@ export const load: PageServerLoad = async ({ locals, request, parent }) => {
 
 	return {
 		initialChartData,
+		initialWindowStart: initialStartTime,
 		streamed: {
 			historicalChartData: historicalDataPromise,
 		},

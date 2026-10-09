@@ -36,5 +36,11 @@
   onstore?.(store);
 
   // svelte-ignore state_referenced_locally
-  onengine(createChartDataEngine(options));
+  // Reads through the prop on every access, so a re-render with new options reaches the
+  // engine the way a page data prop does.
+  onengine(
+    createChartDataEngine(
+      new Proxy({} as ChartDataEngineOptions, { get: (_, key) => options[key as keyof ChartDataEngineOptions] })
+    )
+  );
 </script>

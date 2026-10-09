@@ -76,7 +76,8 @@ public interface IV4Repository<T> where T : class, IV4Record
     Task<T> UpdateAsync(Guid id, T model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
-    /// Delete the record with the given identifier.
+    /// Delete the record with the given identifier, and every other source's copy deduplication
+    /// linked it to.
     /// </summary>
     /// <param name="id">UUID v7 identifier of the record to delete.</param>
     /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>

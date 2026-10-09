@@ -528,6 +528,38 @@ public class StatusServiceTests
     }
 
     [Fact]
+    public async Task GetLastModifiedAsync_CountsDeletedRows_AsNightscoutCountsItsInvalidDocuments()
+    {
+        var now = DateTime.UtcNow;
+        var dbName = $"nocturne_lastmod_{Guid.NewGuid()}";
+        await using var context = TestDbContextFactory.CreateInMemoryContext(dbName);
+        SeedLastModifiedData(context, now);
+        var bolus = new Nocturne.Infrastructure.Data.Entities.V4.BolusEntity
+        {
+            Id = Guid.CreateVersion7(), Timestamp = now.AddHours(-1), Insulin = 1, DeletedAt = now,
+        };
+        var aps = new Nocturne.Infrastructure.Data.Entities.V4.ApsSnapshotEntity
+        {
+            Id = Guid.CreateVersion7(), Timestamp = now.AddHours(-1), AidAlgorithm = "Loop", DeletedAt = now,
+        };
+        var food = new FoodEntity { Id = Guid.CreateVersion7(), Name = "deleted", DeletedAt = now };
+        context.AddRange(bolus, aps, food);
+        context.SaveChanges();
+        var deletedAt = now.AddMinutes(1);
+        bolus.SysUpdatedAt = deletedAt;
+        aps.SysUpdatedAt = deletedAt;
+        food.SysUpdatedAt = deletedAt;
+        context.SaveChanges();
+        var service = CreateStatusService(_configuration, context, dbName);
+
+        var result = await service.GetLastModifiedAsync();
+
+        result.Treatments.Should().Be(deletedAt);
+        result.DeviceStatus.Should().Be(deletedAt);
+        result.Food.Should().Be(deletedAt);
+    }
+
+    [Fact]
     public async Task GetLastModifiedAsync_CalibrationNewerThanSgv_ReportsCalibrationStampForEntries()
     {
         var now = DateTime.UtcNow;

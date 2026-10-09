@@ -1,13 +1,11 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -16,7 +14,6 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -45,12 +42,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
         _context = _db.CreateContext();
 
-        _decomposer = NewDecomposer(new DeduplicationService(
-            _context, Mock.Of<IServiceScopeFactory>(), NullLogger<DeduplicationService>.Instance));
-    }
-
-    private TreatmentDecomposer NewDecomposer(IDeduplicationService deduplication) =>
-        new(
+        _decomposer = new(
             _context,
             Mock.Of<IBolusRepository>(), Mock.Of<ITempBasalRepository>(),
             Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(),
@@ -63,8 +55,8 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
             new AuditContext { IsSystem = true },
-            deduplication,
             NullLogger<TreatmentDecomposer>.Instance);
+    }
 
     public void Dispose()
     {
@@ -117,25 +109,6 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
 
         var primary = await _context.LinkedRecords.AsNoTracking().SingleAsync(l => l.IsPrimary);
         primary.RecordId.Should().Be(otherCopy);
-    }
-
-    [Fact]
-    public async Task A_failed_repoint_rolls_the_delete_back()
-    {
-        var named = await AddCarbAsync("t-1", Connector);
-        var deduplication = new Mock<IDeduplicationService>();
-        deduplication
-            .Setup(d => d.RepointPrimariesAwayFromAsync(
-                It.IsAny<RecordType>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("repoint failed"));
-        var decomposer = NewDecomposer(deduplication.Object);
-
-        var act = () => decomposer.DeleteFromSourceAsync(Connector, new HashSet<string> { "t-1" });
-
-        await act.Should().ThrowAsync<InvalidOperationException>();
-        _context.ChangeTracker.Clear();
-        (await DeletedAtAsync<CarbIntakeEntity>(named)).Should().BeNull(
-            "a deleted primary left in place would hide the other sources' copies");
     }
 
     [Fact]

@@ -109,6 +109,7 @@
               ) && predictionEnabled}
               defaultFocusHours={focusHours}
               initialChartData={data.initialChartData}
+              initialWindowStart={data.initialWindowStart}
               streamedHistoricalData={data.streamed?.historicalChartData}
             />
           </div>

@@ -155,6 +155,19 @@ public abstract class DecomposerBase
     protected static IDisposable SystemAttributedBatchWrites(IAuditContext auditContext)
         => SystemAuditScope.Push(auditContext);
 
+    protected static bool TryGetString(Dictionary<string, object> props, string key, out string value)
+    {
+        value = default!;
+        if (!props.TryGetValue(key, out var obj))
+            return false;
+
+        if (obj is string s) { value = s; return true; }
+        if (obj is System.Text.Json.JsonElement el && el.ValueKind == System.Text.Json.JsonValueKind.String)
+        { value = el.GetString()!; return true; }
+
+        return false;
+    }
+
     /// <summary>
     /// The batch twin of <see cref="UpsertByLegacyIdAsync"/>: a record whose legacy id is stored
     /// updates that row and lands in <see cref="DecompositionResult.UpdatedRecords"/>, so a resend

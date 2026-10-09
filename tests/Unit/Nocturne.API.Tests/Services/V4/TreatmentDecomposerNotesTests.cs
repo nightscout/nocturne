@@ -63,7 +63,6 @@ public class TreatmentDecomposerNotesTests : IDisposable
             activeProfileResolverMock.Object,
             insulinRepoMock.Object,
             Mock.Of<IAuditContext>(),
-            Mock.Of<IDeduplicationService>(),
             NullLogger<TreatmentDecomposer>.Instance);
     }
 

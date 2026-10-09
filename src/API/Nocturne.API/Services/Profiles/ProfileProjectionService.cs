@@ -88,7 +88,11 @@ public class ProfileProjectionService : IProfileProjectionService
     /// to the settings it can be assembled into (<see cref="OwnersAsync"/>). Past the horizon — the
     /// earliest last millisecond among the tables whose page filled — a table holds rows not yet
     /// read, so only profiles stamped at or before it are known to be complete. When none are, no
-    /// profile is stamped in (cursor, horizon] and the read resumes from the horizon.
+    /// profile is stamped in (cursor, horizon] and the read resumes from the horizon. A deleted
+    /// settings row is a deleted profile, delivered with <c>isValid: false</c>, unless another store
+    /// of the same document is still live (<see cref="LiveSiblingAsync"/>): the client knows the
+    /// document by one identifier, so that store is re-sent live at the delete's stamp instead. A
+    /// schedule row, live or deleted, only leads to the live settings that own it.
     /// </remarks>
     public async Task<ModifiedSincePage<Profile>> GetProfilesModifiedSinceAsync(
         long cursorMills, int limit, CancellationToken ct = default)
@@ -103,19 +107,50 @@ public class ProfileProjectionService : IProfileProjectionService
             var sensitivity = await _sensitivityRepo.GetModifiedSinceAsync(cursor, limit, ct);
             var targetRange = await _targetRangeRepo.GetModifiedSinceAsync(cursor, limit, ct);
 
-            var horizon = Horizon(limit, settingsPage, basal, carbRatio, sensitivity, targetRange);
-            List<IV4Record> schedules = [.. basal, .. carbRatio, .. sensitivity, .. targetRange];
+            var horizon = Horizon(
+                limit,
+                Records(settingsPage),
+                Records(basal),
+                Records(carbRatio),
+                Records(sensitivity),
+                Records(targetRange));
+            List<IV4Record> schedules =
+            [
+                .. Records(basal), .. Records(carbRatio), .. Records(sensitivity), .. Records(targetRange),
+            ];
 
-            var candidates = new Dictionary<Guid, TherapySettings>();
-            foreach (var settings in settingsPage.Concat(await OwnersAsync(schedules, ct)))
-                candidates.TryAdd(settings.Id, settings);
+            var candidates = new Dictionary<Guid, HistoryRecord<TherapySettings>>();
+            foreach (var settings in settingsPage)
+                candidates.TryAdd(settings.Record.Id, settings);
+            foreach (var settings in await OwnersAsync(schedules, ct))
+                candidates.TryAdd(settings.Id, new HistoryRecord<TherapySettings>(settings, Deleted: false));
 
-            var stamped = new List<(Profile Profile, Guid SettingsId)>();
-            foreach (var settings in candidates.Values)
+            var stamped = new Dictionary<Guid, Profile>();
+            foreach (var (settings, deleted) in candidates.Values)
             {
                 var profile = await AssembleProfileAsync(settings, ct);
-                if (profile.SrvModified > cursor && (horizon is null || profile.SrvModified <= horizon))
-                    stamped.Add((profile, settings.Id));
+                var settingsId = settings.Id;
+                if (deleted)
+                {
+                    if (await LiveSiblingAsync(settings, ct) is { } sibling)
+                    {
+                        var deletedAt = profile.SrvModified;
+                        profile = await AssembleProfileAsync(sibling, ct);
+                        profile.SrvModified = Math.Max(profile.SrvModified ?? 0, deletedAt ?? 0);
+                        settingsId = sibling.Id;
+                    }
+                    else
+                    {
+                        profile.IsValid = false;
+                    }
+                }
+
+                if (profile.SrvModified > cursor
+                    && (horizon is null || profile.SrvModified <= horizon)
+                    && (!stamped.TryGetValue(settingsId, out var held) || held.SrvModified < profile.SrvModified))
+                {
+                    stamped[settingsId] = profile;
+                }
             }
 
             if (stamped.Count == 0)
@@ -128,9 +163,9 @@ public class ProfileProjectionService : IProfileProjectionService
             }
 
             var ordered = stamped
-                .OrderBy(p => p.Profile.SrvModified)
-                .ThenBy(p => p.SettingsId)
-                .Select(p => p.Profile)
+                .OrderBy(p => p.Value.SrvModified)
+                .ThenBy(p => p.Key)
+                .Select(p => p.Value)
                 .ToList();
 
             var page = ordered.Count <= limit
@@ -145,6 +180,10 @@ public class ProfileProjectionService : IProfileProjectionService
     /// The earliest last millisecond among the <paramref name="pages"/> that came back full, or
     /// <c>null</c> when every table was read to its end.
     /// </summary>
+    private static IReadOnlyList<IV4Record> Records<T>(IReadOnlyList<HistoryRecord<T>> page)
+        where T : IV4Record =>
+        page.Select(r => (IV4Record)r.Record).ToList();
+
     private static long? Horizon(int limit, params IReadOnlyList<IV4Record>[] pages) =>
         pages
             .Where(page => page.Count >= limit)
@@ -187,6 +226,20 @@ public class ProfileProjectionService : IProfileProjectionService
         }
 
         return owners;
+    }
+
+    /// <summary>
+    /// The newest live row stored from the same profile document as the deleted
+    /// <paramref name="settings"/>, which decomposition keys <c>"{profileId}:{storeName}"</c>, or
+    /// <c>null</c> when the whole document is gone.
+    /// </summary>
+    private async Task<TherapySettings?> LiveSiblingAsync(TherapySettings settings, CancellationToken ct)
+    {
+        if (settings.LegacyId?.Contains(':') != true)
+            return null;
+
+        return (await _therapyRepo.GetByLegacyIdPrefixAsync($"{TherapySettings.DocumentIdOf(settings)}:", ct))
+            .FirstOrDefault(s => s.Id != settings.Id);
     }
 
     /// <inheritdoc />

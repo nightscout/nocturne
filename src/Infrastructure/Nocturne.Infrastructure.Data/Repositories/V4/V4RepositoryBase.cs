@@ -3,9 +3,11 @@ using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -558,35 +560,64 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.DeleteAsync" />
+    /// <remarks>Deletes every copy in the record's duplicate group (<see cref="DuplicateDelete.EveryCopy"/>).</remarks>
     public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"{typeof(TModel).Name} {id} not found");
-        entity.DeletedAt = DateTime.UtcNow;
-        await ctx.SaveChangesAsync(ct);
-        var model = ToDomain(entity);
-        await RaiseBroadcastAsync([], [], [model], origin, ct);
+        var (_, copies) = await DuplicateGroupPrimaries.SoftDeleteAsync(ctx, entity, DedupRecordType, ct);
+        await RaiseBroadcastAsync([], [], [ToDomain(entity), .. copies.Select(ToDomain)], origin, ct);
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.RestoreAsync" />
+    /// <remarks>
+    /// Restores the copies in the record's duplicate group deleted with it, so the group reads as
+    /// before the delete (<see cref="SoftDeleteRestoreExtensions.RestoreDeletedGroupAsync{TEntity}(NocturneDbContext, Guid, string, CancellationToken)"/>).
+    /// </remarks>
     public async Task<TModel> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entity = await ctx.RestoreDeletedAsync<TEntity>(id, typeof(TModel).Name, ct);
-        // A restored record reappears in the dataset: broadcast it as a create so clients re-add it.
-        var restored = ToDomain(entity);
-        await RaiseBroadcastAsync([restored], [], [], origin, ct);
-        return restored;
+        var restore = await ctx.RestoreDeletedGroupAsync<TEntity>(id, typeof(TModel).Name, ct);
+        await BroadcastRestoreAsync(ctx, restore, origin, ct);
+        return ToDomain(restore.Restored[0]);
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.BulkRestoreAsync" />
+    /// <remarks>Restores each record's group as <see cref="RestoreAsync"/> does.</remarks>
     public async Task<BulkRestoreResult<TModel>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var result = (await ctx.RestoreDeletedAsync<TEntity>(ids, typeof(TModel).Name, ct)).Map(ToDomain);
-        await RaiseBroadcastAsync(result.Restored, [], [], origin, ct);
-        return result;
+        var restore = await ctx.RestoreDeletedGroupAsync<TEntity>(ids, typeof(TModel).Name, ct);
+        await BroadcastRestoreAsync(ctx, restore, origin, ct);
+        return new BulkRestoreResult<TModel>
+        {
+            Restored = restore.Restored.Select(ToDomain).ToList(),
+            Conflicts = restore.Conflicts,
+        };
+    }
+
+    /// <summary>
+    /// Broadcasts what a restore brought back into normal reads: a restored row that normal reads
+    /// show is re-added as a create, and a live copy promoted to its group's primary as an update. A
+    /// restored copy that is not its group's primary stays hidden, so it is not announced.
+    /// </summary>
+    private async Task BroadcastRestoreAsync(
+        NocturneDbContext ctx, GroupRestore<TEntity> restore, WriteOrigin origin, CancellationToken ct)
+    {
+        var restored = restore.Restored.Concat(restore.Copies).ToList();
+        Guid[] candidates = [.. restored.Select(e => e.Id), .. restore.Promoted];
+        var visible = (await ApplyReadVisibility(ctx.Set<TEntity>().AsNoTracking(), ctx)
+                .Where(e => candidates.Contains(e.Id))
+                .Select(e => e.Id)
+                .ToListAsync(ct))
+            .ToHashSet();
+
+        var created = restored.Where(e => visible.Contains(e.Id)).ToList();
+        var createdIds = created.Select(e => e.Id).ToHashSet();
+        var updated = await LoadAsync(
+            ctx, restore.Promoted.Where(id => visible.Contains(id) && !createdIds.Contains(id)).ToList(), ct);
+        await RaiseBroadcastAsync(created.Select(ToDomain).ToList(), updated, [], origin, ct);
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetDeletedAsync" />
@@ -609,6 +640,14 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// </summary>
     protected internal virtual RecordType? DedupRecordType => null;
 
+    /// <summary>The live records of <paramref name="ids"/>, for a broadcast.</summary>
+    private async Task<IReadOnlyList<TModel>> LoadAsync(
+        NocturneDbContext ctx, IReadOnlyList<Guid> ids, CancellationToken ct) =>
+        ids.Count == 0
+            ? []
+            : (await ctx.Set<TEntity>().AsNoTracking().Where(e => ids.Contains(e.Id)).ToListAsync(ct))
+                .Select(ToDomain).ToList();
+
     /// <summary>
     /// Applies <see cref="ReadVisibilityFilter.ExcludeNonPrimary{TEntity}"/> for
     /// <see cref="DedupRecordType"/>. Every read path of a dedup participant routes through this so
@@ -627,7 +666,10 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return await query.CountAsync(ct);
     }
 
-    /// <summary>Soft-deletes the record(s) with the given legacy id. Returns the number affected.</summary>
+    /// <summary>
+    /// Soft-deletes the record(s) with the given legacy id, and every other source's copy
+    /// deduplication linked them to. Returns the number affected.
+    /// </summary>
     /// <remarks>
     /// Routes through the audited soft-delete helper so every V4 type writes a mutation_audit_log row
     /// and carries the user-delete dedup discriminator. Virtual so types with a type-specific delete
@@ -637,7 +679,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await AuditedSoftDeleteAndBroadcastAsync(
-            ctx, ctx.Set<TEntity>().Where(e => e.LegacyId == legacyId), $"legacy_id={legacyId}", origin, ct);
+            ctx, ctx.Set<TEntity>().Where(e => e.LegacyId == legacyId), $"legacy_id={legacyId}",
+            DuplicateDelete.EveryCopy, origin, ct);
     }
 
     /// <summary>
@@ -646,14 +689,16 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// </summary>
     /// <returns>The number of rows soft-deleted.</returns>
     protected async Task<int> AuditedSoftDeleteAndBroadcastAsync(
-        NocturneDbContext ctx, IQueryable<TEntity> rows, string scope, WriteOrigin origin, CancellationToken ct)
+        NocturneDbContext ctx, IQueryable<TEntity> rows, string scope, DuplicateDelete duplicates,
+        WriteOrigin origin, CancellationToken ct)
     {
-        var result = await ctx.AuditedSoftDeleteWithEntitiesAsync(rows, AuditContext, scope, ct);
+        var result = await ctx.AuditedSoftDeleteWithEntitiesAsync(rows, AuditContext, scope, ct, duplicates);
 
         if (result.Collapsed)
             await RaiseBulkDeleteBroadcastAsync(result.Count, origin, ct);
         else
-            await RaiseBroadcastAsync([], [], result.Entities.Select(ToDomain).ToList(), origin, ct);
+            await RaiseBroadcastAsync(
+                [], await LoadAsync(ctx, result.Promoted, ct), result.Entities.Select(ToDomain).ToList(), origin, ct);
 
         return result.Count;
     }
@@ -661,15 +706,18 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetModifiedSinceAsync" />
     /// <remarks>
     /// Pages on <c>sys_updated_at</c>, the column <see cref="ToDomain"/> reports as
-    /// <see cref="IV4Record.ModifiedAt"/>, through <see cref="HistoryPage"/>, under the same
-    /// <see cref="ApplyReadVisibility"/> every other read of this type observes.
+    /// <see cref="IV4Record.ModifiedAt"/>, through <see cref="HistoryPage"/>, with the soft-delete
+    /// filter lifted. Live rows observe the same <see cref="ApplyReadVisibility"/> every other read
+    /// of this type does; deleted rows are all delivered.
     /// </remarks>
-    public async Task<IReadOnlyList<TModel>> GetModifiedSinceAsync(
+    public async Task<IReadOnlyList<HistoryRecord<TModel>>> GetModifiedSinceAsync(
         long cursorMills, int limit, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await HistoryPage.GetAsync(
-            ApplyReadVisibility(ctx.Set<TEntity>().AsNoTracking(), ctx),
+            DedupRecordType is { } recordType
+                ? ctx.Set<TEntity>().IncludingDeleted().AsNoTracking().ExcludeNonPrimaryKeepingDeleted(ctx, recordType)
+                : ctx.Set<TEntity>().IncludingDeleted().AsNoTracking(),
             e => e.SysUpdatedAt,
             e => e.Id,
             cursorMills,
@@ -678,7 +726,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             typeof(TModel).Name,
             ct);
 
-        return entities.Select(ToDomain).ToList();
+        return entities.Select(e => new HistoryRecord<TModel>(ToDomain(e), e.DeletedAt is not null)).ToList();
     }
 
     /// <summary>Latest stored record timestamp, optionally scoped to a data source (connector watermark).</summary>

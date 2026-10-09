@@ -40,7 +40,9 @@ public interface ITreatmentDecomposer
         IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
-    /// Deletes all v4 records that were decomposed from a legacy Treatment with the given ID.
+    /// Deletes all v4 records that were decomposed from a legacy Treatment with the given ID, and
+    /// every other source's copy deduplication linked them to: a user deleting a treatment deletes
+    /// the event, not one source's report of it.
     /// </summary>
     /// <param name="legacyId">The legacy Treatment ID</param>
     /// <param name="ct">Cancellation token</param>

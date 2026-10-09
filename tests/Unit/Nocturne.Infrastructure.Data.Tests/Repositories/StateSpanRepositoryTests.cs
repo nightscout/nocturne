@@ -794,7 +794,7 @@ public class StateSpanRepositoryTests : IDisposable
         var originalRowId = (await RowsForAsync("glooko-exercise-1")).Single().Id;
 
         var deleted = await _repository.DeleteStateSpanAsync("glooko-exercise-1");
-        deleted.Should().BeTrue();
+        deleted.Should().NotBeEmpty();
 
         await _repository.UpsertStateSpanAsync(ConnectorSpan());
 
@@ -814,7 +814,7 @@ public class StateSpanRepositoryTests : IDisposable
         var originalRowId = (await RowsForAsync("glooko-exercise-1")).Single().Id;
 
         _auditContext.IsSystem = true;
-        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeTrue();
+        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().NotBeEmpty();
         _auditContext.IsSystem = false;
 
         await _repository.UpsertStateSpanAsync(ConnectorSpan());
@@ -842,7 +842,7 @@ public class StateSpanRepositoryTests : IDisposable
         await _repository.UpsertStateSpanAsync(activity);
         var originalRowId = (await RowsForAsync("glooko-illness-1")).Single().Id;
 
-        (await _repository.DeleteActivityStateSpanAsync("glooko-illness-1")).Should().BeTrue();
+        (await _repository.DeleteActivityStateSpanAsync("glooko-illness-1")).Should().NotBeEmpty();
 
         (await _repository.GetActivityStateSpansAsync()).Should().BeEmpty();
 
@@ -1017,9 +1017,9 @@ public class StateSpanRepositoryTests : IDisposable
     public async Task DeletedSpan_DoesNotBlockASecondDelete_ButReportsNotFound()
     {
         await _repository.UpsertStateSpanAsync(ConnectorSpan());
-        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeTrue();
+        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().NotBeEmpty();
 
-        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeFalse();
+        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeEmpty();
     }
 
     [Fact]
@@ -1208,7 +1208,7 @@ public class StateSpanRepositoryTests : IDisposable
     {
         await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 1, "pr-x"));
         await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 5, "pr-b"));
-        (await _repository.DeleteStateSpanAsync("pr-x")).Should().BeTrue();
+        (await _repository.DeleteStateSpanAsync("pr-x")).Should().NotBeEmpty();
 
         await _repository.BulkUpsertAsync(
         [
@@ -1313,7 +1313,7 @@ public class StateSpanRepositoryTests : IDisposable
     {
         await _repository.UpsertStateSpanAsync(ConnectorSpan());
         var originalRowId = (await RowsForAsync("glooko-exercise-1")).Single().Id;
-        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeTrue();
+        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().NotBeEmpty();
 
         await _repository.BulkUpsertAsync(
             [ConnectorSpan(), Span(StateSpanCategory.Exercise, "Cycling", 10, "ex-new")]);
@@ -1327,7 +1327,7 @@ public class StateSpanRepositoryTests : IDisposable
     public async Task BulkUpsertAsync_UserDeletedOpenSpan_IsNotSupersededByALaterSpanInTheBatch()
     {
         await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 9, "ov-deleted"));
-        (await _repository.DeleteStateSpanAsync("ov-deleted")).Should().BeTrue();
+        (await _repository.DeleteStateSpanAsync("ov-deleted")).Should().NotBeEmpty();
 
         await _repository.BulkUpsertAsync(
         [
@@ -1372,7 +1372,7 @@ public class StateSpanRepositoryTests : IDisposable
     {
         await _repository.UpsertStateSpanAsync(ConnectorSpan());
         _auditContext.IsSystem = true;
-        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeTrue();
+        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().NotBeEmpty();
         _auditContext.IsSystem = false;
 
         await _repository.BulkUpsertAsync([ConnectorSpan()]);
@@ -1412,7 +1412,7 @@ public class StateSpanRepositoryTests : IDisposable
     public async Task CreateActivitiesAsStateSpansAsync_DoesNotReturnASpanTheUserDeleted()
     {
         await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Exercise, "Running", 8, "act-deleted"));
-        (await _repository.DeleteStateSpanAsync("act-deleted")).Should().BeTrue();
+        (await _repository.DeleteStateSpanAsync("act-deleted")).Should().NotBeEmpty();
 
         var created = (await _repository.CreateActivitiesAsStateSpansAsync(
         [

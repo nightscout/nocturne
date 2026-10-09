@@ -51,12 +51,6 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<ApsSnapshot>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
 
-    /// <summary>Retrieve <see cref="ApsSnapshot"/> records modified since the given timestamp, ordered oldest-first.</summary>
-    /// <param name="lastModifiedMills">Unix millisecond timestamp; records with <c>SysUpdatedAt</c> at or after this value are returned.</param>
-    /// <param name="limit">Maximum number of records to return (default 1000).</param>
-    /// <param name="ct">Cancellation token.</param>
-    Task<IEnumerable<ApsSnapshot>> GetModifiedSinceAsync(long lastModifiedMills, int limit = 1000, CancellationToken ct = default);
-
     /// <summary>
     /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> for the current tenant
     /// as of an optional point in time, or <c>null</c> if none exist. When <paramref name="asOf"/>
