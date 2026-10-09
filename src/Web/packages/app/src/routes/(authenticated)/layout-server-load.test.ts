@@ -27,7 +27,7 @@ interface Situation {
   dashboardSlugs?: string[];
   /** The /api/v4/status document; a number rejects with that HTTP status. */
   status:
-    | { status?: string; tenantSlug?: string | null; anonymousReadAccess?: boolean }
+    | { status?: string; tenantSlug?: string | null; anonymousReadAccess?: boolean; isDemo?: boolean }
     | number;
   /** The passkey auth-status answer; a number rejects with that HTTP status. */
   authStatus: { onboardingCompleted?: boolean } | number;
@@ -319,6 +319,33 @@ describe("(authenticated) layout load — the public share host", () => {
     await expect(
       redirectLocation({ host: `acme.${BASE}`, cookies: ownerSession, ...sharedTenant })
     ).resolves.toBeNull();
+  });
+});
+
+describe("(authenticated) layout load — demo tenant sign-in", () => {
+  const demo = {
+    host: `demo.${BASE}`,
+    status: { status: "ok", isDemo: true },
+    authStatus: { onboardingCompleted: true },
+    signedIn: false,
+  } as const;
+
+  it("sends a signed-out visitor straight to the demo session, not by way of the login page", async () => {
+    await expect(redirectLocation({ ...demo, pathname: "/reports" })).resolves.toBe(
+      "/api/v4/demo/session?redirect=%2Freports%3F__autologin%3D1"
+    );
+  });
+
+  it("falls back to the login page once the one auto-login attempt has been spent", async () => {
+    await expect(
+      redirectLocation({ ...demo, pathname: "/reports?__autologin=1" })
+    ).resolves.toBe("/auth/login?returnUrl=%2Freports%3F__autologin%3D1");
+  });
+
+  it("keeps a tenant that is not a demo on the login page", async () => {
+    await expect(
+      redirectLocation({ ...demo, status: { status: "ok", isDemo: false } })
+    ).resolves.toBe("/auth/login?returnUrl=%2F");
   });
 });
 

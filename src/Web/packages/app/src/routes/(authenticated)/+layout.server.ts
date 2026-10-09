@@ -5,6 +5,7 @@ import { getRequestStatus } from "$lib/server/request-status";
 import { isTenantlessRoute } from "$lib/navigation/tenantless-navigation";
 import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 import { toIsoString } from "$lib/utils/api-date";
+import { autoLoginEndpoint, autoLoginRedirect } from "$lib/server/auto-login";
 
 /** Permissions that grant read access to glucose data (mirrors API's CanRead + OAuth scopes). */
 const GLUCOSE_READ_PERMISSIONS = [
@@ -81,10 +82,19 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, parent }) =
   // Redirect anonymous visitors to login unless they are on the share host of a tenant with
   // sharing enabled. The share host keeps serving its read-only dashboard, so the shell is never
   // rendered for a visitor who would otherwise see a burst of 401s and a client bounce.
+  //
+  // Where auto-login applies (a demo tenant, or dev auto-login) the visitor goes straight to its
+  // endpoint: the status in hand already decides it, and the login page would only fetch it again
+  // to redirect onward, costing every first visit a round-trip.
   if (!locals.isAuthenticated || !locals.user) {
     if (!publicViewAllowed) {
-      const returnUrl = encodeURIComponent(url.pathname + url.search);
-      throw redirect(303, `/auth/login?returnUrl=${returnUrl}`);
+      const returnUrl = url.pathname + url.search;
+      const endpoint = autoLoginEndpoint(status?.isDemo, locals.isShareHost);
+      throw redirect(
+        303,
+        (endpoint && autoLoginRedirect(endpoint, returnUrl, url.origin)) ??
+          `/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`
+      );
     }
   }
 
