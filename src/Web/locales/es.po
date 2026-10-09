@@ -23044,7 +23044,7 @@ msgstr "Un comando en el navegador configura un servidor gratuito, HTTPS y Noctu
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Non-diabetic range"
-msgstr "Rango sin diabetes"
+msgstr "Rango no diabético"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Type 1 diabetes target"
@@ -23096,7 +23096,7 @@ msgstr "No se pudieron cargar los datos de eHbA1c. Inténtalo de nuevo más tard
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Not enough glucose history yet — each point needs at least a month of readings within the trailing 90 days."
-msgstr "Todavía no hay suficiente historial de glucosa: cada punto necesita al menos un mes de lecturas dentro de los 90 días anteriores."
+msgstr "Aún no hay suficiente historial de glucosa; cada punto necesita al menos un mes de lecturas dentro de los 90 días anteriores."
 
 #. 0: formatLongDate(latest.date)
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
@@ -23111,12 +23111,12 @@ msgstr "Glucosa media ponderada: {0} {1}"
 #. 0: formatLongDate(extremes.highest.date)
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Highest: <0/> ({0})"
-msgstr "Máximo: <0/> ({0})"
+msgstr "Más alta: <0/> ({0})"
 
 #. 0: formatLongDate(extremes.lowest.date)
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lowest: <0/> ({0})"
-msgstr "Mínimo: <0/> ({0})"
+msgstr "Más baja: <0/> ({0})"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lab result (not included in the calculation)"
@@ -23132,7 +23132,7 @@ msgstr "Introduce aquí un resultado de HbA1c de laboratorio; se muestra como un
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "No lab results added yet."
-msgstr "Todavía no se han añadido resultados de laboratorio."
+msgstr "Aún no se han añadido resultados de laboratorio."
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Delete lab result"
@@ -23163,7 +23163,7 @@ msgstr "¿Eliminar este resultado de laboratorio?"
 #. 0: formatA1c(pendingDeleteLabResult.valuePercent ?? 0); 1: formatLongDate(toDate(pendingDeleteLabResult.measuredAt))
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Delete the {0} lab result from {1}."
-msgstr "Elimina el resultado de laboratorio {0} del {1}."
+msgstr "Eliminar el resultado de laboratorio de {0} del {1}."
 
 #: src/routes/(authenticated)/settings/access/+page.svelte
 msgid "The browsers signed in to this account, and where to find everything else that can reach your data."
