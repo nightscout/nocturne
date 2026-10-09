@@ -47,7 +47,10 @@
     "eslint": "^10.3.0",
     "rimraf": "^5.0.5",
     "typescript": "^5.3.3",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.6",
+    "ws": "8.20.1",
+    "@types/ws": "8.18.1",
+    "socket.io-client": "4.8.3"
   },
   "engines": {
     "node": ">=24"
