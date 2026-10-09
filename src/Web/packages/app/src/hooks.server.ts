@@ -119,14 +119,13 @@ const authHandle: Handle = async ({ event, resolve }) => {
       event.locals.isPlatformAdmin = session.isPlatformAdmin ?? false;
       event.locals.isPlatformAccessGrant = session.isPlatformAccessGrant ?? false;
 
-      // Fetch effective permissions (granted scopes and history window) for the current tenant
-      try {
-        const permissions = await apiClient.myPermissions.getMyPermissions();
-        event.locals.effectivePermissions = permissions.scopes ?? [];
-        event.locals.limitTo24Hours = permissions.limitTo24Hours ?? false;
-        event.locals.refusedAsDemoSubject = permissions.refusedAsDemoSubject ?? false;
-      } catch {
-        // Non-fatal — permissions will default to empty
+      // Effective permissions (granted scopes and history window) for the current tenant. Absent
+      // where the permissions endpoint would refuse the caller, which leaves them defaulting empty.
+      const grant = session.grant;
+      if (grant) {
+        event.locals.effectivePermissions = grant.scopes ?? [];
+        event.locals.limitTo24Hours = grant.limitTo24Hours ?? false;
+        event.locals.refusedAsDemoSubject = grant.refusedAsDemoSubject ?? false;
       }
     }
   } catch (error) {
@@ -136,6 +135,29 @@ const authHandle: Handle = async ({ event, resolve }) => {
 
   return resolve(event);
 };
+
+/**
+ * Hosts whose readiness probe last succeeded, with when that answer expires. Only "ready" is
+ * remembered: a host entering setup or recovery is redirected at most READY_TTL_MS late, while the
+ * API keeps refusing its data calls meanwhile; a host that is not ready is probed every request.
+ */
+const readyUntil = new Map<string, number>();
+const READY_TTL_MS = 10_000;
+const READY_CACHE_MAX_HOSTS = 1_000;
+
+function isReadyCached(host: string | null): boolean {
+  const key = host ?? "";
+  const until = readyUntil.get(key);
+  if (until === undefined) return false;
+  if (until > Date.now()) return true;
+  readyUntil.delete(key);
+  return false;
+}
+
+function cacheReady(host: string | null): void {
+  if (readyUntil.size >= READY_CACHE_MAX_HOSTS) readyUntil.clear();
+  readyUntil.set(host ?? "", Date.now() + READY_TTL_MS);
+}
 
 /**
  * Readiness handler - detects setup/recovery mode and an unresolvable host, and redirects to the
@@ -175,9 +197,13 @@ const readinessHandle: Handle = async ({ event, resolve }) => {
 
   // Probe the API for setup/recovery mode. The probe's answer is the failure it throws: a
   // successful status means the instance is ready and this gate has nothing to do.
+  const probeHost = getEffectiveHost(event.request, event.cookies);
+  if (isReadyCached(probeHost)) {
+    return resolve(event);
+  }
+
   try {
     if (!event.locals.statusProbed) {
-      const probeHost = getEffectiveHost(event.request, event.cookies);
       const probeHeaders: Record<string, string> = { "X-Forwarded-Proto": getOriginalProto(event.request) };
       if (probeHost) probeHeaders["X-Forwarded-Host"] = probeHost;
       // Deliberately NO instance key here: a valid instance-key request bypasses the
@@ -192,6 +218,7 @@ const readinessHandle: Handle = async ({ event, resolve }) => {
       await apiClient.status.getStatus();
 
       event.locals.statusProbed = true;
+      cacheReady(probeHost);
     }
   } catch (error) {
     if (error && typeof error === "object" && "status" in error) {
@@ -498,7 +525,11 @@ const healthHandle: Handle = async ({ event, resolve }) => {
   return resolve(event);
 };
 
-// Chain the auth handler, site security handler, proxy handler, and API client handler.
 // requestContextHandle comes first of the request-serving handlers: everything after it reads
 // the facts it establishes.
-export const handle: Handle = sequence(healthHandle, requestContextHandle, shareHostSecurityHandle, resetBitsId, authHandle, readinessHandle, proxyHandle, apiClientHandle, locale);
+//
+// proxyHandle runs ahead of authHandle and readinessHandle. A proxied call reads none of the
+// locals they set and the API authenticates it and answers its setup/recovery state itself, so
+// running them first cost every browser /api call three serial API round-trips, and let a
+// session refresh in authHandle rotate the refresh token the proxy then forwarded stale.
+export const handle: Handle = sequence(healthHandle, requestContextHandle, shareHostSecurityHandle, proxyHandle, resetBitsId, authHandle, readinessHandle, apiClientHandle, locale);
