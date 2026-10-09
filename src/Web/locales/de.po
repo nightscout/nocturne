@@ -22050,6 +22050,7 @@ msgstr ""
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
+#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "No estimate"
 msgstr ""
 
@@ -24744,11 +24745,13 @@ msgstr ""
 msgid "Assess the reliability of your data"
 msgstr ""
 
-#~ msgid "Estimated HbA1c"
-#~ msgstr ""
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Estimated HbA1c"
+msgstr ""
 
-#~ msgid "How your estimated HbA1c has trended over the years"
-#~ msgstr ""
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "How your estimated HbA1c has trended over the years"
+msgstr ""
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Patterns & Trends"
@@ -25808,95 +25811,6 @@ msgstr ""
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Omitting the bind-data override changes the declared storage back to the named volume."
 msgstr ""
-
-#. 0: a1cLabel()
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "Estimated {0}"
-msgstr "Geschätzter {0}"
-
-#. 0: a1cLabel(true)
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "How your {0} has trended over the years"
-msgstr "Wie sich dein {0} über die Jahre entwickelt hat"
-
-#. 0: a1cLabel(true)
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Time-in-range, {0} estimates, and averages"
-msgstr "Zeit im Zielbereich, {0}-Schätzungen und Mittelwerte"
-
-#. 0: a1cLabel()
-#: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "{0} display name"
-msgstr "{0}-Anzeigename"
-
-#: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "Estimated values retain the e prefix: eHbA1c or eA1c."
-msgstr "Geschätzte Werte behalten das Präfix e: eHbA1c oder eA1c."
-
-#. 0: a1cLabel()
-#: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "{0} display unit"
-msgstr "{0}-Anzeigeeinheit"
-
-#. 0: a1cLabel()
-#: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {0}. Blood glucose units are set separately."
-msgstr "Verwende % (NGSP) oder mmol/mol (IFCC) für gemessenen und geschätzten {0}. Die Blutzuckereinheit wird separat eingestellt."
-
-#. 0: formatA1c(variability?.a1cTarget)
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "Target: <{0}"
-msgstr "Ziel: <{0}"
-
-#. 0: formatA1c(variability?.a1cTarget)
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "Target: below {0}. Your care team sets your individual target."
-msgstr "Ziel: unter {0}. Dein Behandlungsteam legt dein individuelles Ziel fest."
-
-#. 0: a1cLabel(true); 1: bgOr(stats?.mean); 2: bgLabel(); 3: dayCount
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "Calculated using the ADAG formula (NGSP %): {0} = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {1} {2} over {3} days."
-msgstr "Berechnet mit der ADAG-Formel (NGSP %): {0} = (mittlere Glukose in mmol/L + 2.59) / 1.59. Basierend auf einer mittleren Glukose von {1} {2} über {3} Tage."
-
-#. 0.0: a1cLabel(true); 0: a1cLabel()
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "<0>What is {0}?</0> This estimates what your lab {0} would be based on your average glucose."
-msgstr "<0>Was ist {0}?</0> Dies schätzt deinen im Labor gemessenen {0} anhand deiner mittleren Glukose."
-
-#. 0: a1cLabel(true)
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
-msgid "Distribution, {0} estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
-msgstr "Für Verteilung, {0}-Schätzung und Variabilitätsstatistiken sind Glukosemessungen erforderlich. Versuche einen längeren Zeitraum."
-
-#. 0: a1cLabel(); 1: a1cLabel(true)
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0/> Estimated {0} ({1})"
-msgstr "<0/> Geschätzter {0} ({1})"
-
-#. 0: a1cLabel(true); 1: a1cLabel(); 2: a1cLabel(true)
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "{0} estimates what a lab {1} test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to NGSP percent with the ADAG formula: {2} (%) = (average glucose in mg/dL + 46.7) / 28.7."
-msgstr "{0} schätzt, welches Ergebnis ein Labortest für {1} an einem bestimmten Tag liefern würde. Für jeden Tag wird die mittlere Glukose aller Messungen der vorhergehenden 90 Tage verwendet, wobei neuere Tage stärker gewichtet werden. Die jüngsten ~30 Tage machen ungefähr die Hälfte der Schätzung aus; der Einfluss älterer Tage nimmt exponentiell ab. Dies ähnelt der Art, wie glykiertes Hämoglobin die Glukosebelastung während der ~90–120 Tage langen Lebensdauer eines roten Blutkörperchens widerspiegelt. Diese gewichtete mittlere Glukose wird anschließend mit der ADAG-Formel in NGSP-Prozent umgerechnet: {2} (%) = (mittlere Glukose in mg/dL + 46.7) / 28.7."
-
-#. 0: a1cLabel(true)
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0/> Loading {0} timeline..."
-msgstr "<0/> {0}-Zeitverlauf wird geladen..."
-
-#. 0: a1cLabel(true)
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Failed to load {0} data. Please try again later."
-msgstr "Die {0}-Daten konnten nicht geladen werden. Bitte versuche es später erneut."
-
-#. 0: a1cLabel(); 1: a1cLabel(true)
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Lab {0} draws, shown as triangles on the chart above. They are not included in the {1} calculation."
-msgstr "Labormessungen von {0}, dargestellt als Dreiecke in der Grafik oben. Sie werden nicht in die Berechnung von {1} einbezogen."
-
-#. 0: a1cLabel(); 1: a1cLabel(true); 2: a1cLabel(true)
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Enter a lab {0} result here — shown as a triangle marker on the chart above, so you can see how closely the {1} estimate tracks an actual lab draw. Lab results are not included in the {2} calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
-msgstr "Gib hier einen Laborwert für {0} ein. Er erscheint als Dreieck in der Grafik oben, damit du vergleichen kannst, wie gut die {1}-Schätzung einem tatsächlichen Laborwert entspricht. Laborwerte werden nicht in die Berechnung von {2} einbezogen. Das Datum unten ist das Datum der Blutentnahme, nicht das Datum der Eingabe."
 
 #: src/lib/stores/realtime-store.svelte.ts
 msgid "Real-time data unavailable"

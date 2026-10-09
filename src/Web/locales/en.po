@@ -22058,6 +22058,7 @@ msgstr "Distribution, A1c estimation and variability statistics need glucose rea
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
+#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "No estimate"
 msgstr "No estimate"
 
@@ -25817,6 +25818,10 @@ msgstr "For bind-data with the BYO-proxy override:"
 msgid "Omitting the bind-data override changes the declared storage back to the named volume."
 msgstr "Omitting the bind-data override changes the declared storage back to the named volume."
 
+#: src/lib/stores/realtime-store.svelte.ts
+msgid "Real-time data unavailable"
+msgstr "Real-time data unavailable"
+
 #. 0: a1cLabel()
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Estimated {0}"
@@ -25905,7 +25910,3 @@ msgstr "Lab {0} draws, shown as triangles on the chart above. They are not inclu
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Enter a lab {0} result here — shown as a triangle marker on the chart above, so you can see how closely the {1} estimate tracks an actual lab draw. Lab results are not included in the {2} calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
 msgstr "Enter a lab {0} result here — shown as a triangle marker on the chart above, so you can see how closely the {1} estimate tracks an actual lab draw. Lab results are not included in the {2} calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
-
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Real-time data unavailable"
-msgstr "Real-time data unavailable"
