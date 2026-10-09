@@ -712,7 +712,7 @@ public class DeviceStatusProjectionServiceTests
 
         device.Should().BeNull();
         from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc));
-        to.Should().Be(new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc));
+        to.Should().Be(new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1));
     }
 
     [Fact]
@@ -734,7 +734,7 @@ public class DeviceStatusProjectionServiceTests
 
         device.Should().BeNull();
         from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc));
-        to.Should().Be(new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc));
+        to.Should().Be(new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1));
     }
 
     [Fact]
@@ -745,7 +745,7 @@ public class DeviceStatusProjectionServiceTests
 
         device.Should().Be("openaps://rpi");
         from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc));
-        to.Should().Be(new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc));
+        to.Should().Be(new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1));
     }
 
     [Fact]
@@ -756,6 +756,145 @@ public class DeviceStatusProjectionServiceTests
         device.Should().BeNull();
         from.Should().BeNull();
         to.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("""{"created_at":{"$gte":1705276800000,"$lte":1705363200000}}""")]
+    [InlineData("""{"created_at":{"$lte":1705363200000,"$gte":1705276800000}}""")]
+    public void ParseFindQuery_WithJsonMillsWindow_ExtractsBothBounds(string find)
+    {
+        var (_, from, to) = DeviceStatusProjectionService.ParseFindQuery(find);
+
+        from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+        to.Should().Be(new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void ParseFindQuery_WithJsonBareMills_IsAnExactInstant()
+    {
+        var (_, from, to) = DeviceStatusProjectionService.ParseFindQuery(
+            """{"created_at":1705320000000}""");
+
+        var instant = new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc);
+        from.Should().Be(instant);
+        to.Should().Be(instant);
+    }
+
+    [Theory]
+    [InlineData("""{"created_at":{"$eq":1705320000000,"$gte":1705276800000}}""")]
+    [InlineData("""{"created_at":{"$gte":1705276800000,"$eq":1705320000000}}""")]
+    [InlineData("""{"created_at":{"$eq":1705320000000,"$lte":1705363200000}}""")]
+    [InlineData("""{"created_at":{"$lte":1705363200000,"$eq":1705320000000}}""")]
+    public void ParseFindQuery_WithEqualityInsideBound_NarrowsToTheInstant(string find)
+    {
+        var (_, from, to) = DeviceStatusProjectionService.ParseFindQuery(find);
+
+        var instant = new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc);
+        from.Should().Be(instant);
+        to.Should().Be(instant);
+    }
+
+    [Theory]
+    [InlineData("""{"created_at":{"$eq":1705276800000,"$gte":1705320000000}}""")]
+    [InlineData("""{"created_at":{"$gte":1705320000000,"$eq":1705276800000}}""")]
+    public void ParseFindQuery_WithEqualityOutsideBound_KeepsTheEmptyIntersection(string find)
+    {
+        var (_, from, to) = DeviceStatusProjectionService.ParseFindQuery(find);
+
+        from.Should().Be(new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc));
+        to.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void ParseFindQuery_WithJsonDeviceEqualityOperator_ExtractsDevice()
+    {
+        var (device, _, _) = DeviceStatusProjectionService.ParseFindQuery(
+            """{"device":{"$eq":"loop://iPhone"}}""");
+
+        device.Should().Be("loop://iPhone");
+    }
+
+    [Theory]
+    [InlineData("""{"device":{"$eq":"loop://iPhone","$ne":"openaps://rpi"}}""")]
+    [InlineData("""{"device":{"$ne":"openaps://rpi"}}""")]
+    [InlineData("""{"created_at":{"$gte":1705276800000,"$ne":1705320000000}}""")]
+    [InlineData("""{"created_at":{"$gte":true}}""")]
+    [InlineData("""{"created_at":{"$gte":9223372036854775807}}""")]
+    [InlineData("""{"created_at":{"$lte":-9223372036854775808}}""")]
+    [InlineData("""{"created_at":{"$gte":1e300}}""")]
+    [InlineData("""{"created_at":{"$gte":"9223372036854775807"}}""")]
+    [InlineData("""{"created_at":99999999999999999}""")]
+    [InlineData("""{"device":{"$ne":"openaps://rpi","$eq":"loop://iPhone"}}""")]
+    [InlineData("""{"device":{},"created_at":{"$gte":1705276800000}}""")]
+    public void ParseDeleteFind_WithUnsupportedJsonCondition_Refuses(string find)
+    {
+        DeviceStatusProjectionService.ParseDeleteFind(find).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("""{"device":{"$eq":"loop://iPhone","$ne":"openaps://rpi"}}""")]
+    [InlineData("""{"device":{"$ne":"openaps://rpi","$eq":"loop://iPhone"}}""")]
+    public void ParseFindQuery_WithDeviceEqualityBesideAnotherOperator_KeepsTheDevice(string find)
+    {
+        var (device, _, _) = DeviceStatusProjectionService.ParseFindQuery(find);
+
+        device.Should().Be("loop://iPhone");
+    }
+
+    [Theory]
+    [InlineData("""{"created_at":{"$gt":1705276800000,"$lt":1705363200000}}""")]
+    [InlineData("""{"created_at":{"$lt":1705363200000,"$gt":1705276800000}}""")]
+    [InlineData("find[created_at][$gt]=1705276800000&find[created_at][$lt]=1705363200000")]
+    [InlineData("find[created_at][$lt]=2024-01-16T00:00:00Z&find[created_at][$gt]=2024-01-15T00:00:00Z")]
+    public void ParseFindQuery_WithStrictBounds_ExcludesTheBoundaryInstants(string find)
+    {
+        var (_, from, to) = DeviceStatusProjectionService.ParseFindQuery(find);
+
+        from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, 1, DateTimeKind.Utc));
+        to.Should().Be(new DateTime(2024, 1, 15, 23, 59, 59, 999, DateTimeKind.Utc));
+    }
+
+    [Theory]
+    [InlineData("find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$gt]=2024-01-15T12:00:00Z"
+        + "&find[created_at][$lte]=2024-01-16T00:00:00Z&find[created_at][$lt]=2024-01-15T18:00:00Z")]
+    [InlineData("find[created_at][$lt]=2024-01-15T18:00:00Z&find[created_at][$lte]=2024-01-16T00:00:00Z"
+        + "&find[created_at][$gt]=2024-01-15T12:00:00Z&find[created_at][$gte]=2024-01-15T00:00:00Z")]
+    public void ParseFindQuery_WithQueryStringBoundsOnBothSides_Intersects(string find)
+    {
+        var (_, from, to) = DeviceStatusProjectionService.ParseFindQuery(find);
+
+        from.Should().Be(new DateTime(2024, 1, 15, 12, 0, 0, 1, DateTimeKind.Utc));
+        to.Should().Be(new DateTime(2024, 1, 15, 17, 59, 59, 999, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void ParseDeleteFind_WithStrictQueryStringBounds_DeletesTheExactWindow()
+    {
+        var filters = DeviceStatusProjectionService.ParseDeleteFind(
+            "find[device]=openaps://rpi&find[created_at][$gt]=1705276800000&find[created_at][$lt]=1705363200000");
+
+        filters.Should().Be(("openaps://rpi",
+            (DateTime?)new DateTime(2024, 1, 15, 0, 0, 0, 1, DateTimeKind.Utc),
+            (DateTime?)new DateTime(2024, 1, 15, 23, 59, 59, 999, DateTimeKind.Utc)));
+    }
+
+    [Theory]
+    [InlineData("""{"created_at":{"$gt":253402300799999}}""")]
+    [InlineData("""{"created_at":{"$lt":-62135596800000}}""")]
+    [InlineData("""{"created_at":{"$gt":"9999-12-31T23:59:59.9999999Z"}}""")]
+    [InlineData("find[created_at][$gt]=253402300799999")]
+    [InlineData("find[created_at][$lt]=0001-01-01T00:00:00Z")]
+    public void ParseDeleteFind_WithStrictBoundBeyondTheDateRange_Refuses(string find)
+    {
+        DeviceStatusProjectionService.ParseDeleteFind(find).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("""{"created_at":{"$gte":253402300799999}}""")]
+    [InlineData("find[created_at][$lte]=0001-01-01T00:00:00Z")]
+    public void ParseDeleteFind_WithInclusiveBoundAtTheDateRangeEdge_Applies(string find)
+    {
+        DeviceStatusProjectionService.ParseDeleteFind(find).Should().NotBeNull();
     }
 
     #endregion
@@ -846,7 +985,7 @@ public class DeviceStatusProjectionServiceTests
         aps.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 120 }, JsonOptions);
 
         var expectedFrom = new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc);
-        var expectedTo = new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc);
+        var expectedTo = new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1);
 
         _apsRepo
             .Setup(r => r.GetAsync(expectedFrom, expectedTo, null, null,

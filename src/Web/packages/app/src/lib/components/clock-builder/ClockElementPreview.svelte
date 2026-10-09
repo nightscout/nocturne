@@ -1,7 +1,7 @@
 <script lang="ts">
   import TrackerCategoryIcon from "$lib/components/icons/TrackerCategoryIcon.svelte";
   import TrendArrow from "$lib/components/clock/TrendArrow.svelte";
-  import type { TrackerDefinitionDto } from "$lib/api";
+  import type { ClockSettings, TrackerDefinitionDto } from "$lib/api";
   import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
   import { renderClockElementValue } from "$lib/components/clock/element-value";
   import {
@@ -18,16 +18,17 @@
 
   interface Props {
     element: InternalElement;
+    settings: ClockSettings | undefined;
     glucose: ClockGlucoseSource;
     /** Ticks so the time and age elements advance while the face is being edited. */
     now: Date;
     trackerDefinitions: TrackerDefinitionDto[];
   }
 
-  let { element, glucose, now, trackerDefinitions }: Props = $props();
+  let { element, settings, glucose, now, trackerDefinitions }: Props = $props();
 
   const customCss = $derived(buildCustomCssString(element));
-  const value = $derived(renderClockElementValue(element, glucose, now));
+  const value = $derived(renderClockElementValue(element, settings, glucose, now));
 </script>
 
 {#if element.type === "arrow"}

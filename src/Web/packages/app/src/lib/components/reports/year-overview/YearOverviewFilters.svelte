@@ -9,6 +9,7 @@
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
 
   interface Props {
+    disabled?: boolean;
     availableDataSources: string[];
     selectedDataSources: string[];
     presentDataTypes: string[];
@@ -18,6 +19,7 @@
   }
 
   let {
+    disabled = false,
     availableDataSources,
     selectedDataSources = $bindable([]),
     presentDataTypes,
@@ -55,7 +57,7 @@
         onValueChange={(v) => {
           selectedDataSources = v ?? [];
         }}
-        disabled={availableDataSources.length === 0}
+        disabled={disabled || availableDataSources.length === 0}
       >
         <Select.Trigger class="w-[200px]">
           <span class="truncate">

@@ -217,7 +217,9 @@
     | "gri"
     | "mean"
     | "hyperHours"
-    | "hyperEvents";
+    | "hyperEvents"
+    | "hypoHours"
+    | "hypoEvents";
 
   function signed(value: number, digits = 1): string {
     if (Math.abs(value) < (digits === 0 ? 0.5 : 0.05)) return "±0";
@@ -268,6 +270,16 @@
       format: (v) => v.toFixed(0),
       formatDelta: (d) => signed(d, 0),
     },
+    hypoHours: {
+      label: "Hypo Duration",
+      format: (v) => `${v.toFixed(1)} h`,
+      formatDelta: (d) => `${signed(d)} h`,
+    },
+    hypoEvents: {
+      label: "Hypo Events",
+      format: (v) => v.toFixed(0),
+      formatDelta: (d) => signed(d, 0),
+    },
   };
 
   type Analysis = NonNullable<NonNullable<typeof queryA.current>["analysis"]>;
@@ -300,6 +312,10 @@
         return tir?.durations?.aboveRange != null ? tir.durations.aboveRange / 60 : null;
       case "hyperEvents":
         return tir?.episodes?.aboveRange ?? null;
+      case "hypoHours":
+        return tir?.durations?.belowRange != null ? tir.durations.belowRange / 60 : null;
+      case "hypoEvents":
+        return tir?.episodes?.belowRange ?? null;
     }
     return null;
   }
@@ -312,6 +328,8 @@
     "mean",
     "hyperHours",
     "hyperEvents",
+    "hypoHours",
+    "hypoEvents",
   ];
 
   // Cap percent change at ±60 % so outliers don't blow out the bar.
@@ -359,7 +377,8 @@
 
       const delta = bv - av;
       const flat =
-        Math.abs(delta) < (key === "gri" || key === "hyperEvents" ? 0.5 : 0.05);
+        Math.abs(delta) <
+        (key === "gri" || key === "hyperEvents" || key === "hypoEvents" ? 0.5 : 0.05);
 
       const magnitude = Math.min(BAR_CAP_PCT, Math.abs(percentChange(av, bv)));
       const halfWidth = (magnitude / BAR_CAP_PCT) * 50;

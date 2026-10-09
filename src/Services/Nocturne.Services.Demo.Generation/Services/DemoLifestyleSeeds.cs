@@ -5,8 +5,7 @@ namespace Nocturne.Services.Demo.Services;
 /// <summary>
 /// Deterministic lifestyle sample data: the food library with per-meal
 /// attribution, body-weight trend, state spans (pump mode, profile, overrides,
-/// exercise, illness, travel), the timezone-timeline trip, and the default
-/// clock face. All keyed off <see cref="DayScenarios"/> so every stream tells
+/// exercise, illness, travel) and the timezone-timeline trip. All keyed off <see cref="DayScenarios"/> so every stream tells
 /// the same story as the glucose it sits beside.
 /// </summary>
 public static class DemoLifestyleSeeds
@@ -163,27 +162,4 @@ public static class DemoLifestyleSeeds
             .Select(s => s.EndLocal is { } end && end > now ? s with { EndLocal = null } : s)
             .ToList();
     }
-
-    /// <summary>
-    /// Default clock-face config matching the web app's starter layout: big
-    /// glucose + trend arrow on top, delta and time-ago beneath.
-    /// </summary>
-    public const string DefaultClockFaceConfigJson = """
-        {
-          "rows": [
-            {
-              "elements": [
-                { "type": "sg", "size": 40, "style": { "color": "dynamic", "font": "system", "fontWeight": "medium", "opacity": 1.0 } },
-                { "type": "arrow", "size": 25, "style": { "color": "dynamic", "font": "system", "fontWeight": "medium", "opacity": 1.0 } }
-              ]
-            },
-            {
-              "elements": [
-                { "type": "delta", "size": 14, "style": { "color": "muted", "font": "system", "fontWeight": "medium", "opacity": 0.9 } },
-                { "type": "age", "size": 14, "style": { "color": "muted", "font": "system", "fontWeight": "medium", "opacity": 0.9 } }
-              ]
-            }
-          ]
-        }
-        """;
 }

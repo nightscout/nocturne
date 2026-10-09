@@ -8,8 +8,7 @@
   import { Button } from "$lib/components/ui/button";
   import {
     getAvailableYears,
-    getDailySummary,
-    getGriTimeline,
+    getYearSummary,
   } from "$api/generated/dataOverviews.generated.remote";
   import GlycemicRiskIndexChart from "$lib/components/reports/GlycemicRiskIndexChart.svelte";
   import YearOverviewFilters from "$lib/components/reports/year-overview/YearOverviewFilters.svelte";
@@ -21,7 +20,10 @@
   } from "$api/generated/nocturne-api-client";
   import { getUnitLabel } from "$lib/utils/formatting";
   import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
-  import { glucoseUnits, yearOverviewColors } from "$lib/stores/appearance-store.svelte";
+  import {
+    glucoseUnits,
+    yearOverviewColors,
+  } from "$lib/stores/appearance-store.svelte";
   import {
     getFocusedIntensityFill,
     resolveColorFocusRange,
@@ -37,8 +39,13 @@
   import { onMount, untrack, tick } from "svelte";
   import { fade } from "svelte/transition";
   import { getWeekColumns } from "$lib/components/reports/year-overview/week-columns";
+  import { YearLoader } from "$lib/components/reports/year-overview/year-loader";
   import { toggled } from "$lib/utils/collections";
-  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
+  import {
+    getReportPrintContext,
+    setReportPrintMeta,
+    setReportPrintPreparation,
+  } from "$lib/components/reports/print/report-print.svelte";
   import type { TextureKey } from "$lib/components/charts/print/chart-print-patterns";
 
   // =========================================================================
@@ -52,6 +59,7 @@
   let yearData = $state<Map<number, DailySummaryDay[]>>(new Map());
   let griTimelineData = $state<Map<number, GriTimelinePeriod[]>>(new Map());
   let loadingYears = $state<Set<number>>(new Set());
+  let failedYears = $state<Set<number>>(new Set());
   let metadataLoaded = $state(false);
   let metadataLoading = $state(false);
   let sentinelElements: Record<number, HTMLDivElement | undefined> = $state({});
@@ -74,13 +82,20 @@
   ];
 
   let selectedMetric = $state<HeatmapMetric>("avgGlucose");
-  const colorsKey = $derived<`${HeatmapMetric}Colors`>(`${selectedMetric}Colors`);
-  const invertKey = $derived<`${HeatmapMetric}Invert`>(`${selectedMetric}Invert`);
+  const colorsKey = $derived<`${HeatmapMetric}Colors`>(
+    `${selectedMetric}Colors`
+  );
+  const invertKey = $derived<`${HeatmapMetric}Invert`>(
+    `${selectedMetric}Invert`
+  );
   const bandKey = $derived<`${HeatmapMetric}Band`>(`${selectedMetric}Band`);
   const colorFocusPreferences = $derived(yearOverviewColors.current);
   const advancedMode = $derived(colorFocusPreferences.advancedMode ?? false);
   const transparencyPercent = $derived(
-    Math.max(0, Math.min(100, colorFocusPreferences.outOfBandTransparency ?? 90))
+    Math.max(
+      0,
+      Math.min(100, colorFocusPreferences.outOfBandTransparency ?? 90)
+    )
   );
 
   const currentMetricColors = $derived.by(() => {
@@ -102,7 +117,8 @@
   });
   const glucoseThresholds = $derived(
     advancedMode
-      ? (resolveGlucoseColorThresholds(colorFocusPreferences.avgGlucose) ?? DEFAULT_GLUCOSE_COLOR_THRESHOLDS)
+      ? (resolveGlucoseColorThresholds(colorFocusPreferences.avgGlucose) ??
+          DEFAULT_GLUCOSE_COLOR_THRESHOLDS)
       : DEFAULT_GLUCOSE_COLOR_THRESHOLDS
   );
   // Unrecolored ramp, used by the Theme swatch preview so it never reflects the currently active palette.
@@ -225,7 +241,13 @@
 
   const glucoseHatchScale = scaleThreshold<number, TextureKey | null>()
     .domain(GLUCOSE_BANDS)
-    .range(["very-low-hatch", "low-hatch", null, "high-hatch", "very-high-hatch"]);
+    .range([
+      "very-low-hatch",
+      "low-hatch",
+      null,
+      "high-hatch",
+      "very-high-hatch",
+    ]);
 
   function getCellHatch(data: CalendarDatum | undefined): TextureKey | null {
     if (selectedMetric !== "avgGlucose" || data?.value == null) return null;
@@ -383,73 +405,110 @@
     if (sortedYears.length === 0) return { title };
     const first = sortedYears.at(-1);
     const last = sortedYears[0];
-    return { title, period: { label: first === last ? `${last}` : `${first} – ${last}` } };
+    return {
+      title,
+      period: { label: first === last ? `${last}` : `${first} – ${last}` },
+    };
   });
 
   /** Discover data types present in loaded data */
   const presentDataTypes = $derived.by(() => {
     const days = [...yearData.values()].flat();
-    return ALL_DATA_TYPES.filter((t) => days.some((day) => day.counts && Object.hasOwn(day.counts, t)));
+    return ALL_DATA_TYPES.filter((t) =>
+      days.some((day) => day.counts && Object.hasOwn(day.counts, t))
+    );
   });
 
   // =========================================================================
   // Data Loading
   // =========================================================================
 
-  async function loadMetadata() {
-    if (metadataLoading) return;
+  let metadataRequest: Promise<void> | undefined;
+  function loadMetadata(): Promise<void> {
+    if (metadataRequest) return metadataRequest;
     metadataLoading = true;
-    try {
-      const result = await getAvailableYears().run();
-      availableYears = result.years ?? [];
-      availableDataSources = result.availableDataSources ?? [];
-      metadataLoaded = true;
-    } catch (err) {
-      console.error("Failed to load available years:", err);
-    } finally {
-      metadataLoading = false;
-    }
-  }
-
-  async function loadYearData(year: number) {
-    if (loadingYears.has(year) || yearData.has(year)) return;
-
-    loadingYears = new Set([...loadingYears, year]);
-    try {
-      const params: { year: number; dataSources?: string[] } = { year };
-      if (selectedDataSources.length > 0) {
-        params.dataSources = selectedDataSources;
+    metadataRequest = (async () => {
+      try {
+        const result = await getAvailableYears().run();
+        if (disposed) return;
+        availableYears = result.years ?? [];
+        availableDataSources = result.availableDataSources ?? [];
+        metadataLoaded = true;
+      } catch (err) {
+        console.error("Failed to load available years:", err);
+      } finally {
+        metadataLoading = false;
+        metadataRequest = undefined;
       }
-      const result = await getDailySummary(params).run();
-      const days = result.days ?? [];
-      yearData = new Map([...yearData, [year, days]]);
-      loadGriTimeline(year);
-    } catch (err) {
-      console.error(`Failed to load data for year ${year}:`, err);
-    } finally {
-      loadingYears = toggled(loadingYears, year, false);
-    }
+    })();
+    return metadataRequest;
   }
 
-  async function loadGriTimeline(year: number) {
-    if (griTimelineData.has(year)) return;
-    try {
-      const result = await getGriTimeline({
-        year,
-        dataSources:
-          selectedDataSources.length > 0 ? selectedDataSources : undefined,
-      }).run();
-      const periods = result.periods ?? [];
-      griTimelineData = new Map([...griTimelineData, [year, periods]]);
-    } catch (err) {
-      console.error(`Failed to load GRI timeline for year ${year}:`, err);
+  const printContext = getReportPrintContext();
+  let disposed = false;
+  const yearLoader = new YearLoader(
+    {
+      summary: (year, sources) =>
+        getYearSummary({
+          year,
+          dataSources: sources.length ? sources : undefined,
+        }).run(),
+    },
+    {
+      daily: (year, result) => {
+        yearData = new Map([...yearData, [year, result.days ?? []]]);
+      },
+      gri: (year, result) => {
+        griTimelineData = new Map([
+          ...griTimelineData,
+          [year, result.periods ?? []],
+        ]);
+      },
+      loading: (year, loading) => {
+        if (loading) failedYears = toggled(failedYears, year, false);
+        loadingYears = toggled(loadingYears, year, loading);
+        if (!loading)
+          tick().then(() => {
+            if (!disposed) setupObserver();
+          });
+      },
+      error: (year, kind, error) => {
+        failedYears = toggled(failedYears, year, true);
+        console.error(`Failed to load ${kind} data for year ${year}:`, error);
+      },
     }
+  );
+
+  function loadYearData(year: number) {
+    return yearLoader.load(year);
   }
+
+  setReportPrintPreparation(async () => {
+    if (!metadataLoaded) await loadMetadata();
+    if (!metadataLoaded || disposed)
+      throw new Error("Year overview is unavailable");
+    const sources = [...selectedDataSources].sort().join(",");
+    for (const year of sortedYears) {
+      if (
+        !(await (failedYears.has(year)
+          ? yearLoader.retry(year)
+          : loadYearData(year)))
+      )
+        throw new Error("Year overview is incomplete");
+    }
+    if (disposed || sources !== [...selectedDataSources].sort().join(",")) {
+      throw new Error("Year overview filters changed");
+    }
+    await tick();
+  });
 
   function clearAndReload() {
+    if (disposed) return;
+    yearLoader.reset(selectedDataSources);
     yearData = new Map();
     griTimelineData = new Map();
     loadingYears = new Set();
+    failedYears = new Set();
     if (sortedYears.length > 0) {
       loadYearData(sortedYears[0]);
     }
@@ -523,17 +582,27 @@
   let observer: IntersectionObserver | undefined;
 
   function setupObserver() {
-    if (!browser) return;
+    if (!browser || disposed) return;
 
     observer?.disconnect();
     observer = new IntersectionObserver(
       (entries) => {
-        for (const entry of entries) {
+        if (yearLoader.busy || disposed) return;
+        for (const entry of entries.toSorted(
+          (a, b) =>
+            Number(
+              b.target instanceof HTMLElement ? b.target.dataset.year : 0
+            ) -
+            Number(a.target instanceof HTMLElement ? a.target.dataset.year : 0)
+        )) {
           if (entry.isIntersecting) {
             if (!(entry.target instanceof HTMLElement)) continue;
             const year = Number(entry.target.dataset.year);
             if (!isNaN(year)) {
-              loadYearData(year);
+              if (yearLoader.canLoad(year)) {
+                loadYearData(year);
+                break;
+              }
             }
           }
         }
@@ -560,10 +629,16 @@
     // bootstrap to a microtask — onMount's synchronous body still counts as render.
     queueMicrotask(async () => {
       await loadMetadata();
+      if (disposed) return;
       if (sortedYears.length > 0) {
         loadYearData(sortedYears[0]);
       }
     });
+    return () => {
+      disposed = true;
+      yearLoader.dispose();
+      observer?.disconnect();
+    };
   });
 
   $effect(() => {
@@ -618,9 +693,15 @@
 <div class="year-overview @container flex min-h-full">
   <!-- Main Content -->
   <div class="flex-1">
+    {#if !metadataLoaded || sortedYears.some((year) => !yearData.has(year) || !griTimelineData.has(year))}
+      <p class="hidden print:block">
+        This overview is incomplete. Use the report's Print button to load all years before printing.
+      </p>
+    {/if}
     <!-- Header / interactive filters — hidden on print -->
     <div class="print:hidden">
       <YearOverviewFilters
+        disabled={printContext?.printing ?? false}
         {availableDataSources}
         bind:selectedDataSources
         {presentDataTypes}
@@ -707,6 +788,8 @@
             {year}
             {yearIndex}
             {loadingYears}
+            failed={failedYears.has(year)}
+            onRetry={() => yearLoader.retry(year)}
             {yearData}
             {transformYearData}
             {getCellFill}

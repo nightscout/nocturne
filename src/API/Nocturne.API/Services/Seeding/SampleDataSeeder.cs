@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -11,6 +12,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
@@ -950,13 +952,20 @@ public class SampleDataSeeder
         if (exists)
             return 0;
 
+        var ownerPreferences = await _db.Subjects
+            .AsNoTracking()
+            .Where(s => s.Id == owner)
+            .Select(s => s.Preferences)
+            .FirstOrDefaultAsync(ct);
+
         _db.ClockFaces.Add(new ClockFaceEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = _db.TenantId,
             UserId = userId,
             Name = "Bedside Clock",
-            ConfigJson = DemoLifestyleSeeds.DefaultClockFaceConfigJson,
+            ConfigJson = ClockFaceService.Serialize(
+                ClockFaceConfig.Starter(UserDisplayPreferences.Deserialize(ownerPreferences))),
         });
         await _db.SaveChangesAsync(ct);
         return 1;

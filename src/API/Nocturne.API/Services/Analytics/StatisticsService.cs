@@ -1329,6 +1329,8 @@ public class StatisticsService : IStatisticsService
             VeryHigh = zoneMinutes[(int)ExcludingZone.VeryHigh],
             AboveRange =
                 zoneMinutes[(int)ExcludingZone.High] + zoneMinutes[(int)ExcludingZone.VeryHigh],
+            BelowRange =
+                zoneMinutes[(int)ExcludingZone.Low] + zoneMinutes[(int)ExcludingZone.VeryLow],
         };
 
         var episodes = CalculateEpisodes(entriesList, thresholds);

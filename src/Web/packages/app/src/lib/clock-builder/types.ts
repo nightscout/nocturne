@@ -50,7 +50,6 @@ export interface ElementInfo {
   minSize: number;
   maxSize: number;
   hasHoursOption?: boolean;
-  hasFormatOption?: boolean;
   hasMinutesAheadOption?: boolean;
   hasTrackerOptions?: boolean;
   hasTrackersOptions?: boolean;
@@ -163,7 +162,6 @@ export const ELEMENT_INFO: Record<ClockElementType, ElementInfo> = {
     defaultSize: 20,
     minSize: 8,
     maxSize: 500,
-    hasFormatOption: true,
   },
   text: {
     type: "text",
@@ -321,12 +319,3 @@ export interface DragState {
   elementIndex: number;
   element: InternalElement;
 }
-
-// Default settings
-export const DEFAULT_SETTINGS: ClockSettings = {
-  bgColor: false,
-  staleMinutes: 13,
-  alwaysShowTime: false,
-  backgroundOpacity: 100,
-  screensaverMode: false,
-};

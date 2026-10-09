@@ -939,7 +939,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     private static V4Models.ApsSnapshot MapToApsSnapshotFromOpenAps(
         DeviceStatus ds, string? legacyId, string? source, Guid? correlationId)
     {
-        var command = ds.OpenAps!.Enacted ?? ds.OpenAps.Suggested;
+        var command = FreshestOpenApsCommand(ds.OpenAps!);
         var predBGs = command?.PredBGs;
         var apsSystem = DetectOpenApsVariant(ds);
 
@@ -1104,7 +1104,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     /// <summary>
     /// Resolves the best available timestamp for a device status record.
     /// Priority: Mills (already normalized from date) > OpenAPS IOB time >
-    /// OpenAPS enacted/suggested timestamp > Loop timestamp > Pump clock > CreatedAt >
+    /// <see cref="FreshestOpenApsCommand"/> timestamp > Loop timestamp > Pump clock > CreatedAt >
     /// Loop predicted start date > now.
     /// </summary>
     internal static DateTime ResolveTimestamp(DeviceStatus ds)
@@ -1115,7 +1115,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         if (ParseTimestampToDateTime(ds.OpenAps?.Iob?.Time) is { } iobTime)
             return iobTime;
 
-        var command = ds.OpenAps?.Enacted ?? ds.OpenAps?.Suggested;
+        var command = ds.OpenAps is null ? null : FreshestOpenApsCommand(ds.OpenAps);
         if (ParseTimestampToDateTime(command?.Timestamp) is { } commandTime)
             return commandTime;
 
@@ -1133,6 +1133,22 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             return predictedTime;
 
         return DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Uploaders re-send the last enacted command with every status while the loop holds a temp
+    /// basal, so the later of enacted and suggested is the current one. Enacted wins a tie, and
+    /// wins when neither timestamp parses.
+    /// </summary>
+    private static OpenApsSuggested? FreshestOpenApsCommand(OpenApsStatus openAps)
+    {
+        if (openAps.Enacted is null || openAps.Suggested is null)
+            return openAps.Enacted ?? openAps.Suggested;
+
+        var enactedTime = ParseTimestampToDateTime(openAps.Enacted.Timestamp);
+        var suggestedTime = ParseTimestampToDateTime(openAps.Suggested.Timestamp);
+        var suggestedIsLater = enactedTime is null ? suggestedTime is not null : suggestedTime > enactedTime;
+        return suggestedIsLater ? openAps.Suggested : openAps.Enacted;
     }
 
     private static long ResolveStatusMills(DeviceStatus ds) =>

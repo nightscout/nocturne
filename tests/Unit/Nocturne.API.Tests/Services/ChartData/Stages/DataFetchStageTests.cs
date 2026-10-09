@@ -243,6 +243,168 @@ public class DataFetchStageTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_StartsFactoryBackedReadsConcurrently()
+    {
+        const int factoryBackedReads = 9;
+        var started = 0;
+        var allStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task<T> Gated<T>(T result) =>
+            Task.Run(async () =>
+            {
+                if (Interlocked.Increment(ref started) == factoryBackedReads)
+                    allStarted.SetResult();
+                await allStarted.Task;
+                return result;
+            });
+
+        var bolus = new Bolus { Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(StartTime + 1000).UtcDateTime };
+
+        _mockSensorGlucoseRepo
+            .Setup(r => r.GetForAnalyticsAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Gated<IEnumerable<SensorGlucose>>(Array.Empty<SensorGlucose>()));
+        _mockBolusRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<BolusKind?>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Gated<IEnumerable<Bolus>>(new[] { bolus }));
+        _mockCarbIntakeRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Gated<IEnumerable<CarbIntake>>(Array.Empty<CarbIntake>()));
+        _mockBgCheckRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Gated<IEnumerable<BGCheck>>(Array.Empty<BGCheck>()));
+        _mockDeviceEventRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Gated<IEnumerable<DeviceEvent>>(Array.Empty<DeviceEvent>()));
+        _mockTempBasalRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(() => Gated<IEnumerable<TempBasal>>(Array.Empty<TempBasal>()));
+        _mockApsSnapshotRepo
+            .Setup(r => r.GetIobCobPointsAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Gated<IReadOnlyList<ApsIobCobPoint>>(Array.Empty<ApsIobCobPoint>()));
+        _mockBasalInjectionRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(() => Gated<IEnumerable<BasalInjection>>(Array.Empty<BasalInjection>()));
+        _mockSleepService
+            .Setup(s => s.GetSessionsAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<SleepSessionType?>(), It.IsAny<SleepSource?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(() => Gated<IEnumerable<SleepSession>>(Array.Empty<SleepSession>()));
+
+        var context = new ChartDataContext
+        {
+            StartTime = StartTime,
+            EndTime = EndTime,
+            IntervalMinutes = 5,
+            BufferStartTime = BufferStartTime,
+        };
+
+        var result = await _stage.ExecuteAsync(context, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        started.Should().Be(factoryBackedReads);
+        result.BolusList.Should().ContainSingle();
+        result.DisplayBoluses.Should().ContainSingle();
+        result.StateSpans.Should().HaveCount(6);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NeverOverlapsScopedContextReads()
+    {
+        var inFlight = 0;
+        var maxInFlight = 0;
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async Task<T> Tracked<T>(T result)
+        {
+            InterlockedMax(ref maxInFlight, Interlocked.Increment(ref inFlight));
+            await release.Task;
+            await Task.Yield();
+            Interlocked.Decrement(ref inFlight);
+            return result;
+        }
+
+        _mockStateSpanRepo
+            .Setup(r => r.GetByCategories(
+                It.IsAny<IEnumerable<StateSpanCategory>>(), It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Tracked(new Dictionary<StateSpanCategory, List<StateSpan>>()));
+        _mockSystemEventRepo
+            .Setup(r => r.GetSystemEventsAsync(
+                It.IsAny<SystemEventType?>(), It.IsAny<SystemEventCategory?>(),
+                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Tracked<IEnumerable<SystemEvent>>(Array.Empty<SystemEvent>()));
+        _mockTrackerRepo
+            .Setup(r => r.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
+            .Returns(() => Tracked(new List<TrackerDefinitionEntity>()));
+        _mockTrackerRepo
+            .Setup(r => r.GetActiveInstancesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Tracked(Array.Empty<TrackerInstanceEntity>()));
+        _mockHeartRateService
+            .Setup(s => s.GetHeartRatesByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int?>(), It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(() => Tracked<IEnumerable<HeartRate>>(Array.Empty<HeartRate>()));
+        _mockStepCountService
+            .Setup(s => s.GetStepCountsByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int?>(), It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(() => Tracked<IEnumerable<StepCount>>(Array.Empty<StepCount>()));
+
+        var run = _stage.ExecuteAsync(
+            new ChartDataContext
+            {
+                StartTime = StartTime,
+                EndTime = EndTime,
+                IntervalMinutes = 5,
+                BufferStartTime = BufferStartTime,
+            },
+            CancellationToken.None);
+        release.SetResult();
+        await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        maxInFlight.Should().Be(1);
+    }
+
+    private static void InterlockedMax(ref int target, int value)
+    {
+        int current;
+        while (value > (current = Volatile.Read(ref target))
+               && Interlocked.CompareExchange(ref target, value, current) != current) { }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_FetchesTempBasalsFromBufferAndSplitsDisplayWindow()
     {
         var beforeWindow = new TempBasal

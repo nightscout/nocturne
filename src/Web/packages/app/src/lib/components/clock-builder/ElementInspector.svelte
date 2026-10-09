@@ -23,13 +23,6 @@
     getTrackerName,
   } from "$lib/clock-builder";
   import TextStyleControls from "./TextStyleControls.svelte";
-  import { DEFAULT_CLOCK_TIME_FORMAT } from "$lib/components/clock/clock-time";
-
-  const FORMAT_LABELS: Record<string, string> = {
-    auto: "Match my preference",
-    "12h": "12-hour",
-    "24h": "24-hour",
-  };
 
   interface Props {
     element: InternalElement;
@@ -105,8 +98,7 @@
   </p>
 
   <div class="mt-4 space-y-4">
-    <!-- Delta options -->
-    {#if element.type === "delta"}
+    {#if element.type === "sg" || element.type === "delta"}
       <div class="flex items-center justify-between">
         <Label>Show units</Label>
         <Checkbox
@@ -132,28 +124,6 @@
                 {h} hour{h > 1 ? "s" : ""}
               </Select.Item>
             {/each}
-          </Select.Content>
-        </Select.Root>
-      </div>
-    {/if}
-
-    <!-- Time format option -->
-    {#if info?.hasFormatOption}
-      <div class="space-y-2">
-        <Label>Format</Label>
-        <Select.Root
-          type="single"
-          value={element.format || DEFAULT_CLOCK_TIME_FORMAT}
-          onValueChange={(v) => onUpdateElement({ format: v })}
-        >
-          <Select.Trigger>
-            {FORMAT_LABELS[element.format ?? ""] ??
-              FORMAT_LABELS[DEFAULT_CLOCK_TIME_FORMAT]}
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="auto">Match my preference</Select.Item>
-            <Select.Item value="12h">12-hour</Select.Item>
-            <Select.Item value="24h">24-hour</Select.Item>
           </Select.Content>
         </Select.Root>
       </div>

@@ -385,6 +385,11 @@ public class TimeInRangeDurations
     /// are mutually excluding zones.
     /// </summary>
     public double AboveRange { get; set; }
+
+    /// <summary>
+    /// Time below range (minutes): <see cref="Low"/> and <see cref="VeryLow"/> together.
+    /// </summary>
+    public double BelowRange { get; set; }
 }
 
 /// <summary>

@@ -43,8 +43,8 @@ public class UserDisplayPreferences
     public string Serialize() => JsonSerializer.Serialize(this, JsonOptions);
 
     // Allowed values for the constrained string preferences (mirror the frontend literal unions).
-    private static readonly HashSet<string> AllowedGlucoseUnits = new(StringComparer.Ordinal) { "mg/dl", "mmol" };
-    private static readonly HashSet<string> AllowedTimeFormats = new(StringComparer.Ordinal) { "12", "24" };
+    internal static readonly HashSet<string> AllowedGlucoseUnits = new(StringComparer.Ordinal) { "mg/dl", "mmol" };
+    internal static readonly HashSet<string> AllowedTimeFormats = new(StringComparer.Ordinal) { "12", "24" };
 
     /// <summary>
     /// Regional formats offered to the user. Empty string means "follow the display language".
@@ -99,12 +99,12 @@ public class UserDisplayPreferences
         }
 
         return YearOverviewColors?.Validate();
-
-        static string? Check(string field, string? value, HashSet<string> allowed) =>
-            value != null && !allowed.Contains(value)
-                ? $"{field}: '{value}' is not allowed. Valid values: {string.Join(", ", allowed)}"
-                : null;
     }
+
+    internal static string? Check(string field, string? value, HashSet<string> allowed) =>
+        value != null && !allowed.Contains(value)
+            ? $"{field}: '{value}' is not allowed. Valid values: {string.Join(", ", allowed)}"
+            : null;
 
     /// <summary>
     /// Merges the non-null fields of <paramref name="incoming"/> into this instance so unset

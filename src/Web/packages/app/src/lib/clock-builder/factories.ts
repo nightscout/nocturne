@@ -7,11 +7,9 @@
 
 import { randomUUID } from "$lib/utils";
 import type { ClockElement, ClockFaceConfig } from "$lib/api";
-import { DEFAULT_CLOCK_TIME_FORMAT } from "$lib/components/clock/clock-time";
 import { DEFAULT_ELEMENT_COLOR } from "./utils";
 import {
   ELEMENT_INFO,
-  DEFAULT_SETTINGS,
   type ClockElementType,
   type InternalElement,
   type InternalRow,
@@ -34,7 +32,6 @@ export function createDefaultElement(type: ClockElementType): ClockElement {
     },
   };
   if (info.hasHoursOption) element.hours = 3;
-  if (info.hasFormatOption) element.format = DEFAULT_CLOCK_TIME_FORMAT;
   if (info.hasMinutesAheadOption) element.minutesAhead = 30;
   if (type === "tracker") {
     element.show = ["name"];
@@ -73,69 +70,11 @@ export function createDefaultElement(type: ClockElementType): ClockElement {
 }
 
 /**
- * Create a default clock face configuration
- */
-export function createDefaultConfig(): ClockFaceConfig {
-  return {
-    rows: [
-      {
-        elements: [
-          {
-            type: "sg",
-            size: 40,
-            style: {
-              color: "dynamic",
-              font: "system",
-              fontWeight: "medium",
-              opacity: 1.0,
-            },
-          },
-          {
-            type: "arrow",
-            size: 25,
-            style: {
-              color: "dynamic",
-              font: "system",
-              fontWeight: "medium",
-              opacity: 1.0,
-            },
-          },
-        ],
-      },
-      {
-        elements: [
-          {
-            type: "delta",
-            size: 14,
-            showUnits: true,
-            style: {
-              color: "dynamic",
-              font: "system",
-              fontWeight: "medium",
-              opacity: 1.0,
-            },
-          },
-        ],
-      },
-      {
-        elements: [
-          {
-            type: "age",
-            size: 10,
-            style: { font: "system", fontWeight: "medium", opacity: 0.7 },
-          },
-        ],
-      },
-    ],
-    settings: { ...DEFAULT_SETTINGS },
-  };
-}
-
-/**
  * Initialize internal config with IDs from a ClockFaceConfig
  */
-export function initializeInternalConfig(config?: ClockFaceConfig): InternalConfig {
-  const sourceConfig = config ?? createDefaultConfig();
+export function initializeInternalConfig(
+  sourceConfig: ClockFaceConfig
+): InternalConfig {
   return {
     rows: (sourceConfig.rows ?? []).map((row) => ({
       _id: randomUUID(),
@@ -144,7 +83,7 @@ export function initializeInternalConfig(config?: ClockFaceConfig): InternalConf
         _id: randomUUID(),
       })),
     })),
-    settings: sourceConfig.settings ?? { ...DEFAULT_SETTINGS },
+    settings: sourceConfig.settings ?? {},
   };
 }
 

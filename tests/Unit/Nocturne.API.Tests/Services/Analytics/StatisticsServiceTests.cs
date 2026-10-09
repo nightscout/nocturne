@@ -273,6 +273,8 @@ public class StatisticsServiceTests
         result.Should().NotBeNull();
         result.Percentages.Target.Should().Be(0);
         result.Durations.Target.Should().Be(0);
+        result.Durations.BelowRange.Should().Be(0);
+        result.Episodes.BelowRange.Should().Be(0);
     }
 
     [Fact]
@@ -296,6 +298,24 @@ public class StatisticsServiceTests
 
         result.Episodes.Low.Should().Be(0);
         result.Episodes.VeryLow.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(1, 3, 0)]
+    [InlineData(5, 15, 1)]
+    public void CalculateTimeInRange_BelowRange_UsesCoveredTimeAndConsensusEpisodes(
+        int cadenceMinutes, double belowMinutes, int episodes
+    )
+    {
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(cadenceMinutes, [100, 60, 40, 60, 70, 180, 200, 300])
+        );
+
+        result.Durations.BelowRange.Should().Be(belowMinutes);
+        result.Durations.Low.Should().Be(2 * cadenceMinutes);
+        result.Durations.VeryLow.Should().Be(cadenceMinutes);
+        result.Durations.AboveRange.Should().Be(2 * cadenceMinutes);
+        result.Episodes.BelowRange.Should().Be(episodes);
     }
 
     [Fact]

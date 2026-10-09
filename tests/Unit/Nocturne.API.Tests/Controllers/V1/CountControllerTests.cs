@@ -242,7 +242,7 @@ public class CountControllerTests
         _controller.ControllerContext.HttpContext.Request.QueryString =
             new QueryString("?find[created_at][$gte]=2026-01-01T00:00:00Z&find[created_at][$lt]=2026-01-02T00:00:00Z");
         var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var to = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc);
+        var to = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1);
         _mockApsSnapshotRepository
             .Setup(s => s.CountAsync(
                 It.Is<DateTime?>(d => d == from), It.Is<DateTime?>(d => d == to), null, It.IsAny<CancellationToken>()))
