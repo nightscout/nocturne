@@ -1,4 +1,3 @@
-import { z } from "zod";
 import type { InAppNotificationDto } from "$lib/api/generated/nocturne-api-client";
 import { isOneOf, isRecord, nonEmptyString } from "$lib/utils/type-guards";
 import { isoNow } from "$lib/utils/now";
@@ -8,6 +7,7 @@ import type {
   Entry,
   StatusEvent,
   StorageEvent,
+  SyncMessageType,
   SyncProgressEvent,
   TrackerUpdateEvent,
 } from "./types";
@@ -114,27 +114,40 @@ export function parseTrackerUpdate(data: unknown): TrackerUpdateEvent | null {
   };
 }
 
-const SyncProgressSchema = z.object({
-  connectorId: z.string(),
-  connectorName: z.string().catch(""),
-  phase: z.enum(["Syncing", "Completed", "Failed"]),
-  errorMessage: z.string().nullable().catch(null),
-  timestamp: z.string().catch(""),
-  messageType: z
-    .enum([
-      "Authenticating",
-      "FetchingData",
-      "ProcessingDataType",
-      "PublishingDataType",
-      "SyncComplete",
-      "SyncFailed",
-    ])
-    .nullable()
-    .catch(null),
-  messageParams: z.record(z.string(), z.string()).nullable().catch(null),
-});
+const SYNC_PHASES = [
+  "Syncing",
+  "Completed",
+  "Failed",
+] as const satisfies readonly SyncProgressEvent["phase"][];
 
+const SYNC_MESSAGE_TYPES = [
+  "Authenticating",
+  "FetchingData",
+  "ProcessingDataType",
+  "PublishingDataType",
+  "SyncComplete",
+  "SyncFailed",
+] as const satisfies readonly SyncMessageType[];
+
+const isStringRecord = (value: unknown): value is Record<string, string> =>
+  isRecord(value) && Object.values(value).every((entry) => typeof entry === "string");
+
+const stringOr = <T>(value: unknown, fallback: T): string | T =>
+  typeof value === "string" ? value : fallback;
+
+/** A sync event needs a connector and a known phase; every other field falls
+ *  back to empty or null when missing or mistyped. */
 export function parseSyncProgress(data: unknown): SyncProgressEvent | null {
-  const result = SyncProgressSchema.safeParse(data);
-  return result.success ? result.data : null;
+  if (!isRecord(data) || typeof data.connectorId !== "string") return null;
+  if (!isOneOf(SYNC_PHASES, data.phase)) return null;
+
+  return {
+    connectorId: data.connectorId,
+    connectorName: stringOr(data.connectorName, ""),
+    phase: data.phase,
+    errorMessage: stringOr(data.errorMessage, null),
+    timestamp: stringOr(data.timestamp, ""),
+    messageType: isOneOf(SYNC_MESSAGE_TYPES, data.messageType) ? data.messageType : null,
+    messageParams: isStringRecord(data.messageParams) ? { ...data.messageParams } : null,
+  };
 }

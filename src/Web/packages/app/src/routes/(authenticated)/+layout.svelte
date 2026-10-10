@@ -11,7 +11,8 @@
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { onMount, onDestroy, type Snippet } from "svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
-  import { AppSidebar, MobileHeader } from "$lib/components/layout";
+  import AppSidebar from "$lib/components/layout/AppSidebar.svelte";
+  import MobileHeader from "$lib/components/layout/MobileHeader.svelte";
   import type { LayoutData } from "./$types";
   import { getTitleFaviconService } from "$lib/services/title-favicon-service.svelte";
   import { getDefaultSettings } from "$lib/components/settings/constants";
