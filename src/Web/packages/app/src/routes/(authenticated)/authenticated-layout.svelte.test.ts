@@ -22,6 +22,8 @@ vi.mock("$routes/(unauthenticated)/auth/auth.remote", () => ({
 
 import AuthenticatedLayoutHarness from "./AuthenticatedLayoutHarness.test.svelte";
 import SettingsLayout from "./settings/+layout.svelte";
+import InitOrderProbe, { probe } from "./InitOrderProbe.test.svelte";
+import { RealtimeStore } from "$lib/stores/realtime-store.svelte";
 import ToolsLayout from "./tools/+layout.svelte";
 
 const BASE = new Date("2026-09-21T12:00:00Z").getTime();
@@ -110,5 +112,26 @@ describe("authenticated layout", () => {
       .element(page.getByRole("main").getByText("page content"))
       .toBeVisible();
     expect(page.getByRole("main").elements()).toHaveLength(1);
+  });
+
+  it("starts the realtime store before the page beneath it initialises", async () => {
+    probe.initializeCalls = 0;
+    probe.seenAtInit = -1;
+    const initialize = vi
+      .spyOn(RealtimeStore.prototype, "initialize")
+      .mockImplementation(async () => {
+        probe.initializeCalls++;
+      });
+
+    render(AuthenticatedLayoutHarness, {
+      props: {
+        data: layoutData({ tenantless: false, canViewRealtimeData: true }),
+        section: InitOrderProbe,
+      },
+    });
+
+    await expect.element(page.getByText("page content")).toBeVisible();
+    expect(probe.seenAtInit).toBe(1);
+    initialize.mockRestore();
   });
 });

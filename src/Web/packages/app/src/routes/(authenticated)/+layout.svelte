@@ -63,6 +63,10 @@
   const tenantless: boolean = data.tenantless === true;
 
   const realtimeStore = createRealtimeStore(config);
+  // Started while this layout initialises, ahead of the page beneath it: effects run only once
+  // the whole tree has hydrated, so the effect below would issue these reads a long task later.
+  // svelte-ignore state_referenced_locally
+  if (browser && data.canViewRealtimeData) realtimeStore.initialize();
   refreshSummaryOnNewReading(
     () => realtimeStore.currentEntry?.mills,
     () => data.canViewRealtimeData
