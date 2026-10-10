@@ -56,7 +56,11 @@ describe("WidgetGrid", () => {
         expect(page.getByText("Loading").elements()).toHaveLength(widgets.length);
         const placeholderHeights = cellHeights(container);
 
-        await vi.waitFor(() => expect(page.getByText("Loading").elements()).toHaveLength(0));
+        // The first test in a cold run also waits on the widgets' first dynamic imports,
+        // which outlast waitFor's 1 s default.
+        await vi.waitFor(() => expect(page.getByText("Loading").elements()).toHaveLength(0), {
+          timeout: 10_000,
+        });
 
         expect(cellHeights(container)).toEqual(placeholderHeights);
         unmount();
