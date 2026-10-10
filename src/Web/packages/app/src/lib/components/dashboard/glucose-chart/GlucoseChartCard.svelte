@@ -55,6 +55,7 @@
   import PointInspectionPicker from "./dialogs/PointInspectionPicker.svelte";
   import BasalInjectionMarkers from "./markers/BasalInjectionMarkers.svelte";
   import BgCheckMarkers from "./markers/BgCheckMarkers.svelte";
+  import { afterNextPaint } from "$lib/utils/after-next-paint";
 
   interface Props {
     dateRange?: { from: Date | string; to: Date | string };
@@ -68,7 +69,7 @@
     demoMode?: boolean;
     /**
      * While true the main plot is left undrawn in its reserved space, and it is drawn a frame
-     * after this turns false. The dashboard holds it until the realtime store's starting data
+     * after this turns false. The dashboard holds it until the realtime store's current reading
      * has landed: the plot is the costliest thing on the page to draw, so drawn in the same
      * task it delays the current reading's paint behind it.
      */
@@ -94,17 +95,8 @@
   let plotDrawn = $state(!deferDrawing);
   $effect(() => {
     if (deferDrawing || plotDrawn) return;
-    let cancelled = false;
-    // After the next frame, so whatever ended the deferral paints before the plot is drawn.
-    const frame = requestAnimationFrame(() =>
-      setTimeout(() => {
-        if (!cancelled) plotDrawn = true;
-      })
-    );
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(frame);
-    };
+    // Whatever ended the deferral paints before the plot is drawn.
+    return afterNextPaint(() => (plotDrawn = true));
   });
   const displayDemoMode = $derived(demoMode ?? realtimeStore.demoMode);
 

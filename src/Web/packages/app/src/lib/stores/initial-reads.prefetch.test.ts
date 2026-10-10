@@ -94,7 +94,11 @@ describe("initial reads prefetch script", () => {
     (store as unknown as { websocketClient: { connect(): void } }).websocketClient.connect = vi.fn();
 
     vi.setSystemTime(new Date(NOW.getTime() + 1_500));
-    await store.initialize();
+    let initialized = false;
+    const initializing = store.initialize().then(() => (initialized = true));
+    for (let tick = 0; tick < 20 && !initialized; tick++) await vi.advanceTimersByTimeAsync(0);
+    expect(initialized).toBe(true);
+    await initializing;
     store.destroy();
 
     expect(prefetched).toHaveLength(12);

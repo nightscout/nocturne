@@ -92,10 +92,14 @@ const recentTreatments = () => page.getByTestId("recent-treatments");
 
 function renderDashboard(
   settings: FeatureSettings,
-  { data = pageData, withRealtimeStore = false }: { data?: HarnessProps["data"]; withRealtimeStore?: boolean } = {}
+  {
+    data = pageData,
+    withRealtimeStore = false,
+    currentReadingLoaded = false,
+  }: { data?: HarnessProps["data"]; withRealtimeStore?: boolean; currentReadingLoaded?: boolean } = {}
 ) {
   render(DashboardPageHarness, {
-    props: { features: settings, data, withRealtimeStore },
+    props: { features: settings, data, withRealtimeStore, currentReadingLoaded },
   });
 }
 
@@ -157,6 +161,16 @@ describe("dashboard page", () => {
     });
 
     await expect.element(glucoseChart()).toHaveAttribute("data-defer-drawing", "true");
+  });
+
+  it("draws the chart's plot once the current reading has landed, ahead of the rest of the starting data", async () => {
+    renderDashboard(features(), {
+      data: { ...pageData, canViewRealtimeData: true },
+      withRealtimeStore: true,
+      currentReadingLoaded: true,
+    });
+
+    await expect.element(glucoseChart()).toHaveAttribute("data-defer-drawing", "false");
   });
 
   it("draws the chart's plot straight away for a viewer without realtime data", async () => {

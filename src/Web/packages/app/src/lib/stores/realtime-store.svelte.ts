@@ -5,6 +5,7 @@ import { markedRead } from "./notification-read";
 import { untilNow } from "$lib/utils/now";
 import { initialReadWindows, initialReadsClock, initialReadsStash, releaseInitialReads } from "./initial-reads";
 import { toDate } from "$lib/utils/formatting";
+import { afterNextPaint } from "$lib/utils/after-next-paint";
 import type {
   Entry,
   WebSocketConfig,
@@ -126,6 +127,10 @@ export async function loadInitialGlucose(
   }
 }
 
+function newestFirst<T extends { mills?: number }>(records: T[]): T[] {
+  return records.sort((a, b) => (b.mills || 0) - (a.mills || 0));
+}
+
 const REALTIME_STORE_KEY = Symbol("realtime-store");
 
 // Module-level singleton instance
@@ -146,8 +151,11 @@ export class RealtimeStore {
   private entryCreateFlushTimeout: ReturnType<typeof setTimeout> | null = null;
   private static readonly ENTRY_CREATE_BATCH_MS = 100;
 
-  /** Loading state - false until initial data is loaded */
+  /** True once every starting read is applied, not only the current reading ({@link currentReadingLoaded}). */
   isReady = $state(false);
+
+  /** True once the starting readings, loop snapshots and therapy state are applied; ahead of {@link isReady}. */
+  currentReadingLoaded = $state(false);
 
   /** Current time state (updated every second) */
   now = $state(Date.now());
@@ -424,9 +432,12 @@ export class RealtimeStore {
         to: now,
         glucoseFrom,
       } = initialReadWindows(initialReadsClock(initialReadsStash(), Date.now()));
-      const starting = Promise.all([
+      const currentReading = Promise.all([
         loadInitialGlucose(sensorGlucoseClient(), glucoseFrom),
-        Promise.resolve<DeviceStatus[]>([]),
+        apsSnapshotClient().getAll(oneDayAgo, now, 50).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load apsSnapshots:", e); return []; }),
+        currentTherapyStateClient().getCurrentTherapyState().catch((e) => { console.error("Failed to load currentTherapyState:", e); return null; }),
+      ]);
+      const rest = Promise.all([
         profileClient().getProfileSummary().catch(() => null),
         trackersClient().getDefinitions().catch(() => []),
         trackersClient().getActiveInstances().catch(() => []),
@@ -436,13 +447,28 @@ export class RealtimeStore {
         bgCheckClient().getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load bgChecks:", e); return []; }),
         noteClient().getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load notes:", e); return []; }),
         deviceEventClient().getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load deviceEvents:", e); return []; }),
-        apsSnapshotClient().getAll(oneDayAgo, now, 50).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load apsSnapshots:", e); return []; }),
-        currentTherapyStateClient().getCurrentTherapyState().catch((e) => { console.error("Failed to load currentTherapyState:", e); return null; }),
       ]);
       releaseInitialReads();
+
+      const [historicalEntries, historicalApsSnapshots, currentTherapyState] = await currentReading;
+      // Defer state updates to a microtask to completely break out of the
+      // current reactive cycle. This prevents effect_update_depth_exceeded errors
+      // when components with PersistedState dependencies are also initializing.
+      queueMicrotask(() => {
+        if (historicalEntries.length > 0) {
+          this.entries = newestFirst(historicalEntries);
+        }
+        if (historicalApsSnapshots.length > 0) {
+          this.apsSnapshots = newestFirst(historicalApsSnapshots);
+        }
+        if (currentTherapyState) {
+          this.currentReservoir = currentTherapyState.reservoir ?? null;
+          this.chartThresholds = currentTherapyState.thresholds ?? null;
+        }
+        this.currentReadingLoaded = true;
+      });
+
       const [
-        historicalEntries,
-        deviceStatusData,
         profileData,
         trackerDefs,
         trackerActive,
@@ -452,86 +478,43 @@ export class RealtimeStore {
         historicalBgChecks,
         historicalNotes,
         historicalDeviceEvents,
-        historicalApsSnapshots,
-        currentTherapyState,
-      ] = await starting;
+      ] = await rest;
+      await new Promise<void>((resolve) => afterNextPaint(resolve));
 
-      // Defer all state updates to a microtask to completely break out of the
-      // current reactive cycle. This prevents effect_update_depth_exceeded errors
-      // when components with PersistedState dependencies are also initializing.
-      queueMicrotask(() => {
-        if (historicalEntries && historicalEntries.length > 0) {
-          this.entries = historicalEntries.sort(
-            (a: Entry, b: Entry) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-
-        if (deviceStatusData && deviceStatusData.length > 0) {
-          this.deviceStatuses = deviceStatusData.sort(
-            (a: DeviceStatus, b: DeviceStatus) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-
-        if (profileData) {
-          this.profile = profileData;
-        }
-
-        if (trackerDefs && trackerDefs.length > 0) {
-          this.trackerDefinitions = trackerDefs;
-        }
-
-        if (trackerActive && trackerActive.length > 0) {
-          this.trackerInstances = trackerActive;
-        }
-
-        if (notifications && notifications.length > 0) {
-          this.inAppNotifications = notifications;
-        }
-
-        // Populate v4 record arrays
-        if (historicalBoluses && historicalBoluses.length > 0) {
-          this.boluses = historicalBoluses.sort(
-            (a: Bolus, b: Bolus) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-        if (historicalCarbIntakes && historicalCarbIntakes.length > 0) {
-          this.carbIntakes = historicalCarbIntakes.sort(
-            (a: CarbIntake, b: CarbIntake) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-        if (historicalBgChecks && historicalBgChecks.length > 0) {
-          this.bgChecks = historicalBgChecks.sort(
-            (a: BGCheck, b: BGCheck) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-        if (historicalNotes && historicalNotes.length > 0) {
-          this.notes = historicalNotes.sort(
-            (a: Note, b: Note) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-        if (historicalDeviceEvents && historicalDeviceEvents.length > 0) {
-          this.deviceEvents = historicalDeviceEvents.sort(
-            (a: DeviceEvent, b: DeviceEvent) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-
-        if (historicalApsSnapshots && historicalApsSnapshots.length > 0) {
-          this.apsSnapshots = historicalApsSnapshots.sort(
-            (a: ApsSnapshot, b: ApsSnapshot) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-
-        if (currentTherapyState) {
-          this.currentReservoir = currentTherapyState.reservoir ?? null;
-          this.chartThresholds = currentTherapyState.thresholds ?? null;
-        }
-
-        this.isReady = true;
-      });
+      if (profileData) {
+        this.profile = profileData;
+      }
+      if (trackerDefs.length > 0) {
+        this.trackerDefinitions = trackerDefs;
+      }
+      if (trackerActive.length > 0) {
+        this.trackerInstances = trackerActive;
+      }
+      if (notifications.length > 0) {
+        this.inAppNotifications = notifications;
+      }
+      if (historicalBoluses.length > 0) {
+        this.boluses = newestFirst(historicalBoluses);
+      }
+      if (historicalCarbIntakes.length > 0) {
+        this.carbIntakes = newestFirst(historicalCarbIntakes);
+      }
+      if (historicalBgChecks.length > 0) {
+        this.bgChecks = newestFirst(historicalBgChecks);
+      }
+      if (historicalNotes.length > 0) {
+        this.notes = newestFirst(historicalNotes);
+      }
+      if (historicalDeviceEvents.length > 0) {
+        this.deviceEvents = newestFirst(historicalDeviceEvents);
+      }
+      this.isReady = true;
     } catch (error) {
       console.error("Failed to fetch historical data:", error);
       toast.error("Failed to load historical data");
-      this.isReady = true; // Still mark as ready to unblock UI
+      // Still mark as ready to unblock UI
+      this.currentReadingLoaded = true;
+      this.isReady = true;
     }
 
     // Connect to WebSocket bridge

@@ -33,7 +33,7 @@
   const hasRecentHistory = $derived(
     realtimeStore?.entries.length ? true : false
   );
-  const recentHistoryReady = $derived(realtimeStore?.isReady ?? true);
+  const recentHistoryReady = $derived(realtimeStore?.currentReadingLoaded ?? true);
   const hasDataNow = $derived(
     hasInitialGlucose ||
       hasRecentHistory ||
