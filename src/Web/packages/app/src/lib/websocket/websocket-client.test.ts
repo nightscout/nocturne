@@ -313,6 +313,157 @@ describe("WebSocketClient.ensureConnected", () => {
   });
 });
 
+describe("WebSocketClient.prefetchTicket", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Ticket endpoint answering each call with a distinct ticket, failing the calls listed. */
+  function stubCountingTickets(failing: number[] = []) {
+    let call = 0;
+    const fetchTicket = vi.fn(async () => {
+      call++;
+      const token = failing.includes(call) ? null : `ticket-${call}`;
+      return { ok: true, status: 200, json: async () => ({ token, retry: token == null || undefined }) };
+    });
+    vi.stubGlobal("fetch", fetchTicket);
+    return fetchTicket;
+  }
+
+  /** The token the socket's `auth` callback hands Socket.IO for one attempt. */
+  function presentedToken(socket: FakeSocket): Promise<unknown> {
+    return new Promise((resolve) =>
+      socket.options.auth((data) => resolve((data as { token: string }).token))
+    );
+  }
+
+  it("requests the ticket once, before connect", () => {
+    const fetchTicket = stubCountingTickets();
+    const client = new WebSocketClient(config);
+
+    client.prefetchTicket();
+    client.prefetchTicket();
+
+    expect(fetchTicket).toHaveBeenCalledTimes(1);
+    expect(lastSocket).toBeNull();
+  });
+
+  it("presents the prefetched ticket on the first connect without a second request", async () => {
+    const fetchTicket = stubCountingTickets();
+    const client = new WebSocketClient(config);
+    client.prefetchTicket();
+
+    client.connect();
+
+    expect(await presentedToken(lastSocket!)).toBe("ticket-1");
+    expect(fetchTicket).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches a fresh ticket for a reconnect", async () => {
+    const fetchTicket = stubCountingTickets();
+    const client = new WebSocketClient(config);
+    client.prefetchTicket();
+    client.connect();
+    await presentedToken(lastSocket!);
+
+    expect(await presentedToken(lastSocket!)).toBe("ticket-2");
+    expect(fetchTicket).toHaveBeenCalledTimes(2);
+  });
+
+  it("fetches a fresh ticket when the prefetch got none", async () => {
+    const fetchTicket = stubCountingTickets([1]);
+    const client = new WebSocketClient(config);
+    client.prefetchTicket();
+
+    client.connect();
+
+    expect(await presentedToken(lastSocket!)).toBe("ticket-2");
+    expect(fetchTicket).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not request a ticket without a socket URL", () => {
+    const fetchTicket = stubCountingTickets();
+
+    new WebSocketClient({ ...config, url: "" }).prefetchTicket();
+
+    expect(fetchTicket).not.toHaveBeenCalled();
+  });
+
+  it("does not request a ticket once a socket exists", () => {
+    const fetchTicket = stubCountingTickets();
+    const client = new WebSocketClient(config);
+    client.connect();
+
+    client.prefetchTicket();
+
+    expect(fetchTicket).not.toHaveBeenCalled();
+  });
+
+  it("presents the prefetched ticket to only the first of two overlapping attempts", async () => {
+    const fetchTicket = stubCountingTickets();
+    const client = new WebSocketClient(config);
+    client.prefetchTicket();
+    client.connect();
+
+    // The superseded first attempt never completes its handshake, so only the
+    // request count shows it took the prefetched ticket.
+    void presentedToken(lastSocket!);
+    const second = await presentedToken(lastSocket!);
+
+    expect(second).toBe("ticket-2");
+    expect(fetchTicket).toHaveBeenCalledTimes(2);
+  });
+
+  it("discards a prefetched ticket when disconnected", async () => {
+    const fetchTicket = stubCountingTickets();
+    const client = new WebSocketClient(config);
+    client.prefetchTicket();
+
+    client.disconnect();
+    client.connect();
+
+    expect(await presentedToken(lastSocket!)).toBe("ticket-2");
+    expect(fetchTicket).toHaveBeenCalledTimes(2);
+  });
+
+  it("discards a prefetched ticket when destroyed", async () => {
+    const fetchTicket = stubCountingTickets();
+    const client = new WebSocketClient(config);
+    client.prefetchTicket();
+
+    client.destroy();
+    client.connect();
+
+    expect(await presentedToken(lastSocket!)).toBe("ticket-2");
+    expect(fetchTicket).toHaveBeenCalledTimes(2);
+  });
+
+  it("accepts a prefetched definitive denial without asking again", async () => {
+    stubTicketEndpoint({ token: null });
+    const client = new WebSocketClient(config);
+    client.prefetchTicket();
+
+    client.connect();
+    await lastSocket!.handshake();
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(client.connectionStatus).toBe("unauthorized");
+  });
+
+  it("does not present a prefetched ticket that may be near its expiry", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const fetchTicket = stubCountingTickets();
+    const client = new WebSocketClient(config);
+    client.prefetchTicket();
+
+    vi.setSystemTime(Date.now() + 61_000);
+    client.connect();
+
+    expect(await presentedToken(lastSocket!)).toBe("ticket-2");
+    expect(fetchTicket).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("WebSocketClient tracker updates", () => {
   /** A client past the handshake, so its event listeners are live. */
   async function connectedClient(): Promise<InstanceType<typeof WebSocketClient>> {

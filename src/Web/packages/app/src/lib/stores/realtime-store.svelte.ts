@@ -448,6 +448,7 @@ export class RealtimeStore {
         noteClient().getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load notes:", e); return []; }),
         deviceEventClient().getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load deviceEvents:", e); return []; }),
       ]);
+      this.websocketClient.prefetchTicket();
       releaseInitialReads();
 
       const [historicalEntries, historicalApsSnapshots, currentTherapyState] = await currentReading;

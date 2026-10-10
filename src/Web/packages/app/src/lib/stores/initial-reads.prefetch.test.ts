@@ -91,7 +91,10 @@ describe("initial reads prefetch script", () => {
       pingTimeout: 0,
       pingInterval: 0,
     });
-    (store as unknown as { websocketClient: { connect(): void } }).websocketClient.connect = vi.fn();
+    const socket = (store as unknown as { websocketClient: { connect(): void; prefetchTicket(): void } })
+      .websocketClient;
+    socket.connect = vi.fn();
+    socket.prefetchTicket = vi.fn();
 
     vi.setSystemTime(new Date(NOW.getTime() + 1_500));
     let initialized = false;

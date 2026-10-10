@@ -58,6 +58,7 @@ interface StoreInternals {
     connectionStatus: WebSocketConnectionStatus;
     connect(): void;
     ensureConnected(): void;
+    prefetchTicket(): void;
     eventHandlers: {
       connect?: (info: ConnectionInfo) => void;
       disconnect?: (reason: string) => void;
@@ -775,11 +776,17 @@ describe("RealtimeStore starting reads", () => {
   const thresholds = { low: 70, high: 180 };
 
   /** A store with a socket URL, so `initialize()` runs the starting reads, and a stubbed connect. */
-  function connectingStore(): { store: TestStore; connect: ReturnType<typeof vi.fn> } {
+  function connectingStore(): {
+    store: TestStore;
+    connect: ReturnType<typeof vi.fn>;
+    prefetchTicket: ReturnType<typeof vi.fn>;
+  } {
     const store = makeStore("http://localhost");
     const connect = vi.fn();
+    const prefetchTicket = vi.fn();
     store.websocketClient.connect = connect;
-    return { store, connect };
+    store.websocketClient.prefetchTicket = prefetchTicket;
+    return { store, connect, prefetchTicket };
   }
 
   function deferred<T>(): { promise: Promise<T>; resolve(value: T): void; reject(error: unknown): void } {
@@ -813,6 +820,36 @@ describe("RealtimeStore starting reads", () => {
     vi.useRealTimers();
     vi.clearAllMocks();
     api.emptyPage.mockReset();
+  });
+
+  it("requests the socket ticket while the reads are in flight", async () => {
+    const therapy = deferred<null>();
+    api.getCurrentTherapyState.mockReturnValue(therapy.promise);
+    api.getProfileSummary.mockResolvedValue(null);
+    const { store, prefetchTicket } = connectingStore();
+    let readSettled = false;
+    therapy.promise.then(() => (readSettled = true));
+
+    const initialized = store.initialize();
+
+    expect(prefetchTicket).toHaveBeenCalledTimes(1);
+    expect(readSettled).toBe(false);
+
+    therapy.resolve(null);
+    await vi.advanceTimersByTimeAsync(0);
+    await initialized;
+    store.destroy();
+  });
+
+  it("does not request a socket ticket without a socket URL", async () => {
+    const store = makeStore();
+    const prefetchTicket = vi.fn();
+    store.websocketClient.prefetchTicket = prefetchTicket;
+
+    await store.initialize();
+
+    expect(prefetchTicket).not.toHaveBeenCalled();
+    store.destroy();
   });
 
   it("applies the current reading while the other reads are still pending", async () => {
