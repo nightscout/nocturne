@@ -109,6 +109,7 @@
               ) && predictionEnabled}
               defaultFocusHours={focusHours}
               initialChartData={data.initialChartData}
+              deferDrawing={data.canViewRealtimeData && !recentHistoryReady}
               initialWindowStart={data.initialWindowStart}
               streamedHistoricalData={data.streamed?.historicalChartData}
             />

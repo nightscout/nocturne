@@ -1,3 +1,5 @@
-<script lang="ts"></script>
+<script lang="ts">
+  const { deferDrawing = false }: { deferDrawing?: boolean } = $props();
+</script>
 
-<div data-testid="glucose-chart">glucose chart</div>
+<div data-testid="glucose-chart" data-defer-drawing={deferDrawing}>glucose chart</div>

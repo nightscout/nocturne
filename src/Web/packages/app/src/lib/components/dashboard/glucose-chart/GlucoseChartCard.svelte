@@ -71,6 +71,13 @@
     defaultFocusHours?: number;
     heightClass?: string;
     demoMode?: boolean;
+    /**
+     * While true the main plot is left undrawn in its reserved space, and it is drawn a frame
+     * after this turns false. The dashboard holds it until the realtime store's starting data
+     * has landed: the plot is the costliest thing on the page to draw, so drawn in the same
+     * task it delays the current reading's paint behind it.
+     */
+    deferDrawing?: boolean;
   }
 
   let {
@@ -83,9 +90,27 @@
     defaultFocusHours,
     heightClass,
     demoMode,
+    deferDrawing = false,
   }: Props = $props();
 
   const realtimeStore = getRealtimeStore();
+
+  // svelte-ignore state_referenced_locally
+  let plotDrawn = $state(!deferDrawing);
+  $effect(() => {
+    if (deferDrawing || plotDrawn) return;
+    let cancelled = false;
+    // After the next frame, so whatever ended the deferral paints before the plot is drawn.
+    const frame = requestAnimationFrame(() =>
+      setTimeout(() => {
+        if (!cancelled) plotDrawn = true;
+      })
+    );
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  });
   const displayDemoMode = $derived(demoMode ?? realtimeStore.demoMode);
 
   // On mobile, drop the card chrome so the chart can use the full width.
@@ -353,42 +378,44 @@
     <!-- The basal, mode and IOB/COB tracks take fixed shares of the height, so
          a 320px chart left them 38px, 13px and 58px tall on a phone: too little
          for their labels. 400px is what a portrait phone shows above the fold. -->
-    <div class={heightClass ?? "h-[400px] @md:h-[450px]"}>
-      <GlucoseChartShell
-        {engine}
-        {inspection}
-        {legend}
-        brushDomain={brushDomain}
-        padding={chartPadding}
-      >
-        {#snippet tracks()}
-          <BasalTrack />
-          <SwimLaneTrack />
-          <ThresholdRules />
-          <GlucoseTrack
-            lineColorMode={chartLineColorMode.current}
-            lineColor={chartLineColor.current}
-            pointColorMode={chartPointColorMode.current}
-            pointColor={chartPointColor.current}
-            showPoints={chartShowPoints.current}
-            areaMode={chartAreaMode.current}
-            areaOpacity={chartAreaOpacity.current}
-          />
-          {#if effectiveShowPredictions}
-            <PredictionTrack />
-          {/if}
-          <IobCobTrack onMarkerClick={handleMarkerClick} />
-          <DeviceEventMarkers onMarkerClick={handleMarkerClick} />
-          <SystemEventMarkers />
-          <TrackerMarkers />
-          <BasalInjectionMarkers />
-          <BgCheckMarkers />
-          <ChartHighlight />
-        {/snippet}
-        {#snippet overlays()}
-          <ChartTooltip onTimeClick={openDayInReview} />
-        {/snippet}
-      </GlucoseChartShell>
+    <div class={heightClass ?? "h-[400px] @md:h-[450px]"} data-testid="glucose-plot">
+      {#if plotDrawn}
+        <GlucoseChartShell
+          {engine}
+          {inspection}
+          {legend}
+          brushDomain={brushDomain}
+          padding={chartPadding}
+        >
+          {#snippet tracks()}
+            <BasalTrack />
+            <SwimLaneTrack />
+            <ThresholdRules />
+            <GlucoseTrack
+              lineColorMode={chartLineColorMode.current}
+              lineColor={chartLineColor.current}
+              pointColorMode={chartPointColorMode.current}
+              pointColor={chartPointColor.current}
+              showPoints={chartShowPoints.current}
+              areaMode={chartAreaMode.current}
+              areaOpacity={chartAreaOpacity.current}
+            />
+            {#if effectiveShowPredictions}
+              <PredictionTrack />
+            {/if}
+            <IobCobTrack onMarkerClick={handleMarkerClick} />
+            <DeviceEventMarkers onMarkerClick={handleMarkerClick} />
+            <SystemEventMarkers />
+            <TrackerMarkers />
+            <BasalInjectionMarkers />
+            <BgCheckMarkers />
+            <ChartHighlight />
+          {/snippet}
+          {#snippet overlays()}
+            <ChartTooltip onTimeClick={openDayInReview} />
+          {/snippet}
+        </GlucoseChartShell>
+      {/if}
     </div>
 
     {#if engine.glucoseData.length > 0}
