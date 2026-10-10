@@ -2,7 +2,6 @@ import { redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
 import { checkOnboarding } from "$lib/server/onboarding-check";
 import { getRequestStatus } from "$lib/server/request-status";
-import { isTenantlessRoute } from "$lib/navigation/tenantless-navigation";
 import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 import { toIsoString } from "$lib/utils/api-date";
 import { autoLoginEndpoint, autoLoginRedirect } from "$lib/server/auto-login";
@@ -23,9 +22,18 @@ function hasGlucoseReadPermission(permissions: string[]): boolean {
   return permissions.some((p) => GLUCOSE_READ_PERMISSIONS.includes(p));
 }
 
-export const load: LayoutServerLoad = async ({ locals, cookies, url, parent }) => {
+export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, parent }) => {
+  // Untracked, so SvelteKit reuses this load's data across client navigations instead of re-running
+  // it whenever the path changes: the URL only shapes a cookie flag and the login return address.
+  const { protocol, pathname, search, origin } = untrack(() => ({
+    protocol: url.protocol,
+    pathname: url.pathname,
+    search: url.search,
+    origin: url.origin,
+  }));
+
   // Resolved by the root layout from the request host and the API's answer for the apex. Read
-  // first because it qualifies the setup redirect below as well as the route guard further down.
+  // first because it qualifies the setup redirect below.
   const { tenantless } = await parent();
 
   // Tenant status drives the anonymous-access gate and the demo banner. Shared with the root
@@ -59,7 +67,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, parent }) =
     const onboarding = await checkOnboarding(
       cookies,
       locals.apiClient,
-      url.protocol === "https:",
+      protocol === "https:",
     );
     if (!onboarding.isComplete) {
       throw redirect(303, "/setup");
@@ -88,21 +96,14 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, parent }) =
   // to redirect onward, costing every first visit a round-trip.
   if (!locals.isAuthenticated || !locals.user) {
     if (!publicViewAllowed) {
-      const returnUrl = url.pathname + url.search;
+      const returnUrl = pathname + search;
       const endpoint = autoLoginEndpoint(status?.isDemo, locals.isShareHost);
       throw redirect(
         303,
-        (endpoint && autoLoginRedirect(endpoint, returnUrl, url.origin)) ??
+        (endpoint && autoLoginRedirect(endpoint, returnUrl, origin)) ??
           `/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`
       );
     }
-  }
-
-  // A tenantless host resolves no tenant, so a tenant-scoped page would render its shell and
-  // then 404 against the API. The nav hides those entries; this catches direct navigation and
-  // stale links, and stays below the login redirect so it can never pre-empt it.
-  if (tenantless && !isTenantlessRoute(url.pathname)) {
-    throw redirect(303, "/");
   }
 
   // Enable realtime glucose data for:

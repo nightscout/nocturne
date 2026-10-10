@@ -137,27 +137,96 @@ const authHandle: Handle = async ({ event, resolve }) => {
 };
 
 /**
- * Hosts whose readiness probe last succeeded, with when that answer expires. Only "ready" is
- * remembered: a host entering setup or recovery is redirected at most READY_TTL_MS late, while the
- * API keeps refusing its data calls meanwhile; a host that is not ready is probed every request.
+ * Status bodies of the hosts whose readiness probe last succeeded, with when each answer expires.
+ * Only "ready" is remembered: a host entering setup or recovery is redirected at most READY_TTL_MS
+ * late, while the API keeps refusing its data calls meanwhile; a host that is not ready is probed
+ * every request. The body depends only on the host (the API resolves the tenant from it and caches
+ * the document per tenant), so a hit also answers getRequestStatus for any caller.
  */
-const readyUntil = new Map<string, number>();
+const readyStatus = new Map<string, { body: App.TenantStatus; until: number }>();
 const READY_TTL_MS = 10_000;
 const READY_CACHE_MAX_HOSTS = 1_000;
 
-function isReadyCached(host: string | null): boolean {
+function cachedReadyStatus(host: string | null): App.TenantStatus | undefined {
   const key = host ?? "";
-  const until = readyUntil.get(key);
-  if (until === undefined) return false;
-  if (until > Date.now()) return true;
-  readyUntil.delete(key);
-  return false;
+  const entry = readyStatus.get(key);
+  if (entry === undefined) return undefined;
+  if (entry.until > Date.now()) return entry.body;
+  readyStatus.delete(key);
+  return undefined;
 }
 
-function cacheReady(host: string | null): void {
-  if (readyUntil.size >= READY_CACHE_MAX_HOSTS) readyUntil.clear();
-  readyUntil.set(host ?? "", Date.now() + READY_TTL_MS);
+function cacheReadyStatus(host: string | null, body: App.TenantStatus): void {
+  if (readyStatus.size >= READY_CACHE_MAX_HOSTS) readyStatus.clear();
+  readyStatus.set(host ?? "", { body: Object.freeze(body), until: Date.now() + READY_TTL_MS });
 }
+
+/**
+ * Static assets, the pages that ARE the setup/recovery/auth/share-unavailable/tenant-inactive
+ * destinations (probing those would cause infinite redirect loops), and external webhook/bot
+ * endpoints that must respond regardless of setup state — third-party services like Discord
+ * cannot follow HTML redirects and will treat any non-2xx as a hard failure.
+ */
+function skipsStatusProbe(pathname: string): boolean {
+  return (
+    STATIC_ASSET_PREFIXES.some((p) => pathname.startsWith(p)) ||
+    pathname.startsWith(SHARE_UNAVAILABLE_PATH) ||
+    pathname.startsWith(TENANT_INACTIVE_PATH) ||
+    pathname.startsWith("/setup") ||
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/api/v4/webhooks") ||
+    pathname.startsWith("/api/v4/bot") ||
+    pathname.startsWith("/api/otel")
+  );
+}
+
+/**
+ * Starts the tenant status call ahead of authHandle, so it overlaps the session check instead of
+ * following it. readinessHandle acts on its outcome and getRequestStatus hands its body to the
+ * layouts, so a request makes at most one status call, and none on a host found ready within
+ * READY_TTL_MS.
+ */
+const statusProbeHandle: Handle = async ({ event, resolve }) => {
+  const apiBaseUrl = getApiBaseUrl();
+  if (!apiBaseUrl || skipsStatusProbe(event.url.pathname)) {
+    return resolve(event);
+  }
+
+  const probeHost = getEffectiveHost(event.request, event.cookies);
+  const cached = cachedReadyStatus(probeHost);
+  if (cached) {
+    event.locals.statusPromise = Promise.resolve(cached);
+    return resolve(event);
+  }
+
+  const probe = (async (): Promise<App.StatusProbe> => {
+    try {
+      const probeHeaders: Record<string, string> = { "X-Forwarded-Proto": getOriginalProto(event.request) };
+      if (probeHost) probeHeaders["X-Forwarded-Host"] = probeHost;
+      // Deliberately NO instance key here: a valid instance-key request bypasses the
+      // API's setup/recovery gate (TenantSetupMiddleware), so a privileged probe always
+      // sees 200 and can never detect setup_required/recovery_mode — leaving the
+      // authenticated page load to run and 503 instead of redirecting to /setup. Probing
+      // as an unprivileged visitor makes this gate observe the same 503 a real user gets.
+      // No session either: the body does not vary by caller, and a credentialed call could
+      // rotate the refresh token alongside authHandle's.
+      const apiClient = createServerApiClient(apiBaseUrl, fetch, {
+        extraHeaders: probeHeaders,
+      });
+      const body = await apiClient.status.getStatus();
+      // The API answers a failure to build the document with a 200 "error" body; that must not
+      // stand in for the host's status for the whole TTL.
+      if (body.status !== "error") cacheReadyStatus(probeHost, body);
+      return { ok: true, body };
+    } catch (error) {
+      return { ok: false, error };
+    }
+  })();
+
+  event.locals.statusProbe = probe;
+  event.locals.statusPromise = probe.then((result) => (result.ok ? result.body : null));
+  return resolve(event);
+};
 
 /**
  * Readiness handler - detects setup/recovery mode and an unresolvable host, and redirects to the
@@ -168,86 +237,45 @@ function cacheReady(host: string | null): void {
  * host), so there is no site-wide setting for this to mirror.
  */
 const readinessHandle: Handle = async ({ event, resolve }) => {
-  const apiBaseUrl = getApiBaseUrl();
-
-  if (!apiBaseUrl) {
+  const probe = event.locals.statusProbe;
+  if (!probe) {
     return resolve(event);
   }
 
-  const pathname = event.url.pathname;
-
-  // Skip the status probe entirely for static assets, for pages that ARE
-  // the setup/recovery/auth/share-unavailable/tenant-inactive destinations (probing those would cause infinite
-  // redirect loops), and for external webhook/bot endpoints that must respond
-  // regardless of setup state — third-party services like Discord cannot
-  // follow HTML redirects and will treat any non-2xx as a hard failure.
-  const skipProbe =
-    STATIC_ASSET_PREFIXES.some((p) => pathname.startsWith(p)) ||
-    pathname.startsWith(SHARE_UNAVAILABLE_PATH) ||
-    pathname.startsWith(TENANT_INACTIVE_PATH) ||
-    pathname.startsWith("/setup") ||
-    pathname.startsWith("/auth") ||
-    pathname.startsWith("/api/v4/webhooks") ||
-    pathname.startsWith("/api/v4/bot") ||
-    pathname.startsWith("/api/otel");
-
-  if (skipProbe) {
+  // The probe's answer is the failure it throws: a successful status means the instance is ready
+  // and this gate has nothing to do.
+  const result = await probe;
+  if (result.ok) {
     return resolve(event);
   }
 
-  // Probe the API for setup/recovery mode. The probe's answer is the failure it throws: a
-  // successful status means the instance is ready and this gate has nothing to do.
-  const probeHost = getEffectiveHost(event.request, event.cookies);
-  if (isReadyCached(probeHost)) {
-    return resolve(event);
-  }
-
-  try {
-    if (!event.locals.statusProbed) {
-      const probeHeaders: Record<string, string> = { "X-Forwarded-Proto": getOriginalProto(event.request) };
-      if (probeHost) probeHeaders["X-Forwarded-Host"] = probeHost;
-      // Deliberately NO instance key here: a valid instance-key request bypasses the
-      // API's setup/recovery gate (TenantSetupMiddleware), so a privileged probe always
-      // sees 200 and can never detect setup_required/recovery_mode — leaving the
-      // authenticated page load to run and 503 instead of redirecting to /setup. Probing
-      // as an unprivileged visitor makes this gate observe the same 503 a real user gets.
-      const apiClient = createServerApiClient(apiBaseUrl, fetch, {
-        extraHeaders: probeHeaders,
-      });
-
-      await apiClient.status.getStatus();
-
-      event.locals.statusProbed = true;
-      cacheReady(probeHost);
+  const { error } = result;
+  if (error && typeof error === "object" && "status" in error) {
+    let body: Record<string, unknown> = {};
+    try {
+      const response = "response" in error ? error.response : undefined;
+      const parsed: unknown = JSON.parse(typeof response === "string" ? response : "{}");
+      if (isRecord(parsed)) body = parsed;
+    } catch {
+      // Couldn't parse — leave recoveryMode unset, which reads as "not ready"
     }
-  } catch (error) {
-    if (error && typeof error === "object" && "status" in error) {
-      let body: Record<string, unknown> = {};
-      try {
-        const response = "response" in error ? error.response : undefined;
-        const parsed: unknown = JSON.parse(typeof response === "string" ? response : "{}");
-        if (isRecord(parsed)) body = parsed;
-      } catch {
-        // Couldn't parse — leave recoveryMode unset, which reads as "not ready"
-      }
 
-      const redirect = statusProbeRedirect({
-        isShareHost: event.locals.isShareHost,
-        apiStatus: error.status,
-        recoveryMode: body.recoveryMode === true,
-        errorCode: typeof body.error === "string" ? body.error : undefined,
-        marketingUrl: env.MARKETING_URL,
+    const redirect = statusProbeRedirect({
+      isShareHost: event.locals.isShareHost,
+      apiStatus: error.status,
+      recoveryMode: body.recoveryMode === true,
+      errorCode: typeof body.error === "string" ? body.error : undefined,
+      marketingUrl: env.MARKETING_URL,
+    });
+
+    if (redirect) {
+      return new Response(null, {
+        status: redirect.status,
+        headers: { Location: redirect.location },
       });
-
-      if (redirect) {
-        return new Response(null, {
-          status: redirect.status,
-          headers: { Location: redirect.location },
-        });
-      }
     }
-    console.error("Failed to probe API readiness:", error);
   }
+  console.error("Failed to probe API readiness:", error);
 
   return resolve(event);
 };
@@ -528,8 +556,8 @@ const healthHandle: Handle = async ({ event, resolve }) => {
 // requestContextHandle comes first of the request-serving handlers: everything after it reads
 // the facts it establishes.
 //
-// proxyHandle runs ahead of authHandle and readinessHandle. A proxied call reads none of the
-// locals they set and the API authenticates it and answers its setup/recovery state itself, so
-// running them first cost every browser /api call three serial API round-trips, and let a
-// session refresh in authHandle rotate the refresh token the proxy then forwarded stale.
-export const handle: Handle = sequence(healthHandle, requestContextHandle, shareHostSecurityHandle, proxyHandle, resetBitsId, authHandle, readinessHandle, apiClientHandle, locale);
+// proxyHandle runs ahead of the status probe, authHandle and readinessHandle. A proxied call reads
+// none of the locals they set and the API authenticates it and answers its setup/recovery state
+// itself, so running them first cost every browser /api call three serial API round-trips, and let
+// a session refresh in authHandle rotate the refresh token the proxy then forwarded stale.
+export const handle: Handle = sequence(healthHandle, requestContextHandle, shareHostSecurityHandle, proxyHandle, resetBitsId, statusProbeHandle, authHandle, readinessHandle, apiClientHandle, locale);
