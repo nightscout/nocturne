@@ -1,6 +1,7 @@
 import { ApiClient } from "./api-client.generated";
 import { browser } from "$app/environment";
 import { createAuthenticatedFetch } from "./auth-interceptor";
+import { initialReadsStash, takeInitialRead } from "$lib/stores/initial-reads";
 
 /**
  * Client-side API client instance This should be used in the browser when you
@@ -27,6 +28,8 @@ export function getApiClient(): ApiClient {
 
     // Create the base fetch function with credentials
     const baseFetch = (url: RequestInfo, init?: RequestInit): Promise<Response> => {
+      const prefetched = takeInitialRead(initialReadsStash(), url, init?.method);
+      if (prefetched) return prefetched;
       return window.fetch(url, {
         ...init,
         credentials: 'include',

@@ -23,6 +23,7 @@
   import { Button } from "$lib/components/ui/button";
   import AlertSurfaces from "$lib/components/alerts/AlertSurfaces.svelte";
   import DemoBanner from "$lib/components/layout/DemoBanner.svelte";
+  import InitialReadsPrefetch from "$lib/components/layout/InitialReadsPrefetch.svelte";
   import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
   import BackupSignInPrompt from "$lib/components/layout/BackupSignInPrompt.svelte";
   import SessionExpiryWatcher from "$lib/components/layout/SessionExpiryWatcher.svelte";
@@ -211,6 +212,8 @@
     }
   });
 </script>
+
+<InitialReadsPrefetch enabled={data.canViewRealtimeData} />
 
 <CoachMarkProvider adapter={coachMarkAdapter} {sequences} router={coachRouter}>
   <CoachParamHandler />

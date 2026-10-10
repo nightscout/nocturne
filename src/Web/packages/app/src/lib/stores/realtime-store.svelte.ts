@@ -2,7 +2,8 @@
 import { WebSocketClient } from "$lib/websocket/websocket-client.svelte";
 import { entryIdentity, isSameEntry, unseenEntries } from "./entry-identity";
 import { markedRead } from "./notification-read";
-import { startOfLocalDay, untilNow } from "$lib/utils/now";
+import { untilNow } from "$lib/utils/now";
+import { initialReadWindows, initialReadsClock, initialReadsStash, releaseInitialReads } from "./initial-reads";
 import { toDate } from "$lib/utils/formatting";
 import type {
   Entry,
@@ -396,31 +397,19 @@ export class RealtimeStore {
 
     // Skip if WebSocket URL is not available (SSR scenario)
     if (!this.websocketClient.hasValidUrl()) {
+      releaseInitialReads();
       return;
     }
 
     try {
       // Fetch historical data using the properly configured API client
       const apiClient = getApiClient();
-      const { from: oneDayAgo, to: now } = untilNow(Date.now() - 24 * 60 * 60 * 1000);
-      const glucoseFrom = untilNow(
-        Math.min(startOfLocalDay(Date.now()), Date.parse(oneDayAgo))
-      ).from;
-      const [
-        historicalEntries,
-        deviceStatusData,
-        profileData,
-        trackerDefs,
-        trackerActive,
-        notifications,
-        historicalBoluses,
-        historicalCarbIntakes,
-        historicalBgChecks,
-        historicalNotes,
-        historicalDeviceEvents,
-        historicalApsSnapshots,
-        currentTherapyState,
-      ] = await Promise.all([
+      const {
+        oneDayAgo,
+        to: now,
+        glucoseFrom,
+      } = initialReadWindows(initialReadsClock(initialReadsStash(), Date.now()));
+      const starting = Promise.all([
         loadInitialGlucose(apiClient, glucoseFrom),
         Promise.resolve<DeviceStatus[]>([]),
         apiClient.profile.getProfileSummary().catch(() => null),
@@ -435,6 +424,22 @@ export class RealtimeStore {
         apiClient.apsSnapshot.getAll(oneDayAgo, now, 50).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load apsSnapshots:", e); return []; }),
         apiClient.currentTherapyState.getCurrentTherapyState().catch((e) => { console.error("Failed to load currentTherapyState:", e); return null; }),
       ]);
+      releaseInitialReads();
+      const [
+        historicalEntries,
+        deviceStatusData,
+        profileData,
+        trackerDefs,
+        trackerActive,
+        notifications,
+        historicalBoluses,
+        historicalCarbIntakes,
+        historicalBgChecks,
+        historicalNotes,
+        historicalDeviceEvents,
+        historicalApsSnapshots,
+        currentTherapyState,
+      ] = await starting;
 
       // Defer all state updates to a microtask to completely break out of the
       // current reactive cycle. This prevents effect_update_depth_exceeded errors
