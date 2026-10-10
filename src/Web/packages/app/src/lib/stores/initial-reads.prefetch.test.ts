@@ -1,17 +1,23 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const clients = vi.hoisted(() => ({ http: undefined as unknown }));
+// The preference stores read the DOM at import, so the browser flag is raised only for the test.
+const env = vi.hoisted(() => ({ browser: false }));
 
-vi.mock("$lib/api/client", async () => {
-  const { ApiClient } = await import("$lib/api/api-client.generated");
-  return { getApiClient: () => new ApiClient("", clients.http as never) };
-});
+vi.mock("$app/environment", () => ({
+  get browser() {
+    return env.browser;
+  },
+  dev: false,
+  building: false,
+  version: "test",
+}));
 
 vi.mock("svelte-sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
 }));
 
+import { resetBrowserClients } from "$lib/api/browser-clients";
 import { RECENT_READINGS, RealtimeStore } from "./realtime-store.svelte";
 import type { InitialReads } from "./initial-reads";
 
@@ -47,9 +53,12 @@ describe("initial reads prefetch script", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
+    resetBrowserClients();
+    env.browser = true;
   });
 
   afterEach(() => {
+    env.browser = false;
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
@@ -58,11 +67,9 @@ describe("initial reads prefetch script", () => {
     const { calls: prefetched, window: scriptWindow } = runScript();
 
     const storeCalls: Call[] = [];
-    clients.http = {
-      fetch: (url: string, init?: RequestInit) => {
-        storeCalls.push({ url, headers: init?.headers });
-        return emptyResponse();
-      },
+    const liveFetch = (url: string, init?: RequestInit) => {
+      storeCalls.push({ url, headers: init?.headers, credentials: init?.credentials });
+      return emptyResponse();
     };
     vi.stubGlobal("document", {
       visibilityState: "visible",
@@ -72,7 +79,9 @@ describe("initial reads prefetch script", () => {
     vi.stubGlobal("window", {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
-      __nocturneInitialReads: scriptWindow.__nocturneInitialReads,
+      fetch: liveFetch,
+      // Same clock as the script, nothing parked: every read goes to the live fetch.
+      __nocturneInitialReads: { now: scriptWindow.__nocturneInitialReads!.now, responses: new Map() },
     });
     const store = new RealtimeStore({
       url: "http://localhost",
@@ -98,7 +107,10 @@ describe("initial reads prefetch script", () => {
       expect(call.headers).toEqual({ Accept: "application/json" });
       expect(call.credentials).toBe("include");
     }
-    for (const call of storeCalls) expect(call.headers).toEqual({ Accept: "application/json" });
+    for (const call of storeCalls) {
+      expect(call.headers).toEqual({ Accept: "application/json" });
+      expect(call.credentials).toBe("include");
+    }
   });
 
   it("stashes the clock and one pending response per URL", () => {

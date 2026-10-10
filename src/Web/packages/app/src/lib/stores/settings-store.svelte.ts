@@ -7,7 +7,7 @@
 
 import { getContext, setContext } from "svelte";
 import { browser } from "$app/environment";
-import { getApiClient } from "$lib/api/client";
+import { uiSettingsClient } from "$lib/api/browser-clients";
 import { getUiSettings } from "$api/ui-settings.remote";
 import { describeSubmitError } from "$lib/forms/submit-error";
 import { remoteErrorMessage } from "$lib/api/remote-error";
@@ -183,7 +183,7 @@ export class SettingsStore {
     this.error = null;
 
     try {
-      const savedSettings = await getApiClient().uiSettings.saveUISettings(
+      const savedSettings = await uiSettingsClient().saveUISettings(
         this.getSettings()
       );
 
@@ -225,7 +225,7 @@ export class SettingsStore {
         profiles: normalizedProfiles,
       };
 
-      const savedConfig = await getApiClient().uiSettings.saveAlarmConfiguration(
+      const savedConfig = await uiSettingsClient().saveAlarmConfiguration(
         toApiAlarmConfiguration(normalizedConfig)
       );
 

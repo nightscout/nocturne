@@ -1,5 +1,5 @@
 // Inlined into the SSR head and run at parse time, before the bundle loads. The one deliberate raw
-// fetch in the app: the realtime store's starting reads are consumed by baseFetch in api/client.ts.
+// fetch in the app: the realtime store's starting reads are consumed by browserHttp in api/browser-clients.ts.
 (function () {
   try {
     if (typeof fetch !== "function") return;

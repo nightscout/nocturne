@@ -6,17 +6,15 @@ const api = vi.hoisted(() => ({
   emptyPage: vi.fn(),
 }));
 
-vi.mock("$lib/api/client", () => ({
-  getApiClient: () => ({
-    currentTherapyState: { getCurrentTherapyState: api.getCurrentTherapyState },
-    apsSnapshot: { getAll: api.apsGetAll },
-    sensorGlucose: { getAll: api.emptyPage },
-    bolus: { getAll: api.emptyPage },
-    nutrition: { getCarbIntakes: api.emptyPage },
-    bGCheck: { getAll: api.emptyPage },
-    note: { getAll: api.emptyPage },
-    deviceEvent: { getAll: api.emptyPage },
-  }),
+vi.mock("$lib/api/browser-clients", () => ({
+  currentTherapyStateClient: () => ({ getCurrentTherapyState: api.getCurrentTherapyState }),
+  apsSnapshotClient: () => ({ getAll: api.apsGetAll }),
+  sensorGlucoseClient: () => ({ getAll: api.emptyPage }),
+  bolusClient: () => ({ getAll: api.emptyPage }),
+  nutritionClient: () => ({ getCarbIntakes: api.emptyPage }),
+  bgCheckClient: () => ({ getAll: api.emptyPage }),
+  noteClient: () => ({ getAll: api.emptyPage }),
+  deviceEventClient: () => ({ getAll: api.emptyPage }),
 }));
 
 vi.mock("svelte-sonner", () => ({
@@ -763,7 +761,7 @@ describe("loadInitialGlucose", () => {
   const FROM = "2026-10-04T00:00:00.000Z";
 
   function clientWith(getAll: ReturnType<typeof vi.fn>) {
-    return { sensorGlucose: { getAll } } as unknown as Parameters<typeof loadInitialGlucose>[0];
+    return { getAll } as unknown as Parameters<typeof loadInitialGlucose>[0];
   }
 
   const readings = (...mgdl: number[]) => ({
