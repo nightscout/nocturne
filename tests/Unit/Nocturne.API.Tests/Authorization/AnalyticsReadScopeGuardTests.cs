@@ -643,6 +643,7 @@ public class AnalyticsReadScopeGuardTests
         Reservoir = 42,
         PumpBatteryPercent = 80,
         PumpBatteryVoltage = 1.4,
+        Thresholds = new ChartThresholdsDto { Low = 70, High = 180, TargetLow = 90, TargetHigh = 140 },
     };
 
     [Fact]
@@ -667,6 +668,18 @@ public class AnalyticsReadScopeGuardTests
         data.Reservoir.Should().BeNull();
         data.PumpBatteryPercent.Should().BeNull();
         data.PumpBatteryVoltage.Should().BeNull();
+    }
+
+    [Fact]
+    public void CurrentTherapyState_Thresholds_FollowGlucose()
+    {
+        var withGlucose = CurrentTherapyStateReadScopeGuard.Redact(
+            TherapyState(), Granted(Scope.GlucoseRead));
+        withGlucose.Thresholds.Should().Be(TherapyState().Thresholds);
+
+        var withoutGlucose = CurrentTherapyStateReadScopeGuard.Redact(
+            TherapyState(), Granted(Scope.TherapyRead, Scope.DevicesRead));
+        withoutGlucose.Thresholds.Should().Be(new ChartThresholdsDto());
     }
 
     /// <summary>
@@ -708,7 +721,8 @@ public class AnalyticsReadScopeGuardTests
             .ReturnsAsync(new PumpSnapshot { Reservoir = 42 });
 
         var controller = new CurrentTherapyStateController(
-            stateSpans.Object, sensitivity.Object, pumps.Object)
+            stateSpans.Object, sensitivity.Object, pumps.Object,
+            Mock.Of<ITherapySettingsResolver>(), Mock.Of<ITargetRangeResolver>())
         {
             ControllerContext = ContextWith(Granted(Scope.TherapyRead)),
         };

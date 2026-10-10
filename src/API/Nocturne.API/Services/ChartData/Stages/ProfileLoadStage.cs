@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 
@@ -10,14 +9,7 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// used by all subsequent stages: timezone, glucose thresholds, and default basal rate.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The coloring thresholds (very-low 54, low 70, high 180, very-high 250 mg/dL) are a fixed clinical
-/// glycemic band, not the patient's personal target — so a narrow target (e.g. 95-95) does not
-/// collapse the "In Range" band onto a single value. The personal target is read from the active
-/// profile at <see cref="ChartDataContext.EndTime"/> and carried separately as
-/// <see cref="ChartThresholdsDto.TargetLow"/>/<see cref="ChartThresholdsDto.TargetHigh"/> for a
-/// distinct reference line. When no profile is available there is no target and basal defaults to 1.0 U/hr.
-/// </para>
+/// Thresholds are built by <see cref="ChartThresholdsBuilder"/>. With no profile, basal defaults to 1.0 U/hr.
 /// </remarks>
 /// <seealso cref="IChartDataStage"/>
 /// <seealso cref="ChartDataContext"/>
@@ -28,11 +20,6 @@ internal sealed class ProfileLoadStage(
     ILogger<ProfileLoadStage> logger
 ) : IChartDataStage
 {
-    private const double DefaultVeryLow = 54;
-    private const double DefaultLow = GlucoseConstants.TargetBottomMgdl;
-    private const double DefaultHigh = GlucoseConstants.TargetTopMgdl;
-    private const double DefaultVeryHigh = 250;
-
     public async Task<ChartDataContext> ExecuteAsync(ChartDataContext context, CancellationToken cancellationToken)
     {
         var hasData = await therapySettingsResolver.HasDataAsync(cancellationToken);
@@ -45,28 +32,16 @@ internal sealed class ProfileLoadStage(
         {
             timezone = await therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
 
-            thresholds = new ChartThresholdsDto
-            {
-                VeryLow = DefaultVeryLow,
-                Low = DefaultLow,
-                High = DefaultHigh,
-                VeryHigh = DefaultVeryHigh,
-                TargetLow = await targetRangeResolver.GetLowBGTargetAsync(context.EndTime, ct: cancellationToken),
-                TargetHigh = await targetRangeResolver.GetHighBGTargetAsync(context.EndTime, ct: cancellationToken),
-            };
+            thresholds = await ChartThresholdsBuilder.BuildAsync(
+                targetRangeResolver, hasProfile: true, context.EndTime, cancellationToken);
             defaultBasalRate = await basalRateResolver.GetBasalRateAsync(context.EndTime, ct: cancellationToken);
 
             logger.LogDebug("Loaded profile data from V4 resolvers");
         }
         else
         {
-            thresholds = new ChartThresholdsDto
-            {
-                VeryLow = DefaultVeryLow,
-                Low = DefaultLow,
-                High = DefaultHigh,
-                VeryHigh = DefaultVeryHigh,
-            };
+            thresholds = await ChartThresholdsBuilder.BuildAsync(
+                targetRangeResolver, hasProfile: false, context.EndTime, cancellationToken);
             defaultBasalRate = 1.0;
         }
 

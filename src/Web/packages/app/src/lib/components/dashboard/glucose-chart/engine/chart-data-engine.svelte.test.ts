@@ -32,6 +32,7 @@ import { error } from "@sveltejs/kit";
 import { flushSync } from "svelte";
 import type { RealtimeStore } from "$lib/stores/realtime-store.svelte";
 import { getChartData } from "$api/chart-data.remote";
+import { getPredictionStatus } from "$api/predictions.remote";
 import { transformChartData } from "$lib/utils/chart-data-transform";
 import type { Entry } from "$lib/websocket/types";
 import Harness from "./chart-data-engine-harness.test.svelte";
@@ -132,6 +133,120 @@ describe("chart data engine — realtime merge window", () => {
     expect(engine.glucoseData.map((p) => p.sgv).sort((a, b) => a - b)).toEqual([
       70, 80,
     ]);
+  });
+});
+
+describe("chart data engine — realtime glucose source", () => {
+  const sidebar: ChartDataEngineOptions = {
+    focusHours: 3,
+    enablePredictions: false,
+    dataWindow: "display",
+    glucoseSource: "realtime",
+  };
+
+  function mountSidebar(
+    options: ChartDataEngineOptions = sidebar,
+    onstore?: (store: RealtimeStore) => void
+  ) {
+    let engine!: ChartDataEngine;
+    vi.mocked(getChartData).mockClear();
+    render(Harness, {
+      props: {
+        entries,
+        options,
+        onengine: (e: ChartDataEngine) => (engine = e),
+        onstore,
+      },
+    });
+    return engine;
+  }
+
+  it("draws the display window from the store's readings without asking the server", async () => {
+    const engine = mountSidebar();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(getChartData).not.toHaveBeenCalled();
+    expect(engine.serverChartData).toBeNull();
+    expect(engine.glucoseData.map((p) => p.sgv).sort((a, b) => a - b)).toEqual([110, 120]);
+  });
+
+  it("uses the fixed band with no target until the store has the therapy state's thresholds", () => {
+    const engine = mountSidebar();
+
+    expect(engine.thresholds).toMatchObject({
+      veryLow: 54,
+      low: 70,
+      high: 180,
+      veryHigh: 250,
+      targetLow: null,
+      targetHigh: null,
+    });
+  });
+
+  it("takes the thresholds the store holds, colouring points by them", () => {
+    const engine = mountSidebar(sidebar, (s) => {
+      s.chartThresholds = {
+        veryLow: 54,
+        low: 70,
+        high: 115,
+        veryHigh: 250,
+        targetLow: 90,
+        targetHigh: 110,
+      };
+    });
+
+    expect(engine.thresholds).toMatchObject({ high: 115, targetLow: 90, targetHigh: 110 });
+    const colourOf = (sgv: number) => engine.glucoseData.find((p) => p.sgv === sgv)?.color;
+    expect(colourOf(110)).toBe("var(--glucose-in-range)");
+    expect(colourOf(120)).toBe("var(--glucose-high)");
+  });
+
+  it("takes the axis ceiling from the store's thresholds", () => {
+    const engine = mountSidebar(sidebar, (s) => {
+      s.chartThresholds = { low: 70, high: 180, veryLow: 54, veryHigh: 250, glucoseYMax: 400 };
+    });
+
+    expect(engine.glucoseYMax).toBe(400);
+  });
+
+  it("makes no remote call at all", async () => {
+    vi.mocked(getPredictionStatus).mockClear();
+    mountSidebar();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(getChartData).not.toHaveBeenCalled();
+    expect(getPredictionStatus).not.toHaveBeenCalled();
+  });
+
+  it("checks prediction status when predictions are enabled", async () => {
+    vi.mocked(getPredictionStatus).mockClear();
+    mountSidebar({ focusHours: 3 });
+
+    await vi.waitFor(() => expect(getPredictionStatus).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not refresh recent data when treatment data changes or the fallback timer fires", async () => {
+    vi.useFakeTimers();
+    try {
+      let store!: RealtimeStore;
+      mountSidebar({ ...sidebar, initialChartData: transformChartData({}) }, (s) => {
+        store = s;
+        s.isReady = true;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      store.boluses = [{ id: "new" }];
+      await vi.advanceTimersByTimeAsync(6 * MINUTE);
+
+      expect(getChartData).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still asks the server by default", async () => {
+    mountSidebar({ focusHours: 3, enablePredictions: false });
+
+    await vi.waitFor(() => expect(getChartData).toHaveBeenCalledTimes(1));
   });
 });
 

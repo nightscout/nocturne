@@ -295,8 +295,13 @@ function processSpans<T extends { startTime: Date; endTime?: Date | null }>(
     }));
 }
 
-/** What the fetch, realtime and prediction layers hand the pure derivations. */
-export type ChartDataViewSource = Pick<
+/**
+ * What the fetch, realtime and prediction layers hand the pure derivations.
+ * `thresholdsOverride` stands in for the server payload's thresholds when set.
+ */
+export type ChartDataViewSource = {
+  readonly thresholdsOverride?: ChartThresholds;
+} & Pick<
   ChartDataEngine,
   | "serverChartData"
   | "glucoseData"
@@ -360,7 +365,7 @@ export function createChartDataView(
 
   // ---- Thresholds ----
   const resolvedThresholds = $derived(
-    resolveChartThresholds(serverChartData?.thresholds)
+    source.thresholdsOverride ?? resolveChartThresholds(serverChartData?.thresholds)
   );
   const lowThreshold = $derived(resolvedThresholds.low);
   const highThreshold = $derived(resolvedThresholds.high);

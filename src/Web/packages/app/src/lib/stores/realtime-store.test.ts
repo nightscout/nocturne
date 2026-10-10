@@ -70,6 +70,7 @@ type TestStore = StoreInternals &
     | "connectionUnavailable"
     | "connectionPresentation"
     | "currentReservoir"
+    | "chartThresholds"
     | "entries"
     | "currentEntry"
     | "bgDelta"
@@ -377,6 +378,45 @@ describe("RealtimeStore reservoir freshness", () => {
     await store.performBackfillIfNeeded(true);
 
     expect(store.currentReservoir).toBe(30);
+
+    store.destroy();
+  });
+});
+
+describe("RealtimeStore chart thresholds", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    api.apsGetAll.mockResolvedValue({ data: [] });
+    api.emptyPage.mockResolvedValue({ data: [] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it("keeps the chart thresholds from the therapy state", async () => {
+    const thresholds = { low: 70, high: 180, veryLow: 54, veryHigh: 250, targetLow: 90, targetHigh: 140 };
+    api.getCurrentTherapyState.mockResolvedValue({ reservoir: 42, thresholds });
+    const store = makeStore();
+    expect(store.chartThresholds).toBeNull();
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(store.chartThresholds).toEqual(thresholds);
+
+    store.destroy();
+  });
+
+  it("keeps the last chart thresholds when the refresh fails", async () => {
+    const store = makeStore();
+    const thresholds = { low: 70, high: 180 };
+    store.chartThresholds = thresholds;
+    api.getCurrentTherapyState.mockRejectedValue(new Error("offline"));
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(store.chartThresholds).toBe(thresholds);
 
     store.destroy();
   });

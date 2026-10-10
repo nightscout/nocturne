@@ -4,6 +4,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.ChartData;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -15,7 +16,8 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <summary>
 /// Returns small "right now" therapy values for the dashboard: the active pump
 /// operational mode, the current insulin sensitivity expressed as a percentage
-/// of the profile baseline, and the pump's latest reservoir and battery reading.
+/// of the profile baseline, the pump's latest reservoir and battery reading, and the
+/// glucose thresholds in force now.
 /// </summary>
 [ApiController]
 [Tags("Current Therapy State")]
@@ -26,15 +28,21 @@ public class CurrentTherapyStateController : ControllerBase
     private readonly IStateSpanService _stateSpanService;
     private readonly ISensitivityResolver _sensitivityResolver;
     private readonly IPumpSnapshotRepository _pumpSnapshotRepository;
+    private readonly ITherapySettingsResolver _therapySettingsResolver;
+    private readonly ITargetRangeResolver _targetRangeResolver;
 
     public CurrentTherapyStateController(
         IStateSpanService stateSpanService,
         ISensitivityResolver sensitivityResolver,
-        IPumpSnapshotRepository pumpSnapshotRepository)
+        IPumpSnapshotRepository pumpSnapshotRepository,
+        ITherapySettingsResolver therapySettingsResolver,
+        ITargetRangeResolver targetRangeResolver)
     {
         _stateSpanService = stateSpanService;
         _sensitivityResolver = sensitivityResolver;
         _pumpSnapshotRepository = pumpSnapshotRepository;
+        _therapySettingsResolver = therapySettingsResolver;
+        _targetRangeResolver = targetRangeResolver;
     }
 
     /// <summary>
@@ -51,6 +59,11 @@ public class CurrentTherapyStateController : ControllerBase
         var pumpMode = await _stateSpanService.GetCurrentPumpModeAsync(cancellationToken);
         var sensitivityPercent = await _sensitivityResolver.GetCurrentSensitivityPercentAsync(cancellationToken);
         var latestPump = await _pumpSnapshotRepository.GetLatestAsync(asOf: null, cancellationToken);
+        var thresholds = await ChartThresholdsBuilder.BuildAsync(
+            _targetRangeResolver,
+            await _therapySettingsResolver.HasDataAsync(cancellationToken),
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            cancellationToken);
         return Ok(CurrentTherapyStateReadScopeGuard.Redact(
             new CurrentTherapyStateResponse
             {
@@ -59,6 +72,7 @@ public class CurrentTherapyStateController : ControllerBase
                 Reservoir = latestPump?.Reservoir,
                 PumpBatteryPercent = latestPump?.BatteryPercent,
                 PumpBatteryVoltage = latestPump?.BatteryVoltage,
+                Thresholds = thresholds,
             },
             HttpContext.GetGrantedScopes()));
     }
@@ -101,4 +115,11 @@ public class CurrentTherapyStateResponse
     /// pump reports no battery voltage.
     /// </summary>
     public double? PumpBatteryVoltage { get; set; }
+
+    /// <summary>
+    /// The glucose colouring band and the personal target in force now, as the chart data
+    /// endpoint carries them for a window ending now. <see cref="ChartThresholdsDto.GlucoseYMax"/>
+    /// is the cap on the ceiling chart data derives from its series, there being no series here.
+    /// </summary>
+    public ChartThresholdsDto Thresholds { get; set; } = new();
 }

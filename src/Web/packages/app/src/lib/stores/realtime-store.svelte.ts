@@ -26,6 +26,7 @@ import type {
   DeviceEvent,
   ApsSnapshot,
   ProfileSummary,
+  ChartThresholdsDto,
   SensorGlucose,
 } from "$lib/api";
 
@@ -203,6 +204,9 @@ export class RealtimeStore {
 
   /** Latest pump reservoir (units), null when the pump reports no numeric level. */
   currentReservoir = $state<number | null>(null);
+
+  /** Glucose thresholds in force now, from the current therapy state; null until its first load. */
+  chartThresholds = $state.raw<ChartThresholdsDto | null>(null);
 
   /** Connection state (with safe initialization) */
   connectionStatus = $derived(
@@ -508,6 +512,7 @@ export class RealtimeStore {
 
         if (currentTherapyState) {
           this.currentReservoir = currentTherapyState.reservoir ?? null;
+          this.chartThresholds = currentTherapyState.thresholds ?? null;
         }
 
         this.isReady = true;
@@ -1033,17 +1038,18 @@ export class RealtimeStore {
     this.decompositionRefreshTimer = setTimeout(() => {
       this.decompositionRefreshTimer = null;
       void this.refreshLatestApsSnapshot();
-      void this.refreshCurrentReservoir();
+      void this.refreshCurrentTherapyState();
     }, RealtimeStore.DECOMPOSITION_REFRESH_MS);
   }
 
-  /** Re-read the pump reservoir from the current therapy state. */
-  private async refreshCurrentReservoir(): Promise<void> {
+  /** Re-read the pump reservoir and chart thresholds from the current therapy state. */
+  private async refreshCurrentTherapyState(): Promise<void> {
     try {
       const therapyState = await getApiClient().currentTherapyState.getCurrentTherapyState();
       this.currentReservoir = therapyState?.reservoir ?? null;
+      this.chartThresholds = therapyState?.thresholds ?? null;
     } catch {
-      // Non-critical — the reservoir pill keeps its last value until the next refresh.
+      // Non-critical — the reservoir pill and thresholds keep their last values until the next refresh.
     }
   }
 
@@ -1101,7 +1107,7 @@ export class RealtimeStore {
       const apiClient = getApiClient();
 
       // Fetch all data types since last received using existing API methods
-      const reservoirRefresh = this.refreshCurrentReservoir();
+      const reservoirRefresh = this.refreshCurrentTherapyState();
       const [entries, deviceStatuses, boluses, carbIntakes, bgChecks, notes, devEvents, newApsSnapshots] = await Promise.all([
         apiClient.sensorGlucose.getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch((): Entry[] => []),
         Promise.resolve<DeviceStatus[]>([]),
