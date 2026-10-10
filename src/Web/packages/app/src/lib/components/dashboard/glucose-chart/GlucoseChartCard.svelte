@@ -224,6 +224,11 @@
     showPredictions && engine.effectiveShowPredictions && !print.active,
   );
 
+  // The controls' line is held until the prediction status says nothing will fill it.
+  const reservePredictionControls = $derived(
+    showPredictions && engine.predictionAvailability !== "unavailable",
+  );
+
   let predictionModeValue = $state(predictionDisplayMode.current);
 
   function handlePredictionModeChange(value: PredictionDisplayMode) {
@@ -357,12 +362,13 @@
         {/if}
       </CardTitle>
 
-      <!-- When predictions are requested this slot holds the controls' space whether or not they
-           render, so the plot does not move when the prediction status arrives: min-h-8 is the
-           segmented xs toggle's height (h-7 items in a p-0.5 track), and below @lg the controls
-           do not fit beside the title, so the slot takes its own line. -->
+      <!-- Until the prediction status says there is nothing to show, this slot holds the
+           controls' space whether or not they render, so the plot does not move when the status
+           arrives: min-h-8 is the segmented xs toggle's height (h-7 items in a p-0.5 track), and
+           below @lg the controls do not fit beside the title, so the slot takes its own line. -->
       <div
-        class="flex items-center gap-2 print:hidden {showPredictions
+        data-testid="prediction-controls"
+        class="flex items-center gap-2 print:hidden {reservePredictionControls
           ? 'min-h-8 basis-full @lg:basis-auto'
           : ''}"
       >

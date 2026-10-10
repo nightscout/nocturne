@@ -19,7 +19,11 @@ import { mergeChartData, replaceWindow } from "$lib/utils/chart-data-merge";
 import type { TransformedChartData } from "$lib/utils/chart-data-transform";
 import { stableBy } from "$lib/utils/stable-by";
 import { mergeRealtimeGlucose } from "./merge-glucose";
-import { createChartDataView, type ChartDataEngine } from "./chart-data-view.svelte";
+import {
+  createChartDataView,
+  type ChartDataEngine,
+  type PredictionAvailability,
+} from "./chart-data-view.svelte";
 
 export * from "./chart-data-view.svelte";
 
@@ -125,7 +129,8 @@ export function createChartDataEngine(
   let predictionData = $state.raw<PredictionData | null>(null);
   let predictionError = $state<string | null>(null);
   let chartDataError = $state<string | null>(null);
-  let predictionServiceAvailable = $state(false);
+  let predictionServiceStatus = $state<PredictionAvailability>("unknown");
+  const predictionServiceAvailable = $derived(predictionServiceStatus === "available");
   let processedHistoricalPromise =
     $state<Promise<TransformedChartData | null> | null>(null);
 
@@ -138,6 +143,14 @@ export function createChartDataEngine(
 
   const hasExternalPredictions = $derived(
     options.externalPredictionData !== undefined
+  );
+
+  const predictionAvailability = $derived<PredictionAvailability>(
+    !(options.enablePredictions ?? true)
+      ? "unavailable"
+      : hasExternalPredictions
+        ? "available"
+        : predictionServiceStatus
   );
 
   const effectiveShowPredictions = $derived(
@@ -440,13 +453,13 @@ export function createChartDataEngine(
     getPredictionStatus({})
       .then((status) => {
         if (!cancelled) {
-          predictionServiceAvailable = status.available;
+          predictionServiceStatus = status.available ? "available" : "unavailable";
         }
       })
       .catch((err) => {
         if (!cancelled) {
           console.warn("Failed to check prediction service status:", err);
-          predictionServiceAvailable = false;
+          predictionServiceStatus = "unavailable";
         }
       });
 
@@ -505,6 +518,9 @@ export function createChartDataEngine(
     },
     get predictionServiceAvailable() {
       return predictionServiceAvailable;
+    },
+    get predictionAvailability() {
+      return predictionAvailability;
     },
     get effectiveShowPredictions() {
       return effectiveShowPredictions;

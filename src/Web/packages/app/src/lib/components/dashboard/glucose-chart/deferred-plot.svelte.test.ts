@@ -77,4 +77,43 @@ describe("GlucoseChartCard deferred drawing", () => {
       expect(plotArea().getBoundingClientRect().top).toBe(reservedTop);
     }
   );
+
+  describe("the prediction controls' line on a narrow card", () => {
+    const controlsSlot = () => page.getByTestId("prediction-controls").element();
+
+    function renderNarrow() {
+      let reportStatus!: (status: { available: boolean }) => void;
+      predictionStatus.next = new Promise((resolve) => (reportStatus = resolve));
+      render(Harness, {
+        props: { initiallyDeferred: false, showPredictions: true, narrow: true, onready: () => {} },
+      });
+      return reportStatus;
+    }
+
+    it("is reserved while the prediction status is pending", async () => {
+      renderNarrow();
+
+      await expect.element(page.getByText("Blood Glucose")).toBeVisible();
+      expect(controlsSlot().getBoundingClientRect().height).toBe(32);
+    });
+
+    it("collapses once the status says predictions are unavailable", async () => {
+      const reportStatus = renderNarrow();
+      await expect.element(page.getByText("Blood Glucose")).toBeVisible();
+
+      reportStatus({ available: false });
+
+      await vi.waitFor(() => expect(controlsSlot().getBoundingClientRect().height).toBe(0));
+    });
+
+    it("stays reserved once the status says predictions are available", async () => {
+      const reportStatus = renderNarrow();
+      await expect.element(page.getByText("Blood Glucose")).toBeVisible();
+
+      reportStatus({ available: true });
+
+      await expect.element(page.getByText("Cone")).toBeVisible();
+      expect(controlsSlot().getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
+    });
+  });
 });
