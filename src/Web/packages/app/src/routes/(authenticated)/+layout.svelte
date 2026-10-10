@@ -63,7 +63,10 @@
   const tenantless: boolean = data.tenantless === true;
 
   const realtimeStore = createRealtimeStore(config);
-  refreshSummaryOnNewReading(() => realtimeStore.currentEntry?.mills);
+  refreshSummaryOnNewReading(
+    () => realtimeStore.currentEntry?.mills,
+    () => data.canViewRealtimeData
+  );
   createAuthStore(); // Initialize auth store in context
 
   // Suppress the auth interceptor's login redirect for guest and public
