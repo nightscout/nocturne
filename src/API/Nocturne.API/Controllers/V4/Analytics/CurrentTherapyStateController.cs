@@ -51,7 +51,7 @@ public class CurrentTherapyStateController : ControllerBase
     /// </summary>
     [HttpGet]
     [RemoteQuery]
-    [RequireScope(Scope.DevicesRead, Scope.TherapyRead)]
+    [RequireScope(Scope.GlucoseRead, Scope.DevicesRead, Scope.TherapyRead)]
     [ProducesResponseType(typeof(CurrentTherapyStateResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<CurrentTherapyStateResponse>> GetCurrentTherapyState(
         CancellationToken cancellationToken = default)

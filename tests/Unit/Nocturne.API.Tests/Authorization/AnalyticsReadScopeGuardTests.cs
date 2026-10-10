@@ -682,17 +682,52 @@ public class AnalyticsReadScopeGuardTests
         withoutGlucose.Thresholds.Should().Be(new ChartThresholdsDto());
     }
 
+    [Fact]
+    public void CurrentTherapyState_GlucoseOnlyGrant_KeepsOnlyTheThresholds()
+    {
+        var data = CurrentTherapyStateReadScopeGuard.Redact(TherapyState(), Granted(Scope.GlucoseRead));
+
+        data.Thresholds.Should().Be(TherapyState().Thresholds);
+        data.CurrentPumpMode.Should().BeNull();
+        data.Reservoir.Should().BeNull();
+        data.PumpBatteryPercent.Should().BeNull();
+        data.PumpBatteryVoltage.Should().BeNull();
+        data.SensitivityPercent.Should().BeNull();
+    }
+
     /// <summary>
-    /// The Viewer role holds glucose and reports only, so it reaches neither category here.
+    /// The sidebar sparkline takes its thresholds from this endpoint, so a caller who can read the
+    /// glucose series (a share link, a guest, the Viewer role) must be admitted to read them.
     /// </summary>
     [Fact]
-    public void CurrentTherapyState_ViewerScopes_SeeNothing()
+    public void CurrentTherapyState_AdmitsAGlucoseOnlyCaller()
+    {
+        CurrentTherapyStateReadScopeGuard.AdmissionScopes.Should().BeEquivalentTo(new[]
+        {
+            Scope.GlucoseRead,
+            Scope.DevicesRead,
+            Scope.TherapyRead,
+        });
+    }
+
+    /// <summary>
+    /// The Viewer role holds glucose and reports only, so it is admitted for the thresholds and
+    /// reaches neither the device nor the therapy fields.
+    /// </summary>
+    [Fact]
+    public void CurrentTherapyState_ViewerScopes_SeeOnlyTheThresholds()
     {
         var viewer = Scope.NormalizeMemberPermissions(
             RoleSeeds.Permissions[RoleSeeds.Viewer]);
 
         CurrentTherapyStateReadScopeGuard.AdmissionScopes
-            .Should().NotContain(s => Scope.Satisfies(viewer, s));
+            .Should().Contain(s => Scope.Satisfies(viewer, s));
+
+        var data = CurrentTherapyStateReadScopeGuard.Redact(TherapyState(), viewer);
+        data.Thresholds.Should().Be(TherapyState().Thresholds);
+        data.CurrentPumpMode.Should().BeNull();
+        data.Reservoir.Should().BeNull();
+        data.SensitivityPercent.Should().BeNull();
     }
 
     [Fact]
@@ -734,6 +769,41 @@ public class AnalyticsReadScopeGuardTests
         data.SensitivityPercent.Should().Be(90);
         data.CurrentPumpMode.Should().BeNull();
         data.Reservoir.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CurrentTherapyState_Handler_GlucoseOnlyCaller_GetsTheThresholdsAlone()
+    {
+        var stateSpans = new Mock<IStateSpanService>();
+        stateSpans.Setup(s => s.GetCurrentPumpModeAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PumpModeState.Manual);
+
+        var sensitivity = new Mock<ISensitivityResolver>();
+        sensitivity.Setup(s => s.GetCurrentSensitivityPercentAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(90);
+
+        var pumps = new Mock<IPumpSnapshotRepository>();
+        pumps.Setup(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PumpSnapshot { Reservoir = 42, BatteryPercent = 80, BatteryVoltage = 1.4 });
+
+        var controller = new CurrentTherapyStateController(
+            stateSpans.Object, sensitivity.Object, pumps.Object,
+            Mock.Of<ITherapySettingsResolver>(), Mock.Of<ITargetRangeResolver>())
+        {
+            ControllerContext = ContextWith(Granted(Scope.GlucoseRead)),
+        };
+
+        var result = await controller.GetCurrentTherapyState();
+
+        var data = result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<CurrentTherapyStateResponse>().Subject;
+        data.Thresholds.GlucoseYMax.Should().BeGreaterThan(0);
+        data.Thresholds.Should().NotBe(new ChartThresholdsDto());
+        data.CurrentPumpMode.Should().BeNull();
+        data.SensitivityPercent.Should().BeNull();
+        data.Reservoir.Should().BeNull();
+        data.PumpBatteryPercent.Should().BeNull();
+        data.PumpBatteryVoltage.Should().BeNull();
     }
 
     // ── Usage analytics ─────────────────────────────────────────────────────────────────────

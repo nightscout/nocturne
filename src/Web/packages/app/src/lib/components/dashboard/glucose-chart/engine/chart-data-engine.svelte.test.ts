@@ -203,10 +203,10 @@ describe("chart data engine — realtime glucose source", () => {
 
   it("takes the axis ceiling from the store's thresholds", () => {
     const engine = mountSidebar(sidebar, (s) => {
-      s.chartThresholds = { low: 70, high: 180, veryLow: 54, veryHigh: 250, glucoseYMax: 400 };
+      s.chartThresholds = { low: 70, high: 180, veryLow: 54, veryHigh: 250, glucoseYMax: 370 };
     });
 
-    expect(engine.glucoseYMax).toBe(400);
+    expect(engine.glucoseYMax).toBe(370);
   });
 
   it("makes no remote call at all", async () => {
