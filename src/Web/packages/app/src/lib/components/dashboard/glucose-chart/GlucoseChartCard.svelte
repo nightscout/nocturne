@@ -357,7 +357,15 @@
         {/if}
       </CardTitle>
 
-      <div class="flex items-center gap-2 print:hidden">
+      <!-- When predictions are requested this slot holds the controls' space whether or not they
+           render, so the plot does not move when the prediction status arrives: min-h-8 is the
+           segmented xs toggle's height (h-7 items in a p-0.5 track), and below @lg the controls
+           do not fit beside the title, so the slot takes its own line. -->
+      <div
+        class="flex items-center gap-2 print:hidden {showPredictions
+          ? 'min-h-8 basis-full @lg:basis-auto'
+          : ''}"
+      >
         <PredictionSettings
           showPredictions={effectiveShowPredictions}
           predictionMode={predictionModeValue}

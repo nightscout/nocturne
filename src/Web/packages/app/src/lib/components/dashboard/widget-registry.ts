@@ -32,6 +32,36 @@ const TOP_WIDGET_LOADERS: Record<TopWidgetId, WidgetLoader> = {
   [WidgetId.Tdd]: () => import("./widgets/TddWidget.svelte"),
 };
 
+/**
+ * What WidgetPlaceholder draws while a widget's component loads: the shape the
+ * widget itself renders first (before its own data arrives), so the cell keeps
+ * its height when the component replaces the placeholder.
+ */
+export type TopWidgetPlaceholder =
+  | "delta"
+  | "stat"
+  | "clock"
+  | "connection"
+  | "empty-state"
+  | "caption"
+  | "spinner";
+
+const TOP_WIDGET_PLACEHOLDERS: Record<TopWidgetId, TopWidgetPlaceholder> = {
+  [WidgetId.BgDelta]: "delta",
+  [WidgetId.LastUpdated]: "stat",
+  [WidgetId.ConnectionStatus]: "connection",
+  [WidgetId.Meals]: "empty-state",
+  [WidgetId.Trackers]: "empty-state",
+  [WidgetId.TirChart]: "spinner",
+  [WidgetId.DailySummary]: "caption",
+  [WidgetId.Clock]: "clock",
+  [WidgetId.Tdd]: "spinner",
+};
+
+export function topWidgetPlaceholder(id: TopWidgetId): TopWidgetPlaceholder {
+  return TOP_WIDGET_PLACEHOLDERS[id];
+}
+
 const cache = new Map<TopWidgetId, Promise<Component>>();
 
 export function loadTopWidget(id: TopWidgetId): Promise<Component> {

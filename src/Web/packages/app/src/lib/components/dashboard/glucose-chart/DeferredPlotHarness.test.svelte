@@ -7,11 +7,14 @@
 
   interface Props {
     initiallyDeferred: boolean;
+    showPredictions?: boolean;
+    /** Narrower than a phone, so the header's controls take their own line. */
+    narrow?: boolean;
     /** Hands the test the setter for `deferDrawing`. */
     onready: (setDeferred: (deferred: boolean) => void) => void;
   }
 
-  let { initiallyDeferred, onready }: Props = $props();
+  let { initiallyDeferred, showPredictions = false, narrow = false, onready }: Props = $props();
 
   createRealtimeStore({
     url: "",
@@ -36,6 +39,6 @@
   onready((value) => (deferred = value));
 </script>
 
-<div class="h-[600px] w-[800px]">
-  <GlucoseChartCard {initialChartData} showPredictions={false} deferDrawing={deferred} />
+<div class="h-[600px] {narrow ? 'w-[340px]' : 'w-[800px]'}">
+  <GlucoseChartCard {initialChartData} {showPredictions} deferDrawing={deferred} />
 </div>
