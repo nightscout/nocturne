@@ -113,9 +113,11 @@ export class WebSocketClient {
     this.config = config;
   }
 
-  /** Connect to WebSocket bridge */
+  /** Open the socket to the bridge. Does nothing while one exists, connecting
+   *  or connected: reopening a dropped one is `ensureConnected`'s, and a
+   *  replacement follows `disconnect()`. */
   connect(): void {
-    if (this.socket?.connected) {
+    if (this.socket) {
       return;
     }
 

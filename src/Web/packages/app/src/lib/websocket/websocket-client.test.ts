@@ -164,8 +164,9 @@ describe("WebSocketClient handshake ticket handling", () => {
     const abandoned = lastSocket!;
     void abandoned.sendHandshake();
 
-    // A second connect() replaces the socket while the first ticket is still
-    // in flight.
+    // A reconnect replaces the socket while the first ticket is still in
+    // flight.
+    client.disconnect();
     client.connect();
     const current = lastSocket!;
     await current.sendHandshake();
@@ -261,6 +262,34 @@ describe("WebSocketClient handshake ticket handling", () => {
 
     expect(client.connectionStatus).not.toBe("connected");
     expect(lastSocket!.disconnectCalls).toBeGreaterThan(0);
+  });
+});
+
+describe("WebSocketClient.connect with a socket already open", () => {
+  it("opens one socket when called twice", () => {
+    stubTicketEndpoint({ token: "a-verifiable-ticket" });
+    const client = new WebSocketClient(config);
+
+    client.connect();
+    const first = lastSocket;
+    client.connect();
+
+    expect(lastSocket).toBe(first);
+    expect(first!.disconnectCalls).toBe(0);
+  });
+
+  it("opens no second socket after ensureConnected opened one", () => {
+    // A tab hidden during the first load reconnects through ensureConnected
+    // before the store's deferred connect() runs.
+    stubTicketEndpoint({ token: "a-verifiable-ticket" });
+    const client = new WebSocketClient(config);
+
+    client.ensureConnected();
+    const first = lastSocket;
+    client.connect();
+
+    expect(first).not.toBeNull();
+    expect(lastSocket).toBe(first);
   });
 });
 
