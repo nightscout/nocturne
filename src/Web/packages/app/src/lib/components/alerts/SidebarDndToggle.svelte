@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import { satisfiesScope } from "$lib/authorization/scopes";
@@ -12,6 +11,13 @@
   import Bell from "@lucide/svelte/icons/bell";
   import BellOff from "@lucide/svelte/icons/bell-off";
   import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
+
+  interface Props {
+    /** Whether the toggle is on screen. The settings are read the first time it is. */
+    visible?: boolean;
+  }
+
+  const { visible = true }: Props = $props();
 
   // Manual DND is tenant-wide — it suppresses delivery of every non-critical
   // alert for every member — so the server gates it on alerts.readwrite.
@@ -42,8 +48,10 @@
     }
   }
 
+  // The update carries the schedule fields back, so it waits for them to be read: sent from the
+  // null state it would switch off a configured schedule.
   async function toggleManual(checked: boolean): Promise<void> {
-    if (saving) return;
+    if (saving || settings === null) return;
     saving = true;
     failed = false;
     try {
@@ -64,9 +72,12 @@
     }
   }
 
+  let requested = false;
   // `.run()` rejects during the render flush, so defer the bootstrap to a microtask.
-  onMount(() => {
-    if (canSetDnd) queueMicrotask(load);
+  $effect(() => {
+    if (!visible || !canSetDnd || requested) return;
+    requested = true;
+    queueMicrotask(load);
   });
 </script>
 
@@ -95,7 +106,7 @@
       class="scale-75 -mr-1"
       checked={isManualActive}
       onCheckedChange={toggleManual}
-      disabled={saving}
+      disabled={saving || settings === null}
       aria-label="Toggle Do Not Disturb"
     />
   </div>
