@@ -183,6 +183,21 @@ describe("hooks — the status probe", () => {
     expect(getStatus).toHaveBeenCalledTimes(2);
   });
 
+  it("does not cache a setup_required document", async () => {
+    // An apex that gets its first tenant must stop reading as tenantless on the next request.
+    const host = freshHost();
+    const tenantless = { status: "setup_required", tenantSlug: null };
+    getStatus.mockResolvedValue(tenantless);
+    const first = await run(requestEvent(host, "/", signedIn));
+    getStatus.mockResolvedValue(ready);
+
+    const second = await run(requestEvent(host, "/", signedIn));
+
+    expect(first.layoutStatus).toEqual(tenantless);
+    expect(second.layoutStatus).toEqual(ready);
+    expect(getStatus).toHaveBeenCalledTimes(2);
+  });
+
   it("keys the cache by host", async () => {
     getStatus.mockResolvedValue(ready);
     await run(requestEvent(freshHost(), "/", signedIn));

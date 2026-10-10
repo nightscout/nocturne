@@ -137,14 +137,16 @@ const authHandle: Handle = async ({ event, resolve }) => {
 };
 
 /**
- * Status bodies of the hosts whose readiness probe last succeeded, with when each answer expires.
- * Only "ready" is remembered: a host entering setup or recovery is redirected at most READY_TTL_MS
- * late, while the API keeps refusing its data calls meanwhile; a host that is not ready is probed
- * every request. The body depends only on the host (the API resolves the tenant from it and caches
+ * Status bodies of the hosts whose probe last answered ready (`READY_STATUS`), with when each
+ * answer expires. Only a ready body is remembered: a host entering setup or recovery is redirected
+ * at most READY_TTL_MS late, while the API keeps refusing its data calls meanwhile; a host that is
+ * not ready, including one answering "setup_required" or "error", is probed every request. The body depends only on the host (the API resolves the tenant from it and caches
  * the document per tenant), so a hit also answers getRequestStatus for any caller.
  */
 const readyStatus = new Map<string, { body: App.TenantStatus; until: number }>();
 const READY_TTL_MS = 10_000;
+/** The status a ready host's document carries (StatusService). */
+const READY_STATUS = "ok";
 const READY_CACHE_MAX_HOSTS = 1_000;
 
 function cachedReadyStatus(host: string | null): App.TenantStatus | undefined {
@@ -214,9 +216,7 @@ const statusProbeHandle: Handle = async ({ event, resolve }) => {
         extraHeaders: probeHeaders,
       });
       const body = await apiClient.status.getStatus();
-      // The API answers a failure to build the document with a 200 "error" body; that must not
-      // stand in for the host's status for the whole TTL.
-      if (body.status !== "error") cacheReadyStatus(probeHost, body);
+      if (body.status === READY_STATUS) cacheReadyStatus(probeHost, body);
       return { ok: true, body };
     } catch (error) {
       return { ok: false, error };
