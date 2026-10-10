@@ -12,7 +12,11 @@ export const page = {
   error: null,
   data,
   form: null,
-  state: {},
+  /**
+   * Written by the `$app/navigation` stub's `pushState` / `replaceState`, as SvelteKit does. Like
+   * `url`, a plain property: a write does not re-run anything that read it.
+   */
+  state: {} as App.PageState,
 };
 
 export const navigating = null;

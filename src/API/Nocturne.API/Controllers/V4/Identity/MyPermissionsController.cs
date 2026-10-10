@@ -50,13 +50,32 @@ public class MyPermissionsController : ControllerBase
     [ProducesResponseType(typeof(MyPermissionsResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<MyPermissionsResponse>> GetMyPermissions()
     {
-        return Ok(new MyPermissionsResponse
-        {
-            Scopes = HttpContext.GetGrantedScopes().ToList(),
-            LimitTo24Hours = _categoryReadContext.IsHistoryClamped,
-            RefusedAsDemoSubject = await DenyDemoSubjectAttribute.RefusesAsync(HttpContext),
-        });
+        return Ok(await BuildAsync(HttpContext, _categoryReadContext));
     }
+
+    /// <summary>
+    /// The caller's grant, or null when the default-deny fallback would refuse this endpoint
+    /// (no non-empty permission trie). <see cref="OidcController.GetSession"/> carries it so a
+    /// session check needs no second round-trip to learn it.
+    /// </summary>
+    internal static async Task<MyPermissionsResponse?> TryBuildAsync(HttpContext httpContext)
+    {
+        if (httpContext.GetPermissionTrie() is not { IsEmpty: false })
+            return null;
+
+        return await BuildAsync(
+            httpContext,
+            httpContext.RequestServices.GetRequiredService<ICategoryReadContext>());
+    }
+
+    private static async Task<MyPermissionsResponse> BuildAsync(
+        HttpContext httpContext,
+        ICategoryReadContext categoryReadContext) => new()
+    {
+        Scopes = httpContext.GetGrantedScopes().ToList(),
+        LimitTo24Hours = categoryReadContext.IsHistoryClamped,
+        RefusedAsDemoSubject = await DenyDemoSubjectAttribute.RefusesAsync(httpContext),
+    };
 }
 
 /// <summary>

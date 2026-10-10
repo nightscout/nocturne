@@ -4,19 +4,16 @@ import { flushSync } from "svelte";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
 import type { AuthStore } from "$lib/stores/auth-store.svelte";
+import { flushIdle, resetIdle } from "$lib/test-stubs/when-idle";
 
 let expiresAt: string | undefined;
 
+const getSessionInfo = vi.hoisted(() => vi.fn());
+
+vi.mock("$lib/utils/when-idle", () => import("$lib/test-stubs/when-idle"));
+
 vi.mock("$routes/(unauthenticated)/auth/auth.remote", () => ({
-  getSessionInfo: () =>
-    remoteQuery(() => ({
-      isAuthenticated: true,
-      subjectId: "subject-1",
-      name: "Test User",
-      roles: [],
-      permissions: [],
-      expiresAt,
-    })),
+  getSessionInfo: () => getSessionInfo(),
   refreshSession: remoteCommand(async () => ({ success: true, expiresAt })),
   logoutSession: remoteCommand(async () => ({ success: true })),
 }));
@@ -54,6 +51,18 @@ async function renderLoaded(): Promise<AuthStore> {
 
 describe("SessionExpiryWatcher", () => {
   beforeEach(() => {
+    resetIdle();
+    getSessionInfo.mockReset();
+    getSessionInfo.mockImplementation(() =>
+      remoteQuery(() => ({
+        isAuthenticated: true,
+        subjectId: "subject-1",
+        name: "Test User",
+        roles: [],
+        permissions: [],
+        expiresAt,
+      }))
+    );
     document.cookie = "IsAuthenticated=true; path=/";
     expiresIn(6 * 60 * 60 * 1000);
     // Installed before the render, so the watcher's interval is scheduled on
@@ -127,5 +136,35 @@ describe("SessionExpiryWatcher", () => {
     flushSync();
 
     await expect.element(warning()).toBeVisible();
+  });
+
+  it("asks for the session only once the page is idle, and warns from it then", async () => {
+    expiresIn(2 * 60 * 1000);
+
+    render(SessionExpiryWatcherHarness, { props: { tickMs: TICK_MS } });
+    flushSync();
+    await Promise.resolve();
+
+    expect(getSessionInfo).not.toHaveBeenCalled();
+    await expect.element(warning()).not.toBeInTheDocument();
+
+    flushIdle();
+
+    await expect.element(warning()).toBeVisible();
+    expect(getSessionInfo).toHaveBeenCalledOnce();
+  });
+
+  it("drops the pending session load when the store is destroyed", () => {
+    let captured: AuthStore | undefined;
+    render(SessionExpiryWatcherHarness, {
+      props: { tickMs: TICK_MS, onstore: (store: AuthStore) => (captured = store) },
+    });
+    flushSync();
+
+    captured?.destroy();
+    flushIdle();
+
+    expect(captured).toBeDefined();
+    expect(getSessionInfo).not.toHaveBeenCalled();
   });
 });

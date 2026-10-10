@@ -65,4 +65,23 @@ describe("GlucoseValueIndicator", () => {
     await expect.element(tile).toHaveClass("bg-muted");
     await expect.element(tile).not.toHaveClass("bg-glucose-very-low");
   });
+
+  it.each(["xs", "sm", "lg"] as const)(
+    "holds the same height at size %s while loading as once the value arrives",
+    async (size) => {
+      const { container, rerender } = render(GlucoseValueIndicator, {
+        displayValue: "",
+        isLoading: true,
+        size,
+      });
+      const indicator = () =>
+        container.querySelector<HTMLElement>("[data-slot=glucose-value-indicator]")!;
+      const loadingHeight = indicator().getBoundingClientRect().height;
+
+      await rerender({ displayValue: 170, isLoading: false });
+      await expect.element(page.getByText("170")).toBeVisible();
+
+      expect(indicator().getBoundingClientRect().height).toBe(loadingHeight);
+    }
+  );
 });

@@ -11,7 +11,8 @@
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { onMount, onDestroy, type Snippet } from "svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
-  import { AppSidebar, MobileHeader } from "$lib/components/layout";
+  import AppSidebar from "$lib/components/layout/AppSidebar.svelte";
+  import MobileHeader from "$lib/components/layout/MobileHeader.svelte";
   import type { LayoutData } from "./$types";
   import { getTitleFaviconService } from "$lib/services/title-favicon-service.svelte";
   import { getDefaultSettings } from "$lib/components/settings/constants";
@@ -23,11 +24,12 @@
   import { Button } from "$lib/components/ui/button";
   import AlertSurfaces from "$lib/components/alerts/AlertSurfaces.svelte";
   import DemoBanner from "$lib/components/layout/DemoBanner.svelte";
+  import InitialReadsPrefetch from "$lib/components/layout/InitialReadsPrefetch.svelte";
   import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
   import BackupSignInPrompt from "$lib/components/layout/BackupSignInPrompt.svelte";
   import SessionExpiryWatcher from "$lib/components/layout/SessionExpiryWatcher.svelte";
   import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
-  import { CommandPalette } from "$lib/components/command-palette";
+  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
   import { CoachMarkProvider, type CoachRouter } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
   import "../../styles/coach-theme-overrides.css";
@@ -63,7 +65,14 @@
   const tenantless: boolean = data.tenantless === true;
 
   const realtimeStore = createRealtimeStore(config);
-  refreshSummaryOnNewReading(() => realtimeStore.currentEntry?.mills);
+  // Started while this layout initialises, ahead of the page beneath it: effects run only once
+  // the whole tree has hydrated, so the effect below would issue these reads a long task later.
+  // svelte-ignore state_referenced_locally
+  if (browser && data.canViewRealtimeData) realtimeStore.initialize();
+  refreshSummaryOnNewReading(
+    () => realtimeStore.currentEntry?.mills,
+    () => data.canViewRealtimeData
+  );
   createAuthStore(); // Initialize auth store in context
 
   // Suppress the auth interceptor's login redirect for guest and public
@@ -76,7 +85,9 @@
   // This makes feature settings available on all pages including the main dashboard.
   createSettingsStore(!tenantless);
 
-  let commandPaletteOpen = $state(false);
+  const commandPalette = lazyComponent(
+    () => import("$lib/components/command-palette/CommandPalette.svelte"),
+  );
   let bannerStripHeight = $state(0);
 
   const coachMarkAdapter = createCoachMarkAdapter(tenantless);
@@ -108,7 +119,7 @@
   function handleCommandPaletteKeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === "k") {
       e.preventDefault();
-      commandPaletteOpen = !commandPaletteOpen;
+      commandPalette.open = !commandPalette.open;
     }
   }
 
@@ -205,6 +216,8 @@
   });
 </script>
 
+<InitialReadsPrefetch enabled={data.canViewRealtimeData} />
+
 <CoachMarkProvider adapter={coachMarkAdapter} {sequences} router={coachRouter}>
   <CoachParamHandler />
   <ChartPrintPatterns />
@@ -269,5 +282,7 @@
       </main>
     </Sidebar.Inset>
   </Sidebar.Provider>
-  <CommandPalette bind:open={commandPaletteOpen} {tenantless} />
+  {#if commandPalette.component}
+    <commandPalette.component bind:open={commandPalette.open} {tenantless} />
+  {/if}
 </CoachMarkProvider>

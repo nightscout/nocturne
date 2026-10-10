@@ -31,7 +31,6 @@ export { default as BasalInjectionMarker } from "./markers/BasalInjectionMarker.
 export { default as BasalInjectionMarkers } from "./markers/BasalInjectionMarkers.svelte";
 
 // Dialogs
-export { default as InspectionDialogs } from "./InspectionDialogs.svelte";
 
 // Sub-components
 export { default as ZoomIndicator } from "./ZoomIndicator.svelte";

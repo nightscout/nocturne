@@ -1,0 +1,18 @@
+{
+	local_certs
+	skip_install_trust
+	auto_https disable_redirects
+	servers {
+		protocols h1 h2
+	}
+}
+
+perf.nocturne.localhost:443 {
+	tls internal
+	encode zstd gzip
+	# Edge-cached in prod (Cloudflare, immutable): base latency only.
+	@static path /_app/immutable/* /fonts/* /logos/* /favicon*
+	reverse_proxy @static web:5173
+	# Everything else goes to the distant origin.
+	reverse_proxy delay:5180
+}

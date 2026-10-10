@@ -44,6 +44,12 @@ interface TicketResult {
   denied: boolean;
 }
 
+/** Oldest a prefetched ticket may be when presented: half the bridge's
+ *  `HANDSHAKE_TICKET_LIFETIME_MS`, counted from the request's start, which
+ *  precedes the ticket's signing. That constant's module needs node crypto, so
+ *  the browser cannot import it. */
+const PREFETCHED_TICKET_MAX_AGE_MS = 60_000;
+
 export class WebSocketClient {
   private socket: Socket | null = null;
   private config: WebSocketConfig;
@@ -82,6 +88,10 @@ export class WebSocketClient {
   private hasNotifiedConnectError = false;
   /** Ticket-less retries tolerated before the failure is surfaced. */
   private static readonly QUIET_AUTH_RETRIES = 3;
+  /** Ticket request started by `prefetchTicket`, consumed by the next handshake
+   *  attempt whatever its outcome. */
+  private prefetchedTicket: { result: Promise<TicketResult>; requestedAt: number } | null =
+    null;
 
   /** Check if the client has a valid URL configured */
   hasValidUrl(): boolean {
@@ -103,9 +113,11 @@ export class WebSocketClient {
     this.config = config;
   }
 
-  /** Connect to WebSocket bridge */
+  /** Open the socket to the bridge. Does nothing while one exists, connecting
+   *  or connected: reopening a dropped one is `ensureConnected`'s, and a
+   *  replacement follows `disconnect()`. */
   connect(): void {
-    if (this.socket?.connected) {
+    if (this.socket) {
       return;
     }
 
@@ -130,9 +142,9 @@ export class WebSocketClient {
         this.config.url,
         realtimeSocketOptions(this.config, (cb) => {
           // Fetched fresh on every (re)connect so a short-lived ticket never goes
-          // stale across reconnections.
+          // stale across reconnections; only the first may use a prefetched one.
           const attempt = ++handshake.attempt;
-          this.fetchTicket().then(({ token, denied }) => {
+          this.takeTicket().then(({ token, denied }) => {
             // A superseded attempt neither publishes its verdict nor completes
             // its handshake: the engine that asked for it is already gone, and
             // the socket it would speak for belongs to a newer attempt.
@@ -168,6 +180,25 @@ export class WebSocketClient {
       return;
     }
     this.connect();
+  }
+
+  /** Start the ticket request the first handshake would make, so it overlaps
+   *  whatever the caller does before `connect()`. */
+  prefetchTicket(): void {
+    if (!this.config.url || this.socket || this.prefetchedTicket) return;
+    const requestedAt = Date.now();
+    this.prefetchedTicket = { result: this.fetchTicket(), requestedAt };
+  }
+
+  /** The prefetched result, once, if it is recent and holds a token or a
+   *  definitive denial; otherwise a fresh fetch. */
+  private async takeTicket(): Promise<TicketResult> {
+    const prefetched = this.prefetchedTicket;
+    this.prefetchedTicket = null;
+    if (!prefetched) return this.fetchTicket();
+    const result = await prefetched.result;
+    const fresh = Date.now() - prefetched.requestedAt < PREFETCHED_TICKET_MAX_AGE_MS;
+    return fresh && (result.token || result.denied) ? result : this.fetchTicket();
   }
 
   /** Fetch a realtime handshake ticket from the BFF. Reports a denial only for a
@@ -253,6 +284,7 @@ export class WebSocketClient {
     this.intentionallyClosed = true;
     this.clearAuthRetry();
     this.activeHandshake = null;
+    this.prefetchedTicket = null;
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;

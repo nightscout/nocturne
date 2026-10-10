@@ -4,19 +4,22 @@ const api = vi.hoisted(() => ({
   getCurrentTherapyState: vi.fn(),
   apsGetAll: vi.fn(),
   emptyPage: vi.fn(),
+  getProfileSummary: vi.fn(),
+  emptyList: vi.fn(),
 }));
 
-vi.mock("$lib/api/client", () => ({
-  getApiClient: () => ({
-    currentTherapyState: { getCurrentTherapyState: api.getCurrentTherapyState },
-    apsSnapshot: { getAll: api.apsGetAll },
-    sensorGlucose: { getAll: api.emptyPage },
-    bolus: { getAll: api.emptyPage },
-    nutrition: { getCarbIntakes: api.emptyPage },
-    bGCheck: { getAll: api.emptyPage },
-    note: { getAll: api.emptyPage },
-    deviceEvent: { getAll: api.emptyPage },
-  }),
+vi.mock("$lib/api/browser-clients", () => ({
+  currentTherapyStateClient: () => ({ getCurrentTherapyState: api.getCurrentTherapyState }),
+  apsSnapshotClient: () => ({ getAll: api.apsGetAll }),
+  sensorGlucoseClient: () => ({ getAll: api.emptyPage }),
+  bolusClient: () => ({ getAll: api.emptyPage }),
+  nutritionClient: () => ({ getCarbIntakes: api.emptyPage }),
+  bgCheckClient: () => ({ getAll: api.emptyPage }),
+  noteClient: () => ({ getAll: api.emptyPage }),
+  deviceEventClient: () => ({ getAll: api.emptyPage }),
+  profileClient: () => ({ getProfileSummary: api.getProfileSummary }),
+  trackersClient: () => ({ getDefinitions: api.emptyList, getActiveInstances: api.emptyList }),
+  notificationsClient: () => ({ getNotifications: api.emptyList }),
 }));
 
 vi.mock("svelte-sonner", () => ({
@@ -53,7 +56,9 @@ interface StoreInternals {
   handleVisibilityChange: (() => void) | null;
   websocketClient: {
     connectionStatus: WebSocketConnectionStatus;
+    connect(): void;
     ensureConnected(): void;
+    prefetchTicket(): void;
     eventHandlers: {
       connect?: (info: ConnectionInfo) => void;
       disconnect?: (reason: string) => void;
@@ -70,20 +75,26 @@ type TestStore = StoreInternals &
     | "connectionUnavailable"
     | "connectionPresentation"
     | "currentReservoir"
+    | "chartThresholds"
     | "entries"
     | "currentEntry"
     | "bgDelta"
     | "direction"
     | "syncProgressByConnector"
     | "trackerInstances"
+    | "apsSnapshots"
+    | "boluses"
+    | "profile"
+    | "isReady"
+    | "currentReadingLoaded"
     | "destroy"
     | "initialize"
   >;
 
 /** Store instance with an empty socket URL, so nothing connects. */
-function makeStore(): TestStore {
+function makeStore(url = ""): TestStore {
   const store = new RealtimeStore({
-    url: "",
+    url,
     reconnectAttempts: 0,
     reconnectDelay: 0,
     maxReconnectDelay: 0,
@@ -377,6 +388,45 @@ describe("RealtimeStore reservoir freshness", () => {
     await store.performBackfillIfNeeded(true);
 
     expect(store.currentReservoir).toBe(30);
+
+    store.destroy();
+  });
+});
+
+describe("RealtimeStore chart thresholds", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    api.apsGetAll.mockResolvedValue({ data: [] });
+    api.emptyPage.mockResolvedValue({ data: [] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it("keeps the chart thresholds from the therapy state", async () => {
+    const thresholds = { low: 70, high: 180, veryLow: 54, veryHigh: 250, targetLow: 90, targetHigh: 140 };
+    api.getCurrentTherapyState.mockResolvedValue({ reservoir: 42, thresholds });
+    const store = makeStore();
+    expect(store.chartThresholds).toBeNull();
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(store.chartThresholds).toEqual(thresholds);
+
+    store.destroy();
+  });
+
+  it("keeps the last chart thresholds when the refresh fails", async () => {
+    const store = makeStore();
+    const thresholds = { low: 70, high: 180 };
+    store.chartThresholds = thresholds;
+    api.getCurrentTherapyState.mockRejectedValue(new Error("offline"));
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(store.chartThresholds).toBe(thresholds);
 
     store.destroy();
   });
@@ -719,11 +769,224 @@ describe("RealtimeStore tracker updates", () => {
   });
 });
 
+describe("RealtimeStore starting reads", () => {
+  const reading = { id: "sg-1", mills: 1_000, mgdl: 120 };
+  const snapshot = { id: "aps-1", mills: 1_000 };
+  const record = { id: "rec-1", mills: 1_000 };
+  const thresholds = { low: 70, high: 180 };
+
+  /** A store with a socket URL, so `initialize()` runs the starting reads, and a stubbed connect. */
+  function connectingStore(): {
+    store: TestStore;
+    connect: ReturnType<typeof vi.fn>;
+    prefetchTicket: ReturnType<typeof vi.fn>;
+  } {
+    const store = makeStore("http://localhost");
+    const connect = vi.fn();
+    const prefetchTicket = vi.fn();
+    store.websocketClient.connect = connect;
+    store.websocketClient.prefetchTicket = prefetchTicket;
+    return { store, connect, prefetchTicket };
+  }
+
+  function deferred<T>(): { promise: Promise<T>; resolve(value: T): void; reject(error: unknown): void } {
+    let resolve!: (value: T) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  /** Runs pending microtasks without firing any timer. */
+  async function drainMicrotasks(): Promise<void> {
+    for (let i = 0; i < 50; i++) await Promise.resolve();
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    api.getCurrentTherapyState.mockResolvedValue({ reservoir: 42, thresholds });
+    api.apsGetAll.mockResolvedValue({ data: [snapshot] });
+    api.emptyList.mockResolvedValue([]);
+    // The glucose read asks for up to 1000 readings; the day's other record reads for 500.
+    api.emptyPage.mockImplementation((_from: unknown, _to: unknown, limit: number) =>
+      Promise.resolve({ data: limit === 1000 ? [reading] : limit === 500 ? [record] : [] })
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+    api.emptyPage.mockReset();
+  });
+
+  it("requests the socket ticket while the reads are in flight", async () => {
+    const therapy = deferred<null>();
+    api.getCurrentTherapyState.mockReturnValue(therapy.promise);
+    api.getProfileSummary.mockResolvedValue(null);
+    const { store, prefetchTicket } = connectingStore();
+    let readSettled = false;
+    therapy.promise.then(() => (readSettled = true));
+
+    const initialized = store.initialize();
+
+    expect(prefetchTicket).toHaveBeenCalledTimes(1);
+    expect(readSettled).toBe(false);
+
+    therapy.resolve(null);
+    await vi.advanceTimersByTimeAsync(0);
+    await initialized;
+    store.destroy();
+  });
+
+  it("does not request a socket ticket without a socket URL", async () => {
+    const store = makeStore();
+    const prefetchTicket = vi.fn();
+    store.websocketClient.prefetchTicket = prefetchTicket;
+
+    await store.initialize();
+
+    expect(prefetchTicket).not.toHaveBeenCalled();
+    store.destroy();
+  });
+
+  it("applies the current reading while the other reads are still pending", async () => {
+    const profile = deferred<null>();
+    api.getProfileSummary.mockReturnValue(profile.promise);
+    const { store, connect } = connectingStore();
+
+    void store.initialize();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.currentReadingLoaded).toBe(true);
+    expect(store.currentEntry?.sgv).toBe(120);
+    expect(store.apsSnapshots).toEqual([snapshot]);
+    expect(store.currentReservoir).toBe(42);
+    expect(store.chartThresholds).toEqual(thresholds);
+    expect(store.isReady).toBe(false);
+    expect(store.boluses).toEqual([]);
+    expect(connect).not.toHaveBeenCalled();
+
+    profile.resolve(null);
+    await vi.advanceTimersByTimeAsync(0);
+    store.destroy();
+  });
+
+  it("applies the other reads in a later task, then marks the store ready and connects", async () => {
+    const profile = deferred<{ units: string } | null>();
+    api.getProfileSummary.mockReturnValue(profile.promise);
+    const { store, connect } = connectingStore();
+
+    const initialized = store.initialize();
+    await vi.advanceTimersByTimeAsync(0);
+    profile.resolve({ units: "mg/dL" });
+    await drainMicrotasks();
+
+    expect(store.boluses).toEqual([]);
+    expect(store.isReady).toBe(false);
+    expect(connect).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(0);
+    await initialized;
+
+    expect(store.boluses).toEqual([record]);
+    expect(store.profile).toEqual({ units: "mg/dL" });
+    expect(store.isReady).toBe(true);
+    expect(connect).toHaveBeenCalledTimes(1);
+    store.destroy();
+  });
+
+  it("applies the current reading in an earlier task than the rest when everything lands at once", async () => {
+    api.getProfileSummary.mockResolvedValue(null);
+    const { store, connect } = connectingStore();
+
+    const initialized = store.initialize();
+    await drainMicrotasks();
+
+    expect(store.currentReadingLoaded).toBe(true);
+    expect(store.isReady).toBe(false);
+    expect(store.boluses).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(0);
+    await initialized;
+
+    expect(store.isReady).toBe(true);
+    expect(store.boluses).toEqual([record]);
+    expect(connect).toHaveBeenCalledTimes(1);
+    store.destroy();
+  });
+
+  /** A document in the given visibility, with `requestAnimationFrame` held until `frame()` runs it. */
+  function onDocument(visibilityState: "visible" | "hidden"): { frame(): void } {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("document", { visibilityState, addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    return { frame: () => frames.splice(0).forEach((callback) => callback(0)) };
+  }
+
+  it("waits for a frame before applying the other reads in a visible document", async () => {
+    api.getProfileSummary.mockResolvedValue(null);
+    const { frame } = onDocument("visible");
+    const { store, connect } = connectingStore();
+
+    const initialized = store.initialize();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.currentReadingLoaded).toBe(true);
+    expect(store.isReady).toBe(false);
+    expect(connect).not.toHaveBeenCalled();
+
+    frame();
+    await vi.advanceTimersByTimeAsync(0);
+    await initialized;
+
+    expect(store.isReady).toBe(true);
+    expect(store.boluses).toEqual([record]);
+    expect(connect).toHaveBeenCalledTimes(1);
+    store.destroy();
+  });
+
+  it("does not wait for a frame in a hidden document", async () => {
+    api.getProfileSummary.mockResolvedValue(null);
+    onDocument("hidden");
+    const { store, connect } = connectingStore();
+
+    const initialized = store.initialize();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.isReady).toBe(true);
+    expect(connect).toHaveBeenCalledTimes(1);
+    await initialized;
+    store.destroy();
+  });
+
+  it("is ready once the other reads settle even when one of them fails", async () => {
+    api.getProfileSummary.mockRejectedValue(new Error("offline"));
+    api.emptyList.mockRejectedValue(new Error("offline"));
+    const { store, connect } = connectingStore();
+
+    const initialized = store.initialize();
+    await vi.advanceTimersByTimeAsync(0);
+    await initialized;
+
+    expect(store.isReady).toBe(true);
+    expect(store.currentReadingLoaded).toBe(true);
+    expect(store.profile).toBeNull();
+    expect(store.boluses).toEqual([record]);
+    expect(connect).toHaveBeenCalledTimes(1);
+    store.destroy();
+  });
+});
+
 describe("loadInitialGlucose", () => {
   const FROM = "2026-10-04T00:00:00.000Z";
 
   function clientWith(getAll: ReturnType<typeof vi.fn>) {
-    return { sensorGlucose: { getAll } } as unknown as Parameters<typeof loadInitialGlucose>[0];
+    return { getAll } as unknown as Parameters<typeof loadInitialGlucose>[0];
   }
 
   const readings = (...mgdl: number[]) => ({

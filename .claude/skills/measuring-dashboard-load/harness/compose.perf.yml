@@ -1,0 +1,30 @@
+# Perf measurement overlay: an HTTP/2 TLS edge on the tenant port (prod is HTTP/3 behind
+# Cloudflare, so plain HTTP/1.1 would serialise 277 chunks over 6 connections), and dev
+# auto-login standing in for the demo sign-in redirect chain.
+# Bind-mount sources come from PERF_HARNESS_DIR (set by up.sh and ab.sh): compose resolves relative paths
+# against the first -f file (e2e/), not this one, so a bare ./Caddyfile would point into e2e/.
+services:
+  web:
+    environment:
+      NOCTURNE_DEV_AUTO_LOGIN: "true"
+    ports: !override
+      - "127.0.0.1:1632:5173"
+  edge:
+    image: caddy:2.10-alpine
+    volumes:
+      - ${PERF_HARNESS_DIR:-.}/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:1631:443"
+    depends_on:
+      web:
+        condition: service_healthy
+  delay:
+    image: node:24-alpine
+    command: ["node", "/delay/delay.mjs"]
+    environment:
+      ORIGIN_DELAY_MS: "${ORIGIN_DELAY_MS:-320}"
+    volumes:
+      - ${PERF_HARNESS_DIR:-.}/delay.mjs:/delay/delay.mjs:ro
+    depends_on:
+      web:
+        condition: service_healthy

@@ -2,8 +2,10 @@
 import { WebSocketClient } from "$lib/websocket/websocket-client.svelte";
 import { entryIdentity, isSameEntry, unseenEntries } from "./entry-identity";
 import { markedRead } from "./notification-read";
-import { startOfLocalDay, untilNow } from "$lib/utils/now";
+import { untilNow } from "$lib/utils/now";
+import { initialReadWindows, initialReadsClock, initialReadsStash, releaseInitialReads } from "./initial-reads";
 import { toDate } from "$lib/utils/formatting";
+import { afterNextPaint } from "$lib/utils/after-next-paint";
 import type {
   Entry,
   WebSocketConfig,
@@ -25,7 +27,9 @@ import type {
   DeviceEvent,
   ApsSnapshot,
   ProfileSummary,
+  ChartThresholdsDto,
   SensorGlucose,
+  SensorGlucoseClient,
 } from "$lib/api";
 
 /**
@@ -46,7 +50,19 @@ import { toast } from "svelte-sonner";
 import { isErrorStatus, presentConnection } from "./connection-indicator.svelte";
 import * as alarmState from "$lib/stores/alarm-state.svelte";
 import { getContext, setContext } from "svelte";
-import { getApiClient } from "$lib/api/client";
+import {
+  apsSnapshotClient,
+  bgCheckClient,
+  bolusClient,
+  currentTherapyStateClient,
+  deviceEventClient,
+  noteClient,
+  notificationsClient,
+  nutritionClient,
+  profileClient,
+  sensorGlucoseClient,
+  trackersClient,
+} from "$lib/api/browser-clients";
 import {
   processPillsData,
   type DeviceStatus as PillsDeviceStatus,
@@ -94,21 +110,25 @@ export const RECENT_READINGS = 5;
  * readings.
  */
 export async function loadInitialGlucose(
-  apiClient: ReturnType<typeof getApiClient>,
+  sensorGlucose: SensorGlucoseClient,
   from: string
 ): Promise<Entry[]> {
   try {
-    const recent = ((await apiClient.sensorGlucose.getAll(from, undefined, 1000)).data ?? []).map(
+    const recent = ((await sensorGlucose.getAll(from, undefined, 1000)).data ?? []).map(
       sensorGlucoseToEntry
     );
     if (recent.length >= RECENT_READINGS) return recent;
-    const latest = ((await apiClient.sensorGlucose.getAll(undefined, undefined, RECENT_READINGS)).data ?? []).map(
+    const latest = ((await sensorGlucose.getAll(undefined, undefined, RECENT_READINGS)).data ?? []).map(
       sensorGlucoseToEntry
     );
     return [...recent, ...unseenEntries(recent, latest)];
   } catch {
     return [];
   }
+}
+
+function newestFirst<T extends { mills?: number }>(records: T[]): T[] {
+  return records.sort((a, b) => (b.mills || 0) - (a.mills || 0));
 }
 
 const REALTIME_STORE_KEY = Symbol("realtime-store");
@@ -131,8 +151,11 @@ export class RealtimeStore {
   private entryCreateFlushTimeout: ReturnType<typeof setTimeout> | null = null;
   private static readonly ENTRY_CREATE_BATCH_MS = 100;
 
-  /** Loading state - false until initial data is loaded */
+  /** True once every starting read is applied, not only the current reading ({@link currentReadingLoaded}). */
   isReady = $state(false);
+
+  /** True once the starting readings, loop snapshots and therapy state are applied; ahead of {@link isReady}. */
+  currentReadingLoaded = $state(false);
 
   /** Current time state (updated every second) */
   now = $state(Date.now());
@@ -202,6 +225,9 @@ export class RealtimeStore {
 
   /** Latest pump reservoir (units), null when the pump reports no numeric level. */
   currentReservoir = $state<number | null>(null);
+
+  /** Glucose thresholds in force now, from the current therapy state; null until its first load. */
+  chartThresholds = $state.raw<ChartThresholdsDto | null>(null);
 
   /** Connection state (with safe initialization) */
   connectionStatus = $derived(
@@ -396,19 +422,54 @@ export class RealtimeStore {
 
     // Skip if WebSocket URL is not available (SSR scenario)
     if (!this.websocketClient.hasValidUrl()) {
+      releaseInitialReads();
       return;
     }
 
     try {
-      // Fetch historical data using the properly configured API client
-      const apiClient = getApiClient();
-      const { from: oneDayAgo, to: now } = untilNow(Date.now() - 24 * 60 * 60 * 1000);
-      const glucoseFrom = untilNow(
-        Math.min(startOfLocalDay(Date.now()), Date.parse(oneDayAgo))
-      ).from;
+      const {
+        oneDayAgo,
+        to: now,
+        glucoseFrom,
+      } = initialReadWindows(initialReadsClock(initialReadsStash(), Date.now()));
+      const currentReading = Promise.all([
+        loadInitialGlucose(sensorGlucoseClient(), glucoseFrom),
+        apsSnapshotClient().getAll(oneDayAgo, now, 50).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load apsSnapshots:", e); return []; }),
+        currentTherapyStateClient().getCurrentTherapyState().catch((e) => { console.error("Failed to load currentTherapyState:", e); return null; }),
+      ]);
+      const rest = Promise.all([
+        profileClient().getProfileSummary().catch(() => null),
+        trackersClient().getDefinitions().catch(() => []),
+        trackersClient().getActiveInstances().catch(() => []),
+        notificationsClient().getNotifications().catch(() => []),
+        bolusClient().getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load boluses:", e); return []; }),
+        nutritionClient().getCarbIntakes(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load carbIntakes:", e); return []; }),
+        bgCheckClient().getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load bgChecks:", e); return []; }),
+        noteClient().getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load notes:", e); return []; }),
+        deviceEventClient().getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load deviceEvents:", e); return []; }),
+      ]);
+      this.websocketClient.prefetchTicket();
+      releaseInitialReads();
+
+      const [historicalEntries, historicalApsSnapshots, currentTherapyState] = await currentReading;
+      // Defer state updates to a microtask to completely break out of the
+      // current reactive cycle. This prevents effect_update_depth_exceeded errors
+      // when components with PersistedState dependencies are also initializing.
+      queueMicrotask(() => {
+        if (historicalEntries.length > 0) {
+          this.entries = newestFirst(historicalEntries);
+        }
+        if (historicalApsSnapshots.length > 0) {
+          this.apsSnapshots = newestFirst(historicalApsSnapshots);
+        }
+        if (currentTherapyState) {
+          this.currentReservoir = currentTherapyState.reservoir ?? null;
+          this.chartThresholds = currentTherapyState.thresholds ?? null;
+        }
+        this.currentReadingLoaded = true;
+      });
+
       const [
-        historicalEntries,
-        deviceStatusData,
         profileData,
         trackerDefs,
         trackerActive,
@@ -418,99 +479,43 @@ export class RealtimeStore {
         historicalBgChecks,
         historicalNotes,
         historicalDeviceEvents,
-        historicalApsSnapshots,
-        currentTherapyState,
-      ] = await Promise.all([
-        loadInitialGlucose(apiClient, glucoseFrom),
-        Promise.resolve<DeviceStatus[]>([]),
-        apiClient.profile.getProfileSummary().catch(() => null),
-        apiClient.trackers.getDefinitions().catch(() => []),
-        apiClient.trackers.getActiveInstances().catch(() => []),
-        apiClient.notifications.getNotifications().catch(() => []),
-        apiClient.bolus.getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load boluses:", e); return []; }),
-        apiClient.nutrition.getCarbIntakes(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load carbIntakes:", e); return []; }),
-        apiClient.bGCheck.getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load bgChecks:", e); return []; }),
-        apiClient.note.getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load notes:", e); return []; }),
-        apiClient.deviceEvent.getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load deviceEvents:", e); return []; }),
-        apiClient.apsSnapshot.getAll(oneDayAgo, now, 50).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load apsSnapshots:", e); return []; }),
-        apiClient.currentTherapyState.getCurrentTherapyState().catch((e) => { console.error("Failed to load currentTherapyState:", e); return null; }),
-      ]);
+      ] = await rest;
+      await new Promise<void>((resolve) => afterNextPaint(resolve));
 
-      // Defer all state updates to a microtask to completely break out of the
-      // current reactive cycle. This prevents effect_update_depth_exceeded errors
-      // when components with PersistedState dependencies are also initializing.
-      queueMicrotask(() => {
-        if (historicalEntries && historicalEntries.length > 0) {
-          this.entries = historicalEntries.sort(
-            (a: Entry, b: Entry) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-
-        if (deviceStatusData && deviceStatusData.length > 0) {
-          this.deviceStatuses = deviceStatusData.sort(
-            (a: DeviceStatus, b: DeviceStatus) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-
-        if (profileData) {
-          this.profile = profileData;
-        }
-
-        if (trackerDefs && trackerDefs.length > 0) {
-          this.trackerDefinitions = trackerDefs;
-        }
-
-        if (trackerActive && trackerActive.length > 0) {
-          this.trackerInstances = trackerActive;
-        }
-
-        if (notifications && notifications.length > 0) {
-          this.inAppNotifications = notifications;
-        }
-
-        // Populate v4 record arrays
-        if (historicalBoluses && historicalBoluses.length > 0) {
-          this.boluses = historicalBoluses.sort(
-            (a: Bolus, b: Bolus) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-        if (historicalCarbIntakes && historicalCarbIntakes.length > 0) {
-          this.carbIntakes = historicalCarbIntakes.sort(
-            (a: CarbIntake, b: CarbIntake) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-        if (historicalBgChecks && historicalBgChecks.length > 0) {
-          this.bgChecks = historicalBgChecks.sort(
-            (a: BGCheck, b: BGCheck) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-        if (historicalNotes && historicalNotes.length > 0) {
-          this.notes = historicalNotes.sort(
-            (a: Note, b: Note) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-        if (historicalDeviceEvents && historicalDeviceEvents.length > 0) {
-          this.deviceEvents = historicalDeviceEvents.sort(
-            (a: DeviceEvent, b: DeviceEvent) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-
-        if (historicalApsSnapshots && historicalApsSnapshots.length > 0) {
-          this.apsSnapshots = historicalApsSnapshots.sort(
-            (a: ApsSnapshot, b: ApsSnapshot) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-
-        if (currentTherapyState) {
-          this.currentReservoir = currentTherapyState.reservoir ?? null;
-        }
-
-        this.isReady = true;
-      });
+      if (profileData) {
+        this.profile = profileData;
+      }
+      if (trackerDefs.length > 0) {
+        this.trackerDefinitions = trackerDefs;
+      }
+      if (trackerActive.length > 0) {
+        this.trackerInstances = trackerActive;
+      }
+      if (notifications.length > 0) {
+        this.inAppNotifications = notifications;
+      }
+      if (historicalBoluses.length > 0) {
+        this.boluses = newestFirst(historicalBoluses);
+      }
+      if (historicalCarbIntakes.length > 0) {
+        this.carbIntakes = newestFirst(historicalCarbIntakes);
+      }
+      if (historicalBgChecks.length > 0) {
+        this.bgChecks = newestFirst(historicalBgChecks);
+      }
+      if (historicalNotes.length > 0) {
+        this.notes = newestFirst(historicalNotes);
+      }
+      if (historicalDeviceEvents.length > 0) {
+        this.deviceEvents = newestFirst(historicalDeviceEvents);
+      }
+      this.isReady = true;
     } catch (error) {
       console.error("Failed to fetch historical data:", error);
       toast.error("Failed to load historical data");
-      this.isReady = true; // Still mark as ready to unblock UI
+      // Still mark as ready to unblock UI
+      this.currentReadingLoaded = true;
+      this.isReady = true;
     }
 
     // Connect to WebSocket bridge
@@ -1028,26 +1033,26 @@ export class RealtimeStore {
     this.decompositionRefreshTimer = setTimeout(() => {
       this.decompositionRefreshTimer = null;
       void this.refreshLatestApsSnapshot();
-      void this.refreshCurrentReservoir();
+      void this.refreshCurrentTherapyState();
     }, RealtimeStore.DECOMPOSITION_REFRESH_MS);
   }
 
-  /** Re-read the pump reservoir from the current therapy state. */
-  private async refreshCurrentReservoir(): Promise<void> {
+  /** Re-read the pump reservoir and chart thresholds from the current therapy state. */
+  private async refreshCurrentTherapyState(): Promise<void> {
     try {
-      const therapyState = await getApiClient().currentTherapyState.getCurrentTherapyState();
+      const therapyState = await currentTherapyStateClient().getCurrentTherapyState();
       this.currentReservoir = therapyState?.reservoir ?? null;
+      this.chartThresholds = therapyState?.thresholds ?? null;
     } catch {
-      // Non-critical — the reservoir pill keeps its last value until the next refresh.
+      // Non-critical — the reservoir pill and thresholds keep their last values until the next refresh.
     }
   }
 
   /** Fetch the most recent APS snapshots and merge any new ones into the store. */
   private async refreshLatestApsSnapshot(): Promise<void> {
     try {
-      const apiClient = getApiClient();
       const { from, to } = untilNow(Date.now() - 5 * 60 * 1000);
-      const result = await apiClient.apsSnapshot.getAll(from, to, 5);
+      const result = await apsSnapshotClient().getAll(from, to, 5);
       const snapshots = result.data ?? [];
       if (snapshots.length === 0) return;
       const added = snapshots.filter(
@@ -1093,19 +1098,17 @@ export class RealtimeStore {
     );
 
     try {
-      const apiClient = getApiClient();
-
       // Fetch all data types since last received using existing API methods
-      const reservoirRefresh = this.refreshCurrentReservoir();
+      const reservoirRefresh = this.refreshCurrentTherapyState();
       const [entries, deviceStatuses, boluses, carbIntakes, bgChecks, notes, devEvents, newApsSnapshots] = await Promise.all([
-        apiClient.sensorGlucose.getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch((): Entry[] => []),
+        sensorGlucoseClient().getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch((): Entry[] => []),
         Promise.resolve<DeviceStatus[]>([]),
-        apiClient.bolus.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
-        apiClient.nutrition.getCarbIntakes(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
-        apiClient.bGCheck.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
-        apiClient.note.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
-        apiClient.deviceEvent.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
-        apiClient.apsSnapshot.getAll(backfillFromDate, nowDate, 20).then((r) => r.data ?? []).catch(() => []),
+        bolusClient().getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
+        nutritionClient().getCarbIntakes(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
+        bgCheckClient().getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
+        noteClient().getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
+        deviceEventClient().getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
+        apsSnapshotClient().getAll(backfillFromDate, nowDate, 20).then((r) => r.data ?? []).catch(() => []),
       ]);
       await reservoirRefresh;
 

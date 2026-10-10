@@ -43,7 +43,10 @@ function mount() {
   let pair!: ReturnType<typeof displayedGlucose>;
   roots.push(
     $effect.root(() => {
-      refreshSummaryOnNewReading(() => source.currentEntry?.mills);
+      refreshSummaryOnNewReading(
+        () => source.currentEntry?.mills,
+        () => true
+      );
       pair = displayedGlucose(source as never);
     })
   );
