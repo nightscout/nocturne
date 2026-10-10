@@ -556,6 +556,31 @@ describe("(authenticated) layout load — a session that ended since the server 
     ).resolves.toBeNull();
   });
 
+  /** Server data for a guest link that expires `offsetMs` from now. */
+  const guestExpiringIn = (offsetMs: number) => ({
+    user: { subjectId: "g1", name: "Guest" },
+    isGuestSession: true,
+    guestExpiresAt: new Date(Date.now() + offsetMs).toISOString(),
+  });
+
+  it("keeps a guest whose link has not expired", async () => {
+    await expect(
+      locationOf(navigate({ cookie: "", data: guestExpiringIn(60_000) }))
+    ).resolves.toBeNull();
+  });
+
+  it("sends a guest whose link has expired to login", async () => {
+    await expect(
+      locationOf(navigate({ cookie: "", data: guestExpiringIn(-60_000) }))
+    ).resolves.toBe("/auth/login?returnUrl=%2Freports%3Frange%3D7d");
+  });
+
+  it("never checks a guest's expiry on the server", async () => {
+    await expect(
+      locationOf(navigate({ cookie: "", data: guestExpiringIn(-60_000), inBrowser: false }))
+    ).resolves.toBeNull();
+  });
+
   it("never checks on the share host", async () => {
     await expect(
       locationOf(navigate({ cookie: "", host: `k7m2q9x4r3wt.share.${BASE}` }))

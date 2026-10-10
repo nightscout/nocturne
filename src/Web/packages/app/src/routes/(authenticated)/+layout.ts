@@ -15,17 +15,22 @@ function hasSessionCookie(): boolean {
     .some((pair) => pair.trim().startsWith(`${AUTH_COOKIE_NAMES.isAuthenticated}=`));
 }
 
+/** Whether a guest link's expiry, as the server load reported it, has passed. */
+function guestLinkExpired(expiresAt: string | null | undefined): boolean {
+  return !!expiresAt && Date.parse(expiresAt) <= Date.now();
+}
+
 export const load: LayoutLoad = async ({ data, url, parent }) => {
   // The server load's data is reused across client navigations, so a session that has since
   // expired or been signed out elsewhere is caught here, where the server would have redirected.
-  if (
-    browser &&
-    data.user &&
-    !data.isGuestSession &&
-    !isShareHost(location.hostname) &&
-    !hasSessionCookie()
-  ) {
-    redirect(303, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`);
+  // A guest holds no session marker; its link's expiry stands in for it.
+  if (browser && data.user && !isShareHost(location.hostname)) {
+    const ended = data.isGuestSession
+      ? guestLinkExpired(data.guestExpiresAt)
+      : !hasSessionCookie();
+    if (ended) {
+      redirect(303, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`);
+    }
   }
 
   // A tenantless host resolves no tenant, so a tenant-scoped page would render its shell and
