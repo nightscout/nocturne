@@ -28,7 +28,7 @@
   import BackupSignInPrompt from "$lib/components/layout/BackupSignInPrompt.svelte";
   import SessionExpiryWatcher from "$lib/components/layout/SessionExpiryWatcher.svelte";
   import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
-  import { CommandPalette } from "$lib/components/command-palette";
+  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
   import { CoachMarkProvider, type CoachRouter } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
   import "../../styles/coach-theme-overrides.css";
@@ -84,7 +84,9 @@
   // This makes feature settings available on all pages including the main dashboard.
   createSettingsStore(!tenantless);
 
-  let commandPaletteOpen = $state(false);
+  const commandPalette = lazyComponent(
+    () => import("$lib/components/command-palette/CommandPalette.svelte"),
+  );
   let bannerStripHeight = $state(0);
 
   const coachMarkAdapter = createCoachMarkAdapter(tenantless);
@@ -116,7 +118,7 @@
   function handleCommandPaletteKeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === "k") {
       e.preventDefault();
-      commandPaletteOpen = !commandPaletteOpen;
+      commandPalette.open = !commandPalette.open;
     }
   }
 
@@ -279,5 +281,7 @@
       </main>
     </Sidebar.Inset>
   </Sidebar.Provider>
-  <CommandPalette bind:open={commandPaletteOpen} {tenantless} />
+  {#if commandPalette.component}
+    <commandPalette.component bind:open={commandPalette.open} {tenantless} />
+  {/if}
 </CoachMarkProvider>

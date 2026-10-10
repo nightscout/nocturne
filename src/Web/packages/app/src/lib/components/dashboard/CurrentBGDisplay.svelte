@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
   import { TrackerCategory } from "$lib/api";
   import { Badge } from "$lib/components/ui/badge";
   import {
@@ -10,8 +11,6 @@
     TrackerPillBar,
   } from "$lib/components/status-pills";
   import { GlucoseValueIndicator } from "$lib/components/shared";
-  import { TrackerCompletionDialog } from "$lib/components/trackers";
-  import { EntryEditDialog } from "$lib/components/entries";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
@@ -91,11 +90,10 @@
     })
   );
 
-  // Entry Dialog State
-  let showEntryDialog = $state(false);
-
   // Tracker Completion Dialog State
-  let showCompletionDialog = $state(false);
+  const trackerCompletionDialog = lazyComponent(
+    () => import("$lib/components/trackers/TrackerCompletionDialog.svelte"),
+  );
   let completingInstanceId = $state<string | null>(null);
   let completingInstanceName = $state("");
   let completingCategory = $state<TrackerCategory | undefined>(undefined);
@@ -114,11 +112,11 @@
     completingCategory = category;
     completingDefinitionId = definitionId;
     completingCompletionEventType = completionEventType;
-    showCompletionDialog = true;
+    trackerCompletionDialog.open = true;
   }
 
   function handleCompletionDialogClose() {
-    showCompletionDialog = false;
+    trackerCompletionDialog.open = false;
     completingInstanceId = null;
     completingInstanceName = "";
     completingCategory = undefined;
@@ -191,18 +189,14 @@
   </div>
 {/if}
 
-<EntryEditDialog
-  bind:open={showEntryDialog}
-  entry={null}
-  onClose={() => (showEntryDialog = false)}
-/>
-
-<TrackerCompletionDialog
-  bind:open={showCompletionDialog}
-  instanceId={completingInstanceId}
-  instanceName={completingInstanceName}
-  category={completingCategory}
-  definitionId={completingDefinitionId}
-  completionEventType={completingCompletionEventType}
-  onClose={handleCompletionDialogClose}
-/>
+{#if trackerCompletionDialog.component}
+  <trackerCompletionDialog.component
+    bind:open={trackerCompletionDialog.open}
+    instanceId={completingInstanceId}
+    instanceName={completingInstanceName}
+    category={completingCategory}
+    definitionId={completingDefinitionId}
+    completionEventType={completingCompletionEventType}
+    onClose={handleCompletionDialogClose}
+  />
+{/if}

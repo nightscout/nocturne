@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
   import { findNearbyEntries } from "./engine/nearby-entries";
   import type { EntryRecord } from "$lib/constants/entry-categories";
   import {
@@ -30,12 +31,11 @@
   import ChartLegend from "./ChartLegend.svelte";
   import ZoomIndicator from "./ZoomIndicator.svelte";
   import { createChartDataEngine } from "./engine/chart-data-engine.svelte";
-  import { createPointInspection } from "./engine/point-inspection.svelte";
+  import { createPointInspection, syncInspectionDialogs } from "./engine/point-inspection.svelte";
   import { getEntryByTreatmentId } from "$api/entries.remote";
   import type { LegendState } from "./chart-context.svelte";
   import type { TransformedChartData } from "$lib/utils/chart-data-transform";
   import type { PredictionData } from "$api/predictions.remote";
-  import { EntryEditDialog } from "$lib/components/entries";
   import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
 
   // Tracks
@@ -52,12 +52,7 @@
   import ChartTooltip from "./ChartTooltip.svelte";
   import { openDayInReview } from "./day-in-review";
 
-  // Dialogs
-  import TreatmentDisambiguationDialog from "./dialogs/TreatmentDisambiguationDialog.svelte";
   import PointInspectionPicker from "./dialogs/PointInspectionPicker.svelte";
-  import GlucoseInspectionDialog from "./dialogs/GlucoseInspectionDialog.svelte";
-  import DeliveryInspectionDialog from "./dialogs/DeliveryInspectionDialog.svelte";
-  import TreatmentInspectionDialog from "./dialogs/TreatmentInspectionDialog.svelte";
   import BasalInjectionMarkers from "./markers/BasalInjectionMarkers.svelte";
   import BgCheckMarkers from "./markers/BgCheckMarkers.svelte";
 
@@ -249,9 +244,7 @@
   // ===== ENTRY EDIT / MARKER CLICK =====
   let selectedEntry = $state<EntryRecord | null>(null);
   let correlatedRecords = $state<EntryRecord[]>([]);
-  let isEntryDialogOpen = $state(false);
   let nearbyEntries = $state<EntryRecord[]>([]);
-  let isDisambiguationOpen = $state(false);
 
   function findAllNearbyEntries(time: Date): EntryRecord[] {
     return findNearbyEntries(
@@ -284,34 +277,23 @@
     if (nearby.length <= 1) {
       selectedEntry = entry;
       correlatedRecords = realtimeStore.findCorrelatedEntries(entry);
-      isEntryDialogOpen = true;
+      entryEditDialog.open = true;
     } else {
       nearbyEntries = nearby;
-      isDisambiguationOpen = true;
+      disambiguationDialog.open = true;
     }
   }
 
   function selectEntryFromList(entry: EntryRecord) {
-    isDisambiguationOpen = false;
+    disambiguationDialog.open = false;
     nearbyEntries = [];
     selectedEntry = entry;
     correlatedRecords = realtimeStore.findCorrelatedEntries(entry);
-    isEntryDialogOpen = true;
+    entryEditDialog.open = true;
   }
 
   // ===== INSPECTION DIALOG STATE =====
-  let isPickerOpen = $state(false);
-  let isGlucoseInspectionOpen = $state(false);
-  let isDeliveryInspectionOpen = $state(false);
-  let isTreatmentInspectionOpen = $state(false);
-
-  $effect(() => {
-    const dialog = inspection.activeDialog;
-    isPickerOpen = dialog === "picker";
-    isGlucoseInspectionOpen = dialog === "glucose";
-    isDeliveryInspectionOpen = dialog === "delivery";
-    isTreatmentInspectionOpen = dialog === "treatment";
-  });
+  let isPickerOpen = $derived(inspection.activeDialog === "picker");
 
   function handleInspectionSelect(type: "glucose" | "delivery" | "treatment") {
     inspection.selectDialog(type);
@@ -348,6 +330,27 @@
       }),
     ),
   );
+
+  const entryEditDialog = lazyComponent(
+    () => import("$lib/components/entries/EntryEditDialog.svelte"),
+  );
+  const disambiguationDialog = lazyComponent(
+    () => import("./dialogs/TreatmentDisambiguationDialog.svelte"),
+  );
+  const glucoseInspectionDialog = lazyComponent(
+    () => import("./dialogs/GlucoseInspectionDialog.svelte"),
+  );
+  const deliveryInspectionDialog = lazyComponent(
+    () => import("./dialogs/DeliveryInspectionDialog.svelte"),
+  );
+  const treatmentInspectionDialog = lazyComponent(
+    () => import("./dialogs/TreatmentInspectionDialog.svelte"),
+  );
+  syncInspectionDialogs(() => inspection, {
+    glucose: glucoseInspectionDialog,
+    delivery: deliveryInspectionDialog,
+    treatment: treatmentInspectionDialog,
+  });
 </script>
 
 {#snippet chartBody()}
@@ -498,27 +501,31 @@
 {/if}
 
 <!-- Entry Edit Dialog -->
-<EntryEditDialog
-  bind:open={isEntryDialogOpen}
-  entry={selectedEntry}
-  {correlatedRecords}
-  onClose={() => {
-    isEntryDialogOpen = false;
-    selectedEntry = null;
-    correlatedRecords = [];
-  }}
-/>
+{#if entryEditDialog.component}
+  <entryEditDialog.component
+    bind:open={entryEditDialog.open}
+    entry={selectedEntry}
+    {correlatedRecords}
+    onClose={() => {
+      entryEditDialog.open = false;
+      selectedEntry = null;
+      correlatedRecords = [];
+    }}
+  />
+{/if}
 
 <!-- Disambiguation Dialog -->
-<TreatmentDisambiguationDialog
-  bind:open={isDisambiguationOpen}
-  entries={nearbyEntries}
-  onSelect={selectEntryFromList}
-  onClose={() => {
-    isDisambiguationOpen = false;
-    nearbyEntries = [];
-  }}
-/>
+{#if disambiguationDialog.component}
+  <disambiguationDialog.component
+    bind:open={disambiguationDialog.open}
+    entries={nearbyEntries}
+    onSelect={selectEntryFromList}
+    onClose={() => {
+      disambiguationDialog.open = false;
+      nearbyEntries = [];
+    }}
+  />
+{/if}
 
 <!-- Point Inspection Dialogs -->
 <PointInspectionPicker
@@ -529,84 +536,90 @@
 />
 
 {#if inspection.timestamp && inspection.glucosePoint && inspection.context}
-  <GlucoseInspectionDialog
-    bind:open={isGlucoseInspectionOpen}
-    timestamp={inspection.timestamp}
-    glucoseValue={inspection.glucosePoint.sgv}
-    glucoseColor={inspection.glucosePoint.color}
-    previousGlucoseValue={inspection.context.previousGlucoseValue}
-    dataSource={inspection.context.dataSource}
-    glucoseData={engine.glucoseData}
-    highThreshold={engine.highThreshold}
-    lowThreshold={engine.lowThreshold}
-    iob={inspection.context.iob}
-    cob={inspection.context.cob}
-    basalRate={inspection.context.basalRate}
-    scheduledBasalRate={inspection.context.scheduledBasalRate}
-    basalOrigin={inspection.context.basalOrigin}
-    pumpMode={inspection.context.pumpMode}
-    overrideState={inspection.context.overrideState}
-    profileName={inspection.context.profileName}
-    activityStates={inspection.context.activityStates}
-    hasDeliveryContext={inspection.context.basalRate != null}
-    hasTreatmentContext={inspection.context.nearbyBolus != null ||
-      inspection.context.nearbyCarbs != null}
-    onClose={closeAllInspections}
-    onNavigateDelivery={() => inspection.navigateTo("delivery")}
-    onNavigateTreatment={() => inspection.navigateTo("treatment")}
-  />
+  {#if glucoseInspectionDialog.component}
+    <glucoseInspectionDialog.component
+      bind:open={glucoseInspectionDialog.open}
+      timestamp={inspection.timestamp}
+      glucoseValue={inspection.glucosePoint.sgv}
+      glucoseColor={inspection.glucosePoint.color}
+      previousGlucoseValue={inspection.context.previousGlucoseValue}
+      dataSource={inspection.context.dataSource}
+      glucoseData={engine.glucoseData}
+      highThreshold={engine.highThreshold}
+      lowThreshold={engine.lowThreshold}
+      iob={inspection.context.iob}
+      cob={inspection.context.cob}
+      basalRate={inspection.context.basalRate}
+      scheduledBasalRate={inspection.context.scheduledBasalRate}
+      basalOrigin={inspection.context.basalOrigin}
+      pumpMode={inspection.context.pumpMode}
+      overrideState={inspection.context.overrideState}
+      profileName={inspection.context.profileName}
+      activityStates={inspection.context.activityStates}
+      hasDeliveryContext={inspection.context.basalRate != null}
+      hasTreatmentContext={inspection.context.nearbyBolus != null ||
+        inspection.context.nearbyCarbs != null}
+      onClose={closeAllInspections}
+      onNavigateDelivery={() => inspection.navigateTo("delivery")}
+      onNavigateTreatment={() => inspection.navigateTo("treatment")}
+    />
+  {/if}
 
-  <DeliveryInspectionDialog
-    bind:open={isDeliveryInspectionOpen}
-    timestamp={inspection.timestamp}
-    basalRate={inspection.context.basalRate}
-    scheduledBasalRate={inspection.context.scheduledBasalRate}
-    basalOrigin={inspection.context.basalOrigin}
-    pumpMode={inspection.context.pumpMode}
-    overrideState={inspection.context.overrideState}
-    profileName={inspection.context.profileName}
-    activityStates={inspection.context.activityStates}
-    iob={inspection.context.iob}
-    isStaleBasal={inspection.context.isStaleBasal}
-    dataSource={inspection.context.dataSource}
-    glucoseData={engine.glucoseData}
-    highThreshold={engine.highThreshold}
-    lowThreshold={engine.lowThreshold}
-    hasGlucoseContext={true}
-    hasTreatmentContext={inspection.context.nearbyBolus != null ||
-      inspection.context.nearbyCarbs != null}
-    onClose={closeAllInspections}
-    onNavigateGlucose={() => inspection.navigateTo("glucose")}
-    onNavigateTreatment={() => inspection.navigateTo("treatment")}
-  />
+  {#if deliveryInspectionDialog.component}
+    <deliveryInspectionDialog.component
+      bind:open={deliveryInspectionDialog.open}
+      timestamp={inspection.timestamp}
+      basalRate={inspection.context.basalRate}
+      scheduledBasalRate={inspection.context.scheduledBasalRate}
+      basalOrigin={inspection.context.basalOrigin}
+      pumpMode={inspection.context.pumpMode}
+      overrideState={inspection.context.overrideState}
+      profileName={inspection.context.profileName}
+      activityStates={inspection.context.activityStates}
+      iob={inspection.context.iob}
+      isStaleBasal={inspection.context.isStaleBasal}
+      dataSource={inspection.context.dataSource}
+      glucoseData={engine.glucoseData}
+      highThreshold={engine.highThreshold}
+      lowThreshold={engine.lowThreshold}
+      hasGlucoseContext={true}
+      hasTreatmentContext={inspection.context.nearbyBolus != null ||
+        inspection.context.nearbyCarbs != null}
+      onClose={closeAllInspections}
+      onNavigateGlucose={() => inspection.navigateTo("glucose")}
+      onNavigateTreatment={() => inspection.navigateTo("treatment")}
+    />
+  {/if}
 
-  <TreatmentInspectionDialog
-    bind:open={isTreatmentInspectionOpen}
-    timestamp={inspection.timestamp}
-    bolusInsulin={inspection.context.nearbyBolus?.insulin}
-    bolusType={inspection.context.nearbyBolus?.bolusType}
-    bolusDataSource={inspection.context.nearbyBolus?.dataSource}
-    carbGrams={inspection.context.nearbyCarbs?.carbs}
-    carbLabel={inspection.context.nearbyCarbs?.label}
-    carbDataSource={inspection.context.nearbyCarbs?.dataSource}
-    iob={inspection.context.iob}
-    cob={inspection.context.cob}
-    glucoseValue={inspection.glucosePoint.sgv}
-    glucoseData={engine.glucoseData}
-    highThreshold={engine.highThreshold}
-    lowThreshold={engine.lowThreshold}
-    hasGlucoseContext={true}
-    hasDeliveryContext={inspection.context.basalRate != null}
-    onClose={closeAllInspections}
-    onNavigateGlucose={() => inspection.navigateTo("glucose")}
-    onNavigateDelivery={() => inspection.navigateTo("delivery")}
-    onEditEntry={() => {
-      closeAllInspections();
-      if (inspection.context?.nearbyBolus?.treatmentId) {
-        handleMarkerClick(inspection.context.nearbyBolus.treatmentId);
-      } else if (inspection.context?.nearbyCarbs?.treatmentId) {
-        handleMarkerClick(inspection.context.nearbyCarbs.treatmentId);
-      }
-    }}
-  />
+  {#if treatmentInspectionDialog.component}
+    <treatmentInspectionDialog.component
+      bind:open={treatmentInspectionDialog.open}
+      timestamp={inspection.timestamp}
+      bolusInsulin={inspection.context.nearbyBolus?.insulin}
+      bolusType={inspection.context.nearbyBolus?.bolusType}
+      bolusDataSource={inspection.context.nearbyBolus?.dataSource}
+      carbGrams={inspection.context.nearbyCarbs?.carbs}
+      carbLabel={inspection.context.nearbyCarbs?.label}
+      carbDataSource={inspection.context.nearbyCarbs?.dataSource}
+      iob={inspection.context.iob}
+      cob={inspection.context.cob}
+      glucoseValue={inspection.glucosePoint.sgv}
+      glucoseData={engine.glucoseData}
+      highThreshold={engine.highThreshold}
+      lowThreshold={engine.lowThreshold}
+      hasGlucoseContext={true}
+      hasDeliveryContext={inspection.context.basalRate != null}
+      onClose={closeAllInspections}
+      onNavigateGlucose={() => inspection.navigateTo("glucose")}
+      onNavigateDelivery={() => inspection.navigateTo("delivery")}
+      onEditEntry={() => {
+        closeAllInspections();
+        if (inspection.context?.nearbyBolus?.treatmentId) {
+          handleMarkerClick(inspection.context.nearbyBolus.treatmentId);
+        } else if (inspection.context?.nearbyCarbs?.treatmentId) {
+          handleMarkerClick(inspection.context.nearbyCarbs.treatmentId);
+        }
+      }}
+    />
+  {/if}
 {/if}

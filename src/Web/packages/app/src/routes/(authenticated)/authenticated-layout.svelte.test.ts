@@ -114,6 +114,18 @@ describe("authenticated layout", () => {
     expect(page.getByRole("main").elements()).toHaveLength(1);
   });
 
+  it("loads the command palette on its first toggle", async () => {
+    render(AuthenticatedLayoutHarness, { props: { data: layoutData() } });
+    await expect.element(page.getByText("page content")).toBeVisible();
+
+    const search = page.getByPlaceholder("Search commands...");
+    expect(search.elements()).toHaveLength(0);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
+
+    await expect.element(search).toBeVisible();
+  });
+
   it("starts the realtime store before the page beneath it initialises", async () => {
     probe.initializeCalls = 0;
     probe.seenAtInit = -1;
