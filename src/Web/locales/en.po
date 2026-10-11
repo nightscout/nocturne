@@ -12418,6 +12418,7 @@ msgstr "Daily step patterns with glucose overlay"
 msgid "<0/> Step Count Actogram"
 msgstr "<0/> Step Count Actogram"
 
+#: src/lib/components/help/HelpHarness.test.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 #: src/routes/(authenticated)/reports/steps/+page.svelte
@@ -26637,3 +26638,127 @@ msgstr "Nocturne downloaded the data, but could not store it locally. Retry the 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Scanning the selected history in Google Health… The catalog remains available while the inventory is loading."
 msgstr "Scanning the selected history in Google Health… The catalog remains available while the inventory is loading."
+
+#: src/lib/components/help/HelpBar.svelte
+msgid "Page help"
+msgstr "Page help"
+
+#. 0: article.title
+#: src/lib/components/help/HelpBar.svelte
+msgid "Help with {0}"
+msgstr "Help with {0}"
+
+#: src/lib/components/help/HelpBar.svelte
+msgid "— Explanations, settings, and getting started"
+msgstr "— Explanations, settings, and getting started"
+
+#: src/lib/components/help/HelpBar.svelte
+#: src/lib/components/help/HelpBar.svelte
+msgid "Minimize help to library icon"
+msgstr "Minimize help to library icon"
+
+#: src/lib/components/help/HelpBar.svelte
+msgid "Open help <0/>"
+msgstr "Open help <0/>"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Nocturne documentation"
+msgstr "Nocturne documentation"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Explore help in the same layout as Nocturne. Close to return to your page."
+msgstr "Explore help in the same layout as Nocturne. Close to return to your page."
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Documentation navigation"
+msgstr "Documentation navigation"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Search all documentation"
+msgstr "Search all documentation"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Search all documentation…"
+msgstr "Search all documentation…"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "No documentation found. Try a page name, a setting, or a connector."
+msgstr "No documentation found. Try a page name, a setting, or a connector."
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Search results"
+msgstr "Search results"
+
+#. 0: results.length
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "{0} results"
+msgstr "{0} results"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Page guide"
+msgstr "Page guide"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Continue exploring"
+msgstr "Continue exploring"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Open connector settings <0/>"
+msgstr "Open connector settings <0/>"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Your Nocturne page stays where you left it."
+msgstr "Your Nocturne page stays where you left it."
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Close help"
+msgstr "Close help"
+
+#: src/lib/components/help/HelpHarness.test.svelte
+msgid "Your activity report stays open while you explore documentation."
+msgstr "Your activity report stays open while you explore documentation."
+
+#: src/lib/components/help/HelpHarness.test.svelte
+msgid "Nocturne <0/>"
+msgstr "Nocturne <0/>"
+
+#: src/lib/components/help/HelpIcon.svelte
+#: src/lib/components/help/HelpIcon.svelte
+msgid "Open page help"
+msgstr "Open page help"
+
+#: src/lib/components/help/HelpPreferences.svelte
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "Full help bar"
+msgstr "Full help bar"
+
+#: src/lib/components/help/HelpPreferences.svelte
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "Library icon only"
+msgstr "Library icon only"
+
+#: src/lib/components/help/HelpPreferences.svelte
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "Hidden"
+msgstr "Hidden"
+
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "<0/>Documentation & help"
+msgstr "<0/>Documentation & help"
+
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "Choose how to access page help. This preference is saved in this browser."
+msgstr "Choose how to access page help. This preference is saved in this browser."
+
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "Help visibility"
+msgstr "Help visibility"
+
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "When hidden, help can always be enabled again here."
+msgstr "When hidden, help can always be enabled again here."
+
+#: src/lib/components/help/HelpIcon.svelte
+#: src/lib/components/help/HelpIcon.svelte
+msgid "Close page help"
+msgstr "Close page help"

@@ -99,7 +99,7 @@ export function articles() {
       sections: [
         {
           title: "Help visibility",
-          text: "Show the full help bar, keep only the library icon, or hide help completely. You can always enable it again here. This preference is saved in this browser.",
+          text: "Use the book next to Nocturne to switch between your page and its documentation. The same sidebar lets you explore other guides. Click the book again or press Escape to return to your page with its filters preserved. Help uses only the library icon by default; you can optionally show the full bar or hide help completely. You can always enable it again here. This preference is saved in this browser.",
         },
       ],
       related: [],

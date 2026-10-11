@@ -13,7 +13,7 @@
   import * as Sidebar from "$lib/components/ui/sidebar";
   import AppSidebar from "$lib/components/layout/AppSidebar.svelte";
   import HelpBar from "$lib/components/help/HelpBar.svelte";
-  import HelpBrowser from "$lib/components/help/HelpBrowser.svelte";
+  import HelpPageView from "$lib/components/help/HelpPageView.svelte";
   import { createHelpContext } from "$lib/help/help-context.svelte";
   import MobileHeader from "$lib/components/layout/MobileHeader.svelte";
   import type { LayoutData } from "./$types";
@@ -61,7 +61,10 @@
   }
 
   const { data, children }: Props = $props();
-  createHelpContext();
+  const help = createHelpContext();
+  beforeNavigate(({ to, from }) => {
+    if (to && to.url.pathname !== from?.url.pathname) help.open = false;
+  });
 
   // A tenantless host leaves the tenant-scoped surfaces below unmounted; see
   // tenantless-navigation. Read once: the host cannot change without a fresh load.
@@ -261,6 +264,7 @@
         <AlertSurfaces />
       {/if}
       <main class="flex-1 overflow-x-clip">
+        <HelpPageView>
         <svelte:boundary>
           {@render children()}
 
@@ -284,10 +288,10 @@
             </Card.Root>
           {/snippet}
         </svelte:boundary>
+        </HelpPageView>
       </main>
     </Sidebar.Inset>
   </Sidebar.Provider>
-  <HelpBrowser />
   {#if commandPalette.component}
     <commandPalette.component bind:open={commandPalette.open} {tenantless} />
   {/if}
