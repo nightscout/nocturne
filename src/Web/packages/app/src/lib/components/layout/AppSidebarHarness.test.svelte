@@ -3,6 +3,8 @@
   import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import AppSidebar from "./AppSidebar.svelte";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
+  import { createHelpContext } from "$lib/help/help-context.svelte";
+  createHelpContext();
 
   const {
     user = null,

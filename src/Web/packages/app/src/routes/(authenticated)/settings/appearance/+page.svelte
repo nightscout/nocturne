@@ -1,4 +1,5 @@
 <script lang="ts">
+  import HelpPreferences from "$lib/components/help/HelpPreferences.svelte";
   import { time } from "$lib/utils/formatting";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import {
@@ -194,6 +195,8 @@
       <p class="text-muted-foreground">Customize the look and feel of Nocturne</p>
     </div>
   </div>
+
+  <HelpPreferences />
 
   {#if store.isLoading}
     <SettingsPageSkeleton cardCount={4} />

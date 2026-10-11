@@ -66,6 +66,7 @@ function renderViewingBravo() {
 
 describe("AppSidebar", () => {
   beforeEach(async () => {
+    localStorage.removeItem("nocturne-help-visibility");
     // Below the sidebar's mobile breakpoint it renders as a closed sheet and offers nothing.
     await page.viewport(1280, 900);
     pageState.data = {};
@@ -79,6 +80,25 @@ describe("AppSidebar", () => {
     getDnd.mockImplementation(() => remoteQuery(() => ({ dndManualActive: false })));
     updateDnd.mockReset();
     updateDnd.mockResolvedValue({ dndManualActive: true });
+  });
+
+  it("keeps help and the sidebar toggle inside the collapsed desktop header", async () => {
+    localStorage.setItem("nocturne-help-visibility", "icon");
+    render(Harness, { user: MEMBER });
+    await group("Toggle Sidebar").first().click();
+    const help = group("Open page help");
+    await expect.element(help).toBeVisible();
+    await vi.waitFor(() => {
+      const icon = help.element().getBoundingClientRect();
+      const toggle = group("Toggle Sidebar").first().element().getBoundingClientRect();
+      const header = help.element().closest('[data-slot="sidebar-header"]')!.getBoundingClientRect();
+      expect(icon.left).toBeGreaterThanOrEqual(header.left);
+      expect(icon.right).toBeLessThanOrEqual(header.right);
+      expect(toggle.left).toBeGreaterThanOrEqual(header.left);
+      expect(toggle.right).toBeLessThanOrEqual(header.right);
+      expect(icon.bottom).toBeLessThanOrEqual(toggle.top);
+    });
+    localStorage.removeItem("nocturne-help-visibility");
   });
 
   it("offers a public share the dashboard and a way to sign in, and nothing the owner acts on", async () => {
