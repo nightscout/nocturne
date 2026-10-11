@@ -101,4 +101,41 @@ public class DeduplicationReconciliationBackgroundServiceTests
             d => d.ReconcileNewLinksAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.Exactly(2));
     }
+
+    [Fact]
+    public async Task ReconcileAllTenantsAsync_PrunesEachTenantAfterItsReconcile_AndNotOneWhoseReconcileFailed()
+    {
+        using var db = TwoActiveTenantsAndOneInactive();
+
+        var calls = new List<string>();
+        var dedupMock = new Mock<IDeduplicationService>();
+        dedupMock
+            .Setup(d => d.ReconcileNewLinksAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                calls.Add("reconcile");
+                if (calls.Count == 1)
+                    throw new InvalidOperationException("boom");
+                return Task.FromResult(new ReconcileResult(0, true));
+            });
+        dedupMock
+            .Setup(d => d.PruneSingletonLinksAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                calls.Add("prune");
+                return Task.FromResult(0);
+            });
+
+        var serviceProvider = BuildServiceProvider(db, dedupMock);
+
+        var sut = new DeduplicationReconciliationBackgroundService(
+            serviceProvider,
+            serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
+            NullLogger<DeduplicationReconciliationBackgroundService>.Instance);
+
+        await sut.ReconcileAllTenantsAsync(CancellationToken.None);
+
+        calls.Should().Equal(["reconcile", "reconcile", "prune"],
+            "a prune may only delete what reconcile has already passed");
+    }
 }
