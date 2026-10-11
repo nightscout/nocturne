@@ -26760,3 +26760,8 @@ msgstr ""
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "When hidden, help can always be enabled again here."
 msgstr ""
+
+#: src/lib/components/help/HelpIcon.svelte
+#: src/lib/components/help/HelpIcon.svelte
+msgid "Close page help"
+msgstr "Fermer l’aide de la page"

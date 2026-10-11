@@ -154,12 +154,13 @@
   let openMenus = $state<Record<string, boolean>>({});
 
   const isActive = (item: NavItem | NavLink): boolean => {
+    const path = help?.open ? help.path : page.url.pathname;
     if (item.href && item?.strict) {
-      return page.url.pathname === item.href;
+      return path === item.href;
     }
 
     if (item.href) {
-      return page.url.pathname.startsWith(item.href);
+      return path.startsWith(item.href);
     }
 
     if ("children" in item && item.children) {
@@ -180,6 +181,12 @@
 
   function toggleMenu(id: string) {
     openMenus[id] = !openMenus[id];
+  }
+  function navigateHelp(event: MouseEvent, href: string | undefined) {
+    if (!help?.open || !href || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    help.select(href);
+    sidebar.setOpenMobile(false);
   }
 </script>
 
@@ -309,12 +316,13 @@
                   <Sidebar.MenuSub>
                     {#each item.children as child (child.href)}
                       <Sidebar.MenuSubItem>
-                        {#if child.href === "/alerts/dnd"}
+                        {#if child.href === "/alerts/dnd" && !help?.open}
                           <SidebarDndToggle visible={openMenus[item.id] === true} />
                         {:else}
                           <Sidebar.MenuSubButton
                             href={child.href}
                             isActive={isActive(child)}
+                            onclick={(event) => navigateHelp(event, child.href)}
                           >
                             <child.icon class="h-4 w-4" />
                             <span>{child.title}</span>
@@ -331,7 +339,7 @@
                 <Sidebar.MenuButton isActive={isActive(item)}>
                   {#snippet child({ props })}
                     <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a runtime string | undefined from NavItem; resolve() requires a literal route id and throws on undefined -->
-                    <a href={item.href} {...props}>
+                    <a href={item.href} {...props} onclick={(event) => navigateHelp(event, item.href)}>
                       <item.icon class="h-4 w-4" />
                       <span class="group-data-[collapsible=icon]:hidden">
                         {item.title}

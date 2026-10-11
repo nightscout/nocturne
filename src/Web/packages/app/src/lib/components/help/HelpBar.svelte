@@ -12,7 +12,7 @@
   );
 </script>
 
-{#if help?.ready && help.mode === "bar"}
+{#if help?.ready && help.mode === "bar" && !help.open}
   <aside
     aria-label="Page help"
     class="print:hidden flex items-center gap-3 border-b bg-primary/5 px-4 py-2.5"

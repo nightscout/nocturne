@@ -13734,7 +13734,7 @@ msgstr ""
 #: ../portal/src/lib/components/SiteFooter.svelte
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Documentation"
-msgstr ""
+msgstr "Documentatie"
 
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Guides, tutorials, and API reference"
@@ -26675,19 +26675,19 @@ msgstr ""
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Search all documentation"
-msgstr ""
+msgstr "Zoeken in alle documentatie"
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Search all documentation…"
-msgstr ""
+msgstr "Zoeken in alle documentatie…"
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "No documentation found. Try a page name, a setting, or a connector."
-msgstr ""
+msgstr "Geen documentatie gevonden. Probeer een paginanaam, instelling of connector."
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Search results"
-msgstr ""
+msgstr "Zoekresultaten"
 
 #. 0: results.length
 #: src/lib/components/help/HelpBrowser.svelte
@@ -26696,11 +26696,11 @@ msgstr ""
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Page guide"
-msgstr ""
+msgstr "Handleiding"
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Continue exploring"
-msgstr ""
+msgstr "Verder lezen"
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Open connector settings <0/>"
@@ -26725,22 +26725,22 @@ msgstr ""
 #: src/lib/components/help/HelpIcon.svelte
 #: src/lib/components/help/HelpIcon.svelte
 msgid "Open page help"
-msgstr ""
+msgstr "Paginahulp openen"
 
 #: src/lib/components/help/HelpPreferences.svelte
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Full help bar"
-msgstr ""
+msgstr "Volledige hulpbalk"
 
 #: src/lib/components/help/HelpPreferences.svelte
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Library icon only"
-msgstr ""
+msgstr "Alleen het boekicoon"
 
 #: src/lib/components/help/HelpPreferences.svelte
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Hidden"
-msgstr ""
+msgstr "Verborgen"
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "<0/>Documentation & help"
@@ -26748,12 +26748,29 @@ msgstr ""
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Choose how to access page help. This preference is saved in this browser."
-msgstr ""
+msgstr "Kies hoe je paginahulp opent. Deze voorkeur wordt in deze browser opgeslagen."
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Help visibility"
-msgstr ""
+msgstr "Zichtbaarheid van hulp"
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "When hidden, help can always be enabled again here."
-msgstr ""
+msgstr "Je kunt verborgen hulp hier altijd weer inschakelen."
+
+#: src/lib/components/help/HelpIcon.svelte
+#: src/lib/components/help/HelpIcon.svelte
+msgid "Close page help"
+msgstr "Paginahulp sluiten"
+
+
+msgid "Open connector settings"
+msgstr "Connectorinstellingen openen"
+
+
+msgid "Page documentation"
+msgstr "Paginadocumentatie"
+
+
+msgid "Documentation & help"
+msgstr "Documentatie en hulp"
