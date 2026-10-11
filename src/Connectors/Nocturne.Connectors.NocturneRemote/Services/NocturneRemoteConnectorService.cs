@@ -68,27 +68,36 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         // Captured as in FetchOrFailAsync, and for the same reason: the retry loop answers with
         // nothing rather than with the status it ended on.
         HttpStatusCode? answered = null;
+        string? transportFailure = null;
 
         try
         {
             await ExecuteWithRetryAsync<HttpStatusCode>(
                 async () =>
                 {
-                    var response = await GetWithHeadersAsync(
-                        BuildAbsoluteUrl($"{NocturneRemoteConstants.SensorGlucose}?limit=1"),
-                        _authHeaders,
-                        cancellationToken);
+                    try
+                    {
+                        var response = await GetWithHeadersAsync(
+                            BuildAbsoluteUrl($"{NocturneRemoteConstants.SensorGlucose}?limit=1"),
+                            _authHeaders,
+                            cancellationToken);
 
-                    answered = response.StatusCode;
+                        answered = response.StatusCode;
 
-                    if (!response.IsSuccessStatusCode)
-                        throw new HttpRequestException(
-                            $"HTTP {(int)response.StatusCode} {response.StatusCode}: " +
-                            await ReadFailureBodyAsync(response, config, cancellationToken),
-                            null,
-                            response.StatusCode);
+                        if (!response.IsSuccessStatusCode)
+                            throw new HttpRequestException(
+                                $"HTTP {(int)response.StatusCode} {response.StatusCode}: " +
+                                await ReadFailureBodyAsync(response, config, cancellationToken),
+                                null,
+                                response.StatusCode);
 
-                    return response.StatusCode;
+                        return response.StatusCode;
+                    }
+                    catch (Exception ex) when (IsTransportFailure(ex))
+                    {
+                        transportFailure = DescribeTransportFailure(ex);
+                        throw;
+                    }
                 },
                 _retryDelayStrategy,
                 maxRetries: 1,
@@ -104,8 +113,11 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         // falling silent.
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return UnansweredResult();
+            return UnansweredResult(transportFailure);
         }
+
+        if (answered is null && transportFailure is not null)
+            return UnansweredResult(transportFailure);
 
         if (answered != HttpStatusCode.Unauthorized)
             return null;
@@ -123,9 +135,10 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     ///     <see cref="BaseConnectorService{TConfig}.AuthenticationFailedResult"/> and for the same
     ///     reasons, but must not borrow its wording: the credential is not what failed.
     /// </summary>
-    private SyncResult UnansweredResult()
+    private SyncResult UnansweredResult(string? detail = null)
     {
-        var unanswered = $"The remote Nocturne instance at {_resolvedBaseUrl} did not answer";
+        var unanswered = $"The remote Nocturne instance at {_resolvedBaseUrl} did not answer" +
+                         (detail is null ? string.Empty : $": {detail}");
 
         _logger.LogError("[{ConnectorSource}] {Detail}", ConnectorSource, unanswered);
 
@@ -381,27 +394,60 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         // Captured rather than logged alone, because the tenant reads the sync card and not the
         // connector logs, and a refused scope is the failure they can actually act on.
         string? refusal = null;
+        string? transportFailure = null;
+        string? failure = null;
 
         var payload = await ExecuteWithRetryAsync(
             async () =>
             {
-                var response = await GetWithHeadersAsync(BuildAbsoluteUrl(relativeUrl), _authHeaders, ct);
+                refusal = null;
+                transportFailure = null;
+                failure = null;
+                try
+                {
+                    var response = await GetWithHeadersAsync(BuildAbsoluteUrl(relativeUrl), _authHeaders, ct);
 
-                if (response.IsSuccessStatusCode)
-                    return await DeserializeResponseAsync<T>(response, ct);
+                    if (response.IsSuccessStatusCode)
+                        return await DeserializeResponseAsync<T>(response, ct);
 
-                refusal = $"HTTP {(int)response.StatusCode} {response.StatusCode}";
-                throw new HttpRequestException(
-                    $"{refusal}: {await ReadFailureBodyAsync(response, config, ct)}",
-                    null,
-                    response.StatusCode);
+                    refusal = $"HTTP {(int)response.StatusCode} {response.StatusCode}";
+                    throw new HttpRequestException(
+                        $"{refusal}: {await ReadFailureBodyAsync(response, config, ct)}",
+                        null,
+                        response.StatusCode);
+                }
+                catch (Exception ex) when (IsTransportFailure(ex))
+                {
+                    transportFailure = DescribeTransportFailure(ex);
+                    throw;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // ExecuteWithRetryAsync deliberately converts parse/unexpected failures to a
+                    // null payload. Preserve the cause here so a tenant does not have to inspect
+                    // connector logs to distinguish malformed responses from an empty page.
+                    failure = DescribeFailure(ex);
+                    throw;
+                }
             },
             _retryDelayStrategy,
             maxRetries: config.MaxRetryAttempts,
             operationName: operationName,
             cancellationToken: ct);
 
-        return payload ?? throw FetchFailed(operationName, refusal);
+        return payload ?? throw FetchFailed(operationName, refusal ?? transportFailure ?? failure);
+    }
+
+    private static bool IsTransportFailure(Exception ex) =>
+        ex is HttpRequestException { StatusCode: null } or IOException or TimeoutException;
+
+    private static string DescribeTransportFailure(Exception ex)
+        => DescribeFailure(ex);
+
+    private static string DescribeFailure(Exception ex)
+    {
+        var detail = ex.GetBaseException().Message.Trim();
+        return detail.Length <= 200 ? detail : detail[..200] + "...";
     }
 
     /// <summary>

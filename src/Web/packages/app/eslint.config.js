@@ -168,6 +168,31 @@ export default [
     }
   },
   {
+    // ApiClient constructs every generated sub-client, so one browser-reachable import ships all
+    // of them. Browser code takes the specific clients from $lib/api/browser-clients.
+    files: ["src/**/*.{ts,js,svelte}"],
+    ignores: [
+      "src/lib/server/**",
+      "src/hooks.server.ts",
+      "src/**/*.server.ts",
+      "src/**/+server.ts",
+      "src/**/*.remote.ts",
+      "src/**/*.test.ts",
+      "src/app.d.ts",
+      "src/lib/api/index.ts"
+    ],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": ["error", {
+        patterns: [{
+          regex: "^([$]lib/api|[$]api|([.]{1,2}/)+api)(/index)?/?$|(^|/)api-client[.]generated([.]ts)?$",
+          importNames: ["ApiClient"],
+          allowTypeImports: true,
+          message: "ApiClient pulls every generated sub-client into the browser bundle. Import the specific client from $lib/api/browser-clients."
+        }]
+      }]
+    }
+  },
+  {
     // Guard against the year-overview/alerts-polling regression class: a remote
     // query() awaited or `.then()`-chained imperatively (outside a reactive
     // context) throws "not created in a reactive context ... Use .run()".

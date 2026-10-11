@@ -76,6 +76,7 @@ services:
       WEB_URL: http://web:5173
       DemoService__Enabled: "false"
       NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS: "true"
+      NOCTURNE_GOOGLE_HEALTH_MOCK: "true"
       # Workstation GC with a conserving heap: the server GC sizes its heaps per core.
       DOTNET_gcServer: "0"
       DOTNET_GCConserveMemory: "5"
@@ -122,6 +123,7 @@ services:
       BASE_DOMAIN: *base-domain
       NOCTURNE_POSTGRES_URI: postgresql://nocturne_web:e2e-web-password@postgres:5432/nocturne
       NODE_OPTIONS: --max-old-space-size=192
+      PROTOCOL_HEADER: x-forwarded-proto
     ports:
       - "127.0.0.1:${E2E_WEB_PORT:-1631}:5173"
     depends_on:
@@ -134,3 +136,15 @@ services:
       interval: 1s
       timeout: 3s
       retries: 60
+
+  web-tls:
+    image: caddy:2-alpine
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:${E2E_WEB_TLS_PORT:-1635}:8443"
+    depends_on:
+      web:
+        condition: service_healthy
+    mem_limit: 96m
+    cpus: 0.25

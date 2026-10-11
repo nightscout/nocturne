@@ -8,19 +8,26 @@
     getAll,
     updateStatus,
   } from "$lib/api/generated/coachMarks.generated.remote";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { whenIdle } from "$lib/utils/when-idle";
 
   // Persisted with the coach marks, so the dismissal is stored per subject per
   // tenant rather than per browser.
   const MARK_KEY = "account.backup-sign-in";
 
-  const credentialsQuery = listCredentials();
-  const marksQuery = getAll();
+  let idle = $state(false);
+  $effect(() => whenIdle(() => (idle = true)));
+
+  const credentialsQuery = $derived(idle ? listCredentials() : null);
+  const marksQuery = $derived(idle ? getAll() : null);
+  retainQuery(() => credentialsQuery);
+  retainQuery(() => marksQuery);
 
   const hasSingleSignInMethod = $derived(
-    credentialsQuery.current?.hasSingleSignInMethod === true
+    credentialsQuery?.current?.hasSingleSignInMethod === true
   );
   const dismissed = $derived(
-    marksQuery.current?.some(
+    marksQuery?.current?.some(
       (mark) => mark.markKey === MARK_KEY && mark.status === "dismissed"
     ) === true
   );

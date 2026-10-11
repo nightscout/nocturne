@@ -154,7 +154,7 @@ public class ChartDataService : IChartDataService
             .ToList(); // Already sorted
 
         var maxSgv = glucoseData.Any() ? glucoseData.Max(g => g.Sgv) : 280;
-        var glucoseYMax = Math.Min(400, Math.Max(280, maxSgv) + 20);
+        var glucoseYMax = Math.Min(ChartThresholdsBuilder.GlucoseYMaxCap, Math.Max(280, maxSgv) + 20);
 
         return (glucoseData, glucoseYMax);
     }

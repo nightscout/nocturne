@@ -14,11 +14,16 @@ import {
   glucoseChartLookback,
   GLUCOSE_CHART_FETCH_HOURS,
 } from "$lib/stores/appearance-store.svelte";
+import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
 import { mergeChartData, replaceWindow } from "$lib/utils/chart-data-merge";
 import type { TransformedChartData } from "$lib/utils/chart-data-transform";
 import { stableBy } from "$lib/utils/stable-by";
 import { mergeRealtimeGlucose } from "./merge-glucose";
-import { createChartDataView, type ChartDataEngine } from "./chart-data-view.svelte";
+import {
+  createChartDataView,
+  type ChartDataEngine,
+  type PredictionAvailability,
+} from "./chart-data-view.svelte";
 
 export * from "./chart-data-view.svelte";
 
@@ -53,6 +58,15 @@ export interface ChartDataEngineOptions {
    * draw, where under-reaching silently drops points it is drawing.
    */
   dataWindow?: "buffer" | "display";
+  /**
+   * Where glucose comes from. `"chart-data"` fetches the chart-data window and
+   * merges the realtime store's readings into it. `"realtime"` never fetches: it
+   * draws the store's readings, with the thresholds the store holds, and still
+   * honours `initialChartData` if given.
+   *
+   * Defaults to `"chart-data"`.
+   */
+  glucoseSource?: "chart-data" | "realtime";
   /** Fired once when `serverChartData` first becomes non-null. */
   onDataReady?: () => void;
 }
@@ -98,6 +112,7 @@ export function createChartDataEngine(
 ): ChartDataEngine {
   const realtimeStore = getRealtimeStore();
   const isBrowser = typeof window !== "undefined";
+  const realtimeOnly = $derived(options.glucoseSource === "realtime");
 
   // ---- Mutable state ----
   // `$state.raw`, not `$state`: serverChartData holds large arrays of glucose
@@ -114,7 +129,8 @@ export function createChartDataEngine(
   let predictionData = $state.raw<PredictionData | null>(null);
   let predictionError = $state<string | null>(null);
   let chartDataError = $state<string | null>(null);
-  let predictionServiceAvailable = $state(false);
+  let predictionServiceStatus = $state<PredictionAvailability>("unknown");
+  const predictionServiceAvailable = $derived(predictionServiceStatus === "available");
   let processedHistoricalPromise =
     $state<Promise<TransformedChartData | null> | null>(null);
 
@@ -127,6 +143,14 @@ export function createChartDataEngine(
 
   const hasExternalPredictions = $derived(
     options.externalPredictionData !== undefined
+  );
+
+  const predictionAvailability = $derived<PredictionAvailability>(
+    !(options.enablePredictions ?? true)
+      ? "unavailable"
+      : hasExternalPredictions
+        ? "available"
+        : predictionServiceStatus
   );
 
   const effectiveShowPredictions = $derived(
@@ -181,8 +205,8 @@ export function createChartDataEngine(
   // ---- Stable fetch range ----
   // Fetch only the visible window when no dateRange is configured. The wider
   // `fullDataRange` (48h) is used by the MiniOverview on the dashboard, which
-  // preloads data via SSR — so consumers that hit this fetch path (sidebar
-  // widget, clock face) don't need the full buffer.
+  // preloads data via SSR — so consumers that hit this fetch path (clock
+  // face) don't need the full buffer.
   // Primitive deriveds, so the range object below is rebuilt only when a
   // rounded bound moves: `displayDateRange` is a fresh object every minute.
   const fetchRange = $derived(options.dateRange ? fullDataRange : displayDateRange);
@@ -283,6 +307,7 @@ export function createChartDataEngine(
 
   // Skip if we already have initial data from SSR streaming
   $effect(() => {
+    if (realtimeOnly) return;
     if (options.initialChartData && untrack(() => serverChartData)) return;
 
     const range = stableFetchRange;
@@ -318,7 +343,7 @@ export function createChartDataEngine(
   // devicestatus creates (the AID cadence), legacy `treatments` socket events and app
   // writes via `treatmentRevision`, and the store's backfill; the timer covers IOB
   // decaying with no new data.
-  const hasInitialData = $derived(!!options.initialChartData);
+  const hasInitialData = $derived(!!options.initialChartData && !realtimeOnly);
   const dataFingerprint = $derived(
     hasInitialData
       ? [
@@ -422,19 +447,19 @@ export function createChartDataEngine(
 
   // Check prediction service availability on mount
   $effect(() => {
-    if (!isBrowser) return;
+    if (!isBrowser || !(options.enablePredictions ?? true)) return;
 
     let cancelled = false;
     getPredictionStatus({})
       .then((status) => {
         if (!cancelled) {
-          predictionServiceAvailable = status.available;
+          predictionServiceStatus = status.available ? "available" : "unavailable";
         }
       })
       .catch((err) => {
         if (!cancelled) {
           console.warn("Failed to check prediction service status:", err);
-          predictionServiceAvailable = false;
+          predictionServiceStatus = "unavailable";
         }
       });
 
@@ -456,13 +481,19 @@ export function createChartDataEngine(
   // series in the app, and a fresh array from it re-dirties the chart's entire
   // extent and scale chain, which reads it again. See the note on `stableBy`.
   const mergeGlucose = stableBy(mergeRealtimeGlucose);
+  const resolveThresholds = stableBy(resolveChartThresholds);
+
+  const realtimeThresholds = $derived(
+    realtimeOnly ? resolveThresholds(realtimeStore.chartThresholds) : undefined
+  );
 
   const glucoseData = $derived(
     mergeGlucose(
       serverChartData,
       realtimeStore.entries,
       dataRange.from.getTime(),
-      dataRange.to.getTime()
+      dataRange.to.getTime(),
+      realtimeThresholds
     )
   );
 
@@ -472,6 +503,9 @@ export function createChartDataEngine(
     },
     get glucoseData() {
       return glucoseData;
+    },
+    get thresholdsOverride() {
+      return realtimeThresholds;
     },
     get predictionData() {
       return predictionData;
@@ -484,6 +518,9 @@ export function createChartDataEngine(
     },
     get predictionServiceAvailable() {
       return predictionServiceAvailable;
+    },
+    get predictionAvailability() {
+      return predictionAvailability;
     },
     get effectiveShowPredictions() {
       return effectiveShowPredictions;

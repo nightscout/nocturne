@@ -279,7 +279,11 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
             }
             else
             {
-                _state = ConnectorResetJobState.Completed;
+                var failed = result.Connectors.Any(connector => !connector.Result.Success) ||
+                             _connectors.Values.Any(connector => connector.State == ConnectorResetConnectorState.Failed);
+                _state = failed ? ConnectorResetJobState.Failed : ConnectorResetJobState.Completed;
+                if (failed)
+                    _errorMessage = "connector_reset_failed";
             }
         }
         catch (OperationCanceledException)
@@ -448,9 +452,9 @@ public enum ConnectorResetJobState
     Pending,
     /// <summary>Actively re-pulling connectors.</summary>
     Running,
-    /// <summary>Every connector has been processed (individual connectors may still have failed).</summary>
+    /// <summary>Every connector has been processed successfully.</summary>
     Completed,
-    /// <summary>The job terminated due to an unrecoverable error before completing.</summary>
+    /// <summary>At least one connector failed, or an unrecoverable error prevented the job from completing.</summary>
     Failed,
     /// <summary>The job was cancelled before completing.</summary>
     Cancelled,
