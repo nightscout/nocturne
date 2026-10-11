@@ -12,6 +12,9 @@
   import { onMount, onDestroy, type Snippet } from "svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import AppSidebar from "$lib/components/layout/AppSidebar.svelte";
+  import HelpBar from "$lib/components/help/HelpBar.svelte";
+  import HelpBrowser from "$lib/components/help/HelpBrowser.svelte";
+  import { createHelpContext } from "$lib/help/help-context.svelte";
   import MobileHeader from "$lib/components/layout/MobileHeader.svelte";
   import type { LayoutData } from "./$types";
   import { getTitleFaviconService } from "$lib/services/title-favicon-service.svelte";
@@ -58,6 +61,7 @@
   }
 
   const { data, children }: Props = $props();
+  createHelpContext();
 
   // A tenantless host leaves the tenant-scoped surfaces below unmounted; see
   // tenantless-navigation. Read once: the host cannot change without a fresh load.
@@ -235,6 +239,7 @@
         class="sticky top-(--mobile-header-offset,0px) z-40 transition-all duration-300 md:top-0"
         bind:offsetHeight={bannerStripHeight}
       >
+          <HelpBar />
           {#if data.isDemo}
             <DemoBanner nextResetAt={data.nextResetAt} />
           {/if}
@@ -282,6 +287,7 @@
       </main>
     </Sidebar.Inset>
   </Sidebar.Provider>
+  <HelpBrowser />
   {#if commandPalette.component}
     <commandPalette.component bind:open={commandPalette.open} {tenantless} />
   {/if}
