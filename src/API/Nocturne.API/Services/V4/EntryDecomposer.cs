@@ -52,12 +52,20 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         _auditContext = auditContext;
     }
 
+    /// <summary>The tables an entry decomposes into, all keyed by its legacy id.</summary>
+    private StoredCorrelationLookup[] EntryTables =>
+    [
+        _sensorGlucoseRepository.GetCorrelationIdsByLegacyIdAsync,
+        _meterGlucoseRepository.GetCorrelationIdsByLegacyIdAsync,
+        _calibrationRepository.GetCorrelationIdsByLegacyIdAsync,
+    ];
+
     /// <inheritdoc />
     public async Task<DecompositionResult> DecomposeAsync(Entry entry, WriteOrigin origin, CancellationToken ct = default)
     {
         var result = new DecompositionResult
         {
-            CorrelationId = Guid.CreateVersion7()
+            CorrelationId = CorrelationIdFor(entry.Id, await GetStoredCorrelationIdsAsync([entry.Id], EntryTables, ct))
         };
 
         var entryType = entry.Type?.ToLowerInvariant();
@@ -158,10 +166,11 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         var mbgList = new List<MeterGlucose>();
         var calList = new List<Calibration>();
         var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
+        var correlationIds = await GetStoredCorrelationIdsAsync(entries.Select(e => e.Id), EntryTables, ct);
 
         foreach (var entry in entries)
         {
-            var correlationId = Guid.CreateVersion7();
+            var correlationId = CorrelationIdFor(entry.Id, correlationIds);
             switch (entry.Type?.ToLowerInvariant())
             {
                 case "sgv":
