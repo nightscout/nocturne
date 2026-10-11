@@ -7,7 +7,7 @@ export function articles() {
       href: "/reports/steps",
       title: "Steps",
       introduction:
-        "You are on the Steps page. This page is about counting steps and viewing your activity over time.",
+        "This guide covers Steps: counting steps and viewing your activity over time.",
       sections: [
         {
           title: "What am I looking at?",
@@ -28,7 +28,7 @@ export function articles() {
       href: "/reports/heart-rate",
       title: "Heart Rate",
       introduction:
-        "You are on the Heart Rate page. This report is about your recorded heart rate and patterns over time.",
+        "This guide covers Heart Rate: your recorded heart rate and patterns over time.",
       sections: [
         {
           title: "Getting started",
@@ -49,7 +49,7 @@ export function articles() {
       href: "/settings/connectors",
       title: "Connectors & Apps",
       introduction:
-        "You are on the Connectors & Apps page. Connectors bring data from other services into Nocturne.",
+        "This guide covers Connectors & Apps. Connectors bring data from other services into Nocturne.",
       sections: [
         {
           title: "Choose your source",
@@ -95,7 +95,7 @@ export function articles() {
       href: "/settings/appearance",
       title: "Appearance",
       introduction:
-        "You are on the Appearance page. Customize how Nocturne looks and how help is displayed.",
+        "This guide covers Appearance: customizing how Nocturne looks and how help is displayed.",
       sections: [
         {
           title: "Help visibility",
@@ -134,7 +134,7 @@ export function articleFor(path: string, links: NavLink[]) {
   return {
     href: normalized,
     title,
-    introduction: `You are on the ${title} page.`,
+    introduction: `This guide covers ${title}.`,
     sections: [
       {
         title: "About this page",

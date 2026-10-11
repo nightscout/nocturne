@@ -11,6 +11,7 @@ export function isHelpMode(value: unknown): value is HelpMode {
 }
 
 export function createHelpContext() {
+  let ready = $state(false);
   let mode = $state<HelpMode>("bar");
   let open = $state(false);
   let path = $state("/");
@@ -23,6 +24,7 @@ export function createHelpContext() {
     } catch {
       /* Help remains usable when browser storage is unavailable. */
     }
+    ready = true;
     const sync = (event: StorageEvent) => {
       if (event.key === STORAGE_KEY) {
         mode = isHelpMode(event.newValue) ? event.newValue : "bar";
@@ -34,6 +36,9 @@ export function createHelpContext() {
   });
 
   const help = {
+    get ready() {
+      return ready;
+    },
     get mode() {
       return mode;
     },

@@ -28,6 +28,14 @@ const navigation: NavItem[] = [
 
 describe("contextual documentation", () => {
   const links = documentationLinks(navigation);
+  it("describes the guide without claiming the app navigated to its page", () => {
+    expect(articleFor("/reports/steps", links).introduction).toContain(
+      "This guide covers Steps"
+    );
+    expect(articleFor("/calendar", links).introduction).toBe(
+      "This guide covers calendar."
+    );
+  });
   it("resolves trailing slashes and provides help for unknown nested pages", () => {
     expect(articleFor("/reports/steps/", links).title).toBe("Steps");
     expect(

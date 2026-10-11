@@ -32,7 +32,7 @@ describe("documentation help", () => {
       .element(page.getByRole("heading", { name: "Search results" }))
       .toBeVisible();
     await expect
-      .element(page.getByRole("button", { name: /^Steps You are/ }))
+      .element(page.getByRole("button", { name: /^Steps This guide/ }))
       .toBeVisible();
     await page.getByRole("button", { name: "Close help", exact: true }).click();
     await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();

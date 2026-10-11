@@ -185,7 +185,7 @@
 
 <Sidebar.Sidebar collapsible="icon">
   <Sidebar.Header
-    class="flex flex-row items-center justify-between p-4 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2"
+    class="flex flex-row items-center justify-between p-4 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2"
   >
     <div class="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
       <img

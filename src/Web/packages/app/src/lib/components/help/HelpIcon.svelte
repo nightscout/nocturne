@@ -6,10 +6,10 @@
   const help = getHelpContext();
 </script>
 
-{#if help?.mode === "icon"}
+{#if help?.ready && help.mode === "icon"}
   <Button
     variant="ghost"
-    size="icon"
+    size="icon-sm"
     title="Open page help"
     aria-label="Open page help"
     onclick={() => help.show(page.url.pathname)}
