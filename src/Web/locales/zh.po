@@ -8636,6 +8636,7 @@ msgid "g carbs"
 msgstr ""
 
 #: ../portal/src/routes/docs/+layout.svelte
+#: src/lib/components/help/HelpPageView.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
 msgid "Escape"
 msgstr ""
@@ -13732,6 +13733,7 @@ msgid "Chat with developers and other users"
 msgstr ""
 
 #: ../portal/src/lib/components/SiteFooter.svelte
+#: src/lib/components/help/HelpBrowser.svelte
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Documentation"
 msgstr ""
@@ -26661,17 +26663,14 @@ msgstr ""
 msgid "Open help <0/>"
 msgstr ""
 
-#: src/lib/components/help/HelpBrowser.svelte
-msgid "Nocturne documentation"
-msgstr ""
+#~ msgid "Nocturne documentation"
+#~ msgstr ""
 
-#: src/lib/components/help/HelpBrowser.svelte
-msgid "Explore help in the same layout as Nocturne. Close to return to your page."
-msgstr ""
+#~ msgid "Explore help in the same layout as Nocturne. Close to return to your page."
+#~ msgstr ""
 
-#: src/lib/components/help/HelpBrowser.svelte
-msgid "Documentation navigation"
-msgstr ""
+#~ msgid "Documentation navigation"
+#~ msgstr ""
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Search all documentation"
@@ -26706,13 +26705,11 @@ msgstr ""
 msgid "Open connector settings <0/>"
 msgstr ""
 
-#: src/lib/components/help/HelpBrowser.svelte
-msgid "Your Nocturne page stays where you left it."
-msgstr ""
+#~ msgid "Your Nocturne page stays where you left it."
+#~ msgstr ""
 
-#: src/lib/components/help/HelpBrowser.svelte
-msgid "Close help"
-msgstr ""
+#~ msgid "Close help"
+#~ msgstr ""
 
 #: src/lib/components/help/HelpHarness.test.svelte
 msgid "Your activity report stays open while you explore documentation."
@@ -26762,3 +26759,21 @@ msgstr ""
 #: src/lib/components/help/HelpIcon.svelte
 msgid "Close page help"
 msgstr "关闭页面帮助"
+
+#~ msgid "Open connector settings"
+#~ msgstr ""
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Page documentation"
+msgstr ""
+
+#~ msgid "Documentation & help"
+#~ msgstr ""
+
+#: src/lib/components/layout/AppSidebarHarness.test.svelte
+msgid "Report filter"
+msgstr ""
+
+#: src/lib/components/layout/AppSidebarHarness.test.svelte
+msgid "Underlying report"
+msgstr ""
