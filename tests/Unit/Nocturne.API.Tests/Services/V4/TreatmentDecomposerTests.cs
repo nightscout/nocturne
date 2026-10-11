@@ -1737,10 +1737,103 @@ public class TreatmentDecomposerTests : IDisposable
         result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().HaveCount(1);
     }
 
-    [Fact]
-    public async Task DecomposeAsync_MealBolusWithNullInsulinAndNullCarbs_ProducesNothing()
+    [Theory]
+    [InlineData("Meal Bolus")]
+    [InlineData("Snack Bolus")]
+    [InlineData("Combo Bolus")]
+    public async Task DecomposeAsync_MealBolusCarryingOnlyCarbs_ProducesCarbIntakeOnly(string eventType)
     {
-        // Arrange - Meal Bolus sets both flags, but the mapped values default to 0
+        // AAPS uploads the carbs half of a meal as a "Meal Bolus" with no insulin field
+        var treatment = new Treatment
+        {
+            Id = "meal-carbs-only",
+            EventType = eventType,
+            Mills = 1700000000000,
+            Carbs = 60,
+            EnteredBy = "AAPS",
+        };
+
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+
+        result.CreatedRecords.OfType<V4Models.Bolus>().Should().BeEmpty("a zero-unit bolus is not a dose");
+        result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().ContainSingle().Which.Carbs.Should().Be(60);
+    }
+
+    [Theory]
+    [InlineData("Meal Bolus")]
+    [InlineData("Snack Bolus")]
+    [InlineData("Combo Bolus")]
+    public async Task DecomposeAsync_MealBolusCarryingOnlyInsulin_ProducesBolusOnly(string eventType)
+    {
+        // AAPS uploads the insulin half of a meal as a "Meal Bolus" with no carbs field
+        var treatment = new Treatment
+        {
+            Id = "meal-insulin-only",
+            EventType = eventType,
+            Mills = 1700000000000,
+            Insulin = 5.85,
+            EnteredBy = "AAPS",
+        };
+
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+
+        result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().BeEmpty("a zero-gram carb intake is not a meal");
+        result.CreatedRecords.OfType<V4Models.Bolus>().Should().ContainSingle().Which.Insulin.Should().Be(5.85);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_MealBolusResentAsOneHalf_DropsTheStoredTwin()
+    {
+        // A meal stored before meals were decomposed by content: a 0 U bolus beside the carbs
+        var stored = new Treatment { Id = "meal-pre-fix", EventType = "Meal Bolus", Mills = 1700000000000, Carbs = 60 };
+        await _context.Boluses.AddAsync(new BolusEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = _context.TenantId, LegacyId = "meal-pre-fix",
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime, Insulin = 0,
+            CorrelationId = Guid.CreateVersion7(),
+        });
+        await _context.CarbIntakes.AddAsync(new CarbIntakeEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = _context.TenantId, LegacyId = "meal-pre-fix",
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime, Carbs = 60,
+            CorrelationId = Guid.CreateVersion7(),
+        });
+        await _context.SaveChangesAsync();
+
+        var result = await _decomposer.DecomposeAsync(stored, WriteOrigin.Live);
+
+        result.UpdatedRecords.OfType<V4Models.CarbIntake>().Should().ContainSingle().Which.Carbs.Should().Be(60);
+        result.CreatedRecords.Should().BeEmpty();
+        _context.ChangeTracker.Clear();
+        _context.Boluses.IgnoreQueryFilters().AsNoTracking().Where(b => b.LegacyId == "meal-pre-fix")
+            .Should().ContainSingle().Which.DeletedAt.Should().NotBeNull("the zero-unit twin is no longer part of the record");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_MealBolusUnderATempBasalLegacyId_WritesNothing()
+    {
+        // AAPS holds a temp basal it read with insulin as a bolus under the temp basal's identifier
+        _tempBasalRepoMock
+            .Setup(r => r.GetByLegacyIdAsync("syn-temp-basal", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new V4Models.TempBasal { Id = Guid.CreateVersion7(), LegacyId = "syn-temp-basal", Rate = 1.25 });
+        var phantom = new Treatment
+        {
+            Id = "syn-temp-basal", EventType = "Meal Bolus", Mills = 1700000000000, Insulin = 0.0014756944, BolusType = "NORMAL",
+        };
+
+        var result = await _decomposer.DecomposeAsync(phantom, WriteOrigin.Live);
+
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.Should().BeEmpty();
+        result.SkippedUnsupported.Should().Be(1);
+        _context.Boluses.Should().BeEmpty();
+        _context.CarbIntakes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_MealBolusWithNullInsulinAndNullCarbs_ProducesBothZeroed()
+    {
+        // Arrange - a Meal Bolus carrying neither half keeps both, so the record still round-trips
         var treatment = new Treatment
         {
             Id = "meal-no-data",
@@ -1749,10 +1842,8 @@ public class TreatmentDecomposerTests : IDisposable
             // Insulin=null, Carbs=null
         };
 
-        // Act
         var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
-        // Assert - Meal Bolus always produces Bolus+CarbIntake by EventType match
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
         result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().HaveCount(1);
 

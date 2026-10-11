@@ -258,12 +258,14 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             produceDeviceEvent = true;
         }
-        else if (string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "Combo Bolus", StringComparison.OrdinalIgnoreCase))
+        else if (IsMealEventType(eventType))
         {
-            produceBolus = true;
-            produceCarbIntake = true;
+            // AAPS uploads one meal as two of these, one carrying only the carbs and one only the
+            // insulin (CarbsExtension.kt, BolusExtension.kt); each half decomposes into what it
+            // carries, so neither gains a zero-valued twin. A record carrying neither keeps both,
+            // so it still round-trips as the Meal Bolus it was sent as.
+            produceBolus = hasInsulin || !hasCarbs;
+            produceCarbIntake = hasCarbs || !hasInsulin;
         }
         else if (string.Equals(eventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase)
               || string.Equals(eventType, "SMB", StringComparison.OrdinalIgnoreCase)
@@ -405,6 +407,12 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             }
         }
 
+        if ((c.ProduceBolus || c.ProduceCarbIntake) && await IsHeldByTempBasalAsync(treatment, ct))
+        {
+            result.SkippedUnsupported++;
+            return result;
+        }
+
         // Produce v4 records
         if (c.ProduceBolus)
         {
@@ -415,6 +423,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             await DecomposeCarbIntakeAsync(treatment, result, origin, ct);
         }
+
+        await DropAbsentMealHalfAsync(treatment, c, origin, ct);
 
         if (c.ProduceBGCheck)
         {
@@ -1123,6 +1133,54 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             t => string.Equals(eventType, t, StringComparison.OrdinalIgnoreCase));
     }
 
+    private static bool IsMealEventType(string? eventType) =>
+        string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(eventType, "Combo Bolus", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether a bolus or carb intake would be written under a temp basal's legacy id. An AAPS that
+    /// read a temp basal served with insulin holds it as a bolus under the temp basal's identifier
+    /// (see <see cref="Treatment.Insulin"/>) and edits it as one; writing that edit would put a
+    /// bolus beside every temp basal it touches.
+    /// </summary>
+    private async Task<bool> IsHeldByTempBasalAsync(Treatment treatment, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(treatment.Id)
+            || await _tempBasalRepository.GetByLegacyIdAsync(treatment.Id, ct) is null)
+            return false;
+
+        Logger.LogWarning(
+            "Refused to write a {EventType} under temp basal {LegacyId}",
+            SanitizeForLog(treatment.EventType), SanitizeForLog(treatment.Id));
+        return true;
+    }
+
+    /// <summary>
+    /// Removes the half of a stored meal that a re-upload no longer carries. Before meal records
+    /// were decomposed by content, every one stored a bolus and a carb intake under its legacy id;
+    /// a resend of the half AAPS actually uploaded would otherwise leave that zero-valued twin
+    /// behind, no longer paired, since the surviving half takes a fresh correlation id.
+    /// </summary>
+    private async Task DropAbsentMealHalfAsync(
+        Treatment treatment, TreatmentClassification c, WriteOrigin origin, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(treatment.Id)
+            || !IsMealEventType(treatment.EventType?.Trim())
+            || c.ProduceBolus == c.ProduceCarbIntake)
+            return;
+
+        if (c.ProduceBolus)
+        {
+            if (await _carbIntakeRepository.GetByLegacyIdAsync(treatment.Id, ct) is { } carb)
+                await _carbIntakeRepository.DeleteAsync(carb.Id, origin, ct);
+        }
+        else if (await _bolusRepository.GetByLegacyIdAsync(treatment.Id, ct) is { } bolus)
+        {
+            await _bolusRepository.DeleteAsync(bolus.Id, origin, ct);
+        }
+    }
+
     private static Dictionary<string, object>? BuildProfileMetadata(Treatment treatment)
     {
         var metadata = new Dictionary<string, object>();
@@ -1353,6 +1411,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             // Track for post-insert linking
             if (c.ProduceBolus && c.ProduceBolusCalc && treatment.Id != null)
                 bolusCalcLinkTreatmentIds.Add(treatment.Id);
+
+            await DropAbsentMealHalfAsync(treatment, c, origin, ct);
         }
 
         if (result.SkippedUnsupported > 0)
