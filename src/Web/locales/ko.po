@@ -26757,3 +26757,8 @@ msgstr ""
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "When hidden, help can always be enabled again here."
 msgstr ""
+
+#: src/lib/components/help/HelpIcon.svelte
+#: src/lib/components/help/HelpIcon.svelte
+msgid "Close page help"
+msgstr "페이지 도움말 닫기"

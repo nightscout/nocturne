@@ -12,7 +12,7 @@ export function isHelpMode(value: unknown): value is HelpMode {
 
 export function createHelpContext() {
   let ready = $state(false);
-  let mode = $state<HelpMode>("bar");
+  let mode = $state<HelpMode>("icon");
   let open = $state(false);
   let path = $state("/");
   let navigation = $state<NavItem[]>([]);
@@ -27,7 +27,7 @@ export function createHelpContext() {
     ready = true;
     const sync = (event: StorageEvent) => {
       if (event.key === STORAGE_KEY) {
-        mode = isHelpMode(event.newValue) ? event.newValue : "bar";
+        mode = isHelpMode(event.newValue) ? event.newValue : "icon";
         if (mode === "hidden") open = false;
       }
     };
@@ -69,6 +69,13 @@ export function createHelpContext() {
     show(value: string) {
       path = value;
       open = true;
+    },
+    toggle(value: string) {
+      if (open) open = false;
+      else {
+        path = value;
+        open = true;
+      }
     },
     select(value: string) {
       path = value;

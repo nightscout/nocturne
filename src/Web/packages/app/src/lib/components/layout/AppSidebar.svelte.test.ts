@@ -101,6 +101,24 @@ describe("AppSidebar", () => {
     localStorage.removeItem("nocturne-help-visibility");
   });
 
+  it("uses the existing sidebar for help and restores the original report and its filters", async () => {
+    pageState.url.pathname = "/reports/steps";
+    pageState.url.search = "?range=week";
+    pageState.data = { effectivePermissions: ["*"] };
+    render(Harness, { user: MEMBER });
+    await page.getByRole("textbox", { name: "Report filter" }).fill("my selection");
+    await group("Open page help").click();
+    await expect.element(page.getByRole("heading", { name: "Steps", exact: true })).toBeVisible();
+    await expect.element(page.getByText("Underlying report")).not.toBeVisible();
+    await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
+    await link("Heart Rate").click();
+    await expect.element(page.getByRole("heading", { name: "Heart Rate", exact: true })).toBeVisible();
+    expect(pageState.url.pathname + pageState.url.search).toBe("/reports/steps?range=week");
+    await group("Close page help").click();
+    await expect.element(page.getByText("Underlying report")).toBeVisible();
+    await expect.element(page.getByRole("textbox", { name: "Report filter" })).toHaveValue("my selection");
+  });
+
   it("offers a public share the dashboard and a way to sign in, and nothing the owner acts on", async () => {
     pageState.data = { effectivePermissions: ["glucose.read"] };
 
