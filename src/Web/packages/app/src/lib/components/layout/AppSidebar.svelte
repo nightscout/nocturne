@@ -1,5 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import HelpIcon from "$lib/components/help/HelpIcon.svelte";
+  import { getHelpContext } from "$lib/help/help-context.svelte";
 
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Collapsible from "$lib/components/ui/collapsible";
@@ -53,6 +55,7 @@
   }: Props = $props();
 
   const sidebar = Sidebar.useSidebar();
+  const help = getHelpContext();
 
   // Defer localStorage check to after hydration so SSR and client initial render
   // both produce the same DOM (avoids hydration mismatch from conditional rendering).
@@ -143,6 +146,10 @@
     }),
   );
 
+  $effect(() => {
+    if (help) help.navigation = navigation;
+  });
+
   // Track which collapsible menus are open
   let openMenus = $state<Record<string, boolean>>({});
 
@@ -193,6 +200,7 @@
       />
       <span class="text-lg font-bold">Nocturne</span>
     </div>
+    <HelpIcon />
     <Sidebar.Trigger />
   </Sidebar.Header>
 

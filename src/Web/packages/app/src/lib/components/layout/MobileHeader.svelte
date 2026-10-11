@@ -1,4 +1,5 @@
 <script lang="ts">
+  import HelpIcon from "$lib/components/help/HelpIcon.svelte";
   import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { getDirectionInfo } from "$lib/utils";
   import {
@@ -82,6 +83,7 @@
 >
   <!-- Sidebar trigger on the left -->
   <Sidebar.Trigger class="-ml-1" />
+  <HelpIcon />
 
   <!-- Current BG display on the right -->
   {#if realtimeStore}
