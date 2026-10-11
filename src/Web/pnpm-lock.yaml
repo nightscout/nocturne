@@ -12,6 +12,9 @@ overrides:
 packageExtensionsChecksum: sha256-+J/i+JN9q0i27S6jHAFCNlPAOZNxqln6DUYUOcBUKZM=
 
 patchedDependencies:
+  '@microsoft/signalr@8.0.17':
+    hash: ef9f75c2512afa4a1a74495b74e8df0a917cbaf70b29dab58fb4a7dbebec4111
+    path: patches/@microsoft__signalr@8.0.17.patch
   bits-ui@2.18.1:
     hash: d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07
     path: patches/bits-ui@2.18.1.patch
@@ -340,7 +343,7 @@ importers:
     dependencies:
       '@microsoft/signalr':
         specifier: ^8.0.0
-        version: 8.0.17(encoding@0.1.13)
+        version: 8.0.17(patch_hash=ef9f75c2512afa4a1a74495b74e8df0a917cbaf70b29dab58fb4a7dbebec4111)(encoding@0.1.13)
       socket.io:
         specifier: ^4.7.5
         version: 4.8.1
@@ -351,6 +354,15 @@ importers:
         specifier: ^3.11.0
         version: 3.18.3
     devDependencies:
+      socket.io-client:
+        specifier: 4.8.3
+        version: 4.8.3
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
+      ws:
+        specifier: 8.20.1
+        version: 8.20.1
       '@nocturne/eslint-config':
         specifier: workspace:*
         version: link:../eslint-config
@@ -767,11 +779,11 @@ importers:
         specifier: ^2.28.1
         version: 2.28.1(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(@types/json-schema@7.0.15)(esbuild@0.28.0)(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)
       tailwind-merge:
-        specifier: ^3.4.0
-        version: 3.4.0
+        specifier: ^3.6.0
+        version: 3.6.0
       tailwind-variants:
         specifier: ^3.2.2
-        version: 3.2.2(tailwind-merge@3.4.0)(tailwindcss@4.1.17)
+        version: 3.2.2(tailwind-merge@3.6.0)(tailwindcss@4.1.17)
       tailwindcss:
         specifier: ^4.1.7
         version: 4.1.17
@@ -851,11 +863,11 @@ importers:
         specifier: ^1.1.1
         version: 1.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))
       tailwind-merge:
-        specifier: ^3.4.0
-        version: 3.4.0
+        specifier: ^3.6.0
+        version: 3.6.0
       tailwind-variants:
         specifier: ^3.2.2
-        version: 3.2.2(tailwind-merge@3.4.0)(tailwindcss@4.1.18)
+        version: 3.2.2(tailwind-merge@3.6.0)(tailwindcss@4.1.18)
       tailwindcss:
         specifier: ^4.1.7
         version: 4.1.18
@@ -6451,9 +6463,6 @@ packages:
     resolution: {integrity: sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==}
     engines: {node: '>=20'}
 
-  tailwind-merge@3.4.0:
-    resolution: {integrity: sha512-uSaO4gnW+b3Y2aWoWfFpX62vn2sR3skfhbjsEnaBI81WD1wBLlHZe5sWf0AqjksNdYTbGBEd0UasQMT3SNV15g==}
-
   tailwind-merge@3.6.0:
     resolution: {integrity: sha512-uxL7qAVQriqRQPAyK3pj66VqskWqoZ37PW94jwOTwNfq/z9oyu1V+eqrZqtR2+fCiXdYOZe/Modt8GtvqNzu+w==}
 
@@ -7829,7 +7838,7 @@ snapshots:
     dependencies:
       svelte: 5.55.5(@typescript-eslint/types@8.59.3)
 
-  '@microsoft/signalr@8.0.17(encoding@0.1.13)':
+  '@microsoft/signalr@8.0.17(patch_hash=ef9f75c2512afa4a1a74495b74e8df0a917cbaf70b29dab58fb4a7dbebec4111)(encoding@0.1.13)':
     dependencies:
       abort-controller: 3.0.0
       eventsource: 2.0.2
@@ -13537,21 +13546,19 @@ snapshots:
 
   tagged-tag@1.0.0: {}
 
-  tailwind-merge@3.4.0: {}
-
   tailwind-merge@3.6.0: {}
 
-  tailwind-variants@3.2.2(tailwind-merge@3.4.0)(tailwindcss@4.1.17):
+  tailwind-variants@3.2.2(tailwind-merge@3.6.0)(tailwindcss@4.1.17):
     dependencies:
       tailwindcss: 4.1.17
     optionalDependencies:
-      tailwind-merge: 3.4.0
+      tailwind-merge: 3.6.0
 
-  tailwind-variants@3.2.2(tailwind-merge@3.4.0)(tailwindcss@4.1.18):
+  tailwind-variants@3.2.2(tailwind-merge@3.6.0)(tailwindcss@4.1.18):
     dependencies:
       tailwindcss: 4.1.18
     optionalDependencies:
-      tailwind-merge: 3.4.0
+      tailwind-merge: 3.6.0
 
   tailwind-variants@3.2.2(tailwind-merge@3.6.0)(tailwindcss@4.3.0):
     dependencies:

@@ -42,6 +42,7 @@ public class GoogleHealthStatus
     public GoogleHealthCapability[] Capabilities { get; set; } = [];
     public bool Configured { get; set; }
     public bool Connected { get; set; }
+    public bool IsDisconnecting { get; set; }
     public string ClientId { get; set; } = "";
     public string CallbackUrl { get; set; } = "";
     public string[] SelectedTypes { get; set; } = [];
@@ -51,6 +52,8 @@ public class GoogleHealthStatus
     public DateTimeOffset? AccessTokenExpiresAt { get; set; }
     public DateTimeOffset? LastAttempt { get; set; }
     public DateTimeOffset? LastSync { get; set; }
+    public DateTimeOffset? BackfillSyncedThrough { get; set; }
+    public bool BackfillComplete { get; set; }
     public string? ErrorCode { get; set; }
     public string[] ErrorDataTypes { get; set; } = [];
     public bool PreviewRequired { get; set; }

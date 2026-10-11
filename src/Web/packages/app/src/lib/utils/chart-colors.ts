@@ -129,6 +129,13 @@ export const GLUCOSE_HEATMAP_LEGEND_STOPS: ReadonlyArray<{ mgdl: number; color: 
 	GLUCOSE_HEATMAP_STOPS.map(([mgdl, cssVar]) => ({ mgdl, color: `var(${cssVar})` }));
 
 /**
+ * Days outside the focused band. Not a ramp anchor: it recedes in both schemes, where
+ * `--glucose-heatmap-1` inverts to contrast with them, and drawing hyperglycaemia in the
+ * ramp's hypo colour would contradict the reading shown on the same cell.
+ */
+export const GLUCOSE_HEATMAP_OUTSIDE_COLOR = "var(--glucose-heatmap-outside)";
+
+/**
  * Blend the two heatmap stops bracketing `mgdl`, clamping outside the anchors.
  *
  * Mixes in sRGB rather than interpolating in JS so the stops can stay theme
@@ -144,6 +151,8 @@ export function getGlucoseHeatmapFill(
 	// Above every anchor (no match) or at/below the first one — clamp to an end stop.
 	if (upper === -1) return stops[stops.length - 1].color;
 	if (upper === 0) return stops[0].color;
+	// An exact anchor is its own colour; blending would nest a 0%-weighted mix of it.
+	if (stops[upper].mgdl === mgdl) return stops[upper].color;
 
 	const { mgdl: loAnchor, color: loColor } = stops[upper - 1];
 	const { mgdl: hiAnchor, color: hiColor } = stops[upper];

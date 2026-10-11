@@ -35,7 +35,7 @@ public class ConnectorSyncToggleTests
         var declared = SyncToggleProperties()
             .Select(property => property.GetCustomAttribute<ConnectorPropertyAttribute>()!.Key);
 
-        declared.Should().BeSubsetOf(ConnectorSyncToggles.ByPropertyKey.Keys);
+        declared.Should().BeEquivalentTo(ConnectorSyncToggles.ByPropertyKey.Keys);
     }
 
     [Fact]

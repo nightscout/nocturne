@@ -1,10 +1,8 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Threading.Channels;
 using Microsoft.AspNetCore.WebUtilities;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.GoogleHealth.Configurations;
@@ -17,86 +15,6 @@ using Nocturne.Core.Models.Health;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
 
-public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
-{
-    internal sealed record Flow(
-        string State,
-        string Verifier,
-        Guid SubjectId,
-        string Settings,
-        DateTimeOffset Expires);
-
-    internal sealed record SyncProgress(
-        GoogleHealthSyncPhase Phase,
-        string? DataType,
-        int CompletedDataTypes,
-        int TotalDataTypes,
-        int PagesRead,
-        bool WorkerOwned = false);
-
-    private readonly Channel<Guid> syncRequests = Channel.CreateUnbounded<Guid>(new()
-    {
-        SingleReader = true,
-        SingleWriter = false
-    });
-    private readonly ConcurrentDictionary<Guid, SyncProgress> syncProgress = new();
-    internal ConcurrentDictionary<Guid, Flow> Flows { get; } = new();
-    internal ConcurrentDictionary<Guid, SemaphoreSlim> Locks { get; } = new();
-
-    public SemaphoreSlim Gate(Guid tenantId) =>
-        Locks.GetOrAdd(tenantId, _ => new SemaphoreSlim(1));
-
-    internal bool Queue(Guid tenantId, int totalDataTypes)
-    {
-        if (!syncProgress.TryAdd(
-                tenantId,
-                new SyncProgress(GoogleHealthSyncPhase.Queued, null, 0, totalDataTypes, 0, true)))
-            return false;
-        if (syncRequests.Writer.TryWrite(tenantId)) return true;
-        syncProgress.TryRemove(tenantId, out _);
-        return false;
-    }
-
-    internal IAsyncEnumerable<Guid> ReadRequestsAsync(CancellationToken ct) =>
-        syncRequests.Reader.ReadAllAsync(ct);
-
-    internal bool StartQueued(Guid tenantId) => Update(tenantId, current =>
-        current.WorkerOwned
-            ? current with { Phase = GoogleHealthSyncPhase.Preparing }
-            : null);
-
-    public void Report(
-        Guid tenantId,
-        GoogleHealthSyncPhase phase,
-        string? dataType = null,
-        int? completedDataTypes = null,
-        int? totalDataTypes = null,
-        int? pagesRead = null) => Update(tenantId, current => current with
-    {
-        Phase = phase,
-        DataType = dataType,
-        CompletedDataTypes = completedDataTypes ?? current.CompletedDataTypes,
-        TotalDataTypes = totalDataTypes ?? current.TotalDataTypes,
-        PagesRead = pagesRead ?? current.PagesRead
-    });
-
-    internal SyncProgress? Progress(Guid tenantId) =>
-        syncProgress.TryGetValue(tenantId, out var progress) ? progress : null;
-
-    internal void Complete(Guid tenantId) => syncProgress.TryRemove(tenantId, out _);
-
-    private bool Update(Guid tenantId, Func<SyncProgress, SyncProgress?> update)
-    {
-        while (syncProgress.TryGetValue(tenantId, out var current))
-        {
-            var next = update(current);
-            if (next is null) return false;
-            if (syncProgress.TryUpdate(tenantId, next, current)) return true;
-        }
-        return false;
-    }
-}
-
 public sealed class GoogleHealthService(
     GoogleHealthCoordinator coordinator,
     GoogleHealthClient google,
@@ -104,6 +22,7 @@ public sealed class GoogleHealthService(
     IConnectorConfigurationService connectorConfigurations,
     IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> configurationLoader,
     ITenantAccessor tenantAccessor,
+    IConnectorSyncCursorStore cursorStore,
     IGoogleHealthReadingWriter? writer = null,
     ILogger<GoogleHealthService>? logger = null) : IGoogleHealthService
 {
@@ -111,15 +30,16 @@ public sealed class GoogleHealthService(
     private const string AccountKeySecret = "accountKey";
     private static readonly TimeSpan AccessTokenSafety = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan PreviewWindow = TimeSpan.FromDays(7);
-    private static readonly TimeSpan PreviewTimeout = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan PreviewGateTimeout = TimeSpan.FromSeconds(5);
+    // Dense heart-rate inventories can require minutes of paging even within a seven-day window.
+    private static readonly TimeSpan PreviewTimeout = TimeSpan.FromMinutes(3);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private Guid TenantId => tenantAccessor.TenantId;
 
     private async Task<GoogleHealthOptions?> StoredOptionsOrNullAsync(CancellationToken ct)
     {
         var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
-        if (stored is null || !stored.IsActive)
-            return null;
+        if (stored is null) return null;
 
         var configuration = await configurationLoader.LoadForTenantAsync(ct);
         DateTimeOffset? importFrom = null;
@@ -147,14 +67,19 @@ public sealed class GoogleHealthService(
     private async Task<GoogleHealthTokenSession?> StoredSessionAsync(CancellationToken ct)
     {
         var configuration = await configurationLoader.LoadForTenantAsync(ct);
-        if (!configuration.Enabled || string.IsNullOrWhiteSpace(configuration.RefreshToken))
-            return null;
+        if (string.IsNullOrWhiteSpace(configuration.RefreshToken)) return null;
+
+        var scopes = (configuration.GrantedScopes ?? string.Empty)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
         try
         {
             var cached = await oauth.GetCurrentSessionAsync();
             if (cached is not null &&
-                string.Equals(cached.RefreshToken, configuration.RefreshToken, StringComparison.Ordinal))
+                string.Equals(cached.RefreshToken, configuration.RefreshToken, StringComparison.Ordinal) &&
+                cached.Scopes.Order(StringComparer.Ordinal).SequenceEqual(scopes.Order(StringComparer.Ordinal)))
                 return cached;
         }
         catch (GoogleHealthException)
@@ -162,18 +87,15 @@ public sealed class GoogleHealthService(
             oauth.InvalidateToken();
         }
 
-        var scopes = (configuration.GrantedScopes ?? string.Empty)
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
         return new GoogleHealthTokenSession(configuration.RefreshToken, scopes);
     }
 
     private async Task SaveOptionsAsync(GoogleHealthOptions options, Guid subject, CancellationToken ct)
     {
         var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
+        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
         var configuration = stored?.Configuration.RootElement.Deserialize<JsonObject>(Json) ?? new JsonObject();
-        configuration["enabled"] ??= true;
+        configuration["enabled"] = !string.IsNullOrWhiteSpace(secrets.GetValueOrDefault("refreshToken"));
         configuration["clientId"] = options.ClientId;
         configuration["callbackUrl"] = options.CallbackUrl;
         configuration["lookbackDays"] = options.HistoryDays;
@@ -187,10 +109,20 @@ public sealed class GoogleHealthService(
         await connectorConfigurations.SaveConfigurationAsync(
             ConnectorName, document, subject.ToString(), ct);
 
-        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
         secrets["clientSecret"] = options.ClientSecret!;
         await connectorConfigurations.SaveSecretsAsync(
             ConnectorName, secrets, subject.ToString(), ct);
+    }
+
+    private async Task SetEnabledAsync(bool enabled, Guid subject, CancellationToken ct)
+    {
+        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
+        if (stored?.Configuration is null) return;
+        var configuration = JsonNode.Parse(stored.Configuration.RootElement.GetRawText())!.AsObject();
+        configuration["enabled"] = enabled;
+        using var document = JsonDocument.Parse(configuration.ToJsonString(Json));
+        await connectorConfigurations.SaveConfigurationAsync(
+            ConnectorName, document, subject.ToString(), ct);
     }
 
     private async Task SaveSessionAsync(
@@ -207,10 +139,13 @@ public sealed class GoogleHealthService(
         secrets[AccountKeySecret] = accountKey;
         await connectorConfigurations.SaveSecretsAsync(
             ConnectorName, secrets, subject.ToString(), ct);
+        await SetEnabledAsync(true, subject, ct);
+        await oauth.StoreSessionAsync(token);
     }
 
     private async Task RemoveSessionAsync(Guid subject, bool removeAccount, CancellationToken ct)
     {
+        await SetEnabledAsync(false, subject, ct);
         var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
         secrets.Remove("refreshToken");
         secrets.Remove("grantedScopes");
@@ -240,7 +175,7 @@ public sealed class GoogleHealthService(
         {
             var settings = await StoredOptionsOrNullAsync(ct);
             if (settings is null)
-                return WithProgress(new GoogleHealthStatus { Capabilities = GoogleHealthClient.Capabilities });
+                return await WithProgressAsync(new GoogleHealthStatus { Capabilities = GoogleHealthClient.Capabilities });
 
             var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
             var session = await StoredSessionAsync(ct);
@@ -249,12 +184,14 @@ public sealed class GoogleHealthService(
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
             var storedError = GoogleHealthErrorCode.Decode(stored?.LastErrorMessage);
+            var resume = await cursorStore.GetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource, ct);
+            var backfillProgress = BackfillProgress(GoogleHealthConnectorService.ParseRuntimeState(resume?.LastGuid));
             var missingScopes = selected
                 .Where(type => session is not null &&
                     !session.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal))
                 .ToArray();
 
-            return WithProgress(new GoogleHealthStatus
+            return await WithProgressAsync(new GoogleHealthStatus
             {
                 Capabilities = GoogleHealthClient.Capabilities,
                 Configured = true,
@@ -270,6 +207,8 @@ public sealed class GoogleHealthService(
                 AccessTokenExpiresAt = session?.AccessTokenExpiresAt,
                 LastAttempt = AsOffset(stored?.LastSyncAttempt),
                 LastSync = AsOffset(stored?.LastSuccessfulSync),
+                BackfillSyncedThrough = backfillProgress.SyncedThrough,
+                BackfillComplete = backfillProgress.Complete,
                 ErrorCode = selected.Length != settings.DataTypes.Length
                     ? "unsupported_type"
                     : missingScopes.Length > 0 ? "partial_consent" : storedError.Code,
@@ -281,7 +220,7 @@ public sealed class GoogleHealthService(
         {
             logger?.LogWarning(ex,
                 "Google Health configuration could not be read for tenant {TenantId}", TenantId);
-            return WithProgress(new GoogleHealthStatus
+            return await WithProgressAsync(new GoogleHealthStatus
             {
                 Capabilities = GoogleHealthClient.Capabilities,
                 Configured = true,
@@ -309,77 +248,79 @@ public sealed class GoogleHealthService(
     public async Task SaveAsync(GoogleHealthOptions options, Guid subject, CancellationToken ct)
     {
         ValidateOptions(options);
-        var gate = coordinator.Gate(TenantId);
-        await gate.WaitAsync(ct);
-        try
-        {
-            var prior = await StoredOptionsOrNullAsync(ct);
-            var session = prior is null ? null : await StoredSessionAsync(ct);
-            if (session is not null && prior is not null &&
-                (options.ClientId != prior.ClientId || options.CallbackUrl != prior.CallbackUrl))
-                throw new GoogleHealthException("disconnect_first");
-            if (string.IsNullOrWhiteSpace(options.ClientSecret) && options.ClientId == prior?.ClientId)
-                options.ClientSecret = prior.ClientSecret;
-            if (string.IsNullOrWhiteSpace(options.ClientSecret))
-                throw new GoogleHealthException("client_secret_required");
+        await using var gate = await coordinator.AcquireAsync(TenantId, ct);
+        var prior = await StoredOptionsOrNullAsync(ct);
+        var session = prior is null ? null : await StoredSessionAsync(ct);
+        if (session is not null && prior is not null &&
+            (options.ClientId != prior.ClientId || options.CallbackUrl != prior.CallbackUrl))
+            throw new GoogleHealthException("disconnect_first");
+        if (string.IsNullOrWhiteSpace(options.ClientSecret) && options.ClientId == prior?.ClientId)
+            options.ClientSecret = prior.ClientSecret;
+        if (string.IsNullOrWhiteSpace(options.ClientSecret))
+            throw new GoogleHealthException("client_secret_required");
 
-            coordinator.Flows.TryRemove(TenantId, out _);
-            await SaveOptionsAsync(options, subject, ct);
-        }
-        finally
+        await ClearFlowAsync(ct);
+        if (prior is not null && (options.ImportFrom != prior.ImportFrom || options.HistoryDays != prior.HistoryDays ||
+                                 !options.DataTypes.Order(StringComparer.Ordinal).SequenceEqual(prior.DataTypes.Order(StringComparer.Ordinal))))
         {
-            gate.Release();
+            var cursor = await cursorStore.GetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource, ct);
+            var state = GoogleHealthConnectorService.ParseRuntimeState(cursor?.LastGuid);
+            foreach (var key in new[] { "backfillCursorDate", "backfillFloorDate", "backfillComplete", "backfillChunkDays" })
+                state.Remove(key);
+            if (!options.DataTypes.Order(StringComparer.Ordinal).SequenceEqual(prior.DataTypes.Order(StringComparer.Ordinal)))
+                state.Remove("lastSyncedTo");
+            await cursorStore.SetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource,
+                new(null, JsonSerializer.Serialize(state, Json)), ct);
         }
+        await SaveOptionsAsync(options, subject, ct);
     }
 
     public async Task<GoogleHealthAuthorize> StartAsync(Guid subject, CancellationToken ct)
     {
-        var gate = coordinator.Gate(TenantId);
-        await gate.WaitAsync(ct);
-        try
+        await using var gate = await coordinator.AcquireAsync(TenantId, ct);
+        if (await StoredSessionAsync(ct) is not null)
+            throw new GoogleHealthException("disconnect_first");
+        var settings = await StoredOptionsAsync(ct);
+        var verifier = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(48));
+        var state = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+        var flow = new GoogleHealthCoordinator.Flow(
+            state, verifier, subject, Fingerprint(settings), DateTimeOffset.UtcNow.AddMinutes(10));
+        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
+        secrets["oauthFlow"] = JsonSerializer.Serialize(flow, Json);
+        await connectorConfigurations.SaveSecretsAsync(ConnectorName, secrets, subject.ToString(), ct);
+        var parameters = new Dictionary<string, string?>
         {
-            if (await StoredSessionAsync(ct) is not null)
-                throw new GoogleHealthException("disconnect_first");
-            var settings = await StoredOptionsAsync(ct);
-            var verifier = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(48));
-            var state = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
-            coordinator.Flows[TenantId] = new(
-                state, verifier, subject, Fingerprint(settings), DateTimeOffset.UtcNow.AddMinutes(10));
-            var parameters = new Dictionary<string, string?>
-            {
-                ["client_id"] = settings.ClientId,
-                ["redirect_uri"] = settings.CallbackUrl,
-                ["response_type"] = "code",
-                ["access_type"] = "offline",
-                ["include_granted_scopes"] = "true",
-                ["prompt"] = "consent select_account",
-                ["scope"] = "openid " + string.Join(' ', GoogleHealthClient.SupportedTypes
-                    .Select(GoogleHealthClient.ScopeFor).Distinct()),
-                ["state"] = state,
-                ["code_challenge_method"] = "S256",
-                ["code_challenge"] = WebEncoders.Base64UrlEncode(
-                    SHA256.HashData(Encoding.ASCII.GetBytes(verifier)))
-            };
-            return new GoogleHealthAuthorize
-            {
-                Url = QueryHelpers.AddQueryString(
-                    "https://accounts.google.com/o/oauth2/v2/auth", parameters)
-            };
-        }
-        finally
+            ["client_id"] = settings.ClientId,
+            ["redirect_uri"] = settings.CallbackUrl,
+            ["response_type"] = "code",
+            ["access_type"] = "offline",
+            ["include_granted_scopes"] = "true",
+            ["prompt"] = "consent select_account",
+            ["scope"] = "openid " + string.Join(' ', GoogleHealthClient.SupportedTypes
+                .Select(GoogleHealthClient.ScopeFor).Distinct()),
+            ["state"] = state,
+            ["code_challenge_method"] = "S256",
+            ["code_challenge"] = WebEncoders.Base64UrlEncode(
+                SHA256.HashData(Encoding.ASCII.GetBytes(verifier)))
+        };
+        return new GoogleHealthAuthorize
         {
-            gate.Release();
-        }
+            Url = QueryHelpers.AddQueryString(
+                "https://accounts.google.com/o/oauth2/v2/auth", parameters)
+        };
     }
 
     public async Task CompleteAsync(GoogleHealthCallback callback, Guid subject, CancellationToken ct)
     {
-        var gate = coordinator.Gate(TenantId);
-        await gate.WaitAsync(ct);
+        await using var gate = await coordinator.AcquireAsync(TenantId, ct);
         try
         {
-            if (!coordinator.Flows.TryRemove(TenantId, out var flow) ||
+            var flowSecrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
+            var flowJson = flowSecrets.GetValueOrDefault("oauthFlow");
+            var flow = flowJson is null ? null : JsonSerializer.Deserialize<GoogleHealthCoordinator.Flow>(flowJson, Json);
+            if (flow is null ||
                 flow.Expires <= DateTimeOffset.UtcNow || flow.SubjectId != subject ||
+                string.IsNullOrEmpty(callback.State) ||
                 !CryptographicOperations.FixedTimeEquals(
                     Encoding.UTF8.GetBytes(flow.State), Encoding.UTF8.GetBytes(callback.State)))
                 throw new GoogleHealthException("expired_signin");
@@ -388,6 +329,7 @@ public sealed class GoogleHealthService(
             if (Fingerprint(settings) != flow.Settings)
                 throw new GoogleHealthException("expired_signin");
 
+            await ClearFlowAsync(ct);
             var requestedScopes = GoogleHealthClient.SupportedTypes
                 .Select(GoogleHealthClient.ScopeFor).Append("openid")
                 .Distinct(StringComparer.Ordinal).ToArray();
@@ -402,7 +344,6 @@ public sealed class GoogleHealthService(
             }
 
             await SaveSessionAsync(settings, token, account, subject, ct);
-            await oauth.StoreSessionAsync(token);
             await connectorConfigurations.UpdateHealthStateAsync(
                 ConnectorName,
                 lastErrorMessage: string.Empty,
@@ -426,76 +367,76 @@ public sealed class GoogleHealthService(
                 ct: CancellationToken.None);
             throw error;
         }
-        finally
-        {
-            gate.Release();
-        }
     }
 
     public async Task DisconnectAsync(Guid subject, CancellationToken ct)
     {
-        var gate = coordinator.Gate(TenantId);
-        await gate.WaitAsync(ct);
-        try
+        var request = await coordinator.RequestDisconnectAsync(TenantId, subject, ct);
+        await ResumeDisconnectAsync(subject, request);
+    }
+
+    public async Task ResumeDisconnectAsync(Guid subject, Guid request)
+    {
+        // Once accepted, refreshing the browser must not cancel local disconnection.
+        await using var gate = await coordinator.AcquireAsync(TenantId, CancellationToken.None);
+        if ((await coordinator.DisconnectRequestAsync(TenantId, CancellationToken.None))?.RequestId != request) return;
+        await coordinator.CompleteAsync(TenantId);
+        var token = await StoredSessionAsync(CancellationToken.None);
+        await ClearFlowAsync(CancellationToken.None);
+        oauth.InvalidateToken();
+        await RemoveSessionAsync(subject, removeAccount: false, CancellationToken.None);
+        var revokeFailed = false;
+        if (token is not null)
         {
-            var token = await StoredSessionAsync(ct);
-            coordinator.Flows.TryRemove(TenantId, out _);
-            oauth.InvalidateToken();
-            var revokeFailed = false;
-            if (token is not null)
+            try
             {
-                try
-                {
-                    revokeFailed = !await oauth.RevokeAsync(token.RefreshToken, ct);
-                }
-                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-                {
-                    revokeFailed = true;
-                }
+                using var revokeCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                revokeFailed = !await oauth.RevokeAsync(token.RefreshToken, revokeCancellation.Token);
             }
-            await RemoveSessionAsync(subject, removeAccount: false, CancellationToken.None);
-            await connectorConfigurations.UpdateHealthStateAsync(
-                ConnectorName,
-                lastErrorMessage: revokeFailed ? "revoke_in_google" : string.Empty,
-                lastErrorAt: revokeFailed ? DateTime.UtcNow : DateTime.MinValue,
-                isHealthy: !revokeFailed,
-                ct: CancellationToken.None);
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or Polly.ExecutionRejectedException)
+            {
+                revokeFailed = true;
+            }
         }
-        finally
-        {
-            gate.Release();
-        }
+        await connectorConfigurations.UpdateHealthStateAsync(
+            ConnectorName,
+            lastErrorMessage: revokeFailed ? "revoke_in_google" : string.Empty,
+            lastErrorAt: revokeFailed ? DateTime.UtcNow : DateTime.MinValue,
+            isHealthy: !revokeFailed,
+            ct: CancellationToken.None);
+        await coordinator.FinishDisconnectAsync(TenantId, request);
     }
 
     public async Task PurgeAsync(Guid subject, CancellationToken ct)
     {
-        var gate = coordinator.Gate(TenantId);
-        await gate.WaitAsync(ct);
-        try
+        await using var gate = await coordinator.AcquireAsync(TenantId, ct);
+        if (await StoredSessionAsync(ct) is not null)
+            throw new GoogleHealthException("disconnect_first");
+        await ClearFlowAsync(ct);
+        oauth.InvalidateToken();
+        await coordinator.CompleteAsync(TenantId);
+        if (writer is not null) await writer.PurgeAsync(ct);
+        await cursorStore.SetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource, new(null, null), ct);
+        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
+        if (stored?.Configuration is not null)
         {
-            if (await StoredSessionAsync(ct) is not null)
-                throw new GoogleHealthException("disconnect_first");
-            if (writer is not null) await writer.PurgeAsync(ct);
-            var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
-            if (stored?.Configuration is not null)
-            {
-                var configuration = JsonNode.Parse(stored.Configuration.RootElement.GetRawText())!.AsObject();
-                configuration.Remove("lastSyncedTo");
-                using var document = JsonDocument.Parse(configuration.ToJsonString(Json));
-                await connectorConfigurations.SaveConfigurationAsync(ConnectorName, document, subject.ToString(), ct);
-            }
-            await RemoveSessionAsync(subject, removeAccount: true, ct);
+            var configuration = JsonNode.Parse(stored.Configuration.RootElement.GetRawText())!.AsObject();
+            foreach (var key in new[] { "lastSyncedTo", "backfillCursorDate", "backfillFloorDate",
+                         "backfillComplete", "backfillChunkDays" })
+                configuration.Remove(key);
+            using var document = JsonDocument.Parse(configuration.ToJsonString(Json));
+            await connectorConfigurations.SaveConfigurationAsync(ConnectorName, document, subject.ToString(), ct);
         }
-        finally
-        {
-            gate.Release();
-        }
+        await RemoveSessionAsync(subject, removeAccount: true, ct);
     }
 
     public async Task<GoogleHealthPreview> PreviewAsync(Guid subject, CancellationToken ct)
     {
-        var gate = coordinator.Gate(TenantId);
-        await gate.WaitAsync(ct);
+        await using var reader = await coordinator.WatchReadsAsync(TenantId, ct);
+        ct = reader.Token;
+        await using var gate = await coordinator.AcquireAsync(TenantId, ct, PreviewGateTimeout);
+        if (gate is null)
+            throw new GoogleHealthException("already_running", stage: "preview");
         try
         {
             using var previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -561,40 +502,33 @@ public sealed class GoogleHealthService(
                 lastErrorAt: DateTime.UtcNow, isHealthy: false, ct: ct);
             throw;
         }
-        finally
-        {
-            gate.Release();
-        }
     }
 
     private async Task<GoogleHealthPreview> ReadInventoryAsync(
         GoogleHealthTokenSession token, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
     {
-        var items = new List<GoogleHealthPreviewItem>();
-        foreach (var capability in GoogleHealthClient.Capabilities)
+        var items = await Task.WhenAll(GoogleHealthClient.Capabilities.Select(async capability =>
         {
             var type = capability.DataType;
             if (!capability.Supported)
             {
-                items.Add(new GoogleHealthPreviewItem { DataType = type, Supported = false });
-                continue;
+                return new GoogleHealthPreviewItem { DataType = type, Supported = false };
             }
             var granted = token.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal);
             if (!granted)
             {
-                items.Add(new GoogleHealthPreviewItem { DataType = type, Granted = false, Supported = true });
-                continue;
+                return new GoogleHealthPreviewItem { DataType = type, Granted = false, Supported = true };
             }
             try
             {
                 var count = await google.CountAsync(token.AccessToken!, type, from, to, ct);
-                items.Add(new GoogleHealthPreviewItem { DataType = type, Granted = true, Count = count, Supported = true });
+                return new GoogleHealthPreviewItem { DataType = type, Granted = true, Count = count, Supported = true };
             }
             catch (GoogleHealthException ex) when (ex.Message != "access_token_rejected")
             {
-                items.Add(new GoogleHealthPreviewItem { DataType = type, Granted = true, ErrorCode = ex.Message, Supported = true });
+                return new GoogleHealthPreviewItem { DataType = type, Granted = true, ErrorCode = ex.Message, Supported = true };
             }
-        }
+        }));
         return new GoogleHealthPreview { Items = items.ToArray() };
     }
 
@@ -602,12 +536,15 @@ public sealed class GoogleHealthService(
     {
         try
         {
+            if (await coordinator.DisconnectRequestAsync(TenantId, ct) is not null)
+                throw new GoogleHealthException("disconnect_first");
             var settings = await StoredOptionsAsync(ct);
             if (await StoredSessionAsync(ct) is null)
                 throw new GoogleHealthException("configure_first");
             if (settings.PreviewOnly) throw new GoogleHealthException("preview_required");
             if (settings.DataTypes.Length == 0) throw new GoogleHealthException("no_types_selected");
-            coordinator.Queue(TenantId, settings.DataTypes.Length);
+            if (!await coordinator.QueueAsync(TenantId, settings.DataTypes.Length, ct))
+                throw new GoogleHealthException("already_running", stage: "sync_queue");
         }
         catch (Exception ex) when (ex is JsonException or FormatException)
         {
@@ -615,9 +552,10 @@ public sealed class GoogleHealthService(
         }
     }
 
-    private GoogleHealthStatus WithProgress(GoogleHealthStatus status)
+    private async Task<GoogleHealthStatus> WithProgressAsync(GoogleHealthStatus status)
     {
-        var progress = coordinator.Progress(TenantId);
+        status.IsDisconnecting = await coordinator.DisconnectRequestAsync(TenantId, CancellationToken.None) is not null;
+        var progress = await coordinator.ProgressAsync(TenantId, CancellationToken.None);
         if (progress is null) return status;
         status.IsSyncing = true;
         status.SyncPhase = progress.Phase;
@@ -635,6 +573,13 @@ public sealed class GoogleHealthService(
         return status;
     }
 
+    private async Task ClearFlowAsync(CancellationToken ct)
+    {
+        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
+        if (!secrets.Remove("oauthFlow")) return;
+        await connectorConfigurations.SaveSecretsAsync(ConnectorName, secrets, ct: ct);
+    }
+
     private async Task<string?> AccountKeyAsync(CancellationToken ct) =>
         (await connectorConfigurations.GetSecretsAsync(ConnectorName, ct))
         .GetValueOrDefault(AccountKeySecret);
@@ -647,6 +592,19 @@ public sealed class GoogleHealthService(
     private static DateTimeOffset? AsOffset(DateTime? value) => value is null
         ? null
         : new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc));
+
+    private static (DateTimeOffset? SyncedThrough, bool Complete) BackfillProgress(IReadOnlyDictionary<string, JsonElement> configuration)
+    {
+        DateTimeOffset? syncedThrough = null;
+        if (configuration.TryGetValue("backfillCursorDate", out var cursor) &&
+            cursor.ValueKind == JsonValueKind.String &&
+            DateTimeOffset.TryParse(cursor.GetString(), CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
+            syncedThrough = parsed;
+        var complete = configuration.TryGetValue("backfillComplete", out var completed) &&
+            completed.ValueKind == JsonValueKind.True;
+        return (syncedThrough, complete);
+    }
 
     private static string[] SelectedTypes(GoogleHealthConnectorConfiguration configuration)
     {
@@ -661,12 +619,12 @@ public sealed class GoogleHealthService(
     private static GoogleHealthConnectorConfiguration Configuration(
         GoogleHealthOptions settings,
         string? refreshToken = null) => new()
-    {
-        ClientId = settings.ClientId,
-        ClientSecret = settings.ClientSecret,
-        CallbackUrl = settings.CallbackUrl,
-        RefreshToken = refreshToken
-    };
+        {
+            ClientId = settings.ClientId,
+            ClientSecret = settings.ClientSecret,
+            CallbackUrl = settings.CallbackUrl,
+            RefreshToken = refreshToken
+        };
 
     private static string Fingerprint(GoogleHealthOptions options) =>
         Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(options, Json)));

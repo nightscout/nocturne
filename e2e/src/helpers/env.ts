@@ -2,6 +2,7 @@
 export const env = {
   apiUrl: `http://127.0.0.1:${process.env.E2E_API_PORT ?? 1630}`,
   webPort: Number(process.env.E2E_WEB_PORT ?? 1631),
+  webTlsPort: Number(process.env.E2E_WEB_TLS_PORT ?? 1635),
   mocksUrl: `http://127.0.0.1:${process.env.E2E_MOCKS_PORT ?? 1634}`,
   /** How the API container reaches the fake vendors. */
   mocksUrlFromApi: "http://mocks:8080",
@@ -15,5 +16,8 @@ export const env = {
   /** A tenant's browser origin: *.localhost resolves to loopback in Chromium. */
   tenantWebUrl(slug: string) {
     return `http://${this.tenantHost(slug)}`;
+  },
+  tenantSecureWebUrl(slug: string) {
+    return `https://${slug}.nocturne.localhost:${this.webTlsPort}`;
   },
 };

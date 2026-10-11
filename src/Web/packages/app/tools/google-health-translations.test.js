@@ -18,15 +18,61 @@ import supportedLocales from "../../../supportedLocales.json";
 
 const require = createRequire(import.meta.url);
 const { po } = require("gettext-parser");
-const connectorReference =
-  /google-health|GoogleHealthSourceRow|ServerConnectorsCard|reports\/ehba1c/;
+const googleHealthReference = /google-health|GoogleHealthSourceRow/;
+const serverConnectorsReference = /ServerConnectorsCard/;
 const placeholderPattern = /(<\/?\d+\s*\/?>|\{[^}]+\})/g;
+const cursorResetFailureCopy =
+  "One or more connectors failed; review the connector details and retry the failed range.";
 const representativeCopy = [
   "Google Health",
+  "Status unavailable",
+  "Loading...",
   "Import recovery",
   "Open connector reset",
   "Save and connect",
   "Refresh inventory",
+  "Disconnecting…",
+  "Disconnecting Google Health. The current scan or import is being stopped.",
+  "Google Health is disconnected. Your imported data has been kept.",
+  "Historical import progress",
+  "The requested history is complete.",
+  "Each sync refreshes today and imports one older calendar month.",
+  cursorResetFailureCopy,
+  "Steps",
+  "Heart rate",
+  "Weight",
+  "Sleep sessions and stages",
+  "Active energy burned",
+  "Total calories",
+  "Distance",
+  "Floors",
+  "Workouts",
+  "Body fat",
+  "Height",
+  "Nutrition log",
+  "Hydration",
+  "Blood glucose",
+  "Oxygen saturation",
+  "Heart rate variability",
+  "Resting heart rate",
+  "Daily oxygen saturation",
+  "Daily respiratory rate",
+  "Sleep respiratory rate",
+  "Core body temperature",
+  "Menstrual period",
+  "Ovulation test",
+  "Cervical mucus",
+  "Sexual activity",
+  "Unknown data type",
+  "Google Health currently provides no read-only scope for this type.",
+  "Not exposed as a readable Google Health API data type.",
+];
+const protectedProductNames = [
+  "Google Health",
+  "Google Cloud",
+  "Google",
+  "Fitbit",
+  "Nocturne",
 ];
 
 function entries(catalog) {
@@ -39,10 +85,23 @@ function placeholders(value) {
   return [...(value.match(placeholderPattern) ?? [])].sort().join("|");
 }
 
+function isGoogleHealthEntry(entry) {
+  const reference = String(entry.comments?.reference ?? "");
+  return (
+    googleHealthReference.test(reference) ||
+    entry.msgid === cursorResetFailureCopy ||
+    (serverConnectorsReference.test(reference) &&
+      /Google Health|Status unavailable|Import steps, heart rate, weight, and sleep from Google Health/.test(
+        entry.msgid
+      ))
+  );
+}
+
 describe("Google Health production translations", () => {
   let root;
   let messageIds;
   let expectedPlaceholders;
+  let disconnectMessageIds;
 
   beforeAll(async () => {
     root = await mkdtemp(
@@ -62,11 +121,7 @@ describe("Google Health production translations", () => {
           await readFile(new URL("../../../locales/en.po", import.meta.url))
         )
       )
-        .filter(
-          (entry) =>
-            entry.msgid &&
-            connectorReference.test(String(entry.comments?.reference ?? ""))
-        )
+        .filter((entry) => entry.msgid && isGoogleHealthEntry(entry))
         .map((entry) => [entry.msgid, placeholders(entry.msgid)])
     );
     const configPath = join(root, "wuchale.config.js");
@@ -90,7 +145,11 @@ describe("Google Health production translations", () => {
     const plugin = wuchale({ configPath });
     await plugin.configResolved({ env: { DEV: false } });
     const fixture = representativeCopy
-      .map((copy) => `<span>${copy}</span>`)
+      .map((copy) =>
+        copy === cursorResetFailureCopy
+          ? `<span>{errorCode === "connector_reset_failed" ? ${JSON.stringify(copy)} : errorCode}</span>`
+          : `<span>${copy}</span>`
+      )
       .join("");
     const { code } = await plugin.transform.handler(
       fixture,
@@ -104,6 +163,30 @@ describe("Google Health production translations", () => {
       Number(match[1])
     );
     expect(messageIds).toHaveLength(representativeCopy.length);
+    expect(code).toMatch(/errorCode\s*===\s*["']connector_reset_failed["']/);
+    const pageSource = await readFile(
+      new URL(
+        "../src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte",
+        import.meta.url
+      ),
+      "utf8"
+    );
+    const buttons = [...pageSource.matchAll(/<Button\b[\s\S]*?<\/Button>/g)]
+      .map(([button]) => button)
+      .filter((button) => button.includes("run(disconnect)"));
+    expect(buttons).toHaveLength(2);
+    const transformed = await plugin.transform.handler(
+      buttons.join(""),
+      join(
+        root,
+        "src/routes/(authenticated)/settings/connectors/google-health/disconnect-buttons.svelte"
+      ),
+      { ssr: false }
+    );
+    disconnectMessageIds = [
+      ...transformed.code.matchAll(/_w_runtime_\.c\((\d+)/g),
+    ].map((match) => Number(match[1]));
+    expect(disconnectMessageIds).toHaveLength(4);
   });
 
   afterAll(async () => {
@@ -123,6 +206,16 @@ describe("Google Health production translations", () => {
           .map((id) => runtime(id))
           .every((text) => text.trim().length > 0)
       ).toBe(true);
+      for (const id of disconnectMessageIds) {
+        expect(
+          runtime
+            .c(id)
+            .flat(Infinity)
+            .filter((part) => typeof part === "string")
+            .join("")
+            .trim().length
+        ).toBeGreaterThan(0);
+      }
     }
   );
 
@@ -134,11 +227,11 @@ describe("Google Health production translations", () => {
           new URL(`../../../locales/${locale}.po`, import.meta.url)
         )
       );
-      const missing = entries(catalog).filter(
-        (entry) =>
-          entry.msgid &&
-          connectorReference.test(String(entry.comments?.reference ?? "")) &&
-          !entry.msgstr?.[0]?.trim()
+      const localized = new Map(
+        entries(catalog).map((entry) => [entry.msgid, entry])
+      );
+      const missing = [...expectedPlaceholders.keys()].filter(
+        (id) => !localized.get(id)?.msgstr?.[0]?.trim()
       );
       expect(missing).toEqual([]);
       const mismatches = entries(catalog).filter(
@@ -148,6 +241,25 @@ describe("Google Health production translations", () => {
             expectedPlaceholders.get(entry.msgid)
       );
       expect(mismatches).toEqual([]);
+    }
+  );
+
+  it.each(supportedLocales)(
+    "keeps connector product names untranslated in %s",
+    async (locale) => {
+      const catalog = po.parse(
+        await readFile(
+          new URL(`../../../locales/${locale}.po`, import.meta.url)
+        )
+      );
+      const translatedProductName = entries(catalog).filter((entry) => {
+        if (!entry.msgid || !isGoogleHealthEntry(entry)) return false;
+        const translation = String(entry.msgstr?.[0] ?? "");
+        return protectedProductNames.some(
+          (name) => entry.msgid.includes(name) && !translation.includes(name)
+        );
+      });
+      expect(translatedProductName).toEqual([]);
     }
   );
 });

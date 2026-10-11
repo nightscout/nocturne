@@ -267,14 +267,17 @@ internal static class WidgetSummaryReadScopeGuard
 
 /// <summary>
 /// Per-category read scopes for the "right now" therapy state: the pump mode and the pump's
-/// reservoir and battery readings are the device category, while the sensitivity adjustment is read
-/// off the active therapy profile.
+/// reservoir and battery readings are the device category, the sensitivity adjustment is read off the
+/// active therapy profile, and the thresholds follow glucose as in <see cref="ChartDataReadScopeGuard"/>.
+/// Glucose alone admits the caller because the dashboard sparkline draws its band from these
+/// thresholds for any viewer of the glucose series.
 /// </summary>
 /// <seealso cref="AnalyticsReadScopes"/>
 internal static class CurrentTherapyStateReadScopeGuard
 {
     public static readonly IReadOnlyList<string> AdmissionScopes =
     [
+        Scope.GlucoseRead,
         Scope.DevicesRead,
         Scope.TherapyRead,
     ];
@@ -290,6 +293,9 @@ internal static class CurrentTherapyStateReadScopeGuard
             data.PumpBatteryPercent = null;
             data.PumpBatteryVoltage = null;
         }
+
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.GlucoseRead))
+            data.Thresholds = new ChartThresholdsDto();
 
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TherapyRead))
             data.SensitivityPercent = null;

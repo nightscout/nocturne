@@ -90,9 +90,16 @@ const glucoseChart = () => page.getByTestId("glucose-chart");
 const recentEntries = () => page.getByTestId("recent-entries");
 const recentTreatments = () => page.getByTestId("recent-treatments");
 
-function renderDashboard(settings: FeatureSettings) {
+function renderDashboard(
+  settings: FeatureSettings,
+  {
+    data = pageData,
+    withRealtimeStore = false,
+    currentReadingLoaded = false,
+  }: { data?: HarnessProps["data"]; withRealtimeStore?: boolean; currentReadingLoaded?: boolean } = {}
+) {
   render(DashboardPageHarness, {
-    props: { features: settings, data: pageData },
+    props: { features: settings, data, withRealtimeStore, currentReadingLoaded },
   });
 }
 
@@ -145,5 +152,30 @@ describe("dashboard page", () => {
     await expect.element(glucoseChart()).not.toBeInTheDocument();
     await expect.element(recentEntries()).not.toBeInTheDocument();
     await expect.element(recentTreatments()).not.toBeInTheDocument();
+  });
+
+  it("holds the chart's plot while a realtime viewer's starting data loads", async () => {
+    renderDashboard(features(), {
+      data: { ...pageData, canViewRealtimeData: true },
+      withRealtimeStore: true,
+    });
+
+    await expect.element(glucoseChart()).toHaveAttribute("data-defer-drawing", "true");
+  });
+
+  it("draws the chart's plot once the current reading has landed, ahead of the rest of the starting data", async () => {
+    renderDashboard(features(), {
+      data: { ...pageData, canViewRealtimeData: true },
+      withRealtimeStore: true,
+      currentReadingLoaded: true,
+    });
+
+    await expect.element(glucoseChart()).toHaveAttribute("data-defer-drawing", "false");
+  });
+
+  it("draws the chart's plot straight away for a viewer without realtime data", async () => {
+    renderDashboard(features(), { withRealtimeStore: true });
+
+    await expect.element(glucoseChart()).toHaveAttribute("data-defer-drawing", "false");
   });
 });

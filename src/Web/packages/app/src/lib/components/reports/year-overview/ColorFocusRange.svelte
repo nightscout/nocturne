@@ -114,6 +114,7 @@
   const themeSwatchGradient = $derived(
     `linear-gradient(135deg, color-mix(in srgb, var(${cssVar}) 18%, transparent), var(${cssVar}))`
   );
+
   const activeBandLeftPercent = $derived.by(() => {
     return Math.max(0, Math.min(100, ((focusBandValues[0] - minimum) / (maximum - minimum)) * 100));
   });
@@ -356,7 +357,6 @@
           aria-label={glucose
             ? "Average glucose color boundaries"
             : `${metricLabel} color focus`}
-          aria-describedby={id + "-description"}
         >
           {#snippet children({ thumbItems })}
             <span

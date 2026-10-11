@@ -65,35 +65,6 @@
   const chartData = $derived(days ? transformYearData(days) : []);
   const isYearLoading = $derived(loadingYears.has(year) && !days);
 
-  let scrollContainer: HTMLDivElement | undefined = $state();
-  let isDragging = $state(false);
-  let startX = $state(0);
-  let scrollLeftStart = $state(0);
-  let hasDragged = $state(false);
-
-
-  function handleMouseDown(e: MouseEvent) {
-    if (!scrollContainer) return;
-    isDragging = true;
-    hasDragged = false;
-    startX = e.pageX - scrollContainer.offsetLeft;
-    scrollLeftStart = scrollContainer.scrollLeft;
-  }
-
-  function handleMouseMove(e: MouseEvent) {
-    if (!isDragging || !scrollContainer) return;
-    e.preventDefault();
-    const x = e.pageX - scrollContainer.offsetLeft;
-    const walk = (x - startX) * 1.5;
-    if (Math.abs(walk) > 4) {
-      hasDragged = true;
-    }
-    scrollContainer.scrollLeft = scrollLeftStart - walk;
-  }
-
-  function handleMouseUp() {
-    isDragging = false;
-  }
   const print = new PrintMode();
   let chartWidth = $state(0);
 
@@ -137,7 +108,7 @@
   ></div>
 
   <!-- Year Label -->
-  <div class="mb-2 flex items-center gap-3">
+  <div class="mb-3 flex items-center gap-3">
     <h2 class="text-xl font-bold tabular-nums">{year}</h2>
     {#if failed}
       <span class="text-sm text-destructive">Some year data could not be loaded.</span>
@@ -153,17 +124,10 @@
     {/if}
   </div>
 
-  <!-- Calendar Heatmap Card with Enhanced Touch & Grab Scrolling -->
+  <!-- Calendar Heatmap -->
   {#if chartData.length > 0}
     <div
-      bind:this={scrollContainer}
-      class="w-full overflow-x-auto overflow-y-visible overscroll-x-contain rounded-xl border border-border bg-card p-4 print:overflow-visible touch-pan-x cursor-grab active:cursor-grabbing select-none"
-      onmousedown={handleMouseDown}
-      onmousemove={handleMouseMove}
-      onmouseup={handleMouseUp}
-      onmouseleave={handleMouseUp}
-      role="region"
-      aria-label={`${year} heatmap scrollable view`}
+      class="w-full overflow-x-auto overflow-y-visible rounded-lg border border-border bg-card p-4 print:overflow-visible"
     >
       <div
         class="h-60 min-w-[900px] print:h-(--print-h) print:min-w-0"
@@ -209,9 +173,9 @@
                     >
                       <text
                         x={monthX}
-                        y={-6}
+                        y={-5}
                         font-size="12"
-                        class="fill-muted-foreground hover:fill-primary font-medium cursor-pointer"
+                        class="fill-muted-foreground hover:fill-primary cursor-pointer"
                       >
                         {formatMonthLabel(monthDate)}
                       </text>
@@ -236,12 +200,11 @@
                       height={cellSize[1] - padding * 2}
                       rx={4}
                       fill={getCellFill(cell.data)}
-                      onpointermove={(e: PointerEvent) => {
-                        if (!isDragging) context.tooltip?.show(e, cell.data);
-                      }}
+                      onpointermove={(e: PointerEvent) =>
+                        context.tooltip?.show(e, cell.data)}
                       onpointerleave={() => context.tooltip?.hide()}
                       onclick={() => {
-                        if (cellDate && !hasDragged) {
+                        if (cellDate) {
                           navigateToDayInReview(cellDate);
                         }
                       }}
@@ -267,7 +230,7 @@
                     >
                       <text
                         x={wk.x + cellSize[0] / 2}
-                        y={7 * cellSize[1] + 16}
+                        y={7 * cellSize[1] + 14}
                         text-anchor="middle"
                         font-size="9"
                         class="fill-muted-foreground hover:fill-primary cursor-pointer"
@@ -398,7 +361,6 @@
           {/snippet}
         </Chart>
       </div>
-      <div class="min-w-[1320px] h-10" aria-hidden="true"></div>
     </div>
   {:else if isYearLoading}
     <div

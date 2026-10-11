@@ -152,21 +152,45 @@ public class TreatmentServiceTests
     [Fact]
     public async Task PatchTreatmentAsync_WhenExists_AppliesPatchAndDecomposes()
     {
-        var existing = new Treatment { Id = "t1", Mills = 1000, EventType = "Note", Notes = "old" };
+        // GetForUpdateAsync re-keys the record to its upsert key (a synthetic legacy id here); the
+        // served form reads back under the id every read serves.
+        var existing = new Treatment { Id = "syn-abc", Mills = 1000, EventType = "Note", Notes = "old" };
+        var served = new Treatment { Id = "01a1203c38ea7808a510f88b", Mills = 1000, EventType = "Note", Notes = "updated" };
         _mockStore.Setup(x => x.GetForUpdateAsync("t1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        _mockStore.Setup(x => x.GetByIdAsync("syn-abc", It.IsAny<CancellationToken>())).ReturnsAsync(served);
+        Treatment? decomposed = null;
+        _mockDecomposer.Setup(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<Treatment, WriteOrigin, CancellationToken>((t, _, _) => decomposed = t)
+            .ReturnsAsync(new DecompositionResult());
+
+        var patchJson = JsonSerializer.Deserialize<JsonElement>("{\"notes\":\"updated\"}");
+        var result = await _treatmentService.PatchTreatmentAsync("t1", patchJson, CancellationToken.None);
+
+        decomposed.Should().NotBeNull();
+        decomposed!.Id.Should().Be("syn-abc", "the decomposer upserts on the stored key");
+        decomposed.Notes.Should().Be("updated");
+        result.Should().BeSameAs(served, "the response carries the id reads serve, not the upsert key");
+        _mockDecomposer.Verify(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnUpdatedAsync(served, It.IsAny<CancellationToken>()), Times.Once);
+        _mockStore.Verify(x => x.GetForUpdateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PatchTreatmentAsync_WhenReadBackMisses_ReturnsTheMergedRecord()
+    {
+        var existing = new Treatment { Id = "syn-abc", Mills = 1000, EventType = "Note", Notes = "old" };
+        _mockStore.Setup(x => x.GetForUpdateAsync("t1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        _mockStore.Setup(x => x.GetByIdAsync("syn-abc", It.IsAny<CancellationToken>())).ReturnsAsync((Treatment?)null);
         _mockDecomposer.Setup(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult());
 
         var patchJson = JsonSerializer.Deserialize<JsonElement>("{\"notes\":\"updated\"}");
         var result = await _treatmentService.PatchTreatmentAsync("t1", patchJson, CancellationToken.None);
 
-        result.Should().NotBeNull();
+        result.Should().BeSameAs(existing);
         result!.Notes.Should().Be("updated");
-        _mockDecomposer.Verify(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
-        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _mockEvents.Verify(x => x.OnUpdatedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Once);
-        _mockStore.Verify(x => x.GetForUpdateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
-        _mockStore.Verify(x => x.GetByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mockEvents.Verify(x => x.OnUpdatedAsync(existing, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]

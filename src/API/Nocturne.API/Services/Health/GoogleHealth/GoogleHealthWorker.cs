@@ -14,28 +14,54 @@ public sealed class GoogleHealthWorker(
 {
     private const string ConnectorId = "googlehealth";
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        ProcessRequestsAsync(stoppingToken);
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try { await ProcessRequestsAsync(stoppingToken); }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Google Health queue polling failed; durable requests will be retried");
+                await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
+            }
+        }
+    }
 
     private async Task ProcessRequestsAsync(CancellationToken stoppingToken)
     {
         try
         {
-            await foreach (var tenantId in coordinator.ReadRequestsAsync(stoppingToken))
+            await Parallel.ForEachAsync(coordinator.ReadRequestsAsync(stoppingToken),
+                new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = stoppingToken },
+                async (tenantId, ct) =>
             {
-                if (!coordinator.StartQueued(tenantId)) continue;
+                await using var claim = await coordinator.ClaimWorkerAsync(tenantId, ct);
+                if (claim is null) return;
+                if (await coordinator.DisconnectRequestAsync(tenantId, ct) is { } disconnect)
+                {
+                    using var recovery = scopes.CreateScope();
+                    recovery.ServiceProvider.GetRequiredService<ITenantAccessor>()
+                        .SetTenant(new(tenantId, "", "", true, false));
+                    await recovery.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.Health.IGoogleHealthService>()
+                        .ResumeDisconnectAsync(disconnect.SubjectId, disconnect.RequestId);
+                    return;
+                }
+                if (!await coordinator.StartQueuedAsync(tenantId, ct)) return;
+                var completed = false;
                 try
                 {
                     using var listing = scopes.CreateScope();
                     var tenant = await listing.ServiceProvider.GetRequiredService<ITenantService>()
-                        .GetByIdAsync(tenantId, stoppingToken);
+                        .GetByIdAsync(tenantId, ct);
                     if (tenant is not { IsActive: true })
                     {
-                        continue;
+                        completed = true;
+                        return;
                     }
-                    await SyncTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, stoppingToken);
+                    completed = await SyncTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, ct);
                 }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
                     return;
                 }
@@ -46,19 +72,33 @@ public sealed class GoogleHealthWorker(
                         "Queued Google Health sync failed for tenant {TenantId} with code {Code} at stage {Stage}. Exception: {Message}",
                         tenantId, error?.Message ?? "internal_sync", error?.Stage ?? "worker", ex.Message);
                 }
-                finally { coordinator.Complete(tenantId); }
-            }
+                finally
+                {
+                    if (completed && !ct.IsCancellationRequested) await coordinator.CompleteAsync(tenantId);
+                }
+            });
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
     }
 
-    private async Task SyncTenantAsync(Guid id, string slug, string displayName, CancellationToken ct)
+    private async Task<bool> SyncTenantAsync(Guid id, string slug, string displayName, CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
             .SetTenant(new(id, slug, displayName, true, false));
-        var result = await scope.ServiceProvider.GetRequiredService<IConnectorSyncService>()
-            .TriggerSyncAsync(ConnectorId, new SyncRequest(), ct);
+        var sync = scope.ServiceProvider.GetRequiredService<IConnectorSyncService>();
+        SyncResult result;
+        while (true)
+        {
+            if (!await coordinator.StartQueuedAsync(id, ct)) return false;
+            result = await sync.TriggerSyncAsync(ConnectorId, new SyncRequest(), ct);
+            if (!result.AlreadyRunning) break;
+            logger.LogInformation(
+                "Google Health worker for tenant {TenantId} ({Slug}) is waiting to retry after an active run", id, slug);
+            await using (await coordinator.AcquireAsync(id, ct)) { }
+            // The connector releases its operation lock just before the outer run guard.
+            await Task.Delay(TimeSpan.FromMilliseconds(100), ct);
+        }
         var configurations = scope.ServiceProvider.GetRequiredService<IConnectorConfigurationService>();
         var now = DateTime.UtcNow;
         if (result.Success)
@@ -72,7 +112,7 @@ public sealed class GoogleHealthWorker(
                 lastErrorAt: string.IsNullOrWhiteSpace(result.Message) ? DateTime.MinValue : now,
                 isHealthy: true,
                 ct: ct);
-            return;
+            return true;
         }
 
         logger.LogError(
@@ -86,5 +126,6 @@ public sealed class GoogleHealthWorker(
             lastErrorAt: now,
             isHealthy: false,
             ct: ct);
+            return true;
     }
 }

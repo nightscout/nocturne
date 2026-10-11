@@ -197,6 +197,13 @@ export interface SeriesFinders {
   findPreviousGlucose: (time: Date) => GlucosePoint | undefined;
 }
 
+/**
+ * Whether the chart will have predictions to show: `unknown` until the prediction
+ * status read settles, `available` once it reports the service up or when the
+ * caller supplies predictions of its own, `unavailable` otherwise.
+ */
+export type PredictionAvailability = "unknown" | "available" | "unavailable";
+
 /** The reactive chart data engine returned by createChartDataEngine */
 export interface ChartDataEngine {
   // Server / merged data
@@ -211,6 +218,7 @@ export interface ChartDataEngine {
   /** Why the last chart-data fetch was refused, or null when it was not. */
   readonly chartDataError: string | null;
   readonly predictionServiceAvailable: boolean;
+  readonly predictionAvailability: PredictionAvailability;
   readonly effectiveShowPredictions: boolean;
 
   // Time ranges
@@ -295,8 +303,13 @@ function processSpans<T extends { startTime: Date; endTime?: Date | null }>(
     }));
 }
 
-/** What the fetch, realtime and prediction layers hand the pure derivations. */
-export type ChartDataViewSource = Pick<
+/**
+ * What the fetch, realtime and prediction layers hand the pure derivations.
+ * `thresholdsOverride` stands in for the server payload's thresholds when set.
+ */
+export type ChartDataViewSource = {
+  readonly thresholdsOverride?: ChartThresholds;
+} & Pick<
   ChartDataEngine,
   | "serverChartData"
   | "glucoseData"
@@ -304,6 +317,7 @@ export type ChartDataViewSource = Pick<
   | "predictionError"
   | "chartDataError"
   | "predictionServiceAvailable"
+  | "predictionAvailability"
   | "effectiveShowPredictions"
   | "nowMinute"
   | "lookbackHours"
@@ -360,7 +374,7 @@ export function createChartDataView(
 
   // ---- Thresholds ----
   const resolvedThresholds = $derived(
-    resolveChartThresholds(serverChartData?.thresholds)
+    source.thresholdsOverride ?? resolveChartThresholds(serverChartData?.thresholds)
   );
   const lowThreshold = $derived(resolvedThresholds.low);
   const highThreshold = $derived(resolvedThresholds.high);
@@ -654,6 +668,9 @@ export function createChartDataView(
     get predictionServiceAvailable() {
       return source.predictionServiceAvailable;
     },
+    get predictionAvailability() {
+      return source.predictionAvailability;
+    },
     get effectiveShowPredictions() {
       return source.effectiveShowPredictions;
     },
@@ -786,6 +803,7 @@ export function createStaticChartEngine(options: {
     predictionError: null,
     chartDataError: null,
     predictionServiceAvailable: false,
+    predictionAvailability: "unavailable",
     effectiveShowPredictions: false,
     get nowMinute() {
       return options.range.to.getTime();

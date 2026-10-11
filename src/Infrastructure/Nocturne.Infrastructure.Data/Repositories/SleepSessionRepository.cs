@@ -108,33 +108,14 @@ public class SleepSessionRepository : ISleepSessionRepository
 
             if (existing is not null)
             {
-                entity.Id = existing.Id;
                 entity.CreatedAt = existing.CreatedAt;
-                ctx.SleepBiometricSamples.RemoveRange(existing.BiometricSamples);
-                ctx.SleepStages.RemoveRange(existing.Stages);
-
-                ctx.Entry(existing).CurrentValues.SetValues(entity);
-                existing.Stages = entity.Stages;
-                existing.BiometricSamples = entity.BiometricSamples;
-
-                foreach (var stage in existing.Stages)
-                {
-                    stage.SleepSessionId = existing.Id;
-                    stage.TenantId = ctx.TenantId;
-                }
-                foreach (var sample in existing.BiometricSamples)
-                {
-                    sample.SleepSessionId = existing.Id;
-                    sample.TenantId = ctx.TenantId;
-                }
-            }
-            else
-            {
-                ctx.SleepSessions.Add(entity);
+                ctx.SleepSessions.Remove(existing);
+                await ctx.SaveChangesAsync(token);
             }
 
+            ctx.SleepSessions.Add(entity);
             await ctx.SaveChangesAsync(token);
-            return SleepSessionMapper.ToDomainModel(existing ?? entity, includeChildren: true);
+            return SleepSessionMapper.ToDomainModel(entity, includeChildren: true);
         }, ct: cancellationToken);
     }
 
@@ -183,11 +164,7 @@ public class SleepSessionRepository : ISleepSessionRepository
             if (!string.IsNullOrEmpty(entity.OriginalId))
                 await LockSourceRecordAsync(ctx, entity, token);
             await LockIdAsync(ctx, id, token);
-            var existing = await ctx.SleepSessions
-                .Include(s => s.Stages)
-                .Include(s => s.BiometricSamples)
-                .AsSplitQuery()
-                .FirstOrDefaultAsync(s => s.Id == id, token);
+            var existing = await ctx.SleepSessions.FirstOrDefaultAsync(s => s.Id == id, token);
 
             if (existing is null)
                 return null;
@@ -214,28 +191,13 @@ public class SleepSessionRepository : ISleepSessionRepository
                 }
             }
 
-            entity.Id = existing.Id;
             entity.CreatedAt = existing.CreatedAt;
-            ctx.SleepBiometricSamples.RemoveRange(existing.BiometricSamples);
-            ctx.SleepStages.RemoveRange(existing.Stages);
-
-            ctx.Entry(existing).CurrentValues.SetValues(entity);
-            existing.Stages = entity.Stages;
-            existing.BiometricSamples = entity.BiometricSamples;
-
-            foreach (var stage in existing.Stages)
-            {
-                stage.SleepSessionId = existing.Id;
-                stage.TenantId = ctx.TenantId;
-            }
-            foreach (var sample in existing.BiometricSamples)
-            {
-                sample.SleepSessionId = existing.Id;
-                sample.TenantId = ctx.TenantId;
-            }
-
+            ctx.SleepSessions.Remove(existing);
             await ctx.SaveChangesAsync(token);
-            return SleepSessionMapper.ToDomainModel(existing, includeChildren: true);
+
+            ctx.SleepSessions.Add(entity);
+            await ctx.SaveChangesAsync(token);
+            return SleepSessionMapper.ToDomainModel(entity, includeChildren: true);
         }, ct: cancellationToken);
     }
 
@@ -268,9 +230,6 @@ public class SleepSessionRepository : ISleepSessionRepository
     /// </summary>
     private static IQueryable<SleepSessionEntity> WithSoftDeleted(NocturneDbContext ctx) =>
         ctx.SleepSessions
-            .Include(s => s.Stages)
-            .Include(s => s.BiometricSamples)
-            .AsSplitQuery()
             .IgnoreQueryFilters()
             .Where(s => s.TenantId == ctx.TenantId);
 

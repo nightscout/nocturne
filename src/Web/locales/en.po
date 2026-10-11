@@ -29,6 +29,7 @@ msgstr "Error ID: {0}"
 #: src/lib/components/connectors/DataSourceSelectionView.svelte
 #: src/lib/components/connectors/DataSourceSelectionView.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(unauthenticated)/auth/bot/authorize/done/+page.svelte
 msgid "Connected"
 msgstr "Connected"
@@ -1566,6 +1567,7 @@ msgstr "Search types..."
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Status"
 msgstr "Status"
 
@@ -2095,15 +2097,14 @@ msgstr "Hours"
 msgid "{0} hour{1}"
 msgstr "{0} hour{1}"
 
-#: src/lib/components/clock-builder/ElementInspector.svelte
-msgid "Format"
-msgstr "Format"
+#~ msgid "Format"
+#~ msgstr "Format"
 
-#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 msgid "12-hour"
 msgstr "12-hour"
 
-#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "24-hour"
 msgstr "24-hour"
@@ -2216,6 +2217,7 @@ msgid "System"
 msgstr "System"
 
 #: src/lib/components/clock-builder/TextStyleControls.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Weight"
 msgstr "Weight"
 
@@ -2551,6 +2553,7 @@ msgstr "Connector Offline"
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Configured"
 msgstr "Configured"
 
@@ -3194,6 +3197,8 @@ msgid "<0/> Has Data"
 msgstr "<0/> Has Data"
 
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Not Configured"
 msgstr "Not Configured"
 
@@ -4254,6 +4259,7 @@ msgstr "Boost"
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Sleep"
 msgstr "Sleep"
 
@@ -4578,6 +4584,7 @@ msgstr "Guest access — read only"
 msgid "Notification"
 msgstr "Notification"
 
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/routes/(unauthenticated)/setup/account/+page.svelte
 msgid "Loading..."
 msgstr "Loading..."
@@ -6357,6 +6364,7 @@ msgstr "Median-75th"
 #~ msgstr "Avg Before"
 
 #: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -7228,6 +7236,7 @@ msgstr "Basal IOB"
 #: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Activity"
 msgstr "Activity"
 
@@ -9863,6 +9872,7 @@ msgstr "Connect"
 msgid "Import your history"
 msgstr "Import your history"
 
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(unauthenticated)/setup/+page@.svelte
 msgid "Import"
 msgstr "Import"
@@ -10072,6 +10082,7 @@ msgid "No data today"
 msgstr "No data today"
 
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Connection"
 msgstr "Connection"
 
@@ -10635,6 +10646,7 @@ msgid "Mmol"
 msgstr "Mmol"
 
 #: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "mmol/L"
@@ -12409,6 +12421,7 @@ msgstr "<0/> Step Count Actogram"
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 #: src/routes/(authenticated)/reports/steps/+page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Steps"
 msgstr "Steps"
 
@@ -13006,6 +13019,7 @@ msgstr "<0/> Units & Formats"
 msgid "Blood glucose units"
 msgstr "Blood glucose units"
 
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Time format"
 msgstr "Time format"
@@ -16895,7 +16909,7 @@ msgid "{0} not linked — connect it in Connectors & Apps to enable delivery."
 msgstr "{0} not linked — connect it in Connectors & Apps to enable delivery."
 
 #: src/lib/components/alerts/ChannelsSection.svelte
-#: src/lib/components/dashboard/WidgetGrid.svelte
+#: src/lib/components/dashboard/widgets/WidgetPlaceholder.svelte
 msgid "Loading"
 msgstr "Loading"
 
@@ -18241,7 +18255,11 @@ msgstr "{0} pp"
 #. 0: e.event.timeToNadirHours.toFixed(1)
 #. 0: v.toFixed(1)
 #. 0: signed(d)
+#. 0: v.toFixed(1)
+#. 0: signed(d)
 #: src/lib/components/reports/sensor-integrity/HypoAfterNoiseLog.svelte
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
 msgid "{0} h"
@@ -18836,6 +18854,7 @@ msgstr "Nocturne is free and open source software, created by people with diabet
 msgid "Weight History - Settings - Nocturne"
 msgstr "Weight History - Settings - Nocturne"
 
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(authenticated)/settings/weight/+page.svelte
 msgid "Weight history"
 msgstr "Weight history"
@@ -19235,10 +19254,8 @@ msgstr "<0/> Loading connectors..."
 msgid "This tenant has no configured connectors."
 msgstr "This tenant has no configured connectors."
 
-#. 0: jobStatus.completedConnectors; 1: jobStatus.totalConnectors
-#: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
-msgid "{0} / {1} connectors"
-msgstr "{0} / {1} connectors"
+#~ msgid "{0} / {1} connectors"
+#~ msgstr "{0} / {1} connectors"
 
 #: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
 msgid "<0/> Failed"
@@ -19946,8 +19963,9 @@ msgstr "Interactive API documentation powered by Scalar. Explore endpoints, test
 #~ msgid "Authentication"
 #~ msgstr "Authentication"
 
-#~ msgid "Sign in with Google"
-#~ msgstr "Sign in with Google"
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sign in with Google"
+msgstr "Sign in with Google"
 
 #~ msgid "Sign in with GitHub"
 #~ msgstr "Sign in with GitHub"
@@ -21621,10 +21639,8 @@ msgstr "Failed to load preview"
 msgid "Copy link"
 msgstr "Copy link"
 
-#: src/lib/components/clock-builder/ElementInspector.svelte
-#: src/lib/components/clock-builder/ElementInspector.svelte
-msgid "Match my preference"
-msgstr "Match my preference"
+#~ msgid "Match my preference"
+#~ msgstr "Match my preference"
 
 #~ msgid "Couldn't copy the code to the clipboard. Copy it manually instead."
 #~ msgstr "Couldn't copy the code to the clipboard. Copy it manually instead."
@@ -24061,6 +24077,7 @@ msgid "Est. A1c (DCCT %)"
 msgstr "Est. A1c (DCCT %)"
 
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Heart rate"
 msgstr "Heart rate"
 
@@ -25716,216 +25733,6 @@ msgstr "Minutes since carbs"
 msgid "min ago"
 msgstr "min ago"
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "PostgreSQL host-directory storage"
-msgstr "PostgreSQL host-directory storage"
-
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Portainer's stack editor and app template use the default named Docker volume; Portainer does not apply Compose override files. To put PostgreSQL data in a host directory, deploy the Docker Compose bundle from the command line with both <0/> and <1/>. See the <2>Docker Compose guide</2> for setup and existing-database migration precautions."
-msgstr "Portainer's stack editor and app template use the default named Docker volume; Portainer does not apply Compose override files. To put PostgreSQL data in a host directory, deploy the Docker Compose bundle from the command line with both <0/> and <1/>. See the <2>Docker Compose guide</2> for setup and existing-database migration precautions."
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "POSTGRES_DATA_PATH=/srv/nocturne/postgres-data"
-msgstr "POSTGRES_DATA_PATH=/srv/nocturne/postgres-data"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Create the directory on the machine running the Docker daemon, not merely on the computer where you run the Docker CLI. Use an absolute path and ensure the PostgreSQL container can write to it. For example: <0/>"
-msgstr "Create the directory on the machine running the Docker daemon, not merely on the computer where you run the Docker CLI. Use an absolute path and ensure the PostgreSQL container can write to it. For example: <0/>"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Add the path to <0/>: <1/>"
-msgstr "Add the path to <0/>: <1/>"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "This replaces the default <0/> command in Step 3 below; do not run both commands. Start the stack with both files. Keep both <1/> arguments on every later Compose command, including updates and shutdown: <2/>"
-msgstr "This replaces the default <0/> command in Step 3 below; do not run both commands. Start the stack with both files. Keep both <1/> arguments on every later Compose command, including updates and shutdown: <2/>"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Changing the path does not move your database"
-msgstr "Changing the path does not move your database"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "A new or empty directory initializes a separate, empty PostgreSQL database. For an existing install, take and verify a backup, stop the stack, and migrate the existing PostgreSQL data before starting with the override. Preserve file ownership and use the same PostgreSQL major version. Keep the original named volume until the new location has been verified. There is no automatic volume migration. Do not use <0/> while the original volume is your only copy."
-msgstr "A new or empty directory initializes a separate, empty PostgreSQL database. For an existing install, take and verify a backup, stop the stack, and migrate the existing PostgreSQL data before starting with the override. Preserve file ownership and use the same PostgreSQL major version. Keep the original named volume until the new location has been verified. There is no automatic volume migration. Do not use <0/> while the original volume is your only copy."
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Stop the stack without removing its containers or volumes, then record the stopped PostgreSQL container: <0/>"
-msgstr "Stop the stack without removing its containers or volumes, then record the stopped PostgreSQL container: <0/>"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Create and inspect a root-owned backup archive while the database is stopped: <0/> Keep this archive somewhere safe before continuing."
-msgstr "Create and inspect a root-owned backup archive while the database is stopped: <0/> Keep this archive somewhere safe before continuing."
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Create the host directory and copy the stopped data directory, preserving its contents and ownership: <0/>"
-msgstr "Create the host directory and copy the stopped data directory, preserving its contents and ownership: <0/>"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Set <0/> in <1/> and start with both Compose files: <2/> If you also use the BYO-proxy override, include it as well: <3/>"
-msgstr "Set <0/> in <1/> and start with both Compose files: <2/> If you also use the BYO-proxy override, include it as well: <3/>"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Verify the PostgreSQL logs and your existing Nocturne data before allowing writes. Keep the original named volume and backup archive until verification is complete. To roll back before new writes, stop the override stack without deleting volumes, then start the original Compose file again: <0/> For a stack that also uses BYO proxy, keep that override when stopping and when returning to the named-volume configuration: <1/>"
-msgstr "Verify the PostgreSQL logs and your existing Nocturne data before allowing writes. Keep the original named volume and backup archive until verification is complete. To roll back before new writes, stop the override stack without deleting volumes, then start the original Compose file again: <0/> For a stack that also uses BYO proxy, keep that override when stopping and when returning to the named-volume configuration: <1/>"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Schedule downtime first. This copies PostgreSQL's physical data directory, so the source server must be stopped and the destination must use the same PostgreSQL major version. These commands assume Docker runs on this Linux host and you are in the directory containing the Compose files and <0/>."
-msgstr "Schedule downtime first. This copies PostgreSQL's physical data directory, so the source server must be stopped and the destination must use the same PostgreSQL major version. These commands assume Docker runs on this Linux host and you are in the directory containing the Compose files and <0/>."
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Do not use <0/> during migration or rollback. It deletes named volumes. If the new database has accepted writes, it is no longer equivalent to the untouched original volume; plan any rollback or restore before reopening the service to users."
-msgstr "Do not use <0/> during migration or rollback. It deletes named volumes. If the new database has accepted writes, it is no longer equivalent to the untouched original volume; plan any rollback or restore before reopening the service to users."
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Move an existing database from the named volume"
-msgstr "Move an existing database from the named volume"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "View docker-compose.bind-data.yaml"
-msgstr "View docker-compose.bind-data.yaml"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below). A second, optional override lets PostgreSQL store its data in a directory on the Docker host."
-msgstr "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below). A second, optional override lets PostgreSQL store its data in a directory on the Docker host."
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Optional: use a host directory for PostgreSQL"
-msgstr "Optional: use a host directory for PostgreSQL"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "The default named Docker volume is recommended for most installs and needs no extra configuration. To place PostgreSQL's data on a specific disk or host directory, use the separate bind-data override. It fixes the mount type to <0/> and requires one path, so the mount type and source cannot be accidentally mismatched."
-msgstr "The default named Docker volume is recommended for most installs and needs no extra configuration. To place PostgreSQL's data on a specific disk or host directory, use the separate bind-data override. It fixes the mount type to <0/> and requires one path, so the mount type and source cannot be accidentally mismatched."
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Keep every active override in the same ordered <0/> list on every Compose command for this stack. Include the bind-data file, the BYO-proxy file, and any local override file you use. Omitting an active override can restore the named-volume mount or bundled proxy configuration."
-msgstr "Keep every active override in the same ordered <0/> list on every Compose command for this stack. Include the bind-data file, the BYO-proxy file, and any local override file you use. Omitting an active override can restore the named-volume mount or bundled proxy configuration."
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "The override requires <0/> and refuses to create a missing host directory. If the variable is unset or the path does not exist, Compose reports an error instead of silently starting PostgreSQL in a newly created directory. A path that exists but contains no database is still a new database."
-msgstr "The override requires <0/> and refuses to create a missing host directory. If the variable is unset or the path does not exist, Compose reports an error instead of silently starting PostgreSQL in a newly created directory. A path that exists but contains no database is still a new database."
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "If you also use the bind-data override, include both overrides in the same command:"
-msgstr "If you also use the bind-data override, include both overrides in the same command:"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Keep every active override in both the pull and update commands. For bind-data only:"
-msgstr "Keep every active override in both the pull and update commands. For bind-data only:"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "For bind-data with the BYO-proxy override:"
-msgstr "For bind-data with the BYO-proxy override:"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Omitting the bind-data override changes the declared storage back to the named volume."
-msgstr "Omitting the bind-data override changes the declared storage back to the named volume."
-
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Real-time data unavailable"
-msgstr "Real-time data unavailable"
-
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Reconnecting..."
-msgstr "Reconnecting..."
-
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Attempting to reconnect"
-msgstr "Attempting to reconnect"
-
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Real-time data disconnected"
-msgstr "Real-time data disconnected"
-
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Failed to connect to real-time data"
-msgstr "Failed to connect to real-time data"
-
-#: src/lib/components/reports/DailyInsulinSummary.svelte
-msgid "Total basal insulin:"
-msgstr "Total basal insulin:"
-
-#: src/lib/components/reports/DailyInsulinSummary.svelte
-msgid "Total daily insulin:"
-msgstr "Total daily insulin:"
-
-#. 0: formatInsulinDisplay(totalInsulin)
-#: src/lib/components/reports/TreatmentSummary.svelte
-msgid "Insulin: {0}U"
-msgstr "Insulin: {0}U"
-
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-msgid "Public - Visible to everyone"
-msgstr "Public - Visible to everyone"
-
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-msgid "Controls whether this tracker is visible to unauthenticated users"
-msgstr "Controls whether this tracker is visible to unauthenticated users"
-
-#: src/routes/(authenticated)/notifications/+page.svelte
-msgid "Tracker active"
-msgstr "Tracker active"
-
-#. 0: thresholdHours ?? "?"
-#: src/routes/(authenticated)/notifications/+page.svelte
-msgid "Exceeded {0}h - change urgently!"
-msgstr "Exceeded {0}h - change urgently!"
-
-#. 0: thresholdHours ?? "?"
-#: src/routes/(authenticated)/notifications/+page.svelte
-msgid "Exceeded {0}h - change soon"
-msgstr "Exceeded {0}h - change soon"
-
-#. 0: thresholdHours ?? def.lifespanHours ?? "?"
-#: src/routes/(authenticated)/notifications/+page.svelte
-msgid "Approaching {0}h limit"
-msgstr "Approaching {0}h limit"
-
-#: src/routes/(authenticated)/reports/agp/+page.svelte
-msgid "<0/> Ambulatory Glucose Profile"
-msgstr "<0/> Ambulatory Glucose Profile"
-
-#: src/routes/(authenticated)/reports/basal-analysis/BasalAnalysisContent.svelte
-msgid "<0/> Basal Rate Analysis"
-msgstr "<0/> Basal Rate Analysis"
-
-#: src/routes/(authenticated)/reports/battery/+page.svelte
-msgid "Battery Report"
-msgstr "Battery Report"
-
-#: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
-msgid "<0/> Insulin Delivery Report"
-msgstr "<0/> Insulin Delivery Report"
-
-#: src/routes/(authenticated)/reports/idp/+page.svelte
-msgid "<0/> Insulin Dosing Profile"
-msgstr "<0/> Insulin Dosing Profile"
-
-#: src/routes/(authenticated)/reports/site-change-impact/+page.svelte
-msgid "<0/> Site Change Impact"
-msgstr "<0/> Site Change Impact"
-
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Sign in with Google"
-msgstr "Sign in with Google"
-
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below)."
-msgstr "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below)."
-
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Starting"
-msgstr "Starting"
-
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Waiting to connect"
-msgstr "Waiting to connect"
-
 #: src/lib/components/connectors/GoogleHealthSourceRow.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
@@ -25963,55 +25770,6 @@ msgstr "Waiting for the first successful sync"
 msgid "Import steps, heart rate, weight, and sleep from Google Health"
 msgstr "Import steps, heart rate, weight, and sleep from Google Health"
 
-#. 0: year
-#: src/lib/components/reports/year-overview/YearHeatmap.svelte
-msgid "{0} heatmap scrollable view"
-msgstr "{0} heatmap scrollable view"
-
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Current smooth 90-day"
-msgstr "Current smooth 90-day"
-
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Linear 90-to-1"
-msgstr "Linear 90-to-1"
-
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Unweighted 90-day"
-msgstr "Unweighted 90-day"
-
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Unweighted 14-day"
-msgstr "Unweighted 14-day"
-
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Experimental comparison of six glucose-derived estimates. Five alternatives are plotted beside the current smooth 90-day method; saved lab results remain independent triangle markers and are never used to alter any estimate."
-msgstr "Experimental comparison of six glucose-derived estimates. Five alternatives are plotted beside the current smooth 90-day method; saved lab results remain independent triangle markers and are never used to alter any estimate."
-
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0>Current smooth 90-day:</0> existing ADAG estimate; smooth decay calibrated so the newest 30 days contribute about half."
-msgstr "<0>Current smooth 90-day:</0> existing ADAG estimate; smooth decay calibrated so the newest 30 days contribute about half."
-
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0>Linear 90-to-1:</0> today has weight 90, yesterday 89, down to weight 1 for the oldest day in the 90-day window."
-msgstr "<0>Linear 90-to-1:</0> today has weight 90, yesterday 89, down to weight 1 for the oldest day in the 90-day window."
-
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0>30-day half-life:</0> exponential decay; a reading's weight halves every 30 days."
-msgstr "<0>30-day half-life:</0> exponential decay; a reading's weight halves every 30 days."
-
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0>Unweighted 90-day:</0> every reading in the trailing 90 days contributes equally; converted with ADAG."
-msgstr "<0>Unweighted 90-day:</0> every reading in the trailing 90 days contributes equally; converted with ADAG."
-
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0>120-day 50/25/25:</0> a common clinical approximation: 50% emphasis on days 0–29, 25% on days 30–59, and 25% on days 60–119; converted with ADAG."
-msgstr "<0>120-day 50/25/25:</0> a common clinical approximation: 50% emphasis on days 0–29, 25% on days 30–59, and 25% on days 60–119; converted with ADAG."
-
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0>Unweighted 14-day:</0> the same ADAG conversion as the 90-day line, but over only 14 days. It should cross the 90-day line after a trend reversal and converge during a stable period."
-msgstr "<0>Unweighted 14-day:</0> the same ADAG conversion as the 90-day line, but over only 14 days. It should cross the 90-day line after a trend reversal and converge during a stable period."
-
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Step history"
 msgstr "Step history"
@@ -26036,7 +25794,6 @@ msgstr "Body measurement"
 msgid "Nutrition"
 msgstr "Nutrition"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Cycle tracking"
 msgstr "Cycle tracking"
@@ -26212,7 +25969,6 @@ msgstr "The import is running in the background. You can leave this page and ret
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health import completed."
 msgstr "Google Health import completed."
 
@@ -26257,7 +26013,7 @@ msgstr "Waiting for the background worker"
 msgid "Refreshing the Google session"
 msgstr "Refreshing the Google session"
 
-#. 0: status.capabilities?.find((entry) => entry.dataType === status?.syncDataType)?.displayName ?? status.syncDataType
+#. 0: dataTypeLabel(status.syncDataType)
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Reading {0}"
 msgstr "Reading {0}"
@@ -26278,6 +26034,7 @@ msgstr "Updating Nocturne health records"
 msgid "Preparing the import"
 msgstr "Preparing the import"
 
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Import status is temporarily unavailable. Retrying."
@@ -26319,6 +26076,26 @@ msgstr "Import running in the background"
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health import progress"
 msgstr "Google Health import progress"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Historical import progress"
+msgstr "Historical import progress"
+
+#~ msgid "Synchronized back through {0}."
+#~ msgstr "Synchronized back through {0}."
+
+#. 0: day(status.backfillSyncedThrough)
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Synchronized back through {0}. <0/>"
+msgstr "Synchronized back through {0}. <0/>"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The requested history is complete."
+msgstr "The requested history is complete."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Each sync refreshes today and imports one older calendar month."
+msgstr "Each sync refreshes today and imports one older calendar month."
 
 #. 0: status.syncCompletedDataTypes; 1: status.syncTotalDataTypes
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
@@ -26442,11 +26219,13 @@ msgstr "Found"
 msgid "Nocturne destination"
 msgstr "Nocturne destination"
 
-#. 0: capability?.displayName ?? item.dataType
+#. 0: dataTypeLabel(item.dataType)
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Import {0}"
 msgstr "Import {0}"
 
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Not scanned"
 msgstr "Not scanned"
@@ -26563,3 +26342,298 @@ msgstr "The reset runs in the background. Platform administrators can monitor or
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Open connector reset"
 msgstr "Open connector reset"
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "PostgreSQL host-directory storage"
+msgstr "PostgreSQL host-directory storage"
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Portainer's stack editor and app template use the default named Docker volume; Portainer does not apply Compose override files. To put PostgreSQL data in a host directory, deploy the Docker Compose bundle from the command line with both <0/> and <1/>. See the <2>Docker Compose guide</2> for setup and existing-database migration precautions."
+msgstr "Portainer's stack editor and app template use the default named Docker volume; Portainer does not apply Compose override files. To put PostgreSQL data in a host directory, deploy the Docker Compose bundle from the command line with both <0/> and <1/>. See the <2>Docker Compose guide</2> for setup and existing-database migration precautions."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "POSTGRES_DATA_PATH=/srv/nocturne/postgres-data"
+msgstr "POSTGRES_DATA_PATH=/srv/nocturne/postgres-data"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Create the directory on the machine running the Docker daemon, not merely on the computer where you run the Docker CLI. Use an absolute path and ensure the PostgreSQL container can write to it. For example: <0/>"
+msgstr "Create the directory on the machine running the Docker daemon, not merely on the computer where you run the Docker CLI. Use an absolute path and ensure the PostgreSQL container can write to it. For example: <0/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Add the path to <0/>: <1/>"
+msgstr "Add the path to <0/>: <1/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "This replaces the default <0/> command in Step 3 below; do not run both commands. Start the stack with both files. Keep both <1/> arguments on every later Compose command, including updates and shutdown: <2/>"
+msgstr "This replaces the default <0/> command in Step 3 below; do not run both commands. Start the stack with both files. Keep both <1/> arguments on every later Compose command, including updates and shutdown: <2/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Changing the path does not move your database"
+msgstr "Changing the path does not move your database"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "A new or empty directory initializes a separate, empty PostgreSQL database. For an existing install, take and verify a backup, stop the stack, and migrate the existing PostgreSQL data before starting with the override. Preserve file ownership and use the same PostgreSQL major version. Keep the original named volume until the new location has been verified. There is no automatic volume migration. Do not use <0/> while the original volume is your only copy."
+msgstr "A new or empty directory initializes a separate, empty PostgreSQL database. For an existing install, take and verify a backup, stop the stack, and migrate the existing PostgreSQL data before starting with the override. Preserve file ownership and use the same PostgreSQL major version. Keep the original named volume until the new location has been verified. There is no automatic volume migration. Do not use <0/> while the original volume is your only copy."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Stop the stack without removing its containers or volumes, then record the stopped PostgreSQL container: <0/>"
+msgstr "Stop the stack without removing its containers or volumes, then record the stopped PostgreSQL container: <0/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Create and inspect a root-owned backup archive while the database is stopped: <0/> Keep this archive somewhere safe before continuing."
+msgstr "Create and inspect a root-owned backup archive while the database is stopped: <0/> Keep this archive somewhere safe before continuing."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Create the host directory and copy the stopped data directory, preserving its contents and ownership: <0/>"
+msgstr "Create the host directory and copy the stopped data directory, preserving its contents and ownership: <0/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Set <0/> in <1/> and start with both Compose files: <2/> If you also use the BYO-proxy override, include it as well: <3/>"
+msgstr "Set <0/> in <1/> and start with both Compose files: <2/> If you also use the BYO-proxy override, include it as well: <3/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Verify the PostgreSQL logs and your existing Nocturne data before allowing writes. Keep the original named volume and backup archive until verification is complete. To roll back before new writes, stop the override stack without deleting volumes, then start the original Compose file again: <0/> For a stack that also uses BYO proxy, keep that override when stopping and when returning to the named-volume configuration: <1/>"
+msgstr "Verify the PostgreSQL logs and your existing Nocturne data before allowing writes. Keep the original named volume and backup archive until verification is complete. To roll back before new writes, stop the override stack without deleting volumes, then start the original Compose file again: <0/> For a stack that also uses BYO proxy, keep that override when stopping and when returning to the named-volume configuration: <1/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Schedule downtime first. This copies PostgreSQL's physical data directory, so the source server must be stopped and the destination must use the same PostgreSQL major version. These commands assume Docker runs on this Linux host and you are in the directory containing the Compose files and <0/>."
+msgstr "Schedule downtime first. This copies PostgreSQL's physical data directory, so the source server must be stopped and the destination must use the same PostgreSQL major version. These commands assume Docker runs on this Linux host and you are in the directory containing the Compose files and <0/>."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Do not use <0/> during migration or rollback. It deletes named volumes. If the new database has accepted writes, it is no longer equivalent to the untouched original volume; plan any rollback or restore before reopening the service to users."
+msgstr "Do not use <0/> during migration or rollback. It deletes named volumes. If the new database has accepted writes, it is no longer equivalent to the untouched original volume; plan any rollback or restore before reopening the service to users."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Move an existing database from the named volume"
+msgstr "Move an existing database from the named volume"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "View docker-compose.bind-data.yaml"
+msgstr "View docker-compose.bind-data.yaml"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below). A second, optional override lets PostgreSQL store its data in a directory on the Docker host."
+msgstr "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below). A second, optional override lets PostgreSQL store its data in a directory on the Docker host."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Optional: use a host directory for PostgreSQL"
+msgstr "Optional: use a host directory for PostgreSQL"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "The default named Docker volume is recommended for most installs and needs no extra configuration. To place PostgreSQL's data on a specific disk or host directory, use the separate bind-data override. It fixes the mount type to <0/> and requires one path, so the mount type and source cannot be accidentally mismatched."
+msgstr "The default named Docker volume is recommended for most installs and needs no extra configuration. To place PostgreSQL's data on a specific disk or host directory, use the separate bind-data override. It fixes the mount type to <0/> and requires one path, so the mount type and source cannot be accidentally mismatched."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Keep every active override in the same ordered <0/> list on every Compose command for this stack. Include the bind-data file, the BYO-proxy file, and any local override file you use. Omitting an active override can restore the named-volume mount or bundled proxy configuration."
+msgstr "Keep every active override in the same ordered <0/> list on every Compose command for this stack. Include the bind-data file, the BYO-proxy file, and any local override file you use. Omitting an active override can restore the named-volume mount or bundled proxy configuration."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "The override requires <0/> and refuses to create a missing host directory. If the variable is unset or the path does not exist, Compose reports an error instead of silently starting PostgreSQL in a newly created directory. A path that exists but contains no database is still a new database."
+msgstr "The override requires <0/> and refuses to create a missing host directory. If the variable is unset or the path does not exist, Compose reports an error instead of silently starting PostgreSQL in a newly created directory. A path that exists but contains no database is still a new database."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "If you also use the bind-data override, include both overrides in the same command:"
+msgstr "If you also use the bind-data override, include both overrides in the same command:"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Keep every active override in both the pull and update commands. For bind-data only:"
+msgstr "Keep every active override in both the pull and update commands. For bind-data only:"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "For bind-data with the BYO-proxy override:"
+msgstr "For bind-data with the BYO-proxy override:"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Omitting the bind-data override changes the declared storage back to the named volume."
+msgstr "Omitting the bind-data override changes the declared storage back to the named volume."
+
+#: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
+msgid "One or more connectors failed; review the connector details and retry the failed range."
+msgstr "One or more connectors failed; review the connector details and retry the failed range."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sleep sessions and stages"
+msgstr "Sleep sessions and stages"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Active energy burned"
+msgstr "Active energy burned"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Total calories"
+msgstr "Total calories"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Distance"
+msgstr "Distance"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Floors"
+msgstr "Floors"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Workouts"
+msgstr "Workouts"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Body fat"
+msgstr "Body fat"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Height"
+msgstr "Height"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nutrition log"
+msgstr "Nutrition log"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Hydration"
+msgstr "Hydration"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Blood glucose"
+msgstr "Blood glucose"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Oxygen saturation"
+msgstr "Oxygen saturation"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Heart rate variability"
+msgstr "Heart rate variability"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Resting heart rate"
+msgstr "Resting heart rate"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Daily oxygen saturation"
+msgstr "Daily oxygen saturation"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Daily respiratory rate"
+msgstr "Daily respiratory rate"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sleep respiratory rate"
+msgstr "Sleep respiratory rate"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Core body temperature"
+msgstr "Core body temperature"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Menstrual period"
+msgstr "Menstrual period"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Ovulation test"
+msgstr "Ovulation test"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Cervical mucus"
+msgstr "Cervical mucus"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sexual activity"
+msgstr "Sexual activity"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Unknown data type"
+msgstr "Unknown data type"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health currently provides no read-only scope for this type."
+msgstr "Google Health currently provides no read-only scope for this type."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Not exposed as a readable Google Health API data type."
+msgstr "Not exposed as a readable Google Health API data type."
+
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
+msgid "Status unavailable"
+msgstr "Status unavailable"
+
+#~ msgid "Disconnecting…"
+#~ msgstr "Disconnecting…"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnecting Google Health. The current scan or import is being stopped."
+msgstr "Disconnecting Google Health. The current scan or import is being stopped."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is disconnected. Your imported data has been kept."
+msgstr "Google Health is disconnected. Your imported data has been kept."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "<0/>Disconnecting…"
+msgstr "<0/>Disconnecting…"
+
+#: src/lib/stores/realtime-store.svelte.ts
+msgid "Real-time data unavailable"
+msgstr "Real-time data unavailable"
+
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "Glucose units"
+msgstr "Glucose units"
+
+#: src/lib/components/meals/MealBolusDialog.svelte
+msgid "Edit bolus"
+msgstr "Edit bolus"
+
+#: src/lib/components/meals/MealBolusDialog.svelte
+msgid "Delete bolus"
+msgstr "Delete bolus"
+
+#: src/routes/(authenticated)/reports/+layout.svelte
+msgid "Unable to load the complete report. Please try again before printing."
+msgstr "Unable to load the complete report. Please try again before printing."
+
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "Some year data could not be loaded."
+msgstr "Some year data could not be loaded."
+
+#. 0: year
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "Retry {0}"
+msgstr "Retry {0}"
+
+#. 0: year
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "Scroll to load {0} data"
+msgstr "Scroll to load {0} data"
+
+#: src/routes/(authenticated)/reports/year-overview/+page.svelte
+msgid "This overview is incomplete. Use the report's Print button to load all years before printing."
+msgstr "This overview is incomplete. Use the report's Print button to load all years before printing."
+
+#: src/routes/(authenticated)/reports/year-overview/YearOverview.test-harness.svelte
+msgid "Prepare print"
+msgstr "Prepare print"
+
+#: src/routes/(authenticated)/clock/config/[id]/+page.svelte
+msgid "Failed to reset clock face"
+msgstr "Failed to reset clock face"
+
+#: src/lib/components/layout/UserMenuHarness.test.svelte
+msgid "Guest User"
+msgstr "Guest User"
+
+#. 0: jobStatus.completedConnectors; 1: jobStatus.totalConnectors
+#: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
+msgid "{0} / {1} processed"
+msgstr "{0} / {1} processed"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Another Google Health import is already running. The inventory will be available when it finishes; refresh this page afterwards."
+msgstr "Another Google Health import is already running. The inventory will be available when it finishes; refresh this page afterwards."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nocturne downloaded the data, but could not store it locally. Retry the same range; if it persists, use the technical stage from the server log."
+msgstr "Nocturne downloaded the data, but could not store it locally. Retry the same range; if it persists, use the technical stage from the server log."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Scanning the selected history in Google Health… The catalog remains available while the inventory is loading."
+msgstr "Scanning the selected history in Google Health… The catalog remains available while the inventory is loading."

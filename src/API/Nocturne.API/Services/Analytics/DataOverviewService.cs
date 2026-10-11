@@ -427,16 +427,12 @@ public class DataOverviewService : IDataOverviewService
     /// </summary>
     private const int EHbA1cWindowDays = 90;
 
-    private const int EHbA1cMaximumWindowDays = 120;
-
-    private const int ShortComparisonWindowDays = 14;
     /// <summary>
     /// Minimum raw (unweighted) reading count across the trailing window before a day's estimate is
     /// trusted enough to emit — otherwise a handful of finger-sticks could swing the estimate wildly.
     /// </summary>
     private const int EHbA1cMinimumReadings = 30;
 
-    private const int EHbA1cMinimumDaysWithData = 30;
     /// <summary>
     /// Per-day decay ratio for the recency weighting: the largest <c>r &lt; 1</c> such that the most
     /// recent 30 days already carry half of the full 90-day weight — a smooth, per-day generalisation
@@ -447,7 +443,6 @@ public class DataOverviewService : IDataOverviewService
     /// </summary>
     private static readonly double EHbA1cDailyDecay = Math.Pow((Math.Sqrt(5) - 1) / 2, 1.0 / 30.0);
 
-    private static readonly double HalfLife30DailyDecay = Math.Pow(0.5, 1.0 / 30.0);
     /// <inheritdoc />
     /// <remarks>
     /// A failed SensorGlucose query fails the request rather than falling back to MeterGlucose.
@@ -470,7 +465,7 @@ public class DataOverviewService : IDataOverviewService
         var sourceKey = dataSources is { Length: > 0 }
             ? string.Join(",", dataSources.OrderBy(s => s, StringComparer.OrdinalIgnoreCase))
             : "all";
-        var cacheKey = $"ehba1c:v4:{TenantCacheId}:{year}:{sourceKey}";
+        var cacheKey = $"ehba1c:{TenantCacheId}:{year}:{sourceKey}";
 
         // Computed once per tenant/year/source combination and reused until it expires below —
         // only a cache miss (new day, first view, or expiry) triggers recomputation.
@@ -488,7 +483,7 @@ public class DataOverviewService : IDataOverviewService
 
         var localYearStart = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
         var localYearEnd = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
-        var localRangeStart = localYearStart.AddDays(-EHbA1cMaximumWindowDays);
+        var localRangeStart = localYearStart.AddDays(-EHbA1cWindowDays);
 
         var lookbackStartUtc = TimeZoneInfo.ConvertTimeToUtc(localRangeStart, tz);
         var yearEndUtc = TimeZoneInfo.ConvertTimeToUtc(localYearEnd, tz);
@@ -521,7 +516,7 @@ public class DataOverviewService : IDataOverviewService
             _logger.LogWarning(ex, "Failed to collect MeterGlucose for eHbA1c timeline {Year}", year);
         }
 
-        // Dense per-local-day buckets spanning the maximum lookback plus the target year, so the
+        // Dense per-local-day buckets spanning the 90-day lookback plus the target year, so the
         // rolling window below is a single O(n) pass rather than a per-day re-scan.
         var totalDays = (int)(localYearEnd - localRangeStart).TotalDays;
         var dailySum = new double[totalDays];
@@ -546,6 +541,7 @@ public class DataOverviewService : IDataOverviewService
         // Caching a partial timeline would blank the missing source for the whole expiry below.
         if (!allSourcesRead)
             return response;
+
         var isCurrentYear = year == localNow.Year;
         // Completed years don't change (barring rare backfills), so cache them for a long time; the
         // current year is still accumulating days, so refresh it more often.
@@ -580,45 +576,30 @@ public class DataOverviewService : IDataOverviewService
     {
         var totalDays = dailySum.Length;
 
-        var prefixGlucoseSum = new double[totalDays + 1];
-        var prefixCount = new int[totalDays + 1];
+        // Prefix sums for the *raw* (unweighted) window — used only to gate whether a day has
+        // enough data, independent of the recency weighting below.
+        var prefixSum = new int[totalDays + 1];
         var prefixDaysWithData = new int[totalDays + 1];
         for (var i = 0; i < totalDays; i++)
         {
-            prefixGlucoseSum[i + 1] = prefixGlucoseSum[i] + dailySum[i];
-            prefixCount[i + 1] = prefixCount[i] + dailyCount[i];
+            prefixSum[i + 1] = prefixSum[i] + dailyCount[i];
             prefixDaysWithData[i + 1] = prefixDaysWithData[i] + (dailyCount[i] > 0 ? 1 : 0);
         }
 
         var weightedSum = new double[totalDays];
         var weightedCount = new double[totalDays];
-        var halfLifeSum = new double[totalDays];
-        var halfLifeCount = new double[totalDays];
-        var linearSum = new double[totalDays];
-        var linearCount = new double[totalDays];
-        var rWindow = Math.Pow(EHbA1cDailyDecay, windowDays);
-        var halfLifeWindow = Math.Pow(HalfLife30DailyDecay, windowDays);
+        var r = EHbA1cDailyDecay;
+        var rWindow = Math.Pow(r, windowDays);
         for (var i = 0; i < totalDays; i++)
         {
             var prevWeightedSum = i > 0 ? weightedSum[i - 1] : 0.0;
             var prevWeightedCount = i > 0 ? weightedCount[i - 1] : 0.0;
-            var prevHalfLifeSum = i > 0 ? halfLifeSum[i - 1] : 0.0;
-            var prevHalfLifeCount = i > 0 ? halfLifeCount[i - 1] : 0.0;
-            var prevLinearSum = i > 0 ? linearSum[i - 1] : 0.0;
-            var prevLinearCount = i > 0 ? linearCount[i - 1] : 0.0;
             var agedOutIndex = i - windowDays;
             var agedOutSum = agedOutIndex >= 0 ? dailySum[agedOutIndex] : 0.0;
             var agedOutCount = agedOutIndex >= 0 ? dailyCount[agedOutIndex] : 0;
-            var previousWindowStart = Math.Max(0, i - windowDays);
-            var previousWindowSum = prefixGlucoseSum[i] - prefixGlucoseSum[previousWindowStart];
-            var previousWindowCount = prefixCount[i] - prefixCount[previousWindowStart];
 
-            weightedSum[i] = dailySum[i] + EHbA1cDailyDecay * prevWeightedSum - rWindow * agedOutSum;
-            weightedCount[i] = dailyCount[i] + EHbA1cDailyDecay * prevWeightedCount - rWindow * agedOutCount;
-            halfLifeSum[i] = dailySum[i] + HalfLife30DailyDecay * prevHalfLifeSum - halfLifeWindow * agedOutSum;
-            halfLifeCount[i] = dailyCount[i] + HalfLife30DailyDecay * prevHalfLifeCount - halfLifeWindow * agedOutCount;
-            linearSum[i] = windowDays * dailySum[i] + prevLinearSum - previousWindowSum;
-            linearCount[i] = windowDays * dailyCount[i] + prevLinearCount - previousWindowCount;
+            weightedSum[i] = dailySum[i] + r * prevWeightedSum - rWindow * agedOutSum;
+            weightedCount[i] = dailyCount[i] + r * prevWeightedCount - rWindow * agedOutCount;
         }
 
         var points = new List<EHbA1cPoint>();
@@ -637,42 +618,20 @@ public class DataOverviewService : IDataOverviewService
                 continue;
 
             var windowStart = Math.Max(0, i - windowDays + 1);
-            var rawCount = prefixCount[i + 1] - prefixCount[windowStart];
+            var rawCount = prefixSum[i + 1] - prefixSum[windowStart];
             if (rawCount < EHbA1cMinimumReadings)
                 continue;
 
             var daysWithData = prefixDaysWithData[i + 1] - prefixDaysWithData[windowStart];
-            if (daysWithData < EHbA1cMinimumDaysWithData)
-                continue;
-
             var weightedMeanMgdl = weightedSum[i] / weightedCount[i];
-            var linearMean = linearSum[i] / linearCount[i];
-            var halfLifeMean = halfLifeSum[i] / halfLifeCount[i];
-            var unweightedMean = RangeMean(prefixGlucoseSum, prefixCount, i - windowDays + 1, i);
-            var weighted120Mean = WeightedBlockMean(prefixGlucoseSum, prefixCount, i);
-            var unweighted14Mean = RangeMean(
-                prefixGlucoseSum,
-                prefixCount,
-                i - ShortComparisonWindowDays + 1,
-                i
-            );
+            // ADAG-derived eA1C formula (Nathan et al., 2008): %A1C = (mean mg/dL + 46.7) / 28.7.
+            var estimatedA1c = (weightedMeanMgdl + 46.7) / 28.7;
 
             points.Add(
                 new EHbA1cPoint
                 {
                     Date = rangeStart.AddDays(i).ToString("yyyy-MM-dd"),
-                    EstimatedA1cPercent = Math.Round(ToAdagPercent(weightedMeanMgdl), 2),
-                    Linear90DayPercent = Math.Round(ToAdagPercent(linearMean), 2),
-                    HalfLife30DayPercent = Math.Round(ToAdagPercent(halfLifeMean), 2),
-                    Unweighted90DayPercent = unweightedMean.HasValue
-                        ? Math.Round(ToAdagPercent(unweightedMean.Value), 2)
-                        : null,
-                    Weighted120DayPercent = weighted120Mean.HasValue
-                        ? Math.Round(GlucoseStatistics.EstimatedA1C(weighted120Mean.Value), 2)
-                        : null,
-                    Unweighted14DayPercent = unweighted14Mean.HasValue
-                        ? Math.Round(ToAdagPercent(unweighted14Mean.Value), 2)
-                        : null,
+                    EstimatedA1cPercent = Math.Round(estimatedA1c, 2),
                     WeightedAverageGlucoseMgdl = Math.Round(weightedMeanMgdl, 1),
                     ReadingCount = rawCount,
                     DaysWithData = daysWithData,
@@ -683,44 +642,6 @@ public class DataOverviewService : IDataOverviewService
         return points.ToArray();
     }
 
-    private static double ToAdagPercent(double meanMgdl) => GlucoseStatistics.EstimatedA1C(meanMgdl);
-
-    private static double? RangeMean(double[] sums, int[] counts, int from, int to)
-    {
-        var start = Math.Max(0, from);
-        var count = counts[to + 1] - counts[start];
-        return count > 0 ? (sums[to + 1] - sums[start]) / count : null;
-    }
-
-    private static double? WeightedBlockMean(double[] sums, int[] counts, int end)
-    {
-        var recentSum = RangeTotal(sums, end - 29, end);
-        var recentCount = RangeTotal(counts, end - 29, end);
-        var middleSum = RangeTotal(sums, end - 59, end - 30);
-        var middleCount = RangeTotal(counts, end - 59, end - 30);
-        var olderSum = RangeTotal(sums, end - 119, end - 60);
-        var olderCount = RangeTotal(counts, end - 119, end - 60);
-        var weightedCount = 4 * recentCount + 2 * middleCount + olderCount;
-        return weightedCount > 0
-            ? (4 * recentSum + 2 * middleSum + olderSum) / weightedCount
-            : null;
-    }
-
-    private static double RangeTotal(double[] prefix, int from, int to)
-    {
-        if (to < 0)
-            return 0;
-        var start = Math.Max(0, from);
-        return prefix[to + 1] - prefix[start];
-    }
-
-    private static int RangeTotal(int[] prefix, int from, int to)
-    {
-        if (to < 0)
-            return 0;
-        var start = Math.Max(0, from);
-        return prefix[to + 1] - prefix[start];
-    }
     /// <summary>
     /// Strips CR/LF from a caller-supplied value before it reaches a log message, so a crafted
     /// data-source name cannot forge additional log lines (CWE-117 log injection).

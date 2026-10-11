@@ -102,25 +102,6 @@ public class EHbA1cPoint
     [JsonPropertyName("estimatedA1cPercent")]
     public double EstimatedA1cPercent { get; set; }
 
-    /// <summary>ADAG estimate using linear daily weights 90 through 1 over 90 days.</summary>
-    [JsonPropertyName("linear90DayPercent")]
-    public double? Linear90DayPercent { get; set; }
-
-    /// <summary>ADAG estimate using exponential weighting with a 30-day half-life.</summary>
-    [JsonPropertyName("halfLife30DayPercent")]
-    public double? HalfLife30DayPercent { get; set; }
-
-    /// <summary>ADAG estimate using an unweighted mean over the trailing 90 days.</summary>
-    [JsonPropertyName("unweighted90DayPercent")]
-    public double? Unweighted90DayPercent { get; set; }
-
-    /// <summary>ADAG estimate using a 120-day 50/25/25 recency model.</summary>
-    [JsonPropertyName("weighted120DayPercent")]
-    public double? Weighted120DayPercent { get; set; }
-
-    /// <summary>ADAG estimate using an unweighted mean over the trailing 14 days.</summary>
-    [JsonPropertyName("unweighted14DayPercent")]
-    public double? Unweighted14DayPercent { get; set; }
     [JsonPropertyName("weightedAverageGlucoseMgdl")]
     public double WeightedAverageGlucoseMgdl { get; set; }
 

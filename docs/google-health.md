@@ -5,22 +5,23 @@ The connector requests read-only Google access and writes steps, heart rate,
 body weight and sleep directly to Nocturne's existing health histories. It does
 not introduce a separate health database or provide treatment recommendations.
 
-## Database deployment
+## Storage and first installation
 
-Deployment applies two EF Core migrations for reconciliation staging in the
-existing database. They create `google_health_reconciliation_runs` and
-`google_health_reconciliation_ids`, followed by tenant row-level security,
-cascading cleanup of staged IDs and an index for expiring abandoned runs.
-These tables hold temporary import administration, not native health histories.
+Google Health uses Nocturne's existing tenant-scoped health tables and encrypted
+connector settings. It adds no database tables, schema changes or EF migrations.
+There is no upgrade or repair path for earlier experimental Google Health builds.
 
-If the initial migration is not registered but either staging table already
-exists, it warns in the migration log and recreates only these two tables in
-the migration transaction. Staged IDs from an interrupted import are discarded;
-retrying the import rebuilds them. Native health data, connector credentials and
-settings are not removed. Unexpected external dependencies prevent replacement
-and roll back the transaction; the migration never uses `DROP ... CASCADE`.
-Already registered migrations are skipped on upgrades and restarts, so existing
-staging is not routinely reset. Back up the database before upgrading.
+During each import, reconciliation keeps only identifiers in the scoped writer's
+memory. Native services upsert records using stable identifiers. Cleanup runs in
+a transaction only after every page of that data type has been read and written
+successfully. Empty results preserve existing data. A cancelled or interrupted
+run discards its temporary identifiers without deleting history; its persisted
+cursor is not advanced, and the same window can be retried safely after restart.
+The identifier set and existing-record comparison are capped at 100,000 records
+per type and window. Reaching that limit retries the same period in smaller
+windows, down to one day, for both live catch-up and historical imports. A
+one-day period that still exceeds the limit fails explicitly without advancing
+the cursor.
 
 ## Google Cloud setup
 
@@ -31,6 +32,25 @@ staging is not routinely reset. Back up the database before upgrading.
    `/settings/connectors/google-health/callback`.
 5. Enter the client ID and secret, choose an import start date, and sign in to Google.
 6. Review the inventory, select supported data types, and choose **Save selection and import**.
+
+### Use your own test connector
+
+For testing, create the OAuth client in a Google Cloud project that you control;
+do not reuse a maintainer's client. Add the Google account that will be tested as
+a test user on the OAuth consent screen while the project is in testing mode.
+The client ID, client secret and refresh token are then stored in the Nocturne
+tenant's encrypted connector configuration. The browser completes the
+authorization-code flow with PKCE, and the connector uses the resulting token to
+read only the Google Health scopes granted by that account.
+
+The connector calls Google Health from the Nocturne server and writes the
+selected records to that server's existing tenant-scoped health histories. It
+does not send the imported records to a shared Nocturne service, the maintainer's
+Google project or Nightscout. When you run a private or test deployment, the
+imported data therefore remains in that deployment and its database, subject to
+the operators who administer that server. Use HTTPS and normal tenant access
+controls, and revoke the Google grant in Google Account security if the test
+deployment is discarded.
 
 Secrets use Nocturne's encrypted connector configuration. OAuth authorization
 uses state and PKCE validation. Google test-mode grants may expire after seven
@@ -45,19 +65,34 @@ by Google and covered by the granted scopes can be imported.
   Clearing the selection pauses imports without removing the connection or data.
 - **Save selection and import** queues a manual import. Leaving the page does not
   cancel the server-side operation. **Sync now** retries the current selection.
-- Automatic synchronization normally runs every 15 minutes. After a successful
-  import it resumes from the stored watermark with a five-minute overlap; without
-  a watermark it uses the configured history window. An older backfill never moves
-  the watermark backwards. The initial import date is consumed after its successful
-  manual import.
+- Automatic synchronization normally runs every 15 minutes. Every managed run
+  refreshes today's live window first, then imports one older calendar month
+  towards the requested start date. This keeps current data flowing while a
+  multi-year history is filled gradually. If a historical window is too large,
+  times out, is rate limited, or cannot be written locally, the next attempt
+  halves it automatically (for example 30, 15, 7, 3, then 1 day); once the
+  smaller window succeeds, whole calendar months are used again. The cursor and
+  retry size are persisted, so a restart resumes at the visible date instead of
+  starting over. The page reports the oldest synchronized date under
+  **Historical import progress**.
+- After the live portion succeeds, its watermark resumes with a five-minute
+  overlap. An older backfill never moves that watermark backwards. The explicit
+  import start date is consumed only after the backfill actually reaches it.
 - Each type is read page by page and written through its native Nocturne service.
   The maximum is 10,000 pages per type and operation; reaching the limit fails
   explicitly instead of reporting an incomplete history as complete.
-- The page-by-page reader and reconciliation staging are the same bounded import
+- The page-by-page reader and reconciliation are the same bounded import
   path used by the connector integration; Google Health does not maintain a
-  second, competing chunking implementation. Each page is written before the
-  next one is requested, so large histories do not have to fit in one request or
-  one in-memory batch.
+  second, competing chunking implementation. Steps, weight and sleep pages are
+  written before the next page is requested. Heart-rate pages are the exception:
+  their samples are accumulated into UTC-minute buckets across the current
+  window so averages remain deterministic across page boundaries, then the
+  resulting readings are written after pagination completes. The 100,000 unique
+  identifier cap also bounds those staged minute buckets; oversized windows are
+  split into smaller periods before the accumulator can grow without bound.
+- Google Health commonly returns near-continuous heart-rate samples. Reducing
+  them to one stable average reading per UTC minute keeps native history and
+  reports responsive while preserving an idempotent value for every minute.
 - An empty result is not an error and is not converted into a zero measurement.
   Unsupported destinations are shown in the inventory but cannot be selected.
 - Disconnecting keeps imported data. Deleting imported Google data is a separate,
@@ -81,9 +116,9 @@ the rest of the application. When copy is added or moved, run the Wuchale
 extraction and keep every locale's `msgstr` non-empty; the lightweight
 `google-health-translations.test.js` check compiles representative production
 strings for every locale and verifies that `{0}` and `<0/>` placeholders are
-preserved. Product names such as **Google Health** and **eHbA1c** remain
-unchanged where the translation service would otherwise split or translate the
-name.
+preserved. Product names such as **Google Health**, **Google Cloud**, **Fitbit**,
+**Nocturne**, and **eHbA1c** remain unchanged where the translation service
+would otherwise split or translate the name.
 
 Sleep uses the session's **end time**, as required by the
 [Google Health filter contract](https://developers.google.com/health/filters).
@@ -91,6 +126,13 @@ The lower time boundary is inclusive and the upper boundary exclusive. A night
 starting before the requested range is included when it ends inside that range,
 with its stages intact. Local filtering and reconciliation use the same window.
 Use **Refresh inventory** to rescan availability after a failed inventory request.
+
+The settings page treats the server capability catalogue as authoritative. If a
+preview is partial (for example while Google is still scanning a large history),
+categories such as **Vitals** and **Body measurement** remain visible and the
+missing rows are labelled **Not scanned**. This is different from **No
+permission** or **Not yet supported**: it means the row can be selected, but the
+latest inventory response did not include a count yet.
 
 Completed types are reconciled within their requested windows. Native source
 identifiers support repeat imports and updates. Reconciliation is scoped to Google
@@ -107,9 +149,58 @@ stages, not record-count completion or estimated time remaining. Errors expose a
 technical code and, where applicable, HTTP status. Use those with the API-server
 log; do not share credentials or health data.
 
+Manual and scheduled imports share the connector's tenant-wide run guard. If a
+scheduled run already owns that slot, **Sync now** reports the request as
+already running and continues polling the server status instead of presenting a
+provider failure. A second import is never started just to satisfy the button
+press.
+
+Local storage failures are reported as `internal_sync_native_write:<data-type>`
+with a stage such as `native_write` or `native_reconciliation_complete`. This
+distinguishes a database/reconciliation problem from a Google permission or
+OAuth problem and causes the next historical attempt to use a smaller window.
+
+The inventory preview uses the same guard but waits only briefly for an active
+import. If the slot remains occupied, the page stops the spinner and explains
+that the inventory can be refreshed after the import completes. This prevents a
+long-running historical import from leaving the settings page in an indefinite
+“Scanning inventory” state.
+
+The heart-rate actogram is a presentation view, not the source of truth. The
+report query averages readings into one UTC-minute point in PostgreSQL before
+serializing the response. Raw heart-rate rows remain available to the health
+history and day-level views, so this optimisation reduces browser payload and
+chart work without discarding measurements. This directly addresses the high
+volume report case tracked in [Nightscout issue #1359](https://github.com/nightscout/nocturne/issues/1359).
+
 ## Verification limits
 
 Automated tests cover authorization, filters, pagination, native writes,
 reconciliation, repeated imports, progress and failure handling using synthetic
 data. They do not authorize a live Google account or prove availability of every
 device's data. Real consent and account-specific imports require runtime testing.
+
+## API replicas and import safety
+
+API replicas sharing the same PostgreSQL database and connector encryption key
+can handle different requests in one Google Health connection flow. The PKCE
+verifier and expiring OAuth state use encrypted connector storage. PostgreSQL
+session locks serialize token refresh, imports, settings changes, disconnect,
+and purge per tenant. Each replica processes up to four manual imports concurrently
+for different tenants while holding each worker claim until the import finishes.
+
+Manual requests and progress use the existing `sync_cursors` column. Workers
+receive PostgreSQL notifications when requests are durably queued; one worker
+owns each request. Tenant-pinned recovery scans run at startup, on listener
+reconnection, and every 15 minutes to recover missed notifications. An
+interrupted worker releases its database session lock, allowing another replica
+to retry the request from the unchanged cursor. Live and historical resume state
+is saved without treating it as a user configuration change.
+
+A malformed measurement or sleep session fails that type's import before
+destructive reconciliation. Earlier successfully written pages remain available,
+and the cursor does not advance. Retrying a complete response preserves stable
+native identifiers. Explicit purge permanently deletes only the current tenant's
+Google Health records, including old tombstones, and clears all resume state
+before releasing the account binding. This permits a replacement account to
+import readings with overlapping identifiers.

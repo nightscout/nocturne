@@ -1683,7 +1683,7 @@ public class DataOverviewServiceTests : IDisposable
     public async Task GetEHbA1cTimelineAsync_MeterGlucoseQueryFails_ReturnsSensorPointsUncached()
     {
         _interceptors = [EntityQueryFailure.For(nameof(MeterGlucoseEntity))];
-        await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0, daily: true);
+        await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
 
         var result = await _service.GetEHbA1cTimelineAsync(2025);
 
@@ -1697,7 +1697,7 @@ public class DataOverviewServiceTests : IDisposable
     public async Task GetEHbA1cTimelineAsync_SensorGlucoseQueryFails_ThrowsRatherThanUsingFingersticks()
     {
         _interceptors = [EntityQueryFailure.For(nameof(SensorGlucoseEntity))];
-        await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0, daily: true);
+        await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
 
         var timeline = () => _service.GetEHbA1cTimelineAsync(2025);
 
@@ -1709,7 +1709,7 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetEHbA1cTimelineAsync_NoCgmData_EstimatesFromFingersticks()
     {
-        await using var _ = await SeedGlucoseAsync(sensorMgdl: null, meterMgdl: 154.0, daily: true);
+        await using var _ = await SeedGlucoseAsync(sensorMgdl: null, meterMgdl: 154.0);
 
         var result = await _service.GetEHbA1cTimelineAsync(2025);
 
@@ -1836,7 +1836,7 @@ public class DataOverviewServiceTests : IDisposable
     /// InMemory store, so seeding goes through one that shares <see cref="_interceptors"/>.
     /// </summary>
     private async Task<NocturneDbContext> SeedGlucoseAsync(
-        double? sensorMgdl, double? meterMgdl, int readings = 30, bool daily = false)
+        double? sensorMgdl, double? meterMgdl, int readings = 30)
     {
         var seed = TestDbContextFactory.CreateInMemoryContext(_dbName, _interceptors);
         seed.TenantId = TenantId;
@@ -1848,7 +1848,7 @@ public class DataOverviewServiceTests : IDisposable
                 seed.SensorGlucose.Add(new SensorGlucoseEntity
                 {
                     Id = Guid.NewGuid(),
-                    Timestamp = daily ? start.AddDays(i) : start.AddHours(i),
+                    Timestamp = start.AddHours(i),
                     Mgdl = sensor,
                     DataSource = "dexcom"
                 });
@@ -1858,7 +1858,7 @@ public class DataOverviewServiceTests : IDisposable
                 seed.MeterGlucose.Add(new MeterGlucoseEntity
                 {
                     Id = Guid.NewGuid(),
-                    Timestamp = daily ? start.AddDays(i) : start.AddHours(i),
+                    Timestamp = start.AddHours(i),
                     Mgdl = meter,
                     DataSource = "meter"
                 });

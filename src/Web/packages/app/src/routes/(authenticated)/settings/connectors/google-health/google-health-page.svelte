@@ -26,6 +26,7 @@
   } from "$lib/components/ui/card";
   import {
     describeGoogleHealthError,
+    isGoogleHealthAlreadyRunningError,
     type GoogleHealthOperation,
   } from "$lib/connectors/google-health-error";
   import { lastSeen } from "$lib/utils/formatting";
@@ -52,6 +53,11 @@
     inventoryBusy = $state(false),
     message = $state(""),
     notice = $state("");
+  let localDisconnecting = $state(false);
+  const disconnecting = $derived(
+    localDisconnecting || !!status?.isDisconnecting
+  );
+  let inventoryGeneration = 0;
   let expandedGroups = $state<Record<string, boolean>>({});
   let purgeDialogOpen = $state(false);
   const patientRecordQuery = getPatientRecord();
@@ -65,30 +71,99 @@
     "body-weights": "Weight history",
     "sleep-sessions": "Sleep history",
   };
-  const categoryOrder = [
-    "Vitals",
-    "Activity",
-    "Body measurement",
-    "Nutrition",
-    "Sleep",
-    "Cycle tracking",
-  ];
+  // Capability.category is a stable server/API key. Keep it separate from the
+  // translated label shown to users; comparing against translated strings
+  // makes categories disappear in locales such as Dutch (where "Vitals" and
+  // "Body measurement" are translated).
+  // Use identifier-shaped keys for the internal category IDs. Wuchale treats
+  // a quoted key that is also a translatable message (for example
+  // "Body measurement") as translated text, which would change the key and
+  // make it stop matching Capability.category in non-English locales. The
+  // normalised comparison below keeps these IDs stable while labels remain
+  // translated for users.
+  const categoryMeta: Record<string, { label: string; hideForMale?: boolean }> =
+    {
+      Vitals: { label: "Vitals" },
+      Activity: { label: "Activity" },
+      BodyMeasurement: { label: "Body measurement" },
+      Nutrition: { label: "Nutrition" },
+      Sleep: { label: "Sleep" },
+      CycleTracking: { label: "Cycle tracking", hideForMale: true },
+    };
+  const categoryOrder = Object.keys(categoryMeta);
+  const dataTypeLabels: Record<string, string> = {
+    steps: "Steps",
+    heartrate: "Heart rate",
+    weight: "Weight",
+    sleep: "Sleep sessions and stages",
+    activeenergyburned: "Active energy burned",
+    totalcalories: "Total calories",
+    distance: "Distance",
+    floors: "Floors",
+    exercise: "Workouts",
+    bodyfat: "Body fat",
+    height: "Height",
+    nutritionlog: "Nutrition log",
+    hydrationlog: "Hydration",
+    bloodglucose: "Blood glucose",
+    oxygensaturation: "Oxygen saturation",
+    heartratevariability: "Heart rate variability",
+    dailyrestingheartrate: "Resting heart rate",
+    dailyoxygensaturation: "Daily oxygen saturation",
+    dailyrespiratoryrate: "Daily respiratory rate",
+    respiratoryratesleepsummary: "Sleep respiratory rate",
+    corebodytemperature: "Core body temperature",
+    menstrualperiod: "Menstrual period",
+    ovulationtest: "Ovulation test",
+    cervicalmucus: "Cervical mucus",
+    sexualactivity: "Sexual activity",
+  };
+  function dataTypeLabel(type: string | null | undefined) {
+    return (
+      dataTypeLabels[(type ?? "").replaceAll("-", "")] ?? "Unknown data type"
+    );
+  }
+  const categoryKey = (category: string | null | undefined) =>
+    (category ?? "").replace(/[^a-z]/gi, "").toLowerCase();
   const categoryGroups = $derived.by(() => {
     const capabilities = status?.capabilities ?? [];
     const items = preview?.items ?? [];
     return categoryOrder
-      .filter((category) => !(isMale && category === "Cycle tracking"))
+      .filter((category) => !(isMale && categoryMeta[category]?.hideForMale))
       .map((category) => {
-        const entries = items
-          .map((item) => ({
-            item,
-            capability: capabilities.find(
-              (entry) => entry.dataType === item.dataType
-            ),
-          }))
-          .filter((entry) => entry.capability?.category === category);
+        // The server catalog is authoritative for what Nocturne can handle.
+        // A slow, timed-out, or older inventory response may omit a type; do
+        // not make its whole category disappear while the server advertises it.
+        const entries = capabilities
+          .filter(
+            (
+              capability
+            ): capability is typeof capability & { dataType: string } =>
+              categoryKey(capability.category) === categoryKey(category) &&
+              !!capability.dataType
+          )
+          .map((capability) => {
+            const item = items.find(
+              (candidate) => candidate.dataType === capability.dataType
+            );
+            return {
+              capability,
+              inventoryMissing: !item,
+              item: item ?? {
+                dataType: capability.dataType,
+                granted:
+                  status?.grantedTypes?.includes(capability.dataType) ?? false,
+                count: 0,
+                supported: capability.supported,
+              },
+            };
+          });
         return {
           category,
+          // Keep the DOM/test identifier on the server's stable category
+          // value; the internal identifier is intentionally locale-neutral.
+          testId: entries[0]?.capability.category ?? category,
+          label: categoryMeta[category]?.label ?? category,
           entries,
           selectedCount: entries.filter((entry) =>
             selected.includes(entry.item.dataType ?? "")
@@ -132,6 +207,8 @@
       "Google's request limit was reached. Nocturne will retry later.",
     google_unavailable:
       "Google is temporarily unavailable. Existing data was preserved.",
+    already_running:
+      "Another Google Health import is already running. The inventory will be available when it finishes; refresh this page afterwards.",
     account_not_linked: "This Google account is not linked to Fitbit.",
     invalid_google_request: "Google rejected the data request.",
     preview_access_denied: "This account cannot access this API version.",
@@ -158,6 +235,8 @@
     pagination_failed: "Nocturne could not retrieve every page.",
     internal_sync:
       "Nocturne could not complete the import. Check the server log for the technical code and stage.",
+    internal_sync_native_write:
+      "Nocturne downloaded the data, but could not store it locally. Retry the same range; if it persists, use the technical stage from the server log.",
   };
   const day = (value?: string | Date | null) =>
     value ? new Date(value).toISOString().slice(0, 10) : "";
@@ -171,17 +250,37 @@
     previewOnly,
   });
   async function loadPreview() {
-    if (inventoryBusy) return;
+    if (inventoryBusy || disconnecting || !status?.connected) return;
+    const generation = ++inventoryGeneration;
+    message = "";
+    notice = "";
     inventoryBusy = true;
     try {
-      preview = await previewGoogleHealth();
+      const result = await previewGoogleHealth();
+      if (
+        generation === inventoryGeneration &&
+        !disconnecting &&
+        status?.connected
+      )
+        preview = result;
     } catch (error) {
-      message = describeGoogleHealthError(error, "readings", errors);
+      if (
+        generation !== inventoryGeneration ||
+        disconnecting ||
+        !status?.connected
+      )
+        return;
+      if (isGoogleHealthAlreadyRunningError(error)) {
+        message = "";
+        notice = errors.already_running;
+      } else {
+        message = describeGoogleHealthError(error, "readings", errors);
+      }
     } finally {
-      inventoryBusy = false;
+      if (generation === inventoryGeneration) inventoryBusy = false;
     }
   }
-  async function refresh(loadInventory = true) {
+  async function refresh() {
     operation = "status";
     status = await getGoogleHealth().run();
     clientId = status.clientId ?? "";
@@ -190,11 +289,7 @@
       `${location.origin}/settings/connectors/google-health/callback`;
     selected = status.configured ? (status.selectedTypes ?? []) : selected;
     historyDays = status.historyDays ?? 7;
-    importFrom =
-      day(status.importFrom) ||
-      day(new Date(Date.now() - (status.historyDays ?? 7) * 86400000));
-    if (status.connected && loadInventory && !status.isSyncing)
-      void loadPreview();
+    importFrom = day(status.importFrom);
   }
   async function run(action: () => Promise<unknown>) {
     busy = true;
@@ -220,13 +315,7 @@
     await saveGoogleHealth(options(false));
     try {
       if (sync && selected.length > 0) {
-        operation = "sync";
-        status = await syncGoogleHealth();
-        notice = status.isSyncing
-          ? "The import is running in the background. You can leave this page and return later."
-          : status.errorCode
-            ? ""
-            : "Google Health import completed.";
+        await syncNow();
       }
     } catch (error) {
       const failedOperation = operation;
@@ -241,19 +330,59 @@
     }
     if (!sync) await refresh();
   }
+  async function syncNow() {
+    operation = "sync";
+    try {
+      status = await syncGoogleHealth();
+      notice = status.isSyncing
+        ? "The import is running in the background. You can leave this page and return later."
+        : status.errorCode
+          ? ""
+          : "Google Health import completed.";
+    } catch (error) {
+      if (!isGoogleHealthAlreadyRunningError(error)) throw error;
+      // A scheduled run can win the tenant slot after the page's last status refresh.
+      message = "";
+      try {
+        await refresh();
+        notice =
+          "The import is running in the background. You can leave this page and return later.";
+      } catch {
+        notice = "Import status is temporarily unavailable. Retrying.";
+      }
+    }
+  }
   async function disconnect() {
     operation = "disconnect";
-    await disconnectGoogleHealth();
+    localDisconnecting = true;
+    ++inventoryGeneration;
+    inventoryBusy = false;
     preview = null;
-    await refresh();
+    notice = "";
+    try {
+      status = await disconnectGoogleHealth();
+      notice =
+        "Google Health is disconnected. Your imported data has been kept.";
+    } finally {
+      localDisconnecting = false;
+    }
   }
-  function itemStatus(item: NonNullable<GoogleHealthPreview["items"]>[number]) {
+  function itemStatus(
+    item: NonNullable<GoogleHealthPreview["items"]>[number],
+    inventoryMissing = false
+  ) {
     if (item.errorCode) return `Read failed (${item.errorCode})`;
-    if (!item.supported)
-      return (
-        status?.capabilities?.find((entry) => entry.dataType === item.dataType)
-          ?.unavailableReason ?? "Not yet supported by Nocturne"
-      );
+    if (!item.supported) {
+      const reason = status?.capabilities?.find(
+        (entry) => entry.dataType === item.dataType
+      )?.unavailableReason;
+      if (reason === "readonly_scope_unavailable")
+        return "Google Health currently provides no read-only scope for this type.";
+      if (reason === "readable_type_unavailable")
+        return "Not exposed as a readable Google Health API data type.";
+      return "Not yet supported by Nocturne";
+    }
+    if (inventoryMissing) return "Not scanned";
     if (!item.granted) return "Permission not granted";
     if (
       !status?.previewRequired &&
@@ -281,7 +410,7 @@
       return "Refreshing the Google session";
     if (status.syncPhase === GoogleHealthSyncPhase.Reading)
       return status.syncDataType
-        ? `Reading ${status.capabilities?.find((entry) => entry.dataType === status?.syncDataType)?.displayName ?? status.syncDataType}`
+        ? `Reading ${dataTypeLabel(status.syncDataType)}`
         : "Reading Google Health data";
     if (status.syncPhase === GoogleHealthSyncPhase.Validating)
       return "Validating the downloaded data";
@@ -289,23 +418,39 @@
       return "Updating Nocturne health records";
     return "Preparing the import";
   }
-onMount(() => {
+  onMount(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     async function pollStatus() {
       try {
-        if (!busy) {
+        if (!busy || localDisconnecting) {
           const wasSyncing = status?.isSyncing;
+          const previousImportFrom = status?.importFrom;
           const next = await getGoogleHealth().run();
           if (disposed) return;
           status = next;
-          if (notice === "Import status is temporarily unavailable. Retrying.") notice = "";
-          if (wasSyncing && !next.isSyncing) {
+          if (!next.connected) preview = null;
+          if (
+            wasSyncing &&
+            !next.isSyncing &&
+            importFrom === day(previousImportFrom)
+          )
+            importFrom = day(next.importFrom);
+          if (notice === "Import status is temporarily unavailable. Retrying.")
+            notice = "";
+          if (
+            wasSyncing &&
+            !next.isSyncing &&
+            next.connected &&
+            !disconnecting
+          ) {
             notice = next.errorCode ? "" : "Google Health import completed.";
           }
         }
       } catch {
-        if (!disposed) notice = "Import status is temporarily unavailable. Retrying.";
+        // Polling failures intentionally use the generic notice; raw remote errors are not actionable here.
+        if (!disposed)
+          notice = "Import status is temporarily unavailable. Retrying.";
       } finally {
         if (!disposed) timer = setTimeout(pollStatus, 2000);
       }
@@ -362,6 +507,12 @@ onMount(() => {
   {#if message}<p role="alert" class="rounded-lg border border-destructive p-4">
       {message}
     </p>{/if}
+  {#if disconnecting}<p
+      role="status"
+      class="rounded-lg border border-primary/40 p-4"
+    >
+      Disconnecting Google Health. The current scan or import is being stopped.
+    </p>{/if}
   {#if notice}<p role="status" class="rounded-lg border border-primary/40 p-4">
       {notice}
     </p>{/if}
@@ -410,6 +561,21 @@ onMount(() => {
       </p>
     </div>{/if}
 
+  {#if status?.connected && status.backfillSyncedThrough}<div
+      role="status"
+      class="rounded-lg border p-4"
+    >
+      <p class="font-medium">Historical import progress</p>
+      <p class="mt-1 text-sm text-muted-foreground">
+        Synchronized back through {day(status.backfillSyncedThrough)}.
+        {#if status.backfillComplete}
+          The requested history is complete.
+        {:else}
+          Each sync refreshes today and imports one older calendar month.
+        {/if}
+      </p>
+    </div>{/if}
+
   <Card>
     <CardHeader>
       <CardTitle>Connection</CardTitle><CardDescription>
@@ -426,11 +592,7 @@ onMount(() => {
           >
             <label class="block text-sm font-medium">
               Google client ID
-              <Input
-                class="mt-1 w-full"
-                required
-                bind:value={clientId}
-              />
+              <Input class="mt-1 w-full" required bind:value={clientId} />
             </label>
             <label class="block text-sm font-medium">
               Client secret
@@ -457,7 +619,6 @@ onMount(() => {
                 type="date"
                 min="2000-01-01"
                 max={day(new Date())}
-                required
                 bind:value={importFrom}
               />
             </label>
@@ -465,13 +626,15 @@ onMount(() => {
               Nocturne retrieves every available page from this date. An early
               start date can make the first import take longer.
             </p>
-            <Button type="submit" disabled={busy}>Save and connect</Button>
+            <Button type="submit" disabled={busy || disconnecting}>
+              Save and connect
+            </Button>
           </form>{:else}<p>
             The encrypted Google Cloud configuration is saved.
           </p>
           <div class="flex gap-2">
             <Button
-              disabled={busy}
+              disabled={busy || disconnecting}
               onclick={() =>
                 void run(async () => {
                   operation = "signin";
@@ -482,10 +645,14 @@ onMount(() => {
               Sign in with Google
             </Button><Button
               variant="outline"
-              disabled={busy}
+              disabled={busy || disconnecting}
               onclick={() => void run(disconnect)}
             >
-              <Unplug class="mr-2 h-4 w-4" />Disconnect
+              {#if disconnecting}<Unplug
+                  class="mr-2 h-4 w-4"
+                />Disconnecting…{:else}<Unplug
+                  class="mr-2 h-4 w-4"
+                />Disconnect{/if}
             </Button>
           </div>
           <details>
@@ -501,11 +668,7 @@ onMount(() => {
             >
               <label class="block text-sm font-medium">
                 Google client ID
-                <Input
-                  class="mt-1 w-full"
-                  required
-                  bind:value={clientId}
-                />
+                <Input class="mt-1 w-full" required bind:value={clientId} />
               </label>
               <label class="block text-sm font-medium">
                 Client secret
@@ -532,11 +695,12 @@ onMount(() => {
                   type="date"
                   min="2000-01-01"
                   max={day(new Date())}
-                  required
                   bind:value={importFrom}
                 />
               </label>
-              <Button type="submit" disabled={busy}>Save and reconnect</Button>
+              <Button type="submit" disabled={busy || disconnecting}>
+                Save and reconnect
+              </Button>
             </form>
           </details>{/if}
       {:else}
@@ -555,27 +719,23 @@ onMount(() => {
           <Button
             variant="outline"
             disabled={busy ||
+              disconnecting ||
               status.isSyncing ||
               status.previewRequired ||
               !status.selectedTypes?.length}
-            onclick={() =>
-              void run(async () => {
-                operation = "sync";
-                status = await syncGoogleHealth();
-                notice = status.isSyncing
-                  ? "The import is running in the background. You can leave this page and return later."
-                  : status.errorCode
-                    ? ""
-                    : "Google Health import completed.";
-              })}
+            onclick={() => void run(syncNow)}
           >
             <RefreshCw class="mr-2 h-4 w-4" />Sync now
           </Button><Button
             variant="outline"
-            disabled={busy || status.isSyncing}
+            disabled={busy || disconnecting}
             onclick={() => void run(disconnect)}
           >
-            <Unplug class="mr-2 h-4 w-4" />Disconnect
+            {#if disconnecting}<Unplug
+                class="mr-2 h-4 w-4"
+              />Disconnecting…{:else}<Unplug
+                class="mr-2 h-4 w-4"
+              />Disconnect{/if}
           </Button>
         </div>
       {/if}
@@ -593,7 +753,8 @@ onMount(() => {
           onsubmit={(event) => {
             event.preventDefault();
             const sync =
-              event.submitter instanceof HTMLButtonElement && event.submitter.value === "sync";
+              event.submitter instanceof HTMLButtonElement &&
+              event.submitter.value === "sync";
             void run(() => saveChanges(sync));
           }}
         >
@@ -604,8 +765,7 @@ onMount(() => {
               type="date"
               min="2000-01-01"
               max={day(new Date())}
-              required
-              disabled={busy || status.isSyncing}
+              disabled={busy || disconnecting || status.isSyncing}
               bind:value={importFrom}
             />
           </label>
@@ -614,12 +774,19 @@ onMount(() => {
             Health. Empty results are not errors. Clear all selections and save
             to pause imports; previously imported data is kept.
           </p>
-          {#if preview}<div class="space-y-3">
+          {#if categoryGroups.length > 0}<div class="space-y-3">
+              {#if inventoryBusy && !preview}
+                <p class="text-sm text-muted-foreground">
+                  Scanning the selected history in Google Health… The catalog
+                  remains available while the inventory is loading.
+                </p>
+              {/if}
               {#each categoryGroups as group (group.category)}
                 <details
                   class="overflow-hidden rounded-lg border"
-                  data-testid={`google-health-category-${group.category}`}
-                  open={expandedGroups[group.category] ?? group.hasSelectableItem}
+                  data-testid={`google-health-category-${group.testId}`}
+                  open={expandedGroups[group.category] ??
+                    group.hasSelectableItem}
                   ontoggle={(event) => {
                     expandedGroups[group.category] = event.currentTarget.open;
                   }}
@@ -627,7 +794,7 @@ onMount(() => {
                   <summary
                     class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 font-medium"
                   >
-                    <span>{group.category}</span>
+                    <span>{group.label}</span>
                     <span class="tabular-nums text-sm text-muted-foreground">
                       {group.selectedCount}/{group.entries.length} selected
                     </span>
@@ -645,20 +812,24 @@ onMount(() => {
                       </thead>
                       <tbody>
                         {#each group.entries as entry (entry.item.dataType)}
-                          {@const { item, capability } = entry}
+                          {@const { item, capability, inventoryMissing } =
+                            entry}
                           <tr class="border-b last:border-b-0">
                             <td class="p-3">
                               <Checkbox
-                                aria-label={`Import ${capability?.displayName ?? item.dataType}`}
+                                aria-label={`Import ${dataTypeLabel(item.dataType)}`}
                                 checked={selected.includes(item.dataType ?? "")}
                                 onCheckedChange={(checked) => {
                                   const dataType = item.dataType;
                                   if (!dataType) return;
                                   selected = checked
                                     ? [...selected, dataType]
-                                    : selected.filter((value) => value !== dataType);
+                                    : selected.filter(
+                                        (value) => value !== dataType
+                                      );
                                 }}
                                 disabled={busy ||
+                                  disconnecting ||
                                   status.isSyncing ||
                                   (!selected.includes(item.dataType ?? "") &&
                                     (!item.supported ||
@@ -667,18 +838,20 @@ onMount(() => {
                               />
                             </td>
                             <td class="p-3 font-medium">
-                              {capability?.displayName ?? item.dataType}
+                              {dataTypeLabel(item.dataType)}
                             </td>
                             <td class="p-3">
-                              {!item.supported
+                              {inventoryMissing
                                 ? "Not scanned"
-                                : !item.granted
-                                  ? "No permission"
-                                  : item.errorCode
-                                    ? "Scan failed"
-                                    : (item.count ?? 0) > 0
-                                      ? `Yes (${item.count})`
-                                      : "No"}
+                                : !item.supported
+                                  ? "Not scanned"
+                                  : !item.granted
+                                    ? "No permission"
+                                    : item.errorCode
+                                      ? "Scan failed"
+                                      : (item.count ?? 0) > 0
+                                        ? `Yes (${item.count})`
+                                        : "No"}
                             </td>
                             <td class="p-3">
                               {capability?.destination
@@ -686,7 +859,9 @@ onMount(() => {
                                   capability.destination)
                                 : "No destination yet"}
                             </td>
-                            <td class="p-3">{itemStatus(item)}</td>
+                            <td class="p-3">
+                              {itemStatus(item, inventoryMissing)}
+                            </td>
                           </tr>
                         {/each}
                       </tbody>
@@ -702,18 +877,27 @@ onMount(() => {
               </p>
             </div>{:else}<p>No inventory has been loaded yet.</p>{/if}
           <div class="flex flex-wrap gap-2">
-            <Button type="submit" disabled={busy || status.isSyncing}>
+            <Button
+              type="submit"
+              disabled={busy || disconnecting || status.isSyncing}
+            >
               Save import settings
             </Button><Button
               type="submit"
               value="sync"
-              disabled={busy || status.isSyncing || selected.length === 0}
+              disabled={busy ||
+                disconnecting ||
+                status.isSyncing ||
+                selected.length === 0}
             >
               Save selection and import
             </Button><Button
               type="button"
               variant="outline"
-              disabled={busy || inventoryBusy || status.isSyncing}
+              disabled={busy ||
+                disconnecting ||
+                inventoryBusy ||
+                status.isSyncing}
               onclick={() => void loadPreview()}
             >
               <RefreshCw class="mr-2 h-4 w-4" />{inventoryBusy
@@ -766,7 +950,11 @@ onMount(() => {
         Nocturne. Data stored by Google is unchanged.
       {/snippet}
       {#snippet trigger(props)}
-        <Button variant="destructive" disabled={busy} {...props}>
+        <Button
+          variant="destructive"
+          disabled={busy || disconnecting}
+          {...props}
+        >
           Delete imported Google Health data
         </Button>
       {/snippet}
@@ -777,14 +965,15 @@ onMount(() => {
       <CardHeader>
         <CardTitle>Import recovery</CardTitle>
         <CardDescription>
-          If a historical import stops or needs to be repeated, reset the Google Health connector
-          from a chosen date. The reset re-reads the range and keeps the normal duplicate protection.
+          If a historical import stops or needs to be repeated, reset the Google
+          Health connector from a chosen date. The reset re-reads the range and
+          keeps the normal duplicate protection.
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-3">
         <p class="text-sm text-muted-foreground">
-          The reset runs in the background. Platform administrators can monitor or cancel it from
-          the connector reset page.
+          The reset runs in the background. Platform administrators can monitor
+          or cancel it from the connector reset page.
         </p>
         <a
           class="inline-flex items-center rounded-md border px-3 py-2 text-sm font-medium underline-offset-4 hover:underline"

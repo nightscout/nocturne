@@ -5,6 +5,7 @@ export interface BridgeConfig {
     hubUrl: string;
     alarmHubUrl?: string;
     configHubUrl?: string;
+    /** @deprecated The bridge retries indefinitely with maxReconnectDelay as the backoff cap. */
     reconnectAttempts?: number;
     reconnectDelay?: number;
     maxReconnectDelay?: number;

@@ -15,6 +15,73 @@ namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
 
 public class GoogleHealthAuthTokenProviderTests
 {
+    public static IEnumerable<object[]> MalformedTokenFields() =>
+        from stage in new[] { "authorization_code", "token_refresh" }
+        from field in new[] { "scope", "expires_in" }
+        from value in new[] { "null", "[]", "{}", "true", "42", "\"invalid\"" }
+        where field != "scope" || value != "\"invalid\""
+        where field != "expires_in" || value != "42"
+        select new object[] { stage, field, value };
+
+    [Theory]
+    [MemberData(nameof(MalformedTokenFields))]
+    public async Task Malformed_token_fields_fail_without_granting_fallback_permissions(string stage, string field, string value)
+    {
+        var body = field == "scope"
+            ? "{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"expires_in\":3600,\"scope\":" + value + "}"
+            : "{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"expires_in\":" + value + "}";
+        var provider = CreateProvider(new StubHandler(_ => Json(body)));
+        await provider.SeedSessionAsync(new GoogleHealthTokenSession("refresh", ["scope-a"]));
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(async () =>
+        {
+            if (stage == "authorization_code")
+                await provider.ExchangeAuthorizationCodeAsync(Configuration("refresh"), "code", "verifier", ["scope-a"], default);
+            else
+                await provider.GetValidTokenAsync(Configuration("refresh"));
+        });
+        Assert.Equal("invalid_token_response", error.Message);
+        Assert.Equal(stage, error.Stage);
+        Assert.Null(await provider.GetCurrentSessionAsync());
+    }
+
+    [Theory]
+    [InlineData("authorization_code", false)]
+    [InlineData("token_refresh", false)]
+    [InlineData("authorization_code", true)]
+    [InlineData("token_refresh", true)]
+    public async Task Scope_fallback_only_applies_when_the_property_is_absent(string stage, bool empty)
+    {
+        var body = "{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"expires_in\":3600" +
+            (empty ? ",\"scope\":\"\"}" : "}");
+        var provider = CreateProvider(new StubHandler(_ => Json(body)));
+        await provider.SeedSessionAsync(new GoogleHealthTokenSession("refresh", ["scope-a"]));
+        GoogleHealthTokenSession session;
+        if (stage == "authorization_code")
+            session = await provider.ExchangeAuthorizationCodeAsync(Configuration("refresh"), "code", "verifier", ["scope-a"], default);
+        else
+        {
+            await provider.GetValidTokenAsync(Configuration("refresh"));
+            session = (await provider.GetCurrentSessionAsync())!;
+        }
+        Assert.Equal(empty ? [] : new[] { "scope-a" }, session.Scopes);
+    }
+
+    [Fact]
+    public async Task Durable_rotated_session_replaces_a_stale_replica_cache()
+    {
+        string? posted = null;
+        var provider = CreateProvider(new StubHandler(request =>
+        {
+            posted = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return Json("""{"access_token":"fresh","expires_in":3600,"token_type":"Bearer"}""");
+        }));
+        await provider.StoreSessionAsync(new GoogleHealthTokenSession("old-refresh", ["scope-a"], "cached", DateTimeOffset.UtcNow.AddHours(1)));
+        await provider.SeedSessionAsync(new GoogleHealthTokenSession("rotated-refresh", ["scope-a"]));
+        Assert.Equal("fresh", await provider.GetValidTokenAsync(Configuration("rotated-refresh")));
+        Assert.Contains("refresh_token=rotated-refresh", posted);
+        Assert.Equal("rotated-refresh", (await provider.GetCurrentSessionAsync())!.RefreshToken);
+    }
+
     [Fact]
     public async Task Refreshes_once_and_reuses_the_tenant_session()
     {

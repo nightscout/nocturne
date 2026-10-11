@@ -34,7 +34,6 @@
   <ItemGroup>
     <ProjectReference Include="../../../src/API/Nocturne.API/Nocturne.API.csproj" />
     <ProjectReference Include="../../../src/Infrastructure/Nocturne.Infrastructure.Data/Nocturne.Infrastructure.Data.csproj" />
-    <ProjectReference Include="../../../src/Infrastructure/Nocturne.Infrastructure.Data.Migrations/Nocturne.Infrastructure.Data.Migrations.csproj" />
     <ProjectReference Include="../../Shared/Nocturne.Tests.Shared/Nocturne.Tests.Shared.csproj" />
   </ItemGroup>
   <ItemGroup>

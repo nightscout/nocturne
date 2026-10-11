@@ -40,7 +40,6 @@ interface Schema {
   allOf?: Schema[];
   minLength?: number;
   maxLength?: number;
-  minItems?: number;
   maxItems?: number;
   pattern?: string;
   minimum?: number;
@@ -56,7 +55,7 @@ type Additional = Schema["additionalProperties"];
 const HANDLED_KEYWORDS = new Set([
   "type", "format", "nullable", "description", "properties", "required",
   "additionalProperties", "items", "enum", "$ref", "oneOf", "allOf",
-  "minLength", "maxLength", "minItems", "maxItems", "pattern", "minimum", "maximum",
+  "minLength", "maxLength", "maxItems", "pattern", "minimum", "maximum",
 ]);
 
 // NSwag emits JsonDocument/JsonElement as concrete objects (isDisposable,
@@ -228,7 +227,6 @@ class Generator {
       }
       case "array": {
         let expr = `z.array(${schema.items ? this.expr(schema.items, `${where}[]`) : "z.unknown()"})`;
-        if (typeof schema.minItems === "number") expr += `.min(${schema.minItems})`;
         if (typeof schema.maxItems === "number") expr += `.max(${schema.maxItems})`;
         return expr;
       }

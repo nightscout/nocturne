@@ -57,6 +57,52 @@ public class HeartRateService(
         CancellationToken cancellationToken = default
     ) => GetByDateRangeAsync(from, to, count, skip, cancellationToken);
 
+    public async Task<IEnumerable<HeartRate>> GetHeartRateMinuteAveragesByDateRangeAsync(
+        DateTime from,
+        DateTime to,
+        CancellationToken cancellationToken = default
+    )
+    {
+        // Group in PostgreSQL so a dense wearable stream does not cross the API boundary as
+        // hundreds of thousands of points. The source table remains untouched and the normal
+        // tenant/soft-delete filters on EntitySet still apply.
+        var rangeStart = from;
+        var rangeEnd = to;
+        var buckets = await (
+            from row in EntitySet.AsNoTracking()
+            where row.Timestamp >= rangeStart && row.Timestamp < rangeEnd
+            let utcTimestamp = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(row.Timestamp, "UTC")
+            group row by new
+            {
+                utcTimestamp.Year,
+                utcTimestamp.Month,
+                utcTimestamp.Day,
+                utcTimestamp.Hour,
+                utcTimestamp.Minute,
+            }
+            into minute
+            orderby minute.Key.Year, minute.Key.Month, minute.Key.Day,
+                minute.Key.Hour, minute.Key.Minute
+            select new
+            {
+                minute.Key.Year,
+                minute.Key.Month,
+                minute.Key.Day,
+                minute.Key.Hour,
+                minute.Key.Minute,
+                AverageBpm = minute.Average(row => (double)row.Bpm),
+            }).ToListAsync(cancellationToken);
+
+        return buckets.Select(bucket => new HeartRate
+        {
+            Timestamp = new DateTime(bucket.Year, bucket.Month, bucket.Day,
+                bucket.Hour, bucket.Minute,
+                0,
+                DateTimeKind.Utc),
+            Bpm = (int)Math.Round(bucket.AverageBpm, MidpointRounding.AwayFromZero),
+        });
+    }
+
     public Task<HeartRate?> GetHeartRateByIdAsync(
         string id,
         CancellationToken cancellationToken = default

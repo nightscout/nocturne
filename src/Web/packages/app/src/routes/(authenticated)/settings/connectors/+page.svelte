@@ -55,11 +55,19 @@
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import { createTerminalRunTracker } from "./terminal-run-tracker";
+  import { canManageConnectors } from "$lib/authorization/connector-management";
+  import { page } from "$app/state";
 
   // Queries — fire on the server during SSR; results land in cache for hydration.
   const servicesOverviewQuery = getServicesOverview();
   const connectorStatusesQuery = getConnectorStatuses();
-  const googleHealthQuery = getGoogleHealth();
+  const canManage = $derived(
+    canManageConnectors(
+      page.data.effectivePermissions,
+      page.data.refusedAsDemoSubject
+    )
+  );
+  const googleHealthQuery = $derived(canManage ? getGoogleHealth() : null);
 
   const servicesOverview = $derived<ServicesOverview | null>(
     servicesOverviewQuery.current ?? null,
@@ -67,10 +75,15 @@
   const connectorStatuses = $derived<ConnectorStatusDto[]>(
     connectorStatusesQuery.current ?? [],
   );
-  const googleHealth = $derived(googleHealthQuery.current ?? null);
+  const googleHealth = $derived(googleHealthQuery?.current ?? null);
+  const googleHealthLoading = $derived(googleHealthQuery?.loading ?? false);
+  const googleHealthFailed = $derived(!!googleHealthQuery?.error);
+  const hasGoogleHealthStatus = $derived(
+    !!googleHealth?.configured && !googleHealthLoading && !googleHealthFailed,
+  );
   const otherDataSources = $derived(
     (servicesOverview?.activeDataSources ?? []).filter(
-      (source) => source.sourceType !== "google-health-connector" && source.deviceId !== "google-health-connector",
+      (source) => !hasGoogleHealthStatus || (source.sourceType !== "google-health-connector" && source.deviceId !== "google-health-connector"),
     ),
   );
   const isLoading = $derived(
@@ -174,7 +187,7 @@
     await refreshQuietly(
       () => servicesOverviewQuery.refresh(),
       () => connectorStatusesQuery.refresh(),
-      () => googleHealthQuery.refresh()
+      () => googleHealthQuery?.refresh() ?? Promise.resolve()
     );
   }
 
@@ -185,7 +198,7 @@
   async function loadConnectorStatuses() {
     await refreshQuietly(
       () => connectorStatusesQuery.refresh(),
-      () => googleHealthQuery.refresh()
+      () => googleHealthQuery?.refresh() ?? Promise.resolve()
     );
   }
 
@@ -433,7 +446,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {#if !googleHealth?.configured && otherDataSources.length === 0}
+        {#if !hasGoogleHealthStatus && otherDataSources.length === 0}
           <div class="text-center py-8 text-muted-foreground">
             <WifiOff class="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p class="font-medium">No data sources detected</p>
@@ -443,7 +456,7 @@
           </div>
         {:else}
           <div class="space-y-3">
-            {#if googleHealth?.configured}
+            {#if hasGoogleHealthStatus && googleHealth}
               <GoogleHealthSourceRow connection={googleHealth} />
             {/if}
             {#each otherDataSources as source (source.id)}
@@ -511,6 +524,8 @@
           showConnectorDialog = true;
         }}
         {googleHealth}
+        {googleHealthLoading}
+        {googleHealthFailed}
       />
     </div>
 

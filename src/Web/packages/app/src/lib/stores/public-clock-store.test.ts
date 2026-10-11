@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const getGlucose = vi.fn();
-vi.mock("$lib/api/client", () => ({
-  getApiClient: () => ({ clockFaces: { getGlucose } }),
+vi.mock("$lib/api/browser-clients", () => ({
+  clockFacesClient: () => ({ getGlucose }),
 }));
 
 const { PublicClockStore } = await import("./public-clock-store.svelte");

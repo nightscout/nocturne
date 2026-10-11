@@ -17,7 +17,8 @@ public sealed class GoogleHealthException(
     string? stage = null,
     string? dataType = null,
     string? providerReason = null,
-    int? providerStatus = null) : Exception(code)
+    int? providerStatus = null,
+    Exception? innerException = null) : Exception(code, innerException)
 {
     public TimeSpan? RetryAfter { get; } = retryAfter;
     public string? Stage { get; } = stage;
@@ -58,10 +59,10 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
         new() { DataType = "daily-respiratory-rate", DisplayName = "Daily respiratory rate", Category = "Vitals", Unit = "breaths/min", RequiredScope = MetricsScope },
         new() { DataType = "respiratory-rate-sleep-summary", DisplayName = "Sleep respiratory rate", Category = "Vitals", Unit = "breaths/min", RequiredScope = MetricsScope },
         new() { DataType = "core-body-temperature", DisplayName = "Core body temperature", Category = "Vitals", Unit = "C", RequiredScope = MetricsScope },
-        new() { DataType = "menstrual-period", DisplayName = "Menstrual period", Category = "Cycle tracking", Unit = "interval", UnavailableReason = "Google Health currently provides no read-only scope for this type." },
-        new() { DataType = "ovulation-test", DisplayName = "Ovulation test", Category = "Cycle tracking", Unit = "result", UnavailableReason = "Google Health currently provides no read-only scope for this type." },
-        new() { DataType = "cervical-mucus", DisplayName = "Cervical mucus", Category = "Cycle tracking", Unit = "observation", UnavailableReason = "Not exposed as a readable Google Health API data type." },
-        new() { DataType = "sexual-activity", DisplayName = "Sexual activity", Category = "Cycle tracking", Unit = "observation", UnavailableReason = "Not exposed as a readable Google Health API data type." }
+        new() { DataType = "menstrual-period", DisplayName = "Menstrual period", Category = "Cycle tracking", Unit = "interval", UnavailableReason = "readonly_scope_unavailable" },
+        new() { DataType = "ovulation-test", DisplayName = "Ovulation test", Category = "Cycle tracking", Unit = "result", UnavailableReason = "readonly_scope_unavailable" },
+        new() { DataType = "cervical-mucus", DisplayName = "Cervical mucus", Category = "Cycle tracking", Unit = "observation", UnavailableReason = "readable_type_unavailable" },
+        new() { DataType = "sexual-activity", DisplayName = "Sexual activity", Category = "Cycle tracking", Unit = "observation", UnavailableReason = "readable_type_unavailable" }
     ];
     public static string[] SupportedTypes => Capabilities.Where(c => c.Supported).Select(c => c.DataType).ToArray();
     public static bool TryGetDataType(SyncDataType type, out string dataType) =>
@@ -130,7 +131,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             try
             {
                 using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-                if (json.RootElement.TryGetProperty("dataPoints", out var data) && data.ValueKind == JsonValueKind.Array)
+                if (json.RootElement.TryGetProperty("dataPoints", out var data))
                     count += data.GetArrayLength();
                 pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
             }
@@ -146,7 +147,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
 
     public async IAsyncEnumerable<IReadOnlyCollection<SleepSession>> ReadSleepPagesAsync(
         string token, DateTimeOffset from, DateTimeOffset to, [EnumeratorCancellation] CancellationToken ct,
-        Action<int>? onPageRead = null)
+        Func<int, Task>? onPageRead = null)
     {
         var filter = $"sleep.interval.end_time >= \"{FormatFilterTime(from)}\" AND sleep.interval.end_time < \"{FormatFilterTime(to)}\"";
         var root = $"https://health.googleapis.com/v4/users/me/dataTypes/sleep/dataPoints:reconcile?pageSize=25&filter={Uri.EscapeDataString(filter)}";
@@ -175,19 +176,13 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
                 if (json.RootElement.TryGetProperty("dataPoints", out var data))
                     foreach (var item in data.EnumerateArray())
                     {
-                        try
-                        {
-                            var session = ParseSleep(item);
-                            if (session.EndMills < from.ToUnixTimeMilliseconds() || session.EndMills >= to.ToUnixTimeMilliseconds())
-                                continue;
-                            sessions.Add(session);
-                        }
-                        catch (GoogleHealthException ex) when (ex.Message is "invalid_google_data" or "unexpected_time_range")
-                        {
-                        }
+                        var session = ParseSleep(item);
+                        if (session.EndMills < from.ToUnixTimeMilliseconds() || session.EndMills >= to.ToUnixTimeMilliseconds())
+                            continue;
+                        sessions.Add(session);
                     }
                 pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
-                onPageRead?.Invoke(page + 1);
+                if (onPageRead is not null) await onPageRead(page + 1);
             }
             catch (GoogleHealthException) { throw; }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException)
@@ -203,7 +198,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
 
     public async IAsyncEnumerable<IReadOnlyCollection<GoogleHealthReading>> ReadPagesAsync(
         string token, string type, DateTimeOffset from, DateTimeOffset to, [EnumeratorCancellation] CancellationToken ct,
-        Action<int>? onPageRead = null)
+        Func<int, Task>? onPageRead = null)
     {
         var field = type == "steps" ? "steps.interval.start_time" : $"{type.Replace('-', '_')}.sample_time.physical_time";
         var filter = $"{field} >= \"{FormatFilterTime(from)}\" AND {field} < \"{FormatFilterTime(to)}\"";
@@ -233,19 +228,13 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
                 if (json.RootElement.TryGetProperty("dataPoints", out var data))
                     foreach (var item in data.EnumerateArray())
                     {
-                        try
-                        {
-                            var point = Parse(type, item);
-                            if (point.Mills < from.ToUnixTimeMilliseconds() || point.Mills >= to.ToUnixTimeMilliseconds())
-                                continue;
-                            points.Add(point);
-                        }
-                        catch (GoogleHealthException ex) when (ex.Message is "invalid_google_data" or "unexpected_time_range")
-                        {
-                        }
+                        var point = Parse(type, item);
+                        if (point.Mills < from.ToUnixTimeMilliseconds() || point.Mills >= to.ToUnixTimeMilliseconds())
+                            continue;
+                        points.Add(point);
                     }
                 pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
-                onPageRead?.Invoke(page + 1);
+                if (onPageRead is not null) await onPageRead(page + 1);
             }
             catch (GoogleHealthException)
             {
@@ -379,18 +368,22 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
         {
             var payload = point.GetProperty("sleep");
             var interval = payload.GetProperty("interval");
-            var start = DateTimeOffset.Parse(interval.GetProperty("startTime").GetString()!, CultureInfo.InvariantCulture);
-            var end = DateTimeOffset.Parse(interval.GetProperty("endTime").GetString()!, CultureInfo.InvariantCulture);
+            var start = DateTimeOffset.Parse(interval.GetProperty("startTime").GetString()!, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+            var end = DateTimeOffset.Parse(interval.GetProperty("endTime").GetString()!, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
             if (end <= start) throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: "sleep");
 
             var stages = new List<SleepStageInterval>();
-            if (payload.TryGetProperty("stages", out var stageData) && stageData.ValueKind == JsonValueKind.Array)
+            if (payload.TryGetProperty("stages", out var stageData))
             {
                 var ordinal = 0;
                 foreach (var stage in stageData.EnumerateArray())
                 {
-                    var stageStart = DateTimeOffset.Parse(stage.GetProperty("startTime").GetString()!, CultureInfo.InvariantCulture);
-                    var stageEnd = DateTimeOffset.Parse(stage.GetProperty("endTime").GetString()!, CultureInfo.InvariantCulture);
+                    var stageStart = DateTimeOffset.Parse(stage.GetProperty("startTime").GetString()!, CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+                    var stageEnd = DateTimeOffset.Parse(stage.GetProperty("endTime").GetString()!, CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
                     if (stageStart < start || stageEnd > end || stageEnd <= stageStart)
                         throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: "sleep");
                     stages.Add(new SleepStageInterval
@@ -403,6 +396,11 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
                 }
             }
 
+            var orderedStages = stages.OrderBy(stage => stage.StartTime).ToArray();
+            for (var index = 1; index < orderedStages.Length; index++)
+                if (orderedStages[index].StartTime < orderedStages[index - 1].EndTime)
+                    throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: "sleep");
+
             JsonElement metadata = default;
             var hasMetadata = payload.TryGetProperty("metadata", out metadata) && metadata.ValueKind == JsonValueKind.Object;
             var isNap = hasMetadata && metadata.TryGetProperty("nap", out var nap) && nap.ValueKind == JsonValueKind.True;
@@ -410,25 +408,32 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             var processed = hasMetadata && metadata.TryGetProperty("processed", out var complete) && complete.ValueKind == JsonValueKind.True;
 
             JsonElement summary = default;
-            var hasSummary = payload.TryGetProperty("summary", out summary) && summary.ValueKind == JsonValueKind.Object;
+            var hasSummary = payload.TryGetProperty("summary", out summary);
+            if (hasSummary && summary.ValueKind != JsonValueKind.Object)
+                throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: "sleep");
             var durationMs = (long)(end - start).TotalMilliseconds;
             var stagedSleepMs = StageMilliseconds(stages, SleepStageType.Asleep, SleepStageType.Light, SleepStageType.Deep, SleepStageType.Rem);
-            var sleepMinutes = hasSummary ? Minutes(summary, "minutesAsleep") : null;
-            var totalSleepMs = sleepMinutes.HasValue ? sleepMinutes.Value * 60_000 : stagedSleepMs;
-            if (totalSleepMs == 0 && stages.Count == 0) totalSleepMs = durationMs;
+            var sleepMs = hasSummary ? SummaryMilliseconds(summary, "minutesAsleep", durationMs) : null;
+            var totalSleepMs = sleepMs ?? stagedSleepMs;
             var stagedAwakeMs = StageMilliseconds(stages, SleepStageType.Awake, SleepStageType.AwakeInBed);
-            var awakeMinutes = hasSummary ? Minutes(summary, "minutesAwake") : null;
-            long? totalAwakeMs = awakeMinutes.HasValue
-                ? awakeMinutes.Value * 60_000
-                : stages.Count > 0 ? stagedAwakeMs : null;
-            var latencyMinutes = hasSummary ? Minutes(summary, "minutesToFallAsleep") : null;
+            var awakeMs = hasSummary ? SummaryMilliseconds(summary, "minutesAwake", durationMs) : null;
+            if (!sleepMs.HasValue && stages.Count == 0) totalSleepMs = durationMs - (awakeMs ?? 0);
+            long? totalAwakeMs = awakeMs ?? (stages.Count > 0 ? stagedAwakeMs : null);
+            var latencyMs = hasSummary ? SummaryMilliseconds(summary, "minutesToFallAsleep", durationMs) : null;
+            if (stagedSleepMs > durationMs || stagedAwakeMs > durationMs ||
+                stagedSleepMs + stagedAwakeMs > durationMs ||
+                totalSleepMs > durationMs || totalSleepMs + (totalAwakeMs ?? 0) > durationMs)
+                throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: "sleep");
 
             var externalId = hasMetadata && metadata.TryGetProperty("externalId", out var external) && external.ValueKind == JsonValueKind.String
                 ? external.GetString()
                 : null;
             var resourceName = ResourceName(point);
-            var originalId = !string.IsNullOrWhiteSpace(resourceName) ? resourceName : externalId;
+            var originalId = !string.IsNullOrWhiteSpace(resourceName) ? resourceName :
+                !string.IsNullOrWhiteSpace(externalId) ? externalId : null;
             originalId ??= Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"sleep|{start:O}|{end:O}")));
+            // SleepSource.Google is shared; its upsert key must distinguish this connector.
+            originalId = "googlehealth:sleep:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(originalId)));
 
             return new SleepSession
             {
@@ -443,9 +448,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
                 DeepSleepMs = stages.Count > 0 ? StageMilliseconds(stages, SleepStageType.Deep) : null,
                 LightSleepMs = stages.Count > 0 ? StageMilliseconds(stages, SleepStageType.Light) : null,
                 RemSleepMs = stages.Count > 0 ? StageMilliseconds(stages, SleepStageType.Rem) : null,
-                SleepLatencyMs = latencyMinutes.HasValue
-                    ? latencyMinutes.Value * 60_000
-                    : null,
+                SleepLatencyMs = latencyMs,
                 Efficiency = durationMs > 0 ? (float)(totalSleepMs * 100d / durationMs) : null,
                 RestlessPeriods = stages.Count > 0 ? stages.Count(stage => stage.Stage == SleepStageType.Restless) : null,
                 Source = SleepSource.Google,
@@ -480,10 +483,15 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
     private static long StageMilliseconds(IEnumerable<SleepStageInterval> stages, params SleepStageType[] types) =>
         stages.Where(stage => types.Contains(stage.Stage)).Sum(stage => (long)(stage.EndTime - stage.StartTime).TotalMilliseconds);
 
-    private static long? Minutes(JsonElement summary, string property) =>
-        summary.TryGetProperty(property, out var value) && long.TryParse(value.ToString(), CultureInfo.InvariantCulture, out var minutes) && minutes >= 0
-            ? minutes
-            : null;
+    private static long? SummaryMilliseconds(JsonElement summary, string property, long durationMs)
+    {
+        if (!summary.TryGetProperty(property, out var value)) return null;
+        if (value.ValueKind is not (JsonValueKind.Number or JsonValueKind.String) ||
+            !long.TryParse(value.ToString(), CultureInfo.InvariantCulture, out var minutes) ||
+            minutes < 0 || minutes > durationMs / 60_000)
+            throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: "sleep");
+        return checked(minutes * 60_000);
+    }
 
     public static GoogleHealthReading Parse(string type, JsonElement point)
     {
@@ -492,8 +500,10 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             var payload = point.GetProperty(type == "heart-rate" ? "heartRate" : type);
             var interval = type == "steps";
             var time = payload.GetProperty(interval ? "interval" : "sampleTime");
-            var start = DateTimeOffset.Parse(time.GetProperty(interval ? "startTime" : "physicalTime").GetString()!, CultureInfo.InvariantCulture);
-            long? end = interval ? DateTimeOffset.Parse(time.GetProperty("endTime").GetString()!, CultureInfo.InvariantCulture).ToUnixTimeMilliseconds() : null;
+            var start = DateTimeOffset.Parse(time.GetProperty(interval ? "startTime" : "physicalTime").GetString()!, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+            long? end = interval ? DateTimeOffset.Parse(time.GetProperty("endTime").GetString()!, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal).ToUnixTimeMilliseconds() : null;
             var valueName = type switch { "steps" => "count", "heart-rate" => "beatsPerMinute", "weight" => "weightGrams", _ => throw new GoogleHealthException("unsupported_type", stage: "data_parse", dataType: type) };
             var value = decimal.Parse(payload.GetProperty(valueName).ToString(), CultureInfo.InvariantCulture);
             if (value < 0 || (type != "steps" && value == 0) ||
@@ -503,8 +513,14 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             int? offset = null;
             if (time.TryGetProperty(interval ? "startUtcOffset" : "utcOffset", out var offsetValue))
             {
-                var seconds = decimal.Parse(offsetValue.GetString()!.TrimEnd('s'), CultureInfo.InvariantCulture);
-                if (seconds % 60 != 0 || Math.Abs(seconds) > 50400) throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: type);
+                if (offsetValue.ValueKind != JsonValueKind.String || offsetValue.GetString() is not { } duration)
+                    throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: type);
+                if (duration.Length < 2 || duration[^1] != 's' ||
+                    !decimal.TryParse(duration.AsSpan(0, duration.Length - 1),
+                        NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
+                        CultureInfo.InvariantCulture, out var seconds) ||
+                    seconds % 60 != 0 || Math.Abs(seconds) > 50400)
+                    throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: type);
                 offset = (int)(seconds / 60);
             }
             return new GoogleHealthReading

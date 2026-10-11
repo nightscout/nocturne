@@ -9,7 +9,7 @@
 
   // Get recent carb intakes from the last 6 hours
   const recentMeals = $derived.by(() => {
-    const sixHoursAgo = realtimeStore.now - 6 * 60 * 60 * 1000;
+    const sixHoursAgo = realtimeStore.nowMinute - 6 * 60 * 60 * 1000;
     return realtimeStore.carbIntakes
       .filter((c) => (c.mills ?? 0) > sixHoursAgo && (c.carbs ?? 0) > 0)
       .sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0))

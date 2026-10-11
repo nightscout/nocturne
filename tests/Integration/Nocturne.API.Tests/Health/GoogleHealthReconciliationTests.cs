@@ -1,17 +1,24 @@
-using System.Data.Common;
+using Microsoft.Extensions.DependencyInjection;
+using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Connectors;
+using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Health;
+using Nocturne.Infrastructure.Data.Interceptors;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.API.Services.Health;
+using Nocturne.API.Services.Realtime;
+using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Npgsql;
-using Testcontainers.PostgreSql;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Integration.Tests.Health;
@@ -20,56 +27,97 @@ namespace Nocturne.API.Integration.Tests.Health;
 public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture fixture)
     : IClassFixture<GoogleHealthPostgresFixture>, IAsyncLifetime
 {
-    private string adminConnection = string.Empty;
     private string connectionString = string.Empty;
-    private readonly string databaseName = "google_health_test_" + Guid.NewGuid().ToString("N");
-    private readonly string roleName = "google_health_app_" + Guid.NewGuid().ToString("N");
     private readonly Guid tenantId = Guid.NewGuid();
     private readonly Guid otherTenantId = Guid.NewGuid();
     private readonly DateTimeOffset from = new(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
 
     public async Task InitializeAsync()
     {
-        adminConnection = fixture.ConnectionString;
-        await using var admin = new NpgsqlConnection(adminConnection);
-        await admin.OpenAsync();
-        await using (var command = new NpgsqlCommand($"CREATE DATABASE {databaseName}", admin))
-            await command.ExecuteNonQueryAsync();
-        connectionString = new NpgsqlConnectionStringBuilder(adminConnection)
-            { Database = databaseName, Pooling = false }.ConnectionString;
+        connectionString = fixture.Database.SuperuserConnectionString;
         await using var db = Context();
-        await db.Database.EnsureCreatedAsync();
-        var migrations = db.GetService<IMigrationsAssembly>();
-        Assert.Contains("20260913000000_AddGoogleHealthReconciliationStaging", migrations.Migrations.Keys);
-        Assert.Contains("20260913120000_SecureGoogleHealthReconciliationStaging", migrations.Migrations.Keys);
-        var history = db.GetService<IHistoryRepository>();
-        await db.Database.ExecuteSqlRawAsync(history.GetCreateScript());
-        foreach (var migrationId in migrations.Migrations.Keys.Where(migrationId => !migrationId.Contains("GoogleHealthReconciliationStaging")))
-        {
-            await db.Database.ExecuteSqlRawAsync(history.GetInsertScript(new HistoryRow(migrationId, "10.0.0")));
-        }
-        await db.Database.MigrateAsync();
         db.Tenants.AddRange(
-            new TenantEntity { Id = tenantId, Slug = "google-test", DisplayName = "Synthetic", IsActive = true },
-            new TenantEntity { Id = otherTenantId, Slug = "google-other", DisplayName = "Synthetic other", IsActive = true });
+            new TenantEntity { Id = tenantId, Slug = $"google-test-{tenantId:N}", DisplayName = "Synthetic", IsActive = true },
+            new TenantEntity { Id = otherTenantId, Slug = $"google-other-{otherTenantId:N}", DisplayName = "Synthetic other", IsActive = true });
         await db.SaveChangesAsync();
-        await db.Database.ExecuteSqlRawAsync($"CREATE ROLE {roleName} NOLOGIN NOSUPERUSER NOBYPASSRLS");
-        await db.Database.ExecuteSqlRawAsync($"GRANT USAGE ON SCHEMA public TO {roleName}");
-        await db.Database.ExecuteSqlRawAsync($"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {roleName}");
     }
 
-    public async Task DisposeAsync()
+    public Task DisposeAsync() => Task.CompletedTask;
+
+    [Fact]
+    public async Task Minute_averages_use_half_open_utc_ranges_and_preserve_raw_tenant_data()
     {
-        await using var admin = new NpgsqlConnection(adminConnection);
-        await admin.OpenAsync();
-        await using (var command = new NpgsqlCommand($"DROP DATABASE IF EXISTS {databaseName} WITH (FORCE)", admin))
-            await command.ExecuteNonQueryAsync();
-        await using (var command = new NpgsqlCommand($"DROP ROLE IF EXISTS {roleName}", admin))
-            await command.ExecuteNonQueryAsync();
+        await using var db = Context();
+        db.TenantId = tenantId;
+        var start = from.AddSeconds(10).UtcDateTime;
+        var end = from.AddMinutes(2).UtcDateTime;
+        foreach (var (timestamp, bpm, deleted) in new[]
+        {
+            (start.AddMilliseconds(-1), 200, false),
+            (start, 60, false),
+            (from.AddSeconds(30).UtcDateTime, 65, false),
+            (from.AddSeconds(40).UtcDateTime, 200, true),
+            (from.AddMinutes(1).AddSeconds(10).UtcDateTime, 80, false),
+            (end.AddMilliseconds(-1), 90, false),
+            (end, 200, false)
+        })
+            db.HeartRates.Add(new HeartRateEntity
+            {
+                Id = Guid.NewGuid(), Timestamp = timestamp, Bpm = bpm,
+                DeletedAt = deleted ? DateTime.UtcNow : null, DataSource = GoogleHealthReadingWriter.Source
+            });
+        await db.SaveChangesAsync();
+        db.TenantId = otherTenantId;
+        db.HeartRates.Add(new HeartRateEntity
+        {
+            Id = Guid.NewGuid(), Timestamp = start, Bpm = 200, DataSource = GoogleHealthReadingWriter.Source
+        });
+        await db.SaveChangesAsync();
+        await UseTenantAsync(db, tenantId);
+        var service = new HeartRateService(db, Mock.Of<IDocumentProcessingService>(),
+            Mock.Of<ISignalRBroadcastService>(), NullLogger<HeartRateService>.Instance);
+
+        var averages = (await service.GetHeartRateMinuteAveragesByDateRangeAsync(start, end)).ToArray();
+
+        Assert.Equal([from.UtcDateTime, from.AddMinutes(1).UtcDateTime], averages.Select(row => row.Timestamp));
+        Assert.All(averages, row => Assert.Equal(DateTimeKind.Utc, row.Timestamp.Kind));
+        Assert.Equal([63, 85], averages.Select(row => row.Bpm));
+        Assert.Equal(7, await db.HeartRates.IgnoreQueryFilters().Where(row => row.TenantId == tenantId).CountAsync());
     }
 
     [Fact]
-    public async Task Staged_writer_preserves_empty_types_and_reconciles_all_native_tables()
+    public async Task Minute_averages_keep_repeated_local_times_distinct_in_non_utc_sessions()
+    {
+        await using var db = Context();
+        await UseTenantAsync(db, tenantId);
+        await db.Database.ExecuteSqlRawAsync("SET TIME ZONE 'America/New_York'");
+        var first = new DateTime(2025, 11, 2, 5, 30, 0, DateTimeKind.Utc);
+        var second = new DateTime(2025, 11, 2, 6, 30, 0, DateTimeKind.Utc);
+        db.HeartRates.AddRange(
+            new HeartRateEntity
+            {
+                Id = Guid.NewGuid(), Timestamp = first, Bpm = 60,
+                DataSource = GoogleHealthReadingWriter.Source
+            },
+            new HeartRateEntity
+            {
+                Id = Guid.NewGuid(), Timestamp = second, Bpm = 80,
+                DataSource = GoogleHealthReadingWriter.Source
+            });
+        await db.SaveChangesAsync();
+        var service = new HeartRateService(db, Mock.Of<IDocumentProcessingService>(),
+            Mock.Of<ISignalRBroadcastService>(), NullLogger<HeartRateService>.Instance);
+
+        var averages = (await service.GetHeartRateMinuteAveragesByDateRangeAsync(
+            new DateTime(2025, 11, 2, 5, 0, 0, DateTimeKind.Utc),
+            new DateTime(2025, 11, 2, 7, 0, 0, DateTimeKind.Utc))).ToArray();
+
+        Assert.Equal([first, second], averages.Select(row => row.Timestamp));
+        Assert.Equal([60, 80], averages.Select(row => row.Bpm));
+    }
+
+    [Fact]
+    public async Task Writer_uses_existing_native_tables_and_preserves_empty_types_and_other_tenants()
     {
         await using var db = Context();
         foreach (var tenant in new[] { tenantId, otherTenantId })
@@ -114,8 +162,6 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         Assert.Equal(3, await db.SleepSessions.CountAsync());
         Assert.False(await db.StepCounts.IgnoreQueryFilters().Where(record => record.TenantId == tenantId && record.SyncIdentifier == "stale")
             .Select(record => EF.Property<bool>(record, "DeletedByUser")).SingleAsync());
-        Assert.Equal(0, await CountAsync(db, "google_health_reconciliation_ids"));
-        Assert.Equal(0, await CountAsync(db, "google_health_reconciliation_runs"));
         await UseTenantAsync(db, otherTenantId);
         Assert.Equal(4, await db.HeartRates.CountAsync());
         Assert.Equal(4, await db.StepCounts.CountAsync());
@@ -123,146 +169,367 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         Assert.Equal(4, await db.SleepSessions.CountAsync());
     }
 
+
     [Fact]
-    public async Task Staging_enforces_rls_batches_ids_and_expires_only_abandoned_tenant_runs()
+    public async Task Sleep_reconciliation_preserves_user_tombstones_and_soft_deletes_missing_sessions()
     {
-        var counter = new InsertCounter();
-        await using var db = Context(counter);
+        await using var db = Context();
         await UseTenantAsync(db, tenantId);
+        var userDeletedAt = from.AddDays(-1).UtcDateTime;
+        foreach (var identifier in new[] { "retained", "stale", "user-deleted" })
+        {
+            var session = new SleepSessionEntity
+            {
+                Id = Guid.NewGuid(), OriginalId = identifier, Source = "Google", SourceApp = "Google Health",
+                StartTime = from.UtcDateTime, EndTime = from.AddHours(8).UtcDateTime,
+                DeletedAt = identifier == "user-deleted" ? userDeletedAt : null
+            };
+            db.SleepSessions.Add(session);
+            db.Entry(session).Property("DeletedByUser").CurrentValue = identifier == "user-deleted";
+        }
+        await db.SaveChangesAsync();
         var writer = Writer(db);
-        var run = await writer.BeginReconciliationAsync(["steps"], from, from.AddDays(1), default);
-        await writer.StageReconciliationIdsAsync(run, "steps", Enumerable.Range(0, 10000).Select(index => "id-" + index).ToArray(), default);
-        Assert.Equal(10, counter.Inserts);
-        Assert.Equal(10000, await CountAsync(db, "google_health_reconciliation_ids"));
-        await writer.StageReconciliationIdsAsync(run, "steps", ["id-0", "id-0"], default);
-        Assert.Equal(10000, await CountAsync(db, "google_health_reconciliation_ids"));
-        var enabled = await db.Database.SqlQueryRaw<int>("""
-            SELECT count(*)::integer AS "Value" FROM pg_class
-            WHERE relname IN ('google_health_reconciliation_ids', 'google_health_reconciliation_runs')
-              AND relrowsecurity AND relforcerowsecurity
-            """).SingleAsync();
-        Assert.Equal(2, enabled);
-        var expired = DateTime.UtcNow.AddDays(-8);
-        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE google_health_reconciliation_runs SET created_at = {expired} WHERE id = {run}");
-        await UseTenantAsync(db, otherTenantId);
-        Assert.Equal(0, await CountAsync(db, "google_health_reconciliation_runs"));
-        Assert.Equal(0, await CountAsync(db, "google_health_reconciliation_ids"));
-        await writer.StageReconciliationIdsAsync(run, "steps", ["cross-tenant"], default);
-        await writer.AbandonReconciliationAsync(run, default);
-        var denied = await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO google_health_reconciliation_ids (run_id, tenant_id, data_type, identifier)
-            VALUES ({run}, {tenantId}, 'steps', 'forbidden')
-            """));
-        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, denied.SqlState);
-        var otherRun = await writer.BeginReconciliationAsync(["steps"], from, from.AddDays(1), default);
-        await writer.StageReconciliationIdsAsync(otherRun, "steps", ["other-tenant"], default);
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var run = await writer.BeginReconciliationAsync(["sleep"], from, from.AddDays(1), default);
+            await writer.StageReconciliationIdsAsync(run, "sleep", ["retained"], default);
+            await writer.CompleteReconciliationAsync(run, default);
+        }
+
+        var sessions = await db.SleepSessions.IgnoreQueryFilters().AsNoTracking()
+            .Where(session => session.TenantId == tenantId)
+            .Select(session => new { session.OriginalId, session.DeletedAt, DeletedByUser = EF.Property<bool>(session, "DeletedByUser") })
+            .ToListAsync();
+        Assert.Equal(3, sessions.Count);
+        var stale = Assert.Single(sessions, session => session.OriginalId == "stale");
+        Assert.NotNull(stale.DeletedAt);
+        Assert.False(stale.DeletedByUser);
+        var deleted = Assert.Single(sessions, session => session.OriginalId == "user-deleted");
+        Assert.Equal(userDeletedAt, deleted.DeletedAt);
+        Assert.True(deleted.DeletedByUser);
+        Assert.Equal("retained", (await db.SleepSessions.AsNoTracking().SingleAsync()).OriginalId);
+    }
+
+    [Fact]
+    public async Task Interrupted_reconciliation_does_not_delete_data_or_require_persistent_staging()
+    {
+        await using var db = Context();
+        db.TenantId = tenantId;
+        db.StepCounts.Add(new StepCountEntity
+        {
+            Id = Guid.NewGuid(), Timestamp = from.AddHours(6).UtcDateTime, Metric = 42,
+            DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "existing"
+        });
+        await db.SaveChangesAsync();
         await UseTenantAsync(db, tenantId);
-        Assert.Equal(10000, await CountAsync(db, "google_health_reconciliation_ids"));
-        var fresh = await writer.BeginReconciliationAsync(["steps"], from, from.AddDays(1), default);
-        Assert.Equal(0, await CountAsync(db, "google_health_reconciliation_ids"));
-        Assert.Equal(1, await CountAsync(db, "google_health_reconciliation_runs"));
-        await writer.AbandonReconciliationAsync(fresh, default);
+        var interrupted = Writer(db);
+        var run = await interrupted.BeginReconciliationAsync(["steps"], from, from.AddDays(1), default);
+        await interrupted.StageReconciliationIdsAsync(run, "steps", ["new"], default);
+
+        var restarted = Writer(db);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => restarted.CompleteReconciliationAsync(run, default));
+        Assert.Equal("existing", (await db.StepCounts.AsNoTracking().SingleAsync()).SyncIdentifier);
+        var retry = await restarted.BeginReconciliationAsync(["steps"], from, from.AddDays(1), default);
+        await restarted.StageReconciliationIdsAsync(retry, "steps", ["existing"], default);
+        await restarted.CompleteReconciliationAsync(retry, default);
+        Assert.Single(await db.StepCounts.AsNoTracking().ToListAsync());
+        Assert.Equal(0, await db.Database.SqlQueryRaw<int>("""
+            SELECT count(*)::integer AS "Value" FROM pg_class
+            WHERE relname LIKE 'google_health_%'
+            """).SingleAsync());
+    }
+
+    [Fact]
+    public async Task Purge_releases_sync_keys_and_preserves_other_sources_and_tenants()
+    {
+        await using var db = Context();
+        foreach (var tenant in new[] { tenantId, otherTenantId })
+        {
+            db.TenantId = tenant;
+            foreach (var identifier in new[] { "active", "user-deleted", "system-deleted", "other-source" })
+            {
+                var source = identifier == "other-source" ? "manual" : GoogleHealthReadingWriter.Source;
+                var deletedAt = identifier.EndsWith("deleted") ? DateTime.UtcNow : (DateTime?)null;
+                var heartRate = new HeartRateEntity { Id = Guid.NewGuid(), Timestamp = from.UtcDateTime, Bpm = 60,
+                    DataSource = source, SyncIdentifier = identifier, DeletedAt = deletedAt };
+                var steps = new StepCountEntity { Id = Guid.NewGuid(), Timestamp = from.UtcDateTime, Metric = 42,
+                    DataSource = source, SyncIdentifier = identifier, DeletedAt = deletedAt };
+                var weight = new BodyWeightEntity { Id = Guid.NewGuid(), Mills = from.ToUnixTimeMilliseconds(), WeightKg = 70,
+                    DataSource = source, SyncIdentifier = identifier, DeletedAt = deletedAt };
+                db.HeartRates.Add(heartRate);
+                db.StepCounts.Add(steps);
+                db.BodyWeights.Add(weight);
+                foreach (var entity in new object[] { heartRate, steps, weight })
+                    db.Entry(entity).Property("DeletedByUser").CurrentValue = identifier == "user-deleted";
+            }
+            var session = new SleepSessionEntity { Id = Guid.NewGuid(), StartTime = from.UtcDateTime.AddHours(-8),
+                EndTime = from.UtcDateTime, Source = "Google", SourceApp = "Google Health", OriginalId = "sleep-key" };
+            db.SleepSessions.Add(session);
+            db.SleepStages.Add(new SleepStageEntity { Id = Guid.NewGuid(), SleepSessionId = session.Id,
+                StartTime = session.StartTime, EndTime = session.EndTime, Stage = "Light" });
+            db.SleepSessions.Add(new SleepSessionEntity { Id = Guid.NewGuid(), StartTime = from.UtcDateTime.AddHours(-8),
+                EndTime = from.UtcDateTime, Source = "Google", SourceApp = "other-app", OriginalId = "other-sleep" });
+            await db.SaveChangesAsync();
+        }
+        await UseTenantAsync(db, tenantId);
+        await Writer(db).PurgeAsync(default);
+        foreach (var count in new[] {
+                     await db.HeartRates.IgnoreQueryFilters().Where(row => row.TenantId == tenantId).CountAsync(),
+                     await db.StepCounts.IgnoreQueryFilters().Where(row => row.TenantId == tenantId).CountAsync(),
+                     await db.BodyWeights.IgnoreQueryFilters().Where(row => row.TenantId == tenantId).CountAsync() })
+            Assert.Equal(1, count);
+        Assert.Equal("other-app", (await db.SleepSessions.AsNoTracking().SingleAsync()).SourceApp);
+        Assert.Empty(await db.SleepStages.AsNoTracking().ToListAsync());
+
+        db.ChangeTracker.Clear();
+        db.HeartRates.Add(new HeartRateEntity { Id = Guid.NewGuid(), Timestamp = from.UtcDateTime, Bpm = 70,
+            DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "user-deleted" });
+        db.StepCounts.Add(new StepCountEntity { Id = Guid.NewGuid(), Timestamp = from.UtcDateTime, Metric = 50,
+            DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "user-deleted" });
+        db.BodyWeights.Add(new BodyWeightEntity { Id = Guid.NewGuid(), Mills = from.ToUnixTimeMilliseconds(), WeightKg = 75,
+            DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "user-deleted" });
+        await db.SaveChangesAsync();
+        Assert.Equal(2, await db.HeartRates.CountAsync());
+        Assert.Equal(2, await db.StepCounts.CountAsync());
+        Assert.Equal(2, await db.BodyWeights.CountAsync());
+
         await UseTenantAsync(db, otherTenantId);
-        Assert.Equal(1, await CountAsync(db, "google_health_reconciliation_ids"));
-        await writer.AbandonReconciliationAsync(otherRun, default);
-        Assert.Equal(0, await CountAsync(db, "google_health_reconciliation_ids"));
+        Assert.Equal(4, await db.HeartRates.IgnoreQueryFilters().Where(row => row.TenantId == otherTenantId).CountAsync());
+        Assert.Equal(4, await db.StepCounts.IgnoreQueryFilters().Where(row => row.TenantId == otherTenantId).CountAsync());
+        Assert.Equal(4, await db.BodyWeights.IgnoreQueryFilters().Where(row => row.TenantId == otherTenantId).CountAsync());
+        Assert.Equal(2, await db.SleepSessions.CountAsync());
+        Assert.Single(await db.SleepStages.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Replicas_share_progress_and_exclude_concurrent_operations_per_tenant()
+    {
+        await SeedConnectorAsync();
+        await using var firstProvider = ReplicaServices();
+        await using var secondProvider = ReplicaServices();
+        var first = new GoogleHealthCoordinator(firstProvider.GetRequiredService<IServiceScopeFactory>());
+        var second = new GoogleHealthCoordinator(secondProvider.GetRequiredService<IServiceScopeFactory>());
+        var lease = await first.AcquireAsync(tenantId, default);
+        try
+        {
+            Assert.Null(await second.AcquireAsync(tenantId, default, TimeSpan.Zero));
+            Assert.False(await second.QueueAsync(tenantId, 4, default).WaitAsync(TimeSpan.FromSeconds(5)));
+            await using var unrelated = await second.AcquireAsync(otherTenantId, default, TimeSpan.Zero);
+            Assert.NotNull(unrelated);
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.AcquireAsync(tenantId, cancellation.Token));
+            await first.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, "steps", 1, 4, 3);
+            var observed = await second.ProgressAsync(tenantId, default);
+            Assert.Equal(GoogleHealthSyncPhase.Reading, observed!.Phase);
+            Assert.Equal(3, observed.PagesRead);
+            Assert.Null(await second.ProgressAsync(otherTenantId, default));
+            Assert.False(await second.QueueAsync(tenantId, 4, default));
+
+            using var scope = firstProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            db.TenantId = tenantId;
+            var cursors = new ConnectorSyncCursorStore(db, NullLogger<ConnectorSyncCursorStore>.Instance);
+            await cursors.SetAsync("GoogleHealth", "health", new(null, "{\"backfillComplete\":true}"));
+            Assert.Equal(3, (await second.ProgressAsync(tenantId, default))!.PagesRead);
+            await first.CompleteScheduledAsync(tenantId);
+        }
+        finally { await lease!.DisposeAsync(); }
+        await using var reacquired = await second.AcquireAsync(tenantId, default, TimeSpan.Zero);
+        Assert.NotNull(reacquired);
+        Assert.Null(await second.ProgressAsync(tenantId, default));
+    }
+
+    [Fact]
+    public async Task Durable_manual_requests_survive_replica_loss_and_have_one_worker_owner()
+    {
+        await SeedConnectorAsync();
+        await using var provider = ReplicaServices();
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        var first = new GoogleHealthCoordinator(scopes);
+        var second = new GoogleHealthCoordinator(scopes);
+        Assert.True(await first.QueueAsync(tenantId, 4, default));
+        Assert.False(await second.QueueAsync(tenantId, 4, default));
+        var claim = await first.ClaimWorkerAsync(tenantId, default);
+        try
+        {
+            Assert.NotNull(claim);
+            Assert.Null(await second.ClaimWorkerAsync(tenantId, default));
+            Assert.True(await first.StartQueuedAsync(tenantId, default));
+            await first.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, "weight", 2, 4, 5);
+            await first.CompleteScheduledAsync(tenantId);
+            Assert.Equal(5, (await second.ProgressAsync(tenantId, default))!.PagesRead);
+        }
+        finally { await claim!.DisposeAsync(); }
+
+        var restarted = new GoogleHealthCoordinator(scopes);
+        await using var requests = restarted.ReadRequestsAsync(default).GetAsyncEnumerator();
+        Assert.True(await requests.MoveNextAsync());
+        Assert.Equal(tenantId, requests.Current);
+        await using var newClaim = await restarted.ClaimWorkerAsync(tenantId, default);
+        Assert.NotNull(newClaim);
+        Assert.True(await restarted.StartQueuedAsync(tenantId, default));
+        await restarted.CompleteAsync(tenantId);
+        Assert.Null(await second.ProgressAsync(tenantId, default));
+        Assert.True(await second.QueueAsync(tenantId, 4, default));
+    }
+
+    [Fact]
+    public async Task Disconnect_interrupts_other_replicas_and_survives_restart()
+    {
+        await SeedConnectorAsync();
+        await using var provider = ReplicaServices();
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        var first = new GoogleHealthCoordinator(scopes);
+        var second = new GoogleHealthCoordinator(scopes);
+        var subject = Guid.NewGuid();
+        await using var reader = await first.WatchReadsAsync(tenantId, default);
+        var request = await second.RequestDisconnectAsync(tenantId, subject, default);
+        await Task.Delay(Timeout.Infinite, reader.Token).ContinueWith(task => Assert.True(task.IsCanceled)).WaitAsync(TimeSpan.FromSeconds(5));
+        var restarted = new GoogleHealthCoordinator(scopes);
+        Assert.Equal(subject, (await restarted.DisconnectRequestAsync(tenantId, default))!.SubjectId);
+        await using var requests = restarted.ReadRequestsAsync(default).GetAsyncEnumerator();
+        Assert.True(await requests.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(tenantId, requests.Current);
+        await restarted.FinishDisconnectAsync(tenantId, Guid.NewGuid());
+        Assert.NotNull(await first.DisconnectRequestAsync(tenantId, default));
+        await restarted.FinishDisconnectAsync(tenantId, request);
+        Assert.Null(await first.DisconnectRequestAsync(tenantId, default));
+    }
+
+    [Fact]
+    public async Task Durable_queue_notifications_dispatch_without_repeated_tenant_sweeps()
+    {
+        await SeedConnectorAsync();
+        using var provider = ReplicaServices();
+        var tenants = Mock.Get(provider.GetRequiredService<ITenantService>());
+        tenants.Setup(service => service.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        var listener = new GoogleHealthCoordinator(scopes);
+        var sender = new GoogleHealthCoordinator(scopes);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await using var requests = listener.ReadRequestsAsync(cancellation.Token).GetAsyncEnumerator();
+        var next = requests.MoveNextAsync().AsTask();
+        while (tenants.Invocations.Count == 0) await Task.Delay(10, cancellation.Token);
+        Assert.False(next.IsCompleted);
+
+        Assert.True(await sender.QueueAsync(tenantId, 1, cancellation.Token));
+        Assert.True(await next.WaitAsync(cancellation.Token));
+        Assert.Equal(tenantId, requests.Current);
+        await sender.CompleteAsync(tenantId);
+        next = requests.MoveNextAsync().AsTask();
+        Assert.True(await sender.QueueAsync(tenantId, 1, cancellation.Token));
+        Assert.True(await next.WaitAsync(cancellation.Token));
+        Assert.Equal(tenantId, requests.Current);
+        tenants.Verify(service => service.GetAllAsync(It.IsAny<CancellationToken>()), Times.Once);
+        await sender.CompleteAsync(tenantId);
+        next = requests.MoveNextAsync().AsTask();
+        var subject = Guid.NewGuid();
+        var disconnect = await sender.RequestDisconnectAsync(tenantId, subject, cancellation.Token);
+        Assert.True(await next.WaitAsync(cancellation.Token));
+        Assert.Equal(tenantId, requests.Current);
+        Assert.Equal(subject, (await listener.DisconnectRequestAsync(tenantId, cancellation.Token))!.SubjectId);
+        Assert.Equal(disconnect, await listener.RequestDisconnectAsync(tenantId, Guid.NewGuid(), cancellation.Token));
+        tenants.Verify(service => service.GetAllAsync(It.IsAny<CancellationToken>()), Times.Once);
+        await sender.FinishDisconnectAsync(tenantId, disconnect);
+    }
+
+    [Fact]
+    public async Task Tenants_with_the_same_legacy_folded_key_have_independent_replica_locks()
+    {
+        var firstTenant = Guid.Empty;
+        var secondTenant = new Guid("00000001-0001-0000-0000-000000000000");
+        await using var provider = ReplicaServices();
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        var first = new GoogleHealthCoordinator(scopes);
+        var second = new GoogleHealthCoordinator(scopes);
+        await using var operation = await first.AcquireAsync(firstTenant, default);
+        await using var unrelated = await second.AcquireAsync(secondTenant, default, TimeSpan.Zero);
+        Assert.NotNull(unrelated);
+        Assert.Null(await second.AcquireAsync(firstTenant, default, TimeSpan.Zero));
+        await using var worker = await second.ClaimWorkerAsync(firstTenant, default);
+        Assert.NotNull(worker);
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Migration_replaces_unregistered_staging_without_changing_native_health_data(bool bothTables)
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("\"legacy\"")]
+    [InlineData("42")]
+    [InlineData("true")]
+    [InlineData("{\"googleHealthProgress\":[]}")]
+    [InlineData("{\"googleHealthProgress\":\"invalid\"}")]
+    [InlineData("{\"googleHealthProgress\":42}")]
+    [InlineData("{\"googleHealthProgress\":{\"Phase\":999,\"WorkerOwned\":true}}")]
+    [InlineData("{\"googleHealthProgress\":{\"Phase\":\"invalid\"}}")]
+    [InlineData("{\"googleHealthProgress\":{\"WorkerOwned\":\"invalid\"}}")]
+    [InlineData("{\"googleHealthProgress\":{\"PagesRead\":{}}}")]
+    public async Task Invalid_cursor_payloads_recover_for_cursor_writes_status_and_queue(string legacyJson)
     {
-        await using var db = Context();
-        await ResetStagingMigrationAsync(db);
-        await db.Database.ExecuteSqlRawAsync("CREATE TABLE google_health_reconciliation_runs (legacy_value text)");
-        if (bothTables)
-            await db.Database.ExecuteSqlRawAsync("CREATE TABLE google_health_reconciliation_ids (legacy_value text)");
+        await SeedConnectorAsync(legacyJson);
+        await using var provider = ReplicaServices();
+        var coordinator = new GoogleHealthCoordinator(provider.GetRequiredService<IServiceScopeFactory>());
+        Assert.Null(await coordinator.ProgressAsync(tenantId, default));
+
+        using var scope = provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         db.TenantId = tenantId;
-        var timestamp = from.UtcDateTime;
-        db.HeartRates.Add(new HeartRateEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Bpm = 60, DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "preserved" });
-        db.StepCounts.Add(new StepCountEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Metric = 42, DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "preserved" });
-        db.BodyWeights.Add(new BodyWeightEntity { Id = Guid.NewGuid(), Mills = from.ToUnixTimeMilliseconds(), WeightKg = 70, DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "preserved" });
-        db.SleepSessions.Add(new SleepSessionEntity { Id = Guid.NewGuid(), StartTime = timestamp, EndTime = timestamp.AddHours(8), Source = "Google", SourceApp = "Google Health", OriginalId = "preserved" });
-        await db.SaveChangesAsync();
-        var notices = new List<string>();
-        ((NpgsqlConnection)db.Database.GetDbConnection()).Notice += (_, args) => notices.Add(args.Notice.MessageText);
+        var cursors = new ConnectorSyncCursorStore(db, NullLogger<ConnectorSyncCursorStore>.Instance);
+        await cursors.SetAsync("GoogleHealth", "health", new(null, "restored"));
+        Assert.Equal("restored", (await cursors.GetAsync("GoogleHealth", "health"))!.LastGuid);
 
-        await db.Database.MigrateAsync();
-
-        Assert.Contains(notices, notice => notice.StartsWith("Replacing unregistered Google Health reconciliation staging tables."));
-        Assert.Equal(2, (await db.Database.GetAppliedMigrationsAsync()).Count(migration => migration.Contains("GoogleHealthReconciliationStaging")));
-        Assert.Equal("preserved", (await db.HeartRates.AsNoTracking().SingleAsync()).SyncIdentifier);
-        Assert.Equal("preserved", (await db.StepCounts.AsNoTracking().SingleAsync()).SyncIdentifier);
-        Assert.Equal("preserved", (await db.BodyWeights.AsNoTracking().SingleAsync()).SyncIdentifier);
-        Assert.Equal("preserved", (await db.SleepSessions.AsNoTracking().SingleAsync()).OriginalId);
-        var writer = Writer(db);
-        var run = await writer.BeginReconciliationAsync(["steps"], from, from.AddDays(1), default);
-        await writer.StageReconciliationIdsAsync(run, "steps", ["preserved"], default);
-        await writer.CompleteReconciliationAsync(run, default);
-        Assert.Equal(0, await CountAsync(db, "google_health_reconciliation_runs"));
-        Assert.Equal(1, await db.StepCounts.CountAsync());
-    }
-
-    [Fact]
-    public async Task Migration_conflict_with_an_external_dependency_rolls_back_without_cascade()
-    {
-        await using var db = Context();
-        await ResetStagingMigrationAsync(db);
-        await db.Database.ExecuteSqlRawAsync("""
-            CREATE TABLE google_health_reconciliation_runs (legacy_value text);
-            INSERT INTO google_health_reconciliation_runs VALUES ('preserved-run');
-            CREATE TABLE google_health_reconciliation_ids (legacy_value text);
-            INSERT INTO google_health_reconciliation_ids VALUES ('preserved-id');
-            CREATE VIEW external_staging_dependency AS SELECT * FROM google_health_reconciliation_runs;
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE connector_configurations SET sync_cursors = {legacyJson}::jsonb
+            WHERE tenant_id = {tenantId} AND connector_name = 'googlehealth'
             """);
+        Assert.True(await coordinator.QueueAsync(tenantId, 4, default));
+        Assert.True((await coordinator.ProgressAsync(tenantId, default))!.WorkerOwned);
+        await coordinator.CompleteAsync(tenantId);
+        Assert.Null(await coordinator.ProgressAsync(tenantId, default));
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() => db.Database.MigrateAsync());
-
-        Assert.Equal(PostgresErrorCodes.DependentObjectsStillExist, exception.SqlState);
-        Assert.Equal(1, await CountAsync(db, "google_health_reconciliation_runs"));
-        Assert.Equal(1, await CountAsync(db, "google_health_reconciliation_ids"));
-        Assert.Equal(1, await CountAsync(db, "external_staging_dependency"));
-        Assert.DoesNotContain(await db.Database.GetAppliedMigrationsAsync(), migration => migration.Contains("GoogleHealthReconciliationStaging"));
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE connector_configurations SET sync_cursors = {legacyJson}::jsonb
+            WHERE tenant_id = {tenantId} AND connector_name = 'googlehealth'
+            """);
+        await coordinator.CompleteAsync(tenantId);
+        db.ChangeTracker.Clear();
+        Assert.Equal("{}", await db.ConnectorConfigurations.Select(row => row.SyncCursorsJson).SingleAsync());
     }
 
-    [Fact]
-    public async Task Registered_migrations_do_not_replace_existing_staging_on_restart()
+    private async Task SeedConnectorAsync(string cursorJson = "{\"unrelated\":{\"LastUpdatedAt\":\"retained\",\"LastGuid\":null}}")
     {
         await using var db = Context();
         db.TenantId = tenantId;
-        var writer = Writer(db);
-        var run = await writer.BeginReconciliationAsync(["steps"], from, from.AddDays(1), default);
-        await writer.StageReconciliationIdsAsync(run, "steps", ["existing-id"], default);
-
-        await db.Database.MigrateAsync();
-
-        Assert.Equal(1, await CountAsync(db, "google_health_reconciliation_runs"));
-        Assert.Equal(1, await CountAsync(db, "google_health_reconciliation_ids"));
-        Assert.Empty(await db.Database.GetPendingMigrationsAsync());
+        db.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
+        {
+            Id = Guid.NewGuid(), ConnectorName = "GoogleHealth", ConfigurationJson = "{}",
+            SyncCursorsJson = cursorJson
+        });
+        await db.SaveChangesAsync();
     }
 
-    private static Task ResetStagingMigrationAsync(NocturneDbContext db) => db.Database.ExecuteSqlRawAsync("""
-        DROP TABLE google_health_reconciliation_ids;
-        DROP TABLE google_health_reconciliation_runs;
-        DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" IN (
-            '20260913000000_AddGoogleHealthReconciliationStaging',
-            '20260913120000_SecureGoogleHealthReconciliationStaging');
-        """);
-
-    private NocturneDbContext Context(DbCommandInterceptor? interceptor = null)
+    private ServiceProvider ReplicaServices()
     {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, options => options.UseNocturneMigrations());
-        if (interceptor is not null) options.AddInterceptors(interceptor);
-        return new NocturneDbContext(options.Options);
+        var services = new ServiceCollection();
+        services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
+        services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.Database.AppConnectionString));
+        services.AddDbContext<NocturneDbContext>((provider, options) => options
+            .UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()).AddInterceptors(new TenantConnectionInterceptor()));
+        var tenants = new Mock<ITenantService>();
+        tenants.Setup(service => service.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+            [new TenantDto(tenantId, "synthetic", "Synthetic", true, DateTime.UtcNow)]);
+        services.AddSingleton(tenants.Object);
+        return services.BuildServiceProvider();
     }
+
+    private NocturneDbContext Context() => new(new DbContextOptionsBuilder<NocturneDbContext>()
+        .UseNpgsql(connectionString).Options);
 
     private async Task UseTenantAsync(NocturneDbContext db, Guid tenant)
     {
         if (db.Database.GetDbConnection().State != System.Data.ConnectionState.Open)
             await db.Database.OpenConnectionAsync();
-        await db.Database.ExecuteSqlRawAsync($"SET ROLE {roleName}");
+        await db.Database.ExecuteSqlRawAsync("SET ROLE nocturne_app");
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('app.current_tenant_id', {tenant.ToString()}, false)");
         db.TenantId = tenant;
     }
@@ -271,37 +538,14 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(), Mock.Of<IBodyWeightService>(),
         Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
 
-    private static Task<int> CountAsync(NocturneDbContext db, string table) =>
-        db.Database.SqlQueryRaw<int>($"SELECT count(*)::integer AS \"Value\" FROM {table}").SingleAsync();
-
-    private sealed class InsertCounter : DbCommandInterceptor
-    {
-        public int Inserts { get; private set; }
-        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
-        {
-            if (command.CommandText.StartsWith("INSERT INTO google_health_reconciliation_ids")) Inserts++;
-            return ValueTask.FromResult(result);
-        }
-    }
 }
 
 public sealed class GoogleHealthPostgresFixture : IAsyncLifetime
 {
-    private PostgreSqlContainer? container;
-    public string ConnectionString { get; private set; } = string.Empty;
+    public TestDatabase Database { get; private set; } = null!;
 
-    public async Task InitializeAsync()
-    {
-        ConnectionString = Environment.GetEnvironmentVariable("NOCTURNE_TEST_POSTGRES_ADMIN") ?? string.Empty;
-        if (!string.IsNullOrEmpty(ConnectionString)) return;
-        container = new PostgreSqlBuilder().WithImage("postgres:17.6").Build();
-        await container.StartAsync();
-        ConnectionString = container.GetConnectionString();
-    }
+    public async Task InitializeAsync() =>
+        Database = await SharedPostgres.CreateMigratedDatabaseAsync("google_health");
 
-    public async Task DisposeAsync()
-    {
-        if (container is not null) await container.DisposeAsync();
-    }
+    public Task DisposeAsync() => Task.CompletedTask;
 }

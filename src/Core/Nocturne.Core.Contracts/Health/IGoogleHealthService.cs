@@ -10,6 +10,7 @@ public interface IGoogleHealthService
     Task<GoogleHealthAuthorize> StartAsync(Guid subject, CancellationToken ct);
     Task CompleteAsync(GoogleHealthCallback callback, Guid subject, CancellationToken ct);
     Task DisconnectAsync(Guid subject, CancellationToken ct);
+    Task ResumeDisconnectAsync(Guid subject, Guid requestId);
     Task PurgeAsync(Guid subject, CancellationToken ct);
     Task<GoogleHealthPreview> PreviewAsync(Guid subject, CancellationToken ct);
     Task QueueSyncAsync(CancellationToken ct);
@@ -17,14 +18,21 @@ public interface IGoogleHealthService
 
 public interface IGoogleHealthSyncCoordinator
 {
-    SemaphoreSlim Gate(Guid tenantId);
-    void Report(
+    Task<IGoogleHealthReadLease> WatchReadsAsync(Guid tenantId, CancellationToken ct);
+    Task<IAsyncDisposable?> AcquireAsync(Guid tenantId, CancellationToken ct, TimeSpan? timeout = null);
+    Task ReportAsync(
         Guid tenantId,
         GoogleHealthSyncPhase phase,
         string? dataType = null,
         int? completedDataTypes = null,
         int? totalDataTypes = null,
         int? pagesRead = null);
+    Task CompleteScheduledAsync(Guid tenantId);
+}
+
+public interface IGoogleHealthReadLease : IAsyncDisposable
+{
+    CancellationToken Token { get; }
 }
 
 public interface IGoogleHealthReadingWriter

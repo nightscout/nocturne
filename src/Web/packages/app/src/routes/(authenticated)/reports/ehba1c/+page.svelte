@@ -31,11 +31,6 @@
   type ChartPoint = {
     date: Date;
     estimatedA1cPercent: number;
-    linear90DayPercent: number | null;
-    halfLife30DayPercent: number | null;
-    unweighted90DayPercent: number | null;
-    weighted120DayPercent: number | null;
-    unweighted14DayPercent: number | null;
     weightedAverageGlucoseMgdl: number;
     readingCount: number;
     daysWithData: number;
@@ -65,14 +60,6 @@
     { key: "veryHigh", label: "Very high", maxPercent: 14.0, swatch: "var(--gri-zone-e)", texture: "ehba1c-zone-very-high" },
   ];
 
-  const METHOD_SERIES = [
-    { key: "current", label: "Current smooth 90-day", color: "var(--ehba1c-line)" },
-    { key: "linear", label: "Linear 90-to-1", color: "var(--ehba1c-linear)" },
-    { key: "halfLife", label: "30-day half-life", color: "var(--ehba1c-half-life)" },
-    { key: "unweighted", label: "Unweighted 90-day", color: "var(--ehba1c-unweighted)" },
-    { key: "weighted120", label: "120-day 50/25/25", color: "var(--ehba1c-weighted-120)" },
-    { key: "short14", label: "Unweighted 14-day", color: "var(--ehba1c-short-14)" },
-  ] as const;
   let loading = $state(true);
   let error = $state<unknown>(null);
   let pointsByYear = $state<Map<number, EHbA1cPoint[]>>(new Map());
@@ -103,6 +90,7 @@
   function dateKey(date: Date): string {
     return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
   }
+
   /** IFCC mmol/mol to NGSP %, the inverse of toIfccMmolMol — used to store a mmol/mol entry as %. */
   function toPercentFromDisplayUnit(value: number): number {
     return a1cUnit === "percent" ? value : value / 10.929 + 2.15;
@@ -119,6 +107,7 @@
       ? `${value.toFixed(1)}%`
       : `${Math.round(value)} mmol/mol`;
   }
+
   function toChartPoints(pointsMap: Map<number, EHbA1cPoint[]>): ChartPoint[] {
     const all: ChartPoint[] = [];
     for (const points of pointsMap.values()) {
@@ -128,11 +117,6 @@
         all.push({
           date: new Date(y, m - 1, d),
           estimatedA1cPercent: point.estimatedA1cPercent ?? 0,
-          linear90DayPercent: point.linear90DayPercent ?? null,
-          halfLife30DayPercent: point.halfLife30DayPercent ?? null,
-          unweighted90DayPercent: point.unweighted90DayPercent ?? null,
-          weighted120DayPercent: point.weighted120DayPercent ?? null,
-          unweighted14DayPercent: point.unweighted14DayPercent ?? null,
           weightedAverageGlucoseMgdl: point.weightedAverageGlucoseMgdl ?? 0,
           readingCount: point.readingCount ?? 0,
           daysWithData: point.daysWithData ?? 0,
@@ -189,17 +173,10 @@
 
   /** Fixed floor at the never-goes-lower bound; auto-scaled ceiling with a little headroom. */
   const yDomain = $derived.by((): [number, number] => {
-    const estimates = chartData.flatMap((p) => [
-      p.estimatedA1cPercent,
-      p.linear90DayPercent,
-      p.halfLife30DayPercent,
-      p.unweighted90DayPercent,
-      p.weighted120DayPercent,
-      p.unweighted14DayPercent,
-    ]).filter((value): value is number => value != null);
-    const dataMaxPercent = estimates.length > 0
-      ? Math.max(...estimates)
-      : A1C_ZONES[1].maxPercent;
+    const dataMaxPercent =
+      chartData.length > 0
+        ? Math.max(...chartData.map((p) => p.estimatedA1cPercent))
+        : A1C_ZONES[1].maxPercent;
     const maxPercent = Math.max(dataMaxPercent + 0.5, A1C_ZONES[1].maxPercent);
     return [toDisplayUnit(MIN_A1C_PERCENT), toDisplayUnit(maxPercent)];
   });
@@ -261,43 +238,51 @@
     }))
   );
 
-  function displayRow(point: ChartPoint) {
-    return {
-      date: point.date,
-      current: toDisplayUnit(point.estimatedA1cPercent),
-      linear: point.linear90DayPercent == null ? null : toDisplayUnit(point.linear90DayPercent),
-      halfLife: point.halfLife30DayPercent == null ? null : toDisplayUnit(point.halfLife30DayPercent),
-      unweighted: point.unweighted90DayPercent == null ? null : toDisplayUnit(point.unweighted90DayPercent),
-      weighted120: point.weighted120DayPercent == null ? null : toDisplayUnit(point.weighted120DayPercent),
-      short14: point.unweighted14DayPercent == null ? null : toDisplayUnit(point.unweighted14DayPercent),
-    };
+  function displayValueForChartDate(date: Date): number | null {
+    if (chartData.length === 0) return null;
+    const timestamp = date.getTime();
+    if (
+      timestamp < chartData[0].date.getTime() ||
+      timestamp > chartData[chartData.length - 1].date.getTime()
+    ) {
+      return null;
+    }
+    const nextIndex = chartData.findIndex((point) => point.date.getTime() >= timestamp);
+    if (nextIndex === 0) return toDisplayUnit(chartData[0].estimatedA1cPercent);
+    if (nextIndex === -1) return toDisplayUnit(chartData[chartData.length - 1].estimatedA1cPercent);
+
+    const previous = chartData[nextIndex - 1];
+    const next = chartData[nextIndex];
+    const progress = (timestamp - previous.date.getTime()) / (next.date.getTime() - previous.date.getTime());
+    const value = previous.estimatedA1cPercent +
+      (next.estimatedA1cPercent - previous.estimatedA1cPercent) * progress;
+    return toDisplayUnit(value);
   }
 
   const displayChartData = $derived.by(() => {
-    const estimates = chartData.map(displayRow);
-    const rows = new SvelteMap(estimates.map((point) => [point.date.getTime(), point]));
-    // Interpolated rows are hover targets only, never inputs to the estimates or summaries.
-    // Labs stay in the marker layer: a second series would draw a line joining lab results.
+    const rows = new SvelteMap<number, { date: Date; displayValue: number }>();
+    for (const point of chartData) {
+      rows.set(point.date.getTime(), {
+        date: point.date,
+        displayValue: toDisplayUnit(point.estimatedA1cPercent),
+      });
+    }
+    // A lab-only date gets a synthetic row with the interpolated estimate solely to give the tooltip
+    // a hover target there. `extremes` and `yDomain` read `chartData`, so the summaries never see
+    // these rows, and lab draws stay out of the calculation (see `labChartPoints`). Declaring lab
+    // draws as a second series instead would be wrong: LineChart renders a Spline per visible
+    // series and would join the lab points with a line.
     for (const labPoint of labChartPoints) {
-      const timestamp = labPoint.date.getTime();
-      if (rows.has(timestamp)) continue;
-      const nextIndex = estimates.findIndex((point) => point.date.getTime() >= timestamp);
-      if (nextIndex <= 0) continue;
-      const previous = estimates[nextIndex - 1];
-      const next = estimates[nextIndex];
-      const progress = (timestamp - previous.date.getTime()) / (next.date.getTime() - previous.date.getTime());
-      const row = { ...previous, date: labPoint.date };
-      for (const method of METHOD_SERIES) {
-        const start = previous[method.key];
-        const end = next[method.key];
-        const value = start == null || end == null ? null : start + (end - start) * progress;
-        if (method.key === "current") row.current = value ?? previous.current;
-        else row[method.key] = value;
+      if (!rows.has(labPoint.date.getTime())) {
+        const displayValue = displayValueForChartDate(labPoint.date);
+        if (displayValue !== null) {
+          rows.set(labPoint.date.getTime(), { date: labPoint.date, displayValue });
+        }
       }
-      rows.set(timestamp, row);
     }
     return [...rows.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
   });
+
   async function addLabResult() {
     const value = Number(newLabValue);
     if (!newLabDate || !newLabValue || Number.isNaN(value)) return;
@@ -346,9 +331,13 @@
           Estimated HbA1c (eHbA1c)
         </Card.Title>
         <Card.Description>
-          Experimental comparison of six glucose-derived estimates. Five alternatives are plotted
-          beside the current smooth 90-day method; saved lab results remain independent triangle
-          markers and are never used to alter any estimate.
+          eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it
+          takes the average glucose from every reading in the trailing 90 days and weights each
+          day's contribution by recency — the most recent ~30 days count for roughly half the
+          estimate, tapering off exponentially for older days, similar to how glycated hemoglobin
+          reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted
+          average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average
+          glucose in mg/dL + 46.7) / 28.7.
         </Card.Description>
       </div>
       <ToggleGroup.Root
@@ -413,15 +402,16 @@
           <LineChart
             data={displayChartData}
             x="date"
-            y="current"
-            legend
+            y="displayValue"
             {yDomain}
             clip
-            series={METHOD_SERIES.map((method) => ({
-              key: method.key,
-              label: method.label,
-              color: method.color,
-            }))}
+            series={[
+              {
+                key: "displayValue",
+                label: a1cUnit === "percent" ? "eHbA1c %" : "eHbA1c mmol/mol",
+                color: "var(--ehba1c-line)",
+              },
+            ]}
             props={{ spline: { "stroke-width": 3, "stroke-linecap": "round", "data-testid": "ehba1c-line" } }}
             points={{ data: labChartPoints, x: (d) => d.date, y: (d) => d.displayValue, children: labMarkers }}
             {annotations}
@@ -461,15 +451,6 @@
               </Tooltip.Root>
             {/snippet}
           </LineChart>
-        </div>
-
-        <div class="mt-4 grid gap-2 text-sm text-muted-foreground @md:grid-cols-2">
-          <p><strong class="text-foreground">Current smooth 90-day:</strong> existing ADAG estimate; smooth decay calibrated so the newest 30 days contribute about half.</p>
-          <p><strong class="text-foreground">Linear 90-to-1:</strong> today has weight 90, yesterday 89, down to weight 1 for the oldest day in the 90-day window.</p>
-          <p><strong class="text-foreground">30-day half-life:</strong> exponential decay; a reading's weight halves every 30 days.</p>
-          <p><strong class="text-foreground">Unweighted 90-day:</strong> every reading in the trailing 90 days contributes equally; converted with ADAG.</p>
-          <p><strong class="text-foreground">120-day 50/25/25:</strong> a common clinical approximation: 50% emphasis on days 0–29, 25% on days 30–59, and 25% on days 60–119; converted with ADAG.</p>
-          <p><strong class="text-foreground">Unweighted 14-day:</strong> the same ADAG conversion as the 90-day line, but over only 14 days. It should cross the 90-day line after a trend reversal and converge during a stable period.</p>
         </div>
 
         <div class="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm">

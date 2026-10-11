@@ -94,6 +94,10 @@ public enum ConnectorPropertyKey
     FetchAllEventTypes,
     IgnoreZeroUnitBasal,
 
+    // Glooko-specific (appended so earlier members keep their values)
+    AutoClockCorrection,
+
+    // Google Health-specific (appended so earlier members keep their values)
     ClientId,
     ClientSecret,
     CallbackUrl,
@@ -104,6 +108,5 @@ public enum ConnectorPropertyKey
     SyncHeartRate,
     SyncBodyWeight,
     SyncSleep,
-    // Glooko-specific (appended so earlier members keep their values)
-    AutoClockCorrection,
+
 }
