@@ -40,8 +40,9 @@ public abstract class DecomposerBase
     /// from what it reads back. Preserving per row instead lets a group fork permanently: siblings are
     /// written in separate transactions, so one lost to a cancelled sync is recreated under a fresh id
     /// while the survivors keep the old one, and a reader that loads siblings by correlation id then
-    /// silently returns nothing. Rewriting the id everywhere on every sync is what currently repairs
-    /// that, so removing the rewrite without converging the group would make the damage permanent.
+    /// silently returns nothing. A decomposer that resolves the group's id first
+    /// (<see cref="GetStoredCorrelationIdsAsync"/>) and stamps every sibling with it converges such a
+    /// group instead, and is the way to keep a stored id.
     /// A group whose members are not all upserted under a shared legacy id has no anchor to converge
     /// on and must not set this at all: <see cref="DeviceStatusDecomposer"/> creates its extras row
     /// keyed by the freshly minted id and carrying no legacy id, so preserving on one of its snapshot
@@ -112,6 +113,54 @@ public abstract class DecomposerBase
         Logger.LogDebug(
             "Updated existing {RecordType} {Id} from legacy record {LegacyId}", recordType, existing.Id, legacyId);
         return (updated, false);
+    }
+
+    /// <summary>
+    /// One table's <see cref="ILegacyKeyedRepository{TRecord}.GetCorrelationIdsByLegacyIdAsync"/>.
+    /// </summary>
+    protected delegate Task<IEnumerable<LegacyCorrelation>> StoredCorrelationLookup(
+        IEnumerable<string> legacyIds, CancellationToken ct);
+
+    /// <summary>
+    /// The correlation id the stored rows of each of <paramref name="legacyIds"/> already carry,
+    /// taken from the first of <paramref name="tables"/> that holds one.
+    /// </summary>
+    /// <remarks>
+    /// A re-send keeps that id rather than minting a fresh one. A fresh id makes an otherwise
+    /// unchanged re-upsert an UPDATE of the indexed correlation column, the bloat described on
+    /// <see cref="UpsertByLegacyIdAsync"/>, and a group row that carries no legacy id of its own
+    /// is found only through the stored id. Stamping every sibling with the one id also converges
+    /// a group that has forked.
+    /// </remarks>
+    protected static async Task<Dictionary<string, Guid>> GetStoredCorrelationIdsAsync(
+        IEnumerable<string?> legacyIds, IReadOnlyList<StoredCorrelationLookup> tables, CancellationToken ct)
+    {
+        var correlationIds = new Dictionary<string, Guid>(StringComparer.Ordinal);
+        var ids = legacyIds.OfType<string>().Distinct(StringComparer.Ordinal).ToList();
+        if (ids.Count == 0)
+            return correlationIds;
+
+        foreach (var table in tables)
+        {
+            foreach (var stored in await table(ids, ct))
+                correlationIds.TryAdd(stored.LegacyId, stored.CorrelationId);
+        }
+
+        return correlationIds;
+    }
+
+    /// <summary>
+    /// The correlation id to write <paramref name="legacyId"/>'s group under: the stored one from
+    /// <see cref="GetStoredCorrelationIdsAsync"/>, else one minted and recorded in
+    /// <paramref name="correlationIds"/> so the batch's duplicates of the legacy id share it.
+    /// </summary>
+    protected static Guid CorrelationIdFor(string? legacyId, Dictionary<string, Guid> correlationIds)
+    {
+        if (legacyId is null)
+            return Guid.CreateVersion7();
+        if (!correlationIds.TryGetValue(legacyId, out var correlationId))
+            correlationIds[legacyId] = correlationId = Guid.CreateVersion7();
+        return correlationId;
     }
 
     /// <summary>
