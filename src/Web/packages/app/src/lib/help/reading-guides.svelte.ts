@@ -743,7 +743,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Complete identity",
-          "Set up the account and correct patient workspace.",
+          "Set up your account and select the correct patient workspace.",
         ],
         [
           "Connect a source",
@@ -1000,7 +1000,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Use correction deliberately",
-          "Fix already-imported data is a separate operation; a display-format change does not repair timestamps.",
+          "The Fix already-imported data action is separate from changing display formats. Use it to correct existing timestamps.",
         ],
       ]
     ),

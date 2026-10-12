@@ -29664,9 +29664,8 @@ msgstr "Sharing & Privacy controls tenant membership; platform administration co
 msgid "Complete identity"
 msgstr "Complete identity"
 
-#: src/lib/help/reading-guides.svelte.ts
-msgid "Set up the account and correct patient workspace."
-msgstr "Set up the account and correct patient workspace."
+#~ msgid "Set up the account and correct patient workspace."
+#~ msgstr "Set up the account and correct patient workspace."
 
 #: src/lib/help/reading-guides.svelte.ts
 msgid "Connect a source"
@@ -30012,9 +30011,8 @@ msgstr "Dated locations explain local timing as the patient travels."
 msgid "Use correction deliberately"
 msgstr "Use correction deliberately"
 
-#: src/lib/help/reading-guides.svelte.ts
-msgid "Fix already-imported data is a separate operation; a display-format change does not repair timestamps."
-msgstr "Fix already-imported data is a separate operation; a display-format change does not repair timestamps."
+#~ msgid "Fix already-imported data is a separate operation; a display-format change does not repair timestamps."
+#~ msgstr "Fix already-imported data is a separate operation; a display-format change does not repair timestamps."
 
 #: src/lib/help/reading-guides.svelte.ts
 msgid "Choose the source"
@@ -30359,3 +30357,11 @@ msgstr "Application dialog content"
 #: src/lib/components/help/HelpHarness.test.svelte
 msgid "Dialog content"
 msgstr "Dialog content"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Set up your account and select the correct patient workspace."
+msgstr "Set up your account and select the correct patient workspace."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The Fix already-imported data action is separate from changing display formats. Use it to correct existing timestamps."
+msgstr "The Fix already-imported data action is separate from changing display formats. Use it to correct existing timestamps."
