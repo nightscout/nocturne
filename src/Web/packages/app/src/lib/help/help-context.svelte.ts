@@ -3,6 +3,21 @@ import type { NavItem } from "$lib/navigation/app-navigation.svelte";
 
 const HELP = Symbol("nocturne-help");
 const STORAGE_KEY = "nocturne-help-visibility";
+const LAYOUT_KEY = "nocturne-help-layout";
+export const helpLayouts = ["drawer", "right", "alongside", "page"] as const;
+export type HelpLayout = (typeof helpLayouts)[number];
+export function isHelpLayout(value: unknown): value is HelpLayout {
+  return helpLayouts.some((layout) => layout === value);
+}
+export function helpLayoutLabel(layout: HelpLayout): string {
+  const labels: Record<HelpLayout, string> = {
+    drawer: "Navigation drawer",
+    right: "Right drawer",
+    alongside: "Side by side",
+    page: "Replace page",
+  };
+  return labels[layout];
+}
 export const helpModes = ["bar", "icon", "hidden"] as const;
 export type HelpMode = (typeof helpModes)[number];
 
@@ -16,11 +31,15 @@ export function createHelpContext() {
   let open = $state(false);
   let path = $state("/");
   let navigation = $state<NavItem[]>([]);
+  let layout = $state<HelpLayout>("drawer");
+  let top = $state(64);
 
   onMount(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (isHelpMode(saved)) mode = saved;
+      const savedLayout = localStorage.getItem(LAYOUT_KEY);
+      if (isHelpLayout(savedLayout)) layout = savedLayout;
     } catch {
       /* Help remains usable when browser storage is unavailable. */
     }
@@ -30,12 +49,32 @@ export function createHelpContext() {
         mode = isHelpMode(event.newValue) ? event.newValue : "icon";
         if (mode === "hidden") open = false;
       }
+      if (event.key === LAYOUT_KEY) {
+        layout = isHelpLayout(event.newValue) ? event.newValue : "drawer";
+      }
     };
     window.addEventListener("storage", sync);
     return () => window.removeEventListener("storage", sync);
   });
 
   const help = {
+    get layout() {
+      return layout;
+    },
+    get top() {
+      return top;
+    },
+    set top(value: number) {
+      top = value;
+    },
+    setLayout(value: HelpLayout) {
+      layout = value;
+      try {
+        localStorage.setItem(LAYOUT_KEY, value);
+      } catch {
+        /* Session-only fallback. */
+      }
+    },
     get ready() {
       return ready;
     },
@@ -67,6 +106,13 @@ export function createHelpContext() {
       }
     },
     show(value: string) {
+      const headers = document.querySelectorAll<HTMLElement>(
+        '[data-slot="sidebar-header"], [data-help-header]'
+      );
+      const header = Array.from(headers).find(
+        (element) => element.getBoundingClientRect().width > 0
+      );
+      top = Math.max(0, header?.getBoundingClientRect().bottom ?? 64);
       path = value;
       open = true;
     },
