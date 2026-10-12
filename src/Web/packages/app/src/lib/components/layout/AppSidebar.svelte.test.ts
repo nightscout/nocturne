@@ -136,6 +136,19 @@ describe("AppSidebar", () => {
     await expect.element(link("Steps")).toHaveAttribute("data-active", "true");
   });
 
+  it("restores an intentionally collapsed active menu after page help", async () => {
+    localStorage.setItem("nocturne-help-layout", "page");
+    pageState.url.pathname = "/reports/steps";
+    pageState.data = { effectivePermissions: ["*"] };
+    render(Harness, { user: MEMBER });
+    await group("Reports").click();
+    await expect.element(link("Steps")).not.toBeInTheDocument();
+    await group("Open page help").click();
+    await expect.element(link("Steps")).toBeVisible();
+    await group("Close page help").click();
+    await expect.element(link("Steps")).not.toBeInTheDocument();
+  });
+
   it("offers a public share the dashboard and a way to sign in, and nothing the owner acts on", async () => {
     pageState.data = { effectivePermissions: ["glucose.read"] };
 

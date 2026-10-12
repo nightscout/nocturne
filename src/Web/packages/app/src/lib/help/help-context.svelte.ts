@@ -33,8 +33,29 @@ export function createHelpContext() {
   let navigation = $state<NavItem[]>([]);
   let layout = $state<HelpLayout>("drawer");
   let top = $state(64);
+  let compact = $state(false);
+
+  function measureHeaderTop() {
+    const headers = document.querySelectorAll<HTMLElement>(
+      '[data-slot="sidebar-header"], [data-help-header]'
+    );
+    const header = Array.from(headers).find((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.right > 0 && rect.left < window.innerWidth;
+    });
+    const rect = header?.getBoundingClientRect();
+    return header?.hasAttribute("data-help-header")
+      ? Math.max(rect?.height ?? 56, rect?.bottom ?? 56)
+      : Math.max(0, rect?.bottom ?? 64);
+  }
 
   onMount(() => {
+    const media = window.matchMedia("(max-width: 1100px)");
+    const syncSize = () => {
+      compact = media.matches;
+    };
+    syncSize();
+    media.addEventListener("change", syncSize);
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (isHelpMode(saved)) mode = saved;
@@ -54,18 +75,21 @@ export function createHelpContext() {
       }
     };
     window.addEventListener("storage", sync);
-    return () => window.removeEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      media.removeEventListener("change", syncSize);
+    };
   });
 
   const help = {
+    get blocking() {
+      return open && layout !== "page" && (layout !== "alongside" || compact);
+    },
     get layout() {
       return layout;
     },
     get top() {
       return top;
-    },
-    set top(value: number) {
-      top = value;
     },
     setLayout(value: HelpLayout) {
       layout = value;
@@ -106,19 +130,14 @@ export function createHelpContext() {
       }
     },
     show(value: string) {
-      const headers = document.querySelectorAll<HTMLElement>(
-        '[data-slot="sidebar-header"], [data-help-header]'
-      );
-      const header = Array.from(headers).find(
-        (element) => element.getBoundingClientRect().width > 0
-      );
-      top = Math.max(0, header?.getBoundingClientRect().bottom ?? 64);
+      top = measureHeaderTop();
       path = value;
       open = true;
     },
     toggle(value: string) {
       if (open) open = false;
       else {
+        top = measureHeaderTop();
         path = value;
         open = true;
       }

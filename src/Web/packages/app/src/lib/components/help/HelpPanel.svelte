@@ -10,7 +10,13 @@
   let panel: HTMLElement;
   let content: HTMLDivElement;
   $effect(() => {
-    const previous = document.activeElement;
+    const active = document.activeElement;
+    const previous =
+      active && active !== document.body
+        ? active
+        : Array.from(
+            document.querySelectorAll<HTMLElement>("[data-help-toggle]")
+          ).find((element) => element.getBoundingClientRect().width > 0);
     panel?.focus({ preventScroll: true });
     return () => {
       void tick().then(() => {
@@ -25,6 +31,7 @@
 </script>
 
 <section
+  data-help-panel
   bind:this={panel}
   tabindex="-1"
   aria-label="Documentation panel"
@@ -57,12 +64,11 @@
       <X class="size-4" />Close
     </Button>
   </header>
-  <div
-    class="flex min-h-0 flex-1"
-    class:wide={help?.layout === "drawer"}
-  >
+  <div class="flex min-h-0 flex-1" class:wide={help?.layout === "drawer"}>
     {#if help?.layout === "drawer"}
-      <div class="help-nav min-h-0 overflow-y-auto overscroll-contain border-r bg-sidebar">
+      <div
+        class="help-nav min-h-0 overflow-y-auto overscroll-contain border-r bg-sidebar"
+      >
         <HelpNavigation />
       </div>
     {/if}
