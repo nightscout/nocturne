@@ -1,16 +1,107 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import Harness from "./HelpHarness.test.svelte";
 
 beforeEach(() => {
   localStorage.removeItem("nocturne-help-visibility");
+  localStorage.setItem("nocturne-help-layout", "page");
   pageState.url.pathname = "/reports/steps";
   pageState.url.search = "?range=week";
 });
 
 describe("documentation help", () => {
+  it("keeps navigation, the guide and the close book reachable on a phone", async () => {
+    await page.viewport(390, 844);
+    localStorage.setItem("nocturne-help-layout", "drawer");
+    render(Harness);
+    await page
+      .getByRole("button", { name: "Open page help", exact: true })
+      .click();
+    await expect
+      .element(
+        page.getByRole("navigation", { name: "Documentation navigation" })
+      )
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("textbox", { name: "Search all documentation" }))
+      .toBeVisible();
+    await vi.waitFor(() => {
+      const bounds = page.getByRole("region", { name: "Documentation panel" }).element().getBoundingClientRect();
+      expect(bounds.left).toBeGreaterThanOrEqual(0);
+      expect(bounds.right).toBeLessThanOrEqual(390);
+    });
+    await page
+      .getByRole("button", { name: "Close page help", exact: true })
+      .click();
+    await expect
+      .element(page.getByRole("textbox", { name: "Report notes" }))
+      .toBeVisible();
+    await page.viewport(1280, 900);
+  });
+  it.each(["drawer", "right", "alongside"])(
+    "keeps the page and its inputs intact with the %s layout",
+    async (layout) => {
+      localStorage.setItem("nocturne-help-layout", layout);
+      render(Harness);
+      await page
+        .getByRole("textbox", { name: "Report notes" })
+        .fill("Keep my work");
+      await page
+        .getByRole("button", { name: "Open page help", exact: true })
+        .click();
+      await expect
+        .element(page.getByRole("region", { name: "Documentation panel" }))
+        .toBeVisible();
+      if (layout !== "drawer")
+        await page.getByText("Browse documentation", { exact: true }).click();
+      await page
+        .getByRole("navigation", { name: "Documentation navigation" })
+        .getByRole("button", { name: "Heart Rate", exact: true })
+        .click();
+      await expect
+        .element(page.getByRole("heading", { name: "Heart Rate", exact: true }))
+        .toBeVisible();
+      expect(pageState.url.pathname + pageState.url.search).toBe(
+        "/reports/steps?range=week"
+      );
+      await page
+        .getByRole("button", { name: "Close documentation", exact: true })
+        .click();
+      await expect
+        .element(page.getByRole("textbox", { name: "Report notes" }))
+        .toHaveValue("Keep my work");
+      await expect
+        .element(
+          page.getByRole("button", { name: "Open page help", exact: true })
+        )
+        .toBeVisible();
+    }
+  );
+
+  it("persists layout selection and uses the navigation drawer by default", async () => {
+    localStorage.removeItem("nocturne-help-layout");
+    render(Harness);
+    await expect
+      .element(page.getByLabelText("Documentation layout"))
+      .toHaveTextContent("Navigation drawer");
+    await page.getByLabelText("Documentation layout").click();
+    await page
+      .getByRole("option", { name: "Right drawer", exact: true })
+      .click();
+    expect(localStorage.getItem("nocturne-help-layout")).toBe("right");
+    await page
+      .getByRole("button", { name: "Open page help", exact: true })
+      .click();
+    await expect
+      .element(page.getByRole("region", { name: "Documentation panel" }))
+      .toBeVisible();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await expect
+      .element(page.getByLabelText("Documentation layout"))
+      .toHaveTextContent("Right drawer");
+  });
   it("opens current-page help, follows connector guides, searches, and closes without navigation", async () => {
     render(Harness);
     await page
