@@ -536,6 +536,66 @@ public class TandemE2eSyncTests
         pumpLogs.Path.Should().Contain("startDate=2026-05-15T00%3A00%3A00Z");
     }
 
+    /// <summary>
+    /// The pump's settings carry no time of their own, so each sync maps them to a profile stamped
+    /// with the time of that sync. Only settings that differ from the last ones published are
+    /// published again; otherwise every sync would store the same profile as a new document.
+    /// </summary>
+    [Fact]
+    public async Task Unchanged_pump_settings_are_published_once()
+    {
+        var fixture = new Fixture(PumperWithSettings(basalRate: 1000));
+
+        await fixture.RunAsync(ProfilesOnly);
+        var result = await fixture.RunAsync(ProfilesOnly);
+
+        fixture.Publisher.Profiles.Should().ContainSingle();
+        result.ItemsSynced[SyncDataType.Profiles].Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Changed_pump_settings_are_published_including_a_return_to_earlier_ones()
+    {
+        var fixture = new Fixture(PumperWithSettings(basalRate: 1000));
+
+        await fixture.RunAsync(ProfilesOnly);
+        fixture.ServePumper(PumperWithSettings(basalRate: 800));
+        await fixture.RunAsync(ProfilesOnly);
+        fixture.ServePumper(PumperWithSettings(basalRate: 1000));
+        await fixture.RunAsync(ProfilesOnly);
+
+        fixture.Publisher.Profiles.Select(p => p.Store["Weekday"].Basal.Single().Value)
+            .Should().Equal(1.0, 0.8, 1.0);
+    }
+
+    [Fact]
+    public async Task Settings_whose_publish_failed_are_published_by_the_next_sync()
+    {
+        var fixture = new Fixture(PumperWithSettings(basalRate: 1000));
+
+        fixture.Publisher.FailProfiles = true;
+        await fixture.RunAsync(ProfilesOnly);
+        fixture.Publisher.FailProfiles = false;
+        await fixture.RunAsync(ProfilesOnly);
+
+        fixture.Publisher.Profiles.Should().ContainSingle();
+    }
+
+    private static readonly SyncRequest ProfilesOnly = new() { DataTypes = [SyncDataType.Profiles] };
+
+    /// <summary><see cref="PumperJson"/>'s pump carrying one pump profile at <paramref name="basalRate"/> milliunits/hour.</summary>
+    private static string PumperWithSettings(int basalRate)
+    {
+        var pumper = JsonNode.Parse(PumperJson)!;
+        pumper["pumps"]![0]!["settings"] = JsonNode.Parse($$"""
+            {"details": {
+                "profiles": {"activeIdp": 1, "profile": [{"name": "Weekday", "idp": 1, "insulinDuration": 300,
+                    "timeDependentSegments": [{"startTime": 0, "basalRate": {{basalRate}}, "isf": 50, "carbRatio": 10000, "targetBg": 110}]}]},
+                "cgmSettings": {"highGlucoseAlertMgPerDl": 200, "lowGlucoseAlertMgPerDl": 80} } }
+            """);
+        return pumper.ToJsonString();
+    }
+
     private static DateTime Utc(int y, int mo, int d, int h, int mi, int s) =>
         new(y, mo, d, h, mi, s, DateTimeKind.Utc);
 
@@ -647,6 +707,20 @@ public class TandemE2eSyncTests
         }
     }
 
+    private sealed class InMemoryCursorStore : IConnectorSyncCursorStore
+    {
+        private readonly Dictionary<(string, string), ConnectorSyncCursor> _cursors = [];
+
+        public Task<ConnectorSyncCursor?> GetAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_cursors.GetValueOrDefault((connectorName, resource)));
+
+        public Task SetAsync(string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken cancellationToken = default)
+        {
+            _cursors[(connectorName, resource)] = cursor;
+            return Task.CompletedTask;
+        }
+    }
+
     /// <summary>Records every published record; the Nocturne analog of upstream's FakeNightscout.</summary>
     private sealed class RecordingPublisher(DateTime? latestEntry, DateTime? latestTreatment)
         : IConnectorPublisher, IGlucosePublisher, ITreatmentPublisher, IDevicePublisher, IMetadataPublisher
@@ -661,6 +735,7 @@ public class TandemE2eSyncTests
         public List<StateSpan> StateSpans { get; } = [];
         public List<SystemEvent> SystemEvents { get; } = [];
         public List<Profile> Profiles { get; } = [];
+        public bool FailProfiles { get; set; }
 
         public bool PublishedAnything =>
             SensorGlucoses.Count + Boluses.Count + CarbIntakes.Count + BolusCalculations.Count +
@@ -729,7 +804,7 @@ public class TandemE2eSyncTests
             Task.FromResult<DateTime?>(null);
 
         public Task<bool> PublishProfilesAsync(IEnumerable<Profile> profiles, string source, WriteOrigin origin, CancellationToken ct = default) =>
-            Record(Profiles, profiles);
+            FailProfiles ? Task.FromResult(false) : Record(Profiles, profiles);
         public Task<bool> PublishFoodAsync(IEnumerable<Food> foods, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Task.FromResult(true);
         public Task<IReadOnlyList<ConnectorFoodEntry>?> PublishConnectorFoodEntriesAsync(IEnumerable<ConnectorFoodEntryImport> entries, string source, WriteOrigin origin, CancellationToken ct = default) =>
@@ -770,6 +845,7 @@ public class TandemE2eSyncTests
         public List<CapturedRequest> Requests { get; } = [];
         private readonly TandemConnectorService _service;
         private readonly TandemConnectorConfiguration _config;
+        private readonly Dictionary<string, string> _responses;
 
         public Fixture(
             string pumperJson = PumperJson,
@@ -793,11 +869,12 @@ public class TandemE2eSyncTests
             };
 
             Publisher = new RecordingPublisher(latestEntry, latestTreatment);
-            var handler = new CapturingHandler(new Dictionary<string, string>
+            _responses = new Dictionary<string, string>
             {
                 ["/api/reports/bff/pumper/"] = pumperJson,
                 ["/api/reports/bff/pump-logs/"] = pumpLogsJson,
-            }, Requests, servesEveryWindow);
+            };
+            var handler = new CapturingHandler(_responses, Requests, servesEveryWindow);
 
             _service = new TandemConnectorService(
                 new HttpClient(handler),
@@ -805,8 +882,11 @@ public class TandemE2eSyncTests
                 NullLogger<TandemConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 new FakeTandemAuthTokenProvider(),
-                Publisher);
+                Publisher,
+                new InMemoryCursorStore());
         }
+
+        public void ServePumper(string pumperJson) => _responses["/api/reports/bff/pumper/"] = pumperJson;
 
         public Task<SyncResult> RunAsync(SyncRequest? request = null) =>
             _service.SyncDataAsync(request ?? new SyncRequest(), _config, CancellationToken.None);
