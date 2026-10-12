@@ -19,7 +19,7 @@
   $effect(() => {
     if (help?.path) {
       query = "";
-      window.scrollTo({ top: 0, behavior: "instant" });
+      if (help.layout === "page") window.scrollTo({ top: 0, behavior: "instant" });
     }
   });
   const links = $derived(documentationLinks(help?.navigation ?? []));
@@ -112,9 +112,8 @@
       {#if article.href.startsWith("/settings/connectors/") && links.some((link) => link.href === "/settings/connectors")}
         <Button
           href={article.href}
-          onclick={() => {
-            if (help) help.open = false;
-          }}
+          target="_blank"
+          rel="noopener"
         >
           Open connector settings <ArrowRight class="size-4" />
         </Button>

@@ -67,6 +67,7 @@ function renderViewingBravo() {
 describe("AppSidebar", () => {
   beforeEach(async () => {
     localStorage.removeItem("nocturne-help-visibility");
+    localStorage.removeItem("nocturne-help-layout");
     // Below the sidebar's mobile breakpoint it renders as a closed sheet and offers nothing.
     await page.viewport(1280, 900);
     pageState.data = {};
@@ -102,6 +103,7 @@ describe("AppSidebar", () => {
   });
 
   it("uses the existing sidebar for help and restores the original report and its filters", async () => {
+    localStorage.setItem("nocturne-help-layout", "page");
     pageState.url.pathname = "/reports/steps";
     pageState.url.search = "?range=week";
     pageState.data = { effectivePermissions: ["*"] };
@@ -117,6 +119,21 @@ describe("AppSidebar", () => {
     await group("Close page help").click();
     await expect.element(page.getByText("Underlying report")).toBeVisible();
     await expect.element(page.getByRole("textbox", { name: "Report filter" })).toHaveValue("my selection");
+  });
+
+  it("covers the original navigation with the drawer and leaves the book usable", async () => {
+    pageState.url.pathname = "/reports/steps";
+    pageState.data = { effectivePermissions: ["*"] };
+    render(Harness, { user: MEMBER });
+    await page.getByRole("textbox", { name: "Report filter" }).fill("unsaved selection");
+    await group("Open page help").click();
+    const docs = page.getByRole("navigation", { name: "Documentation navigation" });
+    await docs.getByRole("button", { name: "Heart Rate", exact: true }).click();
+    await expect.element(page.getByRole("heading", { name: "Heart Rate", exact: true })).toBeVisible();
+    expect(pageState.url.pathname).toBe("/reports/steps");
+    await group("Close page help").click();
+    await expect.element(page.getByRole("textbox", { name: "Report filter" })).toHaveValue("unsaved selection");
+    await expect.element(link("Steps")).toHaveAttribute("data-active", "true");
   });
 
   it("offers a public share the dashboard and a way to sign in, and nothing the owner acts on", async () => {
