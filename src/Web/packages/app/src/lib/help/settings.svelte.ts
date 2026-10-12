@@ -56,8 +56,7 @@ export function settingsArticles(): HelpArticle[] {
       "Choose the default profile here and inspect target, basal, carbohydrate-ratio, and sensitivity schedules. Correct the source profile in the originating app/device when this page only offers a read-only schedule.",
       "Schedules provide context for insulin calculations, scheduled basal, and personal target overlays.",
       "A scheduled rate is not proof of actual delivery. Historical profile timing matters. Personal targets do not replace the report reference bands or automatically update alert thresholds.",
-      ["/settings/connectors", "/reports/basal-analysis", "/alerts"],
-      "glucose"
+      ["/settings/connectors", "/reports/basal-analysis", "/alerts"]
     ),
     guide(
       "/settings/data-quality",
@@ -101,8 +100,7 @@ export function settingsArticles(): HelpArticle[] {
         "/settings/connectors/google-health",
         "/reports/steps",
         "/reports/heart-rate",
-      ],
-      "google-health"
+      ]
     ),
     guide(
       "/settings/members",

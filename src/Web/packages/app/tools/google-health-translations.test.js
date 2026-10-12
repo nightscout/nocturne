@@ -139,14 +139,30 @@ describe("Google Health production translations", () => {
           sourceLocale: "en",
           loader: "sveltekit",
           storage: pofile({ location: "locales/{locale}.po" }),
-          files: ["src/**/*.svelte"],
+          files: ["src/**/*.svelte", "src/**/*.svelte.ts"],
         }) },
       });
     `
     );
     const plugin = wuchale({ configPath });
     await plugin.configResolved({ env: { DEV: false } });
-    const fixture = representativeCopy
+    const labelSource = await readFile(
+      new URL(
+        "../src/lib/components/connectors/google-health-labels.svelte.ts",
+        import.meta.url
+      ),
+      "utf8"
+    );
+    const labelCopy = [
+      ...[...labelSource.matchAll(/^\s+\w+:\s*("(?:[^"\\]|\\.)*"),?$/gm)].map(
+        (match) => JSON.parse(match[1])
+      ),
+      JSON.parse(labelSource.match(/\?\?\s*("(?:[^"\\]|\\.)*")/)[1]),
+    ];
+    const pageCopy = representativeCopy.filter(
+      (copy) => !labelCopy.includes(copy)
+    );
+    const fixture = pageCopy
       .map((copy) =>
         copy === cursorResetFailureCopy
           ? `<span>{errorCode === "connector_reset_failed" ? ${JSON.stringify(copy)} : errorCode}</span>`
@@ -161,11 +177,31 @@ describe("Google Health production translations", () => {
       ),
       { ssr: false }
     );
-    messageIds = [...code.matchAll(/_w_runtime_\((\d+)\)/g)].map((match) =>
+    const pageIds = [...code.matchAll(/_w_runtime_\((\d+)\)/g)].map((match) =>
       Number(match[1])
     );
-    expect(messageIds).toHaveLength(representativeCopy.length);
+    expect(pageIds).toHaveLength(pageCopy.length);
     expect(code).toMatch(/errorCode\s*===\s*["']connector_reset_failed["']/);
+    // Wuchale resolves messages by their source reference. Compile the shared
+    // label module at its real path rather than pretending its strings live on the page.
+    const labels = await plugin.transform.handler(
+      labelSource,
+      join(
+        root,
+        "src/lib/components/connectors/google-health-labels.svelte.ts"
+      ),
+      { ssr: false }
+    );
+    const labelIds = [...labels.code.matchAll(/_w_runtime_\((\d+)\)/g)].map(
+      (match) => Number(match[1])
+    );
+    expect(labelIds).toHaveLength(labelCopy.length);
+    const idsByCopy = new Map([
+      ...pageCopy.map((copy, index) => [copy, pageIds[index]]),
+      ...labelCopy.map((copy, index) => [copy, labelIds[index]]),
+    ]);
+    messageIds = representativeCopy.map((copy) => idsByCopy.get(copy));
+    expect(messageIds.every((id) => Number.isInteger(id))).toBe(true);
     const pageSource = await readFile(
       new URL(
         "../src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte",
@@ -214,9 +250,12 @@ describe("Google Health production translations", () => {
       );
       expect(
         messageIds
-          .map((id) => runtime(id))
-          .every((text) => text.trim().length > 0)
-      ).toBe(true);
+          .map((id, index) => ({
+            source: representativeCopy[index],
+            text: runtime(id),
+          }))
+          .filter((entry) => !entry.text.trim())
+      ).toEqual([]);
       for (const [index, id] of messageIds.entries()) {
         const source = representativeCopy[index];
         if (locale === "en" || !localized.get(source)?.trim()) {

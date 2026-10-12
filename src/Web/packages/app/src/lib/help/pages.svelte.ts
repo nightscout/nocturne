@@ -11,8 +11,7 @@ export function pageArticles(): HelpArticle[] {
       "Use chart controls on this page. Settings → Appearance controls units and display; Therapy shows personal schedules; Connectors & Apps manages incoming data; Alerts manages notifications.",
       "The same stored records feed the calendar and reports.",
       "A latest value can become stale if uploads stop. Gaps and missing treatments limit context. The server classifies the current glucose status; report bands, personal targets, and alerts serve different purposes.",
-      ["/reports", "/settings/connectors", "/settings/appearance", "/alerts"],
-      "glucose"
+      ["/reports", "/settings/connectors", "/settings/appearance", "/alerts"]
     ),
     guide(
       "/calendar",
@@ -92,8 +91,7 @@ export function pageArticles(): HelpArticle[] {
       "Create or edit a rule here for its condition, thresholds, timing, and notification actions. Test it in Simulator; review deliveries in History and quiet periods in Do Not Disturb.",
       "Enabled rules are used by the alert system; they do not change report reference bands.",
       "Delivery depends on fresh data, rule conditions, enabled channels, and quiet settings. A rule threshold is separate from a personal target. Test a change before relying on it.",
-      ["/alerts/simulator", "/alerts/history", "/alerts/dnd"],
-      "glucose"
+      ["/alerts/simulator", "/alerts/history", "/alerts/dnd"]
     ),
     guide(
       "/alerts/simulator",
