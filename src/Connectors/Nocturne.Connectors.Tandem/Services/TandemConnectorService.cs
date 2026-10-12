@@ -26,6 +26,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     private readonly TandemAuthTokenProvider _tokenProvider;
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly TandemSourceApiClient _apiClient;
+    private readonly IConnectorSyncCursorStore? _cursorStore;
 
     public TandemConnectorService(
         HttpClient httpClient,
@@ -33,9 +34,11 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         ILogger<TandemConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
         TandemAuthTokenProvider tokenProvider,
-        IConnectorPublisher? publisher = null)
+        IConnectorPublisher? publisher = null,
+        IConnectorSyncCursorStore? cursorStore = null)
         : base(httpClient, serverResolver, logger, publisher)
     {
+        _cursorStore = cursorStore;
         _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _apiClient = new TandemSourceApiClient(httpClient, logger);
@@ -124,13 +127,69 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         TandemBffPump device, HashSet<SyncDataType> activeTypes, SyncResult result,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
+        if (!activeTypes.Contains(SyncDataType.Profiles))
+            return;
+
         var profile = new TandemProfileMapper(_logger).Map(device.Settings?.Details);
         if (profile == null)
             return;
 
-        await PublishRecordTypeAsync<Nocturne.Core.Models.Profile>(
-            result, SyncDataType.Profiles, activeTypes, [profile],
+        var resource = ProfileCursorResource(device);
+        var fingerprint = TandemProfileMapper.Fingerprint(profile);
+        var unchanged = await PublishedProfileFingerprintAsync(resource, cancellationToken) == fingerprint;
+
+        var published = await PublishRecordTypeAsync<Nocturne.Core.Models.Profile>(
+            result, SyncDataType.Profiles, activeTypes, unchanged ? [] : [profile],
             PublishProfileDataAsync, config, cancellationToken);
+
+        if (published)
+            await RememberPublishedProfileAsync(resource, fingerprint, cancellationToken);
+    }
+
+    /// <summary>
+    /// Where the fingerprint of the profile last published for <paramref name="device"/> is kept.
+    /// </summary>
+    /// <remarks>
+    /// The pump's settings carry no time of their own, so <see cref="TandemProfileMapper.Map"/>
+    /// stamps each sync's profile with the time of the sync and every one would be stored as a new
+    /// profile document. The fingerprint lets a sync publish only settings that differ from the
+    /// last ones published, so a return to earlier settings is still a new document.
+    /// </remarks>
+    private static string ProfileCursorResource(TandemBffPump device) => $"profile:{device.AssignmentId}";
+
+    private async Task<string?> PublishedProfileFingerprintAsync(string resource, CancellationToken cancellationToken)
+    {
+        if (_cursorStore is null)
+            return null;
+
+        try
+        {
+            return (await _cursorStore.GetAsync(TandemConstants.ConnectorName, resource, cancellationToken))?.LastGuid;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[{Source}] Could not read the published profile; publishing", ConnectorSource);
+            return null;
+        }
+    }
+
+    private async Task RememberPublishedProfileAsync(
+        string resource, string fingerprint, CancellationToken cancellationToken)
+    {
+        if (_cursorStore is null)
+            return;
+
+        try
+        {
+            await _cursorStore.SetAsync(
+                TandemConstants.ConnectorName, resource, new ConnectorSyncCursor(null, fingerprint), cancellationToken);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[{Source}] Could not record the published profile", ConnectorSource);
+        }
     }
 
     /// <returns>What the run has to say about a span it could not close, or <c>null</c>.</returns>

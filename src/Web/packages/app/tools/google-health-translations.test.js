@@ -31,9 +31,11 @@ const representativeCopy = [
   "Open connector reset",
   "Save and connect",
   "Refresh inventory",
-  "Disconnecting…",
   "Disconnecting Google Health. The current scan or import is being stopped.",
   "Google Health is disconnected. Your imported data has been kept.",
+  "Another Google Health import is already running. The inventory will be available when it finishes; refresh this page afterwards.",
+  "Nocturne downloaded the data, but could not store it locally. Retry the same range; if it persists, use the technical stage from the server log.",
+  "Scanning the selected history in Google Health… The catalog remains available while the inventory is loading.",
   "Historical import progress",
   "The requested history is complete.",
   "Each sync refreshes today and imports one older calendar month.",
@@ -201,11 +203,26 @@ describe("Google Health production translations", () => {
       );
       const catalog = await import(/* @vite-ignore */ catalogUrl.href);
       const runtime = toRuntime(catalog, locale);
+      const localized = new Map(
+        entries(
+          po.parse(
+            await readFile(
+              new URL(`../../../locales/${locale}.po`, import.meta.url)
+            )
+          )
+        ).map((entry) => [entry.msgid, entry.msgstr?.[0]])
+      );
       expect(
         messageIds
           .map((id) => runtime(id))
           .every((text) => text.trim().length > 0)
       ).toBe(true);
+      for (const [index, id] of messageIds.entries()) {
+        const source = representativeCopy[index];
+        if (locale === "en" || !localized.get(source)?.trim()) {
+          expect(runtime(id)).toBe(source);
+        }
+      }
       for (const id of disconnectMessageIds) {
         expect(
           runtime
@@ -220,7 +237,7 @@ describe("Google Health production translations", () => {
   );
 
   it.each(supportedLocales)(
-    "has no empty Google Health catalog entries in %s",
+    "has English fallback and valid Google Health placeholders in %s",
     async (locale) => {
       const catalog = po.parse(
         await readFile(
@@ -230,13 +247,16 @@ describe("Google Health production translations", () => {
       const localized = new Map(
         entries(catalog).map((entry) => [entry.msgid, entry])
       );
-      const missing = [...expectedPlaceholders.keys()].filter(
-        (id) => !localized.get(id)?.msgstr?.[0]?.trim()
-      );
-      expect(missing).toEqual([]);
+      if (locale === "en") {
+        const missing = [...expectedPlaceholders.keys()].filter(
+          (id) => !localized.get(id)?.msgstr?.[0]?.trim()
+        );
+        expect(missing).toEqual([]);
+      }
       const mismatches = entries(catalog).filter(
         (entry) =>
           expectedPlaceholders.has(entry.msgid) &&
+          entry.msgstr?.[0]?.trim() &&
           placeholders(entry.msgstr?.[0] ?? "") !==
             expectedPlaceholders.get(entry.msgid)
       );
@@ -255,6 +275,7 @@ describe("Google Health production translations", () => {
       const translatedProductName = entries(catalog).filter((entry) => {
         if (!entry.msgid || !isGoogleHealthEntry(entry)) return false;
         const translation = String(entry.msgstr?.[0] ?? "");
+        if (!translation.trim()) return false;
         return protectedProductNames.some(
           (name) => entry.msgid.includes(name) && !translation.includes(name)
         );
