@@ -17,6 +17,8 @@ describe("translation-aware help factories", () => {
     expect(body).toContain("Ambulatory Glucose Profile");
     expect(body).toContain("Where the information comes from");
     expect(body).toContain("percentile");
+    expect(body).toContain("Find the middle line");
+    expect(body).toContain("How to read this page");
   });
   it("keeps English Google setup steps available through the transform", async () => {
     const body = await content("/settings/connectors/google-health");

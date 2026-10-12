@@ -1,3 +1,5 @@
+import { GLUCOSE_REFERENCE_PATH } from "./reference-path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   articles,
@@ -56,6 +58,32 @@ describe("contextual documentation", () => {
     }
     expect(new Set(all.map((article) => article.href)).size).toBe(all.length);
   });
+  it("renders glucose limits once and links report pages to that chapter", () => {
+    const library = articles();
+    expect(
+      library
+        .filter((article) => article.reference === "glucose")
+        .map((article) => article.href)
+    ).toEqual([GLUCOSE_REFERENCE_PATH]);
+    const full = documentationLinks(buildAppNavigation(viewer));
+    expect(full.some((link) => link.href === GLUCOSE_REFERENCE_PATH)).toBe(
+      true
+    );
+    expect(articleFor("/reports/agp", full).related).toContain(
+      GLUCOSE_REFERENCE_PATH
+    );
+    for (const article of library.filter(
+      (article) => !article.helpOnly && !article.steps
+    )) {
+      expect(article.reading, article.href).toHaveLength(3);
+      expect(article.visual, article.href).toBeDefined();
+      for (const path of article.settings ?? [])
+        expect(
+          library.some((entry) => entry.href === path),
+          `${article.href}: ${path}`
+        ).toBe(true);
+    }
+  });
   it("resolves trailing slashes and dynamic detail pages to the relevant guide", () => {
     expect(articleFor("/reports/steps/", links).title).toBe("Steps");
     expect(articleFor("/settings/connectors/dexcom", links).title).toBe(
@@ -89,6 +117,59 @@ describe("contextual documentation", () => {
       )
     ).toBe(false);
     expect(navigation[1].children).toHaveLength(1);
+  });
+  it("does not restore scope-filtered reports through the overview, including public shares", () => {
+    for (const user of [{}, null]) {
+      const visible = documentationLinks(
+        buildAppNavigation({
+          ...viewer,
+          user,
+          isPlatformAdmin: false,
+          grantedScopes: ["glucose.read", "reports.read"],
+        })
+      );
+      expect(visible.some((link) => link.href === "/reports")).toBe(true);
+      for (const href of [
+        "/reports/steps",
+        "/reports/heart-rate",
+        "/reports/sleep",
+        "/reports/idp",
+      ]) {
+        expect(
+          visible.some((link) => link.href === href),
+          href
+        ).toBe(false);
+      }
+      expect(
+        searchDocumentation("steps", visible).some(
+          (article) => article.href === "/reports/steps"
+        )
+      ).toBe(false);
+      expect(
+        visible.some(
+          (link) => link.href === "/reports/data-quality/sensor-integrity"
+        )
+      ).toBe(true);
+    }
+  });
+  it("indexes the shared glucose glossary labels", () => {
+    const visible = documentationLinks(buildAppNavigation(viewer));
+    expect(
+      searchDocumentation("very high", visible).some(
+        (article) => article.href === GLUCOSE_REFERENCE_PATH
+      )
+    ).toBe(true);
+  });
+  it("includes technical Google troubleshooting in the source translation catalogue", () => {
+    const google = articleFor("/settings/connectors/google-health", links);
+    const text = google.sections.find(
+      (section) => section.title === "Common setup errors"
+    )!.text;
+    const catalogue = readFileSync(
+      new URL("../../../../../locales/en.po", import.meta.url),
+      "utf8"
+    );
+    expect(catalogue).toContain(`msgid ${JSON.stringify(text)}`);
   });
   it("keeps admin-only guides out of member and guest search", () => {
     const member = documentationLinks(
@@ -134,11 +215,23 @@ describe("contextual documentation", () => {
   });
   it("orders first setup before consent, inventory selection, and verification", () => {
     const google = articleFor("/settings/connectors/google-health", links);
-    expect(google.steps).toHaveLength(8);
-    expect(google.steps![4].text).toContain("Web application");
-    expect(google.steps![5].text).toContain("required on first setup");
-    expect(google.steps![6].text).toContain("Save selection and import");
-    expect(google.steps![7].text).toContain("choose dates");
+    expect(google.steps).toHaveLength(13);
+    expect(google.steps![0].text).toContain("visible in that app");
+    expect(google.steps![0].links![0].href).toContain(
+      "com.fitbit.FitbitMobile"
+    );
+    expect(google.steps![1].text).toContain("Garmin Connect");
+    expect(google.steps![2].text).toContain(
+      "Enable the API and get an OAuth 2.0 Client ID"
+    );
+    expect(google.steps![5].text).toContain("Web Server");
+    expect(google.steps![6].text).toContain("required on first setup");
+    expect(google.steps![7].text).toContain(
+      "email address used in the Google Health app"
+    );
+    expect(google.steps![10].text).toContain("Save selection and import");
+    expect(google.steps![11].text).toContain("choose dates");
+    expect(JSON.stringify(google)).not.toContain("smokkelaar.duckdns.org");
     expect(
       google.sources!.every((source) => source.href.startsWith("https://"))
     ).toBe(true);
