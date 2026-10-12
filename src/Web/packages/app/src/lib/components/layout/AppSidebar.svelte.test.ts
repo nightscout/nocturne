@@ -1,3 +1,6 @@
+vi.mock("$api/generated/metadatas.generated.remote", () => ({
+  getHelpReference: () => ({ current: undefined, error: undefined, loading: true }),
+}));
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";

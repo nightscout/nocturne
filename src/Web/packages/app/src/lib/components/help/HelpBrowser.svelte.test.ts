@@ -1,3 +1,10 @@
+vi.mock("$api/generated/metadatas.generated.remote", () => ({
+  getHelpReference: () => ({
+    current: undefined,
+    error: undefined,
+    loading: true,
+  }),
+}));
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +20,27 @@ beforeEach(() => {
 });
 
 describe("documentation help", () => {
+  it("offers permitted settings separately while retaining the original page", async () => {
+    pageState.url.pathname = "/settings/appearance";
+    render(Harness);
+    await page
+      .getByRole("button", { name: "Open page help", exact: true })
+      .click();
+    const settings = page.getByRole("link", {
+      name: "Open settings in a new tab",
+    });
+    await expect
+      .element(settings)
+      .toHaveAttribute("href", "/settings/appearance");
+    await expect.element(settings).toHaveAttribute("target", "_blank");
+    expect(pageState.url.pathname).toBe("/settings/appearance");
+    await page
+      .getByRole("button", { name: "Close page help", exact: true })
+      .click();
+    await expect
+      .element(page.getByRole("textbox", { name: "Report notes" }))
+      .toBeVisible();
+  });
   it("adjusts transparency and blur live from help and saves them in this browser", async () => {
     localStorage.setItem("nocturne-help-layout", "right");
     render(Harness);
