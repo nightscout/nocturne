@@ -85,12 +85,12 @@
   class:-translate-y-full={!isVisible && !help?.open}
 >
   <!-- Sidebar trigger on the left -->
-  <Sidebar.Trigger class="-ml-1" />
+  <Sidebar.Trigger class="-ml-1" inert={help?.blocking} />
   <HelpIcon />
 
   <!-- Current BG display on the right -->
   {#if realtimeStore}
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2" inert={help?.blocking}>
       <GlucoseValueIndicator
         displayValue={displayCurrentBG}
         variant={tileVariant}

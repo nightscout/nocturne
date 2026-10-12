@@ -179,12 +179,13 @@
   };
 
   // Initialize open state for menus that have active children
+  let wasPageHelp = false;
   $effect(() => {
-    navigation.forEach((item) => {
-      if (item.children && isActive(item)) {
-        openMenus[item.id] = true;
-      }
-    });
+    const activeMenus = navigation.filter((item) => item.children && isActive(item));
+    const returning = wasPageHelp && !pageHelp;
+    wasPageHelp = !!pageHelp;
+    if (returning) return;
+    activeMenus.forEach((item) => { openMenus[item.id] = true; });
   });
 
   function toggleMenu(id: string) {
@@ -216,7 +217,7 @@
       <span class="text-lg font-bold">Nocturne</span>
     </div>
     <HelpIcon />
-    <Sidebar.Trigger />
+    <Sidebar.Trigger inert={help?.blocking} />
   </Sidebar.Header>
 
   <div class="contents" inert={help?.open && !pageHelp}>

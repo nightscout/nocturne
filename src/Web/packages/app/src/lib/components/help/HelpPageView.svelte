@@ -1,26 +1,13 @@
 <script lang="ts">
-  import { onMount, tick, type Snippet } from "svelte";
+  import { tick, type Snippet } from "svelte";
   import { getHelpContext } from "$lib/help/help-context.svelte";
   import HelpBrowser from "./HelpBrowser.svelte";
   import HelpPanel from "./HelpPanel.svelte";
   import { Button } from "$lib/components/ui/button";
   const { children }: { children: Snippet } = $props();
   const help = getHelpContext();
-  let compact = $state(false);
-  onMount(() => {
-    const media = window.matchMedia("(max-width: 1100px)");
-    const sync = () => {
-      compact = media.matches;
-    };
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
-  });
-  const blocking = $derived(
-    help?.open && (help.layout !== "alongside" || compact)
-  );
   $effect(() => {
-    if (!blocking || help?.layout === "page") return;
+    if (!help?.blocking) return;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
@@ -43,6 +30,52 @@
   onkeydown={(event) => {
     if (help?.open && event.key === "Escape" && !event.defaultPrevented)
       help.open = false;
+    if (help?.blocking && event.key === "Tab" && !event.defaultPrevented) {
+      // A higher-priority app dialog (for example an alert) owns its own focus.
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[role="dialog"], [role="alertdialog"]') &&
+        !event.target.closest("[data-help-panel]")
+      )
+        return;
+      const panel = document.querySelector("[data-help-panel]");
+      const focusable = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '[data-help-toggle], [data-help-panel] button, [data-help-panel] a[href], [data-help-panel] input, [data-help-panel] summary, [data-help-panel] [tabindex="0"]'
+        )
+      ).filter(
+        (element) =>
+          element.getClientRects().length > 0 &&
+          !element.closest("[inert]") &&
+          !element.hasAttribute("disabled")
+      );
+      if (!panel || !focusable.length) return;
+      const active = document.activeElement;
+      const index =
+        active instanceof HTMLElement ? focusable.indexOf(active) : -1;
+      event.preventDefault();
+      const next =
+        index < 0
+          ? event.shiftKey
+            ? focusable.length - 1
+            : 0
+          : (index + (event.shiftKey ? -1 : 1) + focusable.length) %
+            focusable.length;
+      focusable[next].focus({ preventScroll: true });
+    }
+  }}
+  onfocusin={(event) => {
+    if (!help?.blocking || !(event.target instanceof HTMLElement)) return;
+    if (
+      event.target.closest('[role="dialog"], [role="alertdialog"]') &&
+      !event.target.closest("[data-help-panel]")
+    )
+      return;
+    if (!event.target.closest("[data-help-panel], [data-help-toggle]")) {
+      document
+        .querySelector<HTMLElement>("[data-help-panel]")
+        ?.focus({ preventScroll: true });
+    }
   }}
 />
 
@@ -66,7 +99,7 @@
 >
   <div
     hidden={help?.open && help.layout === "page"}
-    inert={blocking}
+    inert={help?.blocking || (help?.open && help.layout === "page")}
     class={help?.open && help.layout === "page"
       ? "hidden"
       : help?.open && help.layout === "alongside"
