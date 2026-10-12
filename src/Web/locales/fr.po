@@ -26847,3 +26847,7 @@ msgstr ""
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "<0/> Close help with the book beside Nocturne, the close button, or Escape. Your page and its inputs stay in place."
 msgstr ""
+
+#: src/lib/components/help/HelpPageView.svelte
+msgid "Tab"
+msgstr ""
