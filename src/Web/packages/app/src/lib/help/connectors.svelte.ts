@@ -141,8 +141,8 @@ export function connectorArticles(): HelpArticle[] {
     title: string,
     source: string,
     details: string
-  ) =>
-    guide(
+  ) => ({
+    ...guide(
       `/settings/connectors/${id}`,
       title,
       `Connect ${title} to the current Nocturne tenant.`,
@@ -151,7 +151,18 @@ export function connectorArticles(): HelpArticle[] {
       "Successfully imported records are used by the corresponding charts, reports, and histories. Inspect the connector's data-type list before choosing it.",
       `${details} Server configuration, account permissions, and provider availability affect syncing. A saved configuration is not proof an import succeeded. Keep credentials private.`,
       ["/settings/connectors"]
-    );
+    ),
+    visual: "flow" as const,
+    settings: ["/settings/connectors"],
+    reading: [
+      { title: "Check the source", text: source },
+      {
+        title: "Complete this connector's form",
+        text: "Use its required fields, account/region options, and supported data-type list. Save and inspect the returned connection status.",
+      },
+      { title: "Verify the imported records", text: details },
+    ],
+  });
   return [
     google,
     connector(

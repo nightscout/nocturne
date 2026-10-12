@@ -4,16 +4,27 @@ import { pageArticles } from "./pages.svelte";
 import { reportArticles } from "./reports.svelte";
 import { settingsArticles } from "./settings.svelte";
 import { connectorArticles } from "./connectors.svelte";
-import { glucoseBands } from "./reference.svelte";
+import { readingGuides } from "./reading-guides.svelte";
+import { glucoseReferenceArticle } from "./glucose-reference.svelte";
+import { GLUCOSE_REFERENCE_PATH } from "./reference-path";
 
 // Per-call factories let translated titles follow the current locale.
 export function articles(): HelpArticle[] {
-  return [
+  const readings = readingGuides();
+  const entries = [
     ...pageArticles(),
     ...reportArticles(),
     ...settingsArticles(),
     ...connectorArticles(),
+    glucoseReferenceArticle(),
   ];
+  return entries.map((article) => {
+    const reading = readings[article.href];
+    const related = [...article.related];
+    if (["/", "/settings/profile", "/alerts"].includes(article.href))
+      related.push(GLUCOSE_REFERENCE_PATH);
+    return { ...article, ...reading, related };
+  });
 }
 
 function parentFor(href: string): string | undefined {
@@ -48,7 +59,23 @@ export function documentationLinks(navigation: NavItem[]): NavLink[] {
         : []
   );
   const allowed = links.map((link) => link.href);
-  for (const article of articles()) {
+  const library = articles();
+  for (const article of library) {
+    if (article.helpOnly) {
+      const parent = links.find((link) =>
+        library
+          .find((entry) => entry.href === link.href)
+          ?.related.includes(article.href)
+      );
+      if (parent)
+        links.push({
+          ...parent,
+          title: article.title,
+          href: article.href,
+          strict: true,
+        });
+      continue;
+    }
     if (article.href.includes("[") || allowed.includes(article.href)) continue;
     const explicit = parentFor(article.href);
     const parent = explicit
@@ -109,9 +136,8 @@ export function searchDocumentation(query: string, links: NavLink[]) {
       const text = [
         article.title,
         article.introduction,
-        ...(article.reference === "glucose"
-          ? glucoseBands({}).map((band) => band.title)
-          : []),
+        ...(article.reading ?? []).flatMap((step) => [step.title, step.text]),
+
         ...article.sections.flatMap((section) => [section.title, section.text]),
         ...(article.steps ?? []).flatMap((step) => [step.title, step.text]),
       ]

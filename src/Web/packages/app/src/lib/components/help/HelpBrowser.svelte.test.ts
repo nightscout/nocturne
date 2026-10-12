@@ -20,6 +20,60 @@ beforeEach(() => {
 });
 
 describe("documentation help", () => {
+  it("keeps the AGP guide focused and opens the shared glucose reference without navigating the report", async () => {
+    pageState.url.pathname = "/reports/agp";
+    render(Harness);
+    await page
+      .getByRole("button", { name: "Open page help", exact: true })
+      .click();
+    await expect
+      .element(page.getByRole("region", { name: "Page reading aid" }))
+      .toBeVisible();
+    await expect
+      .element(
+        page.getByRole("img", {
+          name: "Schematic reading example, without personal data",
+        })
+      )
+      .toBeVisible();
+    const settings = page.getByRole("region", {
+      name: "Settings for this page",
+    });
+    await expect
+      .element(settings.getByRole("link", { name: "Appearance", exact: true }))
+      .toHaveAttribute("target", "_blank");
+    expect(
+      document.querySelector(
+        '[aria-label="Reference from the running application"]'
+      )
+    ).toBeNull();
+    const source = page.getByText("Where the information comes from", {
+      exact: true,
+    });
+    expect(source.element().closest("details")?.open).toBe(false);
+    await page
+      .getByRole("button", {
+        name: "Glucose ranges and report terms",
+        exact: true,
+      })
+      .click();
+    await expect
+      .element(
+        page.getByRole("heading", {
+          name: "Glucose ranges and report terms",
+          exact: true,
+        })
+      )
+      .toBeVisible();
+    await expect
+      .element(
+        page.getByRole("region", {
+          name: "Reference from the running application",
+        })
+      )
+      .toBeVisible();
+    expect(pageState.url.pathname).toBe("/reports/agp");
+  });
   it.each(["page", "drawer", "right", "alongside"])(
     "scrolls only documentation and restores the original position with %s",
     async (layout) => {

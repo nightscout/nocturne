@@ -1,4 +1,5 @@
 <script lang="ts">
+  import HelpReadingAid from "./HelpReadingAid.svelte";
   import HelpReference from "./HelpReference.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as InputGroup from "$lib/components/ui/input-group";
@@ -27,6 +28,12 @@
   const results = $derived(searchDocumentation(query, links));
   const related = $derived(
     article.related.filter((path) => links.some((link) => link.href === path))
+  );
+  const settings = $derived(
+    (article.settings ?? []).filter(
+      (path) =>
+        path !== article.href && links.some((link) => link.href === path)
+    )
   );
   function select(path: string) {
     help?.select(path);
@@ -87,6 +94,26 @@
           {article.introduction}
         </p>
       </div>
+      <HelpReadingAid {article} />
+      {#if settings.length}
+        <section class="space-y-3" aria-label="Settings for this page">
+          <h2 class="font-semibold">Change settings</h2>
+          <p class="text-sm text-muted-foreground">
+            Open the relevant controls in a new tab. Your original page stays in
+            place.
+          </p>
+          <div class="flex flex-wrap gap-2">
+            {#each settings as path (path)}<Button
+                variant="outline"
+                href={path}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {articleFor(path, links).title}<ArrowRight class="size-4" />
+              </Button>{/each}
+          </div>
+        </section>
+      {/if}
       {#if article.steps?.length}
         <section class="space-y-4" aria-label="Step-by-step setup">
           <h2 class="font-semibold">Step-by-step setup</h2>
@@ -147,12 +174,23 @@
       {/if}
       {#if article.reference}<HelpReference kind={article.reference} />{/if}
       {#each article.sections as section (section.title)}
-        <section class="space-y-2 rounded-xl border p-5">
-          <h2 class="font-semibold">{section.title}</h2>
-          <p class="text-sm leading-relaxed text-muted-foreground">
-            {section.text}
-          </p>
-        </section>
+        {#if section.id === "controls"}
+          <section class="space-y-2 rounded-xl border p-4">
+            <h2 class="font-semibold">{section.title}</h2>
+            <p class="text-sm leading-relaxed text-muted-foreground">
+              {section.text}
+            </p>
+          </section>
+        {:else}
+          <details class="rounded-xl border p-4">
+            <summary class="cursor-pointer font-semibold">
+              {section.title}
+            </summary>
+            <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
+              {section.text}
+            </p>
+          </details>
+        {/if}
       {/each}
       {#if related.length}
         <section class="space-y-3">

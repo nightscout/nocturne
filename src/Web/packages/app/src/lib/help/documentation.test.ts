@@ -1,3 +1,4 @@
+import { GLUCOSE_REFERENCE_PATH } from "./reference-path";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
@@ -56,6 +57,32 @@ describe("contextual documentation", () => {
       ).toBe(true);
     }
     expect(new Set(all.map((article) => article.href)).size).toBe(all.length);
+  });
+  it("renders glucose limits once and links report pages to that chapter", () => {
+    const library = articles();
+    expect(
+      library
+        .filter((article) => article.reference === "glucose")
+        .map((article) => article.href)
+    ).toEqual([GLUCOSE_REFERENCE_PATH]);
+    const full = documentationLinks(buildAppNavigation(viewer));
+    expect(full.some((link) => link.href === GLUCOSE_REFERENCE_PATH)).toBe(
+      true
+    );
+    expect(articleFor("/reports/agp", full).related).toContain(
+      GLUCOSE_REFERENCE_PATH
+    );
+    for (const article of library.filter(
+      (article) => !article.helpOnly && !article.steps
+    )) {
+      expect(article.reading, article.href).toHaveLength(3);
+      expect(article.visual, article.href).toBeDefined();
+      for (const path of article.settings ?? [])
+        expect(
+          library.some((entry) => entry.href === path),
+          `${article.href}: ${path}`
+        ).toBe(true);
+    }
   });
   it("resolves trailing slashes and dynamic detail pages to the relevant guide", () => {
     expect(articleFor("/reports/steps/", links).title).toBe("Steps");
@@ -129,7 +156,7 @@ describe("contextual documentation", () => {
     const visible = documentationLinks(buildAppNavigation(viewer));
     expect(
       searchDocumentation("very high", visible).some(
-        (article) => article.href === "/reports/agp"
+        (article) => article.href === GLUCOSE_REFERENCE_PATH
       )
     ).toBe(true);
   });
