@@ -2,6 +2,7 @@
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import AppSidebar from "./AppSidebar.svelte";
+  import MobileHeader from "./MobileHeader.svelte";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
   import { createHelpContext } from "$lib/help/help-context.svelte";
   import HelpPageView from "$lib/components/help/HelpPageView.svelte";
@@ -34,6 +35,7 @@
 <Sidebar.Provider>
   <AppSidebar {user} {isGuestSession} {currentSlug} {baseDomain} />
   <Sidebar.Inset>
+    <MobileHeader />
     <main>
       <HelpPageView>
         <p>Underlying report</p>

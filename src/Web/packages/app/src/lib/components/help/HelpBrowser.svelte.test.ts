@@ -1,17 +1,87 @@
 import { render } from "vitest-browser-svelte";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import Harness from "./HelpHarness.test.svelte";
 
 beforeEach(() => {
   localStorage.removeItem("nocturne-help-visibility");
+  localStorage.removeItem("nocturne-help-appearance");
   localStorage.setItem("nocturne-help-layout", "page");
   pageState.url.pathname = "/reports/steps";
   pageState.url.search = "?range=week";
 });
 
 describe("documentation help", () => {
+  it("adjusts transparency and blur live from help and saves them in this browser", async () => {
+    localStorage.setItem("nocturne-help-layout", "right");
+    render(Harness);
+    await page
+      .getByRole("button", { name: "Open page help", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Display options", exact: true })
+      .click();
+    const controls = page.getByRole("group", {
+      name: "Documentation appearance",
+    });
+    await controls
+      .getByRole("slider", { name: "Documentation transparency" })
+      .click();
+    await userEvent.keyboard("{ArrowRight}");
+    await controls
+      .getByRole("slider", { name: "Documentation background blur" })
+      .click();
+    await userEvent.keyboard("{ArrowRight}");
+    const saved = JSON.parse(localStorage.getItem("nocturne-help-appearance")!);
+    expect(saved.transparency).toBeGreaterThan(0);
+    expect(saved.blur).toBeGreaterThan(0);
+    const panel = page
+      .getByRole("region", { name: "Documentation panel" })
+      .element();
+    expect(
+      getComputedStyle(panel).getPropertyValue("--help-opacity").trim()
+    ).toBe(`${100 - saved.transparency}%`);
+    expect(getComputedStyle(panel).backdropFilter).toBe(
+      `blur(${saved.blur}px)`
+    );
+    await controls
+      .getByRole("button", { name: "Reset help appearance" })
+      .click();
+    expect(
+      JSON.parse(localStorage.getItem("nocturne-help-appearance")!)
+    ).toEqual({ transparency: 22, blur: 2 });
+  });
+
+  it("restores visual preferences and falls back safely for invalid values", async () => {
+    localStorage.setItem(
+      "nocturne-help-appearance",
+      JSON.stringify({ transparency: 40, blur: 6 })
+    );
+    render(Harness);
+    await expect
+      .element(page.getByRole("slider", { name: "Documentation transparency" }))
+      .toHaveAttribute("aria-valuenow", "40");
+    await expect
+      .element(
+        page.getByRole("slider", { name: "Documentation background blur" })
+      )
+      .toHaveAttribute("aria-valuenow", "6");
+    window.dispatchEvent(
+      new StorageEvent("storage", {
+        key: "nocturne-help-appearance",
+        newValue: '{"transparency":200,"blur":-5}',
+      })
+    );
+    await expect
+      .element(page.getByRole("slider", { name: "Documentation transparency" }))
+      .toHaveAttribute("aria-valuenow", "22");
+    await expect
+      .element(
+        page.getByRole("slider", { name: "Documentation background blur" })
+      )
+      .toHaveAttribute("aria-valuenow", "2");
+  });
   it("restores focus to the book after opening from the help bar", async () => {
     localStorage.setItem("nocturne-help-layout", "right");
     localStorage.setItem("nocturne-help-visibility", "bar");
@@ -96,14 +166,17 @@ describe("documentation help", () => {
     await expect
       .element(page.getByRole("textbox", { name: "Search all documentation" }))
       .toBeVisible();
-    await vi.waitFor(() => {
-      const bounds = page
-        .getByRole("region", { name: "Documentation panel" })
-        .element()
-        .getBoundingClientRect();
-      expect(bounds.left).toBeGreaterThanOrEqual(0);
-      expect(bounds.right).toBeLessThanOrEqual(390);
-    });
+    await vi.waitFor(
+      () => {
+        const bounds = page
+          .getByRole("region", { name: "Documentation panel" })
+          .element()
+          .getBoundingClientRect();
+        expect(bounds.left).toBeGreaterThanOrEqual(0);
+        expect(bounds.right).toBeLessThanOrEqual(390);
+      },
+      { timeout: 4000 }
+    );
     await page
       .getByRole("button", { name: "Close page help", exact: true })
       .click();

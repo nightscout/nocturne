@@ -111,7 +111,8 @@ describe("AppSidebar", () => {
     await page.getByRole("textbox", { name: "Report filter" }).fill("my selection");
     await group("Open page help").click();
     await expect.element(page.getByRole("heading", { name: "Steps", exact: true })).toBeVisible();
-    await expect.element(page.getByText("Underlying report")).not.toBeVisible();
+    await expect.element(page.getByText("Underlying report")).toBeVisible();
+    expect(document.querySelector('[aria-label="Report filter"]')?.closest("[inert]")).not.toBeNull();
     await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
     await link("Heart Rate").click();
     await expect.element(page.getByRole("heading", { name: "Heart Rate", exact: true })).toBeVisible();
@@ -126,14 +127,25 @@ describe("AppSidebar", () => {
     pageState.data = { effectivePermissions: ["*"] };
     render(Harness, { user: MEMBER });
     await page.getByRole("textbox", { name: "Report filter" }).fill("unsaved selection");
+    const originalSteps = link("Steps").element();
+    const navigation = originalSteps.closest('[data-slot="sidebar-content"]')!;
+    navigation.scrollTop = 40;
+    const originalPosition = originalSteps.getBoundingClientRect();
     await group("Open page help").click();
+    expect(link("Steps").element()).toBe(originalSteps);
+    expect(originalSteps.getBoundingClientRect().left).toBe(originalPosition.left);
+    expect(originalSteps.getBoundingClientRect().top).toBe(originalPosition.top);
     const docs = page.getByRole("navigation", { name: "Documentation navigation" });
-    await docs.getByRole("button", { name: "Heart Rate", exact: true }).click();
+    await docs.getByRole("link", { name: "Heart Rate", exact: true }).click();
     await expect.element(page.getByRole("heading", { name: "Heart Rate", exact: true })).toBeVisible();
     expect(pageState.url.pathname).toBe("/reports/steps");
+    navigation.scrollTop = 180;
+    expect(navigation.scrollTop).toBe(180);
     await group("Close page help").click();
     await expect.element(page.getByRole("textbox", { name: "Report filter" })).toHaveValue("unsaved selection");
     await expect.element(link("Steps")).toHaveAttribute("data-active", "true");
+    await vi.waitFor(() => expect(originalSteps.getBoundingClientRect().top).toBe(originalPosition.top));
+    expect(navigation.scrollTop).toBe(40);
   });
 
   it("restores an intentionally collapsed active menu after page help", async () => {
@@ -147,6 +159,26 @@ describe("AppSidebar", () => {
     await expect.element(link("Steps")).toBeVisible();
     await group("Close page help").click();
     await expect.element(link("Steps")).not.toBeInTheDocument();
+  });
+
+  it("keeps the book layer aligned when changing between desktop and phone", async () => {
+    pageState.url.pathname = "/reports/steps";
+    pageState.data = { effectivePermissions: ["*"] };
+    render(Harness, { user: MEMBER });
+    await group("Open page help").click();
+    await page.viewport(390, 844);
+    await vi.waitFor(() => {
+      const pane = page.getByRole("region", { name: "Documentation panel" }).element().parentElement!;
+      expect(pane.getBoundingClientRect().left).toBe(0);
+      expect(pane.getBoundingClientRect().right).toBe(390);
+    });
+    await page.viewport(1280, 900);
+    await vi.waitFor(() => {
+      const pane = page.getByRole("region", { name: "Documentation panel" }).element().parentElement!;
+      const header = group("Close page help").element().closest('[data-slot="sidebar-header"]')!;
+      expect(pane.getBoundingClientRect().left).toBe(header.getBoundingClientRect().right);
+    });
+    await group("Close page help").click();
   });
 
   it("offers a public share the dashboard and a way to sign in, and nothing the owner acts on", async () => {
