@@ -20,6 +20,82 @@ beforeEach(() => {
 });
 
 describe("documentation help", () => {
+  it.each(["page", "drawer", "right", "alongside"])(
+    "scrolls only documentation and restores the original position with %s",
+    async (layout) => {
+      await page.viewport(1280, 900);
+      localStorage.setItem("nocturne-help-layout", layout);
+      pageState.url.pathname = "/settings/connectors/google-health";
+      const originalOverflow = document.body.style.overflow;
+      const originalRootOverflow = document.documentElement.style.overflow;
+      render(Harness, { tallPage: true });
+      window.scrollTo({ top: 200, behavior: "instant" });
+      await vi.waitFor(() => expect(window.scrollY).toBe(200));
+      await page
+        .getByRole("button", { name: "Open page help", exact: true })
+        .click();
+      const content = page
+        .getByRole("region", { name: "Documentation content" })
+        .element();
+      await vi.waitFor(() => {
+        expect(content.clientHeight).toBeGreaterThan(0);
+        expect(content.scrollHeight).toBeGreaterThan(content.clientHeight);
+        expect(document.body.style.overflow).toBe("hidden");
+        expect(document.documentElement.style.overflow).toBe("hidden");
+      });
+      // Native keyboard scrolling verifies that the viewport has a real, bounded scroll area.
+      content.focus();
+      await userEvent.keyboard("{PageDown}");
+      await vi.waitFor(() => expect(content.scrollTop).toBeGreaterThan(0));
+      expect(window.scrollY).toBe(200);
+      const background = page
+        .getByRole("textbox", { name: "Report notes" })
+        .element();
+      expect(
+        background.dispatchEvent(
+          new WheelEvent("wheel", {
+            bubbles: true,
+            cancelable: true,
+            deltaY: 300,
+          })
+        )
+      ).toBe(false);
+      expect(
+        background.dispatchEvent(
+          new Event("touchmove", { bubbles: true, cancelable: true })
+        )
+      ).toBe(false);
+      expect(
+        content.dispatchEvent(
+          new WheelEvent("wheel", {
+            bubbles: true,
+            cancelable: true,
+            deltaY: 300,
+          })
+        )
+      ).toBe(true);
+      await page
+        .getByRole("button", { name: "Close page help", exact: true })
+        .click();
+      await vi.waitFor(() => {
+        expect(document.body.style.overflow).toBe(originalOverflow);
+        expect(document.documentElement.style.overflow).toBe(
+          originalRootOverflow
+        );
+        expect(window.scrollY).toBe(200);
+      });
+      expect(
+        background.dispatchEvent(
+          new WheelEvent("wheel", {
+            bubbles: true,
+            cancelable: true,
+            deltaY: 300,
+          })
+        )
+      ).toBe(true);
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
+  );
   it("offers permitted settings separately while retaining the original page", async () => {
     pageState.url.pathname = "/settings/appearance";
     render(Harness);

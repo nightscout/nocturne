@@ -20,8 +20,6 @@
   $effect(() => {
     if (help?.path) {
       query = "";
-      if (help.layout === "page")
-        window.scrollTo({ top: 0, behavior: "instant" });
     }
   });
   const links = $derived(documentationLinks(help?.navigation ?? []));
@@ -89,6 +87,43 @@
           {article.introduction}
         </p>
       </div>
+      {#if article.steps?.length}
+        <section class="space-y-4" aria-label="Step-by-step setup">
+          <h2 class="font-semibold">Step-by-step setup</h2>
+          <ol class="space-y-4">
+            {#each article.steps as step, i (step.title)}
+              <li class="flex gap-4 rounded-xl border p-5">
+                <span
+                  class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-semibold"
+                  aria-hidden="true"
+                >
+                  {i + 1}
+                </span>
+                <div class="space-y-2">
+                  <h3 class="font-semibold">{step.title}</h3>
+                  <p class="text-sm leading-relaxed text-muted-foreground">
+                    {step.text}
+                  </p>
+                  {#if step.links?.length}
+                    <!-- eslint-disable svelte/no-navigation-without-resolve -- Verified external provider instructions. -->
+                    {#each step.links as link (link.href)}
+                      <a
+                        class="block text-sm text-primary underline underline-offset-4"
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {link.title}
+                      </a>
+                    {/each}
+                    <!-- eslint-enable svelte/no-navigation-without-resolve -->
+                  {/if}
+                </div>
+              </li>
+            {/each}
+          </ol>
+        </section>
+      {/if}
       {#if article.sources?.length}
         <section class="space-y-2 rounded-xl border p-5">
           <h2 class="font-semibold">Official instructions and sources</h2>
@@ -111,29 +146,6 @@
         </section>
       {/if}
       {#if article.reference}<HelpReference kind={article.reference} />{/if}
-      {#if article.steps?.length}
-        <section class="space-y-4" aria-label="Step-by-step setup">
-          <h2 class="font-semibold">Step-by-step setup</h2>
-          <ol class="space-y-4">
-            {#each article.steps as step, i (step.title)}
-              <li class="flex gap-4 rounded-xl border p-5">
-                <span
-                  class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-semibold"
-                  aria-hidden="true"
-                >
-                  {i + 1}
-                </span>
-                <div class="space-y-2">
-                  <h3 class="font-semibold">{step.title}</h3>
-                  <p class="text-sm leading-relaxed text-muted-foreground">
-                    {step.text}
-                  </p>
-                </div>
-              </li>
-            {/each}
-          </ol>
-        </section>
-      {/if}
       {#each article.sections as section (section.title)}
         <section class="space-y-2 rounded-xl border p-5">
           <h2 class="font-semibold">{section.title}</h2>

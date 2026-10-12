@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick, type Snippet } from "svelte";
+  import { on } from "svelte/events";
   import { getHelpContext } from "$lib/help/help-context.svelte";
   import HelpPanel from "./HelpPanel.svelte";
   import { fly } from "svelte/transition";
@@ -28,21 +29,43 @@
     };
   });
   $effect(() => {
-    if (!help?.blocking) return;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = overflow;
+    if (!help?.open) return;
+    const root = document.documentElement;
+    const body = document.body;
+    const overflow = body.style.overflow;
+    const rootOverflow = root.style.overflow;
+    const gutter = root.style.scrollbarGutter;
+    const { scrollX, scrollY } = window;
+    root.style.scrollbarGutter =
+      window.innerWidth > root.clientWidth ? "stable" : gutter;
+    root.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    // Inner page/sidebar scrollers must not receive wheel or touch gestures either.
+    const preventBackgroundScroll = (event: Event) => {
+      const insideHelp = event
+        .composedPath()
+        .some(
+          (target) =>
+            target instanceof Element &&
+            target.matches(
+              "[data-help-panel], [data-help-navigation], [data-help-controls]"
+            )
+        );
+      if (!insideHelp && event.cancelable) event.preventDefault();
     };
-  });
-  $effect(() => {
-    if (!help?.open || help.layout !== "page") return;
-    const scrollY = window.scrollY;
-    window.scrollTo({ top: 0, behavior: "instant" });
+    const offWheel = on(window, "wheel", preventBackgroundScroll, {
+      passive: false,
+    });
+    const offTouch = on(window, "touchmove", preventBackgroundScroll, {
+      passive: false,
+    });
     return () => {
-      void tick().then(() => {
-        if (!help.open) window.scrollTo({ top: scrollY, behavior: "instant" });
-      });
+      offWheel();
+      offTouch();
+      body.style.overflow = overflow;
+      root.style.overflow = rootOverflow;
+      root.style.scrollbarGutter = gutter;
+      window.scrollTo({ left: scrollX, top: scrollY, behavior: "instant" });
     };
   });
 </script>
@@ -152,13 +175,12 @@
 <style>
   .page-stack {
     position: relative;
-    min-height: 100dvh;
   }
   .help-surface.page {
-    position: absolute;
+    position: fixed;
     z-index: 20;
-    top: 0;
-    left: 0;
+    top: var(--help-top);
+    left: var(--help-seam);
     border: 0;
     box-shadow: none;
     overflow: clip;
@@ -198,13 +220,12 @@
   }
   .alongside {
     display: grid;
-    min-height: 100dvh;
     grid-template-columns: minmax(0, 1fr) minmax(24rem, 38%);
     align-items: start;
   }
   .docked {
-    position: sticky;
-    height: calc(100dvh - var(--help-top));
+    position: fixed;
+    width: max(24rem, calc((100vw - var(--help-seam)) * 0.38));
   }
   @media (max-width: 1100px) {
     .alongside {

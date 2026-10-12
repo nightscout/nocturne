@@ -6,8 +6,10 @@
   import HelpIcon from "./HelpIcon.svelte";
   import HelpPreferences from "./HelpPreferences.svelte";
   import { Input } from "$lib/components/ui/input";
-  let { hiddenMobileHeader = false }: { hiddenMobileHeader?: boolean } =
-    $props();
+  let {
+    hiddenMobileHeader = false,
+    tallPage = false,
+  }: { hiddenMobileHeader?: boolean; tallPage?: boolean } = $props();
   const help = createHelpContext();
   help.navigation = buildAppNavigation({
     user: {},
@@ -26,6 +28,9 @@
     ></div>{/if}
   <header
     data-help-header
+    class:sticky={tallPage}
+    class:top-0={tallPage}
+    class:z-40={tallPage}
     class:hidden-header={hiddenMobileHeader && !help.open}
     class="flex items-center gap-2 border-b p-4 font-bold"
   >
@@ -34,7 +39,7 @@
   <HelpBar />
   <main>
     <HelpPageView>
-      <div class="mx-auto max-w-4xl space-y-6 p-6">
+      <div class="mx-auto max-w-4xl space-y-6 p-6" class:tall-page={tallPage}>
         <h1 class="text-2xl font-bold">Steps</h1>
         <p>Your activity report stays open while you explore documentation.</p>
         <Input aria-label="Report notes" />
@@ -45,6 +50,9 @@
 </div>
 
 <style>
+  .tall-page {
+    min-height: 300vh;
+  }
   .offscreen-header {
     position: fixed;
     left: -1000px;

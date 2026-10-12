@@ -170,7 +170,7 @@ export function reportArticles(): HelpArticle[] {
       "Readings paired between your selected device and reference.",
       "Choose Device, Reference, and Match within here. Manage sources in Settings → Connectors & Apps.",
       "The scatter and agreement summaries show differences between paired readings.",
-      "Unpaired readings are excluded. A wider tolerance compares less simultaneous readings; your chosen reference is not guaranteed ground truth.",
+      "Unpaired readings are excluded. A wider tolerance allows paired readings farther apart in time; your chosen reference is not guaranteed ground truth.",
       ["/settings/connectors", "/reports/data-quality"]
     ),
     guide(

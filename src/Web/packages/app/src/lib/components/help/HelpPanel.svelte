@@ -23,10 +23,9 @@
         : 2000,
     });
   }
-  let panel: HTMLElement;
   let content: HTMLDivElement;
   $effect(() => {
-    panel?.focus({ preventScroll: true });
+    content?.focus({ preventScroll: true });
   });
   $effect(() => {
     if (help?.path) content?.scrollTo({ top: 0 });
@@ -35,7 +34,6 @@
 
 <section
   data-help-panel
-  bind:this={panel}
   tabindex="-1"
   aria-label="Documentation panel"
   class="help-panel flex min-h-0 flex-col text-foreground"
@@ -83,8 +81,13 @@
     </Button>
   </header>
   <div class="flex min-h-0 flex-1" class:wide={help?.layout === "drawer"}>
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex (This named scroll region must be focusable for keyboard scrolling.) -->
     <div
       bind:this={content}
+      data-help-scroll
+      tabindex="0"
+      role="region"
+      aria-label="Documentation content"
       class="min-w-0 flex-1 overflow-y-auto overscroll-contain"
     >
       {#if !bookLayout || help?.seam === 0}

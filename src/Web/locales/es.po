@@ -26717,25 +26717,25 @@ msgstr ""
 
 #: src/lib/components/help/HelpBar.svelte
 msgid "Page help"
-msgstr ""
+msgstr "Page help"
 
 #. 0: article.title
 #: src/lib/components/help/HelpBar.svelte
 msgid "Help with {0}"
-msgstr ""
+msgstr "Help with {0}"
 
 #: src/lib/components/help/HelpBar.svelte
 msgid "— Explanations, settings, and getting started"
-msgstr ""
+msgstr "— Explanations, settings, and getting started"
 
 #: src/lib/components/help/HelpBar.svelte
 #: src/lib/components/help/HelpBar.svelte
 msgid "Minimize help to library icon"
-msgstr ""
+msgstr "Minimize help to library icon"
 
 #: src/lib/components/help/HelpBar.svelte
 msgid "Open help <0/>"
-msgstr ""
+msgstr "Open help <0/>"
 
 #~ msgid "Nocturne documentation"
 #~ msgstr ""
@@ -26746,7 +26746,7 @@ msgstr ""
 #: src/lib/components/help/HelpNavigation.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 msgid "Documentation navigation"
-msgstr ""
+msgstr "Documentation navigation"
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Search all documentation"
@@ -26789,47 +26789,47 @@ msgstr "Continue exploring"
 
 #: src/lib/components/help/HelpHarness.test.svelte
 msgid "Your activity report stays open while you explore documentation."
-msgstr ""
+msgstr "Your activity report stays open while you explore documentation."
 
 #: src/lib/components/help/HelpHarness.test.svelte
 msgid "Nocturne <0/>"
-msgstr ""
+msgstr "Nocturne <0/>"
 
 #: src/lib/components/help/HelpIcon.svelte
 #: src/lib/components/help/HelpIcon.svelte
 msgid "Open page help"
-msgstr ""
+msgstr "Open page help"
 
 #: src/lib/components/help/HelpPreferences.svelte
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Full help bar"
-msgstr ""
+msgstr "Full help bar"
 
 #: src/lib/components/help/HelpPreferences.svelte
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Library icon only"
-msgstr ""
+msgstr "Library icon only"
 
 #: src/lib/components/help/HelpPreferences.svelte
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Hidden"
-msgstr ""
+msgstr "Hidden"
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "<0/>Documentation & help"
-msgstr ""
+msgstr "<0/>Documentation & help"
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Choose how to access page help. This preference is saved in this browser."
-msgstr ""
+msgstr "Choose how to access page help. This preference is saved in this browser."
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Help visibility"
-msgstr ""
+msgstr "Help visibility"
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "When hidden, help can always be enabled again here."
-msgstr ""
+msgstr "When hidden, help can always be enabled again here."
 
 #: src/lib/components/help/HelpIcon.svelte
 #: src/lib/components/help/HelpIcon.svelte
@@ -26873,90 +26873,90 @@ msgstr "Replace page"
 
 #: src/lib/components/help/HelpHarness.test.svelte
 msgid "Report notes"
-msgstr ""
+msgstr "Report notes"
 
 #: src/lib/components/help/HelpPanel.svelte
 msgid "Close documentation"
-msgstr ""
+msgstr "Close documentation"
 
 #: src/lib/components/help/HelpPanel.svelte
 msgid "Documentation panel"
-msgstr ""
+msgstr "Documentation panel"
 
 #: src/lib/components/help/HelpPanel.svelte
 msgid "Your page stays open underneath"
-msgstr ""
+msgstr "Your page stays open underneath"
 
 #: src/lib/components/help/HelpPanel.svelte
 msgid "<0/>Close"
-msgstr ""
+msgstr "<0/>Close"
 
 #: src/lib/components/help/HelpPanel.svelte
 msgid "Browse documentation"
-msgstr ""
+msgstr "Browse documentation"
 
 #~ msgid "Slides out from the navigation edge and covers the menu and page. Browse guides using a separate copy of your familiar navigation."
 #~ msgstr ""
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Opens a narrower drawer on the right, with guide navigation inside the panel."
-msgstr ""
+msgstr "Opens a narrower drawer on the right, with guide navigation inside the panel."
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Keeps the page usable beside its guide. On smaller screens, opens a full-width drawer."
-msgstr ""
+msgstr "Keeps the page usable beside its guide. On smaller screens, opens a full-width drawer."
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Replaces the page content temporarily and uses the existing menu for documentation."
-msgstr ""
+msgstr "Replaces the page content temporarily and uses the existing menu for documentation."
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Documentation layout"
-msgstr ""
+msgstr "Documentation layout"
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "<0/> Close help with the book beside Nocturne, the close button, or Escape. Your page and its inputs stay in place."
-msgstr ""
+msgstr "<0/> Close help with the book beside Nocturne, the close button, or Escape. Your page and its inputs stay in place."
 
 #~ msgid "Tab"
 #~ msgstr ""
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Opens like a transparent book from the boundary between menu and page. Your existing navigation stays in place and browses documentation while help is open."
-msgstr ""
+msgstr "Opens like a transparent book from the boundary between menu and page. Your existing navigation stays in place and browses documentation while help is open."
 
 #: src/lib/components/help/HelpAppearanceControls.svelte
 msgid "Documentation transparency"
-msgstr ""
+msgstr "Documentation transparency"
 
 #: src/lib/components/help/HelpAppearanceControls.svelte
 msgid "Transparency <0/>"
-msgstr ""
+msgstr "Transparency <0/>"
 
 #: src/lib/components/help/HelpAppearanceControls.svelte
 msgid "Documentation background blur"
-msgstr ""
+msgstr "Documentation background blur"
 
 #. 0.0: help.blur
 #: src/lib/components/help/HelpAppearanceControls.svelte
 msgid "Background blur <0>{0} px</0>"
-msgstr ""
+msgstr "Background blur <0>{0} px</0>"
 
 #: src/lib/components/help/HelpAppearanceControls.svelte
 msgid "Only the background layer changes; documentation text stays fully visible. Saved in this browser."
-msgstr ""
+msgstr "Only the background layer changes; documentation text stays fully visible. Saved in this browser."
 
 #: src/lib/components/help/HelpAppearanceControls.svelte
 msgid "Reset help appearance"
-msgstr ""
+msgstr "Reset help appearance"
 
 #: src/lib/components/help/HelpPanel.svelte
 msgid "Display options"
-msgstr ""
+msgstr "Display options"
 
 #: src/lib/components/help/HelpPanel.svelte
 msgid "Documentation appearance"
-msgstr ""
+msgstr "Documentation appearance"
 
 #: src/lib/help/documentation.svelte.ts
 msgid "Use this page's visible controls and field descriptions to inspect its information."
@@ -26970,9 +26970,8 @@ msgstr "Settings and access"
 msgid "Available actions depend on the selected tenant and your permissions. Check the related settings in the navigation menu. Close documentation with the book or Escape to return to your original page."
 msgstr "Available actions depend on the selected tenant and your permissions. Check the related settings in the navigation menu. Close documentation with the book or Escape to return to your original page."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Connect your own Google account, inspect what is available, then choose what Nocturne should import. Follow the steps in order."
-msgstr "Connect your own Google account, inspect what is available, then choose what Nocturne should import. Follow the steps in order."
+#~ msgid "Connect your own Google account, inspect what is available, then choose what Nocturne should import. Follow the steps in order."
+#~ msgstr "Connect your own Google account, inspect what is available, then choose what Nocturne should import. Follow the steps in order."
 
 #: src/lib/help/connectors.svelte.ts
 msgid "Your device or source app sends data to Google Health. Nocturne reads the selected account through Google's API and stores supported records in this tenant's existing histories. A Google Cloud project provides permission to use the API; it does not generate health data."
@@ -26990,69 +26989,55 @@ msgstr "Imported steps, heart rate, and sleep appear in their reports. Weight ap
 msgid "The phone/watch must first sync to Google. Local Health Connect records do not guarantee availability in Google's cloud API. Inventory availability, Google sign-in, and import completion are separate states. Unsupported types can be visible but cannot be selected for import."
 msgstr "The phone/watch must first sync to Google. Local Health Connect records do not guarantee availability in Google's cloud API. Inventory availability, Google sign-in, and import completion are separate states. Unsupported types can be visible but cannot be selected for import."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Check Google access and your source"
-msgstr "Check Google access and your source"
+#~ msgid "Check Google access and your source"
+#~ msgstr "Check Google access and your source"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Start with the official Google setup guide linked below and check current API access availability: If Google restricts new project access and your project cannot enable the API, resolve eligibility with Google first. Sign into the Google Health mobile app with the account you want to use and check that it contains recent readings. A successful Google sign-in alone does not establish a Google Health profile."
-msgstr "Start with the official Google setup guide linked below and check current API access availability: If Google restricts new project access and your project cannot enable the API, resolve eligibility with Google first. Sign into the Google Health mobile app with the account you want to use and check that it contains recent readings. A successful Google sign-in alone does not establish a Google Health profile."
+#~ msgid "Start with the official Google setup guide linked below and check current API access availability: If Google restricts new project access and your project cannot enable the API, resolve eligibility with Google first. Sign into the Google Health mobile app with the account you want to use and check that it contains recent readings. A successful Google sign-in alone does not establish a Google Health profile."
+#~ msgstr "Start with the official Google setup guide linked below and check current API access availability: If Google restricts new project access and your project cannot enable the API, resolve eligibility with Google first. Sign into the Google Health mobile app with the account you want to use and check that it contains recent readings. A successful Google sign-in alone does not establish a Google Health profile."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Let phone data reach Google Health"
-msgstr "Let phone data reach Google Health"
+#~ msgid "Let phone data reach Google Health"
+#~ msgstr "Let phone data reach Google Health"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "For a watch syncing directly with Google Health, verify the readings in that app. For another Android source using Health Connect, allow the source app to write its data and Google Health to read it. In Google Health use Connections → Partner apps → Sync your favorite apps and complete setup, including the history/background permissions you want. Check the linked official instructions if labels change. Newest data may arrive first: wait for Google to finish syncing older records before diagnosing an empty historical report."
-msgstr "For a watch syncing directly with Google Health, verify the readings in that app. For another Android source using Health Connect, allow the source app to write its data and Google Health to read it. In Google Health use Connections → Partner apps → Sync your favorite apps and complete setup, including the history/background permissions you want. Check the linked official instructions if labels change. Newest data may arrive first: wait for Google to finish syncing older records before diagnosing an empty historical report."
+#~ msgid "For a watch syncing directly with Google Health, verify the readings in that app. For another Android source using Health Connect, allow the source app to write its data and Google Health to read it. In Google Health use Connections → Partner apps → Sync your favorite apps and complete setup, including the history/background permissions you want. Check the linked official instructions if labels change. Newest data may arrive first: wait for Google to finish syncing older records before diagnosing an empty historical report."
+#~ msgstr "For a watch syncing directly with Google Health, verify the readings in that app. For another Android source using Health Connect, allow the source app to write its data and Google Health to read it. In Google Health use Connections → Partner apps → Sync your favorite apps and complete setup, including the history/background permissions you want. Check the linked official instructions if labels change. Newest data may arrive first: wait for Google to finish syncing older records before diagnosing an empty historical report."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Create or choose your Google Cloud project"
-msgstr "Create or choose your Google Cloud project"
+#~ msgid "Create or choose your Google Cloud project"
+#~ msgstr "Create or choose your Google Cloud project"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Use your own project, not someone else's client credentials. Enable the Google Health API using the official setup guide. The project and OAuth app names are descriptive: choose recognisable names. These names do not need to match Nocturne. Do not enable unrelated APIs merely because a guide lists other integrations."
-msgstr "Use your own project, not someone else's client credentials. Enable the Google Health API using the official setup guide. The project and OAuth app names are descriptive: choose recognisable names. These names do not need to match Nocturne. Do not enable unrelated APIs merely because a guide lists other integrations."
+#~ msgid "Use your own project, not someone else's client credentials. Enable the Google Health API using the official setup guide. The project and OAuth app names are descriptive: choose recognisable names. These names do not need to match Nocturne. Do not enable unrelated APIs merely because a guide lists other integrations."
+#~ msgstr "Use your own project, not someone else's client credentials. Enable the Google Health API using the official setup guide. The project and OAuth app names are descriptive: choose recognisable names. These names do not need to match Nocturne. Do not enable unrelated APIs merely because a guide lists other integrations."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Prepare consent and add your test account"
-msgstr "Prepare consent and add your test account"
+#~ msgid "Prepare consent and add your test account"
+#~ msgstr "Prepare consent and add your test account"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "In Google Auth Platform configure the app's consent details. For a personal test choose External with publishing status Testing, then Audience → Test users → Add users. Add the exact Google email address whose health data you will connect and save. Under Data Access, add the read scopes listed in this guide's reference panel and save. Nocturne also requests basic sign-in identification automatically. Testing grants can expire after seven days; reconnect when required."
-msgstr "In Google Auth Platform configure the app's consent details. For a personal test choose External with publishing status Testing, then Audience → Test users → Add users. Add the exact Google email address whose health data you will connect and save. Under Data Access, add the read scopes listed in this guide's reference panel and save. Nocturne also requests basic sign-in identification automatically. Testing grants can expire after seven days; reconnect when required."
+#~ msgid "In Google Auth Platform configure the app's consent details. For a personal test choose External with publishing status Testing, then Audience → Test users → Add users. Add the exact Google email address whose health data you will connect and save. Under Data Access, add the read scopes listed in this guide's reference panel and save. Nocturne also requests basic sign-in identification automatically. Testing grants can expire after seven days; reconnect when required."
+#~ msgstr "In Google Auth Platform configure the app's consent details. For a personal test choose External with publishing status Testing, then Audience → Test users → Add users. Add the exact Google email address whose health data you will connect and save. Under Data Access, add the read scopes listed in this guide's reference panel and save. Nocturne also requests basic sign-in identification automatically. Testing grants can expire after seven days; reconnect when required."
 
 #: src/lib/help/connectors.svelte.ts
 msgid "Create the Web application client"
 msgstr "Create the Web application client"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "In Clients create an OAuth client of type Web application (Web Server in the quick-start wizard). Copy the Callback URL displayed in Nocturne into Authorized redirect URIs. It must match exactly, including https, hostname, port, path, and any trailing slash. Use Nocturne's address, not the sample google.com redirect in Google's quick start. Save and copy both Client ID and Client secret. The name is descriptive; the credentials and redirect address must be exact."
-msgstr "In Clients create an OAuth client of type Web application (Web Server in the quick-start wizard). Copy the Callback URL displayed in Nocturne into Authorized redirect URIs. It must match exactly, including https, hostname, port, path, and any trailing slash. Use Nocturne's address, not the sample google.com redirect in Google's quick start. Save and copy both Client ID and Client secret. The name is descriptive; the credentials and redirect address must be exact."
+#~ msgid "In Clients create an OAuth client of type Web application (Web Server in the quick-start wizard). Copy the Callback URL displayed in Nocturne into Authorized redirect URIs. It must match exactly, including https, hostname, port, path, and any trailing slash. Use Nocturne's address, not the sample google.com redirect in Google's quick start. Save and copy both Client ID and Client secret. The name is descriptive; the credentials and redirect address must be exact."
+#~ msgstr "In Clients create an OAuth client of type Web application (Web Server in the quick-start wizard). Copy the Callback URL displayed in Nocturne into Authorized redirect URIs. It must match exactly, including https, hostname, port, path, and any trailing slash. Use Nocturne's address, not the sample google.com redirect in Google's quick start. Save and copy both Client ID and Client secret. The name is descriptive; the credentials and redirect address must be exact."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Save credentials and sign in"
-msgstr "Save credentials and sign in"
+#~ msgid "Save credentials and sign in"
+#~ msgstr "Save credentials and sign in"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "On Nocturne's Google Health page enter Google client ID, Client secret, and Callback URL. The secret is required on first setup; leave it empty only when editing an already-saved secret. Choose Import data from for the earliest history you want, then Save and connect. Sign in with the same test account and review the requested read permissions. Grant the permissions for the data types you want; declining one can leave its rows unavailable. Confirm you return to Nocturne's connector page."
-msgstr "On Nocturne's Google Health page enter Google client ID, Client secret, and Callback URL. The secret is required on first setup; leave it empty only when editing an already-saved secret. Choose Import data from for the earliest history you want, then Save and connect. Sign in with the same test account and review the requested read permissions. Grant the permissions for the data types you want; declining one can leave its rows unavailable. Confirm you return to Nocturne's connector page."
+#~ msgid "On Nocturne's Google Health page enter Google client ID, Client secret, and Callback URL. The secret is required on first setup; leave it empty only when editing an already-saved secret. Choose Import data from for the earliest history you want, then Save and connect. Sign in with the same test account and review the requested read permissions. Grant the permissions for the data types you want; declining one can leave its rows unavailable. Confirm you return to Nocturne's connector page."
+#~ msgstr "On Nocturne's Google Health page enter Google client ID, Client secret, and Callback URL. The secret is required on first setup; leave it empty only when editing an already-saved secret. Choose Import data from for the earliest history you want, then Save and connect. Sign in with the same test account and review the requested read permissions. Grant the permissions for the data types you want; declining one can leave its rows unavailable. Confirm you return to Nocturne's connector page."
 
 #: src/lib/help/connectors.svelte.ts
 msgid "Review the inventory and start an import"
 msgstr "Review the inventory and start an import"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Inspect the available-data table. Found indicates source availability, not data already imported. Select supported types you want, then choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Rows marked Not scanned need a refreshed inventory, No permission needs the relevant consent, and No destination yet is unsupported. Leaving the page does not cancel the server's import."
-msgstr "Inspect the available-data table. Found indicates source availability, not data already imported. Select supported types you want, then choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Rows marked Not scanned need a refreshed inventory, No permission needs the relevant consent, and No destination yet is unsupported. Leaving the page does not cancel the server's import."
+#~ msgid "Inspect the available-data table. Found indicates source availability, not data already imported. Select supported types you want, then choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Rows marked Not scanned need a refreshed inventory, No permission needs the relevant consent, and No destination yet is unsupported. Leaving the page does not cancel the server's import."
+#~ msgstr "Inspect the available-data table. Found indicates source availability, not data already imported. Select supported types you want, then choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Rows marked Not scanned need a refreshed inventory, No permission needs the relevant consent, and No destination yet is unsupported. Leaving the page does not cancel the server's import."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Confirm that your reports contain data"
-msgstr "Confirm that your reports contain data"
+#~ msgid "Confirm that your reports contain data"
+#~ msgstr "Confirm that your reports contain data"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Watch sync status and Historical import progress. Current data is processed first, followed by older history in stages. Open the relevant report and choose dates that contain source records; check Weight history for weight. If empty, verify the Google account, its actual records, granted permissions, selected types, date range, and last sync error in that order. Use Sync now to request the current selection again; avoid repeatedly disconnecting a working import."
-msgstr "Watch sync status and Historical import progress. Current data is processed first, followed by older history in stages. Open the relevant report and choose dates that contain source records; check Weight history for weight. If empty, verify the Google account, its actual records, granted permissions, selected types, date range, and last sync error in that order. Use Sync now to request the current selection again; avoid repeatedly disconnecting a working import."
+#~ msgid "Watch sync status and Historical import progress. Current data is processed first, followed by older history in stages. Open the relevant report and choose dates that contain source records; check Weight history for weight. If empty, verify the Google account, its actual records, granted permissions, selected types, date range, and last sync error in that order. Use Sync now to request the current selection again; avoid repeatedly disconnecting a working import."
+#~ msgstr "Watch sync status and Historical import progress. Current data is processed first, followed by older history in stages. Open the relevant report and choose dates that contain source records; check Weight history for weight. If empty, verify the Google account, its actual records, granted permissions, selected types, date range, and last sync error in that order. Use Sync now to request the current selection again; avoid repeatedly disconnecting a working import."
 
 #: src/lib/help/connectors.svelte.ts
 msgid "Ongoing sync and historical progress"
@@ -27516,9 +27501,8 @@ msgstr "Choose Device, Reference, and Match within here. Manage sources in Setti
 msgid "The scatter and agreement summaries show differences between paired readings."
 msgstr "The scatter and agreement summaries show differences between paired readings."
 
-#: src/lib/help/reports.svelte.ts
-msgid "Unpaired readings are excluded. A wider tolerance compares less simultaneous readings; your chosen reference is not guaranteed ground truth."
-msgstr "Unpaired readings are excluded. A wider tolerance compares less simultaneous readings; your chosen reference is not guaranteed ground truth."
+#~ msgid "Unpaired readings are excluded. A wider tolerance compares less simultaneous readings; your chosen reference is not guaranteed ground truth."
+#~ msgstr "Unpaired readings are excluded. A wider tolerance compares less simultaneous readings; your chosen reference is not guaranteed ground truth."
 
 #: src/lib/help/reports.svelte.ts
 msgid "Review suggested low-reading windows for a possible quality correction."
@@ -28567,3 +28551,135 @@ msgstr "These values come from the same server models and capability catalogue u
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Open settings in a new tab"
 msgstr "Open settings in a new tab"
+
+#: src/lib/help/reports.svelte.ts
+msgid "Unpaired readings are excluded. A wider tolerance allows paired readings farther apart in time; your chosen reference is not guaranteed ground truth."
+msgstr "Unpaired readings are excluded. A wider tolerance allows paired readings farther apart in time; your chosen reference is not guaranteed ground truth."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "redirect_uri_mismatch: copy the complete Nocturne Callback URL into the same OAuth client's redirect list. Access blocked or test-user errors: check Audience, exact email, enabled API, and current Google access eligibility. ACCOUNT_NOT_LINKED: complete the Google Health app profile with this account. Missing permission: sign in again and grant the required read access. An expired test grant: reconnect; production verification and quota rules belong to Google and can change."
+msgstr "redirect_uri_mismatch: copy the complete Nocturne Callback URL into the same OAuth client's redirect list. Access blocked or test-user errors: check Audience, exact email, enabled API, and current Google access eligibility. ACCOUNT_NOT_LINKED: complete the Google Health app profile with this account. Missing permission: sign in again and grant the required read access. An expired test grant: reconnect; production verification and quota rules belong to Google and can change."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "First install the Google Health app and make sure you can see the data you want to share there. Then follow the Google setup wizard and connect that same account to Nocturne."
+msgstr "First install the Google Health app and make sure you can see the data you want to share there. Then follow the Google setup wizard and connect that same account to Nocturne."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Install Google Health and check your data"
+msgstr "Install Google Health and check your data"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Install Google Health (formerly Fitbit) using the Play Store link below. Open it, sign in with the Google account you want to share, and complete its profile setup. Before continuing, make sure the steps, heart rate, sleep, or weight you want to share are visible in that app. Signing into Google alone is not enough."
+msgstr "Install Google Health (formerly Fitbit) using the Play Store link below. Open it, sign in with the Google account you want to share, and complete its profile setup. Before continuing, make sure the steps, heart rate, sleep, or weight you want to share are visible in that app. Signing into Google alone is not enough."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Install Google Health from the Play Store"
+msgstr "Install Google Health from the Play Store"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Bring data from other apps into Google Health (optional)"
+msgstr "Bring data from other apps into Google Health (optional)"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "On Android use Health Connect, Google's on-device data-sharing service. Let your source app write the desired records and let Google Health read them. In Google Health open Connections → Partner apps → Sync your favorite health apps → Set up. Review the data, history, and background permissions, then check that records appear in Google Health. Garmin needs its watch to sync to Garmin Connect first; Google Health does not connect directly to the watch. Google also documents Samsung Galaxy, Xiaomi/Mi Fitness, Oura, Whoop, Strava, and MyFitnessPal connections. On iPhone the route is generally Apple Health. Available types differ by app: a direct Strava connection exports Google Health activities to Strava; importing Strava activities uses Health Connect or Apple Health instead. Google Health supports more types than this Nocturne connector, so check the importable-type table below."
+msgstr "On Android use Health Connect, Google's on-device data-sharing service. Let your source app write the desired records and let Google Health read them. In Google Health open Connections → Partner apps → Sync your favorite health apps → Set up. Review the data, history, and background permissions, then check that records appear in Google Health. Garmin needs its watch to sync to Garmin Connect first; Google Health does not connect directly to the watch. Google also documents Samsung Galaxy, Xiaomi/Mi Fitness, Oura, Whoop, Strava, and MyFitnessPal connections. On iPhone the route is generally Apple Health. Available types differ by app: a direct Strava connection exports Google Health activities to Strava; importing Strava activities uses Health Connect or Apple Health instead. Google Health supports more types than this Nocturne connector, so check the importable-type table below."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Install or open Health Connect"
+msgstr "Install or open Health Connect"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Google: set up Health Connect permissions and syncing"
+msgstr "Google: set up Health Connect permissions and syncing"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Google: device and app connections, including Garmin"
+msgstr "Google: device and app connections, including Garmin"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Open Google's setup wizard"
+msgstr "Open Google's setup wizard"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Open the Google Setup documentation linked below. Click its blue button labelled Enable the API and get an OAuth 2.0 Client ID. Use a Google account that can manage your Cloud project. If Google restricts access for your project, resolve that eligibility before continuing. Leave Nocturne open in another tab."
+msgstr "Open the Google Setup documentation linked below. Click its blue button labelled Enable the API and get an OAuth 2.0 Client ID. Use a Google account that can manage your Cloud project. If Google restricts access for your project, resolve that eligibility before continuing. Leave Nocturne open in another tab."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Open the Google Setup documentation"
+msgstr "Open the Google Setup documentation"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Name your project and enable the API"
+msgstr "Name your project and enable the API"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Choose a new project and enter a project name, or select an existing project you manage. The name is a reminder for you later: any recognisable name is fine. Click Next. Confirm that you want to enable the Google Health API and continue. This enables access to Google's service; it does not create or import any health records."
+msgstr "Choose a new project and enter a project name, or select an existing project you manage. The name is a reminder for you later: any recognisable name is fine. Click Next. Confirm that you want to enable the Google Health API and continue. This enables access to Google's service; it does not create or import any health records."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Choose a product name"
+msgstr "Choose a product name"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Enter the product/application name requested by the wizard. You are free to choose it: it may match the project name or be completely different. It is the name shown on Google's consent screen when you connect from Nocturne. Complete any required contact details. Neither name needs to match your Nocturne hostname."
+msgstr "Enter the product/application name requested by the wizard. You are free to choose it: it may match the project name or be completely different. It is the name shown on Google's consent screen when you connect from Nocturne. Complete any required contact details. Neither name needs to match your Nocturne hostname."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "For Where are you calling from? select Web Server. In the manual Clients screen the equivalent type is Web application. Copy the complete Callback URL shown by this Nocturne instance under Settings → Connectors & Apps → Google Health into the wizard's redirect field (Authorized redirect URIs). Use your own instance's URL, including its scheme, hostname, port, and callback path exactly. Replace any sample redirect from Google's guide. Click Create. If the wizard's layout changes, the essential choices remain a web client and that exact redirect."
+msgstr "For Where are you calling from? select Web Server. In the manual Clients screen the equivalent type is Web application. Copy the complete Callback URL shown by this Nocturne instance under Settings → Connectors & Apps → Google Health into the wizard's redirect field (Authorized redirect URIs). Use your own instance's URL, including its scheme, hostname, port, and callback path exactly. Replace any sample redirect from Google's guide. Click Create. If the wizard's layout changes, the essential choices remain a web client and that exact redirect."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Download the client configuration and fill Nocturne's fields"
+msgstr "Download the client configuration and fill Nocturne's fields"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Download the Client configuration/Credentials JSON. Copy Client ID and Client secret into the fields of the same names on Nocturne's Google Health page. The secret is required on first setup; leave it empty only when keeping a secret that was already saved. Check the Callback URL and choose Import data from for the history you want. Keep this form ready while you add the test user in the next step. Store the downloaded file privately: it contains credentials."
+msgstr "Download the Client configuration/Credentials JSON. Copy Client ID and Client secret into the fields of the same names on Nocturne's Google Health page. The secret is required on first setup; leave it empty only when keeping a secret that was already saved. Check the Callback URL and choose Import data from for the history you want. Keep this form ready while you add the test user in the next step. Store the downloaded file privately: it contains credentials."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Add the Google account as a test user"
+msgstr "Add the Google account as a test user"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Return to the Google Setup documentation, find Add test users, and open its Audience page link. Select the project you just configured. For a personal test use External with publishing status Testing. Under Test users choose Add users, enter the exact email address used in the Google Health app on your phone, and Save. Add each account that will share data. The account managing the Cloud project can be different from the account sharing health data."
+msgstr "Return to the Google Setup documentation, find Add test users, and open its Audience page link. Select the project you just configured. For a personal test use External with publishing status Testing. Under Test users choose Add users, enter the exact email address used in the Google Health app on your phone, and Save. Add each account that will share data. The account managing the Cloud project can be different from the account sharing health data."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Check the read permissions in Data Access"
+msgstr "Check the read permissions in Data Access"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "In Google's Data Access page choose Add or remove scopes, select the Google Health read scopes shown in Nocturne's reference table below, then Update and Save. Nocturne adds basic sign-in identification itself. These scopes govern which records it can read; they do not allow Nocturne to write to your Google Health account."
+msgstr "In Google's Data Access page choose Add or remove scopes, select the Google Health read scopes shown in Nocturne's reference table below, then Update and Save. Nocturne adds basic sign-in identification itself. These scopes govern which records it can read; they do not allow Nocturne to write to your Google Health account."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Save and connect with the same account"
+msgstr "Save and connect with the same account"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Return to the prepared Nocturne form and choose Save and connect (or Sign in with Google for an existing configuration). Choose the Google Health account you added as a test user, review and grant the read permissions for the data you want, and confirm you return to Nocturne. Testing grants can expire after seven days and then need reconnection."
+msgstr "Return to the prepared Nocturne form and choose Save and connect (or Sign in with Google for an existing configuration). Choose the Google Health account you added as a test user, review and grant the read permissions for the data you want, and confirm you return to Nocturne. Testing grants can expire after seven days and then need reconnection."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "In the available-data table, Found means records exist at the source, not that they have been imported. Select supported types and choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Not scanned needs a refreshed inventory; No permission needs the relevant consent; No destination yet is unsupported. Leaving the page does not cancel the server import."
+msgstr "In the available-data table, Found means records exist at the source, not that they have been imported. Select supported types and choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Not scanned needs a refreshed inventory; No permission needs the relevant consent; No destination yet is unsupported. Leaving the page does not cancel the server import."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Confirm the result in your reports"
+msgstr "Confirm the result in your reports"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Watch sync status and Historical import progress. Open Steps, Heart Rate, or Sleep and choose dates containing source records; use Weight history for weight. If empty, check the source account's visible records, granted permissions, import selection, dates, and last error. Google may still be syncing older phone records; wait for that to finish before retrying. Completed historical months that receive records later need the recovery procedure below."
+msgstr "Watch sync status and Historical import progress. Open Steps, Heart Rate, or Sleep and choose dates containing source records; use Weight history for weight. If empty, check the source account's visible records, granted permissions, import selection, dates, and last error. Google may still be syncing older phone records; wait for that to finish before retrying. Completed historical months that receive records later need the recovery procedure below."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Personalise branding (optional)"
+msgstr "Personalise branding (optional)"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "After the connection works, open Branding in Google Auth Platform to adjust the app's display name, logo, and available contact or policy details. This changes how Google presents the app; it does not change your health data or Nocturne's import settings. Follow Google's validation requirements for any fields you add."
+msgstr "After the connection works, open Branding in Google Auth Platform to adjust the app's display name, logo, and available contact or policy details. This changes how Google presents the app; it does not change your health data or Nocturne's import settings. Follow Google's validation requirements for any fields you add."
+
+#: src/lib/components/help/HelpPanel.svelte
+msgid "Documentation content"
+msgstr "Documentation content"

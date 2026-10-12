@@ -4,6 +4,7 @@ import { pageArticles } from "./pages.svelte";
 import { reportArticles } from "./reports.svelte";
 import { settingsArticles } from "./settings.svelte";
 import { connectorArticles } from "./connectors.svelte";
+import { glucoseBands } from "./reference.svelte";
 
 // Per-call factories let translated titles follow the current locale.
 export function articles(): HelpArticle[] {
@@ -16,6 +17,11 @@ export function articles(): HelpArticle[] {
 }
 
 function parentFor(href: string): string | undefined {
+  // The report overview is not permission to visit every report.
+  if (href.startsWith("/reports/"))
+    return href.startsWith("/reports/data-quality/")
+      ? "/reports/data-quality"
+      : href;
   if (href === "/settings/weight" || href === "/settings/timezone")
     return "/settings/patient";
   if (
@@ -103,6 +109,9 @@ export function searchDocumentation(query: string, links: NavLink[]) {
       const text = [
         article.title,
         article.introduction,
+        ...(article.reference === "glucose"
+          ? glucoseBands({}).map((band) => band.title)
+          : []),
         ...article.sections.flatMap((section) => [section.title, section.text]),
         ...(article.steps ?? []).flatMap((step) => [step.title, step.text]),
       ]

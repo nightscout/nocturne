@@ -2,6 +2,7 @@
 export interface HelpSection {
   title: string;
   text: string;
+  links?: HelpSource[];
 }
 export interface HelpSource {
   title: string;
