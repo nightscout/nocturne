@@ -12,6 +12,75 @@ beforeEach(() => {
 });
 
 describe("documentation help", () => {
+  it("restores focus to the book after opening from the help bar", async () => {
+    localStorage.setItem("nocturne-help-layout", "right");
+    localStorage.setItem("nocturne-help-visibility", "bar");
+    render(Harness);
+    await page.getByRole("button", { name: "Open help", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Close documentation", exact: true })
+      .click();
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(
+        page
+          .getByRole("button", { name: "Open page help", exact: true })
+          .element()
+      )
+    );
+  });
+
+  it("keeps focus in blocking help while allowing the book to close it", async () => {
+    localStorage.setItem("nocturne-help-layout", "right");
+    render(Harness);
+    await page
+      .getByRole("button", { name: "Open page help", exact: true })
+      .click();
+    await page
+      .getByRole("textbox", { name: "Search all documentation" })
+      .fill("steps");
+    const input = document.querySelector<HTMLInputElement>(
+      '[aria-label="Report notes"]'
+    )!;
+    input.focus();
+    expect(document.activeElement).not.toBe(input);
+    expect(input.closest("[inert]")).not.toBeNull();
+    for (let index = 0; index < 15; index++) {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Tab", cancelable: true })
+      );
+      expect(
+        document.activeElement?.closest("[data-help-panel], [data-help-toggle]")
+      ).not.toBeNull();
+    }
+    await page
+      .getByRole("button", { name: "Close page help", exact: true })
+      .click();
+    await expect
+      .element(page.getByRole("textbox", { name: "Report notes" }))
+      .toBeVisible();
+  });
+
+  it("reserves room for the returning mobile header when opened from the bar", async () => {
+    await page.viewport(390, 844);
+    localStorage.setItem("nocturne-help-layout", "drawer");
+    localStorage.setItem("nocturne-help-visibility", "bar");
+    render(Harness, { hiddenMobileHeader: true });
+    await page.getByRole("button", { name: "Open help", exact: true }).click();
+    const panel = page.getByRole("region", { name: "Documentation panel" });
+    await vi.waitFor(() => {
+      const book = page
+        .getByRole("button", { name: "Close page help", exact: true })
+        .element()
+        .getBoundingClientRect();
+      expect(
+        panel.element().getBoundingClientRect().top
+      ).toBeGreaterThanOrEqual(book.bottom);
+    });
+    await page
+      .getByRole("button", { name: "Close page help", exact: true })
+      .click();
+    await page.viewport(1280, 900);
+  });
   it("keeps navigation, the guide and the close book reachable on a phone", async () => {
     await page.viewport(390, 844);
     localStorage.setItem("nocturne-help-layout", "drawer");
@@ -28,7 +97,10 @@ describe("documentation help", () => {
       .element(page.getByRole("textbox", { name: "Search all documentation" }))
       .toBeVisible();
     await vi.waitFor(() => {
-      const bounds = page.getByRole("region", { name: "Documentation panel" }).element().getBoundingClientRect();
+      const bounds = page
+        .getByRole("region", { name: "Documentation panel" })
+        .element()
+        .getBoundingClientRect();
       expect(bounds.left).toBeGreaterThanOrEqual(0);
       expect(bounds.right).toBeLessThanOrEqual(390);
     });

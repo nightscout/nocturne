@@ -6,6 +6,8 @@
   import HelpIcon from "./HelpIcon.svelte";
   import HelpPreferences from "./HelpPreferences.svelte";
   import { Input } from "$lib/components/ui/input";
+  let { hiddenMobileHeader = false }: { hiddenMobileHeader?: boolean } =
+    $props();
   const help = createHelpContext();
   help.navigation = buildAppNavigation({
     user: {},
@@ -18,7 +20,15 @@
 </script>
 
 <div class="min-h-screen bg-background text-foreground">
-  <header class="flex items-center gap-2 border-b p-4 font-bold">
+  {#if hiddenMobileHeader}<div
+      data-slot="sidebar-header"
+      class="offscreen-header"
+    ></div>{/if}
+  <header
+    data-help-header
+    class:hidden-header={hiddenMobileHeader && !help.open}
+    class="flex items-center gap-2 border-b p-4 font-bold"
+  >
     Nocturne <HelpIcon />
   </header>
   <HelpBar />
@@ -33,3 +43,15 @@
     </HelpPageView>
   </main>
 </div>
+
+<style>
+  .offscreen-header {
+    position: fixed;
+    left: -1000px;
+    width: 288px;
+    height: 56px;
+  }
+  .hidden-header {
+    transform: translateY(-100%);
+  }
+</style>
