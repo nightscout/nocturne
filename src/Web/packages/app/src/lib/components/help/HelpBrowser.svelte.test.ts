@@ -20,6 +20,49 @@ beforeEach(() => {
 });
 
 describe("documentation help", () => {
+  it.each(["dialog", "alertdialog"] as const)(
+    "allows scrolling in an active application %s while keeping the background locked",
+    async (role) => {
+      localStorage.setItem("nocturne-help-layout", "alongside");
+      await page.viewport(1280, 900);
+      render(Harness, { applicationDialog: role });
+      await page
+        .getByRole("button", { name: "Open page help", exact: true })
+        .click();
+      const dialog = page.getByRole(role, {
+        name: "Application dialog",
+        exact: true,
+      });
+      const content = dialog
+        .getByRole("region", { name: "Application dialog content" })
+        .element();
+      const wheel = () =>
+        new WheelEvent("wheel", {
+          bubbles: true,
+          cancelable: true,
+          deltaY: 300,
+        });
+      const touch = () =>
+        new Event("touchmove", { bubbles: true, cancelable: true });
+      expect(content.dispatchEvent(wheel())).toBe(true);
+      expect(content.dispatchEvent(touch())).toBe(true);
+      content.focus();
+      await userEvent.keyboard("{PageDown}");
+      await vi.waitFor(() => expect(content.scrollTop).toBeGreaterThan(0));
+      const background = page
+        .getByRole("textbox", { name: "Report notes" })
+        .element();
+      expect(background.dispatchEvent(wheel())).toBe(false);
+      expect(background.dispatchEvent(touch())).toBe(false);
+      expect(document.body.style.overflow).toBe("hidden");
+      dialog.element().setAttribute("inert", "");
+      expect(content.dispatchEvent(wheel())).toBe(false);
+      expect(content.dispatchEvent(touch())).toBe(false);
+      await page
+        .getByRole("button", { name: "Close page help", exact: true })
+        .click();
+    }
+  );
   it("keeps the AGP guide focused and opens the shared glucose reference without navigating the report", async () => {
     pageState.url.pathname = "/reports/agp";
     render(Harness);
@@ -42,11 +85,13 @@ describe("documentation help", () => {
     await expect
       .element(settings.getByRole("link", { name: "Appearance", exact: true }))
       .toHaveAttribute("target", "_blank");
-    expect(
-      document.querySelector(
-        '[aria-label="Reference from the running application"]'
+    await expect
+      .element(
+        page.getByRole("region", {
+          name: "Reference from the running application",
+        })
       )
-    ).toBeNull();
+      .not.toBeInTheDocument();
     const source = page.getByText("Where the information comes from", {
       exact: true,
     });

@@ -48,8 +48,10 @@
           (target) =>
             target instanceof Element &&
             target.matches(
-              "[data-help-panel], [data-help-navigation], [data-help-controls]"
-            )
+              "[data-help-panel], [data-help-navigation], [data-help-controls], [role=dialog], [role=alertdialog]"
+            ) &&
+            !target.closest('[inert], [aria-hidden="true"]') &&
+            target.getClientRects().length > 0
         );
       if (!insideHelp && event.cancelable) event.preventDefault();
     };

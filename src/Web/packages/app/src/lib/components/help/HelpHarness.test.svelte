@@ -9,7 +9,12 @@
   let {
     hiddenMobileHeader = false,
     tallPage = false,
-  }: { hiddenMobileHeader?: boolean; tallPage?: boolean } = $props();
+    applicationDialog,
+  }: {
+    hiddenMobileHeader?: boolean;
+    tallPage?: boolean;
+    applicationDialog?: "dialog" | "alertdialog";
+  } = $props();
   const help = createHelpContext();
   help.navigation = buildAppNavigation({
     user: {},
@@ -49,7 +54,30 @@
   </main>
 </div>
 
+{#if applicationDialog}
+  <div
+    role={applicationDialog}
+    aria-modal="true"
+    aria-label="Application dialog"
+    tabindex="-1"
+    class="fixed right-4 top-24 z-[100] w-64 rounded-xl border bg-background p-4"
+  >
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex (The named test scroll region exercises native keyboard scrolling.) -->
+    <div
+      role="region"
+      aria-label="Application dialog content"
+      tabindex="0"
+      class="h-40 overflow-y-auto overscroll-contain"
+    >
+      <p class="dialog-test-content">Dialog content</p>
+    </div>
+  </div>
+{/if}
+
 <style>
+  .dialog-test-content {
+    height: 800px;
+  }
   .tall-page {
     min-height: 300vh;
   }

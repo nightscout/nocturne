@@ -30344,3 +30344,15 @@ msgstr "Reading diagram — illustrative, not your measurements. Colours follow 
 #: src/lib/components/help/HelpReadingAid.svelte
 msgid "How to read this page"
 msgstr "How to read this page"
+
+#: src/lib/components/help/HelpHarness.test.svelte
+msgid "Application dialog"
+msgstr "Application dialog"
+
+#: src/lib/components/help/HelpHarness.test.svelte
+msgid "Application dialog content"
+msgstr "Application dialog content"
+
+#: src/lib/components/help/HelpHarness.test.svelte
+msgid "Dialog content"
+msgstr "Dialog content"
