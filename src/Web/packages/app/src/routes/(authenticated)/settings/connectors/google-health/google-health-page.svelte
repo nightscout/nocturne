@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { googleHealthDataTypeLabel as dataTypeLabel } from "$lib/components/connectors/google-health-labels.svelte";
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
@@ -91,38 +92,6 @@
       CycleTracking: { label: "Cycle tracking", hideForMale: true },
     };
   const categoryOrder = Object.keys(categoryMeta);
-  const dataTypeLabels: Record<string, string> = {
-    steps: "Steps",
-    heartrate: "Heart rate",
-    weight: "Weight",
-    sleep: "Sleep sessions and stages",
-    activeenergyburned: "Active energy burned",
-    totalcalories: "Total calories",
-    distance: "Distance",
-    floors: "Floors",
-    exercise: "Workouts",
-    bodyfat: "Body fat",
-    height: "Height",
-    nutritionlog: "Nutrition log",
-    hydrationlog: "Hydration",
-    bloodglucose: "Blood glucose",
-    oxygensaturation: "Oxygen saturation",
-    heartratevariability: "Heart rate variability",
-    dailyrestingheartrate: "Resting heart rate",
-    dailyoxygensaturation: "Daily oxygen saturation",
-    dailyrespiratoryrate: "Daily respiratory rate",
-    respiratoryratesleepsummary: "Sleep respiratory rate",
-    corebodytemperature: "Core body temperature",
-    menstrualperiod: "Menstrual period",
-    ovulationtest: "Ovulation test",
-    cervicalmucus: "Cervical mucus",
-    sexualactivity: "Sexual activity",
-  };
-  function dataTypeLabel(type: string | null | undefined) {
-    return (
-      dataTypeLabels[(type ?? "").replaceAll("-", "")] ?? "Unknown data type"
-    );
-  }
   const categoryKey = (category: string | null | undefined) =>
     (category ?? "").replace(/[^a-z]/gi, "").toLowerCase();
   const categoryGroups = $derived.by(() => {

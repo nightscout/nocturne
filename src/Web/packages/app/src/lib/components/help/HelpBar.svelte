@@ -5,7 +5,7 @@
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import { Button } from "$lib/components/ui/button";
   import { getHelpContext } from "$lib/help/help-context.svelte";
-  import { articleFor, documentationLinks } from "$lib/help/documentation";
+  import { articleFor, documentationLinks } from "$lib/help/documentation.svelte";
   const help = getHelpContext();
   const article = $derived(
     articleFor(page.url.pathname, documentationLinks(help?.navigation ?? []))

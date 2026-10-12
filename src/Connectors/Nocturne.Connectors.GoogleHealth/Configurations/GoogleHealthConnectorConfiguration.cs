@@ -17,6 +17,7 @@ namespace Nocturne.Connectors.GoogleHealth.Configurations;
     DefaultStaleThresholdMinutes = 180)]
 public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfiguration
 {
+    public const string CallbackPath = "/settings/connectors/google-health/callback";
     public GoogleHealthConnectorConfiguration()
     {
         ConnectSource = ConnectSource.GoogleHealth;
@@ -71,7 +72,7 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
         callback.UserInfo == string.Empty &&
         callback.Query == string.Empty &&
         callback.Fragment == string.Empty &&
-        callback.AbsolutePath == "/settings/connectors/google-health/callback";
+        callback.AbsolutePath == CallbackPath;
 
     protected override void ValidateSourceSpecificConfiguration()
     {

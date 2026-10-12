@@ -276,6 +276,7 @@ msgstr ""
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
+#: src/lib/help/reference.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
@@ -287,7 +288,7 @@ msgstr ""
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/nightscout-transition/+page.svelte
 msgid "Low"
-msgstr ""
+msgstr "Low"
 
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
@@ -296,6 +297,7 @@ msgstr ""
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
+#: src/lib/help/reference.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
 #: src/routes/(authenticated)/food/GiLabel.svelte
@@ -305,7 +307,7 @@ msgstr ""
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/nightscout-transition/+page.svelte
 msgid "High"
-msgstr ""
+msgstr "High"
 
 #: src/lib/stores/auth-store.svelte.ts
 msgid "IsAuthenticated="
@@ -1233,11 +1235,13 @@ msgid "No condition configured"
 msgstr ""
 
 #. 0: mins
+#. 0: facts.googleHealthSyncIntervalMinutes
 #. 0: toleranceMinutes
 #: src/lib/components/alerts/DndPanel.svelte
+#: src/lib/components/help/HelpReference.svelte
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
 msgid "{0} minutes"
-msgstr ""
+msgstr "{0} minutes"
 
 #. 0: source.readingCount; 1: source.readingCount === 1 ? "" \\: "s"
 #: src/lib/components/patient/PatientDeviceManager.svelte
@@ -1834,9 +1838,10 @@ msgid "Click to view full day report"
 msgstr ""
 
 #: src/lib/components/calendar/CalendarHeader.svelte
+#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Calendar"
-msgstr ""
+msgstr "Calendar"
 
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
@@ -2217,9 +2222,9 @@ msgid "System"
 msgstr ""
 
 #: src/lib/components/clock-builder/TextStyleControls.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Weight"
-msgstr ""
+msgstr "Weight"
 
 #: src/lib/components/clock-builder/TextStyleControls.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
@@ -2447,9 +2452,10 @@ msgstr ""
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
+#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Food"
-msgstr ""
+msgstr "Food"
 
 #~ msgid "Failed to sync food data"
 #~ msgstr ""
@@ -3469,10 +3475,11 @@ msgstr ""
 msgid "Alerts"
 msgstr ""
 
+#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "Sharing & Privacy"
-msgstr ""
+msgstr "Sharing & Privacy"
 
 #: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/layout/BackupSignInPrompt.svelte
@@ -4257,11 +4264,12 @@ msgstr ""
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Sleep"
-msgstr ""
+msgstr "Sleep"
 
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
@@ -4341,10 +4349,11 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 msgid "Battery"
-msgstr ""
+msgstr "Battery"
 
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 msgid "Question"
@@ -4442,13 +4451,15 @@ msgstr ""
 msgid "Accept"
 msgstr ""
 
+#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Dashboard"
-msgstr ""
+msgstr "Dashboard"
 
+#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Time Spans"
-msgstr ""
+msgstr "Time Spans"
 
 #: ../portal/src/routes/features/+page.svelte
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
@@ -4461,107 +4472,123 @@ msgid "Reports"
 msgstr ""
 
 #: src/lib/components/dashboard/widgets/ClockWidget.svelte
+#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Clock"
-msgstr ""
+msgstr "Clock"
 
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 msgid "Overview"
 msgstr ""
 
+#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/meals/+page.svelte
 msgid "Meals"
-msgstr ""
+msgstr "Meals"
 
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/tools/+page.svelte
 msgid "Tools"
 msgstr ""
 
+#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Packing"
-msgstr ""
+msgstr "Packing"
 
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Dev Tools"
 msgstr ""
 
+#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Compatibility"
-msgstr ""
+msgstr "Compatibility"
 
+#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Test Endpoint Compatibility"
-msgstr ""
+msgstr "Test Endpoint Compatibility"
 
 #: src/lib/components/layout/UserMenu.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
+#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/+page.svelte
 msgid "Settings"
-msgstr ""
+msgstr "Settings"
 
+#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(unauthenticated)/setup/+page@.svelte
 msgid "Setup"
-msgstr ""
+msgstr "Setup"
 
 #: src/lib/components/layout/UserMenu.svelte
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/account/+page.svelte
 #: src/routes/(unauthenticated)/setup/+page@.svelte
 msgid "Account"
-msgstr ""
+msgstr "Account"
 
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/patient/+page.svelte
 msgid "Patient Record"
-msgstr ""
+msgstr "Patient Record"
 
+#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Appearance"
-msgstr ""
+msgstr "Appearance"
 
+#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Therapy"
-msgstr ""
+msgstr "Therapy"
 
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/data-quality/+page.svelte
 msgid "Data Quality"
-msgstr ""
+msgstr "Data Quality"
 
+#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 msgid "Notifications & Trackers"
-msgstr ""
+msgstr "Notifications & Trackers"
 
+#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Connectors & Apps"
-msgstr ""
+msgstr "Connectors & Apps"
 
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "Audit Log"
 msgstr ""
 
+#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Support & Community"
-msgstr ""
+msgstr "Support & Community"
 
+#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 msgid "Tenant Management"
-msgstr ""
+msgstr "Tenant Management"
 
 #: src/lib/components/layout/AppSidebar.svelte
 msgid "<0/> Viewing data for"
@@ -5608,10 +5635,11 @@ msgstr ""
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Treatments"
-msgstr ""
+msgstr "Treatments"
 
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
@@ -5814,13 +5842,14 @@ msgstr ""
 msgid "Range"
 msgstr ""
 
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 msgid "Readings"
-msgstr ""
+msgstr "Readings"
 
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
@@ -7150,10 +7179,11 @@ msgstr ""
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
 msgid "Heart Rate"
-msgstr ""
+msgstr "Heart Rate"
 
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
@@ -8460,6 +8490,7 @@ msgstr ""
 
 #: ../portal/src/lib/components/AuroraPool.svelte
 #: ../portal/src/routes/features/+page.svelte
+#: src/lib/help/connectors.svelte.ts
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
@@ -8467,7 +8498,7 @@ msgstr ""
 #: src/routes/(authenticated)/compatibility/test/+page.svelte
 #: src/routes/(legal)/terms/+page.svelte
 msgid "Nightscout"
-msgstr ""
+msgstr "Nightscout"
 
 #. 0: formatElapsedMs(analysis.nightscoutResponseTimeMs || 0)
 #: src/routes/(authenticated)/compatibility/+page.svelte
@@ -9537,22 +9568,25 @@ msgstr ""
 
 #: ../portal/src/lib/components/AuroraPool.svelte
 #: ../portal/src/lib/components/features/ConnectorsDemo.svelte
+#: src/lib/help/connectors.svelte.ts
 #: src/routes/(legal)/terms/+page.svelte
 msgid "Dexcom"
-msgstr ""
+msgstr "Dexcom"
 
 #: ../portal/src/lib/components/AuroraPool.svelte
 #: src/routes/(legal)/terms/+page.svelte
 msgid "FreeStyle Libre"
 msgstr ""
 
+#: src/lib/help/connectors.svelte.ts
 #: src/routes/(legal)/terms/+page.svelte
 msgid "Glooko"
-msgstr ""
+msgstr "Glooko"
 
+#: src/lib/help/connectors.svelte.ts
 #: src/routes/(legal)/terms/+page.svelte
 msgid "Tidepool"
-msgstr ""
+msgstr "Tidepool"
 
 #: src/routes/(legal)/terms/+page.svelte
 msgid "And others"
@@ -10249,10 +10283,11 @@ msgstr ""
 msgid "Close Emergency View"
 msgstr ""
 
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 msgid "Year Overview"
-msgstr ""
+msgstr "Year Overview"
 
 #: src/lib/components/reports/year-overview/YearOverviewFilters.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
@@ -11150,6 +11185,7 @@ msgstr ""
 msgid "Summary <0/>"
 msgstr ""
 
+#. 0: facts.googleHealthDefaultHistoryDays
 #. 0: expiresInDays
 #. 0: days
 #. 0: daysOption
@@ -11159,6 +11195,7 @@ msgstr ""
 #. 0: dateInfo.dayCount
 #. 0: dayCount
 #. 0: dayCount
+#: src/lib/components/help/HelpReference.svelte
 #: src/lib/components/members/CreateInviteCard.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/lib/components/ui/date-range-picker.svelte
@@ -11169,7 +11206,7 @@ msgstr ""
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
 msgid "{0} days"
-msgstr ""
+msgstr "{0} days"
 
 #: src/routes/(authenticated)/reports/agp/+page.svelte
 msgid "<0/> What is an AGP?"
@@ -11566,10 +11603,11 @@ msgstr ""
 msgid "Data Quality Categories"
 msgstr ""
 
+#: src/lib/help/reports.svelte.ts
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 msgid "Compression Lows"
-msgstr ""
+msgstr "Compression Lows"
 
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 msgid "Falsely low readings from sleeping on sensor"
@@ -11771,10 +11809,11 @@ msgstr ""
 msgid "<0/> Glucose Statistics"
 msgstr ""
 
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "Glucose Distribution"
-msgstr ""
+msgstr "Glucose Distribution"
 
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "10th %ile"
@@ -12419,13 +12458,14 @@ msgstr ""
 msgid "<0/> Step Count Actogram"
 msgstr ""
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/lib/components/help/HelpHarness.test.svelte
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 #: src/routes/(authenticated)/reports/steps/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Steps"
-msgstr ""
+msgstr "Steps"
 
 #: src/routes/(authenticated)/reports/week-to-week/+page.svelte
 msgid "Error Loading Week Comparison"
@@ -12548,9 +12588,10 @@ msgstr ""
 msgid "Access Requests - Settings - Nocturne"
 msgstr ""
 
+#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/access-requests/+page.svelte
 msgid "Access Requests"
-msgstr ""
+msgstr "Access Requests"
 
 #: src/routes/(authenticated)/settings/access-requests/+page.svelte
 msgid "Review and manage pending requests to access your data"
@@ -13320,9 +13361,10 @@ msgstr ""
 msgid "Nightscout Transition - Settings - Nocturne"
 msgstr ""
 
+#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/nightscout-transition/+page.svelte
 msgid "Nightscout Transition"
-msgstr ""
+msgstr "Nightscout Transition"
 
 #: src/routes/(authenticated)/settings/nightscout-transition/+page.svelte
 msgid "Monitor your migration from Nightscout and check disconnect readiness"
@@ -13454,9 +13496,10 @@ msgstr ""
 msgid "Data Migration - Settings - Nocturne"
 msgstr ""
 
+#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Data Migration"
-msgstr ""
+msgstr "Data Migration"
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Import your data from Nightscout or MongoDB"
@@ -13737,7 +13780,7 @@ msgstr ""
 #: src/lib/components/help/HelpPanel.svelte
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Documentation"
-msgstr ""
+msgstr "Documentation"
 
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Guides, tutorials, and API reference"
@@ -15117,9 +15160,10 @@ msgstr ""
 msgid "Failed to start Discord link flow."
 msgstr ""
 
+#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
 msgid "Discord Integration"
-msgstr ""
+msgstr "Discord Integration"
 
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
 msgid "Link your Discord account to query glucose and receive alerts through the Nocturne bot."
@@ -15335,9 +15379,10 @@ msgstr ""
 #: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/SidebarDndToggle.svelte
 #: src/lib/components/ui/dropdown-menu/nested-in-popover.test.svelte
+#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Do Not Disturb"
-msgstr ""
+msgstr "Do Not Disturb"
 
 #: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/tenants/TenantsOverview.svelte
@@ -16032,9 +16077,10 @@ msgstr ""
 msgid "User snooze actions cannot be replayed."
 msgstr ""
 
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Hourly Patterns"
-msgstr ""
+msgstr "Hourly Patterns"
 
 #: ../portal/src/lib/components/SiteFooter.svelte
 #: ../portal/src/lib/components/SiteHeader.svelte
@@ -16130,8 +16176,9 @@ msgstr ""
 #~ msgstr ""
 
 #: ../portal/src/lib/components/features/ConnectorsDemo.svelte
+#: src/lib/help/connectors.svelte.ts
 msgid "Libre"
-msgstr ""
+msgstr "Libre"
 
 #: ../portal/src/routes/faq/+page.svelte
 msgid "What is Nocturne?"
@@ -16790,10 +16837,11 @@ msgstr ""
 #~ msgid "Alerts, reminders, and tracked events."
 #~ msgstr ""
 
+#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/access/+page.svelte
 msgid "Active Access"
-msgstr ""
+msgstr "Active Access"
 
 #~ msgid "Signed-in devices, guest links, and connected apps."
 #~ msgstr ""
@@ -18093,8 +18141,9 @@ msgstr ""
 msgid "Log carbs without creating a food entry. The note will be saved with this entry."
 msgstr ""
 
-#~ msgid "Reading"
-#~ msgstr ""
+#: src/lib/components/help/HelpReference.svelte
+msgid "Reading"
+msgstr "Reading"
 
 #: src/lib/components/trackers/ReservoirReportDialog.svelte
 msgid "Current level"
@@ -18512,9 +18561,10 @@ msgid "Link records from multiple data sources that represent the same underlyin
 msgstr ""
 
 #: src/lib/components/settings/DataMaintenanceCard.svelte
+#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
 msgid "Reset Connector Cursors"
-msgstr ""
+msgstr "Reset Connector Cursors"
 
 #: src/lib/components/settings/DataMaintenanceCard.svelte
 msgid "Re-sync a connector from a chosen point."
@@ -18750,9 +18800,10 @@ msgstr ""
 msgid "Re-import failed."
 msgstr ""
 
+#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/timezone/+page.svelte
 msgid "Timezone history"
-msgstr ""
+msgstr "Timezone history"
 
 #: src/routes/(authenticated)/settings/timezone/+page.svelte
 msgid "Some sources (like Glooko) record times in local clock time. Tell Nocturne where you were over time so those readings land at the right moment. Add an entry when you move or travel; daylight saving is handled automatically."
@@ -18858,10 +18909,12 @@ msgstr ""
 msgid "Weight History - Settings - Nocturne"
 msgstr ""
 
+#: src/lib/components/help/HelpReference.svelte
+#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(authenticated)/settings/weight/+page.svelte
 msgid "Weight history"
-msgstr ""
+msgstr "Weight history"
 
 #: src/routes/(authenticated)/settings/weight/+page.svelte
 msgid "Your weight over time. Each entry is dated when it was recorded — editing your current weight on the Patient Record page adds a new entry here rather than overwriting the last one."
@@ -19408,15 +19461,17 @@ msgstr ""
 
 #: ../portal/src/lib/components/AuroraPool.svelte
 #: ../portal/src/lib/components/features/ConnectorsDemo.svelte
+#: src/lib/help/connectors.svelte.ts
 msgid "Tandem"
-msgstr ""
+msgstr "Tandem"
 
 #: ../portal/src/lib/components/AuroraPool.svelte
 msgid "Omnipod"
 msgstr ""
 
-#~ msgid "MyFitnessPal"
-#~ msgstr ""
+#: src/lib/help/connectors.svelte.ts
+msgid "MyFitnessPal"
+msgstr "MyFitnessPal"
 
 #~ msgid "Sugarmate"
 #~ msgstr ""
@@ -19430,8 +19485,9 @@ msgstr ""
 #~ msgid "GlucoTracker"
 #~ msgstr ""
 
-#~ msgid "Home Assistant"
-#~ msgstr ""
+#: src/lib/help/connectors.svelte.ts
+msgid "Home Assistant"
+msgstr "Home Assistant"
 
 #~ msgid "SourceGraphic"
 #~ msgstr ""
@@ -22009,10 +22065,11 @@ msgstr ""
 #~ msgid "higher in {0} →"
 #~ msgstr ""
 
+#: src/lib/help/reports.svelte.ts
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
 msgid "CGM Comparison"
-msgstr ""
+msgstr "CGM Comparison"
 
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 msgid "How far apart two sensors run over the same window"
@@ -23083,9 +23140,10 @@ msgstr ""
 msgid "Elevated"
 msgstr ""
 
+#: src/lib/help/reference.svelte.ts
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Very high"
-msgstr ""
+msgstr "Very high"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Failed to save lab result"
@@ -24080,10 +24138,10 @@ msgstr ""
 msgid "Est. A1c (DCCT %)"
 msgstr ""
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Heart rate"
-msgstr ""
+msgstr "Heart rate"
 
 #. 0: avgBasal?.toFixed(1) ?? "--"; 1: basalPct.toFixed(0)
 #: src/routes/(authenticated)/reports/idp/+page.svelte
@@ -24750,9 +24808,10 @@ msgstr ""
 msgid "Your key metrics at a glance"
 msgstr ""
 
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Executive Summary"
-msgstr ""
+msgstr "Executive Summary"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "All your important numbers in one place"
@@ -24798,25 +24857,28 @@ msgstr ""
 msgid "Review each day individually"
 msgstr ""
 
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Day in Review"
-msgstr ""
+msgstr "Day in Review"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Detailed breakdown of a single day"
 msgstr ""
 
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Week to Week"
-msgstr ""
+msgstr "Week to Week"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Compare patterns across days"
 msgstr ""
 
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Comparison"
-msgstr ""
+msgstr "Comparison"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Diff two date ranges side-by-side"
@@ -24878,25 +24940,28 @@ msgstr ""
 msgid "Basal Rate Analysis"
 msgstr ""
 
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Basal Analysis"
-msgstr ""
+msgstr "Basal Analysis"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "How your basal rates vary"
 msgstr ""
 
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Insulin Delivery"
-msgstr ""
+msgstr "Insulin Delivery"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Basal vs bolus breakdown"
 msgstr ""
 
+#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Site Change Impact"
-msgstr ""
+msgstr "Site Change Impact"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "How site changes affect control"
@@ -25185,8 +25250,9 @@ msgid "No lows lasting 15 minutes or more during this session"
 msgstr ""
 
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+#: src/lib/help/reference.svelte.ts
 msgid "Very low"
-msgstr ""
+msgstr "Very low"
 
 #. 0: bgLabel()
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
@@ -25392,9 +25458,10 @@ msgstr ""
 msgid "Hour"
 msgstr ""
 
+#: src/lib/help/reference.svelte.ts
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 msgid "In range"
-msgstr ""
+msgstr "In range"
 
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 msgid "Below"
@@ -25646,13 +25713,15 @@ msgstr ""
 msgid "<0/> Condition"
 msgstr ""
 
+#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Tenants"
-msgstr ""
+msgstr "Tenants"
 
+#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Translations"
-msgstr ""
+msgstr "Translations"
 
 #: src/lib/components/connectors/ConnectorSetup.svelte
 msgid "Only members who can manage this site's settings can configure or enable this connector."
@@ -25739,6 +25808,9 @@ msgstr ""
 
 #: src/lib/components/connectors/GoogleHealthSourceRow.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/lib/components/help/HelpReference.svelte
+#: src/lib/components/help/HelpReference.svelte
+#: src/lib/help/connectors.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health"
 msgstr "Google Health"
@@ -26211,6 +26283,7 @@ msgstr "検出されたデータ型と Nocturne によるそれらの使用方�
 msgid "{0}/{1} selected"
 msgstr "{0}/{1} が選択されました"
 
+#: src/lib/components/help/HelpReference.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Data type"
 msgstr "データ型"
@@ -26455,95 +26528,95 @@ msgstr ""
 msgid "One or more connectors failed; review the connector details and retry the failed range."
 msgstr "一つ以上のコネクターでエラーが発生しました。コネクターの詳細を確認し、失敗した期間を再試行してください。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Sleep sessions and stages"
 msgstr "睡眠記録と睡眠段階"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Active energy burned"
 msgstr "活動による消費エネルギー"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Total calories"
 msgstr "総カロリー"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Distance"
 msgstr "距離"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Floors"
 msgstr "階数"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Workouts"
 msgstr "運動記録"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Body fat"
 msgstr "体脂肪"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Height"
 msgstr "身長"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Nutrition log"
 msgstr "食事記録"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Hydration"
 msgstr "水分摂取"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Blood glucose"
 msgstr "血糖値"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Oxygen saturation"
 msgstr "酸素飽和度"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Heart rate variability"
 msgstr "心拍変動"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Resting heart rate"
 msgstr "安静時心拍数"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Daily oxygen saturation"
 msgstr "日ごとの酸素飽和度"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Daily respiratory rate"
 msgstr "日ごとの呼吸数"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Sleep respiratory rate"
 msgstr "睡眠中の呼吸数"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Core body temperature"
 msgstr "深部体温"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Menstrual period"
 msgstr "月経"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Ovulation test"
 msgstr "排卵検査"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Cervical mucus"
 msgstr "子宮頸管粘液"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Sexual activity"
 msgstr "性活動"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 msgid "Unknown data type"
 msgstr "不明なデータの種類"
 
@@ -26677,36 +26750,36 @@ msgstr ""
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Search all documentation"
-msgstr ""
+msgstr "Search all documentation"
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Search all documentation…"
-msgstr ""
+msgstr "Search all documentation…"
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "No documentation found. Try a page name, a setting, or a connector."
-msgstr ""
+msgstr "No documentation found. Try a page name, a setting, or a connector."
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Search results"
-msgstr ""
+msgstr "Search results"
 
 #. 0: results.length
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "{0} results"
-msgstr ""
+msgstr "{0} results"
 
 #: src/lib/components/help/HelpBrowser.svelte
+#: src/lib/help/documentation.svelte.ts
 msgid "Page guide"
-msgstr ""
+msgstr "Page guide"
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Continue exploring"
-msgstr ""
+msgstr "Continue exploring"
 
-#: src/lib/components/help/HelpBrowser.svelte
-msgid "Open connector settings <0/>"
-msgstr ""
+#~ msgid "Open connector settings <0/>"
+#~ msgstr "Open connector settings <0/>"
 
 #~ msgid "Your Nocturne page stays where you left it."
 #~ msgstr ""
@@ -26763,12 +26836,13 @@ msgstr ""
 msgid "Close page help"
 msgstr "ページのヘルプを閉じる"
 
-#~ msgid "Open connector settings"
-#~ msgstr ""
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Open connector settings"
+msgstr "Open connector settings"
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Page documentation"
-msgstr ""
+msgstr "Page documentation"
 
 #~ msgid "Documentation & help"
 #~ msgstr ""
@@ -26783,19 +26857,19 @@ msgstr ""
 
 #: src/lib/help/help-context.svelte.ts
 msgid "Navigation drawer"
-msgstr ""
+msgstr "Navigation drawer"
 
 #: src/lib/help/help-context.svelte.ts
 msgid "Right drawer"
-msgstr ""
+msgstr "Right drawer"
 
 #: src/lib/help/help-context.svelte.ts
 msgid "Side by side"
-msgstr ""
+msgstr "Side by side"
 
 #: src/lib/help/help-context.svelte.ts
 msgid "Replace page"
-msgstr ""
+msgstr "Replace page"
 
 #: src/lib/components/help/HelpHarness.test.svelte
 msgid "Report notes"
@@ -26883,3 +26957,1613 @@ msgstr ""
 #: src/lib/components/help/HelpPanel.svelte
 msgid "Documentation appearance"
 msgstr ""
+
+#: src/lib/help/documentation.svelte.ts
+msgid "Use this page's visible controls and field descriptions to inspect its information."
+msgstr "Use this page's visible controls and field descriptions to inspect its information."
+
+#: src/lib/help/documentation.svelte.ts
+msgid "Settings and access"
+msgstr "Settings and access"
+
+#: src/lib/help/documentation.svelte.ts
+msgid "Available actions depend on the selected tenant and your permissions. Check the related settings in the navigation menu. Close documentation with the book or Escape to return to your original page."
+msgstr "Available actions depend on the selected tenant and your permissions. Check the related settings in the navigation menu. Close documentation with the book or Escape to return to your original page."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Connect your own Google account, inspect what is available, then choose what Nocturne should import. Follow the steps in order."
+msgstr "Connect your own Google account, inspect what is available, then choose what Nocturne should import. Follow the steps in order."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Your device or source app sends data to Google Health. Nocturne reads the selected account through Google's API and stores supported records in this tenant's existing histories. A Google Cloud project provides permission to use the API; it does not generate health data."
+msgstr "Your device or source app sends data to Google Health. Nocturne reads the selected account through Google's API and stores supported records in this tenant's existing histories. A Google Cloud project provides permission to use the API; it does not generate health data."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Open Settings → Connectors & Apps → Google Health. Keep the Google Cloud console in another tab. The reference panel below shows the callback path, requested read permissions, supported destinations, and default sync interval from this running version."
+msgstr "Open Settings → Connectors & Apps → Google Health. Keep the Google Cloud console in another tab. The reference panel below shows the callback path, requested read permissions, supported destinations, and default sync interval from this running version."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Imported steps, heart rate, and sleep appear in their reports. Weight appears in Patient Record → Weight history. The supported-destinations table below follows the connector's actual capability catalogue."
+msgstr "Imported steps, heart rate, and sleep appear in their reports. Weight appears in Patient Record → Weight history. The supported-destinations table below follows the connector's actual capability catalogue."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "The phone/watch must first sync to Google. Local Health Connect records do not guarantee availability in Google's cloud API. Inventory availability, Google sign-in, and import completion are separate states. Unsupported types can be visible but cannot be selected for import."
+msgstr "The phone/watch must first sync to Google. Local Health Connect records do not guarantee availability in Google's cloud API. Inventory availability, Google sign-in, and import completion are separate states. Unsupported types can be visible but cannot be selected for import."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Check Google access and your source"
+msgstr "Check Google access and your source"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Start with the official Google setup guide linked below and check current API access availability: If Google restricts new project access and your project cannot enable the API, resolve eligibility with Google first. Sign into the Google Health mobile app with the account you want to use and check that it contains recent readings. A successful Google sign-in alone does not establish a Google Health profile."
+msgstr "Start with the official Google setup guide linked below and check current API access availability: If Google restricts new project access and your project cannot enable the API, resolve eligibility with Google first. Sign into the Google Health mobile app with the account you want to use and check that it contains recent readings. A successful Google sign-in alone does not establish a Google Health profile."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Let phone data reach Google Health"
+msgstr "Let phone data reach Google Health"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "For a watch syncing directly with Google Health, verify the readings in that app. For another Android source using Health Connect, allow the source app to write its data and Google Health to read it. In Google Health use Connections → Partner apps → Sync your favorite apps and complete setup, including the history/background permissions you want. Check the linked official instructions if labels change. Newest data may arrive first: wait for Google to finish syncing older records before diagnosing an empty historical report."
+msgstr "For a watch syncing directly with Google Health, verify the readings in that app. For another Android source using Health Connect, allow the source app to write its data and Google Health to read it. In Google Health use Connections → Partner apps → Sync your favorite apps and complete setup, including the history/background permissions you want. Check the linked official instructions if labels change. Newest data may arrive first: wait for Google to finish syncing older records before diagnosing an empty historical report."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Create or choose your Google Cloud project"
+msgstr "Create or choose your Google Cloud project"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Use your own project, not someone else's client credentials. Enable the Google Health API using the official setup guide. The project and OAuth app names are descriptive: choose recognisable names. These names do not need to match Nocturne. Do not enable unrelated APIs merely because a guide lists other integrations."
+msgstr "Use your own project, not someone else's client credentials. Enable the Google Health API using the official setup guide. The project and OAuth app names are descriptive: choose recognisable names. These names do not need to match Nocturne. Do not enable unrelated APIs merely because a guide lists other integrations."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Prepare consent and add your test account"
+msgstr "Prepare consent and add your test account"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "In Google Auth Platform configure the app's consent details. For a personal test choose External with publishing status Testing, then Audience → Test users → Add users. Add the exact Google email address whose health data you will connect and save. Under Data Access, add the read scopes listed in this guide's reference panel and save. Nocturne also requests basic sign-in identification automatically. Testing grants can expire after seven days; reconnect when required."
+msgstr "In Google Auth Platform configure the app's consent details. For a personal test choose External with publishing status Testing, then Audience → Test users → Add users. Add the exact Google email address whose health data you will connect and save. Under Data Access, add the read scopes listed in this guide's reference panel and save. Nocturne also requests basic sign-in identification automatically. Testing grants can expire after seven days; reconnect when required."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Create the Web application client"
+msgstr "Create the Web application client"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "In Clients create an OAuth client of type Web application (Web Server in the quick-start wizard). Copy the Callback URL displayed in Nocturne into Authorized redirect URIs. It must match exactly, including https, hostname, port, path, and any trailing slash. Use Nocturne's address, not the sample google.com redirect in Google's quick start. Save and copy both Client ID and Client secret. The name is descriptive; the credentials and redirect address must be exact."
+msgstr "In Clients create an OAuth client of type Web application (Web Server in the quick-start wizard). Copy the Callback URL displayed in Nocturne into Authorized redirect URIs. It must match exactly, including https, hostname, port, path, and any trailing slash. Use Nocturne's address, not the sample google.com redirect in Google's quick start. Save and copy both Client ID and Client secret. The name is descriptive; the credentials and redirect address must be exact."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Save credentials and sign in"
+msgstr "Save credentials and sign in"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "On Nocturne's Google Health page enter Google client ID, Client secret, and Callback URL. The secret is required on first setup; leave it empty only when editing an already-saved secret. Choose Import data from for the earliest history you want, then Save and connect. Sign in with the same test account and review the requested read permissions. Grant the permissions for the data types you want; declining one can leave its rows unavailable. Confirm you return to Nocturne's connector page."
+msgstr "On Nocturne's Google Health page enter Google client ID, Client secret, and Callback URL. The secret is required on first setup; leave it empty only when editing an already-saved secret. Choose Import data from for the earliest history you want, then Save and connect. Sign in with the same test account and review the requested read permissions. Grant the permissions for the data types you want; declining one can leave its rows unavailable. Confirm you return to Nocturne's connector page."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Review the inventory and start an import"
+msgstr "Review the inventory and start an import"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Inspect the available-data table. Found indicates source availability, not data already imported. Select supported types you want, then choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Rows marked Not scanned need a refreshed inventory, No permission needs the relevant consent, and No destination yet is unsupported. Leaving the page does not cancel the server's import."
+msgstr "Inspect the available-data table. Found indicates source availability, not data already imported. Select supported types you want, then choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Rows marked Not scanned need a refreshed inventory, No permission needs the relevant consent, and No destination yet is unsupported. Leaving the page does not cancel the server's import."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Confirm that your reports contain data"
+msgstr "Confirm that your reports contain data"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Watch sync status and Historical import progress. Current data is processed first, followed by older history in stages. Open the relevant report and choose dates that contain source records; check Weight history for weight. If empty, verify the Google account, its actual records, granted permissions, selected types, date range, and last sync error in that order. Use Sync now to request the current selection again; avoid repeatedly disconnecting a working import."
+msgstr "Watch sync status and Historical import progress. Current data is processed first, followed by older history in stages. Open the relevant report and choose dates that contain source records; check Weight history for weight. If empty, verify the Google account, its actual records, granted permissions, selected types, date range, and last sync error in that order. Use Sync now to request the current selection again; avoid repeatedly disconnecting a working import."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Ongoing sync and historical progress"
+msgstr "Ongoing sync and historical progress"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Automatic sync uses the default interval shown below unless your server changes it. Managed imports resume recent data from a saved watermark with an overlap, then work backwards through older calendar months towards Import data from. Large or failing periods can be split into smaller windows. Progress describes stages and pages, not an exact remaining time. A restart resumes the saved cursor. Completed older months are not continually rescanned for data that Google uploads late."
+msgstr "Automatic sync uses the default interval shown below unless your server changes it. Managed imports resume recent data from a saved watermark with an overlap, then work backwards through older calendar months towards Import data from. Large or failing periods can be split into smaller windows. Progress describes stages and pages, not an exact remaining time. A restart resumes the saved cursor. Completed older months are not continually rescanned for data that Google uploads late."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Data appeared in Google after an older month was completed"
+msgstr "Data appeared in Google after an older month was completed"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "First confirm that Google now contains the records. Refresh inventory checks availability but does not refill a completed month. Ask a platform administrator to use Import recovery → Open connector reset, select the correct tenant and earliest date to re-read, and monitor the job. The normal import path updates records with duplicate protection. Do not delete all data to solve an empty date range."
+msgstr "First confirm that Google now contains the records. Refresh inventory checks availability but does not refill a completed month. Ask a platform administrator to use Import recovery → Open connector reset, select the correct tenant and earliest date to re-read, and monitor the job. The normal import path updates records with duplicate protection. Do not delete all data to solve an empty date range."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Common setup errors"
+msgstr "Common setup errors"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Pause, disconnect, and deletion"
+msgstr "Pause, disconnect, and deletion"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Clear selected types and Save import settings to pause imports without deleting history. Disconnect removes the connection but keeps imported records. Delete imported Google data is a separate confirmed action available after disconnecting; it affects this tenant's imported records, not Google's originals. Credentials are stored in the server's encrypted connector configuration. Never paste the secret or token into support conversations."
+msgstr "Clear selected types and Save import settings to pause imports without deleting history. Disconnect removes the connection but keeps imported records. Delete imported Google data is a separate confirmed action available after disconnecting; it affects this tenant's imported records, not Google's originals. Credentials are stored in the server's encrypted connector configuration. Never paste the secret or token into support conversations."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Google: API setup, access availability, and account linking"
+msgstr "Google: API setup, access availability, and account linking"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Google: connect Health Connect to Google Health"
+msgstr "Google: connect Health Connect to Google Health"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Google: Web application OAuth and exact redirects"
+msgstr "Google: Web application OAuth and exact redirects"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Google: API data types and availability"
+msgstr "Google: API data types and availability"
+
+#. 0: title
+#: src/lib/help/connectors.svelte.ts
+msgid "Connect {0} to the current Nocturne tenant."
+msgstr "Connect {0} to the current Nocturne tenant."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Open this connector under Settings → Connectors & Apps. Follow its generated configuration form and field descriptions, choose supported data types, save, and inspect connection/sync status. The form's validation and capability list are authoritative for this version."
+msgstr "Open this connector under Settings → Connectors & Apps. Follow its generated configuration form and field descriptions, choose supported data types, save, and inspect connection/sync status. The form's validation and capability list are authoritative for this version."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Successfully imported records are used by the corresponding charts, reports, and histories. Inspect the connector's data-type list before choosing it."
+msgstr "Successfully imported records are used by the corresponding charts, reports, and histories. Inspect the connector's data-type list before choosing it."
+
+#. 0: details
+#: src/lib/help/connectors.svelte.ts
+msgid "{0} Server configuration, account permissions, and provider availability affect syncing. A saved configuration is not proof an import succeeded. Keep credentials private."
+msgstr "{0} Server configuration, account permissions, and provider availability affect syncing. A saved configuration is not proof an import succeeded. Keep credentials private."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Glucose available through your Dexcom Share account."
+msgstr "Glucose available through your Dexcom Share account."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "The account must support sharing; check the selected region and credentials in the setup form. This is a cloud connection, so readings depend on the original device uploading."
+msgstr "The account must support sharing; check the selected region and credentials in the setup form. This is a cloud connection, so readings depend on the original device uploading."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Glucose shared through the configured LibreLinkUp account."
+msgstr "Glucose shared through the configured LibreLinkUp account."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Check the account, region, and linked patient's available readings. Data visible locally on a sensor is not necessarily available to the sharing service."
+msgstr "Check the account, region, and linked patient's available readings. Data visible locally on a sensor is not necessarily available to the sharing service."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "CareLink"
+msgstr "CareLink"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Records made available by the connected CareLink account."
+msgstr "Records made available by the connected CareLink account."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Check the authentication and account requirements shown by this connector. Pump uploads and provider authentication can delay availability."
+msgstr "Check the authentication and account requirements shown by this connector. Pump uploads and provider authentication can delay availability."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Supported data uploaded to your Glooko account."
+msgstr "Supported data uploaded to your Glooko account."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Check the source account's date range and device uploads. Imported profiles and records can have different coverage."
+msgstr "Check the source account's date range and device uploads. Imported profiles and records can have different coverage."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Records read from the Nightscout server you configure."
+msgstr "Records read from the Nightscout server you configure."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Use the correct source URL and authorised credential. Ongoing connector sync is different from the one-off Data Migration tool."
+msgstr "Use the correct source URL and authorised credential. Ongoing connector sync is different from the one-off Data Migration tool."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Supported pump data from the configured Tandem account."
+msgstr "Supported pump data from the configured Tandem account."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Choose the appropriate account/region settings shown in the form. Pump upload timing and available historical profile information affect reports."
+msgstr "Choose the appropriate account/region settings shown in the form. Pump upload timing and available historical profile information affect reports."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Supported records from your myLife account."
+msgstr "Supported records from your myLife account."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Check credentials and actual source uploads. The connector's capability list shows which records this version imports."
+msgstr "Check credentials and actual source uploads. The connector's capability list shows which records this version imports."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Gluroo"
+msgstr "Gluroo"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Glucose, treatment, and profile records made available through Gluroo Global Connect."
+msgstr "Glucose, treatment, and profile records made available through Gluroo Global Connect."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Check the Global Connect setup and source permissions shown by the connector. Uploaded data must reach that account before it can be imported."
+msgstr "Check the Global Connect setup and source permissions shown by the connector. Uploaded data must reach that account before it can be imported."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Eversense"
+msgstr "Eversense"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Supported readings from the configured Eversense account."
+msgstr "Supported readings from the configured Eversense account."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Check the source account, region, and available cloud uploads. Historical coverage depends on the provider."
+msgstr "Check the source account, region, and available cloud uploads. Historical coverage depends on the provider."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Supported nutrition and meal records available through the configured MyFitnessPal connection."
+msgstr "Supported nutrition and meal records available through the configured MyFitnessPal connection."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Check the supported data-type list and source account; this is not a glucose sensor connection."
+msgstr "Check the supported data-type list and source account; this is not a glucose sensor connection."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Supported device records uploaded to the configured Tidepool account."
+msgstr "Supported device records uploaded to the configured Tidepool account."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Verify the selected source account and device uploads. Source records and profiles can have different available periods."
+msgstr "Verify the selected source account and device uploads. Source records and profiles can have different available periods."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Supported pump data available from the configured twiist service."
+msgstr "Supported pump data available from the configured twiist service."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Follow the connection's authentication fields and capability list. Delivery information depends on successful pump uploads."
+msgstr "Follow the connection's authentication fields and capability list. Delivery information depends on successful pump uploads."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Nocturne Remote"
+msgstr "Nocturne Remote"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Records available from the remote Nocturne instance you configure."
+msgstr "Records available from the remote Nocturne instance you configure."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Verify the remote URL, authorised token, tenant, and selected data types. This is a data connection, not a copy of all server settings."
+msgstr "Verify the remote URL, authorised token, tenant, and selected data types. This is a data connection, not a copy of all server settings."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "The Home Assistant integration and entities configured for this connection."
+msgstr "The Home Assistant integration and entities configured for this connection."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Follow the Setup Guide on the connector page for HACS and integration setup. This integration is separate from installing the Nocturne HA app itself."
+msgstr "Follow the Setup Guide on the connector page for HACS and integration setup. This integration is separate from installing the Nocturne HA app itself."
+
+#: src/lib/help/guide.svelte.ts
+msgid "Where the information comes from"
+msgstr "Where the information comes from"
+
+#: src/lib/help/guide.svelte.ts
+msgid "Settings and controls"
+msgstr "Settings and controls"
+
+#: src/lib/help/guide.svelte.ts
+msgid "Where this information is used"
+msgstr "Where this information is used"
+
+#: src/lib/help/guide.svelte.ts
+msgid "Limits and missing information"
+msgstr "Limits and missing information"
+
+#: src/lib/help/reports.svelte.ts
+msgid "Stored glucose readings received from a connector, uploader, or a previous Nightscout import. Treatment and profile panels also need the corresponding insulin, carbohydrate, device, and therapy records."
+msgstr "Stored glucose readings received from a connector, uploader, or a previous Nightscout import. Treatment and profile panels also need the corresponding insulin, carbohydrate, device, and therapy records."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Choose the period with the report's date controls. Settings → Appearance controls display units; Settings → Therapy shows personal targets and schedules. Settings → Connectors & Apps manages imports. Display choices do not change historical readings."
+msgstr "Choose the period with the report's date controls. Settings → Appearance controls display units; Settings → Therapy shows personal targets and schedules. Settings → Connectors & Apps manages imports. Display choices do not change historical readings."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Missing readings affect averages and percentages. Check coverage or reliability before comparing periods. A blank report means missing information, not a zero measurement. The reference bands below differ from personal therapy targets and alert rules."
+msgstr "Missing readings affect averages and percentages. Check coverage or reliability before comparing periods. A blank report means missing information, not a zero measurement. The reference bands below differ from personal therapy targets and alert rules."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Reports overview"
+msgstr "Reports overview"
+
+#: src/lib/help/reports.svelte.ts
+msgid "Choose a report to explore glucose, treatments, or activity."
+msgstr "Choose a report to explore glucose, treatments, or activity."
+
+#: src/lib/help/reports.svelte.ts
+msgid "The overview leads to detailed reports using the same stored data."
+msgstr "The overview leads to detailed reports using the same stored data."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Each report needs its own data types. Opening a report does not enable an import."
+msgstr "Each report needs its own data types. Opening a report does not enable an import."
+
+#: src/lib/help/reports.svelte.ts
+msgid "A short view of glucose, time in range, variability, and coverage."
+msgstr "A short view of glucose, time in range, variability, and coverage."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Start here, then open detailed reports to understand patterns behind the summary."
+msgstr "Start here, then open detailed reports to understand patterns behind the summary."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Indicators describe the selected data; they do not identify the cause of a change."
+msgstr "Indicators describe the selected data; they do not identify the cause of a change."
+
+#: src/lib/help/reports.svelte.ts
+msgid "The Ambulatory Glucose Profile folds many days into one typical day."
+msgstr "The Ambulatory Glucose Profile folds many days into one typical day."
+
+#: src/lib/help/reports.svelte.ts
+msgid "The middle line and percentile bands show when glucose is usually higher, lower, or less predictable."
+msgstr "The middle line and percentile bands show when glucose is usually higher, lower, or less predictable."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Percentiles describe the spread of readings at a time of day. This is not one actual day's trace; uneven coverage can distort it."
+msgstr "Percentiles describe the spread of readings at a time of day. This is not one actual day's trace; uneven coverage can distort it."
+
+#: src/lib/help/reports.svelte.ts
+msgid "See how often readings fall in each range and how this changes by hour."
+msgstr "See how often readings fall in each range and how this changes by hour."
+
+#: src/lib/help/reports.svelte.ts
+msgid "The histogram and variability summaries explain the overall time-in-range result."
+msgstr "The histogram and variability summaries explain the overall time-in-range result."
+
+#: src/lib/help/reports.svelte.ts
+msgid "The histogram counts readings. A broad distribution means more variation. Estimated A1c is calculated from glucose, not measured in blood."
+msgstr "The histogram counts readings. A broad distribution means more variation. Estimated A1c is calculated from glucose, not measured in blood."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Compare glucose-based estimated A1c with laboratory HbA1c results."
+msgstr "Compare glucose-based estimated A1c with laboratory HbA1c results."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Saved laboratory results appear in this timeline beside the glucose estimate."
+msgstr "Saved laboratory results appear in this timeline beside the glucose estimate."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Use the lab-result controls here to add the blood-draw date, value, note, or remove an entry. A lab measurement and an estimate are different and may disagree."
+msgstr "Use the lab-result controls here to add the blood-draw date, value, note, or remove an entry. A lab measurement and an estimate are different and may disagree."
+
+#: src/lib/help/reports.svelte.ts
+msgid "A calendar heatmap shows changes across a whole year."
+msgstr "A calendar heatmap shows changes across a whole year."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Day and month summaries help you choose a period for a detailed report."
+msgstr "Day and month summaries help you choose a period for a detailed report."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Use the year and metric filters here. A day without usable data must not be interpreted as a good result."
+msgstr "Use the year and metric filters here. A day without usable data must not be interpreted as a good result."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Explore the recorded glucose trace and its treatment context."
+msgstr "Explore the recorded glucose trace and its treatment context."
+
+#: src/lib/help/reports.svelte.ts
+msgid "These readings also feed the dashboard, calendar, and glucose statistics."
+msgstr "These readings also feed the dashboard, calendar, and glucose statistics."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Use the chart's date and display controls. Points are samples; a connecting line is not an extra measurement."
+msgstr "Use the chart's date and display controls. Points are samples; a connecting line is not an extra measurement."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Bring one day's glucose and events together on a timeline."
+msgstr "Bring one day's glucose and events together on a timeline."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Inspect the timing behind daily patterns or unusual readings."
+msgstr "Inspect the timing behind daily patterns or unusual readings."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Select the day here. Events only appear if recorded and imported; nearby events do not prove cause and effect."
+msgstr "Select the day here. Events only appear if recorded and imported; nearby events do not prove cause and effect."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Compare weekday glucose patterns across weeks."
+msgstr "Compare weekday glucose patterns across weeks."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Weekday averages help you explore differences between regular routines."
+msgstr "Weekday averages help you explore differences between regular routines."
+
+#: src/lib/help/reports.svelte.ts
+msgid "The same weekday can have unequal coverage between weeks. An average can hide short highs and lows."
+msgstr "The same weekday can have unequal coverage between weeks. An average can hide short highs and lows."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Compare two periods with the same report measures."
+msgstr "Compare two periods with the same report measures."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Find differences before exploring individual days."
+msgstr "Find differences before exploring individual days."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Choose both periods here. Different devices, coverage, or durations can affect the comparison; a difference does not prove a treatment effect."
+msgstr "Choose both periods here. Different devices, coverage, or durations can affect the comparison; a difference does not prove a treatment effect."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Group readings by hour to find recurring highs, lows, and variation."
+msgstr "Group readings by hour to find recurring highs, lows, and variation."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Hourly range bars help you choose a time to investigate on the glucose chart."
+msgstr "Hourly range bars help you choose a time to investigate on the glucose chart."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Each bar describes readings in that hour across the chosen days. Tight range is part of in range: do not add their percentages together."
+msgstr "Each bar describes readings in that hour across the chosen days. Tight range is part of in range: do not add their percentages together."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Inspect basal delivery together with glucose patterns."
+msgstr "Inspect basal delivery together with glucose patterns."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Delivery and schedule information help you inspect specific periods."
+msgstr "Delivery and schedule information help you inspect specific periods."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Therapy profiles provide scheduled rates; temporary basal and delivery records describe changes. Missing delivery records or historical profiles limit the analysis."
+msgstr "Therapy profiles provide scheduled rates; temporary basal and delivery records describe changes. Missing delivery records or historical profiles limit the analysis."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Review basal and bolus totals, their proportions, and timing."
+msgstr "Review basal and bolus totals, their proportions, and timing."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Daily ratios and hourly summaries use stored insulin records."
+msgstr "Daily ratios and hourly summaries use stored insulin records."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Bolus amounts and basal rates have different units. Basal totals depend on duration and available records; incomplete imports can understate totals."
+msgstr "Bolus amounts and basal rates have different units. Basal totals depend on duration and available records; incomplete imports can understate totals."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Compare glucose around recorded infusion-site changes."
+msgstr "Compare glucose around recorded infusion-site changes."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Event windows help you inspect recurring patterns around changes."
+msgstr "Event windows help you inspect recurring patterns around changes."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Correctly timed site-change events and glucose before and after are needed. Association does not prove that the change caused a glucose difference."
+msgstr "Correctly timed site-change events and glucose before and after are needed. Association does not prove that the change caused a glucose difference."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Bring glucose patterns, insulin delivery, and therapy schedules together."
+msgstr "Bring glucose patterns, insulin delivery, and therapy schedules together."
+
+#: src/lib/help/reports.svelte.ts
+msgid "The integrated daily profile combines summaries so you can inspect their timing."
+msgstr "The integrated daily profile combines summaries so you can inspect their timing."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Scheduled basal is the therapy schedule, not necessarily insulin actually delivered. Missing profiles or treatments leave panels empty."
+msgstr "Scheduled basal is the therapy schedule, not necessarily insulin actually delivered. Missing profiles or treatments leave panels empty."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Check that recorded data is complete and usable."
+msgstr "Check that recorded data is complete and usable."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Stored glucose timestamps, device identities, and quality or noise information when supplied."
+msgstr "Stored glucose timestamps, device identities, and quality or noise information when supplied."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Choose the report period. Settings → Data Quality contains detection and maintenance controls. Each detailed quality report has its own filters."
+msgstr "Choose the report period. Settings → Data Quality contains detection and maintenance controls. Each detailed quality report has its own filters."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Coverage and reliability help you interpret reports and recognise import or sensor problems."
+msgstr "Coverage and reliability help you interpret reports and recognise import or sensor problems."
+
+#: src/lib/help/reports.svelte.ts
+msgid "A flag needs inspection; it does not prove a reading is wrong. Cleanup affects later reports, so inspect records before confirming."
+msgstr "A flag needs inspection; it does not prove a reading is wrong. Cleanup affects later reports, so inspect records before confirming."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Sensor Integrity"
+msgstr "Sensor Integrity"
+
+#: src/lib/help/reports.svelte.ts
+msgid "Inspect noisy windows and surrounding readings."
+msgstr "Inspect noisy windows and surrounding readings."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Stored readings and available source noise metadata."
+msgstr "Stored readings and available source noise metadata."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Choose dates here; configure detection in Settings → Data Quality."
+msgstr "Choose dates here; configure detection in Settings → Data Quality."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Flags help you inspect questionable sections of glucose reports."
+msgstr "Flags help you inspect questionable sections of glucose reports."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Not every uploader supplies noise metadata. Noise or a low after a flagged window is not a diagnosis."
+msgstr "Not every uploader supplies noise metadata. Noise or a low after a flagged window is not a diagnosis."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Compare devices that recorded glucose near the same time."
+msgstr "Compare devices that recorded glucose near the same time."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Readings paired between your selected device and reference."
+msgstr "Readings paired between your selected device and reference."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Choose Device, Reference, and Match within here. Manage sources in Settings → Connectors & Apps."
+msgstr "Choose Device, Reference, and Match within here. Manage sources in Settings → Connectors & Apps."
+
+#: src/lib/help/reports.svelte.ts
+msgid "The scatter and agreement summaries show differences between paired readings."
+msgstr "The scatter and agreement summaries show differences between paired readings."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Unpaired readings are excluded. A wider tolerance compares less simultaneous readings; your chosen reference is not guaranteed ground truth."
+msgstr "Unpaired readings are excluded. A wider tolerance compares less simultaneous readings; your chosen reference is not guaranteed ground truth."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Review suggested low-reading windows for a possible quality correction."
+msgstr "Review suggested low-reading windows for a possible quality correction."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Automatic detection examines stored glucose patterns using the detection settings."
+msgstr "Automatic detection examines stored glucose patterns using the detection settings."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Set date and status filters here. Configure automatic detection and typical sleep times in Settings → Data Quality. Inspect suggestions before accepting or dismissing."
+msgstr "Set date and status filters here. Configure automatic detection and typical sleep times in Settings → Data Quality. Inspect suggestions before accepting or dismissing."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Accepted corrections affect subsequent charts and analysis."
+msgstr "Accepted corrections affect subsequent charts and analysis."
+
+#: src/lib/help/reports.svelte.ts
+msgid "A suggestion can be mistaken and does not prove pressure caused a low. Check the preview before changing records."
+msgstr "A suggestion can be mistaken and does not prove pressure caused a low. Check the preview before changing records."
+
+#: src/lib/help/reports.svelte.ts
+msgid "This guide covers Steps: counting steps and viewing your activity over time."
+msgstr "This guide covers Steps: counting steps and viewing your activity over time."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Step-count records received from a supported source. Google Health can import steps available in your connected account."
+msgstr "Step-count records received from a supported source. Google Health can import steps available in your connected account."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Choose dates above the report. Settings → Connectors & Apps → Google Health controls step imports and the historical start date."
+msgstr "Choose dates above the report. Settings → Connectors & Apps → Google Health controls step imports and the historical start date."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Daily totals and activity timing help you explore your routine alongside glucose."
+msgstr "Daily totals and activity timing help you explore your routine alongside glucose."
+
+#: src/lib/help/reports.svelte.ts
+msgid "An empty day does not necessarily mean no steps. Check source data, import selection, progress, and dates. Overlapping source records can differ from your watch's total."
+msgstr "An empty day does not necessarily mean no steps. Check source data, import selection, progress, and dates. Overlapping source records can differ from your watch's total."
+
+#: src/lib/help/reports.svelte.ts
+msgid "This guide covers Heart Rate: your recorded heart rate and patterns over time."
+msgstr "This guide covers Heart Rate: your recorded heart rate and patterns over time."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Device or service samples through a supported connector. Google Health reduces its samples to one stable average per minute."
+msgstr "Device or service samples through a supported connector. Google Health reduces its samples to one stable average per minute."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Choose dates here. Enable heart rate in Settings → Connectors & Apps → Google Health after checking your device's readings reach that account."
+msgstr "Choose dates here. Enable heart rate in Settings → Connectors & Apps → Google Health after checking your device's readings reach that account."
+
+#: src/lib/help/reports.svelte.ts
+msgid "The timeline and daily summaries show heart-rate patterns alongside glucose."
+msgstr "The timeline and daily summaries show heart-rate patterns alongside glucose."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Values are beats per minute. Sampling and averaging can hide brief changes. Missing readings are not a zero heart rate; this page defines no universal high or low threshold."
+msgstr "Values are beats per minute. Sampling and averaging can hide brief changes. Missing readings are not a zero heart rate; this page defines no universal high or low threshold."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Explore sleep sessions, timing, and stage composition."
+msgstr "Explore sleep sessions, timing, and stage composition."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Imported sleep sessions and stages, including supported Google Health records."
+msgstr "Imported sleep sessions and stages, including supported Google Health records."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Choose dates and the view here; open a night for details. Configure imports in Connectors & Apps → Google Health."
+msgstr "Choose dates and the view here; open a night for details. Configure imports in Connectors & Apps → Google Health."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Compare nights and glucose during recorded sleep windows."
+msgstr "Compare nights and glucose during recorded sleep windows."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Device stages are estimates. Missing stages stay missing. Google filters sessions by their end time, so a night can begin before the import start date."
+msgstr "Device stages are estimates. Missing stages stay missing. Google filters sessions by their end time, so a night can begin before the import start date."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Browse, search, add, or edit diabetes events."
+msgstr "Browse, search, add, or edit diabetes events."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Uploaded, imported, and manually saved insulin, carbohydrate, notes, and device events."
+msgstr "Uploaded, imported, and manually saved insulin, carbohydrate, notes, and device events."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Use category tabs and Search here. Add/edit and bulk deletion require write permission. Settings → Therapy shows schedules; Connectors & Apps manages sources."
+msgstr "Use category tabs and Search here. Add/edit and bulk deletion require write permission. Settings → Therapy shows schedules; Connectors & Apps manages sources."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Events appear on glucose timelines and feed insulin and carbohydrate analysis."
+msgstr "Events appear on glucose timelines and feed insulin and carbohydrate analysis."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Event time, units, and type matter. Deletion changes later analysis. A source can recreate records on import unless the applicable deletion protection prevents it."
+msgstr "Event time, units, and type matter. Deletion changes later analysis. A source can recreate records on import unless the applicable deletion protection prevents it."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Review battery information uploaded by devices."
+msgstr "Review battery information uploaded by devices."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Device-status records containing battery values."
+msgstr "Device-status records containing battery values."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Choose dates here. Configure devices and uploaders in Connectors & Apps."
+msgstr "Choose dates here. Configure devices and uploaders in Connectors & Apps."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Battery history helps identify devices needing charging or missing uploads."
+msgstr "Battery history helps identify devices needing charging or missing uploads."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Devices use different formats and update intervals. Missing battery information means unknown, not empty."
+msgstr "Devices use different formats and update intervals. Missing battery information means unknown, not empty."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Sleep night"
+msgstr "Sleep night"
+
+#: src/lib/help/reports.svelte.ts
+msgid "Inspect one night and its stages."
+msgstr "Inspect one night and its stages."
+
+#: src/lib/help/reports.svelte.ts
+msgid "The selected sleep session, stage records, and glucose during that window."
+msgstr "The selected sleep session, stage records, and glucose during that window."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Open a night from the Sleep report; choose other dates there. Import settings are in Connectors & Apps → Google Health."
+msgstr "Open a night from the Sleep report; choose other dates there. Import settings are in Connectors & Apps → Google Health."
+
+#: src/lib/help/reports.svelte.ts
+msgid "The hypnogram and glucose summary explain the overview in detail."
+msgstr "The hypnogram and glucose summary explain the overview in detail."
+
+#: src/lib/help/reports.svelte.ts
+msgid "Missing stages and glucose stay missing. Overlapping sessions and estimated stage labels can limit the summary."
+msgstr "Missing stages and glucose stay missing. Overlapping sessions and estimated stage labels can limit the summary."
+
+#: src/lib/help/reference.svelte.ts
+msgid "Tight range (inside in range)"
+msgstr "Tight range (inside in range)"
+
+#: src/lib/help/pages.svelte.ts
+msgid "See recent glucose and the surrounding recorded events."
+msgstr "See recent glucose and the surrounding recorded events."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Readings, treatments, device status, and profiles from your uploaders and connectors."
+msgstr "Readings, treatments, device status, and profiles from your uploaders and connectors."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Use chart controls on this page. Settings → Appearance controls units and display; Therapy shows personal schedules; Connectors & Apps manages incoming data; Alerts manages notifications."
+msgstr "Use chart controls on this page. Settings → Appearance controls units and display; Therapy shows personal schedules; Connectors & Apps manages incoming data; Alerts manages notifications."
+
+#: src/lib/help/pages.svelte.ts
+msgid "The same stored records feed the calendar and reports."
+msgstr "The same stored records feed the calendar and reports."
+
+#: src/lib/help/pages.svelte.ts
+msgid "A latest value can become stale if uploads stop. Gaps and missing treatments limit context. The server classifies the current glucose status; report bands, personal targets, and alerts serve different purposes."
+msgstr "A latest value can become stale if uploads stop. Gaps and missing treatments limit context. The server classifies the current glucose status; report bands, personal targets, and alerts serve different purposes."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Explore recorded events and glucose by day."
+msgstr "Explore recorded events and glucose by day."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Stored readings and events with their timestamps."
+msgstr "Stored readings and events with their timestamps."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Choose dates and the available view controls here. Display format is in Appearance; event records are in Treatments; timezone history is under Patient Record."
+msgstr "Choose dates and the available view controls here. Display format is in Appearance; event records are in Treatments; timezone history is under Patient Record."
+
+#: src/lib/help/pages.svelte.ts
+msgid "The calendar helps you find a day to inspect on the timeline or in reports."
+msgstr "The calendar helps you find a day to inspect on the timeline or in reports."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Only recorded events appear. Local dates and timezone changes affect which day an event belongs to."
+msgstr "Only recorded events appear. Local dates and timezone changes affect which day an event belongs to."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Inspect periods when a device or recorded state was active."
+msgstr "Inspect periods when a device or recorded state was active."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Imported state spans such as pump modes, connectivity, and basal delivery states."
+msgstr "Imported state spans such as pump modes, connectivity, and basal delivery states."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Use this page's filters and timeline controls. Manage the source connector in Connectors & Apps."
+msgstr "Use this page's filters and timeline controls. Manage the source connector in Connectors & Apps."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Spans provide duration and state context for device and delivery analysis."
+msgstr "Spans provide duration and state context for device and delivery analysis."
+
+#: src/lib/help/pages.svelte.ts
+msgid "A span is a period, not one reading. Open-ended or missing state records can limit its displayed end and duration."
+msgstr "A span is a period, not one reading. Open-ended or missing state records can limit its displayed end and duration."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Choose a clock display for a glance at recent data."
+msgstr "Choose a clock display for a glance at recent data."
+
+#: src/lib/help/pages.svelte.ts
+msgid "The current tenant's glucose/device data and saved clock configurations."
+msgstr "The current tenant's glucose/device data and saved clock configurations."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Create or open a clock configuration here to choose its layout and display options. General units and theme are in Appearance."
+msgstr "Create or open a clock configuration here to choose its layout and display options. General units and theme are in Appearance."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Clock faces present the same incoming data in a compact display."
+msgstr "Clock faces present the same incoming data in a compact display."
+
+#: src/lib/help/pages.svelte.ts
+msgid "A clock is not a separate data source. Check freshness if uploads stop; its configured units can differ from your general display preference."
+msgstr "A clock is not a separate data source. Check freshness if uploads stop; its configured units can differ from your general display preference."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Manage food entries and their nutrition information."
+msgstr "Manage food entries and their nutrition information."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Food catalogue records saved or imported into this tenant."
+msgstr "Food catalogue records saved or imported into this tenant."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Use the page's search, add, and edit controls. Review portion size and carbohydrate units before saving."
+msgstr "Use the page's search, add, and edit controls. Review portion size and carbohydrate units before saving."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Food information can be used when recording meals and carbohydrate intake."
+msgstr "Food information can be used when recording meals and carbohydrate intake."
+
+#: src/lib/help/pages.svelte.ts
+msgid "A catalogue entry is not a record that you ate it. Portion size and nutrition estimates can be inaccurate; check the original source."
+msgstr "A catalogue entry is not a record that you ate it. Portion size and nutrition estimates can be inaccurate; check the original source."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Review meals and their recorded carbohydrate context."
+msgstr "Review meals and their recorded carbohydrate context."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Recorded meals, food/portion information, and associated treatment records."
+msgstr "Recorded meals, food/portion information, and associated treatment records."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Use the page's date, add, and edit controls. Manage reusable foods in Food and treatment records in Treatments."
+msgstr "Use the page's date, add, and edit controls. Manage reusable foods in Food and treatment records in Treatments."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Meal timing and carbohydrates provide context beside glucose and insulin records."
+msgstr "Meal timing and carbohydrates provide context beside glucose and insulin records."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Missing food details do not mean no meal. A nearby glucose change does not establish a meal's effect."
+msgstr "Missing food details do not mean no meal. A nearby glucose change does not establish a meal's effect."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Estimate supplies to take on a trip."
+msgstr "Estimate supplies to take on a trip."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Your chosen trip details, supply categories, and available packing hints."
+msgstr "Your chosen trip details, supply categories, and available packing hints."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Set trip details and review supply estimates here, then open the packing list. Tracker definitions are in Notifications & Trackers."
+msgstr "Set trip details and review supply estimates here, then open the packing list. Tracker definitions are in Notifications & Trackers."
+
+#: src/lib/help/pages.svelte.ts
+msgid "The list turns the estimate into items you can check off and customise."
+msgstr "The list turns the estimate into items you can check off and customise."
+
+#: src/lib/help/pages.svelte.ts
+msgid "This is an estimate. Check your actual supplies, device needs, delays, and a suitable spare amount before travelling."
+msgstr "This is an estimate. Check your actual supplies, device needs, delays, and a suitable spare amount before travelling."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Packing list"
+msgstr "Packing list"
+
+#: src/lib/help/pages.svelte.ts
+msgid "Check off and customise the supplies for your trip."
+msgstr "Check off and customise the supplies for your trip."
+
+#: src/lib/help/pages.svelte.ts
+msgid "The trip estimate and custom items you add."
+msgstr "The trip estimate and custom items you add."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Use the item checkboxes and Custom field here; return to Packing to change trip inputs."
+msgstr "Use the item checkboxes and Custom field here; return to Packing to change trip inputs."
+
+#: src/lib/help/pages.svelte.ts
+msgid "The checklist helps organise packing; it does not monitor the contents of your bag."
+msgstr "The checklist helps organise packing; it does not monitor the contents of your bag."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Checking an item does not verify that you physically packed it. Review quantities and changes to the trip."
+msgstr "Checking an item does not verify that you physically packed it. Review quantities and changes to the trip."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Alert Rules"
+msgstr "Alert Rules"
+
+#: src/lib/help/pages.svelte.ts
+msgid "Choose conditions that should trigger a notification."
+msgstr "Choose conditions that should trigger a notification."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Saved rules evaluated against the data and conditions they reference."
+msgstr "Saved rules evaluated against the data and conditions they reference."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Create or edit a rule here for its condition, thresholds, timing, and notification actions. Test it in Simulator; review deliveries in History and quiet periods in Do Not Disturb."
+msgstr "Create or edit a rule here for its condition, thresholds, timing, and notification actions. Test it in Simulator; review deliveries in History and quiet periods in Do Not Disturb."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Enabled rules are used by the alert system; they do not change report reference bands."
+msgstr "Enabled rules are used by the alert system; they do not change report reference bands."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Delivery depends on fresh data, rule conditions, enabled channels, and quiet settings. A rule threshold is separate from a personal target. Test a change before relying on it."
+msgstr "Delivery depends on fresh data, rule conditions, enabled channels, and quiet settings. A rule threshold is separate from a personal target. Test a change before relying on it."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Alert Simulator"
+msgstr "Alert Simulator"
+
+#: src/lib/help/pages.svelte.ts
+msgid "Test how an alert rule responds to sample conditions."
+msgstr "Test how an alert rule responds to sample conditions."
+
+#: src/lib/help/pages.svelte.ts
+msgid "The rule and the scenario values chosen for the simulation."
+msgstr "The rule and the scenario values chosen for the simulation."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Select the rule and test inputs here. Edit real rules on Alert Rules."
+msgstr "Select the rule and test inputs here. Edit real rules on Alert Rules."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Results help you inspect rule behaviour before enabling or changing it."
+msgstr "Results help you inspect rule behaviour before enabling or changing it."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Simulation is not a live reading and does not guarantee notification delivery. Check History for actual evaluations and deliveries."
+msgstr "Simulation is not a live reading and does not guarantee notification delivery. Check History for actual evaluations and deliveries."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Alert History"
+msgstr "Alert History"
+
+#: src/lib/help/pages.svelte.ts
+msgid "Review recorded alert activity."
+msgstr "Review recorded alert activity."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Alert evaluations and delivery results retained by Nocturne."
+msgstr "Alert evaluations and delivery results retained by Nocturne."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Use the history filters and details here. Change rules in Alert Rules and quiet periods in Do Not Disturb."
+msgstr "Use the history filters and details here. Change rules in Alert Rules and quiet periods in Do Not Disturb."
+
+#: src/lib/help/pages.svelte.ts
+msgid "History helps explain which rule fired and what happened to its notification."
+msgstr "History helps explain which rule fired and what happened to its notification."
+
+#: src/lib/help/pages.svelte.ts
+msgid "A recorded alert is not proof the recipient saw it. Missing source data and delivery failures need separate investigation."
+msgstr "A recorded alert is not proof the recipient saw it. Missing source data and delivery failures need separate investigation."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Manage quiet periods for notifications."
+msgstr "Manage quiet periods for notifications."
+
+#: src/lib/help/pages.svelte.ts
+msgid "The saved quiet schedules and active Do Not Disturb configuration."
+msgstr "The saved quiet schedules and active Do Not Disturb configuration."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Set the applicable quiet times here. Review each rule's behaviour on Alert Rules."
+msgstr "Set the applicable quiet times here. Review each rule's behaviour on Alert Rules."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Quiet settings affect notification handling, not glucose imports or report calculations."
+msgstr "Quiet settings affect notification handling, not glucose imports or report calculations."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Check timezone and the rules/channels affected by your choice. Quiet mode does not stop the underlying measurements."
+msgstr "Check timezone and the rules/channels affected by your choice. Quiet mode does not stop the underlying measurements."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Inspect Nightscout endpoint compatibility."
+msgstr "Inspect Nightscout endpoint compatibility."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Recorded compatibility test results and endpoint metadata."
+msgstr "Recorded compatibility test results and endpoint metadata."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Open a result or run a test under Test Endpoint Compatibility."
+msgstr "Open a result or run a test under Test Endpoint Compatibility."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Results help developers compare Nocturne with a reference implementation."
+msgstr "Results help developers compare Nocturne with a reference implementation."
+
+#: src/lib/help/pages.svelte.ts
+msgid "A passing endpoint test only covers its tested scenario. It does not verify every uploader or all historical data."
+msgstr "A passing endpoint test only covers its tested scenario. It does not verify every uploader or all historical data."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Compare an endpoint with a configured reference."
+msgstr "Compare an endpoint with a configured reference."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Responses and timings returned by the selected test targets."
+msgstr "Responses and timings returned by the selected test targets."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Choose endpoint and parameters here, then inspect the returned comparison. Keep target credentials private."
+msgstr "Choose endpoint and parameters here, then inspect the returned comparison. Keep target credentials private."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Saved results appear in the compatibility views."
+msgstr "Saved results appear in the compatibility views."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Results depend on the target's data, availability, and permissions. Matching one response does not prove full compatibility."
+msgstr "Results depend on the target's data, availability, and permissions. Matching one response does not prove full compatibility."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Choose between the patient workspaces you can access."
+msgstr "Choose between the patient workspaces you can access."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Your memberships and each workspace's permitted summary information."
+msgstr "Your memberships and each workspace's permitted summary information."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Select a tenant here or with the tenant selector. Manage sharing inside that tenant; platform administrators use Tenant Management."
+msgstr "Select a tenant here or with the tenant selector. Manage sharing inside that tenant; platform administrators use Tenant Management."
+
+#: src/lib/help/pages.svelte.ts
+msgid "The selected tenant determines the records and settings shown throughout the app."
+msgstr "The selected tenant determines the records and settings shown throughout the app."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Access to one tenant does not grant access to another. Verify the selected workspace before editing patient records or connections."
+msgstr "Access to one tenant does not grant access to another. Verify the selected workspace before editing patient records or connections."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Follow the guided checklist for a usable Nocturne account and workspace."
+msgstr "Follow the guided checklist for a usable Nocturne account and workspace."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Your account, patient configuration, and connected data sources."
+msgstr "Your account, patient configuration, and connected data sources."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Follow the checklist here; individual settings remain available afterwards in the normal settings pages."
+msgstr "Follow the checklist here; individual settings remain available afterwards in the normal settings pages."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Setup connects the basic configuration to the dashboard and reports."
+msgstr "Setup connects the basic configuration to the dashboard and reports."
+
+#: src/lib/help/pages.svelte.ts
+msgid "Completing a checklist does not manufacture readings. Verify an actual source import and the selected dates."
+msgstr "Completing a checklist does not manufacture readings. Verify an actual source import and the selected dates."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Choose the settings for your account, display, patient data, or connections."
+msgstr "Choose the settings for your account, display, patient data, or connections."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Saved account, browser, tenant, and server configuration."
+msgstr "Saved account, browser, tenant, and server configuration."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Open a settings category from this page or the navigation menu. Some controls require owner or administrator permission."
+msgstr "Open a settings category from this page or the navigation menu. Some controls require owner or administrator permission."
+
+#: src/lib/help/settings.svelte.ts
+msgid "These choices control the relevant display, import, sharing, or analysis features."
+msgstr "These choices control the relevant display, import, sharing, or analysis features."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Account preferences and patient settings are different. Check the selected tenant before changing shared patient settings."
+msgstr "Account preferences and patient settings are different. Check the selected tenant before changing shared patient settings."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Manage your sign-in identity and recovery methods."
+msgstr "Manage your sign-in identity and recovery methods."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Your signed-in account and its registered authentication methods."
+msgstr "Your signed-in account and its registered authentication methods."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Use the account fields, passkey, authenticator, and recovery-code controls here. Active browser sessions are in Settings → Active Access."
+msgstr "Use the account fields, passkey, authenticator, and recovery-code controls here. Active browser sessions are in Settings → Active Access."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Your account is used to sign in and identify your membership across tenants."
+msgstr "Your account is used to sign in and identify your membership across tenants."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Recovery codes and authentication secrets grant account access. Save recovery information privately; it is not the patient's clinical record."
+msgstr "Recovery codes and authentication secrets grant account access. Save recovery information privately; it is not the patient's clinical record."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Describe the person whose data this tenant contains."
+msgstr "Describe the person whose data this tenant contains."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Clinical details, devices, and insulins entered here or imported where supported."
+msgstr "Clinical details, devices, and insulins entered here or imported where supported."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Use Clinical Information, Devices, and Insulins here. Therapy schedules are in Settings → Therapy; dated weights and locations have their own pages."
+msgstr "Use Clinical Information, Devices, and Insulins here. Therapy schedules are in Settings → Therapy; dated weights and locations have their own pages."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Patient information provides context for other views and calculations that need it."
+msgstr "Patient information provides context for other views and calculations that need it."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Changing a patient detail does not rewrite device measurements. Use the correct tenant and units; optional missing details can limit dependent features."
+msgstr "Changing a patient detail does not rewrite device measurements. Use the correct tenant and units; optional missing details can limit dependent features."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Choose how Nocturne and its documentation look."
+msgstr "Choose how Nocturne and its documentation look."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Your saved display preferences and browser-local documentation preferences."
+msgstr "Your saved display preferences and browser-local documentation preferences."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Set theme, language, glucose units, dates, and times here. Help visibility, layout, transparency, and blur are here and in help's Display options."
+msgstr "Set theme, language, glucose units, dates, and times here. Help visibility, layout, transparency, and blur are here and in help's Display options."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Display settings format charts and values. They do not change the underlying stored glucose units or readings."
+msgstr "Display settings format charts and values. They do not change the underlying stored glucose units or readings."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Open and close help with the book next to Nocturne, the close button, or Escape. Your original page and inputs stay in place. Navigation drawer and Replace page use the existing menu for help; Right drawer uses a panel; Side by side keeps the page usable on wide screens. Hidden help can always be enabled here. Documentation appearance is saved in this browser."
+msgstr "Open and close help with the book next to Nocturne, the close button, or Escape. Your original page and inputs stay in place. Navigation drawer and Replace page use the existing menu for help; Right drawer uses a panel; Side by side keeps the page usable on wide screens. Hidden help can always be enabled here. Documentation appearance is saved in this browser."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Inspect imported therapy profiles, personal targets, and schedules."
+msgstr "Inspect imported therapy profiles, personal targets, and schedules."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Profiles uploaded by a device/app or received from a connector, with their effective times."
+msgstr "Profiles uploaded by a device/app or received from a connector, with their effective times."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Choose the default profile here and inspect target, basal, carbohydrate-ratio, and sensitivity schedules. Correct the source profile in the originating app/device when this page only offers a read-only schedule."
+msgstr "Choose the default profile here and inspect target, basal, carbohydrate-ratio, and sensitivity schedules. Correct the source profile in the originating app/device when this page only offers a read-only schedule."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Schedules provide context for insulin calculations, scheduled basal, and personal target overlays."
+msgstr "Schedules provide context for insulin calculations, scheduled basal, and personal target overlays."
+
+#: src/lib/help/settings.svelte.ts
+msgid "A scheduled rate is not proof of actual delivery. Historical profile timing matters. Personal targets do not replace the report reference bands or automatically update alert thresholds."
+msgstr "A scheduled rate is not proof of actual delivery. Historical profile timing matters. Personal targets do not replace the report reference bands or automatically update alert thresholds."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Data Quality settings"
+msgstr "Data Quality settings"
+
+#: src/lib/help/settings.svelte.ts
+msgid "Configure detection and inspect maintenance tools."
+msgstr "Configure detection and inspect maintenance tools."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Saved quality settings and analyses of stored readings."
+msgstr "Saved quality settings and analyses of stored readings."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Set typical bedtime/wake time and automatic detection here. Use the links to quality reports and the maintenance card for the specific operation."
+msgstr "Set typical bedtime/wake time and automatic detection here. Use the links to quality reports and the maintenance card for the specific operation."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Detection creates review suggestions; maintenance can change records subsequently used by charts and reports."
+msgstr "Detection creates review suggestions; maintenance can change records subsequently used by charts and reports."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Inspect the affected period and confirmation before cleanup. A suggestion is not proof a reading is incorrect, and changing detection settings is different from accepting a correction."
+msgstr "Inspect the affected period and confirmation before cleanup. A suggestion is not proof a reading is incorrect, and changing detection settings is different from accepting a correction."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Track supplies, devices, and recurring events."
+msgstr "Track supplies, devices, and recurring events."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Tracker definitions, presets, start events, completions, and notifications recorded in Nocturne."
+msgstr "Tracker definitions, presets, start events, completions, and notifications recorded in Nocturne."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Use Active, History, Definitions, and Presets on this page. Start or complete a tracker using its controls; edit the definition for duration and reminder behaviour."
+msgstr "Use Active, History, Definitions, and Presets on this page. Start or complete a tracker using its controls; edit the definition for duration and reminder behaviour."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Active trackers provide due/urgency information and reminders; completed events form the history."
+msgstr "Active trackers provide due/urgency information and reminders; completed events form the history."
+
+#: src/lib/help/settings.svelte.ts
+msgid "A reminder depends on its definition, start time, and enabled notification delivery. It does not confirm a physical device was changed. Completing and editing a definition are different actions."
+msgstr "A reminder depends on its definition, start time, and enabled notification delivery. It does not confirm a physical device was changed. Completing and editing a definition are different actions."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Review browser sessions signed in to your account."
+msgstr "Review browser sessions signed in to your account."
+
+#: src/lib/help/settings.svelte.ts
+msgid "The server's active account sessions and available device information."
+msgstr "The server's active account sessions and available device information."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Inspect and revoke sessions here. Manage passkeys and other sign-in methods under Account."
+msgstr "Inspect and revoke sessions here. Manage passkeys and other sign-in methods under Account."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Revoking a session requires that browser to authenticate again."
+msgstr "Revoking a session requires that browser to authenticate again."
+
+#: src/lib/help/settings.svelte.ts
+msgid "This list is not the list of data-upload devices or API tokens. Those are under Connectors & Apps. Revoking a browser session does not delete patient records."
+msgstr "This list is not the list of data-upload devices or API tokens. Those are under Connectors & Apps. Revoking a browser session does not delete patient records."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Connectors bring information from device services into Nocturne."
+msgstr "Connectors bring information from device services into Nocturne."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Server connectors, uploaders, authorised apps, client devices, and tokens configured for this tenant."
+msgstr "Server connectors, uploaders, authorised apps, client devices, and tokens configured for this tenant."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Find your source under Server Connectors and open its setup/settings. Review connection status and latest sync. Apps, uploaders, and API tokens have separate controls here."
+msgstr "Find your source under Server Connectors and open its setup/settings. Review connection status and latest sync. Apps, uploaders, and API tokens have separate controls here."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Imported records feed the dashboard, reports, and patient histories. Each connector supports its own data types."
+msgstr "Imported records feed the dashboard, reports, and patient histories. Each connector supports its own data types."
+
+#: src/lib/help/settings.svelte.ts
+msgid "A configured connector may still need sign-in or import selection. Connected does not prove a historical import is complete. Empty data may be a permission, date, or source-sync problem."
+msgstr "A configured connector may still need sign-in or import selection. Connected does not prove a historical import is complete. Empty data may be a permission, date, or source-sync problem."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Control who can see or change this tenant's information."
+msgstr "Control who can see or change this tenant's information."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Tenant memberships, roles, invitations, guest links, and public-sharing settings."
+msgstr "Tenant memberships, roles, invitations, guest links, and public-sharing settings."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Use member permissions, invitations, requests, roles, and guest/public links here. Changes require the appropriate management permission."
+msgstr "Use member permissions, invitations, requests, roles, and guest/public links here. Changes require the appropriate management permission."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Permissions control available pages and operations for members and shared viewers."
+msgstr "Permissions control available pages and operations for members and shared viewers."
+
+#: src/lib/help/settings.svelte.ts
+msgid "A guest link grants the access you configure to anyone who possesses it. Review scope and time limits; revoking access does not remove copies someone already made."
+msgstr "A guest link grants the access you configure to anyone who possesses it. Review scope and time limits; revoking access does not remove copies someone already made."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Find support links and deployment information."
+msgstr "Find support links and deployment information."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Server service status, version information, and details you choose to include in a report."
+msgstr "Server service status, version information, and details you choose to include in a report."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Use the support and issue controls here. Review optional device information and your message before submitting. Tutorial preferences are also here."
+msgstr "Use the support and issue controls here. Review optional device information and your message before submitting. Tutorial preferences are also here."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Version and error details help maintainers understand a reproducible problem."
+msgstr "Version and error details help maintainers understand a reproducible problem."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Describe the page, expected result, and steps to reproduce. Keep credentials, tokens, and identifiable health records out of a public issue."
+msgstr "Describe the page, expected result, and steps to reproduce. Keep credentials, tokens, and identifiable health records out of a public issue."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Inspect and contribute translated interface text."
+msgstr "Inspect and contribute translated interface text."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Nocturne's translation catalogues and saved contributions."
+msgstr "Nocturne's translation catalogues and saved contributions."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Choose a language here; choose your interface language in Appearance. Open a language to edit entries and submit a contribution."
+msgstr "Choose a language here; choose your interface language in Appearance. Open a language to edit entries and submit a contribution."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Approved translations supply interface text, including these help pages."
+msgstr "Approved translations supply interface text, including these help pages."
+
+#: src/lib/help/settings.svelte.ts
+msgid "English is the original help text. Untranslated entries fall back to English; preserve placeholders when contributing a translation."
+msgstr "English is the original help text. Untranslated entries fall back to English; preserve placeholders when contributing a translation."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Review and record dated body weights."
+msgstr "Review and record dated body weights."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Manual entries and supported imports, including Google Health weights."
+msgstr "Manual entries and supported imports, including Google Health weights."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Add the weight in kilograms and its recorded time here. Imported weight selection is in Google Health connector settings."
+msgstr "Add the weight in kilograms and its recorded time here. Imported weight selection is in Google Health connector settings."
+
+#: src/lib/help/settings.svelte.ts
+msgid "These entries form the patient's weight history and provide dated context for features that use weight."
+msgstr "These entries form the patient's weight history and provide dated context for features that use weight."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Check units and timestamps before saving. A missing entry does not mean zero weight; repeated readings can come from different sources."
+msgstr "Check units and timestamps before saving. A missing entry does not mean zero weight; repeated readings can come from different sources."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Record when the patient moved to a different timezone."
+msgstr "Record when the patient moved to a different timezone."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Dated timezone changes entered here and timezone information recorded during imports."
+msgstr "Dated timezone changes entered here and timezone information recorded during imports."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Choose the location timezone and local arrival time. Fix already-imported data is a separate operation here; inspect its affected period first."
+msgstr "Choose the location timezone and local arrival time. Fix already-imported data is a separate operation here; inspect its affected period first."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Timezone history helps place events and daily patterns at the correct local time."
+msgstr "Timezone history helps place events and daily patterns at the correct local time."
+
+#: src/lib/help/settings.svelte.ts
+msgid "A timezone is not just a fixed UTC offset: daylight-saving changes matter. A correction can affect existing data interpretation; ordinary display-format settings are in Appearance."
+msgstr "A timezone is not just a fixed UTC offset: daylight-saving changes matter. A correction can affect existing data interpretation; ordinary display-format settings are in Appearance."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Bring historical records from Nightscout into Nocturne."
+msgstr "Bring historical records from Nightscout into Nocturne."
+
+#: src/lib/help/settings.svelte.ts
+msgid "The Nightscout API or MongoDB source you configure."
+msgstr "The Nightscout API or MongoDB source you configure."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Choose the migration source, credentials, and optional date range here. Inspect active progress, skipped-record notes, and history."
+msgstr "Choose the migration source, credentials, and optional date range here. Inspect active progress, skipped-record notes, and history."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Successfully imported records become available to the normal charts and reports."
+msgstr "Successfully imported records become available to the normal charts and reports."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Keep source credentials private. Completion counts and skipped records matter; a finished job does not mean every source record was accepted. Migration is separate from ongoing connector sync."
+msgstr "Keep source credentials private. Completion counts and skipped records matter; a finished job does not mean every source record was accepted. Migration is separate from ongoing connector sync."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Inspect the transition status between Nightscout and Nocturne."
+msgstr "Inspect the transition status between Nightscout and Nocturne."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Server transition configuration and recorded transition status."
+msgstr "Server transition configuration and recorded transition status."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Review the status on this page. Migration history is under Data Migration; ongoing data sources are under Connectors & Apps."
+msgstr "Review the status on this page. Migration history is under Data Migration; ongoing data sources are under Connectors & Apps."
+
+#: src/lib/help/settings.svelte.ts
+msgid "The status helps the administrator see how the deployment is progressing."
+msgstr "The status helps the administrator see how the deployment is progressing."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Availability depends on the server's transition configuration. It is not a control for changing glucose values."
+msgstr "Availability depends on the server's transition configuration. It is not a control for changing glucose values."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Manage patient workspaces and platform access."
+msgstr "Manage patient workspaces and platform access."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Platform tenant records and administrator identities."
+msgstr "Platform tenant records and administrator identities."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Platform administrators manage tenant display names, slugs, and active status here."
+msgstr "Platform administrators manage tenant display names, slugs, and active status here."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Tenant selection separates each patient's records, configuration, and membership."
+msgstr "Tenant selection separates each patient's records, configuration, and membership."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Check the tenant before changing its status. A slug affects its address; platform permissions differ from a role inside one tenant."
+msgstr "Check the tenant before changing its status. A slug affects its address; platform permissions differ from a role inside one tenant."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Ask a connector to read a chosen historical period again."
+msgstr "Ask a connector to read a chosen historical period again."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Stored connector import watermarks and reset-job progress for the selected tenant."
+msgstr "Stored connector import watermarks and reset-job progress for the selected tenant."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Platform administrators choose Tenant, connector, and optional Lower bound here, then monitor or cancel the job."
+msgstr "Platform administrators choose Tenant, connector, and optional Lower bound here, then monitor or cancel the job."
+
+#: src/lib/help/settings.svelte.ts
+msgid "A successful re-read fills or updates the normal imported histories, using normal duplicate protection."
+msgstr "A successful re-read fills or updates the normal imported histories, using normal duplicate protection."
+
+#: src/lib/help/settings.svelte.ts
+msgid "This does not delete source data. It may be useful when an already-completed month received data late. Refresh inventory only scans availability and is not a historical re-import."
+msgstr "This does not delete source data. It may be useful when an already-completed month received data late. Refresh inventory only scans availability and is not a historical re-import."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Link a Discord identity and manage its use with Nocturne."
+msgstr "Link a Discord identity and manage its use with Nocturne."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Your linked chat identities and server bot configuration."
+msgstr "Your linked chat identities and server bot configuration."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Link, label, select the default, or revoke an identity here; follow the bot's server-install controls where available."
+msgstr "Link, label, select the default, or revoke an identity here; follow the bot's server-install controls where available."
+
+#: src/lib/help/settings.svelte.ts
+msgid "The linked identity supports bot interactions authorised for your account."
+msgstr "The linked identity supports bot interactions authorised for your account."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Bot availability depends on deployment configuration. Revoking a link does not delete patient data or messages already sent."
+msgstr "Bot availability depends on deployment configuration. Revoking a link does not delete patient data or messages already sent."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Review people requesting access to the instance."
+msgstr "Review people requesting access to the instance."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Pending access requests stored by the platform."
+msgstr "Pending access requests stored by the platform."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Administrators review and approve or deny requests here. Tenant membership is managed in Sharing & Privacy."
+msgstr "Administrators review and approve or deny requests here. Tenant membership is managed in Sharing & Privacy."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Decisions determine whether the requester can obtain the applicable access."
+msgstr "Decisions determine whether the requester can obtain the applicable access."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Inspect the identity and requested access. Platform access and membership in an individual tenant are different."
+msgstr "Inspect the identity and requested access. Platform access and membership in an individual tenant are different."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Audit history"
+msgstr "Audit history"
+
+#: src/lib/help/settings.svelte.ts
+msgid "Inspect recorded administrative actions."
+msgstr "Inspect recorded administrative actions."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Audit records retained by this server."
+msgstr "Audit records retained by this server."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Use the filters and detail controls here; access requires the relevant permission."
+msgstr "Use the filters and detail controls here; access requires the relevant permission."
+
+#: src/lib/help/settings.svelte.ts
+msgid "The history helps you understand who changed configuration or access."
+msgstr "The history helps you understand who changed configuration or access."
+
+#: src/lib/help/settings.svelte.ts
+msgid "Only events recorded by the server appear. Retention and visibility depend on deployment and permissions."
+msgstr "Only events recorded by the server appear. Retention and visibility depend on deployment and permissions."
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Official instructions and sources"
+msgstr "Official instructions and sources"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Provider screens and access rules can change. Check the original instructions alongside this Nocturne guide."
+msgstr "Provider screens and access rules can change. Check the original instructions alongside this Nocturne guide."
+
+#: src/lib/components/help/HelpBrowser.svelte
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Step-by-step setup"
+msgstr "Step-by-step setup"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Steps report"
+msgstr "Steps report"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Heart Rate report"
+msgstr "Heart Rate report"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Sleep report"
+msgstr "Sleep report"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Reference from the running application"
+msgstr "Reference from the running application"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Band"
+msgstr "Band"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "<0/> x <1/>"
+msgstr "<0/> x <1/>"
+
+#. 0: unit
+#: src/lib/components/help/HelpReference.svelte
+msgid "Glucose report bands in {0}. The inequality signs show which boundary belongs to each band."
+msgstr "Glucose report bands in {0}. The inequality signs show which boundary belongs to each band."
+
+#. 0: bg(facts.maximumPlausibleGlucose); 1: unit
+#: src/lib/components/help/HelpReference.svelte
+msgid "Glucose statistics exclude non-positive readings and values at or above {0} {1}. Missing or excluded readings are not treated as normal glucose. Reading percentages count distinct measurement times; duration measures use the reading cadence, so gaps matter."
+msgstr "Glucose statistics exclude non-positive readings and values at or above {0} {1}. Missing or excluded readings are not treated as normal glucose. Reading percentages count distinct measurement times; duration measures use the reading cadence, so gaps matter."
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Example — invented readings, using the real report chart"
+msgstr "Example — invented readings, using the real report chart"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "In this example, 76% is in range and 50% is in tight range. The 50% is already included in the 76%. Colours, textures, and chart styling use the same component as the reports."
+msgstr "In this example, 76% is in range and 50% is in tight range. The 50% is already included in the 76%. Colours, textures, and chart styling use the same component as the reports."
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Tight range is a subset of in range, so it is not an extra band to add to the total. Personal targets from Therapy and notification thresholds from Alert Rules are separate. Display rounding can make two nearby boundaries look alike in mmol/L; classification uses the stored glucose value."
+msgstr "Tight range is a subset of in range, so it is not an extra band to add to the total. Personal targets from Therapy and notification thresholds from Alert Rules are separate. Display rounding can make two nearby boundaries look alike in mmol/L; classification uses the stored glucose value."
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Callback path"
+msgstr "Callback path"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Default automatic sync interval"
+msgstr "Default automatic sync interval"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Default history when no start date is chosen"
+msgstr "Default history when no start date is chosen"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "History-days configuration bounds"
+msgstr "History-days configuration bounds"
+
+#. 0: facts.googleHealthMinimumHistoryDays; 1: facts.googleHealthMaximumHistoryDays
+#: src/lib/components/help/HelpReference.svelte
+msgid "{0}–{1} days. An explicit Import data from date uses a separate date setting."
+msgstr "{0}–{1} days. An explicit Import data from date uses a separate date setting."
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Used in Nocturne"
+msgstr "Used in Nocturne"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Importable types from this version's connector catalogue. Other inventory types can be visible without an import destination."
+msgstr "Importable types from this version's connector catalogue. Other inventory types can be visible without an import destination."
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Connected; choose and save the import selection"
+msgstr "Connected; choose and save the import selection"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Import is running; check historical progress"
+msgstr "Import is running; check historical progress"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Example connection states — no personal data"
+msgstr "Example connection states — no personal data"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "These use the same status-row component as Connectors & Apps. A connection can be configured before any data has been imported."
+msgstr "These use the same status-row component as Connectors & Apps. A connection can be configured before any data has been imported."
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Read scopes requested for supported imports"
+msgstr "Read scopes requested for supported imports"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Use these exact scopes in Google Cloud's Data Access configuration. Nocturne adds basic sign-in identification during connection. Do not substitute an unrelated nutrition scope for a required permission."
+msgstr "Use these exact scopes in Google Cloud's Data Access configuration. Nocturne adds basic sign-in identification during connection. Do not substitute an unrelated nutrition scope for a required permission."
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "The current reference values could not be loaded. The written guide is still available; retry to see this server's exact values."
+msgstr "The current reference values could not be loaded. The written guide is still available; retry to see this server's exact values."
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Retry reference values"
+msgstr "Retry reference values"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Loading current reference values…"
+msgstr "Loading current reference values…"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "Reference from this version"
+msgstr "Reference from this version"
+
+#: src/lib/components/help/HelpReference.svelte
+msgid "These values come from the same server models and capability catalogue used by this running Nocturne version."
+msgstr "These values come from the same server models and capability catalogue used by this running Nocturne version."
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Open settings in a new tab"
+msgstr "Open settings in a new tab"
