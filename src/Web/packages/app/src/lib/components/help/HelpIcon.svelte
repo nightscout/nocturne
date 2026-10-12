@@ -21,15 +21,9 @@
             size="icon-sm"
             aria-label={help.open ? "Close page help" : "Open page help"}
             aria-pressed={help.open}
+            data-help-toggle
             aria-controls={help.open ? "nocturne-page-help" : undefined}
-            onclick={(event) => {
-              const header = event.currentTarget.closest(
-                '[data-slot="sidebar-header"], header'
-              );
-              help.top = Math.max(
-                0,
-                header?.getBoundingClientRect().bottom ?? 64
-              );
+            onclick={() => {
               help.toggle(page.url.pathname);
               sidebar?.setOpenMobile(false);
             }}

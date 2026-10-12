@@ -124,6 +124,7 @@
   );
 
   function handleCommandPaletteKeydown(e: KeyboardEvent) {
+    if (help.blocking) return;
     if ((e.metaKey || e.ctrlKey) && e.key === "k") {
       e.preventDefault();
       commandPalette.open = !commandPalette.open;
@@ -241,6 +242,7 @@
       <div
         class="sticky top-(--mobile-header-offset,0px) z-40 transition-all duration-300 md:top-0"
         bind:offsetHeight={bannerStripHeight}
+        inert={help.blocking}
       >
           <HelpBar />
           {#if data.isDemo}
