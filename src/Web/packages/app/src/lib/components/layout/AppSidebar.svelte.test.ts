@@ -126,14 +126,20 @@ describe("AppSidebar", () => {
     pageState.data = { effectivePermissions: ["*"] };
     render(Harness, { user: MEMBER });
     await page.getByRole("textbox", { name: "Report filter" }).fill("unsaved selection");
+    const originalSteps = link("Steps").element();
+    const originalPosition = originalSteps.getBoundingClientRect();
     await group("Open page help").click();
+    expect(link("Steps").element()).toBe(originalSteps);
+    expect(originalSteps.getBoundingClientRect().left).toBe(originalPosition.left);
+    expect(originalSteps.getBoundingClientRect().top).toBe(originalPosition.top);
     const docs = page.getByRole("navigation", { name: "Documentation navigation" });
-    await docs.getByRole("button", { name: "Heart Rate", exact: true }).click();
+    await docs.getByRole("link", { name: "Heart Rate", exact: true }).click();
     await expect.element(page.getByRole("heading", { name: "Heart Rate", exact: true })).toBeVisible();
     expect(pageState.url.pathname).toBe("/reports/steps");
     await group("Close page help").click();
     await expect.element(page.getByRole("textbox", { name: "Report filter" })).toHaveValue("unsaved selection");
     await expect.element(link("Steps")).toHaveAttribute("data-active", "true");
+    await vi.waitFor(() => expect(originalSteps.getBoundingClientRect().top).toBe(originalPosition.top));
   });
 
   it("restores an intentionally collapsed active menu after page help", async () => {

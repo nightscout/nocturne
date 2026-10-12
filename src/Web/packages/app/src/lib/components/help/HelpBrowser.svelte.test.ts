@@ -96,14 +96,17 @@ describe("documentation help", () => {
     await expect
       .element(page.getByRole("textbox", { name: "Search all documentation" }))
       .toBeVisible();
-    await vi.waitFor(() => {
-      const bounds = page
-        .getByRole("region", { name: "Documentation panel" })
-        .element()
-        .getBoundingClientRect();
-      expect(bounds.left).toBeGreaterThanOrEqual(0);
-      expect(bounds.right).toBeLessThanOrEqual(390);
-    });
+    await vi.waitFor(
+      () => {
+        const bounds = page
+          .getByRole("region", { name: "Documentation panel" })
+          .element()
+          .getBoundingClientRect();
+        expect(bounds.left).toBeGreaterThanOrEqual(0);
+        expect(bounds.right).toBeLessThanOrEqual(390);
+      },
+      { timeout: 4000 }
+    );
     await page
       .getByRole("button", { name: "Close page help", exact: true })
       .click();

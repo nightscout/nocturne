@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import HelpIcon from "$lib/components/help/HelpIcon.svelte";
   import { getHelpContext } from "$lib/help/help-context.svelte";
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
 
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Collapsible from "$lib/components/ui/collapsible";
@@ -153,12 +153,17 @@
 
   // Track which collapsible menus are open
   let openMenus = $state<Record<string, boolean>>({});
-  const pageHelp = $derived(help?.open && help.layout === "page");
+  let navigationElement = $state<HTMLElement | null>(null);
+  const pageHelp = $derived(help?.open && (help.layout === "page" || help.layout === "drawer"));
   // Documentation expansion must not alter the user's app navigation state.
   $effect(() => {
     if (!pageHelp) return;
     const saved = untrack(() => ({ ...openMenus }));
-    return () => { openMenus = saved; };
+    const savedScroll = untrack(() => navigationElement?.scrollTop ?? 0);
+    return () => {
+      openMenus = saved;
+      void tick().then(() => { if (!help?.open && navigationElement) navigationElement.scrollTop = savedScroll; });
+    };
   });
 
   const isActive = (item: NavItem | NavLink): boolean => {
@@ -224,7 +229,7 @@
 
   <!-- Glucose Widget (fixed, not scrollable). One tenant's latest reading. -->
   {#if !tenantless}
-    <Sidebar.Group>
+    <Sidebar.Group inert={help?.blocking}>
       <Sidebar.GroupContent>
         <SidebarGlucoseWidget />
       </Sidebar.GroupContent>
@@ -263,7 +268,7 @@
   <!-- The switcher needs a host to navigate to, so unlike the Tenants nav item it stays gated
        on baseDomain. -->
   {#if baseDomain && totalTenantCount > 1 && tenantTargets.length > 0 && !isGuestSession}
-    <div class="border-b px-3 py-2 group-data-[collapsible=icon]:hidden">
+    <div class="border-b px-3 py-2 group-data-[collapsible=icon]:hidden" inert={help?.blocking}>
       <p
         class="mb-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5"
       >
@@ -292,7 +297,7 @@
     </div>
   {/if}
 
-  <Sidebar.Content inert={help?.open && !pageHelp}>
+  <Sidebar.Content bind:ref={navigationElement} inert={help?.open && !pageHelp} role={help?.open && help.layout === "drawer" ? "navigation" : undefined} aria-label={help?.open && help.layout === "drawer" ? "Documentation navigation" : undefined} data-help-navigation={help?.open && help.layout === "drawer" ? "" : undefined}>
     <!-- Navigation -->
     <Sidebar.Group>
       <Sidebar.GroupLabel>Navigation</Sidebar.GroupLabel>

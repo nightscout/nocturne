@@ -72,8 +72,7 @@
     </Select.Root>
     <p class="text-sm text-muted-foreground">
       {#if help.layout === "drawer"}
-        Slides out from the navigation edge and covers the menu and page. Browse
-        guides using a separate copy of your familiar navigation.
+        Opens like a transparent book from the boundary between menu and page. Your existing navigation stays in place and browses documentation while help is open.
       {:else if help.layout === "right"}
         Opens a narrower drawer on the right, with guide navigation inside the
         panel.

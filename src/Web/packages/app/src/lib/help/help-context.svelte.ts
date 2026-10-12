@@ -33,6 +33,7 @@ export function createHelpContext() {
   let navigation = $state<NavItem[]>([]);
   let layout = $state<HelpLayout>("drawer");
   let top = $state(64);
+  let seam = $state(0);
   let compact = $state(false);
 
   function measureHeaderTop() {
@@ -44,6 +45,9 @@ export function createHelpContext() {
       return rect.width > 0 && rect.right > 0 && rect.left < window.innerWidth;
     });
     const rect = header?.getBoundingClientRect();
+    seam = header?.hasAttribute("data-help-header")
+      ? 0
+      : Math.max(0, rect?.right ?? 0);
     return header?.hasAttribute("data-help-header")
       ? Math.max(rect?.height ?? 56, rect?.bottom ?? 56)
       : Math.max(0, rect?.bottom ?? 64);
@@ -90,6 +94,9 @@ export function createHelpContext() {
     },
     get top() {
       return top;
+    },
+    get seam() {
+      return seam;
     },
     setLayout(value: HelpLayout) {
       layout = value;
