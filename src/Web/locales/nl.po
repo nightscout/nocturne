@@ -26801,7 +26801,6 @@ msgstr "Pagina vervangen"
 msgid "Report notes"
 msgstr ""
 
-#: src/lib/components/help/HelpPageView.svelte
 #: src/lib/components/help/HelpPanel.svelte
 msgid "Close documentation"
 msgstr "Documentatie sluiten"
@@ -26849,3 +26848,36 @@ msgstr "<0/> Sluit hulp met het boek naast Nocturne, de sluitknop of Escape. Je 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Opens like a transparent book from the boundary between menu and page. Your existing navigation stays in place and browses documentation while help is open."
 msgstr "Opent als een transparant boek vanaf de scheiding tussen menu en pagina. Je bestaande navigatie blijft op zijn plaats en navigeert door documentatie zolang hulp open is."
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Documentation transparency"
+msgstr "Transparantie van documentatie"
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Transparency <0/>"
+msgstr "Transparantie <0/>"
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Documentation background blur"
+msgstr "Vervaging van de achtergrond"
+
+#. 0.0: help.blur
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Background blur <0>{0} px</0>"
+msgstr "Vervaging <0>{0} px</0>"
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Only the background layer changes; documentation text stays fully visible. Saved in this browser."
+msgstr "Alleen de achtergrondlaag verandert; de documentatietekst blijft volledig zichtbaar. Opgeslagen in deze browser."
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Reset help appearance"
+msgstr "Standaardweergave herstellen"
+
+#: src/lib/components/help/HelpPanel.svelte
+msgid "Display options"
+msgstr "Weergaveopties"
+
+#: src/lib/components/help/HelpPanel.svelte
+msgid "Documentation appearance"
+msgstr "Documentatieweergave"

@@ -5,10 +5,18 @@
   import { getHelpContext } from "$lib/help/help-context.svelte";
   import HelpBrowser from "./HelpBrowser.svelte";
   import HelpNavigation from "./HelpNavigation.svelte";
+  import HelpAppearanceControls from "./HelpAppearanceControls.svelte";
+  import * as Popover from "$lib/components/ui/popover";
   const help = getHelpContext();
+  const bookLayout = $derived(
+    help?.layout === "drawer" || help?.layout === "page"
+  );
   function unfold(node: HTMLElement) {
     return fly(node, {
-      x: help?.layout === "drawer" ? -node.getBoundingClientRect().width : 240,
+      x:
+        help?.layout === "drawer" || help?.layout === "page"
+          ? -node.getBoundingClientRect().width
+          : 240,
       opacity: 1,
       duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches
         ? 0
@@ -31,22 +39,41 @@
   tabindex="-1"
   aria-label="Documentation panel"
   class="help-panel flex min-h-0 flex-col text-foreground"
-  class:book-leaf={help?.layout === "drawer"}
+  class:book-leaf={bookLayout}
   transition:unfold
 >
   <header
-    class={help?.layout === "drawer"
-      ? "flex shrink-0 items-center justify-end px-4 pt-4"
+    class={bookLayout
+      ? "flex shrink-0 items-center justify-end gap-2 px-4 pt-4"
       : "flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3"}
   >
-    {#if help?.layout !== "drawer"}<div>
+    {#if !bookLayout}<div>
         <p class="font-semibold">Documentation</p>
         <p class="text-xs text-muted-foreground">
           Your page stays open underneath
         </p>
       </div>{/if}
+    <Popover.Root>
+      <Popover.Trigger>
+        {#snippet child({ props })}<Button
+            {...props}
+            variant="outline"
+            size="sm"
+          >
+            Display options
+          </Button>{/snippet}
+      </Popover.Trigger>
+      <Popover.Content
+        role="group"
+        class="z-70"
+        aria-label="Documentation appearance"
+        data-help-controls
+      >
+        <HelpAppearanceControls />
+      </Popover.Content>
+    </Popover.Root>
     <Button
-      variant={help?.layout === "drawer" ? "outline" : "ghost"}
+      variant={bookLayout ? "outline" : "ghost"}
       aria-label="Close documentation"
       onclick={() => {
         if (help) help.open = false;
@@ -60,8 +87,8 @@
       bind:this={content}
       class="min-w-0 flex-1 overflow-y-auto overscroll-contain"
     >
-      {#if help?.layout !== "drawer" || help.seam === 0}
-        <details class="border-b" open={help?.layout === "drawer"}>
+      {#if !bookLayout || help?.seam === 0}
+        <details class="border-b" open={bookLayout}>
           <summary class="cursor-pointer px-4 py-3 text-sm font-medium">
             Browse documentation
           </summary>
@@ -79,10 +106,14 @@
   .help-panel {
     height: 100%;
     outline: none;
-    background: var(--background);
+    background: color-mix(
+      in oklab,
+      var(--background) var(--help-opacity, 78%),
+      transparent
+    );
+    backdrop-filter: blur(var(--help-blur, 2px));
   }
   .book-leaf {
-    background: color-mix(in oklab, var(--background) 88%, transparent);
     border-left: 1px solid var(--border);
   }
   .compact-navigation {

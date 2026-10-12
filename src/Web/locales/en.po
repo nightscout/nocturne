@@ -26801,7 +26801,6 @@ msgstr "Replace page"
 msgid "Report notes"
 msgstr "Report notes"
 
-#: src/lib/components/help/HelpPageView.svelte
 #: src/lib/components/help/HelpPanel.svelte
 msgid "Close documentation"
 msgstr "Close documentation"
@@ -26851,3 +26850,36 @@ msgstr "<0/> Close help with the book beside Nocturne, the close button, or Esca
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Opens like a transparent book from the boundary between menu and page. Your existing navigation stays in place and browses documentation while help is open."
 msgstr "Opens like a transparent book from the boundary between menu and page. Your existing navigation stays in place and browses documentation while help is open."
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Documentation transparency"
+msgstr "Documentation transparency"
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Transparency <0/>"
+msgstr "Transparency <0/>"
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Documentation background blur"
+msgstr "Documentation background blur"
+
+#. 0.0: help.blur
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Background blur <0>{0} px</0>"
+msgstr "Background blur <0>{0} px</0>"
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Only the background layer changes; documentation text stays fully visible. Saved in this browser."
+msgstr "Only the background layer changes; documentation text stays fully visible. Saved in this browser."
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Reset help appearance"
+msgstr "Reset help appearance"
+
+#: src/lib/components/help/HelpPanel.svelte
+msgid "Display options"
+msgstr "Display options"
+
+#: src/lib/components/help/HelpPanel.svelte
+msgid "Documentation appearance"
+msgstr "Documentation appearance"

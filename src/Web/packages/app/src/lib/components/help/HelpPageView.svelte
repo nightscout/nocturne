@@ -1,23 +1,12 @@
 <script lang="ts">
   import { tick, type Snippet } from "svelte";
   import { getHelpContext } from "$lib/help/help-context.svelte";
-  import HelpBrowser from "./HelpBrowser.svelte";
   import HelpPanel from "./HelpPanel.svelte";
-  import { Button } from "$lib/components/ui/button";
   import { fly } from "svelte/transition";
   const { children }: { children: Snippet } = $props();
   const help = getHelpContext();
   // @wc-ignore
   const tabKey = "Tab";
-  function openBook(node: HTMLElement) {
-    return fly(node, {
-      x: -node.getBoundingClientRect().width,
-      opacity: 1,
-      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? 0
-        : 2000,
-    });
-  }
   $effect(() => {
     if (!help?.open) return;
     const active = document.activeElement;
@@ -73,7 +62,7 @@
       const panel = document.querySelector("[data-help-panel]");
       const focusable = Array.from(
         document.querySelectorAll<HTMLElement>(
-          '[data-help-toggle], [data-help-panel] button, [data-help-panel] a[href], [data-help-panel] input, [data-help-panel] summary, [data-help-panel] [tabindex="0"], [data-help-navigation] button, [data-help-navigation] a[href]'
+          '[data-help-toggle], [data-help-panel] button, [data-help-panel] a[href], [data-help-panel] input, [data-help-panel] summary, [data-help-panel] [tabindex="0"], [data-help-navigation] button, [data-help-navigation] a[href], [data-help-controls] button, [data-help-controls] [tabindex="0"]'
         )
       ).filter(
         (element) =>
@@ -105,7 +94,7 @@
       return;
     if (
       !event.target.closest(
-        "[data-help-panel], [data-help-toggle], [data-help-navigation]"
+        "[data-help-panel], [data-help-toggle], [data-help-navigation], [data-help-controls]"
       )
     ) {
       document
@@ -117,34 +106,18 @@
 
 <!-- Keep page controls and loaded data mounted while documentation replaces their view. -->
 <div
-  class={help?.open && help.layout === "alongside" ? "alongside" : "contents"}
-  style="--help-top: {help?.top ?? 64}px; --help-seam: {help?.seam ?? 0}px"
+  class={help?.open && help.layout === "page"
+    ? "page-stack"
+    : help?.open && help.layout === "alongside"
+      ? "alongside"
+      : "contents"}
+  style="--help-top: {help?.top ?? 64}px; --help-seam: {help?.seam ??
+    0}px; --help-opacity: {100 -
+    (help?.transparency ?? 22)}%; --help-blur: {help?.blur ?? 2}px"
 >
-  {#if help?.open && help.layout === "page"}
-    <div class="page-guide">
-      <div class="page-guide-leaf" transition:openBook>
-        <div class="flex justify-end px-4 pt-4">
-          <Button
-            variant="outline"
-            onclick={() => {
-              if (help) help.open = false;
-            }}
-          >
-            Close documentation
-          </Button>
-        </div>
-        <HelpBrowser />
-      </div>
-    </div>
-  {/if}
   <div
-    hidden={help?.open && help.layout === "page"}
     inert={help?.blocking || (help?.open && help.layout === "page")}
-    class={help?.open && help.layout === "page"
-      ? "hidden"
-      : help?.open && help.layout === "alongside"
-        ? "min-w-0"
-        : "contents"}
+    class={help?.open && help.layout === "alongside" ? "min-w-0" : "contents"}
   >
     {@render children()}
   </div>
@@ -163,10 +136,11 @@
       ></div>
     </div>
   {/if}
-  {#if help?.open && help.layout !== "page"}
+  {#if help?.open}
     <div
       class="help-surface"
       class:drawer={help.layout === "drawer"}
+      class:page={help.layout === "page"}
       class:right={help.layout === "right"}
       class:docked={help.layout === "alongside"}
     >
@@ -176,12 +150,18 @@
 </div>
 
 <style>
-  .page-guide {
-    overflow: clip;
+  .page-stack {
+    position: relative;
+    min-height: 100dvh;
   }
-  .page-guide-leaf {
-    background: color-mix(in oklab, var(--background) 94%, transparent);
-    border-left: 1px solid var(--border);
+  .help-surface.page {
+    position: absolute;
+    z-index: 20;
+    top: 0;
+    left: 0;
+    border: 0;
+    box-shadow: none;
+    overflow: clip;
   }
   .help-surface {
     position: fixed;

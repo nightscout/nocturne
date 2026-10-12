@@ -4,6 +4,31 @@ import type { NavItem } from "$lib/navigation/app-navigation.svelte";
 const HELP = Symbol("nocturne-help");
 const STORAGE_KEY = "nocturne-help-visibility";
 const LAYOUT_KEY = "nocturne-help-layout";
+const APPEARANCE_KEY = "nocturne-help-appearance";
+export type HelpAppearance = { transparency: number; blur: number };
+function appearanceFromStorage(value: string | null): HelpAppearance {
+  try {
+    const parsed: unknown = JSON.parse(value ?? "null");
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "transparency" in parsed &&
+      "blur" in parsed &&
+      typeof parsed.transparency === "number" &&
+      Number.isFinite(parsed.transparency) &&
+      parsed.transparency >= 0 &&
+      parsed.transparency <= 100 &&
+      typeof parsed.blur === "number" &&
+      Number.isFinite(parsed.blur) &&
+      parsed.blur >= 0 &&
+      parsed.blur <= 20
+    )
+      return { transparency: parsed.transparency, blur: parsed.blur };
+  } catch {
+    /* Invalid or unavailable storage uses the defaults. */
+  }
+  return { transparency: 22, blur: 2 };
+}
 export const helpLayouts = ["drawer", "right", "alongside", "page"] as const;
 export type HelpLayout = (typeof helpLayouts)[number];
 export function isHelpLayout(value: unknown): value is HelpLayout {
@@ -35,6 +60,7 @@ export function createHelpContext() {
   let top = $state(64);
   let seam = $state(0);
   let compact = $state(false);
+  let appearance = $state<HelpAppearance>({ transparency: 22, blur: 2 });
 
   function measureHeaderTop() {
     const headers = document.querySelectorAll<HTMLElement>(
@@ -54,6 +80,18 @@ export function createHelpContext() {
   }
 
   onMount(() => {
+    const anchors = new ResizeObserver(() => {
+      observeHeaders();
+      if (open) top = measureHeaderTop();
+    });
+    function observeHeaders() {
+      document
+        .querySelectorAll<HTMLElement>(
+          '[data-slot="sidebar-header"], [data-help-header]'
+        )
+        .forEach((header) => anchors.observe(header));
+    }
+    observeHeaders();
     const media = window.matchMedia("(max-width: 1100px)");
     const syncSize = () => {
       compact = media.matches;
@@ -65,6 +103,7 @@ export function createHelpContext() {
       if (isHelpMode(saved)) mode = saved;
       const savedLayout = localStorage.getItem(LAYOUT_KEY);
       if (isHelpLayout(savedLayout)) layout = savedLayout;
+      appearance = appearanceFromStorage(localStorage.getItem(APPEARANCE_KEY));
     } catch {
       /* Help remains usable when browser storage is unavailable. */
     }
@@ -77,15 +116,32 @@ export function createHelpContext() {
       if (event.key === LAYOUT_KEY) {
         layout = isHelpLayout(event.newValue) ? event.newValue : "drawer";
       }
+      if (event.key === APPEARANCE_KEY)
+        appearance = appearanceFromStorage(event.newValue);
     };
     window.addEventListener("storage", sync);
     return () => {
+      anchors.disconnect();
       window.removeEventListener("storage", sync);
       media.removeEventListener("change", syncSize);
     };
   });
 
   const help = {
+    get transparency() {
+      return appearance.transparency;
+    },
+    get blur() {
+      return appearance.blur;
+    },
+    setAppearance(value: HelpAppearance) {
+      appearance = appearanceFromStorage(JSON.stringify(value));
+      try {
+        localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance));
+      } catch {
+        /* Session-only fallback. */
+      }
+    },
     get blocking() {
       return open && layout !== "page" && (layout !== "alongside" || compact);
     },

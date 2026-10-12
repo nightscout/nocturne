@@ -1,5 +1,6 @@
 <script lang="ts">
   import BookOpen from "@lucide/svelte/icons/book-open";
+  import HelpAppearanceControls from "./HelpAppearanceControls.svelte";
   import * as Select from "$lib/components/ui/select";
   import {
     getHelpContext,
@@ -86,5 +87,6 @@
       Close help with the book beside Nocturne, the close button, or Escape. Your
       page and its inputs stay in place.
     </p>
+    <HelpAppearanceControls />
   </section>
 {/if}
