@@ -1,7 +1,13 @@
 <script lang="ts">
   import BookOpen from "@lucide/svelte/icons/book-open";
   import * as Select from "$lib/components/ui/select";
-  import { getHelpContext, isHelpMode } from "$lib/help/help-context.svelte";
+  import {
+    getHelpContext,
+    isHelpMode,
+    isHelpLayout,
+    helpLayouts,
+    helpLayoutLabel,
+  } from "$lib/help/help-context.svelte";
   const help = getHelpContext();
 </script>
 
@@ -44,6 +50,42 @@
     </Select.Root>
     <p class="text-sm text-muted-foreground">
       When hidden, help can always be enabled again here.
+    </p>
+    <label class="block text-sm font-medium" for="help-layout">
+      Documentation layout
+    </label>
+    <Select.Root
+      type="single"
+      value={help.layout}
+      onValueChange={(value) => {
+        if (isHelpLayout(value)) help.setLayout(value);
+      }}
+    >
+      <Select.Trigger id="help-layout" class="w-full sm:max-w-sm">
+        {helpLayoutLabel(help.layout)}
+      </Select.Trigger>
+      <Select.Content>
+        {#each helpLayouts as layout (layout)}
+          <Select.Item value={layout}>{helpLayoutLabel(layout)}</Select.Item>
+        {/each}
+      </Select.Content>
+    </Select.Root>
+    <p class="text-sm text-muted-foreground">
+      {#if help.layout === "drawer"}
+        Slides out from the navigation edge and covers the menu and page. Browse
+        guides using a separate copy of your familiar navigation.
+      {:else if help.layout === "right"}
+        Opens a narrower drawer on the right, with guide navigation inside the
+        panel.
+      {:else if help.layout === "alongside"}
+        Keeps the page usable beside its guide. On smaller screens, opens a
+        full-width drawer.
+      {:else}
+        Replaces the page content temporarily and uses the existing menu for
+        documentation.
+      {/if}
+      Close help with the book beside Nocturne, the close button, or Escape. Your
+      page and its inputs stay in place.
     </p>
   </section>
 {/if}

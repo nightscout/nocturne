@@ -5,6 +5,7 @@
   import HelpPageView from "./HelpPageView.svelte";
   import HelpIcon from "./HelpIcon.svelte";
   import HelpPreferences from "./HelpPreferences.svelte";
+  import { Input } from "$lib/components/ui/input";
   const help = createHelpContext();
   help.navigation = buildAppNavigation({
     user: {},
@@ -17,15 +18,16 @@
 </script>
 
 <div class="min-h-screen bg-background text-foreground">
-  <div class="flex items-center gap-2 border-b p-4 font-bold">
+  <header class="flex items-center gap-2 border-b p-4 font-bold">
     Nocturne <HelpIcon />
-  </div>
+  </header>
   <HelpBar />
   <main>
     <HelpPageView>
       <div class="mx-auto max-w-4xl space-y-6 p-6">
         <h1 class="text-2xl font-bold">Steps</h1>
         <p>Your activity report stays open while you explore documentation.</p>
+        <Input aria-label="Report notes" />
         <HelpPreferences />
       </div>
     </HelpPageView>

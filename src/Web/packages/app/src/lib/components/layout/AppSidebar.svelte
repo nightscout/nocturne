@@ -2,6 +2,7 @@
   import { page } from "$app/state";
   import HelpIcon from "$lib/components/help/HelpIcon.svelte";
   import { getHelpContext } from "$lib/help/help-context.svelte";
+  import { untrack } from "svelte";
 
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Collapsible from "$lib/components/ui/collapsible";
@@ -152,9 +153,16 @@
 
   // Track which collapsible menus are open
   let openMenus = $state<Record<string, boolean>>({});
+  const pageHelp = $derived(help?.open && help.layout === "page");
+  // Documentation expansion must not alter the user's app navigation state.
+  $effect(() => {
+    if (!pageHelp) return;
+    const saved = untrack(() => ({ ...openMenus }));
+    return () => { openMenus = saved; };
+  });
 
   const isActive = (item: NavItem | NavLink): boolean => {
-    const path = help?.open ? help.path : page.url.pathname;
+    const path = pageHelp ? help!.path : page.url.pathname;
     if (item.href && item?.strict) {
       return path === item.href;
     }
@@ -210,6 +218,8 @@
     <HelpIcon />
     <Sidebar.Trigger />
   </Sidebar.Header>
+
+  <div class="contents" inert={help?.open && !pageHelp}>
 
   <!-- Glucose Widget (fixed, not scrollable). One tenant's latest reading. -->
   {#if !tenantless}
@@ -281,7 +291,7 @@
     </div>
   {/if}
 
-  <Sidebar.Content>
+  <Sidebar.Content inert={help?.open && !pageHelp}>
     <!-- Navigation -->
     <Sidebar.Group>
       <Sidebar.GroupLabel>Navigation</Sidebar.GroupLabel>
@@ -354,8 +364,9 @@
       </Sidebar.GroupContent>
     </Sidebar.Group>
   </Sidebar.Content>
+  </div>
 
-  <Sidebar.Footer>
+  <Sidebar.Footer inert={help?.open}>
     <Sidebar.Menu>
       {#if !langPrefKnown}
         <Sidebar.MenuItem class="group-data-[collapsible=icon]:hidden">

@@ -13734,6 +13734,7 @@ msgstr ""
 
 #: ../portal/src/lib/components/SiteFooter.svelte
 #: src/lib/components/help/HelpBrowser.svelte
+#: src/lib/components/help/HelpPanel.svelte
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Documentation"
 msgstr ""
@@ -26669,8 +26670,9 @@ msgstr ""
 #~ msgid "Explore help in the same layout as Nocturne. Close to return to your page."
 #~ msgstr ""
 
-#~ msgid "Documentation navigation"
-#~ msgstr ""
+#: src/lib/components/help/HelpNavigation.svelte
+msgid "Documentation navigation"
+msgstr ""
 
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Search all documentation"
@@ -26776,4 +26778,69 @@ msgstr ""
 
 #: src/lib/components/layout/AppSidebarHarness.test.svelte
 msgid "Underlying report"
+msgstr ""
+
+#: src/lib/help/help-context.svelte.ts
+msgid "Navigation drawer"
+msgstr ""
+
+#: src/lib/help/help-context.svelte.ts
+msgid "Right drawer"
+msgstr ""
+
+#: src/lib/help/help-context.svelte.ts
+msgid "Side by side"
+msgstr ""
+
+#: src/lib/help/help-context.svelte.ts
+msgid "Replace page"
+msgstr ""
+
+#: src/lib/components/help/HelpHarness.test.svelte
+msgid "Report notes"
+msgstr ""
+
+#: src/lib/components/help/HelpPageView.svelte
+#: src/lib/components/help/HelpPanel.svelte
+msgid "Close documentation"
+msgstr ""
+
+#: src/lib/components/help/HelpPanel.svelte
+msgid "Documentation panel"
+msgstr ""
+
+#: src/lib/components/help/HelpPanel.svelte
+msgid "Your page stays open underneath"
+msgstr ""
+
+#: src/lib/components/help/HelpPanel.svelte
+msgid "<0/>Close"
+msgstr ""
+
+#: src/lib/components/help/HelpPanel.svelte
+msgid "Browse documentation"
+msgstr ""
+
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "Slides out from the navigation edge and covers the menu and page. Browse guides using a separate copy of your familiar navigation."
+msgstr ""
+
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "Opens a narrower drawer on the right, with guide navigation inside the panel."
+msgstr ""
+
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "Keeps the page usable beside its guide. On smaller screens, opens a full-width drawer."
+msgstr ""
+
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "Replaces the page content temporarily and uses the existing menu for documentation."
+msgstr ""
+
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "Documentation layout"
+msgstr ""
+
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "<0/> Close help with the book beside Nocturne, the close button, or Escape. Your page and its inputs stay in place."
 msgstr ""
