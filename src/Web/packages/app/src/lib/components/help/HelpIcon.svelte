@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import Book from "@lucide/svelte/icons/book";
-  import BookX from "@lucide/svelte/icons/book-x";
+  import BookOpen from "@lucide/svelte/icons/book-open";
+  import X from "@lucide/svelte/icons/x";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { Button } from "$lib/components/ui/button";
   import { getHelpContext } from "$lib/help/help-context.svelte";
@@ -28,9 +28,12 @@
               sidebar?.setOpenMobile(false);
             }}
           >
-            {#if help.open}<BookX class="size-4" />{:else}<Book
-                class="size-4"
-              />{/if}
+            <span class="relative">
+              <BookOpen class="size-4" />{#if help.open}<X
+                  class="absolute -right-1 -top-1 size-2.5"
+                  strokeWidth={3}
+                />{/if}
+            </span>
           </Button>
         {/snippet}
       </Tooltip.Trigger><Tooltip.Content>

@@ -26674,6 +26674,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/help/HelpNavigation.svelte
+#: src/lib/components/layout/AppSidebar.svelte
 msgid "Documentation navigation"
 msgstr ""
 
@@ -26803,7 +26804,6 @@ msgstr ""
 msgid "Report notes"
 msgstr ""
 
-#: src/lib/components/help/HelpPageView.svelte
 #: src/lib/components/help/HelpPanel.svelte
 msgid "Close documentation"
 msgstr ""
@@ -26824,9 +26824,8 @@ msgstr ""
 msgid "Browse documentation"
 msgstr ""
 
-#: src/lib/components/help/HelpPreferences.svelte
-msgid "Slides out from the navigation edge and covers the menu and page. Browse guides using a separate copy of your familiar navigation."
-msgstr ""
+#~ msgid "Slides out from the navigation edge and covers the menu and page. Browse guides using a separate copy of your familiar navigation."
+#~ msgstr ""
 
 #: src/lib/components/help/HelpPreferences.svelte
 msgid "Opens a narrower drawer on the right, with guide navigation inside the panel."
@@ -26848,6 +26847,42 @@ msgstr ""
 msgid "<0/> Close help with the book beside Nocturne, the close button, or Escape. Your page and its inputs stay in place."
 msgstr ""
 
-#: src/lib/components/help/HelpPageView.svelte
-msgid "Tab"
+#~ msgid "Tab"
+#~ msgstr ""
+
+#: src/lib/components/help/HelpPreferences.svelte
+msgid "Opens like a transparent book from the boundary between menu and page. Your existing navigation stays in place and browses documentation while help is open."
+msgstr ""
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Documentation transparency"
+msgstr ""
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Transparency <0/>"
+msgstr ""
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Documentation background blur"
+msgstr ""
+
+#. 0.0: help.blur
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Background blur <0>{0} px</0>"
+msgstr ""
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Only the background layer changes; documentation text stays fully visible. Saved in this browser."
+msgstr ""
+
+#: src/lib/components/help/HelpAppearanceControls.svelte
+msgid "Reset help appearance"
+msgstr ""
+
+#: src/lib/components/help/HelpPanel.svelte
+msgid "Display options"
+msgstr ""
+
+#: src/lib/components/help/HelpPanel.svelte
+msgid "Documentation appearance"
 msgstr ""

@@ -1,11 +1,32 @@
 <script lang="ts">
   import { tick, type Snippet } from "svelte";
   import { getHelpContext } from "$lib/help/help-context.svelte";
-  import HelpBrowser from "./HelpBrowser.svelte";
   import HelpPanel from "./HelpPanel.svelte";
-  import { Button } from "$lib/components/ui/button";
+  import { fly } from "svelte/transition";
   const { children }: { children: Snippet } = $props();
   const help = getHelpContext();
+  // @wc-ignore
+  const tabKey = "Tab";
+  $effect(() => {
+    if (!help?.open) return;
+    const active = document.activeElement;
+    const book = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-help-toggle]")
+    ).find((element) => element.getClientRects().length > 0);
+    const previous =
+      active instanceof HTMLElement &&
+      active !== document.body &&
+      active.isConnected &&
+      !active.closest("[data-help-panel]")
+        ? active
+        : book;
+    return () => {
+      void tick().then(() => {
+        if (!help.open && previous?.isConnected)
+          previous.focus({ preventScroll: true });
+      });
+    };
+  });
   $effect(() => {
     if (!help?.blocking) return;
     const overflow = document.body.style.overflow;
@@ -30,7 +51,7 @@
   onkeydown={(event) => {
     if (help?.open && event.key === "Escape" && !event.defaultPrevented)
       help.open = false;
-    if (help?.blocking && event.key === "Tab" && !event.defaultPrevented) {
+    if (help?.blocking && event.key === tabKey && !event.defaultPrevented) {
       // A higher-priority app dialog (for example an alert) owns its own focus.
       if (
         event.target instanceof Element &&
@@ -41,7 +62,7 @@
       const panel = document.querySelector("[data-help-panel]");
       const focusable = Array.from(
         document.querySelectorAll<HTMLElement>(
-          '[data-help-toggle], [data-help-panel] button, [data-help-panel] a[href], [data-help-panel] input, [data-help-panel] summary, [data-help-panel] [tabindex="0"]'
+          '[data-help-toggle], [data-help-panel] button, [data-help-panel] a[href], [data-help-panel] input, [data-help-panel] summary, [data-help-panel] [tabindex="0"], [data-help-navigation] button, [data-help-navigation] a[href], [data-help-controls] button, [data-help-controls] [tabindex="0"]'
         )
       ).filter(
         (element) =>
@@ -71,7 +92,11 @@
       !event.target.closest("[data-help-panel]")
     )
       return;
-    if (!event.target.closest("[data-help-panel], [data-help-toggle]")) {
+    if (
+      !event.target.closest(
+        "[data-help-panel], [data-help-toggle], [data-help-navigation], [data-help-controls]"
+      )
+    ) {
       document
         .querySelector<HTMLElement>("[data-help-panel]")
         ?.focus({ preventScroll: true });
@@ -79,39 +104,43 @@
   }}
 />
 
-{#if help?.open && help.layout === "page"}
-  <div class="flex justify-end px-4 pt-4">
-    <Button
-      variant="outline"
-      onclick={() => {
-        if (help) help.open = false;
-      }}
-    >
-      Close documentation
-    </Button>
-  </div>
-  <HelpBrowser />
-{/if}
 <!-- Keep page controls and loaded data mounted while documentation replaces their view. -->
 <div
-  class={help?.open && help.layout === "alongside" ? "alongside" : "contents"}
-  style="--help-top: {help?.top ?? 64}px"
+  class={help?.open && help.layout === "page"
+    ? "page-stack"
+    : help?.open && help.layout === "alongside"
+      ? "alongside"
+      : "contents"}
+  style="--help-top: {help?.top ?? 64}px; --help-seam: {help?.seam ??
+    0}px; --help-opacity: {100 -
+    (help?.transparency ?? 22)}%; --help-blur: {help?.blur ?? 2}px"
 >
   <div
-    hidden={help?.open && help.layout === "page"}
     inert={help?.blocking || (help?.open && help.layout === "page")}
-    class={help?.open && help.layout === "page"
-      ? "hidden"
-      : help?.open && help.layout === "alongside"
-        ? "min-w-0"
-        : "contents"}
+    class={help?.open && help.layout === "alongside" ? "min-w-0" : "contents"}
   >
     {@render children()}
   </div>
-  {#if help?.open && help.layout !== "page"}
+  {#if help?.open && (help.layout === "drawer" || help.layout === "page") && help.seam > 0}
+    <div class="help-menu-leaf" aria-hidden="true">
+      <div
+        class="help-menu-glass"
+        transition:fly={{
+          x: help.seam,
+          opacity: 1,
+          duration: window.matchMedia("(prefers-reduced-motion: reduce)")
+            .matches
+            ? 0
+            : 2000,
+        }}
+      ></div>
+    </div>
+  {/if}
+  {#if help?.open}
     <div
       class="help-surface"
       class:drawer={help.layout === "drawer"}
+      class:page={help.layout === "page"}
       class:right={help.layout === "right"}
       class:docked={help.layout === "alongside"}
     >
@@ -121,6 +150,19 @@
 </div>
 
 <style>
+  .page-stack {
+    position: relative;
+    min-height: 100dvh;
+  }
+  .help-surface.page {
+    position: absolute;
+    z-index: 20;
+    top: 0;
+    left: 0;
+    border: 0;
+    box-shadow: none;
+    overflow: clip;
+  }
   .help-surface {
     position: fixed;
     z-index: 60;
@@ -131,7 +173,25 @@
     box-shadow: -12px 0 32px #0003;
   }
   .drawer {
+    left: var(--help-seam);
+    overflow: clip;
+    border: 0;
+    box-shadow: none;
+  }
+  .help-menu-leaf {
+    position: fixed;
+    z-index: 60;
     left: 0;
+    top: var(--help-top);
+    bottom: 0;
+    width: var(--help-seam);
+    overflow: clip;
+    pointer-events: none;
+  }
+  .help-menu-glass {
+    height: 100%;
+    background: color-mix(in oklab, var(--primary) 6%, transparent);
+    border-right: 1px solid var(--border);
   }
   .right {
     width: min(36rem, 100%);
@@ -157,7 +217,8 @@
     }
   }
   @media print {
-    .help-surface {
+    .help-surface,
+    .help-menu-leaf {
       display: none;
     }
   }
