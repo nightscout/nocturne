@@ -1,19 +1,10 @@
 import { guide } from "./guide.svelte";
+import { reportContext } from "./report-context.svelte";
+import { GLUCOSE_REFERENCE_PATH } from "./reference-path";
 import type { HelpArticle } from "./documentation-types";
 
 export function reportArticles(): HelpArticle[] {
-  const source =
-    "Stored glucose readings received from a connector, uploader, or a previous Nightscout import. Treatment and profile panels also need the corresponding insulin, carbohydrate, device, and therapy records.";
-  const controls =
-    "Choose the period with the report's date controls. Settings → Appearance controls display units; Settings → Therapy shows personal targets and schedules. Settings → Connectors & Apps manages imports. Display choices do not change historical readings.";
-  const limits =
-    "Missing readings affect averages and percentages. Check coverage or reliability before comparing periods. A blank report means missing information, not a zero measurement. The reference bands below differ from personal therapy targets and alert rules.";
-  const related = [
-    "/settings/connectors",
-    "/settings/profile",
-    "/settings/appearance",
-    "/reports/data-quality",
-  ];
+  const context = reportContext();
   const report = (
     href: string,
     title: string,
@@ -25,12 +16,11 @@ export function reportArticles(): HelpArticle[] {
       href,
       title,
       intro,
-      source,
-      controls,
+      context[href].source,
+      context[href].controls,
       used,
-      `${detail} ${limits}`,
-      related,
-      "glucose"
+      detail,
+      [...context[href].related, GLUCOSE_REFERENCE_PATH]
     );
   return [
     report(
@@ -170,7 +160,7 @@ export function reportArticles(): HelpArticle[] {
       "Readings paired between your selected device and reference.",
       "Choose Device, Reference, and Match within here. Manage sources in Settings → Connectors & Apps.",
       "The scatter and agreement summaries show differences between paired readings.",
-      "Unpaired readings are excluded. A wider tolerance compares less simultaneous readings; your chosen reference is not guaranteed ground truth.",
+      "Unpaired readings are excluded. A wider tolerance allows paired readings farther apart in time; your chosen reference is not guaranteed ground truth.",
       ["/settings/connectors", "/reports/data-quality"]
     ),
     guide(

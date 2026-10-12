@@ -15343,6 +15343,7 @@ msgstr "<0/> Add condition"
 #~ msgstr "Flat"
 
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/help/reading-guides.svelte.ts
 msgid "Select a rule"
 msgstr "Select a rule"
 
@@ -18822,6 +18823,7 @@ msgstr "No entries yet. Your home timezone is filled in automatically on the nex
 msgid "Delete entry"
 msgstr "Delete entry"
 
+#: src/lib/help/reading-guides.svelte.ts
 #: src/routes/(authenticated)/settings/timezone/+page.svelte
 msgid "Add a location change"
 msgstr "Add a location change"
@@ -26970,9 +26972,8 @@ msgstr "Settings and access"
 msgid "Available actions depend on the selected tenant and your permissions. Check the related settings in the navigation menu. Close documentation with the book or Escape to return to your original page."
 msgstr "Available actions depend on the selected tenant and your permissions. Check the related settings in the navigation menu. Close documentation with the book or Escape to return to your original page."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Connect your own Google account, inspect what is available, then choose what Nocturne should import. Follow the steps in order."
-msgstr "Connect your own Google account, inspect what is available, then choose what Nocturne should import. Follow the steps in order."
+#~ msgid "Connect your own Google account, inspect what is available, then choose what Nocturne should import. Follow the steps in order."
+#~ msgstr "Connect your own Google account, inspect what is available, then choose what Nocturne should import. Follow the steps in order."
 
 #: src/lib/help/connectors.svelte.ts
 msgid "Your device or source app sends data to Google Health. Nocturne reads the selected account through Google's API and stores supported records in this tenant's existing histories. A Google Cloud project provides permission to use the API; it does not generate health data."
@@ -26990,69 +26991,55 @@ msgstr "Imported steps, heart rate, and sleep appear in their reports. Weight ap
 msgid "The phone/watch must first sync to Google. Local Health Connect records do not guarantee availability in Google's cloud API. Inventory availability, Google sign-in, and import completion are separate states. Unsupported types can be visible but cannot be selected for import."
 msgstr "The phone/watch must first sync to Google. Local Health Connect records do not guarantee availability in Google's cloud API. Inventory availability, Google sign-in, and import completion are separate states. Unsupported types can be visible but cannot be selected for import."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Check Google access and your source"
-msgstr "Check Google access and your source"
+#~ msgid "Check Google access and your source"
+#~ msgstr "Check Google access and your source"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Start with the official Google setup guide linked below and check current API access availability: If Google restricts new project access and your project cannot enable the API, resolve eligibility with Google first. Sign into the Google Health mobile app with the account you want to use and check that it contains recent readings. A successful Google sign-in alone does not establish a Google Health profile."
-msgstr "Start with the official Google setup guide linked below and check current API access availability: If Google restricts new project access and your project cannot enable the API, resolve eligibility with Google first. Sign into the Google Health mobile app with the account you want to use and check that it contains recent readings. A successful Google sign-in alone does not establish a Google Health profile."
+#~ msgid "Start with the official Google setup guide linked below and check current API access availability: If Google restricts new project access and your project cannot enable the API, resolve eligibility with Google first. Sign into the Google Health mobile app with the account you want to use and check that it contains recent readings. A successful Google sign-in alone does not establish a Google Health profile."
+#~ msgstr "Start with the official Google setup guide linked below and check current API access availability: If Google restricts new project access and your project cannot enable the API, resolve eligibility with Google first. Sign into the Google Health mobile app with the account you want to use and check that it contains recent readings. A successful Google sign-in alone does not establish a Google Health profile."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Let phone data reach Google Health"
-msgstr "Let phone data reach Google Health"
+#~ msgid "Let phone data reach Google Health"
+#~ msgstr "Let phone data reach Google Health"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "For a watch syncing directly with Google Health, verify the readings in that app. For another Android source using Health Connect, allow the source app to write its data and Google Health to read it. In Google Health use Connections → Partner apps → Sync your favorite apps and complete setup, including the history/background permissions you want. Check the linked official instructions if labels change. Newest data may arrive first: wait for Google to finish syncing older records before diagnosing an empty historical report."
-msgstr "For a watch syncing directly with Google Health, verify the readings in that app. For another Android source using Health Connect, allow the source app to write its data and Google Health to read it. In Google Health use Connections → Partner apps → Sync your favorite apps and complete setup, including the history/background permissions you want. Check the linked official instructions if labels change. Newest data may arrive first: wait for Google to finish syncing older records before diagnosing an empty historical report."
+#~ msgid "For a watch syncing directly with Google Health, verify the readings in that app. For another Android source using Health Connect, allow the source app to write its data and Google Health to read it. In Google Health use Connections → Partner apps → Sync your favorite apps and complete setup, including the history/background permissions you want. Check the linked official instructions if labels change. Newest data may arrive first: wait for Google to finish syncing older records before diagnosing an empty historical report."
+#~ msgstr "For a watch syncing directly with Google Health, verify the readings in that app. For another Android source using Health Connect, allow the source app to write its data and Google Health to read it. In Google Health use Connections → Partner apps → Sync your favorite apps and complete setup, including the history/background permissions you want. Check the linked official instructions if labels change. Newest data may arrive first: wait for Google to finish syncing older records before diagnosing an empty historical report."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Create or choose your Google Cloud project"
-msgstr "Create or choose your Google Cloud project"
+#~ msgid "Create or choose your Google Cloud project"
+#~ msgstr "Create or choose your Google Cloud project"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Use your own project, not someone else's client credentials. Enable the Google Health API using the official setup guide. The project and OAuth app names are descriptive: choose recognisable names. These names do not need to match Nocturne. Do not enable unrelated APIs merely because a guide lists other integrations."
-msgstr "Use your own project, not someone else's client credentials. Enable the Google Health API using the official setup guide. The project and OAuth app names are descriptive: choose recognisable names. These names do not need to match Nocturne. Do not enable unrelated APIs merely because a guide lists other integrations."
+#~ msgid "Use your own project, not someone else's client credentials. Enable the Google Health API using the official setup guide. The project and OAuth app names are descriptive: choose recognisable names. These names do not need to match Nocturne. Do not enable unrelated APIs merely because a guide lists other integrations."
+#~ msgstr "Use your own project, not someone else's client credentials. Enable the Google Health API using the official setup guide. The project and OAuth app names are descriptive: choose recognisable names. These names do not need to match Nocturne. Do not enable unrelated APIs merely because a guide lists other integrations."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Prepare consent and add your test account"
-msgstr "Prepare consent and add your test account"
+#~ msgid "Prepare consent and add your test account"
+#~ msgstr "Prepare consent and add your test account"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "In Google Auth Platform configure the app's consent details. For a personal test choose External with publishing status Testing, then Audience → Test users → Add users. Add the exact Google email address whose health data you will connect and save. Under Data Access, add the read scopes listed in this guide's reference panel and save. Nocturne also requests basic sign-in identification automatically. Testing grants can expire after seven days; reconnect when required."
-msgstr "In Google Auth Platform configure the app's consent details. For a personal test choose External with publishing status Testing, then Audience → Test users → Add users. Add the exact Google email address whose health data you will connect and save. Under Data Access, add the read scopes listed in this guide's reference panel and save. Nocturne also requests basic sign-in identification automatically. Testing grants can expire after seven days; reconnect when required."
+#~ msgid "In Google Auth Platform configure the app's consent details. For a personal test choose External with publishing status Testing, then Audience → Test users → Add users. Add the exact Google email address whose health data you will connect and save. Under Data Access, add the read scopes listed in this guide's reference panel and save. Nocturne also requests basic sign-in identification automatically. Testing grants can expire after seven days; reconnect when required."
+#~ msgstr "In Google Auth Platform configure the app's consent details. For a personal test choose External with publishing status Testing, then Audience → Test users → Add users. Add the exact Google email address whose health data you will connect and save. Under Data Access, add the read scopes listed in this guide's reference panel and save. Nocturne also requests basic sign-in identification automatically. Testing grants can expire after seven days; reconnect when required."
 
 #: src/lib/help/connectors.svelte.ts
 msgid "Create the Web application client"
 msgstr "Create the Web application client"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "In Clients create an OAuth client of type Web application (Web Server in the quick-start wizard). Copy the Callback URL displayed in Nocturne into Authorized redirect URIs. It must match exactly, including https, hostname, port, path, and any trailing slash. Use Nocturne's address, not the sample google.com redirect in Google's quick start. Save and copy both Client ID and Client secret. The name is descriptive; the credentials and redirect address must be exact."
-msgstr "In Clients create an OAuth client of type Web application (Web Server in the quick-start wizard). Copy the Callback URL displayed in Nocturne into Authorized redirect URIs. It must match exactly, including https, hostname, port, path, and any trailing slash. Use Nocturne's address, not the sample google.com redirect in Google's quick start. Save and copy both Client ID and Client secret. The name is descriptive; the credentials and redirect address must be exact."
+#~ msgid "In Clients create an OAuth client of type Web application (Web Server in the quick-start wizard). Copy the Callback URL displayed in Nocturne into Authorized redirect URIs. It must match exactly, including https, hostname, port, path, and any trailing slash. Use Nocturne's address, not the sample google.com redirect in Google's quick start. Save and copy both Client ID and Client secret. The name is descriptive; the credentials and redirect address must be exact."
+#~ msgstr "In Clients create an OAuth client of type Web application (Web Server in the quick-start wizard). Copy the Callback URL displayed in Nocturne into Authorized redirect URIs. It must match exactly, including https, hostname, port, path, and any trailing slash. Use Nocturne's address, not the sample google.com redirect in Google's quick start. Save and copy both Client ID and Client secret. The name is descriptive; the credentials and redirect address must be exact."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Save credentials and sign in"
-msgstr "Save credentials and sign in"
+#~ msgid "Save credentials and sign in"
+#~ msgstr "Save credentials and sign in"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "On Nocturne's Google Health page enter Google client ID, Client secret, and Callback URL. The secret is required on first setup; leave it empty only when editing an already-saved secret. Choose Import data from for the earliest history you want, then Save and connect. Sign in with the same test account and review the requested read permissions. Grant the permissions for the data types you want; declining one can leave its rows unavailable. Confirm you return to Nocturne's connector page."
-msgstr "On Nocturne's Google Health page enter Google client ID, Client secret, and Callback URL. The secret is required on first setup; leave it empty only when editing an already-saved secret. Choose Import data from for the earliest history you want, then Save and connect. Sign in with the same test account and review the requested read permissions. Grant the permissions for the data types you want; declining one can leave its rows unavailable. Confirm you return to Nocturne's connector page."
+#~ msgid "On Nocturne's Google Health page enter Google client ID, Client secret, and Callback URL. The secret is required on first setup; leave it empty only when editing an already-saved secret. Choose Import data from for the earliest history you want, then Save and connect. Sign in with the same test account and review the requested read permissions. Grant the permissions for the data types you want; declining one can leave its rows unavailable. Confirm you return to Nocturne's connector page."
+#~ msgstr "On Nocturne's Google Health page enter Google client ID, Client secret, and Callback URL. The secret is required on first setup; leave it empty only when editing an already-saved secret. Choose Import data from for the earliest history you want, then Save and connect. Sign in with the same test account and review the requested read permissions. Grant the permissions for the data types you want; declining one can leave its rows unavailable. Confirm you return to Nocturne's connector page."
 
 #: src/lib/help/connectors.svelte.ts
 msgid "Review the inventory and start an import"
 msgstr "Review the inventory and start an import"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Inspect the available-data table. Found indicates source availability, not data already imported. Select supported types you want, then choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Rows marked Not scanned need a refreshed inventory, No permission needs the relevant consent, and No destination yet is unsupported. Leaving the page does not cancel the server's import."
-msgstr "Inspect the available-data table. Found indicates source availability, not data already imported. Select supported types you want, then choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Rows marked Not scanned need a refreshed inventory, No permission needs the relevant consent, and No destination yet is unsupported. Leaving the page does not cancel the server's import."
+#~ msgid "Inspect the available-data table. Found indicates source availability, not data already imported. Select supported types you want, then choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Rows marked Not scanned need a refreshed inventory, No permission needs the relevant consent, and No destination yet is unsupported. Leaving the page does not cancel the server's import."
+#~ msgstr "Inspect the available-data table. Found indicates source availability, not data already imported. Select supported types you want, then choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Rows marked Not scanned need a refreshed inventory, No permission needs the relevant consent, and No destination yet is unsupported. Leaving the page does not cancel the server's import."
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Confirm that your reports contain data"
-msgstr "Confirm that your reports contain data"
+#~ msgid "Confirm that your reports contain data"
+#~ msgstr "Confirm that your reports contain data"
 
-#: src/lib/help/connectors.svelte.ts
-msgid "Watch sync status and Historical import progress. Current data is processed first, followed by older history in stages. Open the relevant report and choose dates that contain source records; check Weight history for weight. If empty, verify the Google account, its actual records, granted permissions, selected types, date range, and last sync error in that order. Use Sync now to request the current selection again; avoid repeatedly disconnecting a working import."
-msgstr "Watch sync status and Historical import progress. Current data is processed first, followed by older history in stages. Open the relevant report and choose dates that contain source records; check Weight history for weight. If empty, verify the Google account, its actual records, granted permissions, selected types, date range, and last sync error in that order. Use Sync now to request the current selection again; avoid repeatedly disconnecting a working import."
+#~ msgid "Watch sync status and Historical import progress. Current data is processed first, followed by older history in stages. Open the relevant report and choose dates that contain source records; check Weight history for weight. If empty, verify the Google account, its actual records, granted permissions, selected types, date range, and last sync error in that order. Use Sync now to request the current selection again; avoid repeatedly disconnecting a working import."
+#~ msgstr "Watch sync status and Historical import progress. Current data is processed first, followed by older history in stages. Open the relevant report and choose dates that contain source records; check Weight history for weight. If empty, verify the Google account, its actual records, granted permissions, selected types, date range, and last sync error in that order. Use Sync now to request the current selection again; avoid repeatedly disconnecting a working import."
 
 #: src/lib/help/connectors.svelte.ts
 msgid "Ongoing sync and historical progress"
@@ -27260,17 +27247,14 @@ msgstr "Where this information is used"
 msgid "Limits and missing information"
 msgstr "Limits and missing information"
 
-#: src/lib/help/reports.svelte.ts
-msgid "Stored glucose readings received from a connector, uploader, or a previous Nightscout import. Treatment and profile panels also need the corresponding insulin, carbohydrate, device, and therapy records."
-msgstr "Stored glucose readings received from a connector, uploader, or a previous Nightscout import. Treatment and profile panels also need the corresponding insulin, carbohydrate, device, and therapy records."
+#~ msgid "Stored glucose readings received from a connector, uploader, or a previous Nightscout import. Treatment and profile panels also need the corresponding insulin, carbohydrate, device, and therapy records."
+#~ msgstr "Stored glucose readings received from a connector, uploader, or a previous Nightscout import. Treatment and profile panels also need the corresponding insulin, carbohydrate, device, and therapy records."
 
-#: src/lib/help/reports.svelte.ts
-msgid "Choose the period with the report's date controls. Settings → Appearance controls display units; Settings → Therapy shows personal targets and schedules. Settings → Connectors & Apps manages imports. Display choices do not change historical readings."
-msgstr "Choose the period with the report's date controls. Settings → Appearance controls display units; Settings → Therapy shows personal targets and schedules. Settings → Connectors & Apps manages imports. Display choices do not change historical readings."
+#~ msgid "Choose the period with the report's date controls. Settings → Appearance controls display units; Settings → Therapy shows personal targets and schedules. Settings → Connectors & Apps manages imports. Display choices do not change historical readings."
+#~ msgstr "Choose the period with the report's date controls. Settings → Appearance controls display units; Settings → Therapy shows personal targets and schedules. Settings → Connectors & Apps manages imports. Display choices do not change historical readings."
 
-#: src/lib/help/reports.svelte.ts
-msgid "Missing readings affect averages and percentages. Check coverage or reliability before comparing periods. A blank report means missing information, not a zero measurement. The reference bands below differ from personal therapy targets and alert rules."
-msgstr "Missing readings affect averages and percentages. Check coverage or reliability before comparing periods. A blank report means missing information, not a zero measurement. The reference bands below differ from personal therapy targets and alert rules."
+#~ msgid "Missing readings affect averages and percentages. Check coverage or reliability before comparing periods. A blank report means missing information, not a zero measurement. The reference bands below differ from personal therapy targets and alert rules."
+#~ msgstr "Missing readings affect averages and percentages. Check coverage or reliability before comparing periods. A blank report means missing information, not a zero measurement. The reference bands below differ from personal therapy targets and alert rules."
 
 #: src/lib/help/reports.svelte.ts
 msgid "Reports overview"
@@ -27516,9 +27500,8 @@ msgstr "Choose Device, Reference, and Match within here. Manage sources in Setti
 msgid "The scatter and agreement summaries show differences between paired readings."
 msgstr "The scatter and agreement summaries show differences between paired readings."
 
-#: src/lib/help/reports.svelte.ts
-msgid "Unpaired readings are excluded. A wider tolerance compares less simultaneous readings; your chosen reference is not guaranteed ground truth."
-msgstr "Unpaired readings are excluded. A wider tolerance compares less simultaneous readings; your chosen reference is not guaranteed ground truth."
+#~ msgid "Unpaired readings are excluded. A wider tolerance compares less simultaneous readings; your chosen reference is not guaranteed ground truth."
+#~ msgstr "Unpaired readings are excluded. A wider tolerance compares less simultaneous readings; your chosen reference is not guaranteed ground truth."
 
 #: src/lib/help/reports.svelte.ts
 msgid "Review suggested low-reading windows for a possible quality correction."
@@ -28567,3 +28550,1815 @@ msgstr "These values come from the same server models and capability catalogue u
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Open settings in a new tab"
 msgstr "Open settings in a new tab"
+
+#: src/lib/help/reports.svelte.ts
+msgid "Unpaired readings are excluded. A wider tolerance allows paired readings farther apart in time; your chosen reference is not guaranteed ground truth."
+msgstr "Unpaired readings are excluded. A wider tolerance allows paired readings farther apart in time; your chosen reference is not guaranteed ground truth."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "redirect_uri_mismatch: copy the complete Nocturne Callback URL into the same OAuth client's redirect list. Access blocked or test-user errors: check Audience, exact email, enabled API, and current Google access eligibility. ACCOUNT_NOT_LINKED: complete the Google Health app profile with this account. Missing permission: sign in again and grant the required read access. An expired test grant: reconnect; production verification and quota rules belong to Google and can change."
+msgstr "redirect_uri_mismatch: copy the complete Nocturne Callback URL into the same OAuth client's redirect list. Access blocked or test-user errors: check Audience, exact email, enabled API, and current Google access eligibility. ACCOUNT_NOT_LINKED: complete the Google Health app profile with this account. Missing permission: sign in again and grant the required read access. An expired test grant: reconnect; production verification and quota rules belong to Google and can change."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "First install the Google Health app and make sure you can see the data you want to share there. Then follow the Google setup wizard and connect that same account to Nocturne."
+msgstr "First install the Google Health app and make sure you can see the data you want to share there. Then follow the Google setup wizard and connect that same account to Nocturne."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Install Google Health and check your data"
+msgstr "Install Google Health and check your data"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Install Google Health (formerly Fitbit) using the Play Store link below. Open it, sign in with the Google account you want to share, and complete its profile setup. Before continuing, make sure the steps, heart rate, sleep, or weight you want to share are visible in that app. Signing into Google alone is not enough."
+msgstr "Install Google Health (formerly Fitbit) using the Play Store link below. Open it, sign in with the Google account you want to share, and complete its profile setup. Before continuing, make sure the steps, heart rate, sleep, or weight you want to share are visible in that app. Signing into Google alone is not enough."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Install Google Health from the Play Store"
+msgstr "Install Google Health from the Play Store"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Bring data from other apps into Google Health (optional)"
+msgstr "Bring data from other apps into Google Health (optional)"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "On Android use Health Connect, Google's on-device data-sharing service. Let your source app write the desired records and let Google Health read them. In Google Health open Connections → Partner apps → Sync your favorite health apps → Set up. Review the data, history, and background permissions, then check that records appear in Google Health. Garmin needs its watch to sync to Garmin Connect first; Google Health does not connect directly to the watch. Google also documents Samsung Galaxy, Xiaomi/Mi Fitness, Oura, Whoop, Strava, and MyFitnessPal connections. On iPhone the route is generally Apple Health. Available types differ by app: a direct Strava connection exports Google Health activities to Strava; importing Strava activities uses Health Connect or Apple Health instead. Google Health supports more types than this Nocturne connector, so check the importable-type table below."
+msgstr "On Android use Health Connect, Google's on-device data-sharing service. Let your source app write the desired records and let Google Health read them. In Google Health open Connections → Partner apps → Sync your favorite health apps → Set up. Review the data, history, and background permissions, then check that records appear in Google Health. Garmin needs its watch to sync to Garmin Connect first; Google Health does not connect directly to the watch. Google also documents Samsung Galaxy, Xiaomi/Mi Fitness, Oura, Whoop, Strava, and MyFitnessPal connections. On iPhone the route is generally Apple Health. Available types differ by app: a direct Strava connection exports Google Health activities to Strava; importing Strava activities uses Health Connect or Apple Health instead. Google Health supports more types than this Nocturne connector, so check the importable-type table below."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Install or open Health Connect"
+msgstr "Install or open Health Connect"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Google: set up Health Connect permissions and syncing"
+msgstr "Google: set up Health Connect permissions and syncing"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Google: device and app connections, including Garmin"
+msgstr "Google: device and app connections, including Garmin"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Open Google's setup wizard"
+msgstr "Open Google's setup wizard"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Open the Google Setup documentation linked below. Click its blue button labelled Enable the API and get an OAuth 2.0 Client ID. Use a Google account that can manage your Cloud project. If Google restricts access for your project, resolve that eligibility before continuing. Leave Nocturne open in another tab."
+msgstr "Open the Google Setup documentation linked below. Click its blue button labelled Enable the API and get an OAuth 2.0 Client ID. Use a Google account that can manage your Cloud project. If Google restricts access for your project, resolve that eligibility before continuing. Leave Nocturne open in another tab."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Open the Google Setup documentation"
+msgstr "Open the Google Setup documentation"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Name your project and enable the API"
+msgstr "Name your project and enable the API"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Choose a new project and enter a project name, or select an existing project you manage. The name is a reminder for you later: any recognisable name is fine. Click Next. Confirm that you want to enable the Google Health API and continue. This enables access to Google's service; it does not create or import any health records."
+msgstr "Choose a new project and enter a project name, or select an existing project you manage. The name is a reminder for you later: any recognisable name is fine. Click Next. Confirm that you want to enable the Google Health API and continue. This enables access to Google's service; it does not create or import any health records."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Choose a product name"
+msgstr "Choose a product name"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Enter the product/application name requested by the wizard. You are free to choose it: it may match the project name or be completely different. It is the name shown on Google's consent screen when you connect from Nocturne. Complete any required contact details. Neither name needs to match your Nocturne hostname."
+msgstr "Enter the product/application name requested by the wizard. You are free to choose it: it may match the project name or be completely different. It is the name shown on Google's consent screen when you connect from Nocturne. Complete any required contact details. Neither name needs to match your Nocturne hostname."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "For Where are you calling from? select Web Server. In the manual Clients screen the equivalent type is Web application. Copy the complete Callback URL shown by this Nocturne instance under Settings → Connectors & Apps → Google Health into the wizard's redirect field (Authorized redirect URIs). Use your own instance's URL, including its scheme, hostname, port, and callback path exactly. Replace any sample redirect from Google's guide. Click Create. If the wizard's layout changes, the essential choices remain a web client and that exact redirect."
+msgstr "For Where are you calling from? select Web Server. In the manual Clients screen the equivalent type is Web application. Copy the complete Callback URL shown by this Nocturne instance under Settings → Connectors & Apps → Google Health into the wizard's redirect field (Authorized redirect URIs). Use your own instance's URL, including its scheme, hostname, port, and callback path exactly. Replace any sample redirect from Google's guide. Click Create. If the wizard's layout changes, the essential choices remain a web client and that exact redirect."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Download the client configuration and fill Nocturne's fields"
+msgstr "Download the client configuration and fill Nocturne's fields"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Download the Client configuration/Credentials JSON. Copy Client ID and Client secret into the fields of the same names on Nocturne's Google Health page. The secret is required on first setup; leave it empty only when keeping a secret that was already saved. Check the Callback URL and choose Import data from for the history you want. Keep this form ready while you add the test user in the next step. Store the downloaded file privately: it contains credentials."
+msgstr "Download the Client configuration/Credentials JSON. Copy Client ID and Client secret into the fields of the same names on Nocturne's Google Health page. The secret is required on first setup; leave it empty only when keeping a secret that was already saved. Check the Callback URL and choose Import data from for the history you want. Keep this form ready while you add the test user in the next step. Store the downloaded file privately: it contains credentials."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Add the Google account as a test user"
+msgstr "Add the Google account as a test user"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Return to the Google Setup documentation, find Add test users, and open its Audience page link. Select the project you just configured. For a personal test use External with publishing status Testing. Under Test users choose Add users, enter the exact email address used in the Google Health app on your phone, and Save. Add each account that will share data. The account managing the Cloud project can be different from the account sharing health data."
+msgstr "Return to the Google Setup documentation, find Add test users, and open its Audience page link. Select the project you just configured. For a personal test use External with publishing status Testing. Under Test users choose Add users, enter the exact email address used in the Google Health app on your phone, and Save. Add each account that will share data. The account managing the Cloud project can be different from the account sharing health data."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Check the read permissions in Data Access"
+msgstr "Check the read permissions in Data Access"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "In Google's Data Access page choose Add or remove scopes, select the Google Health read scopes shown in Nocturne's reference table below, then Update and Save. Nocturne adds basic sign-in identification itself. These scopes govern which records it can read; they do not allow Nocturne to write to your Google Health account."
+msgstr "In Google's Data Access page choose Add or remove scopes, select the Google Health read scopes shown in Nocturne's reference table below, then Update and Save. Nocturne adds basic sign-in identification itself. These scopes govern which records it can read; they do not allow Nocturne to write to your Google Health account."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Save and connect with the same account"
+msgstr "Save and connect with the same account"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Return to the prepared Nocturne form and choose Save and connect (or Sign in with Google for an existing configuration). Choose the Google Health account you added as a test user, review and grant the read permissions for the data you want, and confirm you return to Nocturne. Testing grants can expire after seven days and then need reconnection."
+msgstr "Return to the prepared Nocturne form and choose Save and connect (or Sign in with Google for an existing configuration). Choose the Google Health account you added as a test user, review and grant the read permissions for the data you want, and confirm you return to Nocturne. Testing grants can expire after seven days and then need reconnection."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "In the available-data table, Found means records exist at the source, not that they have been imported. Select supported types and choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Not scanned needs a refreshed inventory; No permission needs the relevant consent; No destination yet is unsupported. Leaving the page does not cancel the server import."
+msgstr "In the available-data table, Found means records exist at the source, not that they have been imported. Select supported types and choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Not scanned needs a refreshed inventory; No permission needs the relevant consent; No destination yet is unsupported. Leaving the page does not cancel the server import."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Confirm the result in your reports"
+msgstr "Confirm the result in your reports"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Watch sync status and Historical import progress. Open Steps, Heart Rate, or Sleep and choose dates containing source records; use Weight history for weight. If empty, check the source account's visible records, granted permissions, import selection, dates, and last error. Google may still be syncing older phone records; wait for that to finish before retrying. Completed historical months that receive records later need the recovery procedure below."
+msgstr "Watch sync status and Historical import progress. Open Steps, Heart Rate, or Sleep and choose dates containing source records; use Weight history for weight. If empty, check the source account's visible records, granted permissions, import selection, dates, and last error. Google may still be syncing older phone records; wait for that to finish before retrying. Completed historical months that receive records later need the recovery procedure below."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Personalise branding (optional)"
+msgstr "Personalise branding (optional)"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "After the connection works, open Branding in Google Auth Platform to adjust the app's display name, logo, and available contact or policy details. This changes how Google presents the app; it does not change your health data or Nocturne's import settings. Follow Google's validation requirements for any fields you add."
+msgstr "After the connection works, open Branding in Google Auth Platform to adjust the app's display name, logo, and available contact or policy details. This changes how Google presents the app; it does not change your health data or Nocturne's import settings. Follow Google's validation requirements for any fields you add."
+
+#: src/lib/components/help/HelpPanel.svelte
+msgid "Documentation content"
+msgstr "Documentation content"
+
+#: src/lib/help/glucose-reference.svelte.ts
+msgid "Glucose ranges and report terms"
+msgstr "Glucose ranges and report terms"
+
+#: src/lib/help/glucose-reference.svelte.ts
+msgid "Look up very low, low, in range, tight range, high, and very high in one place. This also explains reading percentages and missing data."
+msgstr "Look up very low, low, in range, tight range, high, and very high in one place. This also explains reading percentages and missing data."
+
+#: src/lib/help/glucose-reference.svelte.ts
+msgid "The live table uses this running server's reference models. It contains no patient readings or credentials."
+msgstr "The live table uses this running server's reference models. It contains no patient readings or credentials."
+
+#: src/lib/help/glucose-reference.svelte.ts
+msgid "Appearance changes display units. Therapy shows your personal target schedule. Alert Rules controls notification thresholds. These are separate from the fixed report bands."
+msgstr "Appearance changes display units. Therapy shows your personal target schedule. Alert Rules controls notification thresholds. These are separate from the fixed report bands."
+
+#: src/lib/help/glucose-reference.svelte.ts
+msgid "The reference bands explain the range colours and summaries in glucose reports. Tight range is contained within in range."
+msgstr "The reference bands explain the range colours and summaries in glucose reports. Tight range is contained within in range."
+
+#: src/lib/help/glucose-reference.svelte.ts
+msgid "Check coverage before interpreting percentages. Missing data is not a normal reading. A glucose-based estimated A1c is different from a blood-test result."
+msgstr "Check coverage before interpreting percentages. Missing data is not a normal reading. A glucose-based estimated A1c is different from a blood-test result."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Start with freshness"
+msgstr "Start with freshness"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check when the latest reading arrived before interpreting its value or direction."
+msgstr "Check when the latest reading arrived before interpreting its value or direction."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the timeline"
+msgstr "Read the timeline"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Line points are glucose samples; recorded treatments provide timing context."
+msgstr "Line points are glucose samples; recorded treatments provide timing context."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose your display"
+msgstr "Choose your display"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use chart controls for the view and Appearance for units, theme, and widgets."
+msgstr "Use chart controls for the view and Appearance for units, theme, and widgets."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose a question"
+msgstr "Choose a question"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use the summary for an overview, patterns for timing, and lifestyle reports for activity."
+msgstr "Use the summary for an overview, patterns for timing, and lifestyle reports for activity."
+
+#: src/lib/help/reading-guides.svelte.ts
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose dates"
+msgstr "Choose dates"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The overview summarises the selected period; detailed reports may have their own filters."
+msgstr "The overview summarises the selected period; detailed reports may have their own filters."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Open the detail"
+msgstr "Open the detail"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Follow the relevant report rather than trying to explain a change from one summary figure."
+msgstr "Follow the relevant report rather than trying to explain a change from one summary figure."
+
+#: src/lib/help/reading-guides.svelte.ts
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check coverage"
+msgstr "Check coverage"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the reliability indicator before trusting the headline measures."
+msgstr "Read the reliability indicator before trusting the headline measures."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the summary"
+msgstr "Read the summary"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Average, range percentages, and variation answer different questions."
+msgstr "Average, range percentages, and variation answer different questions."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Investigate a pattern"
+msgstr "Investigate a pattern"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use AGP for typical timing and Day in Review for an actual day's events."
+msgstr "Use AGP for typical timing and Day in Review for an actual day's events."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Find the middle line"
+msgstr "Find the middle line"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The median describes the middle of the recorded values at each time of day."
+msgstr "The median describes the middle of the recorded values at each time of day."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the width"
+msgstr "Read the width"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A wider percentile envelope means more variation between days at that time."
+msgstr "A wider percentile envelope means more variation between days at that time."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Open an actual day"
+msgstr "Open an actual day"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "AGP combines days. Use Day in Review to see the events behind an individual trace."
+msgstr "AGP combines days. Use Day in Review to see the events behind an individual trace."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the histogram"
+msgstr "Read the histogram"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Taller bars mean more recorded readings in that glucose interval."
+msgstr "Taller bars mean more recorded readings in that glucose interval."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Compare the spread"
+msgstr "Compare the spread"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A narrow cluster and a wide spread describe different degrees of variation."
+msgstr "A narrow cluster and a wide spread describe different degrees of variation."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check hourly differences"
+msgstr "Check hourly differences"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The hourly panel shows whether the overall distribution hides time-of-day differences."
+msgstr "The hourly panel shows whether the overall distribution hides time-of-day differences."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose the time scale"
+msgstr "Choose the time scale"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use the page's timeline controls to compare estimates over time."
+msgstr "Use the page's timeline controls to compare estimates over time."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Add a lab result"
+msgstr "Add a lab result"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Enter the blood-draw date, result in the displayed units, and an optional note."
+msgstr "Enter the blood-draw date, result in the displayed units, and an optional note."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Compare carefully"
+msgstr "Compare carefully"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The glucose estimate and laboratory measurement use different inputs; inspect data coverage too."
+msgstr "The glucose estimate and laboratory measurement use different inputs; inspect data coverage too."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read one cell"
+msgstr "Read one cell"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Each day cell summarises that day's available data for the chosen metric."
+msgstr "Each day cell summarises that day's available data for the chosen metric."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Change the view"
+msgstr "Change the view"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use source/type filters and the legend's metric, colour palette, and focus controls."
+msgstr "Use source/type filters and the legend's metric, colour palette, and focus controls."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect a period"
+msgstr "Inspect a period"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Look for clusters across days, then use a detailed report to examine their cause."
+msgstr "Look for clusters across days, then use a detailed report to examine their cause."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Select the interval you want to inspect on the chart."
+msgstr "Select the interval you want to inspect on the chart."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Follow samples"
+msgstr "Follow samples"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The line connects recorded points; a gap does not contain additional measurements."
+msgstr "The line connects recorded points; a gap does not contain additional measurements."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect context"
+msgstr "Inspect context"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use the chart's tracks and event details rather than treating every nearby event as a cause."
+msgstr "Use the chart's tracks and event details rather than treating every nearby event as a cause."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Pick the day"
+msgstr "Pick the day"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Review one actual date instead of a typical-day average."
+msgstr "Review one actual date instead of a typical-day average."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Align the events"
+msgstr "Align the events"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Compare treatment timestamps with the glucose trace and available device context."
+msgstr "Compare treatment timestamps with the glucose trace and available device context."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check the record"
+msgstr "Check the record"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "If an event is wrong or missing, review Treatments or its source import."
+msgstr "If an event is wrong or missing, review Treatments or its source import."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Compare the same weekday"
+msgstr "Compare the same weekday"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Each weekday curve summarises readings from that part of the selected period."
+msgstr "Each weekday curve summarises readings from that part of the selected period."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Look for timing"
+msgstr "Look for timing"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Notice consistent differences between weekdays before checking individual days."
+msgstr "Notice consistent differences between weekdays before checking individual days."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Sparse weekdays can differ simply because fewer readings were available."
+msgstr "Sparse weekdays can differ simply because fewer readings were available."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose A and B"
+msgstr "Choose A and B"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Select a preset or edit both periods and their labels."
+msgstr "Select a preset or edit both periods and their labels."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Apply with Load"
+msgstr "Apply with Load"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Draft dates do not change the displayed results until Load. Swap exchanges the loaded periods."
+msgstr "Draft dates do not change the displayed results until Load. Swap exchanges the loaded periods."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Compare equivalent data"
+msgstr "Compare equivalent data"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check duration, coverage, and source changes before interpreting a difference."
+msgstr "Check duration, coverage, and source changes before interpreting a difference."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read one hour"
+msgstr "Read one hour"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Each bar groups that hour's readings across the selected days."
+msgstr "Each bar groups that hour's readings across the selected days."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the composition"
+msgstr "Read the composition"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The coloured parts show how those readings are distributed between ranges."
+msgstr "The coloured parts show how those readings are distributed between ranges."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect the timing"
+msgstr "Inspect the timing"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use the hourly summaries to select a time window for the readings chart."
+msgstr "Use the hourly summaries to select a time window for the readings chart."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check missing time"
+msgstr "Check missing time"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Coverage describes where readings are present or absent."
+msgstr "Coverage describes where readings are present or absent."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose the question"
+msgstr "Choose the question"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use sensor integrity for noise, comparison for paired devices, or compression-low review for suggestions."
+msgstr "Use sensor integrity for noise, comparison for paired devices, or compression-low review for suggestions."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Review before cleanup"
+msgstr "Review before cleanup"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Detection is a prompt to inspect records, not proof they should be removed."
+msgstr "Detection is a prompt to inspect records, not proof they should be removed."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Locate flagged windows"
+msgstr "Locate flagged windows"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The daily overview places noise clusters in time."
+msgstr "The daily overview places noise clusters in time."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect nearby glucose"
+msgstr "Inspect nearby glucose"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the cluster detail and subsequent low-reading log together."
+msgstr "Read the cluster detail and subsequent low-reading log together."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check source metadata"
+msgstr "Check source metadata"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A source that supplies no noise information limits the analysis."
+msgstr "A source that supplies no noise information limits the analysis."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose two devices"
+msgstr "Choose two devices"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Device is compared with your selected Reference; both need readings in the chosen period."
+msgstr "Device is compared with your selected Reference; both need readings in the chosen period."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Set Match within"
+msgstr "Set Match within"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A larger tolerance admits readings farther apart in time."
+msgstr "A larger tolerance admits readings farther apart in time."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the diagonal"
+msgstr "Read the diagonal"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Points near equal values indicate closer agreement; only paired samples enter this view."
+msgstr "Points near equal values indicate closer agreement; only paired samples enter this view."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Find a suggestion"
+msgstr "Find a suggestion"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Filter by dates and review status, then open the suggested window."
+msgstr "Filter by dates and review status, then open the suggested window."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect the preview"
+msgstr "Inspect the preview"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the glucose shape and surrounding records before deciding."
+msgstr "Read the glucose shape and surrounding records before deciding."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Accept or dismiss"
+msgstr "Accept or dismiss"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Accept applies the correction; dismiss rejects the suggestion. Detection settings are separate."
+msgstr "Accept applies the correction; dismiss rejects the suggestion. Detection settings are separate."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read daily totals"
+msgstr "Read daily totals"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A day total summarises imported step-count records for that date."
+msgstr "A day total summarises imported step-count records for that date."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the timing"
+msgstr "Read the timing"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The activity view shows when steps were recorded, rather than just the daily sum."
+msgstr "The activity view shows when steps were recorded, rather than just the daily sum."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check an empty day"
+msgstr "Check an empty day"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Confirm the source has records, Steps is selected for import, and the date range includes them."
+msgstr "Confirm the source has records, Steps is selected for import, and the date range includes them."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the unit"
+msgstr "Read the unit"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Heart rate is shown in beats per minute, not glucose units."
+msgstr "Heart rate is shown in beats per minute, not glucose units."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Follow the pattern"
+msgstr "Follow the pattern"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Look at the timing of higher or lower recorded values across the selected days."
+msgstr "Look at the timing of higher or lower recorded values across the selected days."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Remember sampling"
+msgstr "Remember sampling"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Google Health imports minute averages; brief peaks and gaps can differ from your watch's display."
+msgstr "Google Health imports minute averages; brief peaks and gaps can differ from your watch's display."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Compare sessions"
+msgstr "Compare sessions"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Duration and timing describe recorded nights, not a fixed universal sleep target."
+msgstr "Duration and timing describe recorded nights, not a fixed universal sleep target."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read stage composition"
+msgstr "Read stage composition"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The segments show the stages your source supplied. Missing stages are left unknown."
+msgstr "The segments show the stages your source supplied. Missing stages are left unknown."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Open a night"
+msgstr "Open a night"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use the night detail for its stage timeline and glucose during that sleep window."
+msgstr "Use the night detail for its stage timeline and glucose during that sleep window."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Follow the hypnogram"
+msgstr "Follow the hypnogram"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Each segment represents a reported sleep stage over time."
+msgstr "Each segment represents a reported sleep stage over time."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check the window"
+msgstr "Check the window"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The glucose summary uses the selected sleep session's timestamps."
+msgstr "The glucose summary uses the selected sleep session's timestamps."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Return to the overview"
+msgstr "Return to the overview"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use Sleep to compare this night with other dates."
+msgstr "Use Sleep to compare this night with other dates."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Find an event"
+msgstr "Find an event"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose a category and use Search to narrow the treatment table."
+msgstr "Choose a category and use Search to narrow the treatment table."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check its fields"
+msgstr "Check its fields"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect event type, time, insulin/carbohydrate units, and source before editing."
+msgstr "Inspect event type, time, insulin/carbohydrate units, and source before editing."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Save deliberately"
+msgstr "Save deliberately"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Add/edit and bulk deletion change the stored events used by other reports."
+msgstr "Add/edit and bulk deletion change the stored events used by other reports."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Separate rate and amount"
+msgstr "Separate rate and amount"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A basal rate describes delivery per hour; a delivered total describes accumulated insulin."
+msgstr "A basal rate describes delivery per hour; a delivered total describes accumulated insulin."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Compare schedule and records"
+msgstr "Compare schedule and records"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Profiles supply the schedule, while delivery and temporary-basal records describe changes."
+msgstr "Profiles supply the schedule, while delivery and temporary-basal records describe changes."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check missing context"
+msgstr "Check missing context"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A missing historical profile or delivery interval leaves part of the analysis uncertain."
+msgstr "A missing historical profile or delivery interval leaves part of the analysis uncertain."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Compare basal and bolus"
+msgstr "Compare basal and bolus"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The ratio chart shows their contribution to recorded delivery."
+msgstr "The ratio chart shows their contribution to recorded delivery."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect daily and hourly totals"
+msgstr "Inspect daily and hourly totals"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "These views reveal different timing patterns within the selected period."
+msgstr "These views reveal different timing patterns within the selected period."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check completeness"
+msgstr "Check completeness"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Missing basal durations or bolus uploads can understate delivered totals."
+msgstr "Missing basal durations or bolus uploads can understate delivered totals."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Locate the change"
+msgstr "Locate the change"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The comparison is centred on a recorded infusion-site change."
+msgstr "The comparison is centred on a recorded infusion-site change."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read before and after"
+msgstr "Read before and after"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Compare the available glucose in the surrounding windows."
+msgstr "Compare the available glucose in the surrounding windows."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check event timing"
+msgstr "Check event timing"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A missing or incorrectly dated site-change record makes the comparison less useful."
+msgstr "A missing or incorrectly dated site-change record makes the comparison less useful."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the combined view"
+msgstr "Read the combined view"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Glucose patterns and delivery summaries share a daily time scale."
+msgstr "Glucose patterns and delivery summaries share a daily time scale."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Separate planned and delivered"
+msgstr "Separate planned and delivered"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Scheduled basal comes from the profile; actual delivery needs imported insulin records."
+msgstr "Scheduled basal comes from the profile; actual delivery needs imported insulin records."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check individual panels"
+msgstr "Check individual panels"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A complete glucose trace does not guarantee complete treatment or profile data."
+msgstr "A complete glucose trace does not guarantee complete treatment or profile data."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose a device and period"
+msgstr "Choose a device and period"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Review the available battery records in the report's selected window."
+msgstr "Review the available battery records in the report's selected window."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check the latest upload"
+msgstr "Check the latest upload"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "An old value may describe an earlier battery state, not the current device."
+msgstr "An old value may describe an earlier battery state, not the current device."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Compare the source"
+msgstr "Compare the source"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Different devices report battery differently and at different intervals."
+msgstr "Different devices report battery differently and at different intervals."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose a month"
+msgstr "Choose a month"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Move through months to see day summaries and due tracker events."
+msgstr "Move through months to see day summaries and due tracker events."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read a day"
+msgstr "Read a day"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A daily summary condenses its available readings; inspect a day for more detail."
+msgstr "A daily summary condenses its available readings; inspect a day for more detail."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Manage reminders elsewhere"
+msgstr "Manage reminders elsewhere"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Tracker starts/completions affect due events; edit definitions in Notifications & Trackers."
+msgstr "Tracker starts/completions affect due events; edit definitions in Notifications & Trackers."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose the interval"
+msgstr "Choose the interval"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use the date range to find the device state you want to inspect."
+msgstr "Use the date range to find the device state you want to inspect."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read a span"
+msgstr "Read a span"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A horizontal segment is a period in a state, rather than an individual reading."
+msgstr "A horizontal segment is a period in a state, rather than an individual reading."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect transitions"
+msgstr "Inspect transitions"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check adjacent states and missing end times before interpreting duration."
+msgstr "Check adjacent states and missing end times before interpreting duration."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose a face"
+msgstr "Choose a face"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Preview a saved face or create a new configuration."
+msgstr "Preview a saved face or create a new configuration."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Configure its layout"
+msgstr "Configure its layout"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Open the face's editor for its widgets, sizing, and display options."
+msgstr "Open the face's editor for its widgets, sizing, and display options."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check freshness"
+msgstr "Check freshness"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The clock displays incoming records; its appearance does not improve stale uploads."
+msgstr "The clock displays incoming records; its appearance does not improve stale uploads."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Find a food"
+msgstr "Find a food"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Search or filter the catalogue before adding a duplicate entry."
+msgstr "Search or filter the catalogue before adding a duplicate entry."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check portion and nutrition"
+msgstr "Check portion and nutrition"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Carbohydrate values describe a portion; verify both the amount and its unit."
+msgstr "Carbohydrate values describe a portion; verify both the amount and its unit."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use it in a meal"
+msgstr "Use it in a meal"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A catalogue entry becomes meal context only when linked to recorded intake."
+msgstr "A catalogue entry becomes meal context only when linked to recorded intake."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Find unassigned intake"
+msgstr "Find unassigned intake"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use All or Unattributed, then narrow by date, Search, or Food."
+msgstr "Use All or Unattributed, then narrow by date, Search, or Food."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Review a suggested match"
+msgstr "Review a suggested match"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect the meal and carbohydrate event before accepting a proposed attribution."
+msgstr "Inspect the meal and carbohydrate event before accepting a proposed attribution."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Adjust the link"
+msgstr "Adjust the link"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Add, edit, or remove the food association; this is distinct from deleting the glucose trace."
+msgstr "Add, edit, or remove the food association; this is distinct from deleting the glucose trace."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Describe the trip"
+msgstr "Describe the trip"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Set the trip inputs before reading estimated supply quantities."
+msgstr "Set the trip inputs before reading estimated supply quantities."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Review categories"
+msgstr "Review categories"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check the estimate against your own devices and supply use."
+msgstr "Check the estimate against your own devices and supply use."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Open the list"
+msgstr "Open the list"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Turn the estimate into a checklist, adding custom items where necessary."
+msgstr "Turn the estimate into a checklist, adding custom items where necessary."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Review quantities"
+msgstr "Review quantities"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The starting list reflects the trip calculation."
+msgstr "The starting list reflects the trip calculation."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Add custom items"
+msgstr "Add custom items"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Include supplies that the standard categories did not cover."
+msgstr "Include supplies that the standard categories did not cover."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check items physically"
+msgstr "Check items physically"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A tick records your check; it does not verify the contents of your bag."
+msgstr "A tick records your check; it does not verify the contents of your bag."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose a rule"
+msgstr "Choose a rule"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Enable or edit the conditions that should produce an alert."
+msgstr "Enable or edit the conditions that should produce an alert."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose delivery"
+msgstr "Choose delivery"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Review the channels under Where alerts reach you and each rule's configuration."
+msgstr "Review the channels under Where alerts reach you and each rule's configuration."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect actual fires"
+msgstr "Inspect actual fires"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "History records evaluations/delivery; acknowledging an alert is different from disabling its rule."
+msgstr "History records evaluations/delivery; acknowledging an alert is different from disabling its rule."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose the rule whose behaviour you want to inspect."
+msgstr "Choose the rule whose behaviour you want to inspect."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose a replay window"
+msgstr "Choose a replay window"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Replay evaluates against a chosen historical scenario; it is not a new measurement."
+msgstr "Replay evaluates against a chosen historical scenario; it is not a new measurement."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Review the result"
+msgstr "Review the result"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check the simulated fires before enabling the rule for live use."
+msgstr "Check the simulated fires before enabling the rule for live use."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Locate a fire"
+msgstr "Locate a fire"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the timestamp, rule, and severity of a recorded event."
+msgstr "Read the timestamp, rule, and severity of a recorded event."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect delivery"
+msgstr "Inspect delivery"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A rule firing and a notification being delivered are different stages."
+msgstr "A rule firing and a notification being delivered are different stages."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Adjust the right control"
+msgstr "Adjust the right control"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Change the condition in Rules or quiet periods in Do Not Disturb."
+msgstr "Change the condition in Rules or quiet periods in Do Not Disturb."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose manual or schedule"
+msgstr "Choose manual or schedule"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Manual quiet mode and a recurring window serve different purposes."
+msgstr "Manual quiet mode and a recurring window serve different purposes."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Set timing"
+msgstr "Set timing"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use Auto-expire for manual mode, or From/To for the recurring window."
+msgstr "Use Auto-expire for manual mode, or From/To for the recurring window."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check exceptions"
+msgstr "Check exceptions"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Rules allowed through Do Not Disturb can still notify; verify the patient's timezone."
+msgstr "Rules allowed through Do Not Disturb can still notify; verify the patient's timezone."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Set request filters"
+msgstr "Set request filters"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Narrow by path, method, and match type to inspect a specific endpoint."
+msgstr "Narrow by path, method, and match type to inspect a specific endpoint."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the differences"
+msgstr "Read the differences"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect matching and critical issues instead of relying only on the overall score."
+msgstr "Inspect matching and critical issues instead of relying only on the overall score."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Test a scenario"
+msgstr "Test a scenario"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Open Test Endpoint Compatibility to run a deliberate comparison."
+msgstr "Open Test Endpoint Compatibility to run a deliberate comparison."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose a target"
+msgstr "Choose a target"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Set the endpoint and parameters for the intended scenario."
+msgstr "Set the endpoint and parameters for the intended scenario."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Run the comparison"
+msgstr "Run the comparison"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect both responses and timing rather than just a pass/fail headline."
+msgstr "Inspect both responses and timing rather than just a pass/fail headline."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Review coverage"
+msgstr "Review coverage"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "One matching scenario does not verify every uploader or data shape."
+msgstr "One matching scenario does not verify every uploader or data shape."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose the workspace"
+msgstr "Choose the workspace"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Each tile represents a tenant you are allowed to access."
+msgstr "Each tile represents a tenant you are allowed to access."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check identity"
+msgstr "Check identity"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Confirm the patient/workspace before opening its records."
+msgstr "Confirm the patient/workspace before opening its records."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Manage access separately"
+msgstr "Manage access separately"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Sharing & Privacy controls tenant membership; platform administration controls tenant configuration."
+msgstr "Sharing & Privacy controls tenant membership; platform administration controls tenant configuration."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Complete identity"
+msgstr "Complete identity"
+
+#~ msgid "Set up the account and correct patient workspace."
+#~ msgstr "Set up the account and correct patient workspace."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Connect a source"
+msgstr "Connect a source"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Finish the provider's authentication and import selection, not just its setup form."
+msgstr "Finish the provider's authentication and import selection, not just its setup form."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Verify real records"
+msgstr "Verify real records"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Open a report containing dates where the source has data."
+msgstr "Open a report containing dates where the source has data."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose the scope"
+msgstr "Choose the scope"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Account belongs to you; Patient Record and connectors belong to the selected tenant."
+msgstr "Account belongs to you; Patient Record and connectors belong to the selected tenant."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Open a category"
+msgstr "Open a category"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use its controls and field descriptions for the particular feature."
+msgstr "Use its controls and field descriptions for the particular feature."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Verify the result"
+msgstr "Verify the result"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A display change, a saved setting, and an imported record are different outcomes."
+msgstr "A display change, a saved setting, and an imported record are different outcomes."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check your identity"
+msgstr "Check your identity"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "These details describe the signed-in person, not the monitored patient."
+msgstr "These details describe the signed-in person, not the monitored patient."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Prepare recovery"
+msgstr "Prepare recovery"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Register your chosen sign-in methods and save recovery codes privately."
+msgstr "Register your chosen sign-in methods and save recovery codes privately."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Review sessions"
+msgstr "Review sessions"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Active Access manages already-signed-in browsers separately from credentials."
+msgstr "Active Access manages already-signed-in browsers separately from credentials."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check the patient"
+msgstr "Check the patient"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Verify the workspace before editing clinical information."
+msgstr "Verify the workspace before editing clinical information."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Save changed details"
+msgstr "Save changed details"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Weight is recorded into its history when changed; timezone changes take effect from saving."
+msgstr "Weight is recorded into its history when changed; timezone changes take effect from saving."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Manage related history"
+msgstr "Manage related history"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use Weight history and Timezone history for dated entries rather than overwriting a single current value."
+msgstr "Use Weight history and Timezone history for dated entries rather than overwriting a single current value."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose units and theme"
+msgstr "Choose units and theme"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "These format your display rather than changing stored measurements."
+msgstr "These format your display rather than changing stored measurements."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Try help appearance"
+msgstr "Try help appearance"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Open the book and adjust layout, transparency, and blur with Display options."
+msgstr "Open the book and adjust layout, transparency, and blur with Display options."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Know where it is saved"
+msgstr "Know where it is saved"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Documentation preferences are browser-local; account display preferences have their own persistence."
+msgstr "Documentation preferences are browser-local; account display preferences have their own persistence."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose the profile"
+msgstr "Choose the profile"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check which imported profile is default and when the schedule applies."
+msgstr "Check which imported profile is default and when the schedule applies."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read time segments"
+msgstr "Read time segments"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Basal, sensitivity, carbohydrate ratio, and target can change by time of day."
+msgstr "Basal, sensitivity, carbohydrate ratio, and target can change by time of day."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Correct the origin"
+msgstr "Correct the origin"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "When schedules are read-only here, edit the profile in the source app/device and sync again."
+msgstr "When schedules are read-only here, edit the profile in the source app/device and sync again."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Configure detection"
+msgstr "Configure detection"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Set typical sleep times and automatic detection for review suggestions."
+msgstr "Set typical sleep times and automatic detection for review suggestions."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect the result"
+msgstr "Inspect the result"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Open the quality reports to see what was flagged."
+msgstr "Open the quality reports to see what was flagged."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Separate cleanup"
+msgstr "Separate cleanup"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Maintenance and accepting suggestions can change records; merely changing detection settings is a different action."
+msgstr "Maintenance and accepting suggestions can change records; merely changing detection settings is a different action."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Define what is tracked"
+msgstr "Define what is tracked"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Definitions set the duration/reminders; presets reuse starting information."
+msgstr "Definitions set the duration/reminders; presets reuse starting information."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Start an instance"
+msgstr "Start an instance"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "An active tracker measures time from its recorded start."
+msgstr "An active tracker measures time from its recorded start."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Complete the event"
+msgstr "Complete the event"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Completion creates history; editing a definition is not the same as completing an instance."
+msgstr "Completion creates history; editing a definition is not the same as completing an instance."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect sessions"
+msgstr "Inspect sessions"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Find browsers signed in to your account."
+msgstr "Find browsers signed in to your account."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Revoke unwanted access"
+msgstr "Revoke unwanted access"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "That session must authenticate again; stored patient records remain."
+msgstr "That session must authenticate again; stored patient records remain."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use the right list"
+msgstr "Use the right list"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Uploader devices, authorised apps, and API tokens are managed in Connectors & Apps."
+msgstr "Uploader devices, authorised apps, and API tokens are managed in Connectors & Apps."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose the data source"
+msgstr "Choose the data source"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A server connector reads a provider; an uploader pushes records; authorised apps and tokens grant API access."
+msgstr "A server connector reads a provider; an uploader pushes records; authorised apps and tokens grant API access."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Finish its setup"
+msgstr "Finish its setup"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Configure and authenticate the source, then select imports where the connector requires it."
+msgstr "Configure and authenticate the source, then select imports where the connector requires it."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check status and progress"
+msgstr "Check status and progress"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Configured, connected, syncing, and a completed historical import are different states."
+msgstr "Configured, connected, syncing, and a completed historical import are different states."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose who has access"
+msgstr "Choose who has access"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use memberships, invitations, and requests for named people."
+msgstr "Use memberships, invitations, and requests for named people."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose what they can do"
+msgstr "Choose what they can do"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Roles, scopes, and time limits determine the available data and actions."
+msgstr "Roles, scopes, and time limits determine the available data and actions."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Review share links"
+msgstr "Review share links"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Anyone possessing a usable guest link receives its configured access; revoke links you no longer intend to share."
+msgstr "Anyone possessing a usable guest link receives its configured access; revoke links you no longer intend to share."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Identify the version"
+msgstr "Identify the version"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Include the deployment version and relevant error code."
+msgstr "Include the deployment version and relevant error code."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Describe reproduction"
+msgstr "Describe reproduction"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "State the page, steps, expected result, and observed result."
+msgstr "State the page, steps, expected result, and observed result."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Review before sharing"
+msgstr "Review before sharing"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check the optional device details and remove secrets or identifiable records from public reports."
+msgstr "Check the optional device details and remove secrets or identifiable records from public reports."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose a language"
+msgstr "Choose a language"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect the entries available for that catalogue."
+msgstr "Inspect the entries available for that catalogue."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Preserve placeholders"
+msgstr "Preserve placeholders"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Keep interpolation and markup placeholders intact when editing a message."
+msgstr "Keep interpolation and markup placeholders intact when editing a message."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Submit a contribution"
+msgstr "Submit a contribution"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Contributor details and reviewer notes accompany your translation; interface language is selected in Appearance."
+msgstr "Contributor details and reviewer notes accompany your translation; interface language is selected in Appearance."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect dated entries"
+msgstr "Inspect dated entries"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Weight history contains manual records and supported imports."
+msgstr "Weight history contains manual records and supported imports."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Add the right units"
+msgstr "Add the right units"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Enter kilograms and the actual recording time, not simply today's date for an older measurement."
+msgstr "Enter kilograms and the actual recording time, not simply today's date for an older measurement."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Manage imports separately"
+msgstr "Manage imports separately"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Selecting Weight in Google Health controls imports; editing a history entry is a different operation."
+msgstr "Selecting Weight in Google Health controls imports; editing a history entry is a different operation."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose the timezone and local arrival date/time."
+msgstr "Choose the timezone and local arrival date/time."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Keep history meaningful"
+msgstr "Keep history meaningful"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Dated locations explain local timing as the patient travels."
+msgstr "Dated locations explain local timing as the patient travels."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use correction deliberately"
+msgstr "Use correction deliberately"
+
+#~ msgid "Fix already-imported data is a separate operation; a display-format change does not repair timestamps."
+#~ msgstr "Fix already-imported data is a separate operation; a display-format change does not repair timestamps."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose the source"
+msgstr "Choose the source"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Set Nightscout API or MongoDB credentials and an optional date range."
+msgstr "Set Nightscout API or MongoDB credentials and an optional date range."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Watch collections"
+msgstr "Watch collections"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect active progress and skipped-record notes, not just the final status."
+msgstr "Inspect active progress and skipped-record notes, not just the final status."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Verify imported records"
+msgstr "Verify imported records"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check representative dates in normal reports. Ongoing connector sync is configured separately."
+msgstr "Check representative dates in normal reports. Ongoing connector sync is configured separately."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read transition status"
+msgstr "Read transition status"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "This page reflects the deployment's configured transition state."
+msgstr "This page reflects the deployment's configured transition state."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect migration"
+msgstr "Inspect migration"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Data Migration shows historical copy progress and errors."
+msgstr "Data Migration shows historical copy progress and errors."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check ongoing uploads"
+msgstr "Check ongoing uploads"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Connectors & Apps manages continuing data flow after migration."
+msgstr "Connectors & Apps manages continuing data flow after migration."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose the tenant"
+msgstr "Choose the tenant"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Confirm its name and slug before an administrative edit."
+msgstr "Confirm its name and slug before an administrative edit."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check active status"
+msgstr "Check active status"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Tenant activation affects availability of that workspace."
+msgstr "Tenant activation affects availability of that workspace."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Separate permissions"
+msgstr "Separate permissions"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Platform administrators and roles inside one tenant are different kinds of access."
+msgstr "Platform administrators and roles inside one tenant are different kinds of access."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose tenant and connector"
+msgstr "Choose tenant and connector"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "A reset acts on the selected source, not on all tenants."
+msgstr "A reset acts on the selected source, not on all tenants."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose a lower bound"
+msgstr "Choose a lower bound"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Use the earliest date that should be read again."
+msgstr "Use the earliest date that should be read again."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Monitor the job"
+msgstr "Monitor the job"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect progress or cancel the reset before starting another. Normal import duplicate protection applies."
+msgstr "Inspect progress or cancel the reset before starting another. Normal import duplicate protection applies."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Link the identity"
+msgstr "Link the identity"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Connect the intended Discord account to your Nocturne identity."
+msgstr "Connect the intended Discord account to your Nocturne identity."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose the default"
+msgstr "Choose the default"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Labels and default selection help distinguish linked accounts."
+msgstr "Labels and default selection help distinguish linked accounts."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Revoke when needed"
+msgstr "Revoke when needed"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Removing a link stops that authorisation; it does not remove messages already sent."
+msgstr "Removing a link stops that authorisation; it does not remove messages already sent."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect the requester"
+msgstr "Inspect the requester"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Check the identity and requested access."
+msgstr "Check the identity and requested access."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Approve or deny"
+msgstr "Approve or deny"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Apply the intended platform decision to the request."
+msgstr "Apply the intended platform decision to the request."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Manage tenant membership"
+msgstr "Manage tenant membership"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Sharing & Privacy separately controls access to a patient's workspace."
+msgstr "Sharing & Privacy separately controls access to a patient's workspace."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Filter the history"
+msgstr "Filter the history"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Choose the relevant period or action using the available controls."
+msgstr "Choose the relevant period or action using the available controls."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Inspect an event"
+msgstr "Inspect an event"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Read the recorded actor, action, and affected configuration."
+msgstr "Read the recorded actor, action, and affected configuration."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Understand retention"
+msgstr "Understand retention"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Only actions recorded and retained by this server can appear."
+msgstr "Only actions recorded and retained by this server can appear."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Check the source"
+msgstr "Check the source"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Complete this connector's form"
+msgstr "Complete this connector's form"
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Use its required fields, account/region options, and supported data-type list. Save and inspect the returned connection status."
+msgstr "Use its required fields, account/region options, and supported data-type list. Save and inspect the returned connection status."
+
+#: src/lib/help/connectors.svelte.ts
+msgid "Verify the imported records"
+msgstr "Verify the imported records"
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Stored glucose readings feed the overview's range summary and typical-day preview."
+msgstr "Stored glucose readings feed the overview's range summary and typical-day preview."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Use the date selector above the overview, then open a report card. Appearance changes display units; Connectors & Apps manages incoming records."
+msgstr "Use the date selector above the overview, then open a report card. Appearance changes display units; Connectors & Apps manages incoming records."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Glucose readings in the selected period are summarised into headline measures and reliability information."
+msgstr "Glucose readings in the selected period are summarised into headline measures and reliability information."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Choose the date range above the report. Appearance controls glucose units; choose a detailed report to investigate a headline."
+msgstr "Choose the date range above the report. Appearance controls glucose units; choose a detailed report to investigate a headline."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Recorded glucose from several days is grouped by time of day into a median and percentile envelope."
+msgstr "Recorded glucose from several days is grouped by time of day into a median and percentile envelope."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Select the report period above the page. Appearance changes glucose units. A personal target overlay comes from the imported therapy profile."
+msgstr "Select the report period above the page. Appearance changes glucose units. A personal target overlay comes from the imported therapy profile."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Glucose samples are counted by value interval and grouped by hour for the hourly panel."
+msgstr "Glucose samples are counted by value interval and grouped by hour for the hourly panel."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Use the report date selector. Appearance changes the displayed glucose units; source and import problems are managed in Connectors & Apps."
+msgstr "Use the report date selector. Appearance changes the displayed glucose units; source and import problems are managed in Connectors & Apps."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Glucose-based estimates come from stored readings. Laboratory results come from the dated entries you save here."
+msgstr "Glucose-based estimates come from stored readings. Laboratory results come from the dated entries you save here."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Use the timeline's time-scale controls. The Lab results controls add or remove a dated result with its value and optional note. Appearance changes display units."
+msgstr "Use the timeline's time-scale controls. The Lab results controls add or remove a dated result with its value and optional note. Appearance changes display units."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Daily and monthly summaries are built from the stored data types and sources selected on this page."
+msgstr "Daily and monthly summaries are built from the stored data types and sources selected on this page."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Use the source and data-type filters. The legend controls metric, colour palette, and focus range. These view filters do not change imported records."
+msgstr "Use the source and data-type filters. The legend controls metric, colour palette, and focus range. These view filters do not change imported records."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "The glucose chart uses recorded samples and available treatment/device tracks in the chosen interval."
+msgstr "The glucose chart uses recorded samples and available treatment/device tracks in the chosen interval."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Choose dates and visible chart tracks on this page. Appearance changes units; Connectors & Apps manages the records being displayed."
+msgstr "Choose dates and visible chart tracks on this page. Appearance changes units; Connectors & Apps manages the records being displayed."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "One day's recorded glucose, treatments, and available device context are aligned by timestamp."
+msgstr "One day's recorded glucose, treatments, and available device context are aligned by timestamp."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Choose the day here. Correct treatment entries in Treatments; manage profile context in Therapy and formatting in Appearance."
+msgstr "Choose the day here. Correct treatment entries in Treatments; manage profile context in Therapy and formatting in Appearance."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Stored glucose is grouped by weekday across the selected period."
+msgstr "Stored glucose is grouped by weekday across the selected period."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Use the date range above the report to choose the weeks. Appearance changes units; this page does not edit weekday targets or therapy schedules."
+msgstr "Use the date range above the report to choose the weeks. Appearance changes units; this page does not edit weekday targets or therapy schedules."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Each side runs the same glucose analysis for its committed date window."
+msgstr "Each side runs the same glucose analysis for its committed date window."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Choose a preset or set both periods and labels, then click Load. Swap exchanges the loaded periods immediately. Display units are in Appearance."
+msgstr "Choose a preset or set both periods and labels, then click Load. Swap exchanges the loaded periods immediately. Display units are in Appearance."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Glucose samples are grouped into local-hour buckets across the selected days."
+msgstr "Glucose samples are grouped into local-hour buckets across the selected days."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Choose the date range above the report. The hourly summaries and table describe that selection; Appearance controls glucose units and time format."
+msgstr "Choose the date range above the report. The hourly summaries and table describe that selection; Appearance controls glucose units and time format."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Imported basal delivery, temporary basal events, and available therapy schedules provide rate and duration context."
+msgstr "Imported basal delivery, temporary basal events, and available therapy schedules provide rate and duration context."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Choose the report period. Therapy shows the imported schedule; Connectors & Apps manages its source. This report does not edit pump settings."
+msgstr "Choose the report period. Therapy shows the imported schedule; Connectors & Apps manages its source. This report does not edit pump settings."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Recorded basal and bolus delivery is summarised by day and hour."
+msgstr "Recorded basal and bolus delivery is summarised by day and hour."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Choose the report period. Inspect treatment records in Treatments, schedules in Therapy, and delivery imports in Connectors & Apps."
+msgstr "Choose the report period. Inspect treatment records in Treatments, schedules in Therapy, and delivery imports in Connectors & Apps."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Recorded infusion-site changes define the event windows used to compare surrounding glucose."
+msgstr "Recorded infusion-site changes define the event windows used to compare surrounding glucose."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Choose the report period. Check site-change event timestamps in Treatments and any associated tracker history in Notifications & Trackers."
+msgstr "Choose the report period. Check site-change event timestamps in Treatments and any associated tracker history in Notifications & Trackers."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Glucose statistics, recorded insulin delivery, and imported schedules provide the separate panels of the integrated profile."
+msgstr "Glucose statistics, recorded insulin delivery, and imported schedules provide the separate panels of the integrated profile."
+
+#: src/lib/help/report-context.svelte.ts
+msgid "Choose the report period. Therapy provides the profile and scheduled targets; Connectors & Apps manages actual incoming delivery records."
+msgstr "Choose the report period. Therapy provides the profile and scheduled targets; Connectors & Apps manages actual incoming delivery records."
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Settings for this page"
+msgstr "Settings for this page"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Change settings"
+msgstr "Change settings"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Open the relevant controls in a new tab. Your original page stays in place."
+msgstr "Open the relevant controls in a new tab. Your original page stays in place."
+
+#: src/lib/components/help/HelpReadingAid.svelte
+msgid "Page reading aid"
+msgstr "Page reading aid"
+
+#: src/lib/components/help/HelpReadingAid.svelte
+msgid "Schematic reading example, without personal data"
+msgstr "Schematic reading example, without personal data"
+
+#: src/lib/components/help/HelpReadingAid.svelte
+msgid "Reading diagram — illustrative, not your measurements. Colours follow your Nocturne theme."
+msgstr "Reading diagram — illustrative, not your measurements. Colours follow your Nocturne theme."
+
+#: src/lib/components/help/HelpReadingAid.svelte
+msgid "How to read this page"
+msgstr "How to read this page"
+
+#: src/lib/components/help/HelpHarness.test.svelte
+msgid "Application dialog"
+msgstr "Application dialog"
+
+#: src/lib/components/help/HelpHarness.test.svelte
+msgid "Application dialog content"
+msgstr "Application dialog content"
+
+#: src/lib/components/help/HelpHarness.test.svelte
+msgid "Dialog content"
+msgstr "Dialog content"
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "Set up your account and select the correct patient workspace."
+msgstr "Set up your account and select the correct patient workspace."
+
+#: src/lib/help/reading-guides.svelte.ts
+msgid "The Fix already-imported data action is separate from changing display formats. Use it to correct existing timestamps."
+msgstr "The Fix already-imported data action is separate from changing display formats. Use it to correct existing timestamps."
