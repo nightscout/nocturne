@@ -50,18 +50,46 @@ public class ProfileProjectionService : IProfileProjectionService
     /// <inheritdoc />
     public async Task<Profile?> GetProfileByIdAsync(string id, CancellationToken ct = default)
     {
-        // Try legacy ID first
+        var settings = await ResolveRowAsync(id, ct);
+        return settings is null ? null : await AssembleProfileAsync(settings, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> ResolveDocumentIdAsync(string id, CancellationToken ct = default) =>
+        await ResolveRowAsync(id, ct) is { } settings ? TherapySettings.DocumentIdOf(settings) : null;
+
+    /// <summary>
+    /// The row <paramref name="id"/> names, or, for an id that names a whole document, its newest
+    /// store, the default store winning a tie. Exact keys are tried before the served
+    /// <see cref="MongoObjectId.Coerce"/> forms, so a stored ObjectId wins over a prefix or hash match.
+    /// </summary>
+    private async Task<TherapySettings?> ResolveRowAsync(string id, CancellationToken ct)
+    {
         var settings = await _therapyRepo.GetByLegacyIdAsync(id, ct);
 
-        // Fall back to GUID lookup
         if (settings is null && Guid.TryParse(id, out var guid))
             settings = await _therapyRepo.GetByIdAsync(guid, ct);
 
-        if (settings is null)
-            return null;
+        settings ??= await NewestDocumentRowAsync(id, ct);
 
-        return await AssembleProfileAsync(settings, ct);
+        if (settings is not null || !MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+            return settings;
+
+        settings = await _therapyRepo.GetByGuidRangeAsync(low, high, ct);
+        if (settings is not null)
+            return settings;
+
+        var documentId = (await _therapyRepo.GetDocumentIdsAsync(ct))
+            .FirstOrDefault(d => MongoObjectId.Coerce(d) == id);
+        return documentId is null ? null : await NewestDocumentRowAsync(documentId, ct);
     }
+
+    private async Task<TherapySettings?> NewestDocumentRowAsync(string documentId, CancellationToken ct) =>
+        (await _therapyRepo.GetDocumentRowsAsync(documentId, ct))
+            .OrderByDescending(r => r.Timestamp)
+            .ThenByDescending(r => r.IsDefault)
+            .ThenBy(r => r.ProfileName, StringComparer.Ordinal)
+            .FirstOrDefault();
 
     /// <inheritdoc />
     public async Task<IEnumerable<Profile>> GetProfilesAsync(
