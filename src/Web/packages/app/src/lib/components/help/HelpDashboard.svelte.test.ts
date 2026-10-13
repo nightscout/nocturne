@@ -156,6 +156,18 @@ describe("dashboard documentation demo", () => {
     }
   });
 
+  it("places help directly below the selected widget in a narrow panel", async () => {
+    render(Demo, { allowedSettings, width: 360 });
+    const button = page.getByRole("button", { name: "View explanation: BG Delta", exact: true });
+    await button.click();
+    const explanation = page.getByRole("region", { name: "Widget explanation" });
+    await vi.waitFor(() => {
+      const row = button.element().closest('[data-slot="card"]')?.parentElement;
+      expect(row?.children).toHaveLength(1);
+      expect(row?.nextElementSibling).toBe(explanation.element());
+    });
+  });
+
   it("reconnects the local example without touching the patient connection", async () => {
     render(Demo, { allowedSettings });
     await page.getByRole("button", { name: "View explanation: Connection", exact: true }).click();

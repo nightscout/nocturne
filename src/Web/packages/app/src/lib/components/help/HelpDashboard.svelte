@@ -67,11 +67,9 @@
   const widgetTopics = $derived(
     topics.filter((topic) => isTopWidgetId(topic.id))
   );
-  const widgetRows = $derived(
-    Array.from({ length: Math.ceil(widgetTopics.length / 3) }, (_, row) =>
-      widgetTopics.slice(row * 3, row * 3 + 3)
-    )
-  );
+  let exampleWidth = $state(0);
+  const columns = $derived(exampleWidth >= 840 ? 3 : exampleWidth >= 560 ? 2 : 1);
+  const widgetRows = $derived(Array.from({ length: Math.ceil(widgetTopics.length / columns) }, (_, row) => widgetTopics.slice(row * columns, row * columns + columns)));
   let selected = $state<string | null>(null);
   let focusedDetail = $state<number | null>(null);
   const glucoseDetails = $derived([
@@ -243,7 +241,8 @@
 </script>
 
 <Tooltip.Provider>
-  <section class="space-y-5" aria-label="Interactive dashboard examples">
+  <section class="space-y-5" aria-label="Interactive dashboard examples"
+    bind:clientWidth={exampleWidth}>
     <div class="space-y-2">
       <h2 class="text-xl font-semibold">Explore the dashboard</h2>
       <p class="text-sm text-muted-foreground">
@@ -339,7 +338,7 @@
       />{/if}
 
     {#each widgetRows as row, rowIndex (rowIndex)}
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div class="grid gap-3" style:grid-template-columns={`repeat(${columns}, minmax(0, 1fr))`}>
         {#each row as topic (topic.id)}
           <Card size="flush" class="flex flex-col">
             {#if isTopWidgetId(topic.id)}
