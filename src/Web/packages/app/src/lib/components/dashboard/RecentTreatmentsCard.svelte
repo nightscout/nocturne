@@ -72,11 +72,11 @@
             {@const category = ENTRY_CATEGORIES[entry.kind]}
             <li>
             <div
-              class="-mx-2 flex cursor-pointer items-center justify-between rounded-md px-2 py-2.5 transition-colors hover:bg-accent/50"
-              onclick={() => handleEntryClick(entry)}
-              role="button"
-              tabindex="0"
-              onkeydown={(e) => {
+              class="-mx-2 flex items-center justify-between rounded-md px-2 py-2.5 {preview ? '' : 'cursor-pointer transition-colors hover:bg-accent/50'}"
+              onclick={preview ? undefined : () => handleEntryClick(entry)}
+              role={preview ? undefined : "button"}
+              tabindex={preview ? undefined : 0}
+              onkeydown={preview ? undefined : (e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   handleEntryClick(entry);
