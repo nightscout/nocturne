@@ -10,14 +10,15 @@
 
   interface Props {
     displayMode?: PredictionDisplayMode;
+    enabled?: boolean;
   }
 
-  let { displayMode }: Props = $props();
+  let { displayMode, enabled }: Props = $props();
 
   const ctx = getGlucoseChartContext();
 
   const showPredictions = $derived(
-    ctx.engine.predictionServiceAvailable && ctx.engine.predictionData !== null
+    ctx.engine.effectiveShowPredictions && ctx.engine.predictionData !== null
   );
   const effectiveDisplayMode = $derived(
     displayMode ?? predictionDisplayMode.current
@@ -28,7 +29,7 @@
   <PredictionVisualizations
     {showPredictions}
     predictionData={ctx.engine.predictionData}
-    predictionEnabled={predictionEnabled.current}
+    predictionEnabled={enabled ?? predictionEnabled.current}
     predictionDisplayMode={effectiveDisplayMode}
     predictionError={ctx.engine.predictionError}
     glucoseScale={ctx.layout.glucose.scale}

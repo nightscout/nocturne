@@ -12,7 +12,7 @@
   // Toggle between today and 90-day average
   let showAverage = $state(false);
 
-  // Fetch on the client after hydration  -  the underlying API can be slow and
+  // Fetch on the client after hydration - the underlying API can be slow and
   // would otherwise block SSR (timing out and breaking hydration).
   let statsPromise = $state<Promise<import("$lib/api").MultiPeriodStatistics> | null>(
     null
