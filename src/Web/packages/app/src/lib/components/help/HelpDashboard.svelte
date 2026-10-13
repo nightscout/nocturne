@@ -338,7 +338,7 @@
       />{/if}
 
     {#each widgetRows as row, rowIndex (rowIndex)}
-      <div class="grid gap-3" style:grid-template-columns={`repeat(${columns}, minmax(0, 1fr))`}>
+      <div class="grid gap-3" class:grid-cols-1={columns === 1} class:grid-cols-2={columns === 2} class:grid-cols-3={columns === 3}>
         {#each row as topic (topic.id)}
           <Card size="flush" class="flex flex-col">
             {#if isTopWidgetId(topic.id)}

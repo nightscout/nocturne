@@ -5,7 +5,7 @@
 </script>
 
 <Tooltip.Provider>
-  <div class="bg-background text-foreground p-6" style:max-width={width ? `${width}px` : undefined}>
+  <div class="bg-background text-foreground p-6 max-w-[var(--demo-width)]" style:--demo-width={width ? `${width}px` : "100%"}>
     <HelpDashboard {allowedSettings} />
   </div>
 </Tooltip.Provider>
