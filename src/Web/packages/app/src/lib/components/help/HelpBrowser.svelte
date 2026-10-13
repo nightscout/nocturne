@@ -102,7 +102,7 @@
       {#if article.href === "/"}
         {#if dashboardDemo.component}<dashboardDemo.component
             allowedSettings={links.map((link) => link.href)}
-          />{:else}<p>Loading dashboard examples�</p>{/if}
+          />{:else}<p>Loading dashboard examples...</p>{/if}
       {:else}
         <HelpReadingAid {article} />
         {#if settings.length}
