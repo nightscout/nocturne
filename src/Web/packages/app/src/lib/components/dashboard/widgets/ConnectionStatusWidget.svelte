@@ -67,7 +67,8 @@
 
   // Manual reconnect handler
   function handleReconnect() {
-    if (!examples) realtimeStore.reconnect();
+    if (examples) examples.connected = true;
+    else realtimeStore.reconnect();
   }
 </script>
 

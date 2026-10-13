@@ -132,6 +132,16 @@ describe("dashboard documentation demo", () => {
     expect(getChartData).not.toHaveBeenCalled();
   });
 
+  it("reconnects the local example without touching the patient connection", async () => {
+    render(Demo, { allowedSettings });
+    await page.getByRole("button", { name: "View explanation: Connection", exact: true }).click();
+    await page.getByRole("button", { name: "No live connection", exact: true }).click();
+    await expect.element(page.getByText("Disconnected", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect.element(page.getByText("Connected", { exact: true })).toBeVisible();
+    expect(getChartData).not.toHaveBeenCalled();
+  });
+
   it("shows complete glucose examples and neutralises an older reading", async () => {
     render(Demo, { allowedSettings });
     await page
