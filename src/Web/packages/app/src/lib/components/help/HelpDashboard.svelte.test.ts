@@ -132,6 +132,30 @@ describe("dashboard documentation demo", () => {
     expect(getChartData).not.toHaveBeenCalled();
   });
 
+  it("draws and switches example forecasts even when personal predictions are disabled", async () => {
+    const { predictionEnabled, predictionDisplayMode, predictionMinutes } = await import("$lib/stores/appearance-store.svelte");
+    const saved = { enabled: predictionEnabled.current, mode: predictionDisplayMode.current, minutes: predictionMinutes.current };
+    try {
+      predictionEnabled.current = false;
+      predictionDisplayMode.current = "cone";
+      predictionMinutes.current = 15;
+      render(Demo, { allowedSettings });
+      const plot = page.getByTestId("glucose-plot");
+      await vi.waitFor(() => expect(plot.element().querySelector('[class~="stroke-pred-main"]')).not.toBeNull());
+      await page.getByRole("button", { name: "Lines", exact: true }).click();
+      await vi.waitFor(() => expect(plot.element().querySelector('[class~="stroke-pred-iob"]')).not.toBeNull());
+      expect(predictionEnabled.current).toBe(false);
+      expect(predictionDisplayMode.current).toBe("cone");
+      expect(predictionMinutes.current).toBe(15);
+      expect(getPredictionStatus).not.toHaveBeenCalled();
+      expect(getPredictions).not.toHaveBeenCalled();
+    } finally {
+      predictionEnabled.current = saved.enabled;
+      predictionDisplayMode.current = saved.mode;
+      predictionMinutes.current = saved.minutes;
+    }
+  });
+
   it("reconnects the local example without touching the patient connection", async () => {
     render(Demo, { allowedSettings });
     await page.getByRole("button", { name: "View explanation: Connection", exact: true }).click();

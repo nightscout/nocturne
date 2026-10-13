@@ -420,7 +420,7 @@
               areaOpacity={chartAreaOpacity.current}
             />
             {#if effectiveShowPredictions}
-              <PredictionTrack />
+              <PredictionTrack displayMode={staticData ? predictionModeValue : undefined} enabled={staticData ? true : undefined} />
             {/if}
             <IobCobTrack onMarkerClick={handleMarkerClick} />
             <DeviceEventMarkers onMarkerClick={handleMarkerClick} />
