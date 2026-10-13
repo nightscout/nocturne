@@ -46,6 +46,8 @@ export interface ChartDataEngineOptions {
   externalPredictionData?: PredictionData | null;
   enablePredictions?: boolean;
   demoMode?: boolean;
+  /** Fixed examples must never refresh from a patient API. */
+  staticData?: boolean;
   /**
    * How wide a window the consumer draws, and so how far the realtime merge may
    * reach. `"buffer"` is `fullDataRange` — `dateRange` when one was named, the
@@ -234,7 +236,7 @@ export function createChartDataEngine(
 
   // Prediction fetch trigger (skipped when external predictions are provided)
   const predictionFetchTrigger = $derived.by(() => {
-    if (!isBrowser || hasExternalPredictions) return null;
+    if (!isBrowser || hasExternalPredictions || options.staticData) return null;
     const enabled = predictionEnabled.current;
     const latestEntryMills =
       serverChartData?.glucoseData?.[
@@ -307,7 +309,7 @@ export function createChartDataEngine(
 
   // Skip if we already have initial data from SSR streaming
   $effect(() => {
-    if (realtimeOnly) return;
+    if (realtimeOnly || options.staticData) return;
     if (options.initialChartData && untrack(() => serverChartData)) return;
 
     const range = stableFetchRange;
@@ -417,7 +419,7 @@ export function createChartDataEngine(
   });
 
   $effect(() => {
-    if (!isBrowser || dataFingerprint === null || !realtimeStore.isReady) return;
+    if (!isBrowser || options.staticData || dataFingerprint === null || !realtimeStore.isReady) return;
     // The store's own initial load rewrites these arrays; SSR data predates it by seconds.
     if (seenFingerprint === null) {
       seenFingerprint = dataFingerprint;
@@ -429,7 +431,7 @@ export function createChartDataEngine(
   });
 
   $effect(() => {
-    if (!isBrowser || !hasInitialData) return;
+    if (!isBrowser || options.staticData || !hasInitialData) return;
 
     fallbackTimer = setTimeout(refreshRecent, RECENT_REFRESH_FALLBACK_MS);
     const onVisible = () => {
@@ -447,7 +449,7 @@ export function createChartDataEngine(
 
   // Check prediction service availability on mount
   $effect(() => {
-    if (!isBrowser || !(options.enablePredictions ?? true)) return;
+    if (!isBrowser || options.staticData || !(options.enablePredictions ?? true)) return;
 
     let cancelled = false;
     getPredictionStatus({})

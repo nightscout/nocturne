@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { dashboardExamples } from "../demo-context";
+  const examples = dashboardExamples();
   import WidgetCard from "./WidgetCard.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
@@ -33,16 +35,18 @@
   // `timeAgo` reads the clock once; re-derive it on a tick so the age
   // on screen keeps up with the reading it describes.
   const now = new Now();
-  const age = $derived(timeAgo(displayLastUpdated, undefined, now.current));
+  const age = $derived(timeAgo(displayLastUpdated, undefined, examples?.now ?? now.current));
   const units = $derived(glucoseUnits.current);
   const displayBgDelta = $derived(formatGlucoseDelta(rawBgDelta, units));
   const unitLabel = $derived(getUnitLabel(units));
 
-  const connection = $derived(realtimeStore.connectionPresentation);
+  const connection = $derived(examples ? (examples.connected ? "live" : "unavailable") : realtimeStore.connectionPresentation);
   const isLive = $derived(connection === "live" || connection === "pending");
 
   // Battery data
-  const batteryStatusPromise = getCurrentBatteryStatus({ recentMinutes: 30 });
+  const batteryStatusPromise = examples
+    ? Promise.resolve(examples.battery)
+    : getCurrentBatteryStatus({ recentMinutes: 30 });
   // Get battery icon component based on level
   function getBatteryIconComponent(level: number | undefined) {
     if (!level) return BatteryWarning;
