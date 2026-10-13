@@ -1,4 +1,4 @@
-import { WidgetId } from "$lib/api";
+import { WidgetId } from "$lib/api/generated/nocturne-api-client";
 import {
   TOP_WIDGET_IDS,
   type TopWidgetId,
