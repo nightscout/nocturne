@@ -194,12 +194,12 @@ public class ProfileController : BaseV3Controller<Profile>
     /// </summary>
     /// <param name="profileData">Profile data to create (single object or array)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Created profiles</returns>
+    /// <returns>The <see cref="V3CreateResponse"/> for one document; the created profiles for an array.</returns>
     [HttpPost]
     [Authorize]
     [RequireScope(Scope.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/profile")]
-    [ProducesResponseType(typeof(Profile[]), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -239,7 +239,13 @@ public class ProfileController : BaseV3Controller<Profile>
 
             _logger.LogDebug("Successfully created {Count} profiles", createdProfiles.Count());
 
-            return StatusCode(201, createdProfiles.ToArray());
+            if (profileData.ValueKind == JsonValueKind.Array)
+            {
+                return StatusCode(201, createdProfiles.ToArray());
+            }
+
+            var created = createdProfiles.First();
+            return V3Created(nameof(GetProfileById), created.Id);
         }
         catch (ArgumentException ex)
         {

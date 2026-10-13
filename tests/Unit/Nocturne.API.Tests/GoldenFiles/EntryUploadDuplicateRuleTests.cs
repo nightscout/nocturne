@@ -108,6 +108,21 @@ public class EntryUploadDuplicateRuleTests : GoldenFileTestBase
         SensorGlucoseRows().Should().Be(1);
     }
 
+    [Fact]
+    public async Task V3_Deduplication_AnswersTheIdentifierOfTheStoredRowWhateverIdWasSubmitted()
+    {
+        await SeedStoredSgv(120, Device);
+
+        var response = await PostJsonAsync(
+            "/api/v3/entries",
+            new { _id = "6a6a6a6a6a6a6a6a6a6a6a6a", type = "sgv", sgv = 120, date = StoredMills, device = Device });
+
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var identifier = body.RootElement.GetProperty("identifier").GetString();
+        identifier.Should().Be("aaaaaaaaaaaaaaaaaaaaa001");
+        (await Client.GetAsync($"/api/v3/entries/{identifier}")).IsSuccessStatusCode.Should().BeTrue();
+    }
+
     private static object Sgv(double sgv, long mills, string device) =>
         new { type = "sgv", sgv, date = mills, device, direction = "Flat" };
 

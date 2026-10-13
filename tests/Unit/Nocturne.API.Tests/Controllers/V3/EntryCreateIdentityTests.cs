@@ -55,7 +55,7 @@ public class EntryCreateIdentityTests
 
         var stored = _written.Should().ContainSingle().Subject;
         MongoObjectId.IsObjectId(stored.Id).Should().BeTrue();
-        var created = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject;
+        var created = result.Should().BeOfType<CreatedAtActionResult>().Subject;
         created.RouteValues!["id"].Should().Be(stored.Id);
     }
 

@@ -310,12 +310,12 @@ public class FoodController : BaseV3Controller<Food>
     /// </summary>
     /// <param name="foodData">Food data to create (single object or array)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Created food records</returns>
+    /// <returns>The <see cref="V3CreateResponse"/> for one document; the created records for an array.</returns>
     [HttpPost]
     [Authorize]
     [RequireScope(Scope.FoodReadWrite)]
     [NightscoutEndpoint("/api/v3/food")]
-    [ProducesResponseType(typeof(Food[]), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -383,7 +383,18 @@ public class FoodController : BaseV3Controller<Food>
 
             _logger.LogDebug("Successfully created {Count} food records", createdRecords.Count());
 
-            return StatusCode(201, createdRecords.ToArray());
+            if (foodData.ValueKind == JsonValueKind.Array)
+            {
+                return StatusCode(201, createdRecords.ToArray());
+            }
+
+            var created = createdRecords.FirstOrDefault();
+            if (created == null)
+            {
+                return CreateV3ErrorResponse(500, "Failed to create food", "Food creation failed");
+            }
+
+            return V3Created(nameof(GetFoodById), created.Id);
         }
         catch (ArgumentException ex)
         {

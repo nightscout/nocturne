@@ -165,7 +165,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// </summary>
     /// <param name="treatment">The <see cref="Treatment"/> to create.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The created <see cref="Treatment"/>.</returns>
+    /// <returns>The <see cref="V3CreateResponse"/> for the created or already stored treatment.</returns>
     /// <remarks>
     /// Supports AAPS deduplication: if a treatment with the same ID already exists,
     /// returns 200 with <c>isDeduplication: true</c>.
@@ -180,11 +180,12 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [Authorize]
     [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments")]
-    [ProducesResponseType(typeof(Treatment), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<Treatment>> CreateTreatment(
+    public async Task<ActionResult> CreateTreatment(
         [FromBody] Treatment treatment,
         CancellationToken cancellationToken = default
     )
@@ -212,16 +213,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 );
                 if (existingTreatment != null)
                 {
-                    var existingIdentifier = MongoObjectId.Coerce(existingTreatment.Id);
-                    return Ok(
-                        new
-                        {
-                            status = 200,
-                            identifier = existingIdentifier,
-                            isDeduplication = true,
-                            deduplicatedIdentifier = existingIdentifier,
-                        }
-                    );
+                    return V3Deduplicated(existingTreatment.Id, existingTreatment.SrvModified);
                 }
             }
 
@@ -246,12 +238,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
             _logger.LogDebug("Successfully created V3 treatment {Id}", createdTreatment.Id);
 
-            // Location resolves to the 24-hex ObjectId that matches the response body identifier.
-            return CreatedAtAction(
-                nameof(GetTreatment),
-                new { id = MongoObjectId.Coerce(createdTreatment.Id) },
-                createdTreatment
-            );
+            return V3Created(nameof(GetTreatment), createdTreatment.Id);
         }
         catch (ArgumentException ex)
         {

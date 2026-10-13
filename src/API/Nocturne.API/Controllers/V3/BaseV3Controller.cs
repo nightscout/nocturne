@@ -455,6 +455,50 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     /// <summary>
+    /// The V3 answer to a create that stored a new document: 201 with the document's wire
+    /// identifier and the server's write time as <c>lastModified</c>, <c>Location</c> pointing at
+    /// <paramref name="getAction"/>, and <c>Last-Modified</c>.
+    /// </summary>
+    /// <param name="getAction">Name of the action that reads one document of the collection.</param>
+    /// <param name="storedId">Stored id of the created document.</param>
+    protected ActionResult V3Created(string getAction, string? storedId)
+    {
+        var identifier = MongoObjectId.Coerce(storedId);
+        var lastModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
+        return CreatedAtAction(
+            getAction,
+            new { id = identifier },
+            new V3CreateResponse { Status = 201, Identifier = identifier, LastModified = lastModified }
+        );
+    }
+
+    /// <summary>
+    /// The V3 answer to a create that matched a document already stored: 200 with
+    /// <c>isDeduplication</c>, the stored document's identifier, which a v3 read by id resolves, and
+    /// its <c>lastModified</c>. The stored document is left as it was.
+    /// </summary>
+    /// <param name="storedId">Stored id of the existing document.</param>
+    /// <param name="srvModified">The existing document's <c>srvModified</c>, in Unix milliseconds.</param>
+    protected ActionResult V3Deduplicated(string? storedId, long? srvModified)
+    {
+        var lastModified = srvModified ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
+        return Ok(
+            new V3CreateResponse
+            {
+                Status = 200,
+                Identifier = MongoObjectId.Coerce(storedId),
+                IsDeduplication = true,
+                LastModified = lastModified,
+            }
+        );
+    }
+
+    private static string FormatHttpDate(long mills) =>
+        DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime.ToString("R");
+
+    /// <summary>
     /// Set <c>Last-Modified</c> and <c>ETag</c> on a V3 <c>history/{lastModified}</c> response.
     /// AAPS advances its incremental-sync cursor from these headers; without them the cursor
     /// stays put and the same page is requested repeatedly.
@@ -462,8 +506,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <param name="maxMills">Highest record timestamp in the response, in Unix milliseconds.</param>
     protected void SetHistoryCursorHeaders(long maxMills)
     {
-        var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(maxMills).UtcDateTime;
-        Response.Headers["Last-Modified"] = lastModified.ToString("R");
+        Response.Headers["Last-Modified"] = FormatHttpDate(maxMills);
         Response.Headers["ETag"] = FormatCursorETag(maxMills);
     }
 
