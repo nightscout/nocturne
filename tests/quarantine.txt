@@ -35,7 +35,7 @@ Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithFindT
 Nocturne.API.Tests.Integration.Parity.V1.FoodParityTests.GetFoodQuickpicks_WithData_ReturnsSameShape | food/quickpicks returns a food Nightscout does not list
 Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfileCurrent_Empty_ReturnsSameShape | /api/v1/profile/current with no profile answers []; Nightscout null
 Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfileCurrent_WithData_ReturnsSameShape | null-valued profile store fields (perGIvalues, carbs_hr_*, delay_*) are dropped
-Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfile_MultipleProfiles_ReturnsSameShape | several v1 profiles read back with their stores merged into the wrong documents
+Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfile_MultipleProfiles_ReturnsSameShape | null-valued profile store fields (perGIvalues, carbs_hr_*, delay_*) are dropped
 Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfile_WithData_ReturnsSameShape | null-valued profile store fields (perGIvalues, carbs_hr_*, delay_*) are dropped
 Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.PostProfile_Simple_ReturnsSameShape | POST /api/v1/profile response has no created_at
 Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.PostProfile_WithMultipleTimePeriods_ReturnsSameShape | POST /api/v1/profile response has no created_at

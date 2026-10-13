@@ -51,20 +51,26 @@ public interface ITherapySettingsRepository : IProfileScopedRepository<TherapySe
     Task<TherapySettings?> GetNewestDocumentRowAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// The live rows whose legacy id starts with <paramref name="prefix"/>, newest first: for
-    /// <c>"{profileId}:"</c>, the stores of one profile document still standing.
-    /// </summary>
-    /// <param name="prefix">Legacy id prefix to match.</param>
-    /// <param name="ct">Cancellation token.</param>
-    Task<IEnumerable<TherapySettings>> GetByLegacyIdPrefixAsync(string prefix, CancellationToken ct = default);
-
-    /// <summary>
     /// The ids of the stored profile documents (see <see cref="TherapySettings.DocumentIdOf"/>), newest
     /// first as Nightscout sorts them: by time descending, then by <c>_id</c> descending. Profile-switch
     /// snapshots are not documents and are left out.
     /// </summary>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<string>> GetDocumentIdsAsync(CancellationToken ct = default);
+
+    /// <summary>The number of stored profile documents <see cref="GetDocumentIdsAsync"/> lists.</summary>
+    /// <param name="ct">Cancellation token.</param>
+    Task<long> CountDocumentsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// A page of the stored profile documents, ranked as <see cref="GetDocumentIdsAsync"/> ranks them,
+    /// each as its live rows, one per named store.
+    /// </summary>
+    /// <param name="limit">Maximum number of documents to return.</param>
+    /// <param name="offset">Number of documents to skip.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<IReadOnlyList<TherapySettings>>> GetDocumentsAsync(
+        int limit, int offset, CancellationToken ct = default);
 
     /// <summary>
     /// The live rows of the profile document <paramref name="documentId"/>, one per named store,

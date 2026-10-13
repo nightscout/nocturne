@@ -34,93 +34,66 @@ public class ProfileProjectionService : IProfileProjectionService
     }
 
     /// <inheritdoc />
-    public async Task<Profile?> GetCurrentProfileAsync(CancellationToken ct = default)
-    {
-        var settings = await _therapyRepo.GetAsync(
-            from: null, to: null, device: null, source: null,
-            limit: 1, offset: 0, descending: true, ct: ct);
-
-        var latest = settings.FirstOrDefault();
-        if (latest is null)
-            return null;
-
-        return await AssembleProfileAsync(latest, ct);
-    }
+    public async Task<Profile?> GetCurrentProfileAsync(CancellationToken ct = default) =>
+        (await GetProfilesAsync(count: 1, skip: 0, ct)).FirstOrDefault();
 
     /// <inheritdoc />
-    public async Task<Profile?> GetProfileByIdAsync(string id, CancellationToken ct = default)
-    {
-        var settings = await ResolveRowAsync(id, ct);
-        return settings is null ? null : await AssembleProfileAsync(settings, ct);
-    }
+    public async Task<Profile?> GetProfileByIdAsync(string id, CancellationToken ct = default) =>
+        await ResolveDocumentIdAsync(id, ct) is { } documentId
+        && await _therapyRepo.GetDocumentRowsAsync(documentId, ct) is { Count: > 0 } rows
+            ? await AssembleDocumentAsync(rows, ct)
+            : null;
 
     /// <inheritdoc />
-    public async Task<string?> ResolveDocumentIdAsync(string id, CancellationToken ct = default) =>
-        await ResolveRowAsync(id, ct) is { } settings ? TherapySettings.DocumentIdOf(settings) : null;
-
-    /// <summary>
-    /// The row <paramref name="id"/> names, or, for an id that names a whole document, its newest
-    /// store, the default store winning a tie. Exact keys are tried before the served
-    /// <see cref="MongoObjectId.Coerce"/> forms, so a stored ObjectId wins over a prefix or hash match.
-    /// </summary>
-    private async Task<TherapySettings?> ResolveRowAsync(string id, CancellationToken ct)
+    /// <remarks>
+    /// Exact keys are tried before the served <see cref="MongoObjectId.Coerce"/> forms, so a stored
+    /// ObjectId wins over a prefix or hash match.
+    /// </remarks>
+    public async Task<string?> ResolveDocumentIdAsync(string id, CancellationToken ct = default)
     {
         var settings = await _therapyRepo.GetByLegacyIdAsync(id, ct);
 
         if (settings is null && Guid.TryParse(id, out var guid))
             settings = await _therapyRepo.GetByIdAsync(guid, ct);
 
-        settings ??= await NewestDocumentRowAsync(id, ct);
-
-        if (settings is not null || !MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
-            return settings;
-
-        settings = await _therapyRepo.GetByGuidRangeAsync(low, high, ct);
         if (settings is not null)
-            return settings;
+            return TherapySettings.DocumentIdOf(settings);
 
-        var documentId = (await _therapyRepo.GetDocumentIdsAsync(ct))
-            .FirstOrDefault(d => MongoObjectId.Coerce(d) == id);
-        return documentId is null ? null : await NewestDocumentRowAsync(documentId, ct);
+        if (await _therapyRepo.GetDocumentRowsAsync(id, ct) is { Count: > 0 } rows)
+            return TherapySettings.DocumentIdOf(rows[0]);
+
+        if (!MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+            return null;
+
+        if (await _therapyRepo.GetByGuidRangeAsync(low, high, ct) is { } ranged)
+            return TherapySettings.DocumentIdOf(ranged);
+
+        return (await _therapyRepo.GetDocumentIdsAsync(ct)).FirstOrDefault(d => MongoObjectId.Coerce(d) == id);
     }
-
-    private async Task<TherapySettings?> NewestDocumentRowAsync(string documentId, CancellationToken ct) =>
-        (await _therapyRepo.GetDocumentRowsAsync(documentId, ct))
-            .OrderByDescending(r => r.Timestamp)
-            .ThenByDescending(r => r.IsDefault)
-            .ThenBy(r => r.ProfileName, StringComparer.Ordinal)
-            .FirstOrDefault();
 
     /// <inheritdoc />
     public async Task<IEnumerable<Profile>> GetProfilesAsync(
         int count = 10, int skip = 0, CancellationToken ct = default)
     {
-        var settingsList = await _therapyRepo.GetAsync(
-            from: null, to: null, device: null, source: null,
-            limit: count, offset: skip, descending: true, ct: ct);
-
         var profiles = new List<Profile>();
-        foreach (var settings in settingsList)
-        {
-            var profile = await AssembleProfileAsync(settings, ct);
-            profiles.Add(profile);
-        }
+        foreach (var rows in await _therapyRepo.GetDocumentsAsync(count, skip, ct))
+            profiles.Add(await AssembleDocumentAsync(rows, ct));
 
         return profiles;
     }
 
     /// <inheritdoc />
     /// <remarks>
-    /// A profile is stamped by the newest of its rows, so it is found through whichever row moved:
+    /// A document is stamped by the newest of its rows, so it is found through whichever row moved:
     /// each of the five tables pages through its own history page, and every schedule row leads back
-    /// to the settings it can be assembled into (<see cref="OwnersAsync"/>). Past the horizon — the
-    /// earliest last millisecond among the tables whose page filled — a table holds rows not yet
-    /// read, so only profiles stamped at or before it are known to be complete. When none are, no
-    /// profile is stamped in (cursor, horizon] and the read resumes from the horizon. A deleted
-    /// settings row is a deleted profile, delivered with <c>isValid: false</c>, unless another store
-    /// of the same document is still live (<see cref="LiveSiblingAsync"/>): the client knows the
-    /// document by one identifier, so that store is re-sent live at the delete's stamp instead. A
-    /// schedule row, live or deleted, only leads to the live settings that own it.
+    /// to the settings it can be assembled into (<see cref="OwnersAsync"/>). Past the horizon, the
+    /// earliest last millisecond among the tables whose page filled, a table holds rows not yet
+    /// read, so only documents stamped at or before it are known to be complete. When none are, no
+    /// document is stamped in (cursor, horizon] and the read resumes from the horizon. A deleted
+    /// settings row re-sends its document's live stores at the delete's stamp, since the client knows
+    /// the document by one identifier, or, when no store of it is live, a deleted document with
+    /// <c>isValid: false</c>. A schedule row, live or deleted, only leads to the live settings that
+    /// own it. Profile-switch snapshots are not documents and are never delivered.
     /// </remarks>
     public async Task<ModifiedSincePage<Profile>> GetProfilesModifiedSinceAsync(
         long cursorMills, int limit, CancellationToken ct = default)
@@ -153,32 +126,27 @@ public class ProfileProjectionService : IProfileProjectionService
             foreach (var settings in await OwnersAsync(schedules, ct))
                 candidates.TryAdd(settings.Id, new HistoryRecord<TherapySettings>(settings, Deleted: false));
 
-            var stamped = new Dictionary<Guid, Profile>();
-            foreach (var (settings, deleted) in candidates.Values)
+            var stamped = new Dictionary<string, Profile>(StringComparer.Ordinal);
+            foreach (var document in candidates.Values
+                         .Where(c => !TherapySettings.IsProfileSwitchSnapshot(c.Record))
+                         .GroupBy(c => TherapySettings.DocumentIdOf(c.Record), StringComparer.Ordinal))
             {
-                var profile = await AssembleProfileAsync(settings, ct);
-                var settingsId = settings.Id;
-                if (deleted)
+                var live = await _therapyRepo.GetDocumentRowsAsync(document.Key, ct);
+                Profile profile;
+                if (live.Count > 0)
                 {
-                    if (await LiveSiblingAsync(settings, ct) is { } sibling)
-                    {
-                        var deletedAt = profile.SrvModified;
-                        profile = await AssembleProfileAsync(sibling, ct);
-                        profile.SrvModified = Math.Max(profile.SrvModified ?? 0, deletedAt ?? 0);
-                        settingsId = sibling.Id;
-                    }
-                    else
-                    {
-                        profile.IsValid = false;
-                    }
+                    profile = await AssembleDocumentAsync(live, ct);
+                    var deletedAt = document.Where(c => c.Deleted).Select(c => (long?)Stamp(c.Record)).Max();
+                    profile.SrvModified = Math.Max(profile.SrvModified ?? 0, deletedAt ?? 0);
+                }
+                else
+                {
+                    profile = await AssembleDocumentAsync(document.Select(c => c.Record).ToList(), ct);
+                    profile.IsValid = false;
                 }
 
-                if (profile.SrvModified > cursor
-                    && (horizon is null || profile.SrvModified <= horizon)
-                    && (!stamped.TryGetValue(settingsId, out var held) || held.SrvModified < profile.SrvModified))
-                {
-                    stamped[settingsId] = profile;
-                }
+                if (profile.SrvModified > cursor && (horizon is null || profile.SrvModified <= horizon))
+                    stamped[document.Key] = profile;
             }
 
             if (stamped.Count == 0)
@@ -192,7 +160,7 @@ public class ProfileProjectionService : IProfileProjectionService
 
             var ordered = stamped
                 .OrderBy(p => p.Value.SrvModified)
-                .ThenBy(p => p.Key)
+                .ThenBy(p => p.Key, StringComparer.Ordinal)
                 .Select(p => p.Value)
                 .ToList();
 
@@ -215,8 +183,11 @@ public class ProfileProjectionService : IProfileProjectionService
     private static long? Horizon(int limit, params IReadOnlyList<IV4Record>[] pages) =>
         pages
             .Where(page => page.Count >= limit)
-            .Select(page => (long?)new DateTimeOffset(page[^1].ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds())
+            .Select(page => (long?)Stamp(page[^1]))
             .Min();
+
+    private static long Stamp(IV4Record record) =>
+        new DateTimeOffset(record.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
     /// <summary>
     /// Every settings record <see cref="ScheduleForProfileAsync{TRecord}"/> could pair with one of
@@ -256,31 +227,58 @@ public class ProfileProjectionService : IProfileProjectionService
         return owners;
     }
 
-    /// <summary>
-    /// The newest live row stored from the same profile document as the deleted
-    /// <paramref name="settings"/>, which decomposition keys <c>"{profileId}:{storeName}"</c>, or
-    /// <c>null</c> when the whole document is gone.
-    /// </summary>
-    private async Task<TherapySettings?> LiveSiblingAsync(TherapySettings settings, CancellationToken ct)
-    {
-        if (settings.LegacyId?.Contains(':') != true)
-            return null;
-
-        return (await _therapyRepo.GetByLegacyIdPrefixAsync($"{TherapySettings.DocumentIdOf(settings)}:", ct))
-            .FirstOrDefault(s => s.Id != settings.Id);
-    }
-
     /// <inheritdoc />
-    public async Task<long> CountProfilesAsync(string? find = null, CancellationToken ct = default)
+    public Task<long> CountProfilesAsync(string? find = null, CancellationToken ct = default) =>
+        _therapyRepo.CountDocumentsAsync(ct);
+
+    /// <summary>
+    /// One legacy profile document, with a store per row of <paramref name="rows"/>.
+    /// </summary>
+    /// <remarks>
+    /// A document's own <c>defaultProfile</c> is not stored, only the tenant's one
+    /// <see cref="TherapySettings.IsDefault"/> row, so the document names that row's store when it
+    /// holds it and its newest store otherwise, and reads its document-level fields off that store's row.
+    /// </remarks>
+    private async Task<Profile> AssembleDocumentAsync(IReadOnlyList<TherapySettings> rows, CancellationToken ct)
     {
-        return await _therapyRepo.CountAsync(from: null, to: null, ct: ct);
+        var ordered = rows
+            .OrderByDescending(r => r.IsDefault)
+            .ThenByDescending(r => r.Timestamp)
+            .ThenBy(r => r.ProfileName, StringComparer.Ordinal)
+            .ToList();
+        var head = ordered[0];
+
+        var store = new Dictionary<string, ProfileData>();
+        var srvModified = long.MinValue;
+        foreach (var settings in ordered)
+        {
+            var (data, modified) = await AssembleStoreAsync(settings, ct);
+            store[settings.ProfileName] = data;
+            srvModified = Math.Max(srvModified, modified);
+        }
+
+        return new Profile
+        {
+            Id = TherapySettings.DocumentIdOf(head),
+            DefaultProfile = head.ProfileName,
+            StartDate = head.StartDate ?? head.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            Mills = head.Mills,
+            CreatedAt = head.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            SrvModified = srvModified,
+            Units = head.Units ?? "mg/dL",
+            EnteredBy = head.EnteredBy,
+            LoopSettings = head.LoopSettings,
+            IsExternallyManaged = head.IsExternallyManaged,
+            Store = store,
+        };
     }
 
     /// <summary>
-    /// Assembles a <see cref="Profile"/> from a <see cref="TherapySettings"/> record and its
-    /// schedule siblings.
+    /// The store <paramref name="settings"/> and its schedule siblings make, and the newest write
+    /// stamp among them.
     /// </summary>
-    private async Task<Profile> AssembleProfileAsync(TherapySettings settings, CancellationToken ct)
+    private async Task<(ProfileData Data, long Modified)> AssembleStoreAsync(
+        TherapySettings settings, CancellationToken ct)
     {
         var basal = ScheduleForProfileAsync(_basalRepo, settings, ct);
         var carbRatio = ScheduleForProfileAsync(_carbRatioRepo, settings, ct);
@@ -310,27 +308,11 @@ public class ProfileProjectionService : IProfileProjectionService
             TargetHigh = MapTargetHigh(targetRange.Result?.Entries),
         };
 
-        return new Profile
-        {
-            Id = TherapySettings.DocumentIdOf(settings),
-            DefaultProfile = settings.ProfileName,
-            StartDate = settings.StartDate ?? settings.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-            Mills = settings.Mills,
-            CreatedAt = settings.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-            SrvModified = new DateTimeOffset(
-                    new IV4Record?[] { settings, basal.Result, carbRatio.Result, sensitivity.Result, targetRange.Result }
-                        .Max(r => r?.ModifiedAt ?? DateTime.MinValue),
-                    TimeSpan.Zero)
-                .ToUnixTimeMilliseconds(),
-            Units = settings.Units ?? "mg/dL",
-            EnteredBy = settings.EnteredBy,
-            LoopSettings = settings.LoopSettings,
-            IsExternallyManaged = settings.IsExternallyManaged,
-            Store = new Dictionary<string, ProfileData>
-            {
-                [settings.ProfileName] = profileData
-            }
-        };
+        var modified = new IV4Record?[] { settings, basal.Result, carbRatio.Result, sensitivity.Result, targetRange.Result }
+            .OfType<IV4Record>()
+            .Max(Stamp);
+
+        return (profileData, modified);
     }
 
     /// <summary>
