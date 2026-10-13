@@ -3,6 +3,7 @@
   import { PumpModeIcon, ActivityCategoryIcon } from "$lib/components/icons";
   import { getGlucoseChartContext, markerInk } from "../chart-context.svelte";
   import TrackLabel from "./TrackLabel.svelte";
+  import { markerKey } from "$lib/utils/chart-data-merge";
 
   // Native SVG throughout: every span already carries pre-scaled pixel
   // coordinates, and layerchart marks each call registerMark() on mount, so one
@@ -32,7 +33,7 @@
       class="opacity-20"
     />
     <!-- Pump mode spans -->
-    {#each pumpModeSpans as span (span.id)}
+    {#each pumpModeSpans as span, i (markerKey(span.id, span.startTime, i))}
       {@const spanXPos = chartCtx.xScale(span.displayStart)}
       <rect
         x={spanXPos}
@@ -70,7 +71,7 @@
       class="opacity-20"
     />
     <!-- Override spans -->
-    {#each overrideSpans as span (span.id)}
+    {#each overrideSpans as span, i (markerKey(span.id, span.startTime, i))}
       {@const spanXPos = chartCtx.xScale(span.displayStart)}
       <rect
         x={spanXPos}
@@ -109,7 +110,7 @@
       class="opacity-20"
     />
     <!-- Profile spans -->
-    {#each profileSpans as span (span.id)}
+    {#each profileSpans as span, i (markerKey(span.id, span.startTime, i))}
       {@const spanXPos = chartCtx.xScale(span.displayStart)}
       <rect
         x={spanXPos}
@@ -148,7 +149,7 @@
       class="opacity-10"
     />
     <!-- All activity spans rendered in the same lane -->
-    {#each activitySpans as span (span.id)}
+    {#each activitySpans as span, i (markerKey(span.id, span.startTime, i))}
       {@const spanXPos = chartCtx.xScale(span.displayStart)}
       <rect
         x={spanXPos}
