@@ -2034,7 +2034,7 @@ msgid "Preview"
 msgstr "Vista previa"
 
 #~ msgid "DoubleUp"
-#~ msgstr ""
+#~ msgstr "DoubleUp"
 
 #~ msgid "DoubleDown"
 #~ msgstr ""
@@ -3279,6 +3279,7 @@ msgstr "<0/> Visitar el sitio web de {0}"
 
 #: src/lib/components/dashboard/BGStatisticsCards.svelte
 #: src/lib/components/dashboard/widgets/BgDeltaWidget.svelte
+#: src/lib/help/dashboard-guide.svelte.ts
 msgid "BG Delta"
 msgstr "Variación de glucosa"
 
@@ -3289,6 +3290,7 @@ msgstr "Variación de glucosa"
 #: src/lib/components/dashboard/widgets/LastUpdatedWidget.svelte
 #: src/lib/components/dashboard/widgets/LastUpdatedWidget.svelte
 #: src/lib/components/dashboard/widgets/LastUpdatedWidget.svelte
+#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Last Updated"
 msgstr "Última actualización"
 
@@ -3466,6 +3468,7 @@ msgstr "Dispositivos"
 msgid "Insulins"
 msgstr "Insulinas"
 
+#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
@@ -3503,6 +3506,7 @@ msgid "Cone of probabilities"
 msgstr "Cono de probabilidades"
 
 #: src/lib/components/dashboard/PredictionSettings.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Cone"
 msgstr "Cono"
 
@@ -3511,6 +3515,7 @@ msgid "All prediction lines"
 msgstr "Todas las líneas de predicción"
 
 #: src/lib/components/dashboard/PredictionSettings.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Lines"
 msgstr "Líneas"
 
@@ -3830,13 +3835,16 @@ msgid "No unit found."
 msgstr "No se encontró ninguna unidad."
 
 #: src/lib/components/entries/BGCheckSection.svelte
+#: src/lib/help/dashboard-examples.svelte.ts
 msgid "Finger"
 msgstr "Dedo"
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/entries/BGCheckSection.svelte
+#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/help/dashboard-examples.svelte.ts
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 msgid "Sensor"
 msgstr "Sensor"
@@ -4274,6 +4282,7 @@ msgstr "Sueño"
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
+#: src/lib/help/dashboard-examples.svelte.ts
 msgid "Exercise"
 msgstr "Ejercicio"
 
@@ -4322,6 +4331,7 @@ msgstr "Tentempié"
 #: src/lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/entries/BasalInjectionSection.svelte
+#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
@@ -4472,6 +4482,7 @@ msgid "Reports"
 msgstr "Informes"
 
 #: src/lib/components/dashboard/widgets/ClockWidget.svelte
+#: src/lib/help/dashboard-guide.svelte.ts
 #: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Clock"
@@ -4536,6 +4547,7 @@ msgstr "Configuración inicial"
 msgid "Account"
 msgstr "Cuenta"
 
+#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
@@ -4543,17 +4555,20 @@ msgstr "Cuenta"
 msgid "Patient Record"
 msgstr "Historia del paciente"
 
+#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Appearance"
 msgstr "Apariencia"
 
+#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Therapy"
 msgstr "Terapia"
 
+#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
@@ -4567,6 +4582,7 @@ msgstr "Calidad de los datos"
 msgid "Notifications & Trackers"
 msgstr "Notificaciones y seguimientos"
 
+#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
@@ -5857,6 +5873,7 @@ msgid "Std Dev"
 msgstr "Desv. estándar"
 
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+#: src/lib/help/dashboard-guide.svelte.ts
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
@@ -7272,6 +7289,7 @@ msgstr "Actividad"
 
 #: ../portal/src/lib/components/AuroraPool.svelte
 #: ../portal/src/lib/components/features/ConnectorsDemo.svelte
+#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
 msgid "Loop"
 msgstr "Loop"
@@ -7620,6 +7638,7 @@ msgid "Cannula"
 msgstr "Cánula"
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/status-pills/ReservoirPill.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
@@ -10062,6 +10081,7 @@ msgid "Scheduled ({0})"
 msgstr "Programadas ({0})"
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/help/dashboard-guide.svelte.ts
 #: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Overrides"
 msgstr "Anulaciones"
@@ -10079,6 +10099,7 @@ msgid "Moderate"
 msgstr "Moderado"
 
 #: src/lib/components/dashboard/widgets/DailySummaryWidget.svelte
+#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Today's Summary"
 msgstr "Resumen de hoy"
 
@@ -10117,6 +10138,7 @@ msgid "No data today"
 msgstr "Sin datos hoy"
 
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
+#: src/lib/help/dashboard-guide.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Connection"
 msgstr "Conexión"
@@ -10148,6 +10170,8 @@ msgid "Blood Glucose <0/>"
 msgstr "Glucosa en sangre <0/>"
 
 #: src/lib/components/dashboard/widgets/TrackersWidget.svelte
+#: src/lib/components/help/DashboardExplanation.svelte
+#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Trackers"
 msgstr "Seguimientos"
 
@@ -10174,6 +10198,7 @@ msgstr "No se pudieron cargar los datos"
 #~ msgstr ""
 
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
+#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Total Daily Dose"
 msgstr "Dosis diaria total"
 
@@ -10311,6 +10336,7 @@ msgid "Show all"
 msgstr "Mostrar todo"
 
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
+#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Recent Meals"
 msgstr "Comidas recientes"
 
@@ -12975,12 +13001,14 @@ msgstr "Configura las preferencias de visualización del gráfico"
 msgid "Default chart range"
 msgstr "Intervalo predeterminado del gráfico"
 
+#. 0: period
 #. 0: hours
 #. 0: Math.abs(hoursUntil).toFixed(1)
 #. 0: absHours
 #. 0: focusHours
 #. 0: therapy.dia ?? "-"
 #. 0: therapy.dia ?? "-"
+#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/lib/components/ui/duration-input/duration-input.svelte
@@ -14593,6 +14621,7 @@ msgid "Food library"
 msgstr "Biblioteca de alimentos"
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
+#: src/lib/help/dashboard-guide.svelte.ts
 #: src/routes/(authenticated)/time-spans/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Activities"
@@ -15340,7 +15369,7 @@ msgid "<0/> Add condition"
 msgstr "<0/> Añadir condición"
 
 #~ msgid "Flat"
-#~ msgstr ""
+#~ msgstr "Flat"
 
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/help/reading-guides.svelte.ts
@@ -23142,6 +23171,7 @@ msgstr "Objetivo para diabetes tipo 1"
 msgid "Elevated"
 msgstr "Elevado"
 
+#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/help/reference.svelte.ts
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Very high"
@@ -24429,10 +24459,12 @@ msgid "Frequently asked questions"
 msgstr "Preguntas frecuentes"
 
 #: src/lib/components/dashboard/RecentEntriesCard.svelte
+#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Recent readings"
 msgstr "Lecturas recientes"
 
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
+#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Recent treatments"
 msgstr "Tratamientos recientes"
 
@@ -25251,6 +25283,7 @@ msgstr "<0/> Bajadas nocturnas"
 msgid "No lows lasting 15 minutes or more during this session"
 msgstr "No hubo bajadas de 15 minutos o más durante esta sesión"
 
+#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
 #: src/lib/help/reference.svelte.ts
 msgid "Very low"
@@ -30362,3 +30395,727 @@ msgstr "Set up your account and select the correct patient workspace."
 #: src/lib/help/reading-guides.svelte.ts
 msgid "The Fix already-imported data action is separate from changing display formats. Use it to correct existing timestamps."
 msgstr "The Fix already-imported data action is separate from changing display formats. Use it to correct existing timestamps."
+
+#: src/lib/components/help/HelpDashboard.svelte
+#: src/lib/help/dashboard-examples.svelte.ts
+msgid "Infusion site"
+msgstr "Infusion site"
+
+#: src/lib/help/dashboard-examples.svelte.ts
+msgid "Documentation example"
+msgstr "Documentation example"
+
+#: src/lib/help/dashboard-examples.svelte.ts
+msgid "Example profile"
+msgstr "Example profile"
+
+#: src/lib/help/dashboard-examples.svelte.ts
+msgid "Exercise target"
+msgstr "Exercise target"
+
+#: src/lib/help/dashboard-examples.svelte.ts
+msgid "Example device warning"
+msgstr "Example device warning"
+
+#: src/lib/help/dashboard-examples.svelte.ts
+msgid "Sensor check"
+msgstr "Sensor check"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The change beside the glucose value is the uploader's delta when supplied. Otherwise Nocturne subtracts the previous sensor reading from the newest one. Plus means higher; minus means lower. It is not necessarily a five-minute difference when readings are farther apart."
+msgstr "The change beside the glucose value is the uploader's delta when supplied. Otherwise Nocturne subtracts the previous sensor reading from the newest one. Plus means higher; minus means lower. It is not necessarily a five-minute difference when readings are farther apart."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The two newest sensor readings, with any delta supplied by the uploader. The battery badge uses recent device battery reports; the connection indicator describes live browser updates."
+msgstr "The two newest sensor readings, with any delta supplied by the uploader. The battery badge uses recent device battery reports; the connection indicator describes live browser updates."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Select BG Delta as a top widget in Appearance. A meaningful change needs a supplied delta or two sensor readings. Battery information needs a recent battery report."
+msgstr "Select BG Delta as a top widget in Appearance. A meaningful change needs a supplied delta or two sensor readings. Battery information needs a recent battery report."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Compare the timestamps of the two readings. If uploads stopped, check the source app and connector status. A live browser connection does not guarantee a recent sensor measurement."
+msgstr "Compare the timestamps of the two readings. If uploads stopped, check the source app and connector status. A live browser connection does not guarantee a recent sensor measurement."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The age is time since the newest sensor reading's timestamp. The clock time identifies that reading. A battery badge can also show the lowest reported device battery and whether it is charging."
+msgstr "The age is time since the newest sensor reading's timestamp. The clock time identifies that reading. A battery badge can also show the lowest reported device battery and whether it is charging."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Sensor reading timestamps and device battery reports from the last 30 minutes."
+msgstr "Sensor reading timestamps and device battery reports from the last 30 minutes."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Select Last Updated in Appearance. Battery details appear only when a device reports them; their absence does not mean the battery is empty."
+msgstr "Select Last Updated in Appearance. Battery details appear only when a device reports them; their absence does not mean the battery is empty."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Check that the uploader has recent readings and that the connector is syncing. Check device reporting separately if only the battery badge is absent."
+msgstr "Check that the uploader has recent readings and that the connector is syncing. Check device reporting separately if only the battery badge is absent."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Connected means browser live updates are active. Connecting is a pending connection. Disconnected means live updates are unavailable and cached data may still be shown. Not available means this view has no permission for live updates. Messages counts received connection messages."
+msgstr "Connected means browser live updates are active. Connecting is a pending connection. Disconnected means live updates are unavailable and cached data may still be shown. Not available means this view has no permission for live updates. Messages counts received connection messages."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The browser's real-time connection, not a direct connection to your sensor or pump."
+msgstr "The browser's real-time connection, not a direct connection to your sensor or pump."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Select Connection in Appearance. Live updates also require access to this workspace."
+msgstr "Select Connection in Appearance. Live updates also require access to this workspace."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Check your browser connection first. Use Retry after a disconnection. If connected but readings are old, investigate the uploader or connector instead."
+msgstr "Check your browser connection first. Use Retry after a disconnection. If connected but readings are old, investigate the uploader or connector instead."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Shows up to three of the newest carbohydrate entries from the last six hours. The large number totals those displayed entries, not all daily carbohydrate intake. Last identifies the newest displayed meal."
+msgstr "Shows up to three of the newest carbohydrate entries from the last six hours. The large number totals those displayed entries, not all daily carbohydrate intake. Last identifies the newest displayed meal."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Recorded carbohydrate entries with a positive amount."
+msgstr "Recorded carbohydrate entries with a positive amount."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Select Recent Meals in Appearance. Import or record carbohydrate entries; glucose readings alone cannot fill this widget."
+msgstr "Select Recent Meals in Appearance. Import or record carbohydrate entries; glucose readings alone cannot fill this widget."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Check that the source shares carbohydrate records and that the entry is within the last six hours."
+msgstr "Check that the source shares carbohydrate records and that the entry is within the last six hours."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Shows up to four active trackers. The age is measured from their start time. Colours reflect the configured tracker schedule and reached urgency, not glucose ranges."
+msgstr "Shows up to four active trackers. The age is measured from their start time. Colours reflect the configured tracker schedule and reached urgency, not glucose ranges."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Tracker definitions, active runs and their server-provided schedules."
+msgstr "Tracker definitions, active runs and their server-provided schedules."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Select Trackers in Appearance, create a tracker and start a run. Its dashboard visibility must allow it to appear."
+msgstr "Select Trackers in Appearance, create a tracker and start a run. Its dashboard visibility must allow it to appear."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Check the tracker's active run, start time, dashboard visibility and notification thresholds."
+msgstr "Check the tracker's active run, start time, dashboard visibility and notification thresholds."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The coloured bar divides recorded glucose into report bands. The large percentage is in range. Below and Above combine their two respective bands. The comparison is a percentage-point difference from the 90-day result. Use the period button to switch between the last 24 hours and 90 days."
+msgstr "The coloured bar divides recorded glucose into report bands. The large percentage is in range. Below and Above combine their two respective bands. The comparison is a percentage-point difference from the 90-day result. Use the period button to switch between the last 24 hours and 90 days."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Server glucose statistics and the shared report bands. The reading count shows how much recorded data supports the result."
+msgstr "Server glucose statistics and the shared report bands. The reading count shows how much recorded data supports the result."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Select Time in Range in Appearance. Statistics need enough glucose readings; gaps affect how representative the result is."
+msgstr "Select Time in Range in Appearance. Statistics need enough glucose readings; gaps affect how representative the result is."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Check the reading count and Data Quality report. See Glucose ranges for the central definition of the bands; personal targets and alert settings have different purposes."
+msgstr "Check the reading count and Data Quality report. See Glucose ranges for the central definition of the bands; personal targets and alert settings have different purposes."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Summarises loaded readings since local midnight: average, minimum, maximum, time in range and variability. CV expresses variation relative to the average. This widget currently labels CV below 33% Stable, above 50% Variable, and the values between them Moderate. These are summary labels, not trend arrows."
+msgstr "Summarises loaded readings since local midnight: average, minimum, maximum, time in range and variability. CV expresses variation relative to the average. This widget currently labels CV below 33% Stable, above 50% Variable, and the values between them Moderate. These are summary labels, not trend arrows."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Readings currently loaded in the browser. Its day starts at browser-local midnight; incomplete loaded history can make this differ from a full server report."
+msgstr "Readings currently loaded in the browser. Its day starts at browser-local midnight; incomplete loaded history can make this differ from a full server report."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Select Today's Summary in Appearance. At least one valid reading from today must be loaded."
+msgstr "Select Today's Summary in Appearance. At least one valid reading from today must be loaded."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Compare the displayed reading count with your source. For a complete period, use the reports. Check timezone settings if the day boundary looks wrong."
+msgstr "Compare the displayed reading count with your source. For a complete period, use the reports. Check timezone settings if the day boundary looks wrong."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The current local time, seconds and date. It is separate from the age of the newest reading."
+msgstr "The current local time, seconds and date. It is separate from the age of the newest reading."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The browser clock and display locale."
+msgstr "The browser clock and display locale."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Select Clock in Appearance. It does not require sensor or treatment data."
+msgstr "Select Clock in Appearance. It does not require sensor or treatment data."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Check your device clock and timezone if the time is unexpected. Patient timezone history is relevant to recorded events, not the browser clock itself."
+msgstr "Check your device clock and timezone if the time is unexpected. Patient timezone history is relevant to recorded events, not the browser clock itself."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Bolus totals manual bolus records. Auto totals algorithm bolus records, such as imported automatic or microboluses; it is not every automatic basal adjustment. Basal includes pump basal delivery and basal injections, excluding the Auto amount shown separately. Carbs is recorded carbohydrate intake. The ring uses the same insulin categories as the numbers."
+msgstr "Bolus totals manual bolus records. Auto totals algorithm bolus records, such as imported automatic or microboluses; it is not every automatic basal adjustment. Basal includes pump basal delivery and basal injections, excluding the Auto amount shown separately. Carbs is recorded carbohydrate intake. The ring uses the same insulin categories as the numbers."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Server insulin-delivery statistics: manual boluses, algorithm boluses, basal delivery records and basal injections. The source's imported record classification determines the category."
+msgstr "Server insulin-delivery statistics: manual boluses, algorithm boluses, basal delivery records and basal injections. The source's imported record classification determines the category."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Select Total Daily Dose in Appearance. Your source must send insulin records. Auto is shown only when algorithm bolus insulin is greater than zero. Both pump delivery and injected basal can contribute."
+msgstr "Select Total Daily Dose in Appearance. Your source must send insulin records. Auto is shown only when algorithm bolus insulin is greater than zero. Both pump delivery and injected basal can contribute."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The Today button currently means the preceding 24 hours ending at the statistics update time, not midnight to now. The 90-Day Avg view uses the preceding 90 days and displays daily averages. Check imported insulin categories and missing delivery history if a category is absent. These statistics also require sufficient glucose data."
+msgstr "The Today button currently means the preceding 24 hours ending at the statistics update time, not midnight to now. The 90-Day Avg view uses the preceding 90 days and displays daily averages. Check imported insulin categories and missing delivery history if a category is absent. These statistics also require sufficient glucose data."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Current glucose"
+msgstr "Current glucose"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The large value is the newest sensor measurement in your selected units. Its colour comes from the server's status for that reading. The trend comes from the direction supplied with the reading; a change number alone does not create an arrow."
+msgstr "The large value is the newest sensor measurement in your selected units. Its colour comes from the server's status for that reading. The trend comes from the direction supplied with the reading; a change number alone does not create an arrow."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The newest sensor reading, its supplied direction and the server's matching status. The difference uses a supplied delta or the previous sensor reading."
+msgstr "The newest sensor reading, its supplied direction and the server's matching status. The difference uses a supplied delta or the previous sensor reading."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "A sensor source supplies measurements and, when supported, trend directions. Unknown directions cannot be displayed as a known trend. A stale reading loses its active trend presentation."
+msgstr "A sensor source supplies measurements and, when supported, trend directions. Unknown directions cannot be displayed as a known trend. A stale reading loses its active trend presentation."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "X minutes is time since the measurement timestamp, not time since opening the page or the last connector sync. If the reading is old, check the source and connector. Colours, chart bands, therapy targets and alert thresholds are explained centrally in Glucose ranges."
+msgstr "X minutes is time since the measurement timestamp, not time since opening the page or the last connector sync. If the reading is old, check the source and connector. Colours, chart bands, therapy targets and alert thresholds are explained centrally in Glucose ranges."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Status pills"
+msgstr "Status pills"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "IOB is estimated insulin still active; COB is estimated carbohydrates still being absorbed. Basal is a rate, not a delivered daily total. Loop describes the latest algorithm status. Reservoir is the pump's reported remaining insulin. Tracker pills describe active tracker runs."
+msgstr "IOB is estimated insulin still active; COB is estimated carbohydrates still being absorbed. Basal is a rate, not a delivered daily total. Loop describes the latest algorithm status. Reservoir is the pump's reported remaining insulin. Tracker pills describe active tracker runs."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Device or algorithm snapshots, pump reservoir reports and tracker records. These values cannot be reconstructed from glucose alone."
+msgstr "Device or algorithm snapshots, pump reservoir reports and tracker records. These values cannot be reconstructed from glucose alone."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "A compatible uploader must provide the corresponding device or loop fields. Some pumps do not report a numeric reservoir. Tracker pill visibility is configured per tracker."
+msgstr "A compatible uploader must provide the corresponding device or loop fields. Some pumps do not report a numeric reservoir. Tracker pill visibility is configured per tracker."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Check whether the source actually provides the missing field. Compare the device snapshot age, connector state and tracker visibility. A missing estimate is not a zero estimate."
+msgstr "Check whether the source actually provides the missing field. Compare the device snapshot age, connector state and tracker visibility. A missing estimate is not a zero estimate."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Each row shows a recorded reading, its timestamp, difference and available trend. Rows let you inspect the individual measurements behind the latest value."
+msgstr "Each row shows a recorded reading, its timestamp, difference and available trend. Rows let you inspect the individual measurements behind the latest value."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The latest readings loaded from your sensor source."
+msgstr "The latest readings loaded from your sensor source."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Enable the recent-readings dashboard section and import sensor readings."
+msgstr "Enable the recent-readings dashboard section and import sensor readings."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Check timestamp, source and units. If the source has newer readings, check sync status. A missing delta is shown as unavailable rather than a measured zero."
+msgstr "Check timestamp, source and units. If the source has newer readings, check sync status. A missing delta is shown as unavailable rather than a measured zero."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The list shows recent recorded events such as boluses, carbohydrates, meter checks and device changes. These provide context for the glucose curve; they do not prove what caused a change."
+msgstr "The list shows recent recorded events such as boluses, carbohydrates, meter checks and device changes. These provide context for the glucose curve; they do not prove what caused a change."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Imported or manually recorded treatment and device-event records."
+msgstr "Imported or manually recorded treatment and device-event records."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Enable the treatments dashboard section. The source must share the corresponding records, or you can record them yourself."
+msgstr "Enable the treatments dashboard section. The source must share the corresponding records, or you can record them yourself."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Check the event time and whether your connector supports that record type. Inspect the real record on the Treatments page to correct it; this demo cannot edit records."
+msgstr "Check the event time and whether your connector supports that record type. Inspect the real record on the Treatments page to correct it; this demo cannot edit records."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Check the source record and its timestamp, then the chart legend and dashboard settings. If the source has no corresponding data, enabling the display alone cannot create it."
+msgstr "Check the source record and its timestamp, then the chart legend and dashboard settings. If the source has no corresponding data, enabling the display alone cannot create it."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Glucose line and points"
+msgstr "Glucose line and points"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The curve connects recorded sensor measurements. Points and hover details identify individual readings. Gaps mean missing observations, not known stable glucose."
+msgstr "The curve connects recorded sensor measurements. Points and hover details identify individual readings. Gaps mean missing observations, not known stable glucose."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Sensor glucose and measurement timestamps."
+msgstr "Sensor glucose and measurement timestamps."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Axes and time window"
+msgstr "Axes and time window"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The horizontal axis is time; the glucose axis uses your chosen units. Drag or zoom the overview to inspect a shorter period. Selecting a period changes only the demo."
+msgstr "The horizontal axis is time; the glucose axis uses your chosen units. Drag or zoom the overview to inspect a shorter period. Selecting a period changes only the demo."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Measurement timestamps and the display's unit preference."
+msgstr "Measurement timestamps and the display's unit preference."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Colours and target areas"
+msgstr "Colours and target areas"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Colours identify the shared glucose bands. Threshold lines and personal target overlays provide different context. See Glucose ranges for boundary definitions instead of repeating them on every page."
+msgstr "Colours identify the shared glucose bands. Threshold lines and personal target overlays provide different context. See Glucose ranges for boundary definitions instead of repeating them on every page."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Chart thresholds and the therapy profile in force."
+msgstr "Chart thresholds and the therapy profile in force."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Predictions"
+msgstr "Predictions"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Forecast lines or a cone show model estimates beyond recorded glucose. IOB, COB, UAM and zero-temp curves express different model assumptions. They are examples here; future readings can differ."
+msgstr "Forecast lines or a cone show model estimates beyond recorded glucose. IOB, COB, UAM and zero-temp curves express different model assumptions. They are examples here; future readings can differ."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The prediction service needs supported glucose, therapy and treatment context. Enable predictions in the dashboard and algorithm settings."
+msgstr "The prediction service needs supported glucose, therapy and treatment context. Enable predictions in the dashboard and algorithm settings."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Basal delivery"
+msgstr "Basal delivery"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "The basal track shows insulin rate over time against the scheduled rate. Inferred delivery is distinguished from reported delivery. A rate needs a duration before it represents delivered units."
+msgstr "The basal track shows insulin rate over time against the scheduled rate. Inferred delivery is distinguished from reported delivery. A rate needs a duration before it represents delivered units."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Pump basal delivery and schedule records. Configure your therapy profile and upload delivery data."
+msgstr "Pump basal delivery and schedule records. Configure your therapy profile and upload delivery data."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Insulin on board"
+msgstr "Insulin on board"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "IOB shows the source or model's estimate of insulin still active over time. It is distinct from Total Daily Dose."
+msgstr "IOB shows the source or model's estimate of insulin still active over time. It is distinct from Total Daily Dose."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Algorithm/device snapshots with IOB values."
+msgstr "Algorithm/device snapshots with IOB values."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Carbohydrates on board"
+msgstr "Carbohydrates on board"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "COB shows estimated carbohydrates remaining to be absorbed. It is distinct from the total grams entered for a meal."
+msgstr "COB shows estimated carbohydrates remaining to be absorbed. It is distinct from the total grams entered for a meal."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Algorithm/device snapshots with COB values."
+msgstr "Algorithm/device snapshots with COB values."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Bolus markers"
+msgstr "Bolus markers"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Markers identify insulin events at their recorded times. Manual and algorithm boluses can have different styles and classifications."
+msgstr "Markers identify insulin events at their recorded times. Manual and algorithm boluses can have different styles and classifications."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Bolus records with amounts, timestamps and imported classifications."
+msgstr "Bolus records with amounts, timestamps and imported classifications."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Carbohydrate markers"
+msgstr "Carbohydrate markers"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Markers identify recorded carbohydrate intake, including the amount at that time."
+msgstr "Markers identify recorded carbohydrate intake, including the amount at that time."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Carbohydrate entries from an uploader or manual entry."
+msgstr "Carbohydrate entries from an uploader or manual entry."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Meter checks"
+msgstr "Meter checks"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "These markers represent separate blood-glucose checks, rather than continuous sensor measurements."
+msgstr "These markers represent separate blood-glucose checks, rather than continuous sensor measurements."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Recorded meter or calibration checks."
+msgstr "Recorded meter or calibration checks."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Basal injections"
+msgstr "Basal injections"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "A basal injection is an event with a unit amount. It is different from a pump's hourly basal rate."
+msgstr "A basal injection is an event with a unit amount. It is different from a pump's hourly basal rate."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Long-acting insulin injection records."
+msgstr "Long-acting insulin injection records."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Device events"
+msgstr "Device events"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Markers locate events such as sensor or infusion-site changes and other device records."
+msgstr "Markers locate events such as sensor or infusion-site changes and other device records."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Supported device-event records. Some sources do not upload all event types."
+msgstr "Supported device-event records. Some sources do not upload all event types."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Device alarms and warnings"
+msgstr "Device alarms and warnings"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Markers show warnings or alarms recorded by a device. They are historical events, distinct from your Nocturne notification rules."
+msgstr "Markers show warnings or alarms recorded by a device. They are historical events, distinct from your Nocturne notification rules."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Imported system events with severity and timestamps."
+msgstr "Imported system events with severity and timestamps."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Scheduled trackers"
+msgstr "Scheduled trackers"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Markers show scheduled tracker events in the timeline. Configure and start a tracker to make real events available."
+msgstr "Markers show scheduled tracker events in the timeline. Configure and start a tracker to make real events available."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Tracker definitions and scheduled runs. Configure these in Tracker settings."
+msgstr "Tracker definitions and scheduled runs. Configure these in Tracker settings."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Pump modes"
+msgstr "Pump modes"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Spans show when a pump was in a mode such as automatic, manual or suspended. A mode does not by itself specify insulin delivery."
+msgstr "Spans show when a pump was in a mode such as automatic, manual or suspended. A mode does not by itself specify insulin delivery."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Imported pump mode spans."
+msgstr "Imported pump mode spans."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Profile changes"
+msgstr "Profile changes"
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Spans identify which therapy profile was active over a period. Use the legend to reveal this extra track."
+msgstr "Spans identify which therapy profile was active over a period. Use the legend to reveal this extra track."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Imported profile state spans and therapy profiles."
+msgstr "Imported profile state spans and therapy profiles."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Spans show temporary overrides, such as an exercise target. Use the legend to reveal them."
+msgstr "Spans show temporary overrides, such as an exercise target. Use the legend to reveal them."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Imported override state spans."
+msgstr "Imported override state spans."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Spans provide activity context, such as exercise or sleep. Use the legend to reveal this track."
+msgstr "Spans provide activity context, such as exercise or sleep. Use the legend to reveal this track."
+
+#: src/lib/help/dashboard-guide.svelte.ts
+msgid "Supported activity spans from your source; availability depends on the connector."
+msgstr "Supported activity spans from your source; availability depends on the connector."
+
+#: src/lib/components/help/DashboardExplanation.svelte
+msgid "Widget explanation"
+msgstr "Widget explanation"
+
+#: src/lib/components/help/DashboardExplanation.svelte
+msgid "Close explanation"
+msgstr "Close explanation"
+
+#: src/lib/components/help/DashboardExplanation.svelte
+msgid "Complete examples"
+msgstr "Complete examples"
+
+#: src/lib/components/help/DashboardExplanation.svelte
+msgid "The selected example changes the demo above. Your own data and settings stay unchanged."
+msgstr "The selected example changes the demo above. Your own data and settings stay unchanged."
+
+#: src/lib/components/help/DashboardExplanation.svelte
+msgid "What do you see?"
+msgstr "What do you see?"
+
+#: src/lib/components/help/DashboardExplanation.svelte
+msgid "Where does it come from?"
+msgstr "Where does it come from?"
+
+#: src/lib/components/help/DashboardExplanation.svelte
+msgid "Make it appear"
+msgstr "Make it appear"
+
+#: src/lib/components/help/DashboardExplanation.svelte
+msgid "Details and missing data"
+msgstr "Details and missing data"
+
+#: src/lib/components/help/DashboardExplanation.svelte
+msgid "TirChart"
+msgstr "TirChart"
+
+#: src/lib/components/help/DashboardExplanation.svelte
+msgid "Glucose ranges and thresholds"
+msgstr "Glucose ranges and thresholds"
+
+#: src/lib/components/help/DashboardExplanation.svelte
+msgid "Change your real settings"
+msgstr "Change your real settings"
+
+#: src/lib/components/help/DashboardExplanation.svelte
+msgid "These links open the real settings in a new tab, outside this help demo."
+msgstr "These links open the real settings in a new tab, outside this help demo."
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Phone"
+msgstr "Phone"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Value and colour"
+msgstr "Value and colour"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "The value is the newest sensor measurement. Its colour uses the server status for that same reading. Enabled glucose threshold alert rules can affect this classification. Report bands and your personal therapy target are separate; use the central Glucose ranges reference below."
+msgstr "The value is the newest sensor measurement. Its colour uses the server status for that same reading. Enabled glucose threshold alert rules can affect this classification. Report bands and your personal therapy target are separate; use the central Glucose ranges reference below."
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Trend arrow"
+msgstr "Trend arrow"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "The source must supply a recognised direction with the sensor reading. Rising, falling and steady arrows describe that reported trend. An empty or unknown direction does not become a measured trend. The active arrow is hidden when the reading is stale."
+msgstr "The source must supply a recognised direction with the sensor reading. Rising, falling and steady arrows describe that reported trend. An empty or unknown direction does not become a measured trend. The active arrow is hidden when the reading is stale."
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Difference"
+msgstr "Difference"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Nocturne uses the delta supplied with the newest sensor reading, or subtracts the previous sensor reading if no delta is supplied. Plus means the value increased; minus means it decreased. Compare the reading times: the interval may be longer than five minutes."
+msgstr "Nocturne uses the delta supplied with the newest sensor reading, or subtracts the previous sensor reading if no delta is supplied. Plus means the value increased; minus means it decreased. Compare the reading times: the interval may be longer than five minutes."
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Reading age"
+msgstr "Reading age"
+
+#. 0: STALE_THRESHOLD_MS / 60000
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "This measures elapsed time since the newest sensor reading timestamp. It is not the last connector sync or the time since opening the dashboard. The shared display freshness limit is {0} minutes; older readings have a neutral tile and no active arrow."
+msgstr "This measures elapsed time since the newest sensor reading timestamp. It is not the last connector sync or the time since opening the dashboard. The shared display freshness limit is {0} minutes; older readings have a neutral tile and no active arrow."
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Recent and in range"
+msgstr "Recent and in range"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "The newest reading is recent and classified in range. The source supplies a steady trend and a positive difference."
+msgstr "The newest reading is recent and classified in range. The source supplies a steady trend and a positive difference."
+
+#~ msgid "SingleUp"
+#~ msgstr "SingleUp"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "High and rising"
+msgstr "High and rising"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "The newest reading is classified high. A source-supplied rising arrow and positive difference appear together."
+msgstr "The newest reading is classified high. A source-supplied rising arrow and positive difference appear together."
+
+#~ msgid "FortyFiveDown"
+#~ msgstr "FortyFiveDown"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Low and falling"
+msgstr "Low and falling"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "The source reports a falling direction and a negative difference. The server classifies the reading low."
+msgstr "The source reports a falling direction and a negative difference. The server classifies the reading low."
+
+#~ msgid "SingleDown"
+#~ msgstr "SingleDown"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "The server classifies this example urgent low. The same shared theme supplies its tile colour."
+msgstr "The server classifies this example urgent low. The same shared theme supplies its tile colour."
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "The source supplies a double rising direction. The server classification determines the very-high tile colour."
+msgstr "The source supplies a double rising direction. The server classification determines the very-high tile colour."
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Older measurement"
+msgstr "Older measurement"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "The last measurement is older than the shared freshness limit. Its tile becomes neutral and the active arrow is hidden; the old measurement still exists."
+msgstr "The last measurement is older than the shared freshness limit. Its tile becomes neutral and the active arrow is hidden; the old measurement still exists."
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "No supplied trend"
+msgstr "No supplied trend"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "A current reading and difference can be available without a direction. Nocturne does not invent an arrow from the difference."
+msgstr "A current reading and difference can be available without a direction. Nocturne does not invent an arrow from the difference."
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "With automatic boluses"
+msgstr "With automatic boluses"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Without automatic boluses"
+msgstr "Without automatic boluses"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Example time"
+msgstr "Example time"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "One hour later"
+msgstr "One hour later"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Rising reading"
+msgstr "Rising reading"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Falling reading"
+msgstr "Falling reading"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Recent reading"
+msgstr "Recent reading"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Older reading"
+msgstr "Older reading"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Live browser"
+msgstr "Live browser"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "No live connection"
+msgstr "No live connection"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Available data"
+msgstr "Available data"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Missing source data"
+msgstr "Missing source data"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Interactive dashboard examples"
+msgstr "Interactive dashboard examples"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Explore the dashboard"
+msgstr "Explore the dashboard"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "All available widgets are shown with fictional data, including ones hidden on your own dashboard. Open one explanation at a time. Controls only change this demo."
+msgstr "All available widgets are shown with fictional data, including ones hidden on your own dashboard. Open one explanation at a time. Controls only change this demo."
+
+#. 0: reading.age
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "{0} min ago"
+msgstr "{0} min ago"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "View explanation"
+msgstr "View explanation"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "View explanation: status pills"
+msgstr "View explanation: status pills"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Loading example…"
+msgstr "Loading example…"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Reload to load this example."
+msgstr "Reload to load this example."
+
+#. 0: topic.title
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "View explanation: {0}"
+msgstr "View explanation: {0}"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Auto contributes 4 U to the 42 U total."
+msgstr "Auto contributes 4 U to the 42 U total."
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Auto is absent because this example has no algorithm bolus insulin; the total is 38 U."
+msgstr "Auto is absent because this example has no algorithm bolus insulin; the total is 38 U."
+
+#. 0: scenario === 0 ? "Auto contributes 4 U to the 42 U total." \\: "Auto is absent because this example has no algorithm bolus insulin\; the total is 38 U."
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Example window: 12 October 12:00 UTC to 13 October 12:00 UTC. The 90-day button shows a daily average over the longer rolling window. {0}"
+msgstr "Example window: 12 October 12:00 UTC to 13 October 12:00 UTC. The 90-day button shows a daily average over the longer rolling window. {0}"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Demo glucose chart"
+msgstr "Demo glucose chart"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Try the glucose chart"
+msgstr "Try the glucose chart"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "Use the overview to zoom and the legend to show or hide tracks. To read help, choose a part below. Practice controls do not open explanations."
+msgstr "Use the overview to zoom and the legend to show or hide tracks. To read help, choose a part below. Practice controls do not open explanations."
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "View explanation: recent readings"
+msgstr "View explanation: recent readings"
+
+#: src/lib/components/help/HelpDashboard.svelte
+msgid "View explanation: recent treatments"
+msgstr "View explanation: recent treatments"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Loading dashboard examples�"
+msgstr ""
+
+#~ msgid "<0/> Auto"
+#~ msgstr ""
+
+#~ msgid "<0/> Carbs"
+#~ msgstr ""

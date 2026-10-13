@@ -8,6 +8,7 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
+  import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { IsMobile } from "$lib/hooks/is-mobile.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
@@ -67,6 +68,8 @@
     defaultFocusHours?: number;
     heightClass?: string;
     demoMode?: boolean;
+    /** Draw fixed examples without API reads, record editing or persisted preferences. */
+    staticData?: boolean;
     /**
      * While true the main plot is left undrawn in its reserved space, and it is drawn a frame
      * after this turns false. The dashboard holds it until the realtime store's current reading
@@ -86,6 +89,7 @@
     defaultFocusHours,
     heightClass,
     demoMode,
+    staticData = false,
     deferDrawing = false,
   }: Props = $props();
 
@@ -128,6 +132,7 @@
     get externalPredictionData() { return externalPredictionData; },
     get enablePredictions() { return showPredictions; },
     get demoMode() { return demoMode; },
+    get staticData() { return staticData; },
   });
 
   // ===== POINT INSPECTION =====
@@ -210,7 +215,7 @@
       const spanHours = spanMs / (60 * 60 * 1000);
       const roundedSpan = Math.round(spanHours * 2) / 2;
       const clampedSpan = Math.max(1, Math.min(48, roundedSpan));
-      glucoseChartLookback.current = clampedSpan;
+      if (!staticData) glucoseChartLookback.current = clampedSpan;
       brushDomain = domain;
     } else {
       brushDomain = null;
@@ -234,7 +239,7 @@
   function handlePredictionModeChange(value: PredictionDisplayMode) {
     if (value && value !== predictionModeValue) {
       predictionModeValue = value;
-      predictionDisplayMode.current = value;
+      if (!staticData) predictionDisplayMode.current = value;
     }
   }
 
@@ -252,6 +257,7 @@
   }
 
   async function handleMarkerClick(treatmentId: string) {
+    if (staticData) return;
     let entry: EntryRecord | null =
       realtimeStore.findEntryByTreatmentId(treatmentId) ?? null;
 
@@ -372,11 +378,15 @@
           ? 'min-h-8 basis-full @lg:basis-auto'
           : ''}"
       >
+        {#if staticData}
+          <Button variant="outline" size="sm" onclick={() => handlePredictionModeChange(predictionModeValue === "lines" ? "cone" : "lines")}>{predictionModeValue === "lines" ? "Cone" : "Lines"}</Button>
+        {:else}
         <PredictionSettings
           showPredictions={effectiveShowPredictions}
           predictionMode={predictionModeValue}
           onPredictionModeChange={handlePredictionModeChange}
         />
+        {/if}
       </div>
     </div>
   </CardHeader>
@@ -391,7 +401,7 @@
       {#if plotDrawn}
         <GlucoseChartShell
           {engine}
-          {inspection}
+          inspection={staticData ? undefined : inspection}
           {legend}
           brushDomain={brushDomain}
           padding={chartPadding}
@@ -421,7 +431,7 @@
             <ChartHighlight />
           {/snippet}
           {#snippet overlays()}
-            <ChartTooltip onTimeClick={openDayInReview} />
+            <ChartTooltip onTimeClick={staticData ? undefined : openDayInReview} />
           {/snippet}
         </GlucoseChartShell>
       {/if}
@@ -438,7 +448,7 @@
         lowThreshold={Number(engine.lowThreshold)}
         onSelectionChange={(domain) => handleMiniChartBrush(domain)}
         predictionData={miniPredictionData}
-        showPredictions={effectiveShowPredictions && predictionEnabled.current}
+        showPredictions={effectiveShowPredictions && (staticData || predictionEnabled.current)}
         {isZoomed}
         padding={{
           left: chartPadding.left,

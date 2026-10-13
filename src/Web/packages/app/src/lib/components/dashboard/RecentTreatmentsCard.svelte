@@ -15,6 +15,7 @@
 
   interface ComponentProps {
     entries?: EntryRecord[];
+    preview?: boolean;
     maxEntries?: number;
     title?: string;
     subtitle?: string;
@@ -22,6 +23,7 @@
 
   let {
     entries,
+    preview = false,
     maxEntries = 5,
     title = "Recent treatments",
     subtitle = "Last 24 hours",
@@ -40,6 +42,7 @@
   );
 
   function handleEntryClick(entry: EntryRecord) {
+    if (preview) return;
     selectedEntry = entry;
     correlatedRecords = realtimeStore.findCorrelatedEntries(entry);
     entryEditDialog.open = true;
