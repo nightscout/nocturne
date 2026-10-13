@@ -1,4 +1,9 @@
 <script lang="ts">
+  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
+  const dashboardDemo = lazyComponent(() => import("./HelpDashboard.svelte"));
+  $effect(() => {
+    if (article.href === "/" && !query.trim()) dashboardDemo.open = true;
+  });
   import HelpReadingAid from "./HelpReadingAid.svelte";
   import HelpReference from "./HelpReference.svelte";
   import { Button } from "$lib/components/ui/button";
@@ -94,104 +99,110 @@
           {article.introduction}
         </p>
       </div>
-      <HelpReadingAid {article} />
-      {#if settings.length}
-        <section class="space-y-3" aria-label="Settings for this page">
-          <h2 class="font-semibold">Change settings</h2>
-          <p class="text-sm text-muted-foreground">
-            Open the relevant controls in a new tab. Your original page stays in
-            place.
-          </p>
-          <div class="flex flex-wrap gap-2">
-            {#each settings as path (path)}<Button
-                variant="outline"
-                href={path}
+      {#if article.href === "/"}
+        {#if dashboardDemo.component}<dashboardDemo.component
+            allowedSettings={links.map((link) => link.href)}
+          />{:else}<p>Loading dashboard examples�</p>{/if}
+      {:else}
+        <HelpReadingAid {article} />
+        {#if settings.length}
+          <section class="space-y-3" aria-label="Settings for this page">
+            <h2 class="font-semibold">Change settings</h2>
+            <p class="text-sm text-muted-foreground">
+              Open the relevant controls in a new tab. Your original page stays
+              in place.
+            </p>
+            <div class="flex flex-wrap gap-2">
+              {#each settings as path (path)}<Button
+                  variant="outline"
+                  href={path}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {articleFor(path, links).title}<ArrowRight class="size-4" />
+                </Button>{/each}
+            </div>
+          </section>
+        {/if}
+        {#if article.steps?.length}
+          <section class="space-y-4" aria-label="Step-by-step setup">
+            <h2 class="font-semibold">Step-by-step setup</h2>
+            <ol class="space-y-4">
+              {#each article.steps as step, i (step.title)}
+                <li class="flex gap-4 rounded-xl border p-5">
+                  <span
+                    class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-semibold"
+                    aria-hidden="true"
+                  >
+                    {i + 1}
+                  </span>
+                  <div class="space-y-2">
+                    <h3 class="font-semibold">{step.title}</h3>
+                    <p class="text-sm leading-relaxed text-muted-foreground">
+                      {step.text}
+                    </p>
+                    {#if step.links?.length}
+                      <!-- eslint-disable svelte/no-navigation-without-resolve -- Verified external provider instructions. -->
+                      {#each step.links as link (link.href)}
+                        <a
+                          class="block text-sm text-primary underline underline-offset-4"
+                          href={link.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {link.title}
+                        </a>
+                      {/each}
+                      <!-- eslint-enable svelte/no-navigation-without-resolve -->
+                    {/if}
+                  </div>
+                </li>
+              {/each}
+            </ol>
+          </section>
+        {/if}
+        {#if article.sources?.length}
+          <section class="space-y-2 rounded-xl border p-5">
+            <h2 class="font-semibold">Official instructions and sources</h2>
+            <p class="text-sm text-muted-foreground">
+              Provider screens and access rules can change. Check the original
+              instructions alongside this Nocturne guide.
+            </p>
+            <!-- eslint-disable svelte/no-navigation-without-resolve -- Official provider links are external URLs. -->
+            {#each article.sources as source (source.href)}
+              <a
+                class="block text-sm text-primary underline underline-offset-4"
+                href={source.href}
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {articleFor(path, links).title}<ArrowRight class="size-4" />
-              </Button>{/each}
-          </div>
-        </section>
-      {/if}
-      {#if article.steps?.length}
-        <section class="space-y-4" aria-label="Step-by-step setup">
-          <h2 class="font-semibold">Step-by-step setup</h2>
-          <ol class="space-y-4">
-            {#each article.steps as step, i (step.title)}
-              <li class="flex gap-4 rounded-xl border p-5">
-                <span
-                  class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-semibold"
-                  aria-hidden="true"
-                >
-                  {i + 1}
-                </span>
-                <div class="space-y-2">
-                  <h3 class="font-semibold">{step.title}</h3>
-                  <p class="text-sm leading-relaxed text-muted-foreground">
-                    {step.text}
-                  </p>
-                  {#if step.links?.length}
-                    <!-- eslint-disable svelte/no-navigation-without-resolve -- Verified external provider instructions. -->
-                    {#each step.links as link (link.href)}
-                      <a
-                        class="block text-sm text-primary underline underline-offset-4"
-                        href={link.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {link.title}
-                      </a>
-                    {/each}
-                    <!-- eslint-enable svelte/no-navigation-without-resolve -->
-                  {/if}
-                </div>
-              </li>
+                {source.title}
+              </a>
             {/each}
-          </ol>
-        </section>
-      {/if}
-      {#if article.sources?.length}
-        <section class="space-y-2 rounded-xl border p-5">
-          <h2 class="font-semibold">Official instructions and sources</h2>
-          <p class="text-sm text-muted-foreground">
-            Provider screens and access rules can change. Check the original
-            instructions alongside this Nocturne guide.
-          </p>
-          <!-- eslint-disable svelte/no-navigation-without-resolve -- Official provider links are external URLs. -->
-          {#each article.sources as source (source.href)}
-            <a
-              class="block text-sm text-primary underline underline-offset-4"
-              href={source.href}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {source.title}
-            </a>
-          {/each}
-          <!-- eslint-enable svelte/no-navigation-without-resolve -->
-        </section>
-      {/if}
-      {#if article.reference}<HelpReference kind={article.reference} />{/if}
-      {#each article.sections as section (section.title)}
-        {#if section.id === "controls"}
-          <section class="space-y-2 rounded-xl border p-4">
-            <h2 class="font-semibold">{section.title}</h2>
-            <p class="text-sm leading-relaxed text-muted-foreground">
-              {section.text}
-            </p>
+            <!-- eslint-enable svelte/no-navigation-without-resolve -->
           </section>
-        {:else}
-          <details class="rounded-xl border p-4">
-            <summary class="cursor-pointer font-semibold">
-              {section.title}
-            </summary>
-            <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
-              {section.text}
-            </p>
-          </details>
         {/if}
-      {/each}
+        {#if article.reference}<HelpReference kind={article.reference} />{/if}
+        {#each article.sections as section (section.title)}
+          {#if section.id === "controls"}
+            <section class="space-y-2 rounded-xl border p-4">
+              <h2 class="font-semibold">{section.title}</h2>
+              <p class="text-sm leading-relaxed text-muted-foreground">
+                {section.text}
+              </p>
+            </section>
+          {:else}
+            <details class="rounded-xl border p-4">
+              <summary class="cursor-pointer font-semibold">
+                {section.title}
+              </summary>
+              <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
+                {section.text}
+              </p>
+            </details>
+          {/if}
+        {/each}
+      {/if}
       {#if related.length}
         <section class="space-y-3">
           <h2 class="font-semibold">Continue exploring</h2>
