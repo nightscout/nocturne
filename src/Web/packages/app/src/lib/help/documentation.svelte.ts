@@ -1,5 +1,6 @@
 import type { NavItem, NavLink } from "$lib/navigation/app-navigation.svelte";
 import type { HelpArticle } from "./documentation-types";
+import { dashboardTopics, chartTopics } from "./dashboard-guide.svelte";
 import { pageArticles } from "./pages.svelte";
 import { reportArticles } from "./reports.svelte";
 import { settingsArticles } from "./settings.svelte";
@@ -23,7 +24,17 @@ export function articles(): HelpArticle[] {
     const related = [...article.related];
     if (["/", "/settings/profile", "/alerts"].includes(article.href))
       related.push(GLUCOSE_REFERENCE_PATH);
-    return { ...article, ...reading, related };
+    const sections =
+      article.href === "/"
+        ? [
+            ...article.sections,
+            ...[...dashboardTopics(), ...chartTopics()].map((topic) => ({
+              title: topic.title,
+              text: `${topic.meaning} ${topic.source} ${topic.availability} ${topic.check}`,
+            })),
+          ]
+        : article.sections;
+    return { ...article, ...reading, related, sections };
   });
 }
 

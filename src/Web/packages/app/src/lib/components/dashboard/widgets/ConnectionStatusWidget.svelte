@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { dashboardExamples } from "../demo-context";
+  const examples = dashboardExamples();
   import WidgetCard from "./WidgetCard.svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
@@ -7,12 +9,12 @@
   const realtimeStore = getRealtimeStore();
 
   // Reactive state from realtime store
-  const connection = $derived(realtimeStore.connectionPresentation);
+  const connection = $derived(examples ? (examples.connected ? "live" : "unavailable") : realtimeStore.connectionPresentation);
   const isConnected = $derived(connection === "live");
   const connectionError = $derived(
     connection === "unavailable" ? realtimeStore.connectionError : null
   );
-  const stats = $derived(realtimeStore.connectionStats);
+  const stats = $derived(examples ? { messageCount: 144 } : realtimeStore.connectionStats);
   const timeSinceUpdate = $derived(realtimeStore.timeSinceUpdate);
 
   // Connection status styling
@@ -65,7 +67,7 @@
 
   // Manual reconnect handler
   function handleReconnect() {
-    realtimeStore.reconnect();
+    if (!examples) realtimeStore.reconnect();
   }
 </script>
 

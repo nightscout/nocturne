@@ -1245,6 +1245,12 @@ export function createRealtimeStore(config: WebSocketConfig): RealtimeStore {
   return store;
 }
 
+/** Scope an unconnected example store to a documentation subtree. */
+export function provideRealtimeStore(store: RealtimeStore): void {
+  setContext(REALTIME_STORE_KEY, store);
+}
+
+/** Gets the realtime store from context */
 /** Gets the realtime store from context */
 export function getRealtimeStore(): RealtimeStore {
   const store = getContext<RealtimeStore>(REALTIME_STORE_KEY);

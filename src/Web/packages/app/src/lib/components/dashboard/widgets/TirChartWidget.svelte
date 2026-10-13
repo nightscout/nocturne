@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { dashboardExamples } from "../demo-context";
+  const examples = dashboardExamples();
   import { formatNumber } from "$lib/utils/formatting";
   import { onMount } from "svelte";
   import WidgetCard from "./WidgetCard.svelte";
@@ -12,17 +14,21 @@
   // Toggle between today and 90-day average
   let showAverage = $state(false);
 
-  // Fetch on the client after hydration â€” the underlying API can be slow and
+  // Fetch on the client after hydration — the underlying API can be slow and
   // would otherwise block SSR (timing out and breaking hydration).
-  let statsPromise = $state<ReturnType<typeof getMultiPeriodStatistics> | null>(
+  let statsPromise = $state<Promise<import("$lib/api").MultiPeriodStatistics> | null>(
     null
   );
   onMount(() => {
-    statsPromise = getMultiPeriodStatistics();
+    if (!examples) statsPromise = getMultiPeriodStatistics();
   });
 
   // Responsive breakpoint - use horizontal for larger screens (>= 640px / sm breakpoint)
   const isLargeScreen = new MediaQuery("(min-width: 640px)");
+
+  $effect(() => {
+    if (examples) statsPromise = Promise.resolve(examples.statistics);
+  });
 
   function toggleView() {
     showAverage = !showAverage;
