@@ -97,7 +97,7 @@ export function exampleRealtimeStore() {
     targetHigh: _high,
     ...thresholds
   } = resolveChartThresholds();
-  store.chartThresholds = thresholds;
+  store.chartThresholds = { ...thresholds, targetLow: 90, targetHigh: 140 };
   store.entries = Array.from({ length: 73 }, (_, i) => ({
     _id: `help-glucose-${i}`,
     type: "sgv",
@@ -254,10 +254,7 @@ export function exampleChart(store: RealtimeStore) {
 }
 
 export function examplePredictions(): PredictionData {
-  const curve = (end: number) => [
-    { timestamp: EXAMPLE_NOW, value: 106 },
-    { timestamp: EXAMPLE_NOW + hour, value: end },
-  ];
+  const curve = (end: number) => Array.from({ length: 13 }, (_, i) => ({ timestamp: EXAMPLE_NOW + i * 5 * 60000, value: 106 + (end - 106) * i / 12 }));
   return {
     timestamp: new SvelteDate(EXAMPLE_NOW),
     currentBg: 106,
