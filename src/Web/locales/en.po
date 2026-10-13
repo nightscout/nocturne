@@ -31110,12 +31110,15 @@ msgstr "View explanation: recent readings"
 msgid "View explanation: recent treatments"
 msgstr "View explanation: recent treatments"
 
-#: src/lib/components/help/HelpBrowser.svelte
-msgid "Loading dashboard examples�"
-msgstr "Loading dashboard examples�"
+#~ msgid "Loading dashboard examples�"
+#~ msgstr "Loading dashboard examples�"
 
 #~ msgid "<0/> Auto"
 #~ msgstr "<0/> Auto"
 
 #~ msgid "<0/> Carbs"
 #~ msgstr "<0/> Carbs"
+
+#: src/lib/components/help/HelpBrowser.svelte
+msgid "Loading dashboard examples..."
+msgstr "Loading dashboard examples..."
