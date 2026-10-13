@@ -12,6 +12,11 @@ const content = (path: string, locale = "en") =>
   runWithLocale(locale, () => render(Harness, { props: { path } }).body);
 
 describe("translation-aware help factories", () => {
+  it("falls back to English for untranslated dashboard explanations", async () => {
+    const body = await content("/", "nl");
+    expect(body).toContain("Auto totals algorithm bolus records");
+    expect(body).toContain("The large value is the newest sensor measurement");
+  });
   it("renders report content through the production translation transform", async () => {
     const body = await content("/reports/agp");
     expect(body).toContain("Ambulatory Glucose Profile");

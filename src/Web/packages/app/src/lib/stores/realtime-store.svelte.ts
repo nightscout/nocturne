@@ -1251,7 +1251,6 @@ export function provideRealtimeStore(store: RealtimeStore): void {
 }
 
 /** Gets the realtime store from context */
-/** Gets the realtime store from context */
 export function getRealtimeStore(): RealtimeStore {
   const store = getContext<RealtimeStore>(REALTIME_STORE_KEY);
   if (!store) {

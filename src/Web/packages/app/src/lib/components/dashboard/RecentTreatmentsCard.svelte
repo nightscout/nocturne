@@ -71,18 +71,7 @@
           {#each displayEntries as entry, i (entry.data.id ?? `${entry.data.mills}-${i}`)}
             {@const category = ENTRY_CATEGORIES[entry.kind]}
             <li>
-            <div
-              class="-mx-2 flex cursor-pointer items-center justify-between rounded-md px-2 py-2.5 transition-colors hover:bg-accent/50"
-              onclick={() => handleEntryClick(entry)}
-              role="button"
-              tabindex="0"
-              onkeydown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  handleEntryClick(entry);
-                }
-              }}
-            >
+            {#snippet rowContent()}
               <div class="flex items-center gap-2 @md:gap-3">
                 <Badge variant={category.badge}>
                   {category.name}
@@ -102,7 +91,23 @@
               <div class="text-sm text-muted-foreground">
                 {entry.data.dataSource || ""}
               </div>
-            </div>
+            {/snippet}
+            {#if preview}
+              <div class="-mx-2 flex items-center justify-between rounded-md px-2 py-2.5">{@render rowContent()}</div>
+            {:else}
+              <div
+                class="-mx-2 flex cursor-pointer items-center justify-between rounded-md px-2 py-2.5 transition-colors hover:bg-accent/50"
+                onclick={() => handleEntryClick(entry)}
+                role="button"
+                tabindex="0"
+                onkeydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleEntryClick(entry);
+                  }
+                }}
+              >{@render rowContent()}</div>
+            {/if}
             </li>
           {/each}
         </ul>
