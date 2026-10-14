@@ -398,14 +398,7 @@ public class TreatmentsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        // Parse the full query string to reconstruct the find query
-        var queryString = HttpContext?.Request?.QueryString.ToString() ?? string.Empty;
-
-        // Strip the leading '?' if present
-        if (queryString.StartsWith("?"))
-        {
-            queryString = queryString.Substring(1);
-        }
+        var queryString = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
 
         _logger.LogDebug(
             "Bulk delete treatments endpoint requested with query: {QueryString} from {RemoteIpAddress}",
@@ -415,8 +408,7 @@ public class TreatmentsController : ControllerBase
 
         try
         {
-            // Check if there are any find parameters in the query string
-            if (string.IsNullOrWhiteSpace(queryString) || !queryString.Contains("find["))
+            if (queryString is null)
             {
                 _logger.LogWarning("Bulk delete requested without find query - this is dangerous");
                 return BadRequest(
