@@ -3,6 +3,7 @@
   import { getChartContext } from "layerchart";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import BasalInjectionMarker from "./BasalInjectionMarker.svelte";
+  import { markerKey } from "$lib/utils/chart-data-merge";
 
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();
@@ -14,7 +15,7 @@
 
 {#if visible}
   <ChartClipPath>
-    {#each markers as marker (marker.id)}
+    {#each markers as marker, i (markerKey(marker.id, marker.time, i))}
       {@const xPos = chartCtx.xScale(marker.time)}
       <BasalInjectionMarker
         {xPos}

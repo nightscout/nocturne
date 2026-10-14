@@ -134,18 +134,23 @@ public class ModelConventionTests
     }
 
     /// <summary>
-    /// EF drops this one as redundant against the tenant-leading partial indexes unless it is
-    /// declared — see <see cref="NocturneDbContext.V4SnapshotEntities"/>.
+    /// The snapshot tables' other tenant-leading indexes are partial, and EF drops its conventional
+    /// tenant index as redundant against them, so a table neither history-paged nor given
+    /// IX_&lt;table&gt;_tenant_id would leave a tenant-wide scan nothing to read.
     /// </summary>
     [Fact]
-    public void EverySnapshotTable_KeepsTheUnfilteredTenantIndex() =>
-        AssertFamily(
-            NocturneDbContext.V4SnapshotEntities,
-            "_tenant_id",
-            i => Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId)])
-                && !i.IsUnique
-                && i.GetFilter() is null,
-            prefix: "IX_");
+    public void EverySnapshotTable_HasAnUnfilteredTenantLeadingIndex()
+    {
+        NocturneDbContext.V4SnapshotEntities.Should().NotBeEmpty();
+        var model = Model();
+
+        NocturneDbContext.V4SnapshotEntities.Select(model.FindEntityType)
+            .Where(e => e is null
+                || !e.GetIndexes().Any(i =>
+                    i.Properties[0].Name == nameof(ITenantScoped.TenantId) && i.GetFilter() is null))
+            .Select(e => e?.ShortName() ?? "<unmapped>")
+            .Should().BeEmpty("a tenant-wide scan of a snapshot table needs an unfiltered tenant-leading index");
+    }
 
     [Fact]
     public void EverySyncDedupedTable_HasThePartialUniqueUpsertKey() =>

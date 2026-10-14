@@ -15,14 +15,15 @@ import { wuchale } from "wuchale/vite";
 export default defineConfig({
   plugins: [svelte(), wuchale()],
   test: {
-    // This suite exercises the server translation transform independently of node unit tests.
+    // Its own suffix: `*.ssr.test.ts` already belongs to tests that run under
+    // the node config without the production translation transform.
     include: ["src/**/*.render.test.ts"],
     environment: "node",
     alias: [
       {
         // Before the $lib prefix, so it wins for this one module: the real
         // barrel re-exports formatting, which reaches the generated client.
-        find: "$lib/utils",
+        find: /^\$lib\/utils$/,
         replacement: fileURLToPath(new URL("./src/lib/test-stubs/utils-cn.ts", import.meta.url)),
       },
       { find: /^\$lib\//, replacement: fileURLToPath(new URL("./src/lib/", import.meta.url)) },
