@@ -2,6 +2,7 @@
 @source "../node_modules/@nocturne/ui/src";
 @source not "../locales/";
 @source '../node_modules/layerchart/dist';
+@source "../node_modules/@nocturne/watercolour/src";
 
 @font-face {
   font-family: "Montserrat";

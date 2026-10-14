@@ -11,13 +11,12 @@
   import { Button } from "$lib/components/ui/button";
   import { markSetupComplete } from "./setup.remote";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
-  import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import {
     getServicesOverview,
     getActiveDataSources,
     getUploaderSetup,
   } from "$api/generated/services.generated.remote";
-  import { MigrationJobState } from "$api";
+  import { startOrResumeMigration } from "./migration-session";
   import type {
     UploaderApp,
     DataSourceInfo,
@@ -213,25 +212,8 @@
   const MIGRATION_CONNECTOR = "nightscout";
 
   async function handleMigrationConnected() {
-    // Start the import explicitly now that the user has connected their source. Reuse an
-    // already-running or already-completed job if one exists (e.g. the user navigated back),
-    // so re-entering this step never kicks off a duplicate migration.
     try {
-      const history = await migrationRemote.getHistory().run();
-      const existing = history?.find(
-        (j) =>
-          j.state === MigrationJobState.Running ||
-          j.state === MigrationJobState.Pending ||
-          j.state === MigrationJobState.Validating ||
-          j.state === MigrationJobState.Completed
-      );
-      if (existing?.id) {
-        migrationJobId = existing.id;
-      } else {
-        const job =
-          await migrationRemote.startFromConnector(MIGRATION_CONNECTOR);
-        if (job?.id) migrationJobId = job.id;
-      }
+      migrationJobId = await startOrResumeMigration(MIGRATION_CONNECTOR);
     } catch {
       // Leave migrationJobId unset; the import step shows a neutral state if no job exists.
     }

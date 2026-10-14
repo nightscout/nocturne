@@ -1,0 +1,28 @@
+[package]
+name = "nocturne-watercolour-wasm"
+version = "0.1.0"
+edition = "2024"
+description = "wasm-bindgen web adapter for the watercolour engine: shared WebGPU device, per-canvas scene instances, PNG and frame-strip export"
+license = "AGPL-3.0-only"
+publish = false
+
+[lib]
+# rlib so the host-side example and tests link the platform-neutral half;
+# the shipped artifact is the cdylib built for wasm32-unknown-unknown.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+nocturne-watercolour-core = { path = "../nocturne-watercolour-core" }
+nocturne-watercolour-infra = { path = "../nocturne-watercolour-infra" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = "0.4.78"
+js-sys = "0.3.105"
+web-sys = { version = "0.3.105", features = ["HtmlCanvasElement", "Window", "Performance"] }
+console_error_panic_hook = "0.1.7"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+pollster = "1"

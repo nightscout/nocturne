@@ -9,6 +9,8 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import { Artwork } from "@nocturne/watercolour";
+  import { weightScaleArtwork } from "$lib/watercolour-icons";
   import * as bw from "$api/generated/bodyWeights.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import type { BodyWeight } from "$api";
@@ -69,12 +71,21 @@
 </svelte:head>
 
 <div class="mx-auto max-w-2xl space-y-6 p-4">
-  <div class="space-y-1">
-    <h1 class="text-xl font-semibold">Weight history</h1>
-    <p class="text-muted-foreground text-sm">
-      Your weight over time. Each entry is dated when it was recorded — editing your current weight
-      on the Patient Record page adds a new entry here rather than overwriting the last one.
-    </p>
+  <div class="flex items-center gap-4">
+    <Artwork
+      icon={weightScaleArtwork}
+      palette="moss"
+      motion="auto"
+      autoplay="once"
+      class="size-48 shrink-0"
+    />
+    <div class="space-y-1">
+      <h1 class="text-xl font-semibold">Weight history</h1>
+      <p class="text-muted-foreground text-sm">
+        Your weight over time. Each entry is dated when it was recorded — editing your current weight
+        on the Patient Record page adds a new entry here rather than overwriting the last one.
+      </p>
+    </div>
   </div>
 
   <Card.Root>
@@ -83,7 +94,16 @@
     </Card.Header>
     <Card.Content class="space-y-4">
       {#if entries.length === 0}
-        <p class="text-muted-foreground text-sm">No entries yet.</p>
+        <div class="flex flex-col items-center gap-3 py-8 text-center">
+          <Artwork
+            icon={weightScaleArtwork}
+            palette="moss"
+            motion="auto"
+            autoplay="once"
+            class="size-48"
+          />
+          <p class="text-muted-foreground text-sm">No entries yet.</p>
+        </div>
       {:else}
         <ul class="divide-border divide-y">
           {#each entries as entry (entry._id)}

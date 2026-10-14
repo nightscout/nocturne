@@ -1,15 +1,27 @@
 <script lang="ts">
+    import { ArtworkHero } from "@nocturne/watercolour";
     import { resolve } from "$app/paths";
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
     import Callout from "@nocturne/cms/components/Callout.svelte";
+    import { DOCS_HERO } from "$lib/data/docs-artwork";
+
+    const hero = DOCS_HERO["installation/portainer"];
 
     const templateUrl = "https://raw.githubusercontent.com/nightscout/nocturne/main/deploy/portainer/templates.json";
 </script>
 
 <div class="max-w-3xl">
+    <ArtworkHero
+        artwork={hero.artwork}
+        palette={hero.palette}
+        motion="auto"
+        autoplay="once"
+        size={400}
+        wrap={hero.wrap ?? true}
+    />
     <div class="flex items-center gap-4 mb-4">
         <img
             src="/logos/portainer.jpg"

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ShieldCheck from "@lucide/svelte/icons/shield-check";
 	import type { DataQualitySettings } from '$lib/api/generated/nocturne-api-client';
 	import { getUiSettings, saveDataQualitySettings } from '$api/ui-settings.remote';
 	import { remoteErrorMessage } from '$lib/api/remote-error';
@@ -99,7 +100,7 @@
 	<!-- Header -->
 	<div class="flex items-center gap-3">
 		<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-			<Activity class="h-6 w-6 text-primary" />
+			<ShieldCheck class="size-6 text-primary" />
 		</div>
 		<div>
 			<h1 class="text-2xl font-bold tracking-tight">Data Quality</h1>

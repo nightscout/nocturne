@@ -1,0 +1,5 @@
+# wgpu 30 needs rustc 1.87 or newer, and `build:wasm` needs the wasm32 target.
+[toolchain]
+channel = "1.99.0"
+targets = ["wasm32-unknown-unknown"]
+components = ["clippy", "rustfmt"]

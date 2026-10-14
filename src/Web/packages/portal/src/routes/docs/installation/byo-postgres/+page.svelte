@@ -1,10 +1,22 @@
 <script lang="ts">
+    import { ArtworkHero } from "@nocturne/watercolour";
+    import { DOCS_HERO } from "$lib/data/docs-artwork";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import bootstrapSql from "$lib/release/bootstrap-roles.sql?raw";
+
+    const hero = DOCS_HERO["installation/byo-postgres"];
 </script>
 
 <div class="max-w-3xl">
+    <ArtworkHero
+        artwork={hero.artwork}
+        palette={hero.palette}
+        motion="auto"
+        autoplay="once"
+        size={400}
+        wrap={hero.wrap ?? true}
+    />
     <h1 class="text-4xl font-bold tracking-tight mb-4">Bring Your Own PostgreSQL</h1>
 
     <p class="text-lg text-muted-foreground mb-8">

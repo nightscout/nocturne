@@ -10,7 +10,6 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
-  import Battery from "@lucide/svelte/icons/battery";
   import BatteryCharging from "@lucide/svelte/icons/battery-charging";
   import BatteryFull from "@lucide/svelte/icons/battery-full";
   import BatteryLow from "@lucide/svelte/icons/battery-low";
@@ -26,6 +25,8 @@
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { formatMinutesDuration } from "$lib/utils/duration";
+  import { Artwork } from "@nocturne/watercolour";
+  import { batteryArtwork } from "$lib/watercolour-icons";
 
   // Get shared date params from context (set by reports layout)
   // Default: 7 days is good for battery analysis (typical charge cycle period)
@@ -138,7 +139,13 @@
     <Card>
       <CardContent class="pt-6">
         <div class="text-center py-8">
-          <Battery class="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true" />
+          <Artwork
+            icon={batteryArtwork}
+            palette="water"
+            motion="auto"
+            autoplay="once"
+            class="mx-auto mb-4 size-48"
+          />
           <h3 class="text-lg font-medium">No Battery Data Available</h3>
           <p class="text-sm text-muted-foreground mt-2">
             Battery data is collected from devices that report uploader status.

@@ -1,5 +1,7 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
+  import { ArtworkHero } from "@nocturne/watercolour";
+  import { DOCS_HERO } from "$lib/data/docs-artwork";
   import { Button } from "@nocturne/ui/ui/button";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
@@ -59,9 +61,19 @@
         "The official managed Nocturne instance, run by the creator of the project. Automatic updates, daily backups, and zero maintenance. Just connect your CGM and go.",
     },
   ]);
+
+    const hero = DOCS_HERO["installation"];
 </script>
 
 <div class="max-w-3xl">
+  <ArtworkHero
+        artwork={hero.artwork}
+        palette={hero.palette}
+        motion="auto"
+        autoplay="once"
+        size={400}
+        wrap={hero.wrap ?? true}
+    />
   <h1 class="text-4xl font-bold tracking-tight mb-4">Installation Guide</h1>
   <p class="text-lg text-muted-foreground mb-8">
     Choose a deployment method below to get Nocturne running on your

@@ -54,6 +54,35 @@ jobs:
         working-directory: src/Web
         run: pnpm install --frozen-lockfile
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          # Sources, not just the lockfile: actions/cache restores crates/target with mtimes
+          # newer than the checkout, and cargo's path-package fingerprint is mtime-based, so a
+          # lockfile-only key lets a source-only change reuse a stale build and never re-save it.
+          key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
+
+      - name: Install wasm-bindgen-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.128
+
+      - name: Install binaryen (wasm-opt)
+        run: npm install -g binaryen
+
+      - name: Build watercolour wasm
+        working-directory: src/Web
+        run: pnpm --filter @nocturne/watercolour build:wasm
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:

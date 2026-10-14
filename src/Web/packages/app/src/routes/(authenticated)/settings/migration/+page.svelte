@@ -29,6 +29,8 @@
   import Server from "@lucide/svelte/icons/server";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Info from "@lucide/svelte/icons/info";
+  import { Artwork } from "@nocturne/watercolour";
+  import { databaseArtwork } from "$lib/watercolour-icons";
   import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import { remoteErrorMessage } from "$lib/api/remote-error";
@@ -586,7 +588,13 @@
               </div>
             {:else}
               <div class="text-center py-12 text-muted-foreground">
-                <RefreshCw class="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <Artwork
+                  icon={databaseArtwork}
+                  palette="slate"
+                  motion="auto"
+                  autoplay="once"
+                  class="mx-auto mb-3 size-48"
+                />
                 <p>No active migration</p>
                 <p class="text-sm">
                   Start a new migration to see progress here
@@ -609,7 +617,13 @@
           <CardContent>
             {#if history.length === 0}
               <div class="text-center py-12 text-muted-foreground">
-                <Clock class="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <Artwork
+                  icon={databaseArtwork}
+                  palette="slate"
+                  motion="auto"
+                  autoplay="once"
+                  class="mx-auto mb-3 size-48"
+                />
                 <p>No migration history</p>
                 <p class="text-sm">Completed migrations will appear here</p>
               </div>
