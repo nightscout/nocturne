@@ -1011,21 +1011,9 @@ public class EntriesController : ControllerBase
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        string? findQuery = find;
+        var findQuery = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
 
-        // If no simple find parameter provided, check for complex query parameters
-        if (string.IsNullOrEmpty(findQuery))
-        {
-            var queryString = HttpContext?.Request?.QueryString.ToString() ?? "";
-
-            if (!string.IsNullOrEmpty(queryString) && queryString != "?")
-            {
-                // Remove the leading '?' from query string and use it as the find query
-                findQuery = queryString.TrimStart('?');
-            }
-        }
-
-        if (string.IsNullOrEmpty(findQuery))
+        if (!LegacyFindQueryString.HasConditions(findQuery))
         {
             return BadRequest(
                 new

@@ -59,8 +59,17 @@ public sealed class FindQuery
     /// <summary>Inclusive upper time bound in Unix milliseconds, if the query constrains one.</summary>
     public long? ToMills { get; }
 
-    /// <summary><c>true</c> when the query contains no conditions at all.</summary>
-    public bool IsEmpty => _root.Children.Count == 0;
+    /// <summary>
+    /// <c>true</c> when the query carries no condition a caller could honour: nothing at all, only
+    /// empty <c>$and</c>/<c>$or</c> groups or operand objects, or only <c>find[…]</c> keys the parser
+    /// could not interpret.
+    /// </summary>
+    public bool IsEmpty => !HasLeafCondition(_root);
+
+    private static bool HasLeafCondition(Group group) =>
+        group.Children.Any(child => child is Condition cond
+            ? cond.Op != UnsupportedOp
+            : child is Group nested && HasLeafCondition(nested));
 
     /// <summary>
     /// <c>true</c> when the query contains conditions beyond the extracted

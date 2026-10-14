@@ -371,16 +371,10 @@ public class DeviceStatusController : ControllerBase
 
         try
         {
-            // Build find query from query string parameters
-            var findQuery = HttpContext?.Request?.QueryString.Value ?? string.Empty;
+            var findQuery = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
 
-            // Remove the leading '?' if present
-            if (findQuery.StartsWith("?"))
-            {
-                findQuery = findQuery.Substring(1);
-            }
-
-            if (DeviceStatusProjectionService.ParseDeleteFind(findQuery) is null)
+            if (!LegacyFindQueryString.HasConditions(findQuery)
+                || DeviceStatusProjectionService.ParseDeleteFind(findQuery) is null)
             {
                 _logger.LogWarning("Bulk delete device status refused: the query names no find it can apply");
                 return BadRequest(

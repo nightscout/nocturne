@@ -32,6 +32,27 @@ public class FindQueryTests
         query.Matches(Doc("""{"anything":1}""")).Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("find[]=")]
+    [InlineData("find[]=x&token=y")]
+    [InlineData("{\"$and\":[]}")]
+    [InlineData("{\"$or\":[{}]}")]
+    [InlineData("{\"date\":{}}")]
+    public void IsEmpty_WhenNoConditionCanBeHonoured_IsTrue(string find)
+    {
+        FindQuery.Parse(find).IsEmpty.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("find[type]=sgv")]
+    [InlineData("find[]=x&find[type]=sgv")]
+    [InlineData("{\"$and\":[{\"type\":\"sgv\"}]}")]
+    [InlineData("{\"date\":{\"$gte\":1704067200000}}")]
+    public void IsEmpty_WhenAConditionCanBeHonoured_IsFalse(string find)
+    {
+        FindQuery.Parse(find).IsEmpty.Should().BeFalse();
+    }
+
     [Fact]
     public void Parse_MalformedJson_YieldsEmptyQuery()
     {

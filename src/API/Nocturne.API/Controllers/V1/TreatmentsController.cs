@@ -398,17 +398,16 @@ public class TreatmentsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        var queryString = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
-
         _logger.LogDebug(
-            "Bulk delete treatments endpoint requested with query: {QueryString} from {RemoteIpAddress}",
-            queryString,
+            "Bulk delete treatments endpoint requested from {RemoteIpAddress}",
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
         try
         {
-            if (queryString is null)
+            var find = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
+
+            if (!LegacyFindQueryString.HasConditions(find))
             {
                 _logger.LogWarning("Bulk delete requested without find query - this is dangerous");
                 return BadRequest(
@@ -417,7 +416,7 @@ public class TreatmentsController : ControllerBase
             }
 
             var deletedCount = await _treatmentService.DeleteTreatmentsAsync(
-                LegacyTreatmentDateWindow.Apply(queryString, _timeProvider.GetUtcNow()),
+                LegacyTreatmentDateWindow.Apply(find, _timeProvider.GetUtcNow()),
                 cancellationToken
             );
 
@@ -427,11 +426,7 @@ public class TreatmentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(
-                ex,
-                "Error bulk deleting treatments with query: {QueryString}",
-                queryString
-            );
+            _logger.LogError(ex, "Error bulk deleting treatments");
             return StatusCode(500, "Internal server error while bulk deleting treatments");
         }
     }

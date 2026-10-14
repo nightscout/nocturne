@@ -1860,8 +1860,11 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         var findQuery = Core.Models.Queries.FindQuery.Parse(find);
         var (fromMills, toMills) = (findQuery.FromMills, findQuery.ToMills);
 
-        // find is client-controlled; strip line breaks so it can't forge log entries
-        var findForLog = find?.ReplaceLineEndings(" ");
+        if (findQuery.IsEmpty)
+        {
+            Logger.LogWarning("BulkDelete refused: the find has no conditions");
+            return 0;
+        }
 
         // This sweep deletes every record type in the window, so it can only honor pure
         // time-range queries. Field-filtered deletes must resolve matches through the filtered
@@ -1869,16 +1872,13 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         // non-matching records.
         if (findQuery.HasFieldFilters)
         {
-            Logger.LogWarning("BulkDelete refused: find query carries field filters the by-time sweep cannot honor. find={Find}", findForLog);
+            Logger.LogWarning("BulkDelete refused: the find carries field filters the by-time sweep cannot honor");
             return 0;
         }
 
-        var hasFind = !string.IsNullOrEmpty(find) && find != "{}";
-        var hasTimeBounds = fromMills.HasValue || toMills.HasValue;
-
-        if (hasFind && !hasTimeBounds)
+        if (!fromMills.HasValue && !toMills.HasValue)
         {
-            Logger.LogWarning("BulkDelete refused: find query has no parseable time range. find={Find}", findForLog);
+            Logger.LogWarning("BulkDelete refused: the find has no parseable time range");
             return 0;
         }
 
@@ -1906,7 +1906,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             return deleted;
         }, ct: ct);
 
-        Logger.LogInformation("BulkDelete: removed {Total} v4 treatment records for find={Find}", total, findForLog);
+        Logger.LogInformation("BulkDelete: removed {Total} v4 treatment records from={From} to={To}", total, from, to);
         return total;
     }
 

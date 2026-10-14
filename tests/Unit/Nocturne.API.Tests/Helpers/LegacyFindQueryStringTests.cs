@@ -33,6 +33,28 @@ public class LegacyFindQueryStringTests
         LegacyFindQueryString.Resolve(null, "{}").Should().Be("{}");
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("{}")]
+    [InlineData("%7B%7D")]
+    [InlineData("count=5&token=x")]
+    [InlineData("{\"type\":")]
+    public void HasConditions_NoConditions_IsFalse(string? find)
+    {
+        LegacyFindQueryString.HasConditions(find).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("find[type]=sgv")]
+    [InlineData("find%5Btype%5D=sgv&token=x")]
+    [InlineData("{\"type\":\"sgv\"}")]
+    [InlineData("{\"date\":{\"$gte\":1704067200000}}")]
+    public void HasConditions_AnyCondition_IsTrue(string find)
+    {
+        LegacyFindQueryString.HasConditions(find).Should().BeTrue();
+    }
+
     private static HttpRequest Request(string queryString)
     {
         var context = new DefaultHttpContext();
