@@ -556,12 +556,17 @@ public class Treatment : ProcessableDocumentBase
     private double? _relative;
 
     /// <summary>
-    /// Gets or sets the relative basal rate change
+    /// Gets or sets the extended bolus rate in units per hour.
     /// </summary>
     [JsonPropertyName("relative")]
     public double? Relative
     {
-        get => _relative ?? Rate;
+        // Nightscout's day-to-day report adds relative to bolus insulin even on temp basals.
+        get => string.Equals(EventType, "Temp Basal", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(EventType, "Temporary Basal", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(EventType, "TempBasal", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : _relative ?? Rate;
         set => _relative = value;
     }
 
