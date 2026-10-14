@@ -1,6 +1,8 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
@@ -23,6 +25,8 @@ public abstract class BaseV3Controller<T> : ControllerBase
 {
     protected readonly IDocumentProcessingService _documentProcessingService;
     protected readonly ILogger _logger;
+
+    private static readonly JsonSerializerOptions DocumentOptions = NightscoutJsonOptions.Create();
 
     /// <summary>
     /// Initializes the base V3 controller with shared services.
@@ -256,6 +260,22 @@ public abstract class BaseV3Controller<T> : ControllerBase
         );
 
         return JsonSerializer.Serialize(conditions);
+    }
+
+    /// <summary>
+    /// Serializes <paramref name="document"/> as the Nightscout wire shape and stamps the v3
+    /// <c>identifier</c>, also served as <c>_id</c>, as the 24-hex ObjectId a by-id read resolves.
+    /// </summary>
+    protected static JsonObject ToV3Document<TDocument>(TDocument document, string? id)
+    {
+        var node = JsonSerializer.SerializeToNode(document, DocumentOptions)!.AsObject();
+        if (MongoObjectId.Coerce(id) is { } identifier)
+        {
+            node["_id"] = identifier;
+            node["identifier"] = identifier;
+        }
+
+        return node;
     }
 
     /// <summary>

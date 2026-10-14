@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -144,10 +145,10 @@ public class V3CursorETagTests
         var envelope = okResult.Value!;
         var resultProperty = envelope.GetType().GetProperty("result");
         var profiles = resultProperty!.GetValue(envelope)
-            .Should().BeAssignableTo<IEnumerable<Profile>>().Subject.ToList();
+            .Should().BeAssignableTo<IEnumerable<JsonObject>>().Subject.ToList();
 
         // Ascending order matters: AAPS activates the LAST element of the page.
-        profiles.Select(p => p.SrvModified).Should().Equal(older, newer);
+        profiles.Select(p => p["srvModified"]!.GetValue<long>()).Should().Equal(older, newer);
     }
 
     [Fact]
@@ -203,8 +204,8 @@ public class V3CursorETagTests
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         var resultProperty = okResult.Value!.GetType().GetProperty("result");
         var returned = resultProperty!.GetValue(okResult.Value)
-            .Should().BeAssignableTo<IEnumerable<Food>>().Subject.ToList();
-        returned.Should().ContainSingle().Which.Name.Should().Be("edited");
+            .Should().BeAssignableTo<IEnumerable<JsonObject>>().Subject.ToList();
+        returned.Should().ContainSingle().Which["name"]!.GetValue<string>().Should().Be("edited");
     }
 
     [Fact]

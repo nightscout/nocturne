@@ -31,6 +31,14 @@ public interface IProfileProjectionService
     Task<Profile?> GetProfileByIdAsync(string id, CancellationToken ct = default);
 
     /// <summary>
+    /// The id of the stored profile document <paramref name="id"/> names: a row's legacy or own id,
+    /// a document id, or the <see cref="MongoObjectId.Coerce"/> form v3 serves it under. Reads and
+    /// writes by id resolve through this, so each reaches the document the other does.
+    /// </summary>
+    /// <returns>The document id, or <c>null</c> when nothing stored answers to <paramref name="id"/>.</returns>
+    Task<string?> ResolveDocumentIdAsync(string id, CancellationToken ct = default);
+
+    /// <summary>
     /// Get a paginated list of profiles, ordered by timestamp descending.
     /// </summary>
     /// <param name="count">Maximum number of profiles to return.</param>
