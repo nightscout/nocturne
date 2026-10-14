@@ -86,7 +86,7 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
         if (from.HasValue)
             query = query.Where(e => e.Timestamp >= from.Value);
         if (to.HasValue)
-            query = query.Where(e => e.Timestamp < to.Value);
+            query = query.Where(e => e.Timestamp <= to.Value);
 
         return await ctx.AuditedSoftDeleteAsync(query, AuditContext, $"timestamp={from:O}..{to:O}", ct);
     }
