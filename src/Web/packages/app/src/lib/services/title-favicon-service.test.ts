@@ -17,6 +17,18 @@ vi.mock("$lib/utils/formatting", () => ({
 
 vi.mock("@nocturne/ui/glucose-icon", () => ({ renderGlucoseIcon: vi.fn(() => "data:") }));
 
+const engineHost = vi.hoisted(() => {
+	const host = {
+		booting: null as Promise<void> | null,
+		async whenNotBooting(): Promise<void> {
+			while (host.booting) await host.booting;
+		},
+	};
+	return host;
+});
+
+vi.mock("@nocturne/watercolour", () => ({ getEngineHost: () => engineHost }));
+
 function make_settings(overrides: Partial<TitleFaviconSettings> = {}): TitleFaviconSettings {
 	return {
 		enabled: true,
@@ -39,7 +51,7 @@ function stubDom(): void {
 		documentElement: {},
 		head: { appendChild: () => {} },
 		createElement: () => ({ getContext: () => ({}) }),
-		querySelector: () => ({ href: "" }),
+		querySelector: vi.fn(() => ({ href: "" })),
 	});
 }
 
@@ -102,6 +114,59 @@ describe("TitleFaviconService", () => {
 
 		it("is neutral before the status for the reading has loaded", () => {
 			expect(fillFor(undefined, 40)).toBe("--muted-foreground");
+		});
+	});
+
+	describe("during an engine boot", () => {
+		let link: { href: string };
+		let endBoot: () => void;
+
+		beforeEach(() => {
+			stubDom();
+			link = { href: "" };
+			vi.mocked(document.querySelector).mockReturnValue(link as unknown as Element);
+			vi.mocked(renderGlucoseIcon).mockReset().mockImplementation(({ text }) => `data:${text}`);
+			service.initialize();
+			engineHost.booting = new Promise<void>((resolve) => {
+				endBoot = () => {
+					engineHost.booting = null;
+					resolve();
+				};
+			});
+		});
+
+		afterEach(() => {
+			endBoot();
+		});
+
+		const settings = make_settings({ faviconEnabled: true, faviconShowBg: true });
+
+		it("draws the favicon once the boot is over, and only the latest reading", async () => {
+			service.update(100, "Flat", 0, settings, "in-range");
+			service.update(120, "Flat", 0, settings, "in-range");
+			await Promise.resolve();
+			expect(renderGlucoseIcon).not.toHaveBeenCalled();
+
+			endBoot();
+			await vi.waitFor(() => expect(link.href).toBe("data:120"));
+			expect(renderGlucoseIcon).toHaveBeenCalledOnce();
+		});
+
+		it("holds the alarm flash's favicon until the boot is over", async () => {
+			service.update(50, "Flat", 0, settings, "very-low");
+			service.syncAlarmFlash(GlucoseStatus.UrgentLow, alarmVisual);
+			await Promise.resolve();
+			expect(renderGlucoseIcon).not.toHaveBeenCalled();
+
+			endBoot();
+			await vi.waitFor(() => expect(link.href).toBe("data:50"));
+			expect(renderGlucoseIcon).toHaveBeenCalledOnce();
+		});
+
+		it("draws at once with no boot in progress", () => {
+			endBoot();
+			service.update(140, "Flat", 0, settings, "in-range");
+			expect(link.href).toBe("data:140");
 		});
 	});
 

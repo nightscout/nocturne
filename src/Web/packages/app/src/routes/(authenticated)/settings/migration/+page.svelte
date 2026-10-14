@@ -29,11 +29,13 @@
   import Server from "@lucide/svelte/icons/server";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Info from "@lucide/svelte/icons/info";
-  import { Artwork } from "@nocturne/watercolour";
+  import { EmptyState } from "$lib/components/shared";
   import { databaseArtwork } from "$lib/watercolour-icons";
   import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import { remoteErrorMessage } from "$lib/api/remote-error";
+  import MigrationCompleteMoment from "./MigrationCompleteMoment.svelte";
+  import { completedCleanly } from "./migration-outcome";
   import {
     type MigrationJobInfo,
     type MigrationJobStatus,
@@ -56,6 +58,8 @@
   // Active migration state
   let activeMigration = $state<MigrationJobStatus | null>(null);
   let pollingActive = $state(false);
+  /** A run this page watched finish cleanly; set only by polling, never by loading history. */
+  let completedJobId = $state<string | null>(null);
 
   // Form state
   let mode = $state<"Api" | "MongoDb">("Api");
@@ -139,6 +143,7 @@
   // Poll migration status
   async function pollMigrationStatus(jobId: string) {
     pollingActive = true;
+    completedJobId = null;
     try {
       while (pollingActive) {
         const status = await migrationRemote.getStatus(jobId).run();
@@ -153,6 +158,7 @@
         ) {
           pollingActive = false;
           await loadData(); // Refresh history
+          if (completedCleanly(history.find((j) => j.id === jobId))) completedJobId = jobId;
           break;
         }
 
@@ -262,6 +268,12 @@
           ready.
         </Alert.Description>
       </Alert.Root>
+    {/if}
+
+    {#if completedJobId}
+      {#key completedJobId}
+        <MigrationCompleteMoment />
+      {/key}
     {/if}
 
     <Tabs.Root bind:value={activeTab} class="space-y-6">
@@ -587,19 +599,11 @@
                 </Button>
               </div>
             {:else}
-              <div class="text-center py-12 text-muted-foreground">
-                <Artwork
-                  icon={databaseArtwork}
-                  palette="slate"
-                  motion="auto"
-                  autoplay="once"
-                  class="mx-auto mb-3 size-48"
-                />
-                <p>No active migration</p>
-                <p class="text-sm">
-                  Start a new migration to see progress here
-                </p>
-              </div>
+              <EmptyState
+                art={databaseArtwork}
+                title="No active migration"
+                body="Start a new migration to see progress here"
+              />
             {/if}
           </CardContent>
         </Card>
@@ -616,17 +620,11 @@
           </CardHeader>
           <CardContent>
             {#if history.length === 0}
-              <div class="text-center py-12 text-muted-foreground">
-                <Artwork
-                  icon={databaseArtwork}
-                  palette="slate"
-                  motion="auto"
-                  autoplay="once"
-                  class="mx-auto mb-3 size-48"
-                />
-                <p>No migration history</p>
-                <p class="text-sm">Completed migrations will appear here</p>
-              </div>
+              <EmptyState
+                art={databaseArtwork}
+                title="No migration history"
+                body="Completed migrations will appear here"
+              />
             {:else}
               <div class="space-y-3">
                 {#each history as job (job.id)}

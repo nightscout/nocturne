@@ -8,6 +8,7 @@
   import { Separator } from "$lib/components/ui/separator";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
+  import UserAvatar from "$lib/components/account/UserAvatar.svelte";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Clock from "@lucide/svelte/icons/clock";
@@ -114,6 +115,7 @@
 <Card.Root class="@container">
   <Card.Header>
     <div class="flex items-start justify-between gap-4">
+      <UserAvatar name={member.name} size="md" />
       <div class="space-y-1 flex-1 min-w-0">
         <Card.Title class="flex items-center gap-2 flex-wrap">
           <span class="truncate">

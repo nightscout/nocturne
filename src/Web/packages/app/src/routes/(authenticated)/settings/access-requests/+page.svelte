@@ -1,10 +1,12 @@
 <script lang="ts">
+  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
+  import { EmptyState } from "$lib/components/shared";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import CheckCircle2 from "@lucide/svelte/icons/circle-check";
@@ -57,7 +59,7 @@
   // Loading states
   let approvingId = $state<string | null>(null);
   let denyingId = $state<string | null>(null);
-  let successMessage = $state<string | null>(null);
+  let successMessage = $state<{ text: string; wash: boolean } | null>(null);
   let errorMessage = $state<string | null>(null);
 
   function formatRelativeTime(dateInput: string | Date): string {
@@ -94,7 +96,7 @@
           limitTo24Hours: limitTo24Hours[subjectId] ?? false,
         },
       });
-      successMessage = "Access request approved.";
+      successMessage = { text: "Access request approved.", wash: true };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to approve request. Please try again.");
@@ -109,7 +111,7 @@
     errorMessage = null;
     try {
       await deny(subjectId);
-      successMessage = "Access request denied.";
+      successMessage = { text: "Access request denied.", wash: false };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to deny request. Please try again.");
@@ -147,34 +149,16 @@
   {/if}
 
   {#if successMessage}
-    <div
-      class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
-    >
-      <CheckCircle2
-        class="mt-0.5 h-4 w-4 shrink-0 text-success"
-      />
-      <p class="text-sm text-success">
-        {successMessage}
-      </p>
-    </div>
+    <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
   {/if}
 
   {#if requests.length === 0}
-    <Card.Root>
-      <Card.Content
-        class="flex flex-col items-center justify-center py-12 text-center"
-      >
-        <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-        >
-          <UserPlus class="h-6 w-6 text-muted-foreground" />
-        </div>
-        <p class="text-sm text-muted-foreground max-w-sm">
-          No pending access requests. When someone requests access to your data,
-          they will appear here.
-        </p>
-      </Card.Content>
-    </Card.Root>
+    <EmptyState
+      art="people-group"
+      variant="card"
+      title="No pending access requests"
+      body="When someone requests access to your data, they will appear here."
+    />
   {:else}
     <div class="space-y-4">
       {#each requests as request (request.subjectId)}

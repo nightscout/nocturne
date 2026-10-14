@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
+  import SubmitButton from "$lib/forms/SubmitButton.svelte";
   import Check from "@lucide/svelte/icons/check";
   import MessageSquareText from "@lucide/svelte/icons/message-square-text";
   import { copyToClipboard } from "$lib/utils";
@@ -14,6 +14,7 @@
   let { url, inviterName, onCopied, onCopyFailed }: Props = $props();
 
   let copied = $state(false);
+  let copies = $state(0);
 
   const message = $derived(
     inviterName
@@ -27,12 +28,19 @@
       return;
     }
     onCopied();
+    copies += 1;
     copied = true;
     setTimeout(() => (copied = false), 2000);
   }
 </script>
 
-<Button variant="outline" class="w-full" onclick={copyMessage}>
+<SubmitButton
+  type="button"
+  variant="outline"
+  saved={copies}
+  class="w-full"
+  onclick={copyMessage}
+>
   {#if copied}
     <Check class="h-4 w-4 text-success" />
     Message copied
@@ -40,4 +48,4 @@
     <MessageSquareText class="h-4 w-4" />
     Copy invitation message
   {/if}
-</Button>
+</SubmitButton>

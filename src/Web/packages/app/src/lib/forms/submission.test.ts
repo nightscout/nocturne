@@ -78,6 +78,46 @@ describe("useSubmission", () => {
     expect(submission.error).toBeNull();
   });
 
+  it("counts only the submissions that succeeded, after onSuccess", async () => {
+    const submission = useSubmission();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await submission.run(async () => false);
+    await submission.run(async () => {
+      throw new Error("offline");
+    });
+    await submission.run(
+      async () => true,
+      () => {
+        throw new Error("follow-up failed");
+      }
+    );
+    await submission.run(async () => true, async () => false);
+    expect(submission.saved).toBe(0);
+
+    await submission.run(async () => true);
+    await submission.run(async () => true);
+    expect(submission.saved).toBe(2);
+  });
+
+  it("reports a failed follow-up apart from a failed submission", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const submission = useSubmission({
+      fallback: "Couldn't save.",
+      followUpFallback: "Saved, but the follow-up failed.",
+    });
+
+    await expect(
+      submission.run(
+        async () => true,
+        () => {
+          throw new Error("offline");
+        }
+      )
+    ).resolves.toBe(true);
+    expect(submission.error).toBe("Saved, but the follow-up failed.");
+  });
+
   it("clears on demand", async () => {
     const submission = useSubmission();
     await submission.run(async () => {

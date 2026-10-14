@@ -7,6 +7,7 @@
   import Calendar from "@lucide/svelte/icons/calendar";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "$lib/components/ui/card";
+  import { EmptyState } from "$lib/components/shared";
   import { page } from "$app/state";
   import {
     reportsOverviewScopes,
@@ -230,15 +231,13 @@
           </CardContent>
         </Card>
       {:else if !isLoading}
-        <Card variant="dashed">
-          <CardContent class="text-center">
-            <h2 class="mb-2 text-lg font-semibold">No data in this range</h2>
-            <p class="mx-auto max-w-md text-muted-foreground">
-              There aren't enough glucose readings between these dates to
-              summarise. Choose a longer date range.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          art="report-pages"
+          variant="dashed"
+          title="No data in this range"
+          headingLevel={2}
+          body="There aren't enough glucose readings between these dates to summarise. Choose a longer date range."
+        />
       {/if}
     {/if}
 

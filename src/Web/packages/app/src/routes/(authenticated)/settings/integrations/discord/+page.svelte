@@ -15,6 +15,7 @@
 	import Save from "@lucide/svelte/icons/save";
 	import X from "@lucide/svelte/icons/x";
 	import Loader2 from "@lucide/svelte/icons/loader-circle";
+	import { EmptyState } from "$lib/components/shared";
 	import {
 		getLinks,
 		setDefault,
@@ -156,9 +157,11 @@
 		</Card.Header>
 		<Card.Content class="space-y-3">
 			{#if links.length === 0}
-				<p class="text-sm text-muted-foreground">
-					No Discord accounts linked yet. Use the button below to connect one.
-				</p>
+				<EmptyState
+					art="chat-bubble"
+					title="No Discord accounts linked yet"
+					body="Use the button below to connect one."
+				/>
 			{:else}
 				{#each links as link (link.id)}
 					<div class="flex flex-col gap-2 p-3 border rounded-md">

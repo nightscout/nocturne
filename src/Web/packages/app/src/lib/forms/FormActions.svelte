@@ -5,6 +5,7 @@
   import Save from "@lucide/svelte/icons/save";
   import { cn } from "$lib/utils";
   import FormError from "./FormError.svelte";
+  import SubmitButton from "./SubmitButton.svelte";
   import type { FieldIssues } from "./field-messages";
 
   interface Props {
@@ -16,6 +17,8 @@
     form?: { readonly pending: number };
     /** Additional in-flight work owned by the caller (e.g. a second save). */
     pending?: boolean;
+    /** See `SubmitButton`'s `saved`. */
+    saved?: number;
     /** Form-level error — one that belongs to no single field. */
     error?: FieldIssues;
     /** Move focus to the error when it appears. */
@@ -43,6 +46,7 @@
   let {
     form,
     pending = false,
+    saved,
     error,
     focusError = false,
     disabled = false,
@@ -71,7 +75,7 @@
       </Button>
     {/if}
 
-    <Button type="submit" form={formId} disabled={inFlight || disabled}>
+    <SubmitButton form={formId} {saved} disabled={inFlight || disabled}>
       {#if inFlight}
         <Loader2 class="mr-2 h-4 w-4 animate-spin" />
       {:else if icon}
@@ -80,6 +84,6 @@
         <Save class="mr-2 h-4 w-4" />
       {/if}
       {inFlight ? (pendingLabel ?? submitLabel) : submitLabel}
-    </Button>
+    </SubmitButton>
   </div>
 </div>

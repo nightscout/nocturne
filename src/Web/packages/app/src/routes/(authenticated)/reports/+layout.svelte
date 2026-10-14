@@ -6,6 +6,7 @@
     import ResourceGuard from "$lib/components/reports/ResourceGuard.svelte";
     import HistoryLimitNotice from "$lib/components/layout/HistoryLimitNotice.svelte";
     import ReportPrintHeader from "$lib/components/reports/print/ReportPrintHeader.svelte";
+    import PrintReportButton from "$lib/components/reports/print/PrintReportButton.svelte";
     import {
         createReportPrintContext,
         installPrintFitFallback,
@@ -15,7 +16,7 @@
     import Filter from "@lucide/svelte/icons/funnel";
     import Calendar from "@lucide/svelte/icons/calendar";
     import ChevronDown from "@lucide/svelte/icons/chevron-down";
-    import Printer from "@lucide/svelte/icons/printer";
+    import ReportHeaderWashDeferred from "$lib/components/reports/ReportHeaderWashDeferred.svelte";
     import { toast } from "svelte-sonner";
     import { onMount } from "svelte";
     import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
@@ -50,8 +51,9 @@
 
     const printCtx = createReportPrintContext();
 
-    async function handlePrint() {
-        if (printCtx.printing) return;
+    /** Resolves true once the print dialog has run, false when it never opened. */
+    async function handlePrint(): Promise<boolean> {
+        if (printCtx.printing) return false;
         printCtx.printing = true;
         const url = page.url.href;
         const preparationVersion = printCtx.preparationVersion;
@@ -60,9 +62,11 @@
                 () => printCtx.prepare(),
                 () => page.url.href === url && printCtx.preparationVersion === preparationVersion,
             );
+            return true;
         } catch (error) {
             console.error("Failed to prepare report for printing:", error);
             toast.error("Unable to load the complete report. Please try again before printing.");
+            return false;
         } finally {
             printCtx.printing = false;
         }
@@ -143,38 +147,29 @@
         <div
                 class="sticky top-(--app-sticky-top,0px) z-20 transition-all duration-300 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
         >
-            <div class="flex h-14 items-center justify-between gap-2 px-3 @md:px-6">
-                <div class="flex items-center gap-2">
-                    <!-- Report info -->
-                    <div class="flex items-center gap-3">
-                        <h1 class="text-lg font-semibold text-foreground">{reportName}</h1>
-                        {#if showFilters}
-                            <Button
-                                    variant="outline"
-                                    size="sm"
-                                    class="hidden sm:inline-flex"
-                                    onclick={() => (filterSidebarOpen = true)}
-                                    aria-label="Change date range"
-                            >
-                                <Calendar class="h-3.5 w-3.5"/>
-                                <span>{dateRangeDisplay}</span>
-                                <ChevronDown class="h-3 w-3 opacity-60"/>
-                            </Button>
-                        {/if}
-                    </div>
+            <!-- At 35% the darkest wash keeps the bar's text above 9:1 in either theme. -->
+            <ReportHeaderWashDeferred name={page.url.pathname} class="inset-0 opacity-35"/>
+            <div class="relative flex h-14 items-center justify-between gap-2 px-3 @md:px-6">
+                <!-- Report info -->
+                <div class="flex items-center gap-3">
+                    <h1 class="text-lg font-semibold text-foreground">{reportName}</h1>
+                    {#if showFilters}
+                        <Button
+                                variant="outline"
+                                size="sm"
+                                class="hidden sm:inline-flex"
+                                onclick={() => (filterSidebarOpen = true)}
+                                aria-label="Change date range"
+                        >
+                            <Calendar class="h-3.5 w-3.5"/>
+                            <span>{dateRangeDisplay}</span>
+                            <ChevronDown class="h-3 w-3 opacity-60"/>
+                        </Button>
+                    {/if}
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button
-                            variant="outline"
-                            size="sm"
-                            onclick={handlePrint}
-                            disabled={printCtx.printing}
-                            aria-label="Print report"
-                    >
-                        <Printer class="w-4 h-4"/>
-                        <span class="hidden sm:inline">Print</span>
-                    </Button>
+                    <PrintReportButton print={handlePrint} disabled={printCtx.printing}/>
                     {#if showFilters}
                         <Button
                                 variant="outline"

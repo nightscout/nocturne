@@ -2,7 +2,6 @@
   import { FoodState } from './food-state.svelte.js';
   import { setFoodState } from './food-context.js';
   import { onMount } from 'svelte';
-  import type { Food } from '$api';
   import type { GiLevel } from './types';
 
   import FoodList from './FoodList.svelte';
@@ -16,7 +15,7 @@
   import Search from '@lucide/svelte/icons/search';
   import Star from '@lucide/svelte/icons/star';
   import X from '@lucide/svelte/icons/x';
-  import { Artwork } from "@nocturne/watercolour";
+  import { EmptyState } from '$lib/components/shared';
   import * as Select from '$lib/components/ui/select';
   import { Button } from '$lib/components/ui/button';
   import { Separator } from '$lib/components/ui/separator';
@@ -33,10 +32,6 @@
 
   const giLevels: GiLevel[] = ['low', 'medium', 'high'];
   const ALL_CATEGORIES = '__all';
-
-  async function handleAdd(food: Food) {
-    await state.addFood(food);
-  }
 </script>
 
 <svelte:head>
@@ -149,42 +144,33 @@
 
     <!-- Composer -->
     {#if state.composerOpen}
-      <Composer onadd={handleAdd} onclose={() => (state.composerOpen = false)} />
+      <Composer onadd={(food) => state.addFood(food)} onclose={() => (state.composerOpen = false)} />
     {/if}
 
     <!-- Content -->
     {#if state.loading}
       <div class="py-16 text-center text-muted-foreground">Loading food database...</div>
     {:else if state.foods.length === 0}
-      <div class="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center text-muted-foreground">
-        <Artwork
-          artwork="apple"
-          palette="moss"
-          motion="auto"
-          autoplay="once"
-          class="size-48"
-        />
-        <div class="text-lg font-semibold text-foreground">Build your food database</div>
-        <div class="max-w-[380px] text-sm leading-relaxed">
-          Add the foods you eat regularly with their carb counts. Once they're here,
-          logging a meal takes a couple of taps anywhere in Nocturne.
-        </div>
-        <div class="mt-1.5 flex gap-2">
+      <EmptyState
+        art="apple"
+        variant="dashed"
+        title="Build your food database"
+        body="Add the foods you eat regularly with their carb counts. Once they're here, logging a meal takes a couple of taps anywhere in Nocturne."
+      >
+        {#snippet action()}
           <Button size="sm" onclick={() => (state.composerOpen = true)}><Plus class="h-3.5 w-3.5" /> Add your first food</Button>
           <Button variant="outline" size="sm"><Upload class="h-3.5 w-3.5" /> Import CSV</Button>
-        </div>
-        <div class="mt-4 text-xs text-muted-foreground/60">
-          Or browse the Nocturne food bank →
-        </div>
-      </div>
+        {/snippet}
+        {#snippet footnote()}
+          <p class="mt-3 text-muted-foreground/60">Or browse the Nocturne food bank →</p>
+        {/snippet}
+      </EmptyState>
     {:else if state.filteredFoods.length === 0}
-      <div class="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-        <div class="grid h-14 w-14 place-items-center rounded-2xl bg-white/[0.05] text-muted-foreground">
-          <Search class="h-6 w-6" />
-        </div>
-        <div class="text-base font-semibold text-foreground">No matches for "{state.query}"</div>
-        <Button variant="outline" size="sm" onclick={() => state.clearFilters()}>Clear filters</Button>
-      </div>
+      <EmptyState art="magnifying-glass" title={`No matches for "${state.query}"`}>
+        {#snippet action()}
+          <Button variant="outline" size="sm" onclick={() => state.clearFilters()}>Clear filters</Button>
+        {/snippet}
+      </EmptyState>
     {:else}
       <FoodList />
     {/if}

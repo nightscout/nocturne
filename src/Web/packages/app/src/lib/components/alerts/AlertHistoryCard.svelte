@@ -12,6 +12,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import Clock from "@lucide/svelte/icons/clock";
+  import { EmptyState } from "$lib/components/shared";
   import { formatElapsedDuration } from "$lib/utils/duration";
 
   interface Props {
@@ -70,13 +71,11 @@
   </CardHeader>
   <CardContent>
     {#if !history || !history.items || history.items.length === 0}
-      <div class="text-center py-8 text-muted-foreground">
-        <Clock class="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p class="font-medium">No alert history</p>
-        <p class="text-sm">
-          Resolved alerts will appear here
-        </p>
-      </div>
+      <EmptyState
+        art="clock"
+        title="No alert history"
+        body="Resolved alerts will appear here"
+      />
     {:else}
       <div class="overflow-x-auto">
         <table class="w-full text-sm">

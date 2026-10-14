@@ -3,7 +3,7 @@
 //! (halos, blooms, line hints) only when `Style::fine`.
 
 use nocturne_watercolour_core::domain::{
-    LiftStroke, Operation, Palette, Paper, PigmentRole, RadiusProfile, Scene, StrokeSpan,
+    LiftStroke, Operation, Palette, Paper, PigmentRole, Point, RadiusProfile, Scene, StrokeSpan,
 };
 
 use super::geometry::{Crescent, Frame, bell_outline};
@@ -112,14 +112,91 @@ pub(super) fn crescent_moon(style: &Style, palette: &Palette) -> Scene {
 /// Dome and lip stencilled from one wash, then a wet-on-dry lip band and a
 /// clapper below it.
 pub(super) fn alarm_bell(style: &Style, palette: &Palette) -> Scene {
+    let mut p = bell(style, palette, 0.0);
+    p.settle(0.8, 3.0);
+    style.scene(
+        "alarm-bell",
+        palette,
+        SQUARE,
+        Paper::cold_press(style.seed()),
+        p.finish(),
+    )
+}
+
+/// The alarm bell swung off its axis, with two strokes of sound either side.
+/// The swing alone reads as a bell that is crooked; the strokes are what say
+/// it is ringing, so they survive at `Small` too.
+pub(super) fn ringing_bell(style: &Style, palette: &Palette) -> Scene {
+    let frame = Frame::new(SQUARE);
+    let shadow = role(palette, PigmentRole::Shadow);
+    let base = role(palette, PigmentRole::BaseWash);
+    let mut p = bell(style, palette, RINGING_TILT);
+    let (cx, cy) = (0.5f32, 0.4f32);
+    let arcs: &[(f32, f32)] = if style.fine() {
+        &[(0.37, 0.03), (0.45, 0.024)]
+    } else {
+        &[(0.4, 0.042)]
+    };
+    for (i, &(r, radius)) in arcs.iter().enumerate() {
+        for side in [-1.0f32, 1.0] {
+            let arc: Vec<_> = (0..=8)
+                .map(|k| {
+                    let a = (k as f32 / 8.0 - 0.5) * 0.8;
+                    frame.pt(cx + side * r * a.cos(), cy + r * a.sin())
+                })
+                .collect();
+            p.at(
+                0.62 + i as f32 * 0.05,
+                brush(
+                    arc,
+                    radius,
+                    if i == 0 { shadow } else { base },
+                    style.conc(0.8),
+                    style.water(0.3),
+                    0.45,
+                ),
+            );
+        }
+    }
+    p.settle(0.82, 3.0);
+    style.scene(
+        "ringing-bell",
+        palette,
+        SQUARE,
+        Paper::cold_press(style.seed()),
+        p.finish(),
+    )
+}
+
+/// Radians the ringing bell is swung by, about the middle of its body.
+const RINGING_TILT: f32 = -0.22;
+
+/// The bell both bell artworks share, swung by `tilt` radians about its
+/// middle so it stays centred; everything but the settle and the scene.
+fn bell(style: &Style, palette: &Palette, tilt: f32) -> Painting {
     let frame = Frame::new(SQUARE);
     let base = role(palette, PigmentRole::BaseWash);
     let shadow = role(palette, PigmentRole::Shadow);
     let (top, lip, lip_hw, lip_depth) = (0.2, 0.68, 0.3, 0.06);
+    let (sin, cos) = tilt.sin_cos();
+    let swing = |pts: Vec<Point>| -> Vec<Point> {
+        if tilt == 0.0 {
+            return pts;
+        }
+        pts.into_iter()
+            .map(|q| {
+                let (dx, dy) = (q.x - 0.5, q.y - 0.46);
+                Point::new(
+                    (0.5 + dx * cos - dy * sin).clamp(0.0, 1.0),
+                    (0.46 + dx * sin + dy * cos).clamp(0.0, 1.0),
+                )
+            })
+            .collect()
+    };
     let mut p = Painting::new(style.ticks(340));
     p.mask(
         0.0,
-        bell_outline(&frame, 0.5, top, lip, lip_hw, lip_depth),
+        swing(bell_outline(&frame, 0.5, top, lip, lip_hw, lip_depth)),
         0.012,
     );
     // The stencil owns the silhouette; the body only has to deliver pigment
@@ -132,7 +209,7 @@ pub(super) fn alarm_bell(style: &Style, palette: &Palette) -> Scene {
     p.at(
         0.0,
         water(
-            frame.line(0.5, 0.32, 0.5, 0.62),
+            swing(frame.line(0.5, 0.32, 0.5, 0.62)),
             0.42,
             style.water(0.75),
             0.15,
@@ -141,7 +218,7 @@ pub(super) fn alarm_bell(style: &Style, palette: &Palette) -> Scene {
     p.at(
         0.0,
         brush(
-            frame.hatch(0.06, 0.94, band_top, band_bottom, rows),
+            swing(frame.hatch(0.06, 0.94, band_top, band_bottom, rows)),
             frame.hatch_radius(band_top, band_bottom, rows),
             base,
             style.conc(0.42),
@@ -152,7 +229,7 @@ pub(super) fn alarm_bell(style: &Style, palette: &Palette) -> Scene {
     p.at(
         0.05,
         brush(
-            frame.line(0.3, 0.63, 0.7, 0.63),
+            swing(frame.line(0.3, 0.63, 0.7, 0.63)),
             0.09,
             shadow,
             style.conc(0.45),
@@ -164,7 +241,7 @@ pub(super) fn alarm_bell(style: &Style, palette: &Palette) -> Scene {
         p.at(
             0.08,
             Operation::Lift(LiftStroke {
-                path: vec![frame.pt(0.38, 0.32), frame.pt(0.33, 0.5)],
+                path: swing(vec![frame.pt(0.38, 0.32), frame.pt(0.33, 0.5)]),
                 radius: RadiusProfile::uniform(0.035),
                 strength: 0.55,
                 softness: 0.8,
@@ -176,7 +253,7 @@ pub(super) fn alarm_bell(style: &Style, palette: &Palette) -> Scene {
     p.at(
         0.5,
         brush(
-            frame.line(0.19, lip + lip_depth * 0.5, 0.81, lip + lip_depth * 0.5),
+            swing(frame.line(0.19, lip + lip_depth * 0.5, 0.81, lip + lip_depth * 0.5)),
             0.03,
             shadow,
             style.conc(0.85),
@@ -187,7 +264,7 @@ pub(super) fn alarm_bell(style: &Style, palette: &Palette) -> Scene {
     p.at(
         0.5,
         brush(
-            vec![frame.pt(0.5, 0.82)],
+            swing(vec![frame.pt(0.5, 0.82)]),
             0.045,
             shadow,
             style.conc(0.85),
@@ -199,7 +276,7 @@ pub(super) fn alarm_bell(style: &Style, palette: &Palette) -> Scene {
         p.at(
             0.5,
             brush(
-                vec![frame.pt(0.5, 0.165)],
+                swing(vec![frame.pt(0.5, 0.165)]),
                 0.028,
                 shadow,
                 style.conc(0.6),
@@ -208,14 +285,7 @@ pub(super) fn alarm_bell(style: &Style, palette: &Palette) -> Scene {
             ),
         );
     }
-    p.settle(0.8, 3.0);
-    style.scene(
-        "alarm-bell",
-        palette,
-        SQUARE,
-        Paper::cold_press(style.seed()),
-        p.finish(),
-    )
+    p
 }
 
 /// Two rings, the second glazed wet-on-dry so the overlaps darken.

@@ -3,8 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import { toast } from "svelte-sonner";
-  import { useToastSubmission } from "$lib/forms";
+  import { toastSaved, useToastSubmission } from "$lib/forms";
   import type { Food } from "$lib/api";
   import { CategorySubcategoryCombobox } from "$lib/components/food";
   import UnitCombobox from "./UnitCombobox.svelte";
@@ -129,7 +128,7 @@
         ? await updateFood({ foodId: editingFoodId, request: payload })
         : await createFood(payload);
 
-      toast.success(editingFoodId ? "Food updated successfully" : "Food created successfully");
+      toastSaved(editingFoodId ? "Food updated successfully" : "Food created successfully");
       onSave?.(result);
       onOpenChange(false);
     });

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { EmptyState } from "$lib/components/shared";
   import {
     Card,
     CardContent,
@@ -165,12 +166,17 @@
       </div>
     </CardHeader>
     <CardContent>
-      <p class="text-sm text-muted-foreground">No target range configured.</p>
-      {#if !readOnly}
-        <Button variant="outline" size="sm" class="mt-3" onclick={startEdit}>
-          Set Target Range
-        </Button>
-      {/if}
+      <EmptyState
+        art="report-pages"
+        size="compact"
+        title="No target range configured"
+        action={readOnly ? undefined : setTargetRangeAction}
+      />
     </CardContent>
   </Card>
+  {#snippet setTargetRangeAction()}
+    <Button variant="outline" size="sm" onclick={startEdit}>
+      Set Target Range
+    </Button>
+  {/snippet}
 {/if}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
   import type { HourlyInsulinDeliveryPoint } from "$lib/api";
-  import Syringe from "@lucide/svelte/icons/syringe";
+  import { EmptyState } from "$lib/components/shared";
   import {
     patternClass,
     type TextureKey,
@@ -167,20 +167,15 @@
       </dl>
     {/if}
   {:else}
-    <div
-      class="flex h-[350px] w-full items-center justify-center text-muted-foreground"
-    >
-      <div class="text-center">
-        <Syringe class="mx-auto h-10 w-10 opacity-30" />
-        <p class="mt-2 font-medium">
-          {showStacked ? "No insulin delivery data" : "No basal delivery data"}
-        </p>
-        <p class="text-sm">
-          {showStacked
-            ? "No treatments found in this period"
-            : "No basal records found in this period"}
-        </p>
-      </div>
+    <div class="flex h-[350px] w-full items-center justify-center">
+      <EmptyState
+        art="report-pages"
+        size="compact"
+        title={showStacked ? "No insulin delivery data" : "No basal delivery data"}
+        body={showStacked
+          ? "No treatments found in this period"
+          : "No basal records found in this period"}
+      />
     </div>
   {/if}
 </div>

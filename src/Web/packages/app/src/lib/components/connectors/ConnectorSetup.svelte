@@ -21,6 +21,7 @@
   import { getMyPermissions } from "$lib/api/generated/myPermissions.generated.remote";
   import { canManageConnectors } from "$lib/authorization/connector-management";
   import { describeSubmitError } from "$lib/forms/submit-error";
+  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
   import {
     Card,
     CardContent,
@@ -40,6 +41,7 @@
   import Lock from "@lucide/svelte/icons/lock";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import ConnectorSelectionGrid from "$lib/components/connectors/ConnectorSelectionGrid.svelte";
+  import { EmptyState } from "$lib/components/shared";
   import ConnectorDangerZone from "$lib/components/connectors/ConnectorDangerZone.svelte";
   import { retainQuery } from "$lib/api/retain-query.svelte";
 
@@ -172,7 +174,7 @@
 
   // --- UI state ---
   let isSaving = $state(false);
-  let saveMessage = $state<{ type: "success" | "error"; text: string } | null>(
+  let saveMessage = $state<{ type: "success" | "error"; text: string; wash?: boolean } | null>(
     null
   );
 
@@ -302,6 +304,7 @@
       saveMessage = {
         type: "success",
         text: active ? "Connector enabled" : "Connector disabled",
+        wash: active,
       };
     } catch (e) {
       saveMessage = {
@@ -374,33 +377,15 @@
       </div>
 
       <!-- Save Message -->
-      {#if saveMessage}
-        <Card variant={saveMessage.type === "error" ? "destructive" : "success"}>
+      {#if saveMessage?.type === "error"}
+        <Card variant="destructive">
           <CardContent class="flex items-center gap-3 py-3">
-            {#if saveMessage.type === "error"}
-              <AlertCircle class="h-5 w-5 text-destructive" />
-            {:else}
-              <div
-                class="h-5 w-5 rounded-full bg-success flex items-center justify-center"
-              >
-                <svg
-                  class="h-3 w-3 text-success-foreground"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="3"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-            {/if}
+            <AlertCircle class="h-5 w-5 text-destructive" />
             <p class="text-sm">{saveMessage.text}</p>
           </CardContent>
         </Card>
+      {:else if saveMessage}
+        <SuccessBanner wash={saveMessage.wash}>{saveMessage.text}</SuccessBanner>
       {/if}
 
       <!-- Enable/Disable Toggle -->
@@ -449,25 +434,14 @@
           onSave={handleSave}
         />
       {:else}
-        <Card>
-          <CardContent class="py-8">
-            <div class="text-center">
-              <AlertCircle
-                class="h-12 w-12 mx-auto mb-4 text-muted-foreground"
-              />
-              <p class="font-medium">No Runtime Configuration Available</p>
-              <p class="text-sm text-muted-foreground mt-2">
-                This connector does not support runtime configuration.
-                {#if connectorInfo?.documentationUrl}
-                  Check the documentation for environment variable
-                  configuration.
-                {:else}
-                  Configure via environment variables on the server.
-                {/if}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <EmptyState
+          art="plug"
+          variant="card"
+          title="No Runtime Configuration Available"
+          body={connectorInfo?.documentationUrl
+            ? "This connector does not support runtime configuration. Check the documentation for environment variable configuration."
+            : "This connector does not support runtime configuration. Configure via environment variables on the server."}
+        />
       {/if}
 
       <!-- Extras snippet -->

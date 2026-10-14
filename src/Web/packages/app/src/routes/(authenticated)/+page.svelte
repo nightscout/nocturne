@@ -6,6 +6,7 @@
     RecentTreatmentsCard,
     WidgetGrid,
   } from "$lib/components/dashboard";
+  import { showsCurrentGlucoseWidget } from "$lib/components/dashboard/top-widget-ids";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import { dashboardTopWidgets } from "$lib/stores/appearance-store.svelte";
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
@@ -44,6 +45,8 @@
 
   // Get enabled top widgets from persisted appearance store
   const topWidgets = $derived(dashboardTopWidgets.current);
+  // The Current glucose widget attaches this mark to its own tile while it carries the reading.
+  const readingInWidget = $derived(showsCurrentGlucoseWidget(topWidgets));
 
   // Get focusHours setting for chart default time range
   const focusHours = $derived(
@@ -63,12 +66,14 @@
     <HistoryLimitNotice />
 
     <div
-      {@attach coachmark({
-        key: "quick-tour.current-bg",
-        title: "Your glucose, live",
-        description:
-          "This updates in real-time as new readings arrive from your CGM.",
-      })}
+      {@attach readingInWidget
+        ? undefined
+        : coachmark({
+            key: "quick-tour.current-bg",
+            title: "Your glucose, live",
+            description:
+              "This updates in real-time as new readings arrive from your CGM.",
+          })}
     >
       <CurrentBGDisplay />
     </div>
@@ -87,7 +92,7 @@
             "Reorder or swap these in Settings \u2192 Appearance to show the stats you care about.",
         })}
       >
-        <WidgetGrid widgets={topWidgets} maxWidgets={3} />
+        <WidgetGrid widgets={topWidgets} />
       </div>
 
       {#if isMainSectionEnabled(widgets, WidgetId.GlucoseChart)}

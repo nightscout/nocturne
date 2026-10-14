@@ -13,6 +13,7 @@ import { directionGlyph, type GlucoseTileVariant } from "@nocturne/ui/glucose";
 import { renderGlucoseIcon } from "@nocturne/ui/glucose-icon";
 import type { GlucoseStatus } from "$lib/api/generated/nocturne-api-client";
 import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
+import { getEngineHost } from "@nocturne/watercolour";
 
 /** Resolve CSS variable to its computed value */
 function resolveCssVar(name: string): string {
@@ -64,6 +65,9 @@ export class TitleFaviconService {
   private currentBg = 0;
   private currentStatus: GlucoseTileVariant = "neutral";
   private currentTitle = "";
+
+  /** The favicon to draw once the engine boot in progress is over; see {@link paintFavicon}. */
+  private pendingFavicon: (() => string) | null = null;
 
   /**
    * Initialize the service - call once on app startup
@@ -141,13 +145,10 @@ export class TitleFaviconService {
       } else {
         color = settings.faviconColorCoded ? STATUS_COLORS[variant]() : resolveCssVar("--muted-foreground");
       }
-      const faviconDataUrl = this.generateFaviconDataUrl(
-        settings.faviconShowBg ? bg : null,
-        color
-      );
       // Only update if not currently flashing
       if (!this.flashInterval) {
-        this.linkElement.href = faviconDataUrl;
+        const text = settings.faviconShowBg ? bg : null;
+        this.paintFavicon(() => this.generateFaviconDataUrl(text, color));
       }
     }
   }
@@ -220,11 +221,9 @@ export class TitleFaviconService {
 
       // Update favicon with alarm color
       if (this.canvas && this.ctx && this.linkElement && this.currentAlarmVisual) {
-        const faviconDataUrl = this.generateFaviconDataUrl(
-          this.currentBg,
-          this.currentAlarmVisual.flashColor || STATUS_COLORS[this.currentStatus]()
-        );
-        this.linkElement.href = faviconDataUrl;
+        const bg = this.currentBg;
+        const color = this.currentAlarmVisual.flashColor || STATUS_COLORS[this.currentStatus]();
+        this.paintFavicon(() => this.generateFaviconDataUrl(bg, color));
       }
     } else {
       // Flash OFF - show normal state or blank
@@ -233,11 +232,13 @@ export class TitleFaviconService {
       // Show original/dim favicon
       if (this.linkElement) {
         if (this.originalFavicon) {
+          this.pendingFavicon = null;
           this.linkElement.href = this.originalFavicon;
         } else if (this.canvas && this.ctx) {
           // Generate dim favicon
-          const faviconDataUrl = this.generateFaviconDataUrl(this.currentBg, resolveCssVar("--muted-foreground"));
-          this.linkElement.href = faviconDataUrl;
+          const bg = this.currentBg;
+          const color = resolveCssVar("--muted-foreground");
+          this.paintFavicon(() => this.generateFaviconDataUrl(bg, color));
         }
       }
     }
@@ -295,6 +296,28 @@ export class TitleFaviconService {
   }
 
   /**
+   * Sets the favicon to what `draw` returns, waiting out an engine boot first: drawing reads the
+   * canvas back from the GPU, and a readback issued during device and pipeline creation stalls
+   * with it, measured at 400 ms against 50 ms. A newer request made while waiting replaces the
+   * older one, so only the latest is drawn.
+   */
+  private paintFavicon(draw: () => string): void {
+    const engine = getEngineHost();
+    const waiting = this.pendingFavicon !== null;
+    if (!waiting && !engine.booting) {
+      if (this.linkElement) this.linkElement.href = draw();
+      return;
+    }
+    this.pendingFavicon = draw;
+    if (waiting) return;
+    void engine.whenNotBooting().then(() => {
+      const latest = this.pendingFavicon;
+      this.pendingFavicon = null;
+      if (latest && this.linkElement && this.canvas) this.linkElement.href = latest();
+    });
+  }
+
+  /**
    * Generate a favicon data URL using canvas
    */
   private generateFaviconDataUrl(bg: number | null, backgroundColor: string): string {
@@ -323,6 +346,7 @@ export class TitleFaviconService {
     }
 
     if (this.linkElement && this.originalFavicon) {
+      this.pendingFavicon = null;
       this.linkElement.href = this.originalFavicon;
     }
   }
@@ -333,6 +357,7 @@ export class TitleFaviconService {
   destroy(): void {
     if (!browser) return;
     this.stopFlashing();
+    this.pendingFavicon = null;
     this.canvas = null;
     this.ctx = null;
     this.initialized = false;

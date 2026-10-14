@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getStatus as getConnectorStatuses } from "$api/generated/connectorStatus.generated.remote";
-  import FirstReadingEmptyState from "./FirstReadingEmptyState.svelte";
+  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
   import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
 
   interface Props {
@@ -58,11 +58,18 @@
 
   const showEmpty = $derived(!loading && !hasEverReceivedReading);
 
+  // Watercolour throughout, so a dashboard that has readings never loads it.
+  const emptyState = lazyComponent(() => import("./FirstReadingEmptyState.svelte"));
   $effect(() => {
-    onResolve?.(showEmpty);
+    if (showEmpty) emptyState.open = true;
+  });
+
+  // The chart stays up until the empty state can replace it.
+  $effect(() => {
+    onResolve?.(showEmpty && emptyState.component !== null);
   });
 </script>
 
-{#if showEmpty}
-  <FirstReadingEmptyState connectors={configuredConnectors} />
+{#if showEmpty && emptyState.component}
+  <emptyState.component connectors={configuredConnectors} />
 {/if}

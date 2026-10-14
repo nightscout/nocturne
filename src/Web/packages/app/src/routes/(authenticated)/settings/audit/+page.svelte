@@ -11,8 +11,8 @@
   import ScrollText from "@lucide/svelte/icons/scroll-text";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import Info from "@lucide/svelte/icons/info";
   import X from "@lucide/svelte/icons/x";
+  import { EmptyState } from "$lib/components/shared";
   import {
     getMutationAuditLog,
     getReadAccessAuditLog,
@@ -297,28 +297,23 @@
       <!-- Gated on the saved config, not the switch: flipping the switch without
            saving would otherwise reveal an empty table the server isn't filling. -->
       {#if !config?.readAuditEnabled}
-        <!-- Empty state: read audit not enabled -->
-        <Card.Root>
-          <Card.Content class="flex flex-col items-center justify-center py-12 text-center">
-            <Info class="h-10 w-10 text-muted-foreground mb-4" />
-            <p class="text-lg font-medium mb-2">Read audit is not enabled</p>
-            {#if canManageAudit}
-              <p class="text-sm text-muted-foreground mb-4">
-                Enable read access logging to track who views patient data.
-              </p>
-              <Button onclick={enableReadAudit} disabled={isSaving}>
-                {#if isSaving}
-                  <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-                {/if}
-                Enable now
-              </Button>
-            {:else}
-              <p class="text-sm text-muted-foreground">
-                Contact your admin to enable read audit logging.
-              </p>
+        <EmptyState
+          art="clock"
+          variant="card"
+          title="Read audit is not enabled"
+          body={canManageAudit
+            ? "Enable read access logging to track who views patient data."
+            : "Contact your admin to enable read audit logging."}
+          action={canManageAudit ? enableReadAuditAction : undefined}
+        />
+        {#snippet enableReadAuditAction()}
+          <Button onclick={enableReadAudit} disabled={isSaving}>
+            {#if isSaving}
+              <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             {/if}
-          </Card.Content>
-        </Card.Root>
+            Enable now
+          </Button>
+        {/snippet}
       {:else}
         <!-- Date Range Filter Card -->
         <Card.Root>
