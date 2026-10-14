@@ -1,8 +1,11 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V2;
 using Nocturne.API.Tests.Services.Legacy;
 using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Xunit;
 
@@ -30,7 +33,12 @@ public sealed class DDataControllerNonUtcHostTests : IDisposable
         TimeZoneInfo.ClearCachedData();
         Assert.NotEqual(TimeSpan.Zero, TimeZoneInfo.Local.BaseUtcOffset);
 
-        _controller = new DDataController(_service.Object, NullLogger<DDataController>.Instance);
+        _controller = new DDataController(
+            _service.Object,
+            Mock.Of<IActivityDecomposer>(),
+            NullLogger<DDataController>.Instance
+        );
+        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
     }
 
     public void Dispose()
@@ -43,12 +51,12 @@ public sealed class DDataControllerNonUtcHostTests : IDisposable
     public async Task GetDDataAt_OffsetTimestamp_QueriesThatInstant()
     {
         _service
-            .Setup(x => x.GetDDataWithRecentStatusesAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DDataResponse());
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData());
 
         await _controller.GetDDataAt(OffsetTimestamp, CancellationToken.None);
 
-        _service.Verify(x => x.GetDDataWithRecentStatusesAsync(ExpectedMills, It.IsAny<CancellationToken>()));
+        _service.Verify(x => x.GetDDataAsync(ExpectedMills, It.IsAny<CancellationToken>()));
     }
 
     [Fact]
