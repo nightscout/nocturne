@@ -19,6 +19,14 @@ async function ssr(
 }
 
 describe("appearance-store SSR resolution", () => {
+  it("keeps A1c names and units isolated between concurrent requests", async () => {
+    const [custom, defaults] = await Promise.all([
+      ssr([{ a1cName: "A1c", a1cUnits: "mmol/mol" }]),
+      ssr([]),
+    ]);
+    expect(custom).toContain("A1c / eA1c: 53 mmol/mol");
+    expect(defaults).toContain("HbA1c / eHbA1c: 7.0%");
+  });
   it("renders the request's units, not the module default", async () => {
     const body = await ssr([mmol]);
 

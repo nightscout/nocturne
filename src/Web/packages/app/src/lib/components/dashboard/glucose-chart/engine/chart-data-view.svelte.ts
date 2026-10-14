@@ -49,6 +49,7 @@ export interface CarbMarkerData {
   carbs?: number;
   label?: string;
   treatmentId?: string;
+  isOffset?: boolean;
   dataSource?: string;
   [key: string]: unknown;
 }

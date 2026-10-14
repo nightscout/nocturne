@@ -758,8 +758,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         // The partial sync-id and legacy-id indexes lead with tenant_id, which makes EF drop the
         // auto-created tenant index as redundant, but a filtered index can't serve general
-        // tenant-scoped scans (all pre-existing rows have NULL sync_identifier).
-        foreach (var entity in V4SnapshotEntities.Select(t => modelBuilder.Entity(t)))
+        // tenant-scoped scans (all pre-existing rows have NULL sync_identifier). A history-paged
+        // table needs none: its unfiltered ix_<table>_tenant_history already leads with tenant_id.
+        foreach (var entity in V4SnapshotEntities.Except(V4HistoryPagedEntities).Select(t => modelBuilder.Entity(t)))
         {
             entity.HasIndex(nameof(ITenantScoped.TenantId))
                 .HasDatabaseName($"IX_{entity.Metadata.GetTableName()}_tenant_id");
@@ -1447,6 +1448,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(j => j.State)
             .HasDatabaseName("ix_connector_reset_jobs_state");
 
+        // A canonical id is minted per group, so it alone narrows a lookup to that group's few links;
+        // leading with record_type, or adding is_primary, only made the index bigger.
         modelBuilder
             .Entity<LinkedRecordEntity>()
             .HasIndex(l => l.CanonicalId)
@@ -1466,16 +1469,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(l => new { l.TenantId, l.SysCreatedAt })
             .HasDatabaseName("ix_linked_records_tenant_created");
 
-        modelBuilder
-            .Entity<LinkedRecordEntity>()
-            .HasIndex(l => new
-            {
-                l.RecordType,
-                l.CanonicalId,
-                l.IsPrimary,
-            })
-            .HasDatabaseName("ix_linked_records_type_canonical_primary");
-
         // Every read of this table is tenant-scoped, by the global query filter and again by the
         // tenant_isolation RLS policy, so leading on record_type made the window scan span all
         // tenants -- 41,414 index tuples read per scan, the worst ratio in the schema. Serves the
@@ -1486,13 +1479,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(l => new { l.TenantId, l.RecordType, l.SourceTimestamp })
             .HasDatabaseName("ix_linked_records_tenant_type_timestamp");
 
-        // Partial index for the NOT EXISTS anti-join in read queries —
-        // only non-primary rows enter the index, keeping it small.
-        modelBuilder
-            .Entity<LinkedRecordEntity>()
-            .HasIndex(l => new { l.RecordType, l.RecordId })
-            .HasDatabaseName("ix_linked_records_non_primary_record")
-            .HasFilter("NOT is_primary");
+        // The NOT EXISTS anti-join of ReadVisibilityFilter reads ix_linked_records_tenant_type_not_primary,
+        // which AddCompositePerformanceIndexes creates in raw SQL and so the model does not carry.
 
         modelBuilder
             .Entity<ConnectorConfigurationEntity>()
@@ -1722,18 +1710,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(e => new { e.TenantId, e.Timestamp })
             .HasDatabaseName("ix_sensor_glucose_tenant_timestamp")
             .IsDescending(false, true);
-
-        // Keep the conventional TenantId index (see ApsSnapshot note).
-        modelBuilder
-            .Entity<MeterGlucoseEntity>()
-            .HasIndex(e => e.TenantId)
-            .HasDatabaseName("IX_meter_glucose_tenant_id");
-
-        // Keep the conventional TenantId index (see ApsSnapshot note).
-        modelBuilder
-            .Entity<CalibrationEntity>()
-            .HasIndex(e => e.TenantId)
-            .HasDatabaseName("IX_calibrations_tenant_id");
 
         modelBuilder
             .Entity<BolusEntity>()
