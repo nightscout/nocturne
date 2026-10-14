@@ -42,6 +42,8 @@ public class TempBasalToTreatmentMapperTests
         result.Duration.Should().BeApproximately(30.0, 0.001);
         result.Rate.Should().Be(1.5);
         result.Absolute.Should().Be(1.5);
+        result.Relative.Should().BeNull();
+        result.Insulin.Should().BeNull();
         result.Temp.Should().Be("absolute");
         result.EnteredBy.Should().Be("openaps");
         result.DataSource.Should().Be("openaps-connector");
