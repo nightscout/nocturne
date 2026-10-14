@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.Authorization;
+
 namespace Nocturne.Core.Contracts.Multitenancy;
 
 /// <summary>
@@ -103,7 +105,10 @@ public record TenantRoleDto(
     bool IsSystem,
     int MemberCount,
     DateTime SysCreatedAt
-);
+)
+{
+    public RoleAccessLevel? AccessLevel => RoleAccessLevels.Of(Permissions);
+}
 
 /// <summary>
 /// Result of a role deletion attempt. Deletion fails if the role is a system role

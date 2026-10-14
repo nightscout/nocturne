@@ -18,7 +18,7 @@ function toDateInput(value: string | Date | null | undefined): string {
 }
 
 const ClinicalFieldsSchema = z.object({
-  diabetesType: z.string().min(1, "Diabetes type is required"),
+  diabetesType: z.string().optional(),
   diabetesTypeOther: z.string().optional(),
   diagnosisDate: z.string().optional(),
   dateOfBirth: z.string().optional(),
@@ -116,7 +116,7 @@ export class ClinicalState {
       submitErrorMessage:
         "We couldn't save your patient record. Your changes are still here — please try again.",
       onreset: (snapshot) => {
-        this.diabetesType = snapshot.diabetesType;
+        this.diabetesType = snapshot.diabetesType ?? "";
         this.diabetesTypeOther = snapshot.diabetesTypeOther ?? "";
         this.diagnosisDate = snapshot.diagnosisDate ?? "";
         this.dateOfBirth = snapshot.dateOfBirth ?? "";

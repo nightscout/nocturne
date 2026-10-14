@@ -92,9 +92,11 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
     resolvePermissions(locals),
   ]);
   const cookiePrefs = parsePrefsCookie(cookies.get(PREFS_COOKIE_NAME));
+  const tenantDefault = locals.isAuthenticated ? locals.user?.defaultGlucoseUnits : undefined;
   const displayPreferences = [
     hasStoredPreferences(serverPrefs) ? serverPrefs : null,
     cookiePrefs,
+    tenantDefault ? { glucoseUnits: tenantDefault } : null,
   ].filter((prefs) => prefs !== null && prefs !== undefined);
   const displayLanguage = resolveLanguage(
     locals.isAuthenticated ? locals.user?.preferredLanguage : null,

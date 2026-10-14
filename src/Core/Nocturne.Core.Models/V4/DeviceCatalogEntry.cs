@@ -37,4 +37,10 @@ public record DeviceCatalogEntry
     /// Null for non-CGM devices.
     /// </summary>
     public CgmProperties? Cgm { get; init; }
+
+    /// <summary>
+    /// Insulin-pump properties (rated pod, infusion-set and reservoir wear times).
+    /// Null for non-pump devices and for a custom pump.
+    /// </summary>
+    public PumpProperties? Pump { get; init; }
 }

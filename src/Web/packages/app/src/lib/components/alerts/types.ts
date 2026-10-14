@@ -11,6 +11,8 @@ import {
 } from "$api-clients";
 import type {
 	AlertRuleResponse,
+	AlertRuleChannelResponse,
+	CreateAlertRuleChannelRequest,
 	ThresholdCondition,
 	RateOfChangeCondition,
 	SignalLossCondition,
@@ -727,17 +729,32 @@ export function buildBody(state: RuleEditorState) {
 					.map((c) => stripEditorFields(flattenSingleChildRoot(c))),
 			},
 		},
-		channels: state.channels.map((c) => ({
-			channelType: c.channelType,
-			destination: c.destination || undefined,
-			destinationLabel: c.destinationLabel || undefined,
-			// device_action carries its selected capabilities as a JSON object;
-			// the server serialises it to JSONB. Omit for channels without metadata.
-			metadata: c.metadata ?? undefined,
-			// Omitted keeps the stored secret, empty clears it — the editor only ever
-			// knows whether one exists, never what it is.
-			secret: c.secret ? c.secret : c.hasSecret ? undefined : "",
-		})),
+		channels: state.channels.map(toChannelRequest),
+	};
+}
+
+export function toChannelRequest(c: ChannelDef): CreateAlertRuleChannelRequest {
+	return {
+		channelType: c.channelType,
+		destination: c.destination || undefined,
+		destinationLabel: c.destinationLabel || undefined,
+		// device_action carries its selected capabilities as a JSON object;
+		// the server serialises it to JSONB. Omit for channels without metadata.
+		metadata: c.metadata ?? undefined,
+		// Omitted keeps the stored secret, empty clears it — the editor only ever
+		// knows whether one exists, never what it is.
+		secret: c.secret ? c.secret : c.hasSecret ? undefined : "",
+	};
+}
+
+export function toChannelDef(c: AlertRuleChannelResponse): ChannelDef {
+	return {
+		_uid: newUid(),
+		channelType: c.channelType ?? ChannelType.WebPush,
+		destination: c.destination ?? "",
+		destinationLabel: c.destinationLabel ?? "",
+		metadata: parseChannelMetadata(c.metadata),
+		hasSecret: c.hasSecret ?? false,
 	};
 }
 
@@ -1021,14 +1038,7 @@ export function parseRule(r: AlertRuleResponse | null): RuleEditorState {
 		(r.channels ?? [])
 			.slice()
 			.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-			.map((c) => ({
-				_uid: newUid(),
-				channelType: c.channelType ?? ChannelType.WebPush,
-				destination: c.destination ?? "",
-				destinationLabel: c.destinationLabel ?? "",
-				metadata: parseChannelMetadata(c.metadata),
-				hasSecret: c.hasSecret ?? false,
-			}));
+			.map(toChannelDef);
 
 	return {
 		name: r.name ?? "",

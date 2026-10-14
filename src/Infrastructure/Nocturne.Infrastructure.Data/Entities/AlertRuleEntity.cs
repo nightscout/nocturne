@@ -114,6 +114,14 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     public string? ManagedBy { get; set; }
 
     /// <summary>
+    /// Which of the setup hub's starter rules this is, or null for any other rule. Unlike
+    /// <see cref="ManagedBy"/> it leaves the rule wholly the user's.
+    /// </summary>
+    [Column("starter_kind")]
+    [MaxLength(16)]
+    public StarterAlertKind? StarterKind { get; set; }
+
+    /// <summary>
     /// Order in which the rule should be processed or displayed
     /// </summary>
     [Column("sort_order")]

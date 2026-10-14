@@ -410,7 +410,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// Returns true if the field is not present (backwards compatibility - existing connectors default to enabled).
     /// Returns false only if explicitly set to false or there's a parsing error.
     /// </summary>
-    private bool GetEnabledFromConfig(string configJson)
+    internal static bool GetEnabledFromConfig(string configJson)
     {
         try
         {
@@ -423,11 +423,10 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             // This ensures existing connector configs continue to work after the migration
             return true;
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            _logger.LogDebug(ex, "Failed to parse configuration JSON for enabled field");
+            return false;
         }
-        return false;
     }
 
     /// <inheritdoc />

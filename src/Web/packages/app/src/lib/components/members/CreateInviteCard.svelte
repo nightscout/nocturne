@@ -1,3 +1,12 @@
+<script module lang="ts">
+  /** An access level in plain words, granting one role. */
+  export interface InviteRoleChoice {
+    roleId: string;
+    label: string;
+    description: string;
+  }
+</script>
+
 <script lang="ts">
   import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
   import { Button } from "$lib/components/ui/button";
@@ -6,6 +15,7 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import * as RadioGroup from "$lib/components/ui/radio-group";
   import { Select, SelectContent, SelectItem, SelectTrigger } from "$lib/components/ui/select";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
@@ -14,18 +24,25 @@
   import CopyInvitationMessageButton from "$lib/components/members/CopyInvitationMessageButton.svelte";
   import CopyButton from "$lib/components/members/CopyButton.svelte";
   import { Artwork } from "@nocturne/watercolour";
-  import { coachmark } from "@nocturne/coach";
   import { createInvite } from "$api/generated/memberInvites.generated.remote";
   import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
   import { describeSubmitError } from "$lib/forms";
 
   interface Props {
     roles: TenantRoleDto[];
+    /**
+     * Offered as a single choice in place of the role checkboxes and direct permissions, for
+     * someone who should not need to know the roles by name. Empty falls back to the checkboxes.
+     */
+    roleChoices?: InviteRoleChoice[];
+    onCreated?: (url: string) => void;
     onCancel: () => void;
   }
 
   let {
     roles = [],
+    roleChoices,
+    onCreated,
     onCancel,
   }: Props = $props();
 
@@ -82,6 +99,7 @@
         createdInviteUrl = result.inviteUrl.startsWith("http")
           ? result.inviteUrl
           : `${window.location.origin}${result.inviteUrl}`;
+        onCreated?.(createdInviteUrl);
       }
     } catch (e) {
       errorMessage = describeSubmitError(e, "Failed to create invite. Please try again.");
@@ -134,11 +152,7 @@
         />
         <SuccessBanner>Invite link created. Share it with the new member.</SuccessBanner>
 
-        <div class="flex gap-2" {@attach coachmark({
-          key: "setup-invite.copy-link",
-          title: "Send the link",
-          description: `The link expires in ${expiryLabel}. They'll need to sign in or create an account to accept.`,
-        })}>
+        <div class="flex gap-2">
           <Input
             type="text"
             value={createdInviteUrl}
@@ -180,12 +194,26 @@
           />
         </div>
 
+        {#if roleChoices?.length}
+          <div class="space-y-2">
+            <Label id="invite-access-label">What can they do?</Label>
+            <RadioGroup.Root
+              class="gap-2"
+              aria-labelledby="invite-access-label"
+              value={inviteRoleIds[0]}
+              onValueChange={(value) => (inviteRoleIds = [value])}
+            >
+              {#each roleChoices as choice (choice.roleId)}
+                <RadioGroup.Card value={choice.roleId}>
+                  <span class="text-sm font-medium">{choice.label}</span>
+                  <span class="text-xs text-muted-foreground">{choice.description}</span>
+                </RadioGroup.Card>
+              {/each}
+            </RadioGroup.Root>
+          </div>
+        {:else}
         <!-- Role multi-select -->
-        <div class="space-y-2" {@attach coachmark({
-          key: "setup-invite.roles",
-          title: "Choose their access",
-          description: "Roles control what they can see and do. Viewer for a quick glance, Caretaker if they help manage your diabetes.",
-        })}>
+        <div class="space-y-2">
           <Label>Roles</Label>
           <div class="grid gap-2 @sm:grid-cols-2">
             {#each roles as role (role.id)}
@@ -205,6 +233,7 @@
             {/each}
           </div>
         </div>
+        {/if}
 
         <div class="space-y-2">
           <Label for="invite-expiry">Link expires</Label>
@@ -227,6 +256,7 @@
           </p>
         </div>
 
+        {#if !roleChoices?.length}
         <!-- Direct permissions (collapsible) -->
         <Collapsible.Root
           open={showInvitePermissions}
@@ -250,6 +280,7 @@
             </div>
           </Collapsible.Content>
         </Collapsible.Root>
+        {/if}
 
         <div
           class="flex items-start gap-2 rounded-md border p-3 bg-muted/30"

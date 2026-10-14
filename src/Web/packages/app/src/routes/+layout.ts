@@ -7,6 +7,7 @@ import {
     registerPreferenceCookieDomain,
     registerPreferencesWriteThrough,
     reconcilePreferences,
+    showTenantDefaultUnits,
     setLanguage,
     type SupportedLocale,
 } from '$lib/stores/appearance-store.svelte'
@@ -59,6 +60,7 @@ export const load: LayoutLoad = async ({ url, data }) => {
         // On a share host they are the link owner's, and hydrating them here is what keeps the
         // client from replacing the server-rendered view with this browser's defaults.
         reconcilePreferences(data?.serverPreferences)
+        showTenantDefaultUnits(data?.user?.defaultGlucoseUnits)
     }
 
     if (browser && locales.includes(locale)) {

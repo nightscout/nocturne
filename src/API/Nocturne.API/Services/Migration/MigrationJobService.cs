@@ -48,6 +48,12 @@ public interface IMigrationJobService
 
     /// <summary>Lists the calling tenant's migration sources. Source URLs frequently identify a person, so sources are never listed cross-tenant.</summary>
     Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>Reads a Nightscout instance's display units and current profile's units and timezone.</summary>
+    /// <exception cref="MigrationSourceException">The instance could not be read.</exception>
+    /// <exception cref="System.Text.Json.JsonException">The instance answered with something other than JSON.</exception>
+    Task<NightscoutDisplaySettings> ReadDisplaySettingsAsync(
+        string nightscoutUrl, string? apiSecret, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -303,16 +309,7 @@ public class MigrationJobService : IMigrationJobService
             };
         }
 
-        using var scope = _serviceProvider.CreateScope();
-        var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
-        var httpClient = httpClientFactory.CreateClient(HttpClientName);
-        httpClient.BaseAddress = baseAddress;
-
-        // Add API secret header if provided (Nightscout expects the SHA1 hash)
-        if (!string.IsNullOrEmpty(request.NightscoutApiSecret))
-        {
-            httpClient.DefaultRequestHeaders.Add("api-secret", MigrationJob.HashApiSecret(request.NightscoutApiSecret));
-        }
+        var httpClient = CreateSourceClient(baseAddress, request.NightscoutApiSecret);
 
         try
         {
@@ -337,6 +334,31 @@ public class MigrationJobService : IMigrationJobService
                 ErrorMessage = ex.Message,
             };
         }
+    }
+
+    public async Task<NightscoutDisplaySettings> ReadDisplaySettingsAsync(
+        string nightscoutUrl, string? apiSecret, CancellationToken ct = default)
+    {
+        if (!NightscoutBaseUri.TryFor(nightscoutUrl, out var baseAddress))
+            throw new MigrationSourceException(NightscoutBaseUri.InvalidUrlMessage, MigrationFailureCause.Unreachable);
+
+        var httpClient = CreateSourceClient(baseAddress, apiSecret);
+        var status = await MigrationJob.ReadFromSourceAsync(
+            httpClient, "api/v1/status.json", "status", ct, NightscoutRead.ImportProbe);
+        var profiles = await MigrationJob.ReadFromSourceAsync(httpClient, "api/v1/profile.json", "profile", ct);
+        return NightscoutDisplaySettings.Parse(status, profiles);
+    }
+
+    private HttpClient CreateSourceClient(Uri baseAddress, string? apiSecret)
+    {
+        var httpClient = _serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName);
+        httpClient.BaseAddress = baseAddress;
+
+        // Nightscout expects the SHA1 hash of the secret.
+        if (!string.IsNullOrEmpty(apiSecret))
+            httpClient.DefaultRequestHeaders.Add("api-secret", MigrationJob.HashApiSecret(apiSecret));
+
+        return httpClient;
     }
 
     private async Task<TestMigrationConnectionResult> TestMongoConnectionAsync(
