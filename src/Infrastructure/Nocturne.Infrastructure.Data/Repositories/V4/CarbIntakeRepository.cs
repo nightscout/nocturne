@@ -154,8 +154,9 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
     /// <summary>
     /// Insert-time deduplication runs AFTER commit: the ingested rows are durably persisted first, and
     /// dedup linking is best-effort (a failure is logged, not allowed to roll back the insert). A row
-    /// missed here stays unlinked until the full dedup job: the reconcile pass reads only links. Only
-    /// runs on newly inserted entities — updated-in-place rows were already linked when first inserted.
+    /// missed here is never reconciled, which reads only links, but once older than
+    /// <see cref="DeduplicationService.SingletonLinkRetention"/> later records match it as a group of
+    /// its own. Only runs on newly inserted entities — updated-in-place rows were already linked when first inserted.
     /// </summary>
     protected override async Task PostCommitDedupAsync(
         NocturneDbContext ctx, IReadOnlyList<CarbIntakeEntity> inserted, WriteOrigin origin, CancellationToken ct)

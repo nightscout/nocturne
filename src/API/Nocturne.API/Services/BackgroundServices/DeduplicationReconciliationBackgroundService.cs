@@ -9,7 +9,8 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// Periodically drives cursor-based deduplication reconciliation for every active tenant.
 /// On each tick it enumerates active tenants and calls
 /// <see cref="IDeduplicationService.ReconcileNewLinksAsync(int, int, CancellationToken)"/> for each,
-/// merging duplicate canonical groups created since the tenant's persisted cursor.
+/// merging duplicate canonical groups created since the tenant's persisted cursor, then
+/// <see cref="IDeduplicationService.PruneSingletonLinksAsync(int, int, CancellationToken)"/>.
 /// </summary>
 /// <remarks>
 /// Single-instance deployment only. If the API is ever scaled out, gate per-tenant reconcile with a
@@ -20,6 +21,8 @@ internal sealed class DeduplicationReconciliationBackgroundService : BackgroundS
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(2);
     private static readonly int BatchSize = 5000;
     private static readonly int MaxBatchesPerTick = 4;
+    private static readonly int PruneBatchSize = 10_000;
+    private static readonly int MaxPruneBatchesPerTick = 10;
 
     private readonly IServiceProvider _serviceProvider;
     private readonly ActiveTenantSnapshot _activeTenants;
@@ -91,10 +94,11 @@ internal sealed class DeduplicationReconciliationBackgroundService : BackgroundS
 
                 var dedup = scope.ServiceProvider.GetRequiredService<IDeduplicationService>();
                 var result = await dedup.ReconcileNewLinksAsync(BatchSize, MaxBatchesPerTick, ct);
+                var pruned = await dedup.PruneSingletonLinksAsync(PruneBatchSize, MaxPruneBatchesPerTick, ct);
 
                 _logger.LogDebug(
-                    "Reconciled deduplication for tenant {TenantSlug}: {GroupsMerged} groups merged",
-                    tenant.Slug, result.GroupsMerged);
+                    "Reconciled deduplication for tenant {TenantSlug}: {GroupsMerged} groups merged, {LinksPruned} singleton links pruned",
+                    tenant.Slug, result.GroupsMerged, pruned);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

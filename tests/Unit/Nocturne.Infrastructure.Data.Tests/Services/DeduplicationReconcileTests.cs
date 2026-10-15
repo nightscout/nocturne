@@ -829,8 +829,9 @@ public class DeduplicationReconcileTests : IDisposable
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.SensorGlucose, candidates, CancellationToken.None);
 
         merged.Should().Be(0);
-        Reads.Count.Should().Be(24,
-            "one query learns the candidates' timestamps and each hour of runs, 13 readings, shares one neighbour load");
+        Reads.Count.Should().Be(47,
+            "one query learns the candidates' timestamps and each hour of runs, 13 readings, shares one "
+            + "neighbour load of two reads: the stored primaries and the records whose singleton link was pruned");
     }
 
     [Fact]

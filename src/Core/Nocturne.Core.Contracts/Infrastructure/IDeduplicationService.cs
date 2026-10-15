@@ -95,4 +95,12 @@ public interface IDeduplicationService
     /// batch. Stops when caught up or after maxBatches. Returns groups merged and whether caught up.
     /// </summary>
     Task<ReconcileResult> ReconcileNewLinksAsync(int batchSize, int maxBatches, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes, for the current tenant, links that are the only link of their group once reconcile
+    /// has passed them and they are a day old, at most maxBatches batches of batchSize. Matching
+    /// reads a record with no link that old as the singleton group it was, so a group that never
+    /// gained a second record costs no row. Returns the number of links deleted.
+    /// </summary>
+    Task<int> PruneSingletonLinksAsync(int batchSize, int maxBatches, CancellationToken cancellationToken = default);
 }
