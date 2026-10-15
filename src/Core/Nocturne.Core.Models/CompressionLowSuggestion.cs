@@ -83,6 +83,9 @@ public class CompressionLowSuggestion
     /// </summary>
     [JsonPropertyName("recoveryMinutes")]
     public int? RecoveryMinutes { get; set; }
+
+    [JsonIgnore]
+    public string? DataSource { get; set; }
 }
 
 /// <summary>

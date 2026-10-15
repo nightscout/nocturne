@@ -30,7 +30,7 @@ public class DemoDataPurgeParityTests : IDisposable
     private static readonly Guid TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
     /// <summary>Number of rows <see cref="SeedOneDemoRowOfEveryType"/> writes.</summary>
-    private const int SeededRows = 12;
+    private const int SeededRows = 14;
 
     private readonly SqliteTestDatabase _db;
 
@@ -78,13 +78,20 @@ public class DemoDataPurgeParityTests : IDisposable
     private void SeedOneDemoRowOfEveryType(bool softDeleted = false)
     {
         var timestamp = DateTime.UtcNow;
+        var timestampMills = new DateTimeOffset(timestamp).ToUnixTimeMilliseconds();
+        var demoDeviceId = Guid.CreateVersion7();
         DateTime? deletedAt = softDeleted ? timestamp : null;
 
         using var db = NewContext();
+        db.PatientDevices.Add(new PatientDeviceEntity
+        {
+            Id = demoDeviceId, TenantId = TenantId, DeviceCategory = "cgm",
+            Manufacturer = "Dexcom", Model = "G7", SerialNumber = "demo-cgm",
+        });
         db.SensorGlucose.Add(new SensorGlucoseEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
-            Timestamp = timestamp, Mgdl = 120, DeletedAt = deletedAt,
+            Timestamp = timestamp, Mgdl = 120, PatientDeviceId = demoDeviceId, DeletedAt = deletedAt,
         });
         db.MeterGlucose.Add(new MeterGlucoseEntity
         {
@@ -136,6 +143,19 @@ public class DemoDataPurgeParityTests : IDisposable
             Id = Guid.CreateVersion7(), TenantId = TenantId, Source = DataSources.DemoService,
             Category = "PumpMode", State = "Automatic", StartTimestamp = timestamp,
         });
+        db.StateSpans.Add(new StateSpanEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, Source = "compression-low-detection",
+            Category = "DataExclusion", State = "CompressionLow", StartTimestamp = timestamp,
+            MetadataJson = "{\"DemoSeed\":true}",
+        });
+        db.CompressionLowSuggestions.Add(new CompressionLowSuggestionEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, StartMills = timestampMills - 60_000,
+            EndMills = timestampMills + 60_000,
+            NightOf = DateOnly.FromDateTime(timestamp), CreatedAt = 1,
+            DataSource = DataSources.DemoService,
+        });
         db.ApsSnapshots.Add(new ApsSnapshotEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
@@ -158,6 +178,7 @@ public class DemoDataPurgeParityTests : IDisposable
             + await db.BolusCalculations.IgnoreQueryFilters().LongCountAsync()
             + await db.TempBasals.IgnoreQueryFilters().LongCountAsync()
             + await db.StateSpans.IgnoreQueryFilters().LongCountAsync()
+            + await db.CompressionLowSuggestions.IgnoreQueryFilters().LongCountAsync()
             + await db.ApsSnapshots.IgnoreQueryFilters().LongCountAsync();
     }
 
@@ -165,8 +186,8 @@ public class DemoDataPurgeParityTests : IDisposable
     {
         var controller = CreateController();
 
-        var entries = ((DemoDeleteResultDto)((OkObjectResult)await controller.DeleteEntries(default)).Value!).DeletedCount;
         var treatments = ((DemoDeleteResultDto)((OkObjectResult)await controller.DeleteTreatments(default)).Value!).DeletedCount;
+        var entries = ((DemoDeleteResultDto)((OkObjectResult)await controller.DeleteEntries(default)).Value!).DeletedCount;
 
         return entries + treatments;
     }
@@ -216,7 +237,58 @@ public class DemoDataPurgeParityTests : IDisposable
         var result = await CreateService(ctx).DeleteDemoDataAsync();
 
         result.DeletedCounts.Should().Contain(new KeyValuePair<string, long>("Glucose", 3));
-        result.DeletedCounts.Should().Contain(new KeyValuePair<string, long>("Treatments", 8));
+        result.DeletedCounts.Should().Contain(new KeyValuePair<string, long>("Treatments", 10));
         result.DeletedCounts.Should().Contain(new KeyValuePair<string, long>("DeviceStatus", 1));
+    }
+
+    [Fact]
+    public async Task ServicePurge_PreservesRealReviewRowsAndDeletesSuggestionsOnDemoDevice()
+    {
+        var deviceId = Guid.CreateVersion7();
+        var demoTime = DateTime.UtcNow;
+        var demoMills = new DateTimeOffset(demoTime).ToUnixTimeMilliseconds();
+        var demoSuggestion = Guid.CreateVersion7();
+        var realSuggestion = Guid.CreateVersion7();
+        await using (var db = NewContext())
+        {
+            db.PatientDevices.Add(new PatientDeviceEntity
+            {
+                Id = deviceId, TenantId = TenantId, DeviceCategory = "cgm",
+                Manufacturer = "Dexcom", Model = "G7", SerialNumber = "demo-cgm",
+            });
+            db.SensorGlucose.Add(new SensorGlucoseEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, PatientDeviceId = deviceId,
+                Timestamp = demoTime, Mgdl = 58,
+            });
+            db.CompressionLowSuggestions.AddRange(
+                new CompressionLowSuggestionEntity
+                {
+                    Id = demoSuggestion, TenantId = TenantId, StartMills = demoMills - 60_000,
+                    EndMills = demoMills + 60_000, NightOf = DateOnly.FromDateTime(demoTime), CreatedAt = 1,
+                    DataSource = DataSources.DemoService,
+                },
+                new CompressionLowSuggestionEntity
+                {
+                    Id = realSuggestion, TenantId = TenantId, StartMills = demoMills + 3_600_000,
+                    EndMills = demoMills + 3_660_000, NightOf = DateOnly.FromDateTime(demoTime), CreatedAt = 1,
+                    DataSource = "manual",
+                });
+            db.StateSpans.Add(new StateSpanEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, Source = "compression-low-detection",
+                Category = "DataExclusion", State = "CompressionLow", StartTimestamp = demoTime,
+                MetadataJson = "{\"DemoSeed\":true,\"SuggestionId\":\"" + demoSuggestion + "\"}",
+            });
+            db.SaveChanges();
+        }
+
+        await using (var db = NewContext())
+            await CreateService(db).DeleteDemoDataAsync();
+
+        await using var verify = NewContext();
+        (await verify.CompressionLowSuggestions.Select(s => s.Id).ToListAsync())
+            .Should().ContainSingle().Which.Should().Be(realSuggestion);
+        (await verify.StateSpans.CountAsync()).Should().Be(0);
     }
 }
