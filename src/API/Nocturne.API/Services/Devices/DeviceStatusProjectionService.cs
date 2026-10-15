@@ -465,7 +465,8 @@ public class DeviceStatusProjectionService
     {
         ds.Override = new OverrideStatus
         {
-            Active = overrideSpan.IsActive,
+            // The span contains the status time. IsActive would say whether it has ended since.
+            Active = true,
             Timestamp = overrideSpan.StartTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
         };
 
@@ -805,7 +806,7 @@ public class DeviceStatusProjectionService
     {
         return overrides.FirstOrDefault(o =>
             o.StartTimestamp <= timestamp &&
-            (!o.EndTimestamp.HasValue || o.EndTimestamp.Value >= timestamp));
+            (!o.EndTimestamp.HasValue || o.EndTimestamp.Value > timestamp));
     }
 
     private static T? DeserializeOrNull<T>(string? json, ILogger? logger = null) where T : class

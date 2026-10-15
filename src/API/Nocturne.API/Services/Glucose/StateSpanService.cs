@@ -57,6 +57,15 @@ public class StateSpanService : IStateSpanService
     }
 
     /// <inheritdoc />
+    public Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
+        StateSpanCategory category,
+        string? source,
+        DateTime from,
+        int count,
+        CancellationToken cancellationToken = default)
+        => _repository.GetStateSpansStartingFromAsync(category, source, from, count, cancellationToken);
+
+    /// <inheritdoc />
     public Task<PumpModeState?> GetCurrentPumpModeAsync(CancellationToken cancellationToken = default)
         => _repository.GetCurrentPumpModeAsync(cancellationToken);
 
