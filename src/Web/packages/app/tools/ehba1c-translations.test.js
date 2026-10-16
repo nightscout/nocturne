@@ -26,6 +26,8 @@ const labLabels = {
 
 // The browser component suite does not apply Wuchale. Missing catalogue entries
 // still get IDs during a production transform, but resolve to empty text at runtime.
+// The estimate's label comes from a1cLabel(), not the catalogue, so only the lab
+// label is a message here.
 describe("eHbA1c tooltip production translations", () => {
   let root;
   let messageIds;
@@ -61,14 +63,14 @@ describe("eHbA1c tooltip production translations", () => {
     const plugin = wuchale({ configPath });
     await plugin.configResolved({ env: { DEV: false } });
     const { code } = await plugin.transform.handler(
-      "<span>eHbA1c</span><span>Lab result</span>",
+      "<span>{a1cLabel(true)}</span><span>Lab result</span>",
       join(root, "src/routes/(authenticated)/reports/ehba1c/+page.svelte"),
       { ssr: false }
     );
     messageIds = [...code.matchAll(/_w_runtime_\((\d+)\)/g)].map((match) =>
       Number(match[1])
     );
-    expect(messageIds).toHaveLength(2);
+    expect(messageIds).toHaveLength(1);
   });
 
   afterAll(async () => {
@@ -76,17 +78,14 @@ describe("eHbA1c tooltip production translations", () => {
   });
 
   it.each(supportedLocales)(
-    "keeps both labels visible in %s",
+    "keeps the lab label visible in %s",
     async (locale) => {
       const catalogUrl = pathToFileURL(
         join(root, "locales/.wuchale", `main.0.${locale}.compiled.js`)
       );
       const catalog = await import(/* @vite-ignore */ catalogUrl.href);
       const runtime = toRuntime(catalog, locale);
-      expect(messageIds.map((id) => runtime(id))).toEqual([
-        "eHbA1c",
-        labLabels[locale],
-      ]);
+      expect(messageIds.map((id) => runtime(id))).toEqual([labLabels[locale]]);
     }
   );
 });
