@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
@@ -13,8 +14,9 @@ namespace Nocturne.Connectors.Eversense.Services;
 
 /// <summary>
 ///     Connector service for Eversense Now data source.
-///     Writes SensorGlucose records directly from the Eversense following-patient API.
-///     Each sync produces at most one reading since the API only returns the latest glucose value.
+///     Writes SensorGlucose records from the Eversense care API the Eversense NOW follower app reads:
+///     the followed patient's latest reading from the following-patient list, plus the glucose history
+///     since the last stored reading from the user-event feed.
 /// </summary>
 public class EversenseConnectorService : BaseConnectorService<EversenseConnectorConfiguration>
 {
@@ -128,35 +130,25 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                 return result;
             }
 
-            if (!patient.IsTransmitterConnected)
+            var history = await FetchHistoryAsync(config, patient, request, cancellationToken);
+            var records = MergeReadings(history, _mapper.Map(patient));
+            if (records.Count == 0)
             {
                 _logger.LogDebug(
-                    "[{ConnectorSource}] Transmitter not connected for patient {Patient}, skipping",
+                    "[{ConnectorSource}] No readings for patient {Patient}",
                     ConnectorSource,
                     patient.UserName);
                 return result;
             }
 
-            var sg = _mapper.Map(patient);
-            if (sg == null)
-            {
-                _logger.LogDebug(
-                    "[{ConnectorSource}] Mapper returned null for patient {Patient}",
-                    ConnectorSource,
-                    patient.UserName);
-                return result;
-            }
-
-            // Debug, not Information: the shared publish log runs at Information and a glucose
-            // value is health data, so the reading stays out of the default-level sink.
-            _logger.LogDebug(
-                "[{ConnectorSource}] Publishing reading {Mgdl} mg/dL at {Timestamp:O}",
+            _logger.LogInformation(
+                "[{ConnectorSource}] Publishing {Count} reading(s), {HistoryCount} from history",
                 ConnectorSource,
-                sg.Mgdl,
-                sg.Timestamp);
+                records.Count,
+                history.Count);
 
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                [sg], PublishSensorGlucoseDataAsync, config, cancellationToken);
+                records, PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -166,6 +158,134 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
         }
 
         return result;
+    }
+
+    /// <summary>
+    ///     How far back a sync without a resume point looks, matching the Eversense NOW graph.
+    /// </summary>
+    internal static readonly TimeSpan DefaultHistoryWindow = TimeSpan.FromHours(4);
+
+    /// <summary>
+    ///     The span of one history request. Kept to a day so a long catch-up is many small reads
+    ///     rather than one the care API may refuse or truncate.
+    /// </summary>
+    internal static readonly TimeSpan HistoryChunk = TimeSpan.FromDays(1);
+
+    /// <summary>
+    ///     A first background sync reaches back one day; a longer import is a manual historical sync,
+    ///     bounded by <see cref="EversenseConnectorConfiguration.MaxHistoryDays"/>.
+    /// </summary>
+    protected override DateTime? InitialSyncFloor => DateTime.UtcNow.AddDays(-1);
+
+    /// <summary>
+    ///     The request windows for a sync from <paramref name="from"/> to <paramref name="to"/>, oldest
+    ///     first. The end runs five minutes past now, as the NOW app asks, so a reading stamped by a
+    ///     transmitter clock slightly ahead is not cut off.
+    /// </summary>
+    internal static IReadOnlyList<(DateTime Start, DateTime End)> HistoryWindows(
+        DateTime? from, DateTime? to, DateTime now)
+    {
+        var end = to ?? now.AddMinutes(5);
+        var floor = now.AddDays(-EversenseConnectorConfiguration.MaxHistoryDays);
+        var start = from ?? now - DefaultHistoryWindow;
+        if (start < floor) start = floor;
+
+        var windows = new List<(DateTime, DateTime)>();
+        for (var windowStart = start; windowStart < end; windowStart += HistoryChunk)
+        {
+            var windowEnd = windowStart + HistoryChunk;
+            windows.Add((windowStart, windowEnd < end ? windowEnd : end));
+        }
+
+        return windows;
+    }
+
+    /// <summary>
+    ///     The latest reading wins over a history row at the same instant, since only it carries a trend.
+    /// </summary>
+    internal static List<SensorGlucose> MergeReadings(IEnumerable<SensorGlucose> history, SensorGlucose? latest)
+    {
+        var byMills = new Dictionary<long, SensorGlucose>();
+        foreach (var record in history)
+            byMills[record.Mills] = record;
+        if (latest != null)
+            byMills[latest.Mills] = latest;
+
+        return byMills.Values.OrderBy(r => r.Mills).ToList();
+    }
+
+    /// <summary>
+    ///     Glucose history for <paramref name="patient"/> over the request's window. A failed window
+    ///     ends the fetch and keeps what was read before it, so the latest reading is still published
+    ///     when the history feed is unavailable.
+    /// </summary>
+    private async Task<IReadOnlyList<SensorGlucose>> FetchHistoryAsync(
+        EversenseConnectorConfiguration config,
+        EversensePatientDatum patient,
+        SyncRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (patient.UserId <= 0)
+        {
+            _logger.LogWarning(
+                "[{ConnectorSource}] Followed patient has no user id; skipping glucose history",
+                ConnectorSource);
+            return [];
+        }
+
+        var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
+        if (string.IsNullOrEmpty(token))
+            return [];
+
+        var dataBaseUrl = EversenseConstants.DataBaseUrl(config.Server);
+        var records = new List<SensorGlucose>();
+        foreach (var (start, end) in HistoryWindows(request.From, request.To, DateTime.UtcNow))
+        {
+            var url = $"{dataBaseUrl}{EversenseConstants.Endpoints.GetFollowingUserSensorGlucose}" +
+                      $"?UserID={patient.UserId}" +
+                      $"&startDate={Uri.EscapeDataString(start.ToString(EversenseConstants.HistoryDateFormat, CultureInfo.InvariantCulture))}" +
+                      $"&endDate={Uri.EscapeDataString(end.ToString(EversenseConstants.HistoryDateFormat, CultureInfo.InvariantCulture))}";
+
+            var events = await ExecuteWithRetryAsync(
+                async () =>
+                {
+                    using var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+                    httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+                    if (!response.IsSuccessStatusCode)
+                        throw new HttpRequestException(
+                            $"HTTP {(int)response.StatusCode} {response.StatusCode}",
+                            null,
+                            response.StatusCode);
+
+                    return await DeserializeResponseAsync<List<EversenseUserEvent>>(response, cancellationToken) ?? [];
+                },
+                _retryDelayStrategy,
+                reAuthenticateOnUnauthorized: async () =>
+                {
+                    _tokenProvider.InvalidateToken();
+                    var newToken = await _tokenProvider.GetValidTokenAsync(config);
+                    if (string.IsNullOrEmpty(newToken)) return false;
+                    token = newToken;
+                    return true;
+                },
+                maxRetries: config.MaxRetryAttempts,
+                operationName: "FetchEversenseGlucoseHistory"
+            );
+
+            if (events == null)
+            {
+                _logger.LogWarning(
+                    "[{ConnectorSource}] Glucose history unavailable from {Start:O}; publishing what was read before it",
+                    ConnectorSource,
+                    start);
+                break;
+            }
+
+            records.AddRange(_mapper.MapHistory(events));
+        }
+
+        return records;
     }
 
     /// <summary>
@@ -183,7 +303,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
             return null;
         }
 
-        var dataBaseUrl = GetDataBaseUrl(config.Server);
+        var dataBaseUrl = EversenseConstants.DataBaseUrl(config.Server);
         var url = $"{dataBaseUrl}{EversenseConstants.Endpoints.GetFollowingPatientList}";
 
         var result = await ExecuteWithRetryAsync(
@@ -219,10 +339,4 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
 
         return result;
     }
-
-    private static string GetDataBaseUrl(string server) => server.ToUpperInvariant() switch
-    {
-        "US" => EversenseConstants.Servers.UsData,
-        _ => throw new ArgumentOutOfRangeException(nameof(server), server, "Unsupported Eversense server region")
-    };
 }
