@@ -16,8 +16,17 @@ public class EversensePatientDatum
     [JsonPropertyName("Units")]
     public int Units { get; set; }
 
+    /// <summary>
+    /// Null for a patient whose app has not reported a transmitter connection.
+    /// </summary>
     [JsonPropertyName("IsTransmitterConnected")]
-    public bool IsTransmitterConnected { get; set; }
+    public bool? IsTransmitterConnected { get; set; }
+
+    /// <summary>
+    /// The patient's care-API user id, which the history feeds are queried by.
+    /// </summary>
+    [JsonPropertyName("UserID")]
+    public int UserId { get; set; }
 
     /// <summary>
     /// The patient's username (email). Used for patient selection when following multiple patients.
