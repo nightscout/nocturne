@@ -1,18 +1,34 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { describe, it, expect, vi } from "vitest";
-import { MigrationJobState } from "$api";
-import type { MigrationJobStatus } from "$api";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { MigrationJobState, MigrationMode } from "$api";
+import type { MigrationJobInfo, MigrationJobStatus } from "$api";
 
 let status: MigrationJobStatus;
+let history: MigrationJobInfo[] = [];
+const statusSpy = vi.fn();
 
+// The factory is hoisted above every declaration here, so it may only reach the bindings
+// below from inside the functions it returns.
 vi.mock("$api/generated/migrations.generated.remote", () => ({
-  getStatus: () => ({ run: () => Promise.resolve(status) }),
+  getStatus: (jobId: string) => {
+    statusSpy(jobId);
+    return { run: () => Promise.resolve(status) };
+  },
+  getHistory: () => ({ run: () => Promise.resolve(history) }),
 }));
 
 import ImportProgress from "./ImportProgress.svelte";
 
 describe("ImportProgress", () => {
+  beforeEach(() => {
+    // The module under test keeps this session's job id in session storage, which a real
+    // browser carries between tests in this file.
+    sessionStorage.clear();
+    statusSpy.mockClear();
+    history = [];
+  });
+
   // A run that imported some collections and was refused others still ends Completed — there is
   // no partial state — so the server's summary is the only thing standing between the wizard and
   // presenting a half-finished import as a clean one.
@@ -88,6 +104,33 @@ describe("ImportProgress", () => {
     render(ImportProgress, { jobId: "job-2", onComplete: () => {} });
 
     await expect.element(page.getByText(/collections imported/)).not.toBeInTheDocument();
+  });
+
+  // Migration runs outlive the data they imported, so a tenant that wiped its instance to start
+  // over still has completed runs on file. Watching one of those would report an import that
+  // this session never made — the wizard knows of no job, and says so.
+  it("ignores a completed run this session did not start", async () => {
+    history = [
+      {
+        id: "old-job",
+        mode: MigrationMode.Api,
+        createdAt: "2025-11-02T00:00:00Z",
+        state: MigrationJobState.Completed,
+        completedAt: "2025-11-02T00:04:00Z",
+      },
+    ];
+    status = {
+      state: MigrationJobState.Completed,
+      progressPercentage: 100,
+      collectionProgress: {},
+    };
+    const onProgressChange = vi.fn();
+
+    render(ImportProgress, { onProgressChange, onComplete: () => {} });
+
+    await expect.element(page.getByText(/0 records migrated/)).toBeVisible();
+    expect(statusSpy).not.toHaveBeenCalled();
+    expect(onProgressChange).not.toHaveBeenCalled();
   });
 
   // Someone who deleted a stretch of readings and re-imports it gets none of them back. The lane

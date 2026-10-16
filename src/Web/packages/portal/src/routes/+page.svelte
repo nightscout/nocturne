@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { Artwork } from "@nocturne/watercolour";
     import { Button } from "@nocturne/ui/ui/button";
     import ArrowRight from "@lucide/svelte/icons/arrow-right";
     import Play from "@lucide/svelte/icons/play";
@@ -155,6 +156,13 @@
                 Read the docs
             </Button>
         </div>
+        <Artwork
+            artwork="key"
+            palette="ember"
+            motion="auto"
+            autoplay="once"
+            class="hidden size-[200px] shrink-0 lg:block xl:size-[240px]"
+        />
     </div>
 
     <pre

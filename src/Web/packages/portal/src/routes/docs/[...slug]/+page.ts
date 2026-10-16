@@ -32,5 +32,5 @@ export const load: PageLoad = async ({ params }) => {
   if (!match) throw error(404, `Doc not found: ${params.slug}`);
 
   const mod = await match[1]();
-  return { content: mod.default };
+  return { content: mod.default, slug: params.slug };
 };
