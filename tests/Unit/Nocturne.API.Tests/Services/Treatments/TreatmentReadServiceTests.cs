@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Treatments;
@@ -496,13 +497,13 @@ public class TreatmentReadServiceTests
     }
 
     [Fact]
-    public async Task UpdateAsync_ByAnEchoedId_ReadsTheResultBackByTheRecordsOwnId()
+    public async Task UpdateAsync_ByAnEchoedId_ReadsTheResultBackByTheUpsertKey()
     {
         var syncIdentifier = Guid.NewGuid().ToString().ToUpperInvariant();
         var echoed = MongoObjectId.Coerce(syncIdentifier)!;
         var carb = new CarbIntake { Id = Guid.CreateVersion7(), LegacyId = syncIdentifier };
         _carbIntakeRepo.Setup(r => r.GetByLegacyIdUuidPrefixAsync(echoed, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
-        _carbIntakeRepo.Setup(r => r.GetByIdAsync(carb.Id, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
+        _carbIntakeRepo.Setup(r => r.GetByLegacyIdAsync(syncIdentifier, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
         ProjectAs(carb.Id);
         _decomposer
             .Setup(d => d.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -516,6 +517,53 @@ public class TreatmentReadServiceTests
             It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
         _carbIntakeRepo.Verify(r => r.GetByLegacyIdUuidPrefixAsync(echoed, It.IsAny<CancellationToken>()), Times.Once);
         _carbIntakeRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UpdateAsync_WhenTheStoredTreatmentFailsToDecompose_Propagates(bool stateSpan)
+    {
+        const string id = "69F15FD2-8075-4DEB-AEA3-4352F455840D";
+        if (stateSpan)
+        {
+            _projection
+                .Setup(p => p.GetProjectedStateSpanTreatmentAsync(id, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Treatment { Id = "span-1" });
+            _projection
+                .Setup(p => p.GetStateSpanTreatmentIdAsync(id, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(id);
+        }
+        else
+        {
+            var carb = new CarbIntake { Id = Guid.CreateVersion7(), LegacyId = id };
+            _carbIntakeRepo.Setup(r => r.GetByLegacyIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
+            ProjectAs(carb.Id);
+        }
+
+        _decomposer
+            .Setup(d => d.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DbUpdateException("store down"));
+
+        var update = () => _service.UpdateAsync(id, new Treatment { EventType = "Carb Correction", Carbs = 25 });
+
+        await update.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WhenTheCallerCancels_Propagates()
+    {
+        const string id = "69F15FD2-8075-4DEB-AEA3-4352F455840D";
+        var carb = new CarbIntake { Id = Guid.CreateVersion7(), LegacyId = id };
+        _carbIntakeRepo.Setup(r => r.GetByLegacyIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
+        ProjectAs(carb.Id);
+        _decomposer
+            .Setup(d => d.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        var update = () => _service.UpdateAsync(id, new Treatment { EventType = "Carb Correction" });
+
+        await update.Should().ThrowAsync<OperationCanceledException>();
     }
 
     [Fact]

@@ -47,7 +47,7 @@ public class HealthRecordResponseContractTests
     {
         await HeartRate().GetHeartRates();
 
-        _heartRates.Verify(s => s.GetHeartRatesAsync(10, 0, It.IsAny<CancellationToken>()), Times.Once);
+        _heartRates.Verify(s => s.GetHeartRatesAsync(10, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class HealthRecordResponseContractTests
     {
         await StepCount().GetStepCounts();
 
-        _stepCounts.Verify(s => s.GetStepCountsAsync(10, 0, It.IsAny<CancellationToken>()), Times.Once);
+        _stepCounts.Verify(s => s.GetStepCountsAsync(10, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

@@ -9025,12 +9025,8 @@ msgstr "Something went wrong"
 #~ msgid "{0} readings analyzed"
 #~ msgstr "{0} readings analyzed"
 
-#: src/routes/(authenticated)/reports/agp/+page.svelte
-#: src/routes/(authenticated)/reports/comparison/+page.svelte
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-#: src/routes/(authenticated)/reports/idp/+page.svelte
-msgid "Est. A1C"
-msgstr "Est. A1C"
+#~ msgid "Est. A1C"
+#~ msgstr "Est. A1C"
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 msgid "Variability"
@@ -11699,9 +11695,8 @@ msgstr "<0/> Time in Range"
 msgid "Time Breakdown (per day avg)"
 msgstr "Time Breakdown (per day avg)"
 
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "<0/> Estimated A1C"
-msgstr "<0/> Estimated A1C"
+#~ msgid "<0/> Estimated A1C"
+#~ msgstr "<0/> Estimated A1C"
 
 #~ msgid "Great! Below the 7% target"
 #~ msgstr "Great! Below the 7% target"
@@ -11712,9 +11707,8 @@ msgstr "<0/> Estimated A1C"
 #~ msgid "Room for improvement"
 #~ msgstr "Room for improvement"
 
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "<0>What is eA1C?</0> This estimates what your lab A1C would be based on your average glucose."
-msgstr "<0>What is eA1C?</0> This estimates what your lab A1C would be based on your average glucose."
+#~ msgid "<0>What is eA1C?</0> This estimates what your lab A1C would be based on your average glucose."
+#~ msgstr "<0>What is eA1C?</0> This estimates what your lab A1C would be based on your average glucose."
 
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "Clinical details"
@@ -11878,9 +11872,8 @@ msgstr "Hourly Distribution"
 msgid "Percentage of time in each glucose range by hour of day"
 msgstr "Percentage of time in each glucose range by hour of day"
 
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
-msgid "A1c Estimation"
-msgstr "A1c Estimation"
+#~ msgid "A1c Estimation"
+#~ msgstr "A1c Estimation"
 
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "Based on average glucose"
@@ -11892,12 +11885,8 @@ msgstr "Based on average glucose"
 #~ msgid "A1c (IFCC)"
 #~ msgstr "A1c (IFCC)"
 
-#. 0: Math.round(toIfccMmolMol(percent))
-#. 0: Math.round(value)
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "{0} mmol/mol"
-msgstr "{0} mmol/mol"
+#~ msgid "{0} mmol/mol"
+#~ msgstr "{0} mmol/mol"
 
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "Glycemic Variability"
@@ -17677,9 +17666,8 @@ msgstr "Food database entries and nutritional information"
 msgid "Statistics"
 msgstr "Statistics"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Time-in-range, A1c estimates, and averages"
-msgstr "Time-in-range, A1c estimates, and averages"
+#~ msgid "Time-in-range, A1c estimates, and averages"
+#~ msgstr "Time-in-range, A1c estimates, and averages"
 
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
@@ -22029,9 +22017,8 @@ msgstr "Target {0}"
 #~ msgid "Time in Range, glucose variability and estimated A1C over the last {0} days, each shown with the consensus target it is read against."
 #~ msgstr "Time in Range, glucose variability and estimated A1C over the last {0} days, each shown with the consensus target it is read against."
 
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "Target: below 7%. Your care team sets your individual target."
-msgstr "Target: below 7%. Your care team sets your individual target."
+#~ msgid "Target: below 7%. Your care team sets your individual target."
+#~ msgstr "Target: below 7%. Your care team sets your individual target."
 
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "No estimate for this window"
@@ -22066,11 +22053,9 @@ msgstr "Target: at least 70% CGM active time over 14 days; the statistics on thi
 msgid "No readings in this date range"
 msgstr "No readings in this date range"
 
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
-msgid "Distribution, A1c estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
-msgstr "Distribution, A1c estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
+#~ msgid "Distribution, A1c estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
+#~ msgstr "Distribution, A1c estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
 
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
@@ -23091,33 +23076,26 @@ msgstr "Failed to save lab result"
 msgid "Failed to delete lab result"
 msgstr "Failed to delete lab result"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0/> Estimated HbA1c (eHbA1c)"
-msgstr "<0/> Estimated HbA1c (eHbA1c)"
+#~ msgid "<0/> Estimated HbA1c (eHbA1c)"
+#~ msgstr "<0/> Estimated HbA1c (eHbA1c)"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average glucose in mg/dL + 46.7) / 28.7."
-msgstr "eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average glucose in mg/dL + 46.7) / 28.7."
+#~ msgid "eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average glucose in mg/dL + 46.7) / 28.7."
+#~ msgstr "eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average glucose in mg/dL + 46.7) / 28.7."
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Show as percent"
-msgstr "Show as percent"
+#~ msgid "Show as percent"
+#~ msgstr "Show as percent"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Show as mmol/mol"
-msgstr "Show as mmol/mol"
+#~ msgid "Show as mmol/mol"
+#~ msgstr "Show as mmol/mol"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "mmol/mol"
-msgstr "mmol/mol"
+#~ msgid "mmol/mol"
+#~ msgstr "mmol/mol"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0/> Loading eHbA1c timeline..."
-msgstr "<0/> Loading eHbA1c timeline..."
+#~ msgid "<0/> Loading eHbA1c timeline..."
+#~ msgstr "<0/> Loading eHbA1c timeline..."
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Failed to load eHbA1c data. Please try again later."
-msgstr "Failed to load eHbA1c data. Please try again later."
+#~ msgid "Failed to load eHbA1c data. Please try again later."
+#~ msgstr "Failed to load eHbA1c data. Please try again later."
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Not enough glucose history yet — each point needs at least a month of readings within the trailing 90 days."
@@ -23151,9 +23129,8 @@ msgstr "Lab result (not included in the calculation)"
 msgid "Lab results"
 msgstr "Lab results"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not included in the eHbA1c calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
-msgstr "Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not included in the eHbA1c calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
+#~ msgid "Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not included in the eHbA1c calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
+#~ msgstr "Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not included in the eHbA1c calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "No lab results added yet."
@@ -23167,7 +23144,7 @@ msgstr "Delete lab result"
 msgid "Date of blood draw"
 msgstr "Date of blood draw"
 
-#. 0: a1cUnit === "percent" ? "%" \\: "mmol/mol"
+#. 0: a1cUnits.current === "percent" ? "%" \\: "mmol/mol"
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Result ({0})"
 msgstr "Result ({0})"
@@ -23176,7 +23153,7 @@ msgstr "Result ({0})"
 msgid "<0/> Add lab result"
 msgstr "<0/> Add lab result"
 
-#. 0: formatA1c(point.data.valuePercent); 1: formatLongDate(point.data.date); 2: point.data.note ? ` — ${point.data.note}` \\: ""
+#. 0: formatA1c(point.data.a1cDisplay); 1: formatLongDate(point.data.date); 2: point.data.note ? ` — ${point.data.note}` \\: ""
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lab result: {0} ({1}){2}"
 msgstr "Lab result: {0} ({1}){2}"
@@ -23185,7 +23162,7 @@ msgstr "Lab result: {0} ({1}){2}"
 msgid "Delete this lab result?"
 msgstr "Delete this lab result?"
 
-#. 0: formatA1c(pendingDeleteLabResult.valuePercent ?? 0); 1: formatLongDate(toDate(pendingDeleteLabResult.measuredAt))
+#. 0: formatA1c(pendingDeleteLabResult.a1cDisplay); 1: formatLongDate(toDate(pendingDeleteLabResult.measuredAt))
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Delete the {0} lab result from {1}."
 msgstr "Delete the {0} lab result from {1}."
@@ -24055,10 +24032,8 @@ msgstr "Change"
 msgid "Showing {0} only"
 msgstr "Showing {0} only"
 
-#. 0: bgOr(stats?.mean); 1: bgLabel(); 2: dayCount
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "Calculated using the ADAG formula: eA1C = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {0} {1} over {2} days."
-msgstr "Calculated using the ADAG formula: eA1C = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {0} {1} over {2} days."
+#~ msgid "Calculated using the ADAG formula: eA1C = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {0} {1} over {2} days."
+#~ msgstr "Calculated using the ADAG formula: eA1C = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {0} {1} over {2} days."
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Shown in % (NGSP)"
@@ -24068,13 +24043,11 @@ msgstr "Shown in % (NGSP)"
 msgid "Shown in mmol/mol (IFCC)"
 msgstr "Shown in mmol/mol (IFCC)"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Lab HbA1c draws, shown as triangles on the chart above. They are not included in the eHbA1c calculation."
-msgstr "Lab HbA1c draws, shown as triangles on the chart above. They are not included in the eHbA1c calculation."
+#~ msgid "Lab HbA1c draws, shown as triangles on the chart above. They are not included in the eHbA1c calculation."
+#~ msgstr "Lab HbA1c draws, shown as triangles on the chart above. They are not included in the eHbA1c calculation."
 
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
-msgid "Est. A1c (DCCT %)"
-msgstr "Est. A1c (DCCT %)"
+#~ msgid "Est. A1c (DCCT %)"
+#~ msgstr "Est. A1c (DCCT %)"
 
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
@@ -24407,9 +24380,8 @@ msgstr "· {0} readings"
 msgid "Consensus target: at least 70% of time in range."
 msgstr "Consensus target: at least 70% of time in range."
 
-#: src/routes/(authenticated)/reports/+page.svelte
-msgid "Estimated A1C"
-msgstr "Estimated A1C"
+#~ msgid "Estimated A1C"
+#~ msgstr "Estimated A1C"
 
 #: src/routes/(authenticated)/reports/+page.svelte
 msgid "Coefficient of variation"
@@ -24540,9 +24512,8 @@ msgstr "Charged: {0} ({1}% to {2}%)"
 msgid "Lasted: {0} ({1}% to {2}%)"
 msgstr "Lasted: {0} ({1}% to {2}%)"
 
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "Target: <7%"
-msgstr "Target: <7%"
+#~ msgid "Target: <7%"
+#~ msgstr "Target: <7%"
 
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "Standard deviation"
@@ -24770,13 +24741,11 @@ msgstr "Time spent in each glucose zone"
 msgid "Assess the reliability of your data"
 msgstr "Assess the reliability of your data"
 
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "Estimated HbA1c"
-msgstr "Estimated HbA1c"
+#~ msgid "Estimated HbA1c"
+#~ msgstr "Estimated HbA1c"
 
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "How your estimated HbA1c has trended over the years"
-msgstr "How your estimated HbA1c has trended over the years"
+#~ msgid "How your estimated HbA1c has trended over the years"
+#~ msgstr "How your estimated HbA1c has trended over the years"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Patterns & Trends"
@@ -25520,9 +25489,8 @@ msgstr "Every service also logs to the <0/> driver, rotated at three files of 10
 msgid "The stack uses the same restart policy and log rotation as the <0>Docker Compose bundle</0>. Portainer stacks do not read override files, so to keep your own logging driver, edit the <1/> section of each service in the stack editor instead."
 msgstr "The stack uses the same restart policy and log rotation as the <0>Docker Compose bundle</0>. Portainer stacks do not read override files, so to keep your own logging driver, edit the <1/> section of each service in the stack editor instead."
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "eHbA1c"
-msgstr "eHbA1c"
+#~ msgid "eHbA1c"
+#~ msgstr "eHbA1c"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lab result"
@@ -26574,6 +26542,95 @@ msgstr "<0/>Disconnecting…"
 #: src/lib/stores/realtime-store.svelte.ts
 msgid "Real-time data unavailable"
 msgstr "Real-time data unavailable"
+
+#. 0: a1cLabel()
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Estimated {0}"
+msgstr "Estimated {0}"
+
+#. 0: a1cLabel(true)
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "How your {0} has trended over the years"
+msgstr "How your {0} has trended over the years"
+
+#. 0: a1cLabel(true)
+#: src/lib/components/rbac/PermissionCategorySelector.svelte
+msgid "Time-in-range, {0} estimates, and averages"
+msgstr "Time-in-range, {0} estimates, and averages"
+
+#. 0: a1cLabel()
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "{0} display name"
+msgstr "{0} display name"
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Estimated values retain the e prefix: eHbA1c or eA1c."
+msgstr "Estimated values retain the e prefix: eHbA1c or eA1c."
+
+#. 0: a1cLabel()
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "{0} display unit"
+msgstr "{0} display unit"
+
+#. 0: a1cLabel()
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {0}. Blood glucose units are set separately."
+msgstr "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {0}. Blood glucose units are set separately."
+
+#. 0: formatA1c(variability.a1cTarget)
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "Target: <{0}"
+msgstr "Target: <{0}"
+
+#. 0: formatA1c(variability?.a1cTarget)
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "Target: below {0}. Your care team sets your individual target."
+msgstr "Target: below {0}. Your care team sets your individual target."
+
+#. 0: a1cLabel(true); 1: bgOr(stats?.mean); 2: bgLabel(); 3: dayCount
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "Calculated using the ADAG formula (NGSP %): {0} = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {1} {2} over {3} days."
+msgstr "Calculated using the ADAG formula (NGSP %): {0} = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {1} {2} over {3} days."
+
+#. 0.0: a1cLabel(true); 0: a1cLabel()
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "<0>What is {0}?</0> This estimates what your lab {0} would be based on your average glucose."
+msgstr "<0>What is {0}?</0> This estimates what your lab {0} would be based on your average glucose."
+
+#. 0: a1cLabel(true)
+#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
+msgid "Distribution, {0} estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
+msgstr "Distribution, {0} estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
+
+#. 0: a1cLabel(); 1: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "<0/> Estimated {0} ({1})"
+msgstr "<0/> Estimated {0} ({1})"
+
+#. 0: a1cLabel(true); 1: a1cLabel(); 2: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "{0} estimates what a lab {1} test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to NGSP percent with the ADAG formula: {2} (%) = (average glucose in mg/dL + 46.7) / 28.7."
+msgstr "{0} estimates what a lab {1} test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to NGSP percent with the ADAG formula: {2} (%) = (average glucose in mg/dL + 46.7) / 28.7."
+
+#. 0: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "<0/> Loading {0} timeline..."
+msgstr "<0/> Loading {0} timeline..."
+
+#. 0: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Failed to load {0} data. Please try again later."
+msgstr "Failed to load {0} data. Please try again later."
+
+#. 0: a1cLabel(); 1: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Lab {0} draws, shown as triangles on the chart above. They are not included in the {1} calculation."
+msgstr "Lab {0} draws, shown as triangles on the chart above. They are not included in the {1} calculation."
+
+#. 0: a1cLabel(); 1: a1cLabel(true); 2: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Enter a lab {0} result here — shown as a triangle marker on the chart above, so you can see how closely the {1} estimate tracks an actual lab draw. Lab results are not included in the {2} calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
+msgstr "Enter a lab {0} result here — shown as a triangle marker on the chart above, so you can see how closely the {1} estimate tracks an actual lab draw. Lab results are not included in the {2} calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
 
 #: src/lib/components/clock-builder/DisplaySettings.svelte
 msgid "Glucose units"

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
@@ -249,21 +250,8 @@ public class FoodController : ControllerBase
 
         try
         {
-            List<Food> foodsToCreate;
-
-            // Handle both single food record and array of food records
-            if (foods.ValueKind == JsonValueKind.Array)
-            {
-                foodsToCreate =
-                    JsonSerializer.Deserialize<List<Food>>(foods.GetRawText()) ?? new List<Food>();
-            }
-            else if (foods.ValueKind == JsonValueKind.Object)
-            {
-                var singleFood = JsonSerializer.Deserialize<Food>(foods.GetRawText());
-                foodsToCreate =
-                    singleFood != null ? new List<Food> { singleFood } : new List<Food>();
-            }
-            else
+            var foodsToCreate = NightscoutJsonBody.ReadObjects<Food>(foods);
+            if (foodsToCreate is null)
             {
                 _logger.LogWarning("Invalid JSON format for food records");
                 return BadRequest("Invalid JSON format. Expected object or array of food records.");

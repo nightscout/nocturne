@@ -5,7 +5,10 @@ using Microsoft.Extensions.Logging;
 using Nocturne.API.Tests.Infrastructure;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Platform;
+using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Events;
@@ -15,6 +18,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Cache.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
@@ -190,15 +194,27 @@ public class ServiceCacheTests
         var httpContextAccessor = new HttpContextAccessor { HttpContext = httpContext };
 
         var mockDbContextFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
+        var tenantDbContextFactory = new Mock<ITenantDbContextFactory>();
+        tenantDbContextFactory
+            .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext());
+        var appearanceReader = new Mock<IShareAppearanceReader>();
+        appearanceReader
+            .Setup(r => r.GetSharedAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UserDisplayPreferences());
         var statusService = new StatusService(
             mockConfiguration,
             _mockCacheService.Object,
             _mockDemoModeService.Object,
             dbContext,
             mockDbContextFactory.Object,
+            tenantDbContextFactory.Object,
             httpContextAccessor,
             _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),
+            appearanceReader.Object,
+            new GlucoseStatusClassifier(mockConfiguration, NullLogger<GlucoseStatusClassifier>.Instance),
+            Mock.Of<ICategoryReadContext>(),
             _mockStatusLogger.Object
         );
 
@@ -271,15 +287,27 @@ public class ServiceCacheTests
         var httpContextAccessor = new HttpContextAccessor { HttpContext = httpContext };
 
         var mockDbContextFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
+        var tenantDbContextFactory = new Mock<ITenantDbContextFactory>();
+        tenantDbContextFactory
+            .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext());
+        var appearanceReader = new Mock<IShareAppearanceReader>();
+        appearanceReader
+            .Setup(r => r.GetSharedAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UserDisplayPreferences());
         var statusService = new StatusService(
             mockConfiguration,
             _mockCacheService.Object,
             _mockDemoModeService.Object,
             dbContext,
             mockDbContextFactory.Object,
+            tenantDbContextFactory.Object,
             httpContextAccessor,
             _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),
+            appearanceReader.Object,
+            new GlucoseStatusClassifier(mockConfiguration, NullLogger<GlucoseStatusClassifier>.Instance),
+            Mock.Of<ICategoryReadContext>(),
             _mockStatusLogger.Object
         );
 

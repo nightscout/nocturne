@@ -215,16 +215,6 @@ class SignalRClient {
       this.messageHandler.handleDataUpdate(data);
     });
 
-    this.dataConnection.on("announcement", (message: unknown) => {
-      logger.debug("Received announcement from SignalR:", message);
-      this.messageHandler.handleAnnouncement(message);
-    });
-
-    this.dataConnection.on("notification", (notification: unknown) => {
-      logger.debug("Received notification from SignalR:", notification);
-      this.messageHandler.handleNotification(notification);
-    });
-
     this.dataConnection.on("statusUpdate", (status: unknown) => {
       logger.debug("Received statusUpdate from SignalR:", status);
       this.messageHandler.handleStatusUpdate(status);
@@ -296,19 +286,29 @@ class SignalRClient {
       await this.subscribeToAlarmHub();
     });
 
+    this.alarmConnection.on("announcement", (message: unknown) => {
+      logger.debug("Received announcement from SignalR:", message);
+      this.messageHandler.handleAnnouncement(message);
+    });
+
+    this.alarmConnection.on("notification", (notification: unknown) => {
+      logger.debug("Received notification from SignalR:", notification);
+      this.messageHandler.handleNotification(notification);
+    });
+
     this.alarmConnection.on("alarm", (alarm: unknown) => {
       logger.debug("Received alarm from SignalR:", alarm);
-      this.messageHandler.handleAlarm(alarm);
+      this.messageHandler.handleAlarm("alarm", alarm);
     });
 
     this.alarmConnection.on("urgent_alarm", (alarm: unknown) => {
       logger.debug("Received urgent_alarm from SignalR:", alarm);
-      this.messageHandler.handleAlarm(alarm);
+      this.messageHandler.handleAlarm("urgent_alarm", alarm);
     });
 
-    this.alarmConnection.on("clear_alarm", () => {
-      logger.debug("Received clear_alarm from SignalR");
-      this.messageHandler.handleClearAlarm();
+    this.alarmConnection.on("clear_alarm", (clear: unknown) => {
+      logger.debug("Received clear_alarm from SignalR:", clear);
+      this.messageHandler.handleClearAlarm(clear);
     });
   }
 

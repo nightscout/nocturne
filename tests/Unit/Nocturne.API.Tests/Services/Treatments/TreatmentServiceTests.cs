@@ -152,6 +152,18 @@ public class TreatmentServiceTests
     }
 
     [Fact]
+    public async Task UpdateTreatmentAsync_WhenTheStoreFails_InvalidatesTheCacheAndPropagates()
+    {
+        _mockStore.Setup(x => x.UpdateAsync("id", It.IsAny<Treatment>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("store down"));
+
+        var update = () => _treatmentService.UpdateTreatmentAsync("id", new Treatment(), CancellationToken.None);
+
+        await update.Should().ThrowAsync<InvalidOperationException>();
+        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnUpdatedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task DeleteTreatmentAsync_ShouldInvalidateCacheAndPublishEvent()
     {
         var existing = new Treatment { Id = "id" };

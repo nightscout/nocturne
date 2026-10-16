@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { a1cLabel, formatA1c } from "$lib/utils/a1c-formatting";
   import { PieChart, Text } from "layerchart";
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
@@ -79,8 +80,6 @@
       mean: basicStats?.mean ?? 0,
       median: basicStats?.median ?? 0,
       stdDev: basicStats?.standardDeviation ?? 0,
-      // The A1c estimate is computed by the backend; there is no frontend fallback.
-      a1cDCCT: analysis?.gmi?.value ?? glycemicVariability?.estimatedA1c ?? null,
       gvi: glycemicVariability?.glycemicVariabilityIndex ?? null,
       pgs: glycemicVariability?.patientGlycemicStatus ?? null,
       meanTotalDailyChange: glycemicVariability?.meanTotalDailyChange ?? null,
@@ -109,7 +108,7 @@
         <Card.Content class="py-12 text-center">
           <p class="font-medium">No readings in this date range</p>
           <p class="mt-1 text-sm text-muted-foreground">
-            Distribution, A1c estimation and variability statistics need glucose
+            Distribution, {a1cLabel(true)} estimation and variability statistics need glucose
             readings to be calculated. Try a wider date range.
           </p>
         </Card.Content>
@@ -237,18 +236,21 @@
       <div class="grid gap-6 @2xl:grid-cols-2 @4xl:grid-cols-3 print:grid-cols-3 print:gap-3">
         <Card.Root>
           <Card.Header>
-            <Card.Title class="text-lg">A1c Estimation</Card.Title>
+            <Card.Title class="text-lg">
+              {report.analysis?.gmi?.value != null ? "GMI" : a1cLabel(true)}</Card.Title>
             <Card.Description>Based on average glucose</Card.Description>
           </Card.Header>
           <Card.Content>
             <div class="mb-3 flex flex-wrap items-baseline justify-between gap-x-2">
               <span class="text-muted-foreground">
-                {report.analysis?.gmi?.value != null ? "GMI (DCCT %)" : "Est. A1c (DCCT %)"}
+                {report.analysis?.gmi?.value != null ? "GMI (%)" : a1cLabel(true)}
               </span>
               <span class="text-lg font-semibold tabular-nums whitespace-nowrap">
-                {overallStats.a1cDCCT != null
-                  ? `${overallStats.a1cDCCT.toFixed(1)}%`
-                  : "No estimate"}
+                {report.analysis?.gmi?.value != null
+                  ? `${report.analysis.gmi.value.toFixed(1)}%`
+                  : formatA1c(
+                      report.analysis?.glycemicVariability?.estimatedA1cDisplay
+                    )}
               </span>
             </div>
             <ReliabilityBadge reliability={report.analysis?.reliability} />

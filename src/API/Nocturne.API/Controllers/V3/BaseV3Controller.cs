@@ -451,7 +451,16 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <returns>Nightscout-compatible success response</returns>
     protected ActionResult CreateV3SuccessResponse(object result)
     {
-        return Ok(new { status = 200, result });
+        return Ok(new V3Envelope<object> { Result = result });
+    }
+
+    /// <summary>
+    /// Create the V3 success response for a delete: <c>{"status": 200}</c> with no result.
+    /// AAPS treats any other success status on DELETE as unknown and stops syncing the collection.
+    /// </summary>
+    protected ActionResult CreateV3DeleteResponse()
+    {
+        return Ok(new { status = 200 });
     }
 
     /// <summary>
@@ -725,37 +734,6 @@ public abstract class BaseV3Controller<T> : ControllerBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to get last modified timestamp");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Parse create request from request body
-    /// </summary>
-    /// <typeparam name="TRequest">Type of the request object</typeparam>
-    /// <returns>Parsed request object or null</returns>
-    protected async Task<TRequest?> ParseCreateRequest<TRequest>()
-        where TRequest : class
-    {
-        try
-        {
-            if (Request.ContentLength == 0)
-                return null;
-
-            using var reader = new StreamReader(Request.Body);
-            var body = await reader.ReadToEndAsync();
-
-            if (string.IsNullOrEmpty(body))
-                return null;
-
-            return JsonSerializer.Deserialize<TRequest>(
-                body,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to parse create request");
             return null;
         }
     }

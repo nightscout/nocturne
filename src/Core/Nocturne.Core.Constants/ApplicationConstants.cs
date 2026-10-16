@@ -459,6 +459,18 @@ public static class ApplicationConstants
     }
 
     /// <summary>
+    /// Nightscout API levels Nocturne reports for client compatibility.
+    /// </summary>
+    public static class NightscoutApi
+    {
+        /// <summary>
+        /// The v3 API level reported as <c>apiVersion</c> by <c>/api/v3/status</c> and <c>/api/v3/version</c>,
+        /// matching upstream Nightscout.
+        /// </summary>
+        public const string V3Version = "3.0.5";
+    }
+
+    /// <summary>
     /// API route segment constants and YARP proxy patterns, organized by API version.
     /// </summary>
     /// <remarks>

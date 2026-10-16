@@ -4,7 +4,7 @@
   Body: {
     status: ok,
     name: nightscout,
-    version: 0.0.0.0,
+    version: {Scrubbed},
     serverTime: {Scrubbed},
     serverTimeEpoch: {Scrubbed},
     apiEnabled: true,

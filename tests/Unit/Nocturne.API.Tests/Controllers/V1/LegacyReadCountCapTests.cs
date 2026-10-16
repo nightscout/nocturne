@@ -402,7 +402,8 @@ public class LegacyReadCountCapTests
         var controller = new ActivityController(
             activityService,
             Mock.Of<IActivityDecomposer>(),
-            Mock.Of<ILogger<ActivityController>>()
+            Mock.Of<ILogger<ActivityController>>(),
+            TimeProvider.System
         )
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },

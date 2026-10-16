@@ -42,7 +42,7 @@ public class TreatmentFindDateWindowTests
     [InlineData("find[$and][0][created_at][$gte]=2020-01-01&find[eventType]=Note")]
     public void FieldFilteredFindWithoutIdOrDateBound_GetsFourDayCreatedAtWindow(string find)
     {
-        var windowed = LegacyTreatmentDateWindow.Apply(find, Now);
+        var windowed = LegacyFindDateWindow.Apply(find, Now);
 
         var parsed = FindQuery.Parse(windowed);
         parsed.FromMills.Should().BeGreaterThanOrEqualTo(WindowStartMills);
@@ -60,7 +60,7 @@ public class TreatmentFindDateWindowTests
     [InlineData("{\"created_at\":{\"$gte\":\"2020-01-01\"},\"eventType\":\"Note\"}")]
     public void FindWithIdOrExplicitDateBound_IsNotNarrowed(string find)
     {
-        LegacyTreatmentDateWindow.Apply(find, Now).Should().Be(find);
+        LegacyFindDateWindow.Apply(find, Now).Should().Be(find);
     }
 
     [Theory]
@@ -71,13 +71,34 @@ public class TreatmentFindDateWindowTests
     [InlineData("find[date][$gte]=1000")]
     public void FindWithoutFieldFilters_IsUnchanged(string? find)
     {
-        LegacyTreatmentDateWindow.Apply(find, Now).Should().Be(find);
+        LegacyFindDateWindow.Apply(find, Now).Should().Be(find);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("{}")]
+    [InlineData("count=10")]
+    public void WindowingUnfilteredFinds_WindowsAnAbsentOrEmptyFind(string? find)
+    {
+        var windowed = LegacyFindDateWindow.Apply(find, Now, windowUnfiltered: true);
+
+        FindQuery.Parse(windowed).FromMills.Should().Be(WindowStartMills);
+    }
+
+    [Theory]
+    [InlineData("find[created_at][$gte]=2020-01-01")]
+    [InlineData("find[dateString][$lte]=2020-01-01")]
+    [InlineData("{\"_id\":\"5f8d0c1e8a7b4c3d9e5f0001\"}")]
+    public void WindowingUnfilteredFinds_StillSkipsAFindWithADateBoundOrId(string find)
+    {
+        LegacyFindDateWindow.Apply(find, Now, windowUnfiltered: true).Should().Be(find);
     }
 
     [Fact]
     public void WindowBound_IsLegacyIsoString()
     {
-        LegacyTreatmentDateWindow.Apply("{\"eventType\":\"Note\"}", Now)
+        LegacyFindDateWindow.Apply("{\"eventType\":\"Note\"}", Now)
             .Should().Be("{\"eventType\":\"Note\",\"created_at\":{\"$gte\":\"2026-09-23T12:00:00.000Z\"}}");
     }
 
@@ -185,7 +206,7 @@ public class TreatmentFindDateWindowTests
     {
         const string find = "{\"eventType\":\"Note\",\"eventType\":\"Meal Bolus\"}";
 
-        var windowed = LegacyTreatmentDateWindow.Apply(find, Now);
+        var windowed = LegacyFindDateWindow.Apply(find, Now);
 
         windowed.Should().StartWith(find[..^1]);
         FindQuery.Parse(windowed).FromMills.Should().Be(WindowStartMills);
@@ -203,7 +224,7 @@ public class TreatmentFindDateWindowTests
         await NewReadService(projection.Object, NullLogger<TreatmentReadService>.Instance).QueryAsync(
             new TreatmentQuery
             {
-                Find = LegacyTreatmentDateWindow.Apply("find[id][$eq]=abc", Now),
+                Find = LegacyFindDateWindow.Apply("find[id][$eq]=abc", Now),
                 Count = int.MaxValue,
             });
 

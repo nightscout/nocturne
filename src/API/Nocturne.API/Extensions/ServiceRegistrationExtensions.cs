@@ -897,6 +897,7 @@ public static class ServiceRegistrationExtensions
 
         // Loop/OpenAPS integration
         services.Configure<LoopConfiguration>(configuration.GetSection("Loop"));
+        services.AddSingleton<IConfigureOptions<LoopConfiguration>, LoopLegacyEnvironmentConfiguration>();
         services.AddScoped<ILoopService, LoopService>();
         services.AddScoped<IOpenApsService, OpenApsService>();
         services.AddScoped<IPumpAlertService, PumpAlertService>();

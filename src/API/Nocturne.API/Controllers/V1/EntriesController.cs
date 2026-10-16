@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Models.Authorization;
@@ -13,7 +14,6 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.Serializers;
 using Nocturne.Core.Models.Extensions;
 using Nocturne.Core.Contracts.Entries;
 
@@ -740,8 +740,9 @@ public class EntriesController : ControllerBase
     /// <summary>
     /// Parses the loosely-typed entries request body (JsonElement, a single Entry, an Entry[]/
     /// IEnumerable&lt;Entry&gt; from tests, or a raw object) into a list of entries. Returns false
-    /// only when a raw object cannot be deserialized as entry JSON; a malformed JsonElement instead
-    /// throws and is handled by the caller's outer catch (matching the original inline behavior).
+    /// when the body is neither an object nor an array, or a raw object cannot be deserialized as
+    /// entry JSON; a JsonElement that does not fit <see cref="Entry"/> throws <see cref="JsonException"/>,
+    /// which the callers answer with 400.
     /// </summary>
     private static bool TryParseEntries(object entryData, out List<Entry> entries)
     {
@@ -749,7 +750,10 @@ public class EntriesController : ControllerBase
 
         if (entryData is JsonElement jsonElement)
         {
-            AddEntriesFromJsonElement(jsonElement, entries);
+            if (NightscoutJsonBody.ReadObjects<Entry>(jsonElement) is not { } read)
+                return false;
+
+            entries.AddRange(read);
         }
         else if (entryData is Entry singleEntry)
         {
@@ -770,7 +774,10 @@ public class EntriesController : ControllerBase
             {
                 var jsonString = JsonSerializer.Serialize(entryData);
                 var element = JsonSerializer.Deserialize<JsonElement>(jsonString);
-                AddEntriesFromJsonElement(element, entries);
+                if (NightscoutJsonBody.ReadObjects<Entry>(element) is not { } read)
+                    return false;
+
+                entries.AddRange(read);
             }
             catch
             {
@@ -780,32 +787,6 @@ public class EntriesController : ControllerBase
 
         return true;
     }
-
-    /// <summary>
-    /// Appends the entries contained in a JSON element (array of entries, or a single entry) to
-    /// <paramref name="entries"/>, skipping elements that deserialize to null.
-    /// </summary>
-    private static void AddEntriesFromJsonElement(JsonElement element, List<Entry> entries)
-    {
-        if (element.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in element.EnumerateArray())
-            {
-                var entry = DeserializeEntry(item);
-                if (entry != null)
-                    entries.Add(entry);
-            }
-        }
-        else
-        {
-            var entry = DeserializeEntry(element);
-            if (entry != null)
-                entries.Add(entry);
-        }
-    }
-
-    private static Entry? DeserializeEntry(JsonElement element) =>
-        JsonSerializer.Deserialize<Entry>(element.GetRawText(), UploaderIdJsonModifier.CaseInsensitiveReadOptions);
 
     /// <summary>
     /// True when an entry carries meaningful glucose data, a usable timestamp, or a non-sgv type.
@@ -1174,6 +1155,19 @@ public class EntriesController : ControllerBase
 
 
             return Accepted(response);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Invalid JSON in async entries request with correlation ID: {CorrelationId}", correlationId);
+            return BadRequest(
+                new
+                {
+                    status = 400,
+                    message = "Invalid entry data format",
+                    type = "client",
+                    correlationId = correlationId,
+                }
+            );
         }
         catch (OperationCanceledException)
         {

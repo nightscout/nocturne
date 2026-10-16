@@ -404,12 +404,12 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// </summary>
     /// <param name="id">Treatment ID</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>No content on success</returns>
+    /// <returns><c>{"status": 200}</c> on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments/:id")]
-    [ProducesResponseType(204)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -433,7 +433,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
         _logger.LogDebug("Successfully deleted V3 treatment {Id}", id);
 
-        return NoContent();
+        return CreateV3DeleteResponse();
     }
 
     /// <summary>

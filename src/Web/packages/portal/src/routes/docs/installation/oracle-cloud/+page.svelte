@@ -234,7 +234,7 @@
             <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.ssh/nocturne_oci</code>.
             Nocturne keeps running without it, but it is your only way onto the server.
         </li>
-        <li>Updates are automatic. Watchtower checks for new Nocturne images daily.</li>
+        <li>Watchtower checks for new Nocturne images daily. It does not update Caddy or Postgres; update them with <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">cd /opt/nocturne &amp;&amp; sudo docker compose pull &amp;&amp; sudo docker compose up -d</code>.</li>
         <li>Nocturne starts again by itself when the server reboots.</li>
         <li>
             To get a shell on the server, run the SSH command the script printed. Everything
