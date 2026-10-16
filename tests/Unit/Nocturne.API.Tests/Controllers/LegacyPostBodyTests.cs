@@ -264,7 +264,8 @@ public class LegacyPostBodyTests
             .Callback<IEnumerable<Activity>, CancellationToken>((a, _) => activities.AddRange(a))
             .ReturnsAsync([]);
         var controller = WithContext(new LegacyV1.ActivityController(
-            service.Object, Mock.Of<IActivityDecomposer>(), NullLogger<LegacyV1.ActivityController>.Instance));
+            service.Object, Mock.Of<IActivityDecomposer>(), NullLogger<LegacyV1.ActivityController>.Instance,
+            TimeProvider.System));
         controller.HttpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>();
         return new Handler(
             $$"""{"Type":"walk","Duration":"30","Mills":{{Millis}}}""",

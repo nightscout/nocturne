@@ -100,7 +100,7 @@ public class TreatmentsController : ControllerBase
             }
 
             var treatments = await _treatmentService.GetTreatmentsAsync(
-                find: LegacyTreatmentDateWindow.Apply(findQuery, _timeProvider.GetUtcNow()),
+                find: LegacyFindDateWindow.Apply(findQuery, _timeProvider.GetUtcNow()),
                 count: count is { } requested ? LegacyReadLimits.ClampCount(requested) : null,
                 skip: skip,
                 cancellationToken: cancellationToken
