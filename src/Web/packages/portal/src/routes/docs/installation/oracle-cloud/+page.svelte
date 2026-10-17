@@ -29,7 +29,7 @@
         </li>
         <li>
             A domain name. Nocturne gives every site its own subdomain, so the DNS provider
-            must support wildcard records. If you do not have a domain, a free one from deSEC
+            must support wildcard records. If you do not have a domain, a free one from DuckDNS
             works well; see below.
         </li>
         <li>
@@ -38,26 +38,27 @@
         </li>
     </ul>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">No domain yet? Get one from deSEC</h2>
+    <h2 class="text-2xl font-bold mt-8 mb-4">No domain yet? Get one from DuckDNS</h2>
     <p class="text-muted-foreground mb-4">
-        <a href="https://desec.io" class="text-primary hover:underline">deSEC</a> is a non-profit
-        DNS provider that gives out free names under <strong>dedyn.io</strong>. With one of those,
-        the installer creates the DNS records for you and there is nothing to configure by hand.
+        <a href="https://www.duckdns.org" class="text-primary hover:underline">DuckDNS</a> is a
+        free DNS service that gives out names under <strong>duckdns.org</strong>. Every subdomain
+        of your name resolves to the same address, so the wildcard Nocturne needs comes with it.
+        With one of those, the installer sets the address for you and there is nothing to
+        configure by hand.
     </p>
     <ol class="list-decimal list-inside space-y-2 text-muted-foreground mb-8">
-        <li>Create an account at desec.io and confirm your email address.</li>
+        <li>Sign in at duckdns.org with one of the accounts it offers.</li>
         <li>
-            Under <strong>Domains</strong>, add a dynDNS domain and pick a name. Your domain is
-            then <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">yourname.dedyn.io</code>.
+            Under <strong>domains</strong>, add a name. Your domain is then
+            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">yourname.duckdns.org</code>.
         </li>
         <li>
-            Under <strong>Token management</strong>, create a token and copy the long secret it
-            shows you once — not the name you gave the token. You can delete the token afterwards.
+            Copy the <strong>token</strong> shown at the top of the page. It looks like
+            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">01234567-89ab-cdef-0123-456789abcdef</code>.
         </li>
     </ol>
     <p class="text-muted-foreground mb-8">
-        The same works for a domain you already own if its DNS is hosted at deSEC. If it is
-        hosted elsewhere, you add two records by hand in Step 3.
+        For a domain you already own, you add two records by hand at your DNS provider in Step 3.
     </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Before you start: keeping it free</h2>
@@ -156,12 +157,13 @@
         </p>
     </Callout>
     <p class="text-muted-foreground mb-4">
-        Early on it asks for a deSEC token. <strong>Nothing appears on screen as you paste it</strong>
-        — the token is hidden, and the installer tells you how many characters it read so you can
-        see the paste landed. If deSEC does not accept it you can paste another. Press Enter with
-        nothing pasted and it prints two records for you to create by hand instead. Either way it
-        keeps working while the server boots, and waits for the records before it requests
-        certificates.
+        If your domain is under duckdns.org, it asks early on for your DuckDNS token.
+        <strong>Nothing appears on screen as you paste it</strong> — the token is hidden, and the
+        installer tells you how many characters it read so you can see the paste landed. If
+        DuckDNS does not accept it you can paste another. Press Enter with nothing pasted and it
+        tells you the address to set yourself instead. For any other domain it prints two records
+        for you to create by hand. Either way it keeps working while the server boots, and waits
+        for the records before it requests certificates.
     </p>
     <details class="mb-4">
         <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">What the script does</summary>
@@ -200,9 +202,11 @@
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Step 3: Add the DNS records</h2>
     <p class="text-muted-foreground mb-4">
-        Skip this step if you gave the installer a deSEC token. Otherwise, at your domain
-        provider, create two <strong>A</strong> records pointing at the IP address the script
-        printed:
+        Skip this step if you gave the installer a DuckDNS token. If you use DuckDNS without
+        one, put the IP address the script printed into the <strong>current ip</strong> box next
+        to your name at duckdns.org and click <strong>update ip</strong>. For any other domain,
+        at your domain provider, create two <strong>A</strong> records pointing at the IP address
+        the script printed:
     </p>
     <CodeBlock code={"nocturne.example.com      A   <the IP address>\n*.nocturne.example.com    A   <the IP address>"} class="mb-4" />
     <p class="text-muted-foreground mb-8">
