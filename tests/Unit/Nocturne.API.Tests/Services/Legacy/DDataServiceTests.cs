@@ -39,28 +39,19 @@ public class DDataServiceTests
         _mockLogger = new Mock<ILogger<DDataService>>();
 
         // Build a DeviceStatusProjectionService backed by empty mocked repositories
-        var mockApsRepo = new Mock<IApsSnapshotRepository>();
-        mockApsRepo.Setup(x => x.GetAsync(
+        var mockGroupRepo = new Mock<IDeviceStatusGroupRepository>();
+        mockGroupRepo.Setup(x => x.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<ApsSnapshot>());
-        var mockPumpRepo = new Mock<IPumpSnapshotRepository>();
-        mockPumpRepo.Setup(x => x.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<PumpSnapshot>());
-        var mockUploaderRepo = new Mock<IUploaderSnapshotRepository>();
-        var mockStateSpanRepo = new Mock<IStateSpanRepository>();
-        var mockExtrasRepo = new Mock<IDeviceStatusExtrasRepository>();
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
 
         var projectionService = new DeviceStatusProjectionService(
-            mockApsRepo.Object,
-            mockPumpRepo.Object,
-            mockUploaderRepo.Object,
-            mockStateSpanRepo.Object,
-            mockExtrasRepo.Object,
+            mockGroupRepo.Object,
+            new Mock<IApsSnapshotRepository>().Object,
+            new Mock<IPumpSnapshotRepository>().Object,
+            new Mock<IUploaderSnapshotRepository>().Object,
+            new Mock<IStateSpanRepository>().Object,
+            new Mock<IDeviceStatusExtrasRepository>().Object,
             new Mock<ILogger<DeviceStatusProjectionService>>().Object);
 
         _ddataService = new DDataService(

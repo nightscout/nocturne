@@ -185,6 +185,74 @@ public class DeviceStatusIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
+    public async Task UploaderOnlyStatus_IsListedCountedAndInHistory()
+    {
+        var at = UniqueTime();
+        var cursor = DateTimeOffset.UtcNow.AddSeconds(-1).ToUnixTimeMilliseconds();
+        await PostAsync(new { created_at = Iso(at), mills = Mills(at), device = "xDrip-DexcomG6", uploader = new { battery = 41 } });
+
+        var listed = (await ListAsync(at, at)).Should().ContainSingle().Subject;
+        listed.GetProperty("uploader").GetProperty("battery").GetInt32().Should().Be(41);
+        (await CountAsync(at, at)).Should().Be(1);
+        (await HistoryAsync(cursor)).Should().ContainSingle(doc => CreatedAt(doc) == Iso(at))
+            .Which.GetProperty("uploader").GetProperty("battery").GetInt32().Should().Be(41);
+    }
+
+    [Fact]
+    public async Task PumpStatusWithoutAps_CarriesItsUploaderAndExtras()
+    {
+        var at = UniqueTime();
+        await PostAsync(new
+        {
+            created_at = Iso(at), mills = Mills(at), device = "medtronic-600://phone",
+            pump = new { clock = Iso(at), reservoir = 87.5 },
+            uploader = new { battery = 63 },
+            connect = new { sensorState = "OK" },
+        });
+
+        var listed = (await ListAsync(at, at)).Should().ContainSingle().Subject;
+        listed.GetProperty("pump").GetProperty("reservoir").GetDouble().Should().Be(87.5);
+        listed.GetProperty("uploader").GetProperty("battery").GetInt32().Should().Be(63);
+        listed.GetProperty("connect").GetProperty("sensorState").GetString().Should().Be("OK");
+        (await CountAsync(at, at)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ExtrasOnlyStatus_IsListedCountedAndInHistory()
+    {
+        var at = UniqueTime();
+        var cursor = DateTimeOffset.UtcNow.AddSeconds(-1).ToUnixTimeMilliseconds();
+        await PostAsync(new { created_at = Iso(at), mills = Mills(at), device = "xdripjs://rig", xdripjs = new { state = 6, stateString = "OK" } });
+
+        var listed = (await ListAsync(at, at)).Should().ContainSingle().Subject;
+        listed.GetProperty("xdripjs").GetProperty("stateString").GetString().Should().Be("OK");
+        (await CountAsync(at, at)).Should().Be(1);
+        (await HistoryAsync(cursor)).Should().ContainSingle(doc => CreatedAt(doc) == Iso(at));
+    }
+
+    [Fact]
+    public async Task StatusesOfEveryKind_PageNewestFirstEachOnce()
+    {
+        var newest = UniqueTime();
+        var times = Enumerable.Range(0, 4).Select(i => newest.AddMinutes(-i)).ToArray();
+        await PostAsync(new
+        {
+            created_at = Iso(times[0]), mills = Mills(times[0]), device = "openaps://rig",
+            openaps = new { suggested = new { bg = 120, timestamp = Iso(times[0]) } },
+        });
+        await PostAsync(new { created_at = Iso(times[1]), mills = Mills(times[1]), device = "pump://rig", pump = new { clock = Iso(times[1]), reservoir = 50 } });
+        await PostAsync(new { created_at = Iso(times[2]), mills = Mills(times[2]), device = "xdrip://phone", uploader = new { battery = 70 } });
+        await PostAsync(new { created_at = Iso(times[3]), mills = Mills(times[3]), device = "xdripjs://rig", xdripjs = new { state = 6 } });
+
+        var pages = new List<string?>();
+        for (var skip = 0; skip < 5; skip++)
+            pages.AddRange((await ListAsync(times[^1], newest, $"&count=1&skip={skip}")).Select(CreatedAt));
+
+        pages.Should().Equal(times.Select(Iso));
+        (await CountAsync(times[^1], newest)).Should().Be(4);
+    }
+
+    [Fact]
     public async Task HealthCheck_ShouldReturnOk()
     {
         // Act
@@ -192,5 +260,40 @@ public class DeviceStatusIntegrationTests : ApiIntegrationTestBase
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    private static DateTime UniqueTime() =>
+        new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(Random.Shared.Next(0, 50_000) * 10);
+
+    private static string Iso(DateTime at) => at.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+
+    private static long Mills(DateTime at) => new DateTimeOffset(at, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+    private static string? CreatedAt(JsonElement doc) =>
+        doc.TryGetProperty("created_at", out var createdAt) ? createdAt.GetString() : null;
+
+    private static string Window(DateTime from, DateTime to) =>
+        $"find[created_at][$gte]={Iso(from)}&find[created_at][$lte]={Iso(to)}";
+
+    private async Task PostAsync(object status) =>
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/devicestatus", status))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+    private async Task<List<JsonElement>> ListAsync(DateTime from, DateTime to, string paging = "&count=50") =>
+        (await AuthenticatedClient.GetFromJsonAsync<List<JsonElement>>(
+            $"/api/v1/devicestatus?{Window(from, to)}{paging}"))!;
+
+    private async Task<long> CountAsync(DateTime from, DateTime to)
+    {
+        var rows = await AuthenticatedClient.GetFromJsonAsync<List<JsonElement>>(
+            $"/api/v1/count/devicestatus/where?{Window(from, to)}");
+        return rows!.Count == 0 ? 0 : rows.Single().GetProperty("count").GetInt64();
+    }
+
+    private async Task<List<JsonElement>> HistoryAsync(long cursor)
+    {
+        var body = await AuthenticatedClient.GetFromJsonAsync<JsonElement>(
+            $"/api/v3/devicestatus/history/{cursor}?limit=1000");
+        return body.GetProperty("result").EnumerateArray().ToList();
     }
 }

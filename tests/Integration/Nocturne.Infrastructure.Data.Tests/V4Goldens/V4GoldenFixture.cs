@@ -85,6 +85,8 @@ public class V4GoldenFixture : IAsyncLifetime
         services.AddScoped<IApsSnapshotRepository, ApsSnapshotRepository>();
         services.AddScoped<IPumpSnapshotRepository, PumpSnapshotRepository>();
         services.AddScoped<IUploaderSnapshotRepository, UploaderSnapshotRepository>();
+        services.AddScoped<IDeviceStatusExtrasRepository, DeviceStatusExtrasRepository>();
+        services.AddScoped<IDeviceStatusGroupRepository, DeviceStatusGroupRepository>();
         services.AddScoped<ITherapySettingsRepository, TherapySettingsRepository>();
         services.AddScoped<IBasalScheduleRepository, BasalScheduleRepository>();
         services.AddScoped<ICarbRatioScheduleRepository, CarbRatioScheduleRepository>();

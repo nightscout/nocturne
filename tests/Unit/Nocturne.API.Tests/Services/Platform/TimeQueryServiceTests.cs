@@ -9,6 +9,7 @@ using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Models.V4;
 using Xunit;
 using TimePatternQuery = Nocturne.Core.Contracts.Legacy.TimePatternQuery;
 
@@ -34,6 +35,10 @@ public class TimeQueryServiceTests
         _mockLogger = new Mock<ILogger<TimeQueryService>>();
 
         var projectionService = new DeviceStatusProjectionService(
+            Mock.Of<IDeviceStatusGroupRepository>(r => r.GetAsync(
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>())
+                == Task.FromResult<IReadOnlyList<DeviceStatusGroup>>(Array.Empty<DeviceStatusGroup>())),
             new Mock<IApsSnapshotRepository>().Object,
             new Mock<IPumpSnapshotRepository>().Object,
             new Mock<IUploaderSnapshotRepository>().Object,

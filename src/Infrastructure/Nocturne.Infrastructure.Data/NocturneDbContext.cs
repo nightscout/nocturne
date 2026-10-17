@@ -530,8 +530,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>
     /// Tables a v3 history endpoint pages through <see cref="HistoryPage"/> on <c>sys_updated_at</c>:
     /// the V4 record tables of the treatment projection's <c>LegacyTreatmentTables.All</c> (its state
-    /// spans page on <c>ix_state_spans_tenant_category_updated_at</c>), the device-status
-    /// projection's APS snapshots, the three glucose types the entry projection reads and the five
+    /// spans page on <c>ix_state_spans_tenant_category_updated_at</c>), the four tables a device
+    /// status is decomposed into, the three glucose types the entry projection reads and the five
     /// profile-decomposition tables.
     /// </summary>
     internal static readonly Type[] V4HistoryPagedEntities =
@@ -544,6 +544,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(TempBasalEntity),
         typeof(BolusCalculationEntity),
         typeof(ApsSnapshotEntity),
+        typeof(PumpSnapshotEntity),
+        typeof(UploaderSnapshotEntity),
+        typeof(DeviceStatusExtrasEntity),
         typeof(SensorGlucoseEntity),
         typeof(MeterGlucoseEntity),
         typeof(CalibrationEntity),
@@ -712,6 +715,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .IsDescending(false, true)
                 .HasFilter("deleted_at IS NULL");
         }
+
+        // The device status list walks extras newest-first beside the snapshots; see
+        // DeviceStatusGroupRepository.GetAsync.
+        modelBuilder.Entity<DeviceStatusExtrasEntity>()
+            .HasIndex(e => new { e.TenantId, e.Timestamp })
+            .HasDatabaseName("ix_device_status_extras_tenant_timestamp")
+            .IsDescending(false, true)
+            .HasFilter("deleted_at IS NULL");
 
         // The legacy-id uniqueness must drop soft-deleted rows, or the next resync of a
         // system-swept legacy id is a 23505 — see SoftDeleteDedupExtensions.GetBlockingLegacyIdsAsync.

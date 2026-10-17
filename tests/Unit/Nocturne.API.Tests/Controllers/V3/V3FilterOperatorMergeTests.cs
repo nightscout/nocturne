@@ -166,17 +166,18 @@ public class V3FilterOperatorMergeTests
         string queryString)
     {
         (DateTime? From, DateTime? To, string? Device) captured = default;
-        var apsRepo = new Mock<IApsSnapshotRepository>();
-        apsRepo
+        var groupRepo = new Mock<IDeviceStatusGroupRepository>();
+        groupRepo
             .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Callback<DateTime?, DateTime?, string?, string?, int, int, bool, CancellationToken>(
-                (from, to, device, _, _, _, _, _) => captured = (from, to, device))
-            .ReturnsAsync(Array.Empty<ApsSnapshot>());
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<DateTime?, DateTime?, string?, int, int, CancellationToken>(
+                (from, to, device, _, _, _) => captured = (from, to, device))
+            .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
 
         var projection = new DeviceStatusProjectionService(
-            apsRepo.Object,
+            groupRepo.Object,
+            Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IPumpSnapshotRepository>(),
             Mock.Of<IUploaderSnapshotRepository>(),
             Mock.Of<IStateSpanRepository>(),

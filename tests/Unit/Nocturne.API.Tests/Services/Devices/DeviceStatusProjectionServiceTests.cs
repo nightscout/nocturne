@@ -19,6 +19,7 @@ public class DeviceStatusProjectionServiceTests
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
+    private readonly Mock<IDeviceStatusGroupRepository> _groupRepo = new();
     private readonly Mock<IApsSnapshotRepository> _apsRepo = new();
     private readonly Mock<IPumpSnapshotRepository> _pumpRepo = new();
     private readonly Mock<IUploaderSnapshotRepository> _uploaderRepo = new();
@@ -34,6 +35,7 @@ public class DeviceStatusProjectionServiceTests
         SetupDefaultEmptyReturns();
 
         _service = new DeviceStatusProjectionService(
+            _groupRepo.Object,
             _apsRepo.Object,
             _pumpRepo.Object,
             _uploaderRepo.Object,
@@ -44,29 +46,11 @@ public class DeviceStatusProjectionServiceTests
 
     private void SetupDefaultEmptyReturns()
     {
-        _apsRepo
+        _groupRepo
             .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
-                It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
-
-        _pumpRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
-                It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Enumerable.Empty<PumpSnapshot>());
-
-        _uploaderRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
-                It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Enumerable.Empty<UploaderSnapshot>());
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
 
         _pumpRepo
             .Setup(r => r.GetByCorrelationIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
@@ -406,6 +390,38 @@ public class DeviceStatusProjectionServiceTests
     }
 
     [Fact]
+    public void ProjectAsync_WithOnlyExtras_IsIdentifiedByTheExtrasRow()
+    {
+        var extras = new DeviceStatusExtras
+        {
+            Id = Guid.NewGuid(),
+            CorrelationId = Guid.NewGuid(),
+            Timestamp = ReferenceTime,
+            CreatedAt = ReferenceTime.AddMinutes(1),
+            ModifiedAt = ReferenceTime.AddMinutes(2),
+            Extras = new Dictionary<string, object?> { ["xdripjs"] = new { state = 6 } },
+        };
+
+        var ds = DeviceStatusProjectionService.ProjectFromSnapshots(null, null, null, null, extras);
+
+        ds.Id.Should().Be(extras.Id.ToString());
+        ds.Mills.Should().Be(ReferenceMillis);
+        ds.CreatedAt.Should().Be("2024-01-15T12:00:00.000Z");
+        ds.SrvCreated.Should().Be(Mills(extras.CreatedAt));
+        ds.SrvModified.Should().Be(Mills(extras.ModifiedAt));
+        ds.Device.Should().BeEmpty();
+        ds.XDripJs.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void ProjectAsync_WithNothing_Throws()
+    {
+        var project = () => DeviceStatusProjectionService.ProjectFromSnapshots(null, null, null, null, null);
+
+        project.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void ProjectAsync_WithClientIdentifierInExtras_DoesNotReEmitIt()
     {
         var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
@@ -429,141 +445,91 @@ public class DeviceStatusProjectionServiceTests
 
     #endregion
 
-    #region Correlation
+    #region GetAsync
 
     [Fact]
-    public async Task ProjectAsync_CorrelatesByCorrelationId()
+    public async Task GetAsync_ProjectsEachGroupWithItsMembers()
     {
-        // Arrange
-        var correlationId = Guid.NewGuid();
         var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
-        aps.CorrelationId = correlationId;
         aps.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 120 }, JsonOptions);
-
         var pump = CreatePumpSnapshot();
-        pump.CorrelationId = correlationId;
         pump.Reservoir = 50.0;
-
         var uploader = CreateUploaderSnapshot();
-        uploader.CorrelationId = correlationId;
         uploader.Battery = 80;
+        ReturnGroups(new DeviceStatusGroup(aps, pump, uploader, null, ReferenceTime));
 
-        _apsRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
-                It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { aps });
-
-        _pumpRepo
-            .Setup(r => r.GetByCorrelationIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { pump });
-
-        _uploaderRepo
-            .Setup(r => r.GetByCorrelationIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { uploader });
-
-        // Act
         var results = (await _service.GetAsync(10, 0, null, CancellationToken.None)).ToList();
 
-        // Assert
-        results.Should().HaveCount(1);
-        var ds = results[0];
+        var ds = results.Should().ContainSingle().Subject;
+        ds.Id.Should().Be(aps.LegacyId);
         ds.OpenAps.Should().NotBeNull();
-        ds.Pump.Should().NotBeNull();
         ds.Pump!.Reservoir.Should().Be(50.0);
-        ds.Uploader.Should().NotBeNull();
         ds.Uploader!.Battery.Should().Be(80);
     }
 
-    #endregion
-
-    #region Orphan Pump (xDrip+)
-
     [Fact]
-    public async Task ProjectAsync_OrphanPumpSnapshot_ReturnsDeviceStatusWithPumpOnly()
+    public async Task GetAsync_PumpOnlyGroup_ProjectsThePumpAlone()
     {
-        // Arrange — no APS snapshots, only an orphan pump
         var pump = CreatePumpSnapshot();
-        pump.CorrelationId = null; // No correlation = orphan
+        pump.CorrelationId = null;
         pump.Reservoir = 42.0;
         pump.Manufacturer = "Medtronic";
+        ReturnGroups(new DeviceStatusGroup(null, pump, null, null, ReferenceTime));
 
-        _pumpRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
-                It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { pump });
+        var ds = (await _service.GetAsync(10, 0, null, CancellationToken.None)).Should().ContainSingle().Subject;
 
-        // Act
-        var results = (await _service.GetAsync(10, 0, null, CancellationToken.None)).ToList();
-
-        // Assert
-        results.Should().HaveCount(1);
-        var ds = results[0];
         ds.OpenAps.Should().BeNull();
         ds.Loop.Should().BeNull();
-        ds.Pump.Should().NotBeNull();
         ds.Pump!.Reservoir.Should().Be(42.0);
         ds.Pump.Manufacturer.Should().Be("Medtronic");
     }
 
-    #endregion
-
-    #region GetAsync — Pagination
-
     [Fact]
-    public async Task GetAsync_WithPagination_ReturnsPagedResults()
+    public async Task GetAsync_GivesTheOverrideOnlyToStatusesWithAps()
     {
-        // Arrange — 3 APS snapshots, request page of 2
-        var snapshots = Enumerable.Range(0, 2).Select(i =>
-        {
-            var s = CreateApsSnapshot(AidAlgorithm.OpenAps);
-            s.Timestamp = ReferenceTime.AddMinutes(-i);
-            s.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 120 + i }, JsonOptions);
-            return s;
-        }).ToList();
+        var aps = CreateApsSnapshot(AidAlgorithm.Loop);
+        aps.LoopJson = "{}";
+        var uploader = CreateUploaderSnapshot();
+        ReturnGroups(
+            new DeviceStatusGroup(aps, null, null, null, ReferenceTime),
+            new DeviceStatusGroup(null, null, uploader, null, ReferenceTime));
+        _stateSpanRepo
+            .Setup(r => r.GetByCategory(
+                StateSpanCategory.Override, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new StateSpan { StartTimestamp = ReferenceTime.AddMinutes(-5) }]);
 
-        _apsRepo
-            .Setup(r => r.GetAsync(null, null, null, null, 2, 1, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(snapshots);
-
-        // Act
-        var results = (await _service.GetAsync(2, 1, null, CancellationToken.None)).ToList();
-
-        // Assert
-        results.Should().HaveCount(2);
-        _apsRepo.Verify(r => r.GetAsync(null, null, null, null, 2, 1, true, It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    #endregion
-
-    #region GetAsync — Time Range
-
-    [Fact]
-    public async Task GetAsync_WithTimeRange_FiltersCorrectly()
-    {
-        // Arrange — the repo returns filtered results
-        var snapshot = CreateApsSnapshot(AidAlgorithm.AndroidAps);
-        snapshot.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 130 }, JsonOptions);
-
-        _apsRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
-                It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { snapshot });
-
-        // Act
         var results = (await _service.GetAsync(10, 0, null, CancellationToken.None)).ToList();
 
-        // Assert
-        results.Should().HaveCount(1);
-        results[0].OpenAps.Should().NotBeNull();
+        results.Select(r => r.Override is not null).Should().Equal(true, false);
+    }
+
+    [Fact]
+    public async Task GetAsync_PassesThePageToTheRepository()
+    {
+        await _service.GetAsync(2, 1, null, CancellationToken.None);
+
+        _groupRepo.Verify(r => r.GetAsync(null, null, null, 2, 1, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetAsync_WithDeviceFilter_PassesDeviceToRepository()
+    {
+        await _service.GetAsync(10, 0, "find[device]=openaps://rpi", CancellationToken.None);
+
+        _groupRepo.Verify(r => r.GetAsync(null, null, "openaps://rpi", 10, 0, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetAsync_WithDateRangeFilter_PassesDatesToRepository()
+    {
+        var expectedFrom = new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+        var expectedTo = new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1);
+
+        await _service.GetAsync(10, 0,
+            "find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z",
+            CancellationToken.None);
+
+        _groupRepo.Verify(r => r.GetAsync(expectedFrom, expectedTo, null, 10, 0, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     #endregion
@@ -571,57 +537,36 @@ public class DeviceStatusProjectionServiceTests
     #region GetModifiedSinceAsync
 
     [Fact]
-    public async Task GetModifiedSinceAsync_ReturnsModifiedRecords()
+    public async Task GetModifiedSinceAsync_ProjectsEachGroupStampedByItsNewestRow()
     {
-        // Arrange
-        var correlationId = Guid.NewGuid();
         var aps = CreateApsSnapshot(AidAlgorithm.AndroidAps);
-        aps.CorrelationId = correlationId;
         aps.ModifiedAt = ReferenceTime.AddMinutes(5);
         aps.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 140 }, JsonOptions);
-
         var pump = CreatePumpSnapshot();
-        pump.CorrelationId = correlationId;
         pump.Reservoir = 60.0;
+        var pumpChangedLater = ReferenceTime.AddMinutes(7);
+        ReturnHistory(new HistoryRecord<DeviceStatusGroup>(new(aps, pump, null, null, pumpChangedLater), Deleted: false));
 
-        _apsRepo
-            .Setup(r => r.GetModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new HistoryRecord<ApsSnapshot>(aps, Deleted: false)]);
-
-        _pumpRepo
-            .Setup(r => r.GetByCorrelationIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { pump });
-
-        // Act
         var results = (await _service.GetModifiedSinceAsync(ReferenceMillis, 100, CancellationToken.None)).ToList();
 
-        // Assert
-        results.Should().HaveCount(1);
-        results[0].OpenAps.Should().NotBeNull();
-        results[0].Pump.Should().NotBeNull();
-        results[0].Pump!.Reservoir.Should().Be(60.0);
-        results[0].SrvModified.Should().Be(Mills(aps.ModifiedAt));
-        results[0].IsValid.Should().BeNull();
+        var ds = results.Should().ContainSingle().Subject;
+        ds.OpenAps.Should().NotBeNull();
+        ds.Pump!.Reservoir.Should().Be(60.0);
+        ds.SrvModified.Should().Be(Mills(pumpChangedLater), "the history pages on the status's newest row");
+        ds.IsValid.Should().BeNull();
     }
 
     [Fact]
-    public async Task GetModifiedSinceAsync_DeletedSnapshot_ProjectsWithIsValidFalse()
+    public async Task GetModifiedSinceAsync_DeletedStatus_ProjectsWithIsValidFalse()
     {
-        var live = CreateApsSnapshot(AidAlgorithm.AndroidAps);
-        live.CorrelationId = null;
+        var live = CreateUploaderSnapshot();
         live.ModifiedAt = ReferenceTime.AddMinutes(1);
         var deleted = CreateApsSnapshot(AidAlgorithm.AndroidAps);
-        deleted.CorrelationId = null;
         deleted.LegacyId = "65f000000000000000000def";
         deleted.ModifiedAt = ReferenceTime.AddMinutes(2);
-
-        _apsRepo
-            .Setup(r => r.GetModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(
-            [
-                new HistoryRecord<ApsSnapshot>(live, Deleted: false),
-                new HistoryRecord<ApsSnapshot>(deleted, Deleted: true),
-            ]);
+        ReturnHistory(
+            new HistoryRecord<DeviceStatusGroup>(new(null, null, live, null, live.ModifiedAt), Deleted: false),
+            new HistoryRecord<DeviceStatusGroup>(new(deleted, null, null, null, deleted.ModifiedAt), Deleted: true));
 
         var results = (await _service.GetModifiedSinceAsync(ReferenceMillis, 100, CancellationToken.None)).ToList();
 
@@ -655,6 +600,34 @@ public class DeviceStatusProjectionServiceTests
         result.Should().NotBeNull();
         result!.OpenAps.Should().NotBeNull();
         _apsRepo.Verify(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_WithTheIdAnExtrasOnlyStatusIsListedUnder_ProjectsIt()
+    {
+        var extras = new DeviceStatusExtras
+        {
+            Id = Guid.NewGuid(),
+            CorrelationId = Guid.NewGuid(),
+            Timestamp = ReferenceTime,
+            Extras = new Dictionary<string, object?> { ["xdripjs"] = new { state = 6 } },
+        };
+        _extrasRepo.Setup(r => r.GetByIdAsync(extras.Id, It.IsAny<CancellationToken>())).ReturnsAsync(extras);
+        _extrasRepo
+            .Setup(r => r.GetByCorrelationIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([extras]);
+        _apsRepo
+            .Setup(r => r.GetByCorrelationIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _stateSpanRepo
+            .Setup(r => r.GetByCategory(
+                It.IsAny<StateSpanCategory>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var result = await _service.GetByIdAsync(extras.Id.ToString(), CancellationToken.None);
+
+        result!.Id.Should().Be(extras.Id.ToString());
+        result.XDripJs.Should().NotBeNull();
     }
 
     #endregion
@@ -930,37 +903,19 @@ public class DeviceStatusProjectionServiceTests
     #region CountAsync
 
     [Fact]
-    public async Task CountAsync_WithNoFilter_ReturnsSumOfApsAndOrphanPump()
+    public async Task CountAsync_ReturnsTheRepositoryCount()
     {
-        _apsRepo
-            .Setup(r => r.CountAsync(null, null, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(10);
-        _pumpRepo
-            .Setup(r => r.CountUncorrelatedAsync(null, null, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(2);
+        _groupRepo.Setup(r => r.CountAsync(null, null, null, It.IsAny<CancellationToken>())).ReturnsAsync(12);
 
-        var count = await _service.CountAsync(null, CancellationToken.None);
-
-        count.Should().Be(12);
+        (await _service.CountAsync(null, CancellationToken.None)).Should().Be(12);
     }
 
     [Fact]
-    public async Task CountAsync_WithDateFilter_PassesDatesToRepos()
+    public async Task CountAsync_WithDateFilter_PassesDatesToRepository()
     {
-        _apsRepo
-            .Setup(r => r.CountAsync(
-                It.Is<DateTime?>(d => d.HasValue),
-                It.Is<DateTime?>(d => d.HasValue),
-                null,
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(5);
-        _pumpRepo
-            .Setup(r => r.CountUncorrelatedAsync(
-                It.Is<DateTime?>(d => d.HasValue),
-                It.Is<DateTime?>(d => d.HasValue),
-                null,
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(3);
+        var expectedFrom = new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+        var expectedTo = new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1);
+        _groupRepo.Setup(r => r.CountAsync(expectedFrom, expectedTo, null, It.IsAny<CancellationToken>())).ReturnsAsync(8);
 
         var count = await _service.CountAsync(
             "find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z",
@@ -970,68 +925,28 @@ public class DeviceStatusProjectionServiceTests
     }
 
     [Fact]
-    public async Task CountAsync_WithDeviceFilter_PassesDeviceToRepos()
+    public async Task CountAsync_WithDeviceFilter_PassesDeviceToRepository()
     {
-        _apsRepo
-            .Setup(r => r.CountAsync(null, null, "openaps://rpi", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(3);
-        _pumpRepo
-            .Setup(r => r.CountUncorrelatedAsync(null, null, "openaps://rpi", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(1);
+        _groupRepo.Setup(r => r.CountAsync(null, null, "openaps://rpi", It.IsAny<CancellationToken>())).ReturnsAsync(4);
 
-        var count = await _service.CountAsync("find[device]=openaps://rpi", CancellationToken.None);
-
-        count.Should().Be(4);
-    }
-
-    #endregion
-
-    #region GetAsync — Find Filtering
-
-    [Fact]
-    public async Task GetAsync_WithDeviceFilter_PassesDeviceToRepository()
-    {
-        var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
-        aps.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 120 }, JsonOptions);
-
-        _apsRepo
-            .Setup(r => r.GetAsync(null, null, "openaps://rpi", null,
-                It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { aps });
-
-        var results = (await _service.GetAsync(10, 0, "find[device]=openaps://rpi", CancellationToken.None)).ToList();
-
-        results.Should().HaveCount(1);
-        _apsRepo.Verify(r => r.GetAsync(null, null, "openaps://rpi", null,
-            10, 0, true, It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task GetAsync_WithDateRangeFilter_PassesDatesToRepository()
-    {
-        var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
-        aps.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 120 }, JsonOptions);
-
-        var expectedFrom = new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc);
-        var expectedTo = new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1);
-
-        _apsRepo
-            .Setup(r => r.GetAsync(expectedFrom, expectedTo, null, null,
-                It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { aps });
-
-        var results = (await _service.GetAsync(10, 0,
-            "find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z",
-            CancellationToken.None)).ToList();
-
-        results.Should().HaveCount(1);
-        _apsRepo.Verify(r => r.GetAsync(expectedFrom, expectedTo, null, null,
-            10, 0, true, It.IsAny<CancellationToken>()), Times.Once);
+        (await _service.CountAsync("find[device]=openaps://rpi", CancellationToken.None)).Should().Be(4);
     }
 
     #endregion
 
     #region Helpers
+
+    private void ReturnGroups(params DeviceStatusGroup[] groups) =>
+        _groupRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(groups);
+
+    private void ReturnHistory(params HistoryRecord<DeviceStatusGroup>[] page) =>
+        _groupRepo
+            .Setup(r => r.GetModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(page);
 
     private static long Mills(DateTime value) =>
         new DateTimeOffset(value, TimeSpan.Zero).ToUnixTimeMilliseconds();

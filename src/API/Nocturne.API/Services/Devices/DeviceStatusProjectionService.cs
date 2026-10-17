@@ -14,21 +14,15 @@ namespace Nocturne.API.Services.Devices;
 /// to <see cref="V4.DeviceStatusDecomposer"/>, which breaks them apart on write.
 /// </summary>
 /// <remarks>
-/// <para>
-/// <see cref="ApsSnapshot"/> is the primary query anchor because most device status records
-/// include APS data. Orphan <see cref="PumpSnapshot"/> and <see cref="UploaderSnapshot"/>
-/// records (those without a matching APS correlation) cover the xDrip+ case where only
-/// pump/uploader data is submitted.
-/// </para>
-/// <para>
-/// Correlated records are batch-loaded by <see cref="IV4Record.CorrelationId"/> and merged
-/// into a single <see cref="DeviceStatus"/> per correlation group.
-/// </para>
+/// Which rows make up one status, and which of them places it, is
+/// <see cref="IDeviceStatusGroupRepository"/>'s rule; every list, count and history read here goes
+/// through it.
 /// </remarks>
 /// <seealso cref="V4.DeviceStatusDecomposer"/>
 /// <seealso cref="DeviceStatus"/>
 public class DeviceStatusProjectionService
 {
+    private readonly IDeviceStatusGroupRepository _groupRepo;
     private readonly IApsSnapshotRepository _apsRepo;
     private readonly IPumpSnapshotRepository _pumpRepo;
     private readonly IUploaderSnapshotRepository _uploaderRepo;
@@ -42,6 +36,7 @@ public class DeviceStatusProjectionService
     };
 
     public DeviceStatusProjectionService(
+        IDeviceStatusGroupRepository groupRepo,
         IApsSnapshotRepository apsRepo,
         IPumpSnapshotRepository pumpRepo,
         IUploaderSnapshotRepository uploaderRepo,
@@ -49,6 +44,7 @@ public class DeviceStatusProjectionService
         IDeviceStatusExtrasRepository extrasRepo,
         ILogger<DeviceStatusProjectionService> logger)
     {
+        _groupRepo = groupRepo;
         _apsRepo = apsRepo;
         _pumpRepo = pumpRepo;
         _uploaderRepo = uploaderRepo;
@@ -58,9 +54,7 @@ public class DeviceStatusProjectionService
     }
 
     /// <summary>
-    /// Returns paginated <see cref="DeviceStatus"/> documents projected from V4 snapshots.
-    /// APS snapshots are the primary anchor; orphan pump/uploader snapshots are included
-    /// for completeness (xDrip+ case).
+    /// Returns paginated <see cref="DeviceStatus"/> documents projected from V4 snapshots, newest first.
     /// </summary>
     /// <param name="count">Maximum number of results.</param>
     /// <param name="skip">Number of results to skip for pagination.</param>
@@ -70,82 +64,8 @@ public class DeviceStatusProjectionService
         int count, int skip, string? find, CancellationToken ct)
     {
         var (device, from, to) = ParseFindQuery(find);
-
-        // 1. Query APS snapshots as primary anchor (newest-first with pagination)
-        var apsSnapshots = (await _apsRepo.GetAsync(
-            from: from, to: to, device: device, source: null,
-            limit: count, offset: skip, descending: true, ct: ct)).ToList();
-
-        // 2. Collect correlation IDs from APS results
-        var apsCorrelationIds = apsSnapshots
-            .Where(a => a.CorrelationId.HasValue)
-            .Select(a => a.CorrelationId!.Value)
-            .ToHashSet();
-
-        // 3. Query orphan pump snapshots (those whose CorrelationId is not in the APS set).
-        //    Only include orphans on the first page (skip == 0) — on subsequent pages they
-        //    would have already appeared, and mixing two offset spaces breaks pagination.
-        var orphanPumps = new List<PumpSnapshot>();
-        if (skip == 0)
-        {
-            var allPumpSnapshots = (await _pumpRepo.GetAsync(
-                from: from, to: to, device: device, source: null,
-                limit: count, offset: 0, descending: true, ct: ct)).ToList();
-
-            orphanPumps = allPumpSnapshots
-                .Where(p => !p.CorrelationId.HasValue || !apsCorrelationIds.Contains(p.CorrelationId.Value))
-                .ToList();
-        }
-
-        // 4. Batch-load correlated records
-        var allCorrelationIds = apsCorrelationIds.ToList();
-
-        var correlatedPumps = allCorrelationIds.Count > 0
-            ? (await _pumpRepo.GetByCorrelationIdsAsync(allCorrelationIds, ct)).ToList()
-            : new List<PumpSnapshot>();
-
-        var correlatedUploaders = allCorrelationIds.Count > 0
-            ? (await _uploaderRepo.GetByCorrelationIdsAsync(allCorrelationIds, ct)).ToList()
-            : new List<UploaderSnapshot>();
-
-        var extras = allCorrelationIds.Count > 0
-            ? (await _extrasRepo.GetByCorrelationIdsAsync(allCorrelationIds, ct)).ToList()
-            : new List<DeviceStatusExtras>();
-
-        // Load override state spans that overlap with the time range of results
-        var overrides = await LoadOverridesForSnapshots(apsSnapshots, ct);
-
-        // Build lookup dictionaries by CorrelationId
-        var pumpByCorrelation = correlatedPumps
-            .Where(p => p.CorrelationId.HasValue)
-            .ToLookup(p => p.CorrelationId!.Value);
-        var uploaderByCorrelation = correlatedUploaders
-            .Where(u => u.CorrelationId.HasValue)
-            .ToLookup(u => u.CorrelationId!.Value);
-        var extrasByCorrelation = extras
-            .ToLookup(e => e.CorrelationId);
-
-        // 5. Project each APS snapshot into a DeviceStatus
-        var results = new List<DeviceStatus>();
-
-        foreach (var aps in apsSnapshots)
-        {
-            var correlationId = aps.CorrelationId;
-            var pump = correlationId.HasValue ? pumpByCorrelation[correlationId.Value].FirstOrDefault() : null;
-            var uploader = correlationId.HasValue ? uploaderByCorrelation[correlationId.Value].FirstOrDefault() : null;
-            var extra = correlationId.HasValue ? extrasByCorrelation[correlationId.Value].FirstOrDefault() : null;
-            var overrideSpan = FindOverrideForTimestamp(overrides, aps.Timestamp);
-
-            results.Add(ProjectFromSnapshots(aps, pump, uploader, overrideSpan, extra, _logger));
-        }
-
-        // 6. Project orphan pump snapshots (no APS correlation)
-        foreach (var pump in orphanPumps)
-        {
-            results.Add(ProjectFromSnapshots(null, pump, null, null, null, _logger));
-        }
-
-        return results.OrderByDescending(d => d.Mills).Take(count);
+        var groups = await _groupRepo.GetAsync(from, to, device, count, skip, ct);
+        return await ProjectAsync(groups, ct);
     }
 
     /// <summary>
@@ -159,6 +79,7 @@ public class DeviceStatusProjectionService
         ApsSnapshot? aps = null;
         PumpSnapshot? pump = null;
         UploaderSnapshot? uploader = null;
+        DeviceStatusExtras? extras = null;
 
         if (Guid.TryParse(id, out var uuid))
         {
@@ -167,10 +88,12 @@ public class DeviceStatusProjectionService
                 pump = await _pumpRepo.GetByIdAsync(uuid, ct);
             if (aps == null && pump == null)
                 uploader = await _uploaderRepo.GetByIdAsync(uuid, ct);
+            if (aps == null && pump == null && uploader == null)
+                extras = await _extrasRepo.GetByIdAsync(uuid, ct);
         }
 
         // Fallback to legacy ID
-        if (aps == null && pump == null && uploader == null)
+        if (aps == null && pump == null && uploader == null && extras == null)
         {
             aps = await _apsRepo.GetByLegacyIdAsync(id, ct);
             if (aps == null)
@@ -180,7 +103,7 @@ public class DeviceStatusProjectionService
         }
 
         // Fallback to a 24-hex ObjectId derived from the record's UUID (resolved via prefix range).
-        if (aps == null && pump == null && uploader == null
+        if (aps == null && pump == null && uploader == null && extras == null
             && MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
         {
             aps = await _apsRepo.GetByGuidRangeAsync(low, high, ct);
@@ -188,13 +111,15 @@ public class DeviceStatusProjectionService
                 pump = await _pumpRepo.GetByGuidRangeAsync(low, high, ct);
             if (aps == null && pump == null)
                 uploader = await _uploaderRepo.GetByGuidRangeAsync(low, high, ct);
+            if (aps == null && pump == null && uploader == null)
+                extras = await _extrasRepo.GetByGuidRangeAsync(low, high, ct);
         }
 
-        if (aps == null && pump == null && uploader == null)
+        if (aps == null && pump == null && uploader == null && extras == null)
             return null;
 
         // Load correlated records if we found an anchor
-        var correlationId = aps?.CorrelationId ?? pump?.CorrelationId ?? uploader?.CorrelationId;
+        var correlationId = aps?.CorrelationId ?? pump?.CorrelationId ?? uploader?.CorrelationId ?? extras?.CorrelationId;
 
         if (correlationId.HasValue)
         {
@@ -216,8 +141,8 @@ public class DeviceStatusProjectionService
                 uploader = uploaderRecords.FirstOrDefault();
             }
 
-            var extras = (await _extrasRepo.GetByCorrelationIdsAsync(correlationIds, ct)).FirstOrDefault();
-            var timestamp = aps?.Timestamp ?? pump?.Timestamp ?? uploader?.Timestamp ?? DateTime.UtcNow;
+            extras ??= (await _extrasRepo.GetByCorrelationIdsAsync(correlationIds, ct)).FirstOrDefault();
+            var timestamp = aps?.Timestamp ?? pump?.Timestamp ?? uploader?.Timestamp ?? extras?.Timestamp ?? DateTime.UtcNow;
             var overrides = await _stateSpanRepo.GetByCategory(
                 StateSpanCategory.Override,
                 from: timestamp.AddMinutes(-1),
@@ -232,9 +157,8 @@ public class DeviceStatusProjectionService
     }
 
     /// <summary>
-    /// Returns <see cref="DeviceStatus"/> documents projected from APS snapshots
-    /// modified since the given Unix millisecond threshold. Used for AAPS incremental sync.
-    /// A deleted snapshot projects with <c>isValid: false</c>.
+    /// Returns <see cref="DeviceStatus"/> documents modified since the given Unix millisecond
+    /// threshold. Used for AAPS incremental sync. A deleted status projects with <c>isValid: false</c>.
     /// </summary>
     /// <param name="lastModified">Unix millisecond timestamp threshold.</param>
     /// <param name="limit">Maximum number of results.</param>
@@ -242,73 +166,61 @@ public class DeviceStatusProjectionService
     public async Task<IEnumerable<DeviceStatus>> GetModifiedSinceAsync(
         long lastModified, int limit, CancellationToken ct)
     {
-        var page = await _apsRepo.GetModifiedSinceAsync(lastModified, limit, ct);
+        var page = await _groupRepo.GetModifiedSinceAsync(lastModified, limit, ct);
+        var statuses = await ProjectAsync(page.Select(r => r.Record).ToList(), ct);
 
-        if (page.Count == 0)
-            return Enumerable.Empty<DeviceStatus>();
-
-        var apsSnapshots = page.Select(r => r.Record).ToList();
-
-        var correlationIds = apsSnapshots
-            .Where(a => a.CorrelationId.HasValue)
-            .Select(a => a.CorrelationId!.Value)
-            .Distinct()
-            .ToList();
-
-        var pumps = correlationIds.Count > 0
-            ? (await _pumpRepo.GetByCorrelationIdsAsync(correlationIds, ct)).ToList()
-            : new List<PumpSnapshot>();
-        var uploaders = correlationIds.Count > 0
-            ? (await _uploaderRepo.GetByCorrelationIdsAsync(correlationIds, ct)).ToList()
-            : new List<UploaderSnapshot>();
-        var extras = correlationIds.Count > 0
-            ? (await _extrasRepo.GetByCorrelationIdsAsync(correlationIds, ct)).ToList()
-            : new List<DeviceStatusExtras>();
-
-        var pumpByCorrelation = pumps.Where(p => p.CorrelationId.HasValue).ToLookup(p => p.CorrelationId!.Value);
-        var uploaderByCorrelation = uploaders.Where(u => u.CorrelationId.HasValue).ToLookup(u => u.CorrelationId!.Value);
-        var extrasByCorrelation = extras.ToLookup(e => e.CorrelationId);
-
-        // Load override state spans the same way as GetAsync/GetByIdAsync
-        var overrides = await LoadOverridesForSnapshots(apsSnapshots, ct);
-
-        return page.Select(row =>
+        for (var i = 0; i < page.Count; i++)
         {
-            var aps = row.Record;
-            var cid = aps.CorrelationId;
-            var pump = cid.HasValue ? pumpByCorrelation[cid.Value].FirstOrDefault() : null;
-            var uploader = cid.HasValue ? uploaderByCorrelation[cid.Value].FirstOrDefault() : null;
-            var extra = cid.HasValue ? extrasByCorrelation[cid.Value].FirstOrDefault() : null;
-            var overrideSpan = FindOverrideForTimestamp(overrides, aps.Timestamp);
-            var status = ProjectFromSnapshots(aps, pump, uploader, overrideSpan, extra, _logger);
-            if (row.Deleted)
-                status.IsValid = false;
-            return status;
-        });
+            if (page[i].Deleted)
+                statuses[i].IsValid = false;
+        }
+
+        return statuses;
     }
 
     /// <summary>
     /// Returns the number of <see cref="DeviceStatus"/> documents <see cref="GetAsync"/> projects for
-    /// <paramref name="find"/> without a page limit: every APS snapshot plus every pump snapshot
-    /// no APS snapshot in the same window and device correlates with.
+    /// <paramref name="find"/> without a page limit.
     /// </summary>
     /// <param name="find">MongoDB-style query filter (same format as <see cref="GetAsync"/>).</param>
     /// <param name="ct">Cancellation token.</param>
     public async Task<long> CountAsync(string? find, CancellationToken ct)
     {
         var (device, from, to) = ParseFindQuery(find);
+        return await _groupRepo.CountAsync(from, to, device, ct);
+    }
 
-        var apsCount = await _apsRepo.CountAsync(from, to, device, ct);
-        var orphanPumpCount = await _pumpRepo.CountUncorrelatedAsync(from, to, device, ct);
+    /// <summary>
+    /// Projects each group, giving a status with an APS snapshot the override active at its time.
+    /// <c>srvModified</c> is the group's <see cref="DeviceStatusGroup.ModifiedAt"/>, the stamp the
+    /// history pages on, so a client's cursor never passes a status it has not seen.
+    /// </summary>
+    private async Task<List<DeviceStatus>> ProjectAsync(IReadOnlyList<DeviceStatusGroup> groups, CancellationToken ct)
+    {
+        var overrides = await LoadOverridesForSnapshots(groups.Select(g => g.Aps).OfType<ApsSnapshot>().ToList(), ct);
 
-        return apsCount + orphanPumpCount;
+        return groups
+            .Select(g =>
+            {
+                var status = ProjectFromSnapshots(
+                    g.Aps,
+                    g.Pump,
+                    g.Uploader,
+                    g.Aps is { } aps ? FindOverrideForTimestamp(overrides, aps.Timestamp) : null,
+                    g.Extras,
+                    _logger);
+                status.SrvModified = new DateTimeOffset(g.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                return status;
+            })
+            .ToList();
     }
 
     #region Projection Logic
 
     /// <summary>
-    /// Projects V4 snapshots into a legacy <see cref="DeviceStatus"/> document.
-    /// At least one of <paramref name="aps"/> or <paramref name="pump"/> must be non-null.
+    /// Projects V4 snapshots into a legacy <see cref="DeviceStatus"/> document, identified by the first
+    /// of <paramref name="aps"/>, <paramref name="pump"/>, <paramref name="uploader"/> and
+    /// <paramref name="extras"/> present. At least one must be.
     /// </summary>
     internal static DeviceStatus ProjectFromSnapshots(
         ApsSnapshot? aps,
@@ -318,22 +230,14 @@ public class DeviceStatusProjectionService
         DeviceStatusExtras? extras,
         ILogger? logger = null)
     {
-        var anchor = (IV4Record?)aps ?? (IV4Record?)pump ?? (IV4Record?)uploader
-            ?? throw new ArgumentException("At least one snapshot must be non-null");
-
-        var ds = new DeviceStatus
-        {
-            Id = anchor.LegacyId ?? anchor.Id.ToString(),
-            Mills = anchor.Mills,
-            Date = anchor.Mills,
-            SrvModified = new DateTimeOffset(anchor.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            SrvCreated = new DateTimeOffset(anchor.CreatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            // Nightscout clients place a status on the timeline by created_at, so it is the event
-            // time; the server clock is srvCreated.
-            CreatedAt = anchor.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-            UtcOffset = anchor.UtcOffset,
-            Device = anchor.Device ?? string.Empty,
-        };
+        var anchor = (IV4Record?)aps ?? (IV4Record?)pump ?? uploader;
+        var ds = anchor is not null
+            ? NewStatus(anchor.LegacyId ?? anchor.Id.ToString(), anchor.Timestamp, anchor.CreatedAt,
+                anchor.ModifiedAt, anchor.UtcOffset, anchor.Device)
+            : extras is not null
+                ? NewStatus(extras.Id.ToString(), extras.Timestamp, extras.CreatedAt, extras.ModifiedAt,
+                    utcOffset: null, device: null)
+                : throw new ArgumentException("At least one snapshot must be non-null");
 
         // Project APS data
         if (aps != null)
@@ -373,6 +277,25 @@ public class DeviceStatusProjectionService
         }
 
         return ds;
+    }
+
+    private static DeviceStatus NewStatus(
+        string id, DateTime timestamp, DateTime createdAt, DateTime modifiedAt, int? utcOffset, string? device)
+    {
+        var mills = new DateTimeOffset(timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        return new DeviceStatus
+        {
+            Id = id,
+            Mills = mills,
+            Date = mills,
+            SrvModified = new DateTimeOffset(modifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            SrvCreated = new DateTimeOffset(createdAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            // Nightscout clients place a status on the timeline by created_at, so it is the event
+            // time; the server clock is srvCreated.
+            CreatedAt = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            UtcOffset = utcOffset,
+            Device = device ?? string.Empty,
+        };
     }
 
     private static void ProjectLoopData(DeviceStatus ds, ApsSnapshot aps, ILogger? logger = null)
