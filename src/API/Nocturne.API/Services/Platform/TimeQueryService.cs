@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Platform;
@@ -17,8 +16,6 @@ namespace Nocturne.API.Services.Platform;
 /// <seealso cref="IBraceExpansionService"/>
 public class TimeQueryService : ITimeQueryService
 {
-    private static readonly string[] OperatorSuffixes = ["_gte", "_lte", "_gt", "_lt", "_ne", "_regex", "_in", "_nin"];
-
     private readonly IEntryService _entries;
     private readonly ITreatmentService _treatments;
     private readonly DeviceStatusProjectionService _deviceStatuses;
@@ -48,7 +45,7 @@ public class TimeQueryService : ITimeQueryService
         string? regex,
         string storage = "entries",
         string fieldName = "dateString",
-        Dictionary<string, object>? queryParameters = null,
+        string? find = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -60,108 +57,13 @@ public class TimeQueryService : ITimeQueryService
             fieldName
         );
 
-        // Prepare time patterns for the specified field
         var timePatterns = _braceExpansionService.PrepareTimePatterns(prefix, regex, fieldName);
-
-        // Build query parameters for PostgreSQL
-        var queryParams = new Dictionary<string, object>();
-
-        // Add time pattern filtering
-        if (
-            timePatterns.CanOptimizeWithIndex
-            && !string.IsNullOrEmpty(timePatterns.SingleRegexPattern)
-        )
-        {
-            queryParams[fieldName + "_regex"] = timePatterns.SingleRegexPattern;
-        }
-        else if (timePatterns.InPatterns?.Any() == true)
-        {
-            queryParams[fieldName + "_in"] = timePatterns.InPatterns;
-        }
-
-        // Apply additional query parameters
-        if (queryParameters != null)
-        {
-            foreach (var kvp in queryParameters)
-            {
-                // Handle special MongoDB-style query operators
-                if (kvp.Key == "find" && kvp.Value is Dictionary<string, object> findDict)
-                {
-                    foreach (var findKvp in findDict)
-                    {
-                        if (findKvp.Value is Dictionary<string, object> operatorDict)
-                        {
-                            // Handle MongoDB operators like $in, $nin, $regex, etc.
-                            foreach (var opKvp in operatorDict)
-                            {
-                                switch (opKvp.Key)
-                                {
-                                    case "$in":
-                                        queryParams[findKvp.Key + "_in"] = ConvertArray(
-                                            opKvp.Value
-                                        );
-                                        break;
-                                    case "$nin":
-                                        queryParams[findKvp.Key + "_nin"] = ConvertArray(
-                                            opKvp.Value
-                                        );
-                                        break;
-                                    case "$regex":
-                                        queryParams[findKvp.Key + "_regex"] = ConvertValue(
-                                            opKvp.Value
-                                        );
-                                        break;
-                                    case "$gte":
-                                        queryParams[findKvp.Key + "_gte"] = ConvertValue(
-                                            opKvp.Value
-                                        );
-                                        break;
-                                    case "$lte":
-                                        queryParams[findKvp.Key + "_lte"] = ConvertValue(
-                                            opKvp.Value
-                                        );
-                                        break;
-                                    case "$gt":
-                                        queryParams[findKvp.Key + "_gt"] = ConvertValue(
-                                            opKvp.Value
-                                        );
-                                        break;
-                                    case "$lt":
-                                        queryParams[findKvp.Key + "_lt"] = ConvertValue(
-                                            opKvp.Value
-                                        );
-                                        break;
-                                    case "$ne":
-                                        queryParams[findKvp.Key + "_ne"] = ConvertValue(
-                                            opKvp.Value
-                                        );
-                                        break;
-                                    default:
-                                        queryParams[findKvp.Key] = ConvertValue(opKvp.Value);
-                                        break;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            queryParams[findKvp.Key] = ConvertValue(findKvp.Value);
-                        }
-                    }
-                }
-                else if (kvp.Key != "count" && kvp.Key != "sort")
-                {
-                    queryParams[kvp.Key] = ConvertValue(kvp.Value);
-                }
-            }
-        }
-
-        // Execute query based on storage type
-        var findQuery = ConvertQueryParamsToFindQuery(queryParams);
+        var findQuery = BuildFind(find, fieldName, timePatterns, type: null);
 
         return storage.ToLowerInvariant() switch
         {
             "entries" => await _entries.GetEntriesWithAdvancedFilterAsync(
-                findQuery ?? "{}",
+                findQuery,
                 count: 1000,
                 skip: 0,
                 cancellationToken: cancellationToken
@@ -196,7 +98,7 @@ public class TimeQueryService : ITimeQueryService
         string? type,
         string? prefix,
         string? regex,
-        Dictionary<string, object>? queryParameters = null,
+        string? find = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -209,49 +111,13 @@ public class TimeQueryService : ITimeQueryService
             regex
         );
 
-        // Prepare time patterns for the specified field
         var timePatterns = _braceExpansionService.PrepareTimePatterns(prefix, regex, field);
-
-        // Build query parameters for PostgreSQL
-        var queryParams = new Dictionary<string, object>();
-
-        // Add time pattern filtering
-        if (
-            timePatterns.CanOptimizeWithIndex
-            && !string.IsNullOrEmpty(timePatterns.SingleRegexPattern)
-        )
-        {
-            queryParams[field + "_regex"] = timePatterns.SingleRegexPattern;
-        }
-        else
-        {
-            queryParams[field + "_in"] = timePatterns.InPatterns;
-        }
-
-        // Apply type filter if specified
-        if (!string.IsNullOrEmpty(type))
-        {
-            queryParams["type"] = type;
-        }
-
-        // Apply additional query parameters
-        if (queryParameters != null)
-        {
-            foreach (var kvp in queryParameters)
-            {
-                queryParams[kvp.Key] = kvp.Value;
-            }
-        }
-
-        // Execute query based on storage type
-        // Note: PostgreSQL service uses different method signatures than MongoDB
-        // Converting parameters to match PostgreSQL API
-        var findQuery = ConvertQueryParamsToFindQuery(queryParams);
+        var findQuery = BuildFind(find, field, timePatterns, type);
 
         return storage.ToLowerInvariant() switch
         {
             "entries" => await _entries.GetEntriesWithAdvancedFilterAsync(
-                findQuery ?? "{}",
+                findQuery,
                 count: 1000,
                 skip: 0,
                 cancellationToken: cancellationToken
@@ -332,18 +198,6 @@ public class TimeQueryService : ITimeQueryService
                     queryStructure[kvp.Key] = kvp.Value;
                 }
             }
-
-            // Handle find parameters
-            if (
-                queryParameters.TryGetValue("find", out var findValue)
-                && findValue is Dictionary<string, object> findDict
-            )
-            {
-                foreach (var findKvp in findDict)
-                {
-                    queryStructure[findKvp.Key] = findKvp.Value;
-                }
-            }
         }
 
         return new TimeQueryEcho
@@ -365,87 +219,36 @@ public class TimeQueryService : ITimeQueryService
     }
 
     /// <summary>
-    /// Convert a value to the appropriate type for MongoDB queries
+    /// Merges the time pattern and slice type with the caller's <c>find[...]</c> keys into one
+    /// querystring-form find, the shape every read service parses. A single prefix is ANDed with
+    /// the expanded patterns, as upstream does. Expanded patterns become one alternation because
+    /// <c>$in</c> compares literally. Repeated <c>$regex</c> keys on one field stay separate
+    /// conditions in <see cref="Nocturne.Core.Models.Queries.FindQuery"/>.
     /// </summary>
-    private object ConvertValue(object value)
+    private static string BuildFind(
+        string? find,
+        string field,
+        Nocturne.Core.Contracts.Legacy.TimePatternQuery timePatterns,
+        string? type
+    )
     {
-        if (value is JsonElement jsonElement)
-        {
-            return jsonElement.ValueKind switch
-            {
-                JsonValueKind.Number => jsonElement.TryGetInt64(out var longVal)
-                    ? longVal
-                    : jsonElement.GetDouble(),
-                JsonValueKind.String => jsonElement.GetString() ?? "",
-                JsonValueKind.True => true,
-                JsonValueKind.False => false,
-                _ => value.ToString() ?? "",
-            };
-        }
+        var patterns = new List<string>();
+        if (timePatterns.CanOptimizeWithIndex && !string.IsNullOrEmpty(timePatterns.SingleRegexPattern))
+            patterns.Add(timePatterns.SingleRegexPattern);
 
-        return value;
-    }
+        var expanded = (timePatterns.InPatterns ?? []).Where(p => p.Length > 0).ToArray();
+        if (expanded.Length > 0)
+            patterns.Add(string.Join('|', expanded));
 
-    /// <summary>
-    /// Convert a value to an array for MongoDB $in/$nin operations
-    /// </summary>
-    private IEnumerable<object> ConvertArray(object value)
-    {
-        if (value is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Array)
-        {
-            return jsonElement.EnumerateArray().Select(element => ConvertValue(element)).ToArray();
-        }
+        var terms = patterns
+            .Select(p => $"find[{field}][$regex]={Uri.EscapeDataString(p)}")
+            .ToList();
+        if (!string.IsNullOrEmpty(type))
+            terms.Add($"find[type]={Uri.EscapeDataString(type)}");
+        if (!string.IsNullOrEmpty(find))
+            terms.Add(find);
 
-        if (value is IEnumerable<object> enumerable)
-        {
-            return enumerable.Select(item => ConvertValue(item)).ToArray();
-        }
-
-        return new[] { ConvertValue(value) };
-    }
-
-    /// <summary>
-    /// Convert query parameters dictionary to standard MongoDB JSON format.
-    /// Translates field_operator keys (e.g. dateString_regex) into
-    /// <c>{"field": {"$operator": value}}</c> for downstream find-query parsing.
-    /// </summary>
-    private string? ConvertQueryParamsToFindQuery(Dictionary<string, object> queryParams)
-    {
-        if (queryParams.Count == 0)
-        {
-            return null;
-        }
-
-        // Convert field_operator format to MongoDB JSON: {"field": {"$operator": value}}
-        var mongoDoc = new Dictionary<string, object>();
-
-        foreach (var kvp in queryParams)
-        {
-            var key = kvp.Key;
-            var value = kvp.Value;
-
-            // Check for operator suffix pattern: field_gte, field_lte, field_regex, etc.
-            var matchedSuffix = OperatorSuffixes.FirstOrDefault(s => key.EndsWith(s));
-
-            if (matchedSuffix != null)
-            {
-                var fieldName = key[..^matchedSuffix.Length];
-                var mongoOp = "$" + matchedSuffix[1..]; // _gte → $gte
-
-                if (!mongoDoc.TryGetValue(fieldName, out var existing) || existing is not Dictionary<string, object> ops)
-                {
-                    ops = new Dictionary<string, object>();
-                    mongoDoc[fieldName] = ops;
-                }
-                ops[mongoOp] = value;
-            }
-            else
-            {
-                mongoDoc[key] = value;
-            }
-        }
-
-        return JsonSerializer.Serialize(mongoDoc);
+        return string.Join('&', terms);
     }
 
     /// <summary>
