@@ -375,10 +375,13 @@ Design notes:
   `Cache-Control` headers follow the same rule: a tenant data read is never `public`
   (V3 reads send `private, max-age=60`, pinned by `V3CacheControlTests`).
 - **PHI cache invariant.** The same holds for the tenant-keyed application caches of
-  time-series data (`EntryCacheAdapter`, `TreatmentCacheAdapter`, the multi-period
-  statistics, the eHbA1c timeline): their keys carry the tenant, not the history
-  window, so a history-clamped request (`ICategoryReadContext.IsHistoryClamped`)
-  neither reads nor writes them. Do not key them by clamp instead. A read that fans out
+  time-series data and of values derived from it (`EntryCacheAdapter`,
+  `TreatmentCacheAdapter`, the multi-period statistics, the eHbA1c timeline, IOB/COB, the
+  active-profile and basal-assignment resolvers): their keys carry the tenant, not the
+  history window or the share's categories, so a history-clamped request or any share
+  (`ICategoryReadContext.BypassesTenantCaches`) neither reads nor writes them. A
+  full-history share still differs from the owner: every table no granted scope governs
+  is hidden from it. Do not key them by clamp or share instead. A read that fans out
   in a fresh DI scope (`TenantOverviewService`) carries the caller's clamp into that
   scope's `ICategoryReadContext`.
 

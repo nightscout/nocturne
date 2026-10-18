@@ -1659,19 +1659,13 @@ public class DataOverviewServiceTests : IDisposable
 
     [Theory]
     [Trait("Category", "Unit")]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task GetEHbA1cTimelineAsync_HistoryClamped_NeitherReadsNorWritesTheCache(bool share)
+    [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
+    public async Task GetEHbA1cTimelineAsync_BypassingCaller_NeitherReadsNorWritesTheCache(string caller)
     {
-        // The cache holds a full-history timeline an unclamped reader loaded; a clamped reader
-        // must not be served it, nor leave its own narrowed timeline for the next reader.
         _cacheService
             .Setup(c => c.GetAsync<EHbA1cTimelineResponse>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new EHbA1cTimelineResponse { Year = 2024 });
-        if (share)
-            _categoryReadContext.MarkShare();
-        else
-            _categoryReadContext.ClampMemberHistory();
+        CacheBypassingCallers.Become(_categoryReadContext, caller);
 
         await _service.GetEHbA1cTimelineAsync(2024);
 

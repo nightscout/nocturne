@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Platform;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
@@ -9,8 +10,8 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Tests.Services.Treatments;
 
 /// <summary>
-/// The recent-treatment cache is keyed by tenant alone, so a history-clamped reader has to stay
-/// out of it entirely, for the reason given on <see cref="Entries.EntryCacheAdapterTests"/>.
+/// The recent-treatment cache is keyed by tenant alone, so every caller
+/// <see cref="CacheBypassingCallers"/> lists stays out of it entirely.
 /// </summary>
 [Trait("Category", "Unit")]
 public class TreatmentCacheAdapterTests
@@ -54,14 +55,10 @@ public class TreatmentCacheAdapterTests
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task GetOrComputeAsync_HistoryClamped_NeitherReadsNorWritesTheCache(bool share)
+    [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
+    public async Task GetOrComputeAsync_BypassingCaller_NeitherReadsNorWritesTheCache(string caller)
     {
-        if (share)
-            _categoryReadContext.MarkShare();
-        else
-            _categoryReadContext.ClampMemberHistory();
+        CacheBypassingCallers.Become(_categoryReadContext, caller);
 
         var result = await Adapter().GetOrComputeAsync(
             CacheableQuery, () => Task.FromResult<IReadOnlyList<Treatment>>([]), CancellationToken.None);

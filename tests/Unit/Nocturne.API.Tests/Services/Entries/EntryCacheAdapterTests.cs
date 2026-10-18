@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Entries;
 using Nocturne.API.Services.Platform;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Cache.Abstractions;
@@ -9,9 +10,8 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Tests.Services.Entries;
 
 /// <summary>
-/// The recent-entry cache is keyed by tenant alone, so a history-clamped reader has to stay out of
-/// it entirely: a hit would serve it entries an unclamped reader loaded, and a write would hand
-/// its narrowed entries to the next unclamped reader.
+/// The recent-entry cache is keyed by tenant alone, so every caller
+/// <see cref="CacheBypassingCallers"/> lists stays out of it entirely.
 /// </summary>
 [Trait("Category", "Unit")]
 public class EntryCacheAdapterTests
@@ -49,14 +49,6 @@ public class EntryCacheAdapterTests
             NullLogger<EntryCacheAdapter>.Instance);
     }
 
-    private void Clamp(bool share)
-    {
-        if (share)
-            _categoryReadContext.MarkShare();
-        else
-            _categoryReadContext.ClampMemberHistory();
-    }
-
     [Fact]
     public async Task GetOrComputeAsync_Unclamped_ServesTheTenantCache()
     {
@@ -67,11 +59,10 @@ public class EntryCacheAdapterTests
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task GetOrComputeAsync_HistoryClamped_NeitherReadsNorWritesTheCache(bool share)
+    [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
+    public async Task GetOrComputeAsync_BypassingCaller_NeitherReadsNorWritesTheCache(string caller)
     {
-        Clamp(share);
+        CacheBypassingCallers.Become(_categoryReadContext, caller);
 
         var result = await Adapter().GetOrComputeAsync(
             CacheableQuery, () => Task.FromResult<IReadOnlyList<Entry>>([]));
@@ -89,11 +80,10 @@ public class EntryCacheAdapterTests
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task GetOrComputeCurrentAsync_HistoryClamped_ComputesWithoutTouchingTheCache(bool share)
+    [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
+    public async Task GetOrComputeCurrentAsync_BypassingCaller_ComputesWithoutTouchingTheCache(string caller)
     {
-        Clamp(share);
+        CacheBypassingCallers.Become(_categoryReadContext, caller);
         var computed = new Entry { Id = "computed" };
 
         var result = await Adapter().GetOrComputeCurrentAsync(() => Task.FromResult<Entry?>(computed));

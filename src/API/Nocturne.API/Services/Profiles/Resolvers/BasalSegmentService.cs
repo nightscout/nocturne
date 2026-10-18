@@ -73,14 +73,14 @@ internal sealed class BasalSegmentService : IBasalSegmentService
     }
 
     /// <remarks>
-    /// A history-clamped request neither reads nor writes the cache, per
-    /// <see cref="ActiveProfileResolver"/>.
+    /// A request that <see cref="ICategoryReadContext.BypassesTenantCaches"/> neither reads nor writes
+    /// the cache.
     /// </remarks>
     private async Task<IReadOnlyList<ScheduleAssignment>> GetAssignmentsAsync(
         BasalWindow window,
         CancellationToken ct)
     {
-        if (_categoryReadContext.IsHistoryClamped)
+        if (_categoryReadContext.BypassesTenantCaches)
             return await BuildAssignmentsAsync(window, ct);
 
         var cacheKey = $"BasalAssignments:{_tenantAccessor.TenantId}:{window.StartMills}:{window.EndMills}";

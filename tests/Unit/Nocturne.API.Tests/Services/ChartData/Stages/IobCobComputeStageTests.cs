@@ -4,13 +4,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
@@ -65,16 +68,19 @@ public class IobCobComputeStageTests
             .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
                 new TherapyTimeline(new[] { new TherapySegment(from, to, defaultSnapshot) }));
 
-        _stage = new IobCobComputeStage(
-            _mockIobCalculator.Object,
-            _mockCobCalculator.Object,
-            _mockBasalSeriesBuilder.Object,
-            _mockTherapyTimelineResolver.Object,
-            _cache,
-            MockTenantAccessor.Create().Object,
-            NullLogger<IobCobComputeStage>.Instance
-        );
+        _stage = CreateStage(new CategoryReadContext());
     }
+
+    private IobCobComputeStage CreateStage(ICategoryReadContext categoryReadContext) => new(
+        _mockIobCalculator.Object,
+        _mockCobCalculator.Object,
+        _mockBasalSeriesBuilder.Object,
+        _mockTherapyTimelineResolver.Object,
+        _cache,
+        MockTenantAccessor.Create().Object,
+        categoryReadContext,
+        NullLogger<IobCobComputeStage>.Instance
+    );
 
     [Fact]
     public async Task ExecuteAsync_ComputesIobCobAndBasalSeries()
@@ -270,7 +276,7 @@ public class IobCobComputeStageTests
 
         var stage = new IobCobComputeStage(
             realIob, realCob, basalSeriesBuilder.Object, timelineResolver.Object,
-            _cache, MockTenantAccessor.Create().Object, NullLogger<IobCobComputeStage>.Instance);
+            _cache, MockTenantAccessor.Create().Object, new CategoryReadContext(), NullLogger<IobCobComputeStage>.Instance);
 
         var context = new ChartDataContext
         {
@@ -461,6 +467,46 @@ public class IobCobComputeStageTests
         }, CancellationToken.None);
 
         second.IobSeries.Should().ContainSingle().Which.Value.Should().Be(1.5);
+    }
+
+    /// <summary>
+    /// The key fingerprints the treatments, not the therapy timeline, and a share computes with the
+    /// profile tables hidden from it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
+    public async Task ExecuteAsync_BypassingCaller_NeitherReadsNorWritesTheCachedSeries(string caller)
+    {
+        var context = new ChartDataContext
+        {
+            StartTime = TestMills,
+            EndTime = TestMills,
+            IntervalMinutes = 5,
+            DefaultBasalRate = 1.0,
+            BolusList = [new Bolus
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(TestMills - 5 * 60 * 1000).UtcDateTime,
+                Insulin = 3.0,
+            }],
+            CarbIntakeList = [],
+            TempBasalList = [],
+        };
+        void IobIs(double iob) => _mockIobCalculator
+            .Setup(s => s.FromBoluses(It.IsAny<List<Bolus>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
+            .Returns(new IobResult { Iob = iob });
+        var bypassing = CreateStage(CacheBypassingCallers.Context(caller));
+
+        IobIs(2.0);
+        await _stage.ExecuteAsync(context, CancellationToken.None);
+
+        IobIs(7.0);
+        var bypassed = await bypassing.ExecuteAsync(context, CancellationToken.None);
+
+        IobIs(9.0);
+        var owner = await _stage.ExecuteAsync(context, CancellationToken.None);
+
+        bypassed.IobSeries.Should().ContainSingle().Which.Value.Should().Be(7.0, "the owner's cached series is not served");
+        owner.IobSeries.Should().ContainSingle().Which.Value.Should().Be(2.0, "the bypassing series is not written over it");
     }
 
     [Fact]

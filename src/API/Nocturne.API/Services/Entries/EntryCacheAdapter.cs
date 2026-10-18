@@ -15,9 +15,7 @@ namespace Nocturne.API.Services.Entries;
 /// and demo-mode isolation for <see cref="Entry"/> queries.
 /// Only caches skip=0 queries with common counts to keep cache cardinality bounded.
 /// Demo mode queries use a separate key suffix to prevent real data from leaking into demo views.
-/// A history-clamped request (<see cref="ICategoryReadContext.IsHistoryClamped"/>) bypasses the
-/// cache entirely: the keys are per tenant, so a hit could serve it rows an unclamped reader
-/// loaded, and a write could hand its narrowed rows to an unclamped one.
+/// A request that <see cref="ICategoryReadContext.BypassesTenantCaches"/> skips the cache entirely.
 /// </summary>
 /// <seealso cref="IEntryCache"/>
 /// <seealso cref="EntryService"/>
@@ -36,7 +34,7 @@ public class EntryCacheAdapter : IEntryCache
     /// <param name="cache">The distributed cache service for get/set/remove operations.</param>
     /// <param name="demoMode">Demo mode service used to isolate demo and real data cache keys.</param>
     /// <param name="tenant">Provides the current tenant context for scoping all cache keys.</param>
-    /// <param name="categoryReadContext">Says whether this request is history-clamped.</param>
+    /// <param name="categoryReadContext">Says whether this request bypasses the cache.</param>
     /// <param name="logger">The logger instance.</param>
     public EntryCacheAdapter(
         ICacheService cache,
@@ -61,7 +59,7 @@ public class EntryCacheAdapter : IEntryCache
         CancellationToken ct = default)
     {
         // Only cache skip=0 with common counts
-        if (_categoryReadContext.IsHistoryClamped
+        if (_categoryReadContext.BypassesTenantCaches
             || query.Skip != 0
             || !EntryDomainLogic.IsCommonEntryCount(query.Count))
             return null;
@@ -90,7 +88,7 @@ public class EntryCacheAdapter : IEntryCache
         Func<Task<Entry?>> compute,
         CancellationToken ct = default)
     {
-        if (_categoryReadContext.IsHistoryClamped)
+        if (_categoryReadContext.BypassesTenantCaches)
             return await compute();
 
         var demoSuffix = _demoMode.IsEnabled ? ":demo" : "";

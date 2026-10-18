@@ -826,10 +826,7 @@ public class StatisticsController : ControllerBase
     {
         var cacheKey = $"statistics:multi-period:{TenantCacheId}";
 
-        // A history-clamped request bypasses the cache, for the reason given on
-        // EntryCacheAdapter. So does a share: its categories decide what the body counts, and the key
-        // carries only the tenant.
-        var useCache = !_categoryReadContext.IsHistoryClamped && !_categoryReadContext.IsShare;
+        var useCache = !_categoryReadContext.BypassesTenantCaches;
         var cachedResult = useCache
             ? await _cacheService.GetAsync<MultiPeriodStatistics>(cacheKey, cancellationToken)
             : null;
