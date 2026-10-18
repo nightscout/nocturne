@@ -10,6 +10,7 @@ using Nocturne.Connectors.FreeStyle.Configurations;
 using Nocturne.Connectors.FreeStyle.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -49,6 +50,59 @@ public class LibreConnectorServiceTests
 
         result.Success.Should().BeTrue();
         result.ItemsSynced[SyncDataType.Glucose].Should().Be(0);
+    }
+
+    private const string Connections = "{\"data\":[{\"patientId\":\"p1\",\"firstName\":\"A\",\"lastName\":\"B\"}]}";
+
+    private static string GraphWithSensor(string sensorJson) =>
+        "{\"data\":{\"connection\":{\"glucoseMeasurement\":"
+        + "{\"factoryTimestamp\":\"2024-01-01T00:00:00.000Z\",\"valueInMgPerDl\":0,\"trendArrow\":0},"
+        + "\"sensor\":" + sensorJson + "},\"graphData\":[]}}";
+
+    /// <summary>
+    /// LibreLinkUp names the sensor it is reading and when it was activated, so its start is
+    /// recorded rather than left to inference, even on a sync with no new readings.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_PublishesTheCurrentSensorsStart()
+    {
+        var fixture = new ServiceFixture(
+            connectionsJson: Connections,
+            graphJson: GraphWithSensor("{\"deviceId\":\"d1\",\"sn\":\"0M0001ABCD\",\"a\":1760000000,\"w\":60,\"pt\":4}"));
+        List<DeviceEvent> published = [];
+        fixture.Publisher
+            .Setup(p => p.Treatments.GetLatestTreatmentTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DateTime.UtcNow.AddDays(-1));
+        fixture.Publisher
+            .Setup(p => p.Device.PublishDeviceEventsAsync(
+                It.IsAny<IEnumerable<DeviceEvent>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<DeviceEvent> records, string _, WriteOrigin _, CancellationToken _) => published.AddRange(records))
+            .ReturnsAsync(true);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.DeviceEvents] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        published.Should().ContainSingle().Which.Should().Match<DeviceEvent>(e =>
+            e.EventType == DeviceEventType.SensorStart
+            && e.Timestamp == DateTimeOffset.FromUnixTimeSeconds(1760000000).UtcDateTime
+            && e.SyncIdentifier == "libre_sensor_0M0001ABCD"
+            && e.Device!.Contains("0M0001ABCD"));
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{\"sn\":\"\",\"a\":1760000000}")]
+    [InlineData("{\"sn\":\"0M0001ABCD\",\"a\":0}")]
+    public async Task SyncDataAsync_WithNoActivatedSensor_PublishesNoStart(string sensorJson)
+    {
+        var fixture = new ServiceFixture(connectionsJson: Connections, graphJson: GraphWithSensor(sensorJson));
+
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.DeviceEvents] }, fixture.Config, CancellationToken.None);
+
+        fixture.Publisher.Verify(p => p.Device.PublishDeviceEventsAsync(
+            It.IsAny<IEnumerable<DeviceEvent>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK)

@@ -25,7 +25,8 @@ The crate is pure evaluation: no I/O, no clock, no persistence.
   its auto-resolve tree is false, §6.3).
 - Out of scope, host-side: context enrichment, persistence, delivery and DND
   suppression, and sweep scheduling. [`wall_clock::references_wall_clock`]
-  says which rules the sweep must evaluate (semantics §5.1).
+  says which rules the sweep must evaluate (semantics §5.1), and
+  [`facts::rule_reads`] which context facts a rule reads (semantics §5.2).
 
 ## Layout
 
@@ -43,6 +44,7 @@ The crate is pure evaluation: no I/O, no clock, no persistence.
 | `validate` | the evaluability check parsing applies and the save-time check hosts apply |
 | `classify` | scope classes for scoped Do Not Disturb |
 | `wall_clock` | which rules need periodic evaluation |
+| `facts` | the context facts each kind reads, and which rules read a given fact |
 
 ## Verification
 

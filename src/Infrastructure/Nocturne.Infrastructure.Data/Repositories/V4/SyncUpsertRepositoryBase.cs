@@ -52,6 +52,10 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// Creates a record, or updates in place the stored row carrying the same
     /// (DataSource, SyncIdentifier).
     /// </summary>
+    /// <remarks>
+    /// Sealed so the single write has one override point, <see cref="UpsertAsync"/>, that both entry
+    /// points pass through.
+    /// </remarks>
     /// <param name="model">The record to create.</param>
     /// <param name="origin">Whether the write is live or a backfill import.</param>
     /// <param name="ct">The cancellation token.</param>
@@ -61,7 +65,11 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// <see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/> — the same rule
     /// <see cref="SplitUpsertsAsync"/> applies to a batch.
     /// </exception>
-    public override async Task<TModel> CreateAsync(TModel model, WriteOrigin origin, CancellationToken ct = default)
+    public sealed override async Task<TModel> CreateAsync(TModel model, WriteOrigin origin, CancellationToken ct = default)
+        => (await UpsertAsync(model, origin, ct)).Record;
+
+    /// <inheritdoc cref="ISyncKeyedRepository{T}.UpsertAsync" />
+    public virtual async Task<SyncUpsert<TModel>> UpsertAsync(TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         // The domain models carry no sync-key contract, so the key is read off the mapped entity.
@@ -82,11 +90,11 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
                 var upserted = ToDomain(existing);
                 // A single explicit upsert always broadcasts (no material-change gate on the single path).
                 await RaiseBroadcastAsync([], [upserted], [], origin, ct);
-                return upserted;
+                return new SyncUpsert<TModel>(upserted, Created: false);
             }
         }
 
-        return await InsertAsync(ctx, entity, origin, ct);
+        return new SyncUpsert<TModel>(await InsertAsync(ctx, entity, origin, ct), Created: true);
     }
 
     /// <summary>

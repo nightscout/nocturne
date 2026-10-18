@@ -102,6 +102,32 @@ roles yourself and point Nocturne at them with connection strings.
 Leave any bot variables blank or commented out if you don't use that platform;
 nothing here is required for a working install.
 
+### Loop remote commands
+
+Remote commands to a Loop phone go through Apple Push Notification service (APNs),
+so Nocturne needs your APNs key. Each setting has two names: the Nocturne form, and
+the Nightscout variable. If you set both, the Nocturne form wins.
+
+| Nocturne form | Nightscout variable | What it is |
+|---------------|---------------------|------------|
+| `Loop__ApnsKey` | `LOOP_APNS_KEY` | The APNs private key, in PEM format. |
+| `Loop__ApnsKeyId` | `LOOP_APNS_KEY_ID` | The key's ID. |
+| `Loop__DeveloperTeamId` | `LOOP_DEVELOPER_TEAM_ID` | Your Apple Developer Team ID, exactly 10 characters. |
+| `Loop__PushServerEnvironment` | `LOOP_PUSH_SERVER_ENVIRONMENT` | `production` (the default) or `development`. Use `development` only for a Loop build installed from Xcode. |
+
+The bundled Compose file passes `nocturne-api` an explicit list of variables, so a
+name in your `.env` does not reach it by itself. Add the ones you use to that
+service's `environment:` in a Compose override file:
+
+```yaml
+services:
+  nocturne-api:
+    environment:
+      LOOP_APNS_KEY: "${LOOP_APNS_KEY}"
+      LOOP_APNS_KEY_ID: "${LOOP_APNS_KEY_ID}"
+      LOOP_DEVELOPER_TEAM_ID: "${LOOP_DEVELOPER_TEAM_ID}"
+```
+
 ### Image pinning
 
 `NOCTURNE_API_IMAGE` and `NOCTURNE_WEB_IMAGE` default to the `:latest` tag on

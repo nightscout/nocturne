@@ -46,8 +46,10 @@ public class HeartRateService(
     public Task<IEnumerable<HeartRate>> GetHeartRatesAsync(
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default
-    ) => GetAllAsync(count, skip, cancellationToken);
+    ) => GetNewestFirstAsync(count, skip, from, to, cancellationToken);
 
     public Task<IEnumerable<HeartRate>> GetHeartRatesByDateRangeAsync(
         DateTime from,

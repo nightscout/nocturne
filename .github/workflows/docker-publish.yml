@@ -105,6 +105,10 @@ jobs:
       - name: Build and push Nocturne.API container
         working-directory: src/API/Nocturne.API
         run: |
+          version_args=()
+          if [[ -n "${{ steps.tags.outputs.app_version }}" ]]; then
+            version_args+=("-p:Version=${{ steps.tags.outputs.app_version }}")
+          fi
           dotnet publish \
             -c Release \
             -p:PublishProfile=DefaultContainer \
@@ -112,6 +116,7 @@ jobs:
             -p:ContainerRegistry=${{ env.REGISTRY }} \
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-api \
             -p:GenerateNSwagClient=false \
+            "${version_args[@]}" \
             "-p:ContainerImageTags=${{ steps.tags.outputs.version }}" \
             "-p:ContainerGitCommit=${GITHUB_SHA}" \
             "-p:ContainerBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"

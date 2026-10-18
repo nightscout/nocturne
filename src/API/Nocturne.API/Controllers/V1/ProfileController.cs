@@ -1,7 +1,9 @@
+using System.Text.Json;
 using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
@@ -196,33 +198,16 @@ public class ProfileController : ControllerBase
 
         try
         {
-            Profile[] profiles;
-
-            // Handle both single profile and array of profiles (Nightscout compatibility)
-            if (body.ValueKind == System.Text.Json.JsonValueKind.Array)
-            {
-                profiles = System.Text.Json.JsonSerializer.Deserialize<Profile[]>(
-                    body.GetRawText(),
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                ) ?? Array.Empty<Profile>();
-            }
-            else if (body.ValueKind == System.Text.Json.JsonValueKind.Object)
-            {
-                var profile = System.Text.Json.JsonSerializer.Deserialize<Profile>(
-                    body.GetRawText(),
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                );
-                profiles = profile != null ? new[] { profile } : Array.Empty<Profile>();
-            }
-            else
+            var profiles = NightscoutJsonBody.ReadObjects<Profile>(body);
+            if (profiles is null)
             {
                 _logger.LogDebug("Invalid profile data format");
                 return BadRequest("Invalid profile data format");
             }
 
-            _logger.LogDebug("Processing {Count} profiles", profiles.Length);
+            _logger.LogDebug("Processing {Count} profiles", profiles.Count);
 
-            if (profiles.Length == 0)
+            if (profiles.Count == 0)
             {
                 _logger.LogDebug("No profiles provided in request body");
                 return Ok(Array.Empty<Profile>());
@@ -236,6 +221,11 @@ public class ProfileController : ControllerBase
 
             _logger.LogDebug("Created {Count} profiles", result.Length);
             return Ok(result);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Invalid JSON in create profiles request");
+            return BadRequest("Invalid profile data format");
         }
         catch (Exception ex)
         {

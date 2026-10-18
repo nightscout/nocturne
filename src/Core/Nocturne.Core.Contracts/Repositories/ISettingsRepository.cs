@@ -84,17 +84,6 @@ public interface ISettingsRepository
     Task<bool> DeleteSettingsAsync(string id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Bulk delete settings entries using query filters
-    /// </summary>
-    /// <param name="findQuery">Query filter for settings entries to delete</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Number of settings entries deleted</returns>
-    Task<long> BulkDeleteSettingsAsync(
-        string findQuery,
-        CancellationToken cancellationToken = default
-    );
-
-    /// <summary>
     /// Count settings entries with optional filtering
     /// </summary>
     /// <param name="findQuery">Optional query filter</param>

@@ -467,22 +467,17 @@ public class NutritionController : ControllerBase, IWriteScopedController
             carbModel.CorrelationId = existingBolusCorrelationId;
         }
 
-        var bolusBefore = await _context.Boluses.CountAsync(ct);
-        var createdBolus = await _bolusRepo.CreateAsync(bolusModel, WriteOrigin.Live, ct);
-        var bolusWasNew = (await _context.Boluses.CountAsync(ct)) > bolusBefore;
-
-        var carbBefore = await _context.CarbIntakes.CountAsync(ct);
-        var createdCarb = await _carbIntakeRepo.CreateAsync(carbModel, WriteOrigin.Live, ct);
-        var carbWasNew = (await _context.CarbIntakes.CountAsync(ct)) > carbBefore;
+        var bolus = await _bolusRepo.UpsertAsync(bolusModel, WriteOrigin.Live, ct);
+        var carb = await _carbIntakeRepo.UpsertAsync(carbModel, WriteOrigin.Live, ct);
 
         var response = new CreateMealResponse
         {
-            CorrelationId = createdBolus.CorrelationId ?? createdCarb.CorrelationId ?? correlationId,
-            Bolus = createdBolus,
-            CarbIntake = createdCarb,
+            CorrelationId = bolus.Record.CorrelationId ?? carb.Record.CorrelationId ?? correlationId,
+            Bolus = bolus.Record,
+            CarbIntake = carb.Record,
         };
 
-        return (bolusWasNew || carbWasNew)
+        return (bolus.Created || carb.Created)
             ? StatusCode(StatusCodes.Status201Created, response)
             : Ok(response);
     }

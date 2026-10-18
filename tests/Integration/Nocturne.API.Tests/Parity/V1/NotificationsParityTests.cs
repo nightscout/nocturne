@@ -14,45 +14,18 @@ public class NotificationsParityTests : ParityTestBase
     public NotificationsParityTests(ParityTestFixture fixture, ITestOutputHelper output)
         : base(fixture, output) { }
 
-    #region POST /api/v1/notifications/ack
+    #region GET /api/v1/notifications/ack
 
     [Fact]
-    public async Task PostNotificationAck_Simple_ReturnsSameShape()
+    public async Task GetNotificationAck_Simple_ReturnsSameShape()
     {
-        var ack = new
-        {
-            level = 1,
-            group = "test-group",
-            silenceTime = 30
-        };
-
-        await AssertPostParityAsync("/api/v1/notifications/ack", ack);
+        await AssertGetParityAsync("/api/v1/notifications/ack?level=1&group=test-group");
     }
 
     [Fact]
-    public async Task PostNotificationAck_WithAllFields_ReturnsSameShape()
+    public async Task GetNotificationAck_WithAllFields_ReturnsSameShape()
     {
-        var ack = new
-        {
-            level = 2,
-            group = "urgent",
-            silenceTime = 60,
-            clear = true
-        };
-
-        await AssertPostParityAsync("/api/v1/notifications/ack", ack);
-    }
-
-    [Fact]
-    public async Task PostNotificationAck_LevelZero_ReturnsSameShape()
-    {
-        var ack = new
-        {
-            level = 0,
-            group = "info"
-        };
-
-        await AssertPostParityAsync("/api/v1/notifications/ack", ack);
+        await AssertGetParityAsync("/api/v1/notifications/ack?level=2&group=urgent&time=1800000");
     }
 
     #endregion
@@ -171,17 +144,6 @@ public class NotificationsParityTests : ParityTestBase
     #endregion
 
     #region Error Cases
-
-    [Fact]
-    public async Task PostNotificationAck_MissingLevel_ReturnsSameShape()
-    {
-        var ack = new
-        {
-            group = "test"
-        };
-
-        await AssertPostParityAsync("/api/v1/notifications/ack", ack);
-    }
 
     [Fact]
     public async Task PostAdminNotify_Empty_ReturnsSameShape()

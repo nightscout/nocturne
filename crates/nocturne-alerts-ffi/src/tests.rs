@@ -18,7 +18,8 @@ use serde_json::{Map, Value, json};
 use crate::{
     envelope_string, nocturne_alerts_classify, nocturne_alerts_describe, nocturne_alerts_evaluate,
     nocturne_alerts_evaluate_node, nocturne_alerts_free_string, nocturne_alerts_leaf_paths,
-    nocturne_alerts_references_wall_clock, nocturne_alerts_tzdb_version, nocturne_alerts_version,
+    nocturne_alerts_references_any, nocturne_alerts_references_wall_clock,
+    nocturne_alerts_rule_reads, nocturne_alerts_tzdb_version, nocturne_alerts_version,
 };
 
 /// Calls an FFI function with `input`, copies the result into a Rust string
@@ -951,6 +952,79 @@ fn references_wall_clock_rejects_a_bad_envelope() {
 }
 
 #[test]
+fn references_wall_clock_walks_an_enabled_auto_resolve_tree() {
+    let request = |enabled: bool| {
+        json!({
+            "schema_version": 1,
+            "condition_type": "threshold",
+            "condition_params": { "direction": "above", "value": 180 },
+            "auto_resolve_enabled": enabled,
+            "auto_resolve_params": { "type": "staleness", "staleness": { "operator": ">", "value": 30 } },
+        })
+        .to_string()
+    };
+    let enabled = call_json(nocturne_alerts_references_wall_clock, &request(true));
+    assert_eq!(enabled["references_wall_clock"], json!(true));
+    let disabled = call_json(nocturne_alerts_references_wall_clock, &request(false));
+    assert_eq!(disabled["references_wall_clock"], json!(false));
+}
+
+fn high_rule_resolving_on_cob() -> Value {
+    json!({
+        "schema_version": 1,
+        "condition_type": "threshold",
+        "condition_params": { "direction": "above", "value": 180 },
+        "auto_resolve_enabled": true,
+        "auto_resolve_params": { "type": "cob", "cob": { "operator": "==", "value": 0 } },
+    })
+}
+
+#[test]
+fn rule_reads_names_facts_by_wire_name() {
+    let response = call_json(
+        nocturne_alerts_rule_reads,
+        &high_rule_resolving_on_cob().to_string(),
+    );
+    assert_eq!(response["ok"], json!(true));
+    assert_eq!(response["reads"], json!(["glucose", "carbs"]));
+    let unknown = call_json(
+        nocturne_alerts_rule_reads,
+        &json!({ "schema_version": 1, "condition_type": "no_such_kind" }).to_string(),
+    );
+    assert_eq!(unknown["reads"], json!([]));
+}
+
+#[test]
+fn references_any_matches_facts_by_wire_name() {
+    let with_facts = |facts: Value| {
+        let mut request = high_rule_resolving_on_cob();
+        request["facts"] = facts;
+        call_json(nocturne_alerts_references_any, &request.to_string())
+    };
+    assert_eq!(with_facts(json!(["carbs"]))["references_any"], json!(true));
+    assert_eq!(
+        with_facts(json!(["insulin", "pump"]))["references_any"],
+        json!(false)
+    );
+    assert_eq!(with_facts(json!([]))["references_any"], json!(false));
+    assert_error(&with_facts(json!(["carbs", "cob"])), "unknown fact 'cob'");
+    assert_error(
+        &call_json(
+            nocturne_alerts_references_any,
+            &high_rule_resolving_on_cob().to_string(),
+        ),
+        "missing field `facts`",
+    );
+}
+
+#[test]
+fn rule_reads_and_references_any_reject_a_bad_envelope() {
+    for export in [nocturne_alerts_rule_reads, nocturne_alerts_references_any] {
+        assert_error(&call_json(export, "{ nope"), "invalid request envelope");
+    }
+}
+
+#[test]
 fn classify_rejects_null_pointer() {
     let response: Value = unsafe {
         let ptr = nocturne_alerts_classify(std::ptr::null());
@@ -1431,6 +1505,27 @@ mod uniffi_surface {
             serde_json::from_str(&uniffi_api::references_wall_clock(&request)).expect("valid JSON");
         assert_eq!(wall_clock["ok"], json!(true));
         assert_eq!(wall_clock["references_wall_clock"], json!(true));
+    }
+
+    #[test]
+    fn rule_reads_and_references_any_share_the_envelope_contract() {
+        let mut request = json!({
+            "schema_version": 1,
+            "condition_type": "signal_loss",
+            "condition_params": { "timeout_minutes": 15 },
+            "facts": ["glucose"]
+        });
+        let reads: Value = serde_json::from_str(&uniffi_api::rule_reads(&request.to_string()))
+            .expect("valid JSON");
+        assert_eq!(reads["reads"], json!(["glucose"]));
+        let any: Value = serde_json::from_str(&uniffi_api::references_any(&request.to_string()))
+            .expect("valid JSON");
+        assert_eq!(any["references_any"], json!(true));
+        request["facts"] = json!(["nope"]);
+        let unknown: Value =
+            serde_json::from_str(&uniffi_api::references_any(&request.to_string()))
+                .expect("valid JSON");
+        assert_eq!(unknown["ok"], json!(false));
     }
 
     #[test]

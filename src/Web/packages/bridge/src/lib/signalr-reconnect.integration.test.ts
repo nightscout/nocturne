@@ -68,7 +68,7 @@ it("recovers all real hubs after partial handshake failure and a prolonged outag
     downstream,
     {},
     "nocturne.test",
-    ["test"],
+    "test",
     "test-key",
     url,
   );
@@ -90,11 +90,15 @@ it("recovers all real hubs after partial handshake failure and a prolonged outag
   const received = {
     create: vi.fn(),
     urgent_alarm: vi.fn(),
+    clear_alarm: vi.fn(),
     configChanged: vi.fn(),
   };
   for (const [event, handler] of Object.entries(received))
     consumer.on(event, handler);
-  const client = new SignalRClient(new MessageTranslator(relay, "test"), {
+  const translator = new MessageTranslator(relay, "test");
+  const handleAnnouncement = vi.spyOn(translator, "handleAnnouncement");
+  const handleNotification = vi.spyOn(translator, "handleNotification");
+  const client = new SignalRClient(translator, {
     hubUrl: `${url}/hubs/data`,
     alarmHubUrl: `${url}/hubs/alarms`,
     configHubUrl: `${url}/hubs/config`,
@@ -137,15 +141,40 @@ it("recovers all real hubs after partial handshake failure and a prolonged outag
       collection: "entries",
       document: { sgv: 120 },
     });
-    emit("/hubs/alarms", "alarm", { level: "urgent", message: "HIGH" });
+    emit("/hubs/alarms", "urgent_alarm", { level: 2, message: "HIGH" });
+    const clear = {
+      clear: true,
+      title: "Alarm Cleared - default",
+      message: "Level 2 alarm has been acknowledged and cleared",
+      group: "default",
+      level: 2,
+    };
+    emit("/hubs/alarms", "clear_alarm", clear);
+    const announcement = {
+      level: 0,
+      title: "Sensor change",
+      message: "Change the sensor",
+      group: "default",
+      isAnnouncement: true,
+    };
+    emit("/hubs/alarms", "announcement", announcement);
+    emit("/hubs/alarms", "notification", { ...announcement, level: 1 });
     emit("/hubs/config", "configChanged", { key: "threshold" });
     await vi.waitFor(() => {
       expect(received.create).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ colName: "entries", doc: { sgv: 120 } }),
       );
       expect(received.urgent_alarm).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ level: "urgent", message: "HIGH" }),
+        expect.objectContaining({ level: 2, message: "HIGH" }),
       );
+      expect(received.clear_alarm).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining(clear),
+      );
+      expect(handleAnnouncement).toHaveBeenCalledExactlyOnceWith(announcement);
+      expect(handleNotification).toHaveBeenCalledExactlyOnceWith({
+        ...announcement,
+        level: 1,
+      });
       expect(received.configChanged).toHaveBeenCalledExactlyOnceWith({
         key: "threshold",
       });

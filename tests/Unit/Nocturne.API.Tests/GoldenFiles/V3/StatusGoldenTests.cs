@@ -15,7 +15,7 @@ public class StatusGoldenTests : GoldenFileTestBase
         var captured = await CaptureResponse(response);
 
         await Verify(captured)
-            .ScrubMembers("serverTime", "serverTimeEpoch", "srvDate", "uptimeMs", "head", "apiVersion", "version");
+            .ScrubMembers("serverTime", "serverTimeEpoch", "srvDate", "uptimeMs", "head", "version");
     }
 
     #endregion
@@ -23,13 +23,13 @@ public class StatusGoldenTests : GoldenFileTestBase
     #region GET /api/v3/version
 
     [Fact]
-    public async Task GetVersion_ReturnsVersionResponseShape()
+    public async Task GetVersion_ReturnsV3Envelope()
     {
         var response = await Client.GetAsync("/api/v3/version");
         var captured = await CaptureResponse(response);
 
         await Verify(captured)
-            .ScrubMembers("serverTime", "build");
+            .ScrubMembers("version");
     }
 
     #endregion

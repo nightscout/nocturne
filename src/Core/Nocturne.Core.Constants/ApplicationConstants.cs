@@ -187,118 +187,6 @@ public static class ApplicationConstants
     public static class Web
     {
         /// <summary>
-        /// Default values for client-side display and behavior settings.
-        /// These are applied when a user has not customized their preferences.
-        /// </summary>
-        public static class ClientDefaults
-        {
-            /// <summary>
-            /// Default glucose display unit. Either "mg/dl" or "mmol".
-            /// </summary>
-            public const string Units = "mg/dl";
-
-            /// <summary>
-            /// Default time format: 12-hour or 24-hour clock.
-            /// </summary>
-            public const int TimeFormat = 12;
-
-            /// <summary>
-            /// Whether night mode (dark theme) is enabled by default.
-            /// </summary>
-            public const bool NightMode = false;
-
-            /// <summary>
-            /// Whether to show the blood glucose on-screen by default.
-            /// </summary>
-            public const bool ShowBGON = true;
-
-            /// <summary>
-            /// Whether to show insulin on board (IOB) by default.
-            /// </summary>
-            public const bool ShowIOB = true;
-
-            /// <summary>
-            /// Whether to show carbs on board (COB) by default.
-            /// </summary>
-            public const bool ShowCOB = true;
-
-            /// <summary>
-            /// Whether to show basal rate by default.
-            /// </summary>
-            public const bool ShowBasal = true;
-
-            /// <summary>
-            /// Default UI language code (ISO 639-1).
-            /// </summary>
-            public const string Language = "en";
-
-            /// <summary>
-            /// Default visual theme name.
-            /// </summary>
-            public const string Theme = "default";
-
-            /// <summary>
-            /// Whether the urgent high glucose alarm is enabled by default.
-            /// </summary>
-            public const bool AlarmUrgentHigh = true;
-
-            /// <summary>
-            /// Whether the high glucose alarm is enabled by default.
-            /// </summary>
-            public const bool AlarmHigh = true;
-
-            /// <summary>
-            /// Whether the low glucose alarm is enabled by default.
-            /// </summary>
-            public const bool AlarmLow = true;
-
-            /// <summary>
-            /// Whether the urgent low glucose alarm is enabled by default.
-            /// </summary>
-            public const bool AlarmUrgentLow = true;
-
-            /// <summary>
-            /// Whether the stale data warning alarm is enabled by default.
-            /// </summary>
-            public const bool AlarmTimeagoWarn = true;
-
-            /// <summary>
-            /// Minutes of data staleness before triggering a warning alarm.
-            /// </summary>
-            public const int AlarmTimeagoWarnMins = 15;
-
-            /// <summary>
-            /// Whether the urgent stale data alarm is enabled by default.
-            /// </summary>
-            public const bool AlarmTimeagoUrgent = true;
-
-            /// <summary>
-            /// Minutes of data staleness before triggering an urgent alarm.
-            /// </summary>
-            public const int AlarmTimeagoUrgentMins = 30;
-
-            /// <summary>
-            /// Whether to display glucose forecast/prediction lines by default.
-            /// </summary>
-            public const bool ShowForecast = true;
-
-            /// <summary>
-            /// Default number of hours to display in the main chart view.
-            /// </summary>
-            public const int FocusHours = 3;
-
-            /// <summary>
-            /// Interval in seconds between heartbeat pings from the client.
-            /// </summary>
-            public const int Heartbeat = 60;
-
-            /// <summary>
-            /// Default roles assigned to unauthenticated users.
-            /// </summary>
-            public const string AuthDefaultRoles = "readable";
-        }
-
-        /// <summary>
         /// Defaults for the four legacy Nightscout <c>bg*</c> threshold settings, in mg/dL. They are
         /// what ships when nothing else supplies a value: the status and tenant-overview services
         /// fall back to them when the matching <c>Thresholds:Bg*</c> configuration key is absent, and
@@ -332,60 +220,6 @@ public static class ApplicationConstants
             /// Glucose level (mg/dL) at or below which readings are categorized as urgent-low.
             /// </summary>
             public const int BgLow = 55;
-        }
-
-        /// <summary>
-        /// Configuration defaults for the dedicated clock/kiosk display mode.
-        /// </summary>
-        public static class Clock
-        {
-            /// <summary>
-            /// Maximum minutes since the last reading before the clock display shows a stale-data indicator.
-            /// </summary>
-            public const int MaxStaleMinutes = 60;
-
-            /// <summary>
-            /// Element identifiers that can appear in the clock view:
-            /// sg (sensor glucose), dt (delta), ar (arrow/direction), ag (age/staleness), time.
-            /// </summary>
-            public static readonly string[] AllowedElements = { "sg", "dt", "ar", "ag", "time" };
-
-            /// <summary>
-            /// Minimum and maximum font size percentages for each clock element,
-            /// governing how large each element can be rendered.
-            /// </summary>
-            public static class SizeConstraints
-            {
-                /// <summary>Minimum font size percentage for the sensor glucose element.</summary>
-                public const int SgMin = 20;
-
-                /// <summary>Maximum font size percentage for the sensor glucose element.</summary>
-                public const int SgMax = 80;
-
-                /// <summary>Minimum font size percentage for the delta element.</summary>
-                public const int DtMin = 10;
-
-                /// <summary>Maximum font size percentage for the delta element.</summary>
-                public const int DtMax = 40;
-
-                /// <summary>Minimum font size percentage for the arrow/direction element.</summary>
-                public const int ArMin = 15;
-
-                /// <summary>Maximum font size percentage for the arrow/direction element.</summary>
-                public const int ArMax = 50;
-
-                /// <summary>Minimum font size percentage for the age/staleness element.</summary>
-                public const int AgMin = 8;
-
-                /// <summary>Maximum font size percentage for the age/staleness element.</summary>
-                public const int AgMax = 24;
-
-                /// <summary>Minimum font size percentage for the time element.</summary>
-                public const int TimeMin = 16;
-
-                /// <summary>Maximum font size percentage for the time element.</summary>
-                public const int TimeMax = 48;
-            }
         }
     }
 
@@ -456,6 +290,18 @@ public static class ApplicationConstants
             TimeAgo,
             DeviceStatus,
         };
+    }
+
+    /// <summary>
+    /// Nightscout API levels Nocturne reports for client compatibility.
+    /// </summary>
+    public static class NightscoutApi
+    {
+        /// <summary>
+        /// The v3 API level reported as <c>apiVersion</c> by <c>/api/v3/status</c> and <c>/api/v3/version</c>,
+        /// matching upstream Nightscout.
+        /// </summary>
+        public const string V3Version = "3.0.5";
     }
 
     /// <summary>
