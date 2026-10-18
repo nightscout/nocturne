@@ -7,8 +7,8 @@ using Microsoft.Extensions.Logging;
 namespace Nocturne.Infrastructure.Data.Security;
 
 /// <summary>
-/// The Data Protection key ring, stored in <see cref="NocturneDbContext.DataProtectionKeys"/>. It takes
-/// a context per call from the context pool rather than resolving one from a DI scope, as
+/// The Data Protection key ring, stored in <see cref="NocturneDbContext.DataProtectionKeys"/>. It opens
+/// a context per call from the raw factory rather than resolving one from a DI scope, as
 /// <c>PersistKeysToDbContext</c> would; the keys belong to the instance, not to any tenant.
 /// </summary>
 internal sealed class NocturneDbXmlRepository(

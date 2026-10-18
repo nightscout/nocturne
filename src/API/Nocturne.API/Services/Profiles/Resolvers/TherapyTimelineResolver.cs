@@ -163,8 +163,7 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         var resolvedProfile = profileName ?? "Default";
         var anchorDt = DateTimeOffset.FromUnixTimeMilliseconds(anchorMills).UtcDateTime;
 
-        // Resolve sequentially: each read opens its own context, so parallel awaits would hold a
-        // pooled connection per read for one request.
+        // Sequential: see INocturneDbContextFactory.
         var dia = await _therapySettings.GetDIAAsync(anchorMills, resolvedProfile, ct);
         var carbsHr = await _therapySettings.GetCarbAbsorptionRateAsync(anchorMills, resolvedProfile, ct);
         var timezoneId = await _therapySettings.GetTimezoneAsync(resolvedProfile, ct);

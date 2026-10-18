@@ -66,9 +66,7 @@ public class DDataService : IDDataService
     {
         var ddata = new DData { LastUpdated = timestamp };
 
-        // Load data from various collections based on timestamp.
-        // Fetched sequentially: each read opens its own context, so running them concurrently
-        // would hold a pooled connection per read for one request.
+        // Sequential: see INocturneDbContextFactory.
         await LoadSgvsAsync(ddata, timestamp, cancellationToken);
         await LoadTreatmentsAsync(ddata, timestamp, cancellationToken);
         await LoadMbgsAsync(ddata, timestamp, cancellationToken);

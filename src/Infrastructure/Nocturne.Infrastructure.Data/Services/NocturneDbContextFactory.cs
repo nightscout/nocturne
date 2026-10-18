@@ -16,6 +16,11 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// its contexts read <see cref="TenantReadContext.FailClosed"/>: no tenant, not a share, no clamp, no
 /// audit actor. A root-resolved factory never reads any request's scope. Background work that needs
 /// a tenant's scope state opens a scope with the tenant set and resolves the factory there.
+/// <para>
+/// Each open context holds its own pooled connection while it runs a query, so a caller that runs
+/// several reads in one request awaits them in turn: concurrent awaits would take a connection per
+/// read for that one request.
+/// </para>
 /// </remarks>
 public interface INocturneDbContextFactory
 {

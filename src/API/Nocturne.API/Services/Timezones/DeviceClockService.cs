@@ -242,7 +242,7 @@ public class DeviceClockService : IDeviceClockService
         // Skip (but still stamp) when there is nothing to do or the slot is taken: the zone is
         // already current, an identical entry exists (e.g. this service added it before the marker
         // existed), or any entry occupies the same instant — inserting there would violate the
-        // timeline's unique effective_from and a failed insert would poison the change tracker.
+        // timeline's unique effective_from.
         var occupied = entries.Any(e => e.EffectiveFrom == effectiveFrom);
         if (!string.Equals(current, zone, StringComparison.Ordinal) && !occupied)
         {

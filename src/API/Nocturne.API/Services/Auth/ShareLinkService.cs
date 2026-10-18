@@ -37,9 +37,8 @@ public interface IShareAppearanceReader
 
 /// <summary>
 /// Manages a tenant's single public share link: its token, the Public subject's read role, and
-/// the 24-hour/full-history scope. Runs on the request-scoped <see cref="NocturneDbContext"/>;
-/// the membership tables are not RLS-scoped, so tenant isolation comes from the explicit tenant-id
-/// predicate on every query — those predicates must be preserved.
+/// the 24-hour/full-history scope. The membership tables are not RLS-scoped, so tenant isolation
+/// comes from the explicit tenant-id predicate on every query; those predicates must be preserved.
 /// </summary>
 public interface IShareLinkService : IShareAppearanceReader
 {
