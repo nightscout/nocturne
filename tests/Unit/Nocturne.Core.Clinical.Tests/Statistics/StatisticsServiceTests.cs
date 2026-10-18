@@ -1,0 +1,2021 @@
+using FluentAssertions;
+using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Clinical.Statistics;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
+
+namespace Nocturne.Core.Clinical.Tests.Statistics;
+
+/// <summary>
+/// Comprehensive unit tests for the StatisticsService
+/// Ensures 1:1 functionality parity with TypeScript utilities and covers all edge cases
+/// </summary>
+[Parity]
+public class StatisticsServiceTests
+{
+    private readonly StatisticsService _statisticsService;
+
+    public StatisticsServiceTests()
+    {
+        _statisticsService = new StatisticsService();
+    }
+
+    #region Basic Statistics Tests
+
+    [Fact]
+    public void CalculateBasicStats_WithValidGlucoseValues_ShouldReturnCorrectStatistics()
+    {
+        // Arrange
+        var glucoseValues = new double[] { 70, 80, 90, 100, 110, 120, 130, 140, 150, 160 };
+
+        // Act
+        var result = _statisticsService.CalculateBasicStats(glucoseValues);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Count.Should().Be(10);
+        result.Mean.Should().Be(115.0);
+        result.Median.Should().Be(115.0);
+        result.Min.Should().Be(70);
+        result.Max.Should().Be(160);
+        result.StandardDeviation.Should().BeApproximately(30.3, 0.1);
+    }
+
+    [Fact]
+    public void CalculateBasicStats_WithEmptyValues_ShouldReturnZeroedStatistics()
+    {
+        // Arrange
+        var glucoseValues = new double[] { };
+
+        // Act
+        var result = _statisticsService.CalculateBasicStats(glucoseValues);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Count.Should().Be(0);
+        result.Mean.Should().Be(0);
+        result.Median.Should().Be(0);
+        result.Min.Should().Be(0);
+        result.Max.Should().Be(0);
+        result.StandardDeviation.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateBasicStats_WithInvalidValues_ShouldFilterOutInvalidReadings()
+    {
+        // Arrange
+        var glucoseValues = new double[] { -10, 0, 50, 100, 150, 700, 800 };
+
+        // Act
+        var result = _statisticsService.CalculateBasicStats(glucoseValues);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Count.Should().Be(3); // Only 50, 100, 150 are valid
+        result.Mean.Should().Be(100.0);
+    }
+
+    [Fact]
+    public void CalculateMean_WithValidValues_ShouldReturnRoundedMean()
+    {
+        // Arrange
+        var values = new double[] { 100.1, 100.2, 100.3 };
+
+        // Act
+        var result = _statisticsService.CalculateMean(values);
+
+        // Assert
+        result.Should().Be(100.2);
+    }
+
+    [Fact]
+    public void CalculatePercentile_WithSortedValues_ShouldReturnCorrectPercentile()
+    {
+        // Arrange
+        var sortedValues = new double[] { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
+
+        // Act
+        var p25 = _statisticsService.CalculatePercentile(sortedValues, 25);
+        var p50 = _statisticsService.CalculatePercentile(sortedValues, 50);
+        var p75 = _statisticsService.CalculatePercentile(sortedValues, 75);
+
+        // Assert
+        p25.Should().BeApproximately(32.5, 0.1);
+        p50.Should().BeApproximately(55, 0.1);
+        p75.Should().BeApproximately(77.5, 0.1);
+    }
+
+    [Fact]
+    public void ExtractGlucoseValues_WithMixedEntries_ShouldExtractValidValues()
+    {
+        // Arrange
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 100, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now).UtcDateTime },
+            new SensorGlucose { Mgdl = 120, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 1).UtcDateTime },
+            new SensorGlucose { Mgdl = 0, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 2).UtcDateTime },
+            new SensorGlucose { Mgdl = 0, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 3).UtcDateTime },
+            new SensorGlucose { Mgdl = 700, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 4).UtcDateTime }, // Should be filtered out
+            new SensorGlucose { Mgdl = 80, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 5).UtcDateTime },
+        };
+
+        // Act
+        var result = _statisticsService.ExtractGlucoseValues(entries).ToList();
+
+        // Assert
+        result.Should().HaveCount(3);
+        result.Should().Contain(new[] { 100.0, 120.0, 80.0 });
+    }
+
+    #endregion
+
+    #region Glycemic Variability Tests
+
+    [Fact]
+    public void CalculateGlycemicVariability_WithValidData_ShouldReturnCompleteMetrics()
+    {
+        // Arrange
+        var values = new double[] { 70, 100, 130, 160, 190, 140, 110, 80 };
+        var entries = values.Select(
+            (v, i) =>
+                new SensorGlucose
+                {
+                    Mgdl = v,
+                    Timestamp = DateTimeOffset.UtcNow.AddMinutes(i * 5).UtcDateTime,
+                }
+        );
+
+        // Act
+        var result = _statisticsService.CalculateGlycemicVariability(values, entries)!;
+
+        // Assert
+        result.Should().NotBeNull();
+        result.CoefficientOfVariation.Should().BeGreaterThan(0);
+        result.StandardDeviation.Should().BeGreaterThan(0);
+        result.EstimatedA1c.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void CalculateEstimatedA1C_WithValidAverageGlucose_ShouldReturnCorrectA1C()
+    {
+        // Arrange
+        var averageGlucose = 154.0; // Should result in ~7.0% A1C
+
+        // Act
+        var result = _statisticsService.CalculateEstimatedA1C(averageGlucose);
+
+        // Assert
+        result.Should().BeApproximately(7.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateEstimatedA1C_WithZeroGlucose_ShouldReturnZero()
+    {
+        // Arrange
+        var averageGlucose = 0.0;
+
+        // Act
+        var result = _statisticsService.CalculateEstimatedA1C(averageGlucose);
+
+        // Assert
+        result.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateMAGE_WithValidValues_ShouldReturnPositiveValue()
+    {
+        // Arrange
+        var values = new double[] { 100, 150, 120, 180, 90, 160, 110 };
+
+        // Act
+        var result = _statisticsService.CalculateMAGE(values);
+
+        // Assert
+        result.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void CalculateMAGE_WithInsufficientData_ShouldReturnZero()
+    {
+        // Arrange
+        var values = new double[] { 100, 110 };
+
+        // Act
+        var result = _statisticsService.CalculateMAGE(values);
+
+        // Assert
+        result.Should().Be(0);
+    }
+
+    #endregion
+
+    #region Time in Range Tests
+
+    [Fact]
+    public void CalculateTimeInRange_WithValidEntries_ShouldReturnCorrectPercentages()
+    {
+        // Arrange
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 50, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now).UtcDateTime }, // Very low
+            new SensorGlucose { Mgdl = 65, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 1 * 300_000).UtcDateTime }, // Low
+            new SensorGlucose { Mgdl = 100, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 2 * 300_000).UtcDateTime }, // Target
+            new SensorGlucose { Mgdl = 150, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 3 * 300_000).UtcDateTime }, // Target
+            new SensorGlucose { Mgdl = 200, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 4 * 300_000).UtcDateTime }, // High
+            new SensorGlucose { Mgdl = 300, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 5 * 300_000).UtcDateTime }, // Very high
+        };
+
+        // Act
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Percentages.VeryLow.Should().BeApproximately(16.67, 0.1);
+        result.Percentages.Low.Should().BeApproximately(16.67, 0.1);
+        result.Percentages.Target.Should().BeApproximately(33.33, 0.1);
+        result.Percentages.High.Should().BeApproximately(16.67, 0.1);
+        result.Percentages.VeryHigh.Should().BeApproximately(16.67, 0.1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_WithCustomThresholds_ShouldUseCustomValues()
+    {
+        // Arrange
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 100, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now).UtcDateTime },
+            new SensorGlucose { Mgdl = 120, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 1 * 300_000).UtcDateTime },
+            new SensorGlucose { Mgdl = 140, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 2 * 300_000).UtcDateTime },
+        };
+        var customThresholds = new GlycemicThresholds { TargetBottom = 90, TargetTop = 130 };
+
+        // Act
+        var result = _statisticsService.CalculateTimeInRange(entries, customThresholds);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Percentages.Target.Should().BeApproximately(66.67, 0.1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_WithEmptyEntries_ShouldReturnZeroMetrics()
+    {
+        // Arrange
+        var entries = Array.Empty<SensorGlucose>();
+
+        // Act
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Percentages.Target.Should().Be(0);
+        result.Durations.Target.Should().Be(0);
+        result.Durations.BelowRange.Should().Be(0);
+        result.Episodes.BelowRange.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_AboveRange_SumsTheHighAndVeryHighZones()
+    {
+        // Arrange
+        // High, VeryHigh, Target, Low, High, Target: the Low reading must count in neither field.
+        var result = _statisticsService.CalculateTimeInRange(Sequence(200, 300, 100, 60, 200, 100));
+
+        // Assert
+        result.Durations.High.Should().Be(10);
+        result.Durations.VeryHigh.Should().Be(5);
+        result.Durations.Low.Should().Be(5);
+        result.Durations.AboveRange.Should().Be(15);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_DoNotCountASingleReadingDip()
+    {
+        var result = _statisticsService.CalculateTimeInRange(Sequence(100, 60, 100, 100, 100, 100));
+
+        result.Episodes.Low.Should().Be(0);
+        result.Episodes.VeryLow.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(1, 3, 0)]
+    [InlineData(5, 15, 1)]
+    public void CalculateTimeInRange_BelowRange_UsesCoveredTimeAndConsensusEpisodes(
+        int cadenceMinutes, double belowMinutes, int episodes
+    )
+    {
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(cadenceMinutes, [100, 60, 40, 60, 70, 180, 200, 300])
+        );
+
+        result.Durations.BelowRange.Should().Be(belowMinutes);
+        result.Durations.Low.Should().Be(2 * cadenceMinutes);
+        result.Durations.VeryLow.Should().Be(cadenceMinutes);
+        result.Durations.AboveRange.Should().Be(2 * cadenceMinutes);
+        result.Episodes.BelowRange.Should().Be(episodes);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_DoNotCountADipShorterThanFifteenMinutes()
+    {
+        var result = _statisticsService.CalculateTimeInRange(Sequence(100, 60, 60, 100, 100, 100, 100));
+
+        result.Episodes.Low.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountAFifteenMinuteDip()
+    {
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(100, 60, 60, 60, 100, 100, 100, 100));
+
+        result.Episodes.Low.Should().Be(1);
+        result.Episodes.VeryLow.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountADipStillUnderwayAtTheEndOfTheData()
+    {
+        var result = _statisticsService.CalculateTimeInRange(Sequence(100, 60, 60, 60));
+
+        result.Episodes.Low.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_KeepADipInterruptedByABriefReturnAsOneEpisode()
+    {
+        // Ten minutes back in range is short of the fifteen that end an episode.
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(60, 60, 60, 60, 100, 100, 60, 60, 60, 60, 100, 100, 100, 100));
+
+        result.Episodes.Low.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_SplitDipsSeparatedByFifteenMinutesInRange()
+    {
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(60, 60, 60, 60, 100, 100, 100, 60, 60, 60, 60, 100, 100, 100));
+
+        result.Episodes.Low.Should().Be(2);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_SplitADipAcrossAGapInTheData()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        int[] minutes = [0, 5, 10, 15, 45, 50, 55, 60, 65, 70, 75];
+        int[] mgdl = [60, 60, 60, 60, 60, 60, 60, 60, 100, 100, 100];
+        var entries = minutes
+            .Select((m, i) => new SensorGlucose { Mgdl = mgdl[i], Timestamp = start.AddMinutes(m) })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(2);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_DoNotBridgeAGapToReachFifteenMinutes()
+    {
+        // Ten minutes low, a half-hour gap, five minutes low: neither side lasted fifteen.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        int[] minutes = [0, 5, 35, 40, 45, 50, 55];
+        int[] mgdl = [60, 60, 60, 100, 100, 100, 100];
+        var entries = minutes
+            .Select((m, i) => new SensorGlucose { Mgdl = mgdl[i], Timestamp = start.AddMinutes(m) })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountAHypoThatDeepensAndRecoversOnceAgainstItsWorstZone()
+    {
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(65, 45, 45, 45, 65, 100, 100, 100, 100));
+
+        result.Episodes.VeryLow.Should().Be(1);
+        result.Episodes.Low.Should().Be(0);
+        result.Episodes.BelowRange.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_GradeAHypoSevereOnlyAfterFifteenMinutesBelowTheSevereThreshold()
+    {
+        // Ten minutes below 54 inside a longer low is a low episode, not a very-low one.
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(65, 45, 45, 65, 100, 100, 100, 100));
+
+        result.Episodes.VeryLow.Should().Be(0);
+        result.Episodes.Low.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_NeedTheSevereMinutesToBeConsecutive()
+    {
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(45, 45, 60, 45, 45, 100, 100, 100));
+
+        result.Episodes.VeryLow.Should().Be(0);
+        result.Episodes.Low.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_FollowAFifteenMinuteSensorWithJitter()
+    {
+        // Every interval a little over fifteen minutes is the sensor's cadence rather than a
+        // gap, so eight low readings are one two-hour episode.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        int[] mgdl = [60, 60, 60, 60, 60, 60, 60, 60, 100, 100, 100];
+        var entries = mgdl
+            .Select((value, i) => new SensorGlucose
+            {
+                Mgdl = value,
+                Timestamp = start.AddSeconds(i * (15 * 60 + 3)),
+            })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(1);
+        result.Durations.Low.Should().BeApproximately(8 * 15.05, 0.01);
+    }
+
+    [Theory]
+    [InlineData(15.0, 10)]
+    [InlineData(15.1, 5)]
+    public void CalculateTimeInRange_Episodes_DoNotCountOneLowReadingAcrossTwoMissedReadings(
+        double missedMinutes, double creditedMinutes)
+    {
+        // A five-minute sensor that misses two readings after a single low: whether the
+        // interval is 15.0 minutes or a few seconds more, the low stands for at most two
+        // cadences and is not an episode.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new[] { 100, 100, 100 }
+            .Select((value, i) => new SensorGlucose { Mgdl = value, Timestamp = start.AddMinutes(i * 5) })
+            .Append(new SensorGlucose { Mgdl = 60, Timestamp = start.AddMinutes(15) })
+            .Concat(new[] { 100, 100, 100, 100 }.Select((value, i) => new SensorGlucose
+            {
+                Mgdl = value,
+                Timestamp = start.AddMinutes(15 + missedMinutes + i * 5),
+            }))
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(0);
+        result.Durations.Low.Should().BeApproximately(creditedMinutes, 1e-9);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_TreatASparseStretchInFiveMinuteDataAsGaps()
+    {
+        // Five-minute data, then six low readings 25 minutes apart, then five-minute data again.
+        // No CGM reports every 25 minutes, so each interval is a dropout rather than a cadence.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new List<SensorGlucose>();
+        for (var i = 0; i < 6; i++)
+            entries.Add(new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(i * 5) });
+        var sparseStart = start.AddMinutes(30);
+        for (var i = 0; i < 6; i++)
+            entries.Add(new SensorGlucose { Mgdl = 60, Timestamp = sparseStart.AddMinutes(i * 25) });
+        var resumed = sparseStart.AddMinutes(5 * 25 + 5);
+        for (var i = 0; i < 6; i++)
+            entries.Add(new SensorGlucose { Mgdl = 100, Timestamp = resumed.AddMinutes(i * 5) });
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(0);
+        result.Durations.Low.Should().Be(6 * 5);
+    }
+
+    [Theory]
+    [InlineData(25)]
+    [InlineData(60)]
+    public void CalculateTimeInRange_Episodes_TreatATwoReadingSeriesAsTwoGapSeparatedReadings(int minutesApart)
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 60, Timestamp = start },
+            new SensorGlucose { Mgdl = 60, Timestamp = start.AddMinutes(minutesApart) },
+        };
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(0);
+        result.Durations.Low.Should().Be(10);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CreditHourlyReadingsOneDefaultCadenceEach()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = Enumerable.Range(0, 6)
+            .Select(i => new SensorGlucose { Mgdl = 60, Timestamp = start.AddHours(i) })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(0);
+        result.Durations.Low.Should().Be(30);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CalculateTimeInRange_Episodes_DoNotLetAReadingAtTheSameInstantBreakARun(bool conflictFirst)
+    {
+        // Two readings stamped at one instant disagree; whichever order they arrive in, the run
+        // of lows through that instant is unbroken.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var shared = start.AddMinutes(5);
+        var low = new SensorGlucose { Mgdl = 60, Timestamp = shared };
+        var inRange = new SensorGlucose { Mgdl = 75, Timestamp = shared };
+        var entries = new List<SensorGlucose> { new() { Mgdl = 60, Timestamp = start } };
+        entries.AddRange(conflictFirst ? [inRange, low] : [low, inRange]);
+        entries.Add(new SensorGlucose { Mgdl = 60, Timestamp = start.AddMinutes(10) });
+        entries.Add(new SensorGlucose { Mgdl = 60, Timestamp = start.AddMinutes(15) });
+        for (var i = 0; i < 4; i++)
+            entries.Add(new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(20 + i * 5) });
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CalculateTimeInRange_Episodes_EnterALowAtAnInstantTheReadingsDisagreeOn(bool lowFirst)
+    {
+        // The first three instants beyond range each hold a low and an in-range reading.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new List<SensorGlucose>
+        {
+            new() { Mgdl = 100, Timestamp = start },
+            new() { Mgdl = 100, Timestamp = start.AddMinutes(5) },
+        };
+        for (var i = 0; i < 3; i++)
+        {
+            var at = start.AddMinutes(10 + i * 5);
+            var low = new SensorGlucose { Mgdl = 60, Timestamp = at };
+            var inRange = new SensorGlucose { Mgdl = 100, Timestamp = at };
+            entries.AddRange(lowFirst ? [low, inRange] : [inRange, low]);
+        }
+        for (var i = 0; i < 4; i++)
+            entries.Add(new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(25 + i * 5) });
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(1);
+        result.Durations.Low.Should().Be(15);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CalculateTimeInRange_Durations_CreditADisagreeingInstantToItsLowReading(bool lowFirst)
+    {
+        // Two sources stamped at the same instants for two hours, one reading 65 and one 80.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new List<SensorGlucose>();
+        for (var i = 0; i < 24; i++)
+        {
+            var at = start.AddMinutes(i * 5);
+            var low = new SensorGlucose { Mgdl = 65, Timestamp = at };
+            var inRange = new SensorGlucose { Mgdl = 80, Timestamp = at };
+            entries.AddRange(lowFirst ? [low, inRange] : [inRange, low]);
+        }
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Durations.Low.Should().Be(120);
+        result.Durations.Target.Should().Be(0);
+        result.Episodes.Low.Should().Be(1);
+        result.Percentages.Low.Should().Be(100);
+        result.Percentages.Target.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(12)]
+    [InlineData(30)]
+    public void CalculateTimeInRange_Episodes_FoldALowUploadedTwiceSecondsApartIntoOneReading(int offsetSeconds)
+    {
+        var result = _statisticsService.CalculateTimeInRange(TwoUploaderLow(offsetSeconds));
+
+        result.Episodes.Low.Should().Be(1);
+        result.Durations.Low.Should().BeApproximately(120, 0.5);
+        result.Percentages.Low.Should().BeApproximately(24.0 / 28 * 100, 1e-9);
+    }
+
+    [Theory]
+    [InlineData(31)]
+    [InlineData(45)]
+    [InlineData(60)]
+    [InlineData(90)]
+    public void CalculateTimeInRange_Episodes_FindALowUploadedTwiceTooFarApartToFold(int offsetSeconds)
+    {
+        // Interleaved uploads outside the fold window: the episode is found, and only the ends of
+        // the series, where the cadence window sees one side, lose a few minutes.
+        var result = _statisticsService.CalculateTimeInRange(TwoUploaderLow(offsetSeconds));
+
+        result.Episodes.Low.Should().Be(1);
+        result.Durations.Low.Should().BeInRange(110, 121);
+    }
+
+    /// <summary>
+    /// A two-hour low at five-minute cadence posted by two uploaders, the second
+    /// <paramref name="offsetSeconds"/> behind the first, then twenty minutes in range.
+    /// </summary>
+    private static List<SensorGlucose> TwoUploaderLow(int offsetSeconds)
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new List<SensorGlucose>();
+        for (var i = 0; i < 24; i++)
+        {
+            var at = start.AddMinutes(i * 5);
+            entries.Add(new SensorGlucose { Mgdl = 60, Timestamp = at, DataSource = "xdrip" });
+            entries.Add(new SensorGlucose { Mgdl = 60, Timestamp = at.AddSeconds(offsetSeconds), DataSource = "share" });
+        }
+        for (var i = 0; i < 4; i++)
+            entries.Add(new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(120 + i * 5) });
+
+        return entries;
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Durations_KeepEveryReadingOfAOneMinuteSensorWithJitter()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = Enumerable.Range(0, 120)
+            .Select(i => new SensorGlucose
+            {
+                Mgdl = 100,
+                Timestamp = start.AddSeconds(i * 60 + (i % 2 == 0 ? 4 : -4)),
+            })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Durations.Target.Should().BeApproximately(120, 0.5);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_DoNotManufactureALowFromAOneMinuteSensorAtTheThreshold()
+    {
+        // Alternating 69 and 71 every minute: half the time low, never fifteen minutes of it.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = Enumerable.Range(0, 120)
+            .Select(i => new SensorGlucose
+            {
+                Mgdl = i % 2 == 0 ? 69 : 71,
+                Timestamp = start.AddSeconds(i * 60 + (i % 3 == 0 ? 5 : 0)),
+            })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(0);
+        result.Percentages.Low.Should().Be(50);
+        result.Durations.Low.Should().BeApproximately(60, 1);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CalculateTimeInRange_Durations_CreditAHighAndInRangeInstantToItsHighReading(bool highFirst)
+    {
+        var at = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var high = new SensorGlucose { Mgdl = 200, Timestamp = at };
+        var inRange = new SensorGlucose { Mgdl = 150, Timestamp = at };
+
+        var result = _statisticsService.CalculateTimeInRange(highFirst ? [high, inRange] : [inRange, high]);
+
+        result.Durations.High.Should().Be(5);
+        result.Durations.Target.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_TreatTwentyMinuteSpacingInFiveMinuteDataAsGaps()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new List<SensorGlucose>();
+        for (var i = 0; i < 6; i++)
+            entries.Add(new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(i * 5) });
+        var sparseStart = start.AddMinutes(30);
+        for (var i = 0; i < 6; i++)
+            entries.Add(new SensorGlucose { Mgdl = 60, Timestamp = sparseStart.AddMinutes(i * 20) });
+        var resumed = sparseStart.AddMinutes(5 * 20 + 5);
+        for (var i = 0; i < 6; i++)
+            entries.Add(new SensorGlucose { Mgdl = 100, Timestamp = resumed.AddMinutes(i * 5) });
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(0);
+        result.Durations.Low.Should().Be(6 * 5);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountALowAtFiveMinutesAfterHoursAtOneMinute()
+    {
+        // The window's median interval is one minute, but the low is read every five, and each of
+        // those readings stands for its own five minutes.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var oneMinute = Enumerable.Range(0, 180)
+            .Select(i => new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(i) });
+        var lowStart = start.AddMinutes(180);
+        int[] fiveMinute = [60, 60, 60, 60, 60, 60, 60, 100, 100, 100, 100];
+        var entries = oneMinute
+            .Concat(fiveMinute.Select((value, i) =>
+                new SensorGlucose { Mgdl = value, Timestamp = lowStart.AddMinutes(i * 5) }))
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(1);
+        result.Durations.Low.Should().Be(35);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_ApplyTheSameRulesAboveRange()
+    {
+        // A single high reading; a rise holding above 250 for fifteen minutes, with a brief dip
+        // back to range inside it; fifteen minutes in range; a high touching 260 once.
+        var result = _statisticsService.CalculateTimeInRange(Sequence(
+            100, 200, 100, 100, 100,
+            200, 260, 260, 260, 100, 200, 200, 100, 100, 100,
+            200, 260, 200, 100, 100, 100));
+
+        result.Episodes.VeryHigh.Should().Be(1);
+        result.Episodes.High.Should().Be(1);
+        result.Episodes.AboveRange.Should().Be(2);
+        result.Episodes.BelowRange.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountACrossingFromHighStraightToLowOnEachSide()
+    {
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(200, 200, 200, 60, 60, 60, 100, 100, 100));
+
+        result.Episodes.High.Should().Be(1);
+        result.Episodes.Low.Should().Be(1);
+        result.Episodes.AboveRange.Should().Be(1);
+        result.Episodes.BelowRange.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_NeedFifteenReadingsFromAOneMinuteSensor()
+    {
+        var fourteen = Enumerable.Repeat(60, 14).Concat(Enumerable.Repeat(100, 20)).ToArray();
+        var fifteen = Enumerable.Repeat(60, 15).Concat(Enumerable.Repeat(100, 20)).ToArray();
+
+        _statisticsService.CalculateTimeInRange(Sequence(1, fourteen)).Episodes.Low.Should().Be(0);
+        _statisticsService.CalculateTimeInRange(Sequence(1, fifteen)).Episodes.Low.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountNoneWhenTheReadingsNeverLeaveTarget()
+    {
+        var result = _statisticsService.CalculateTimeInRange(Sequence(100, 120, 140, 110));
+
+        result.Episodes.VeryLow.Should().Be(0);
+        result.Episodes.Low.Should().Be(0);
+        result.Episodes.High.Should().Be(0);
+        result.Episodes.VeryHigh.Should().Be(0);
+        result.Episodes.AboveRange.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Durations_FollowTheSensorsOwnCadence()
+    {
+        int[] values = [200, 300, 100, 60, 200, 100];
+
+        var fiveMinute = _statisticsService.CalculateTimeInRange(Sequence(5, values));
+        var oneMinute = _statisticsService.CalculateTimeInRange(Sequence(1, values));
+
+        oneMinute.Durations.High.Should().Be(fiveMinute.Durations.High / 5).And.Be(2);
+        oneMinute.Durations.VeryHigh.Should().Be(fiveMinute.Durations.VeryHigh / 5).And.Be(1);
+        oneMinute.Durations.Low.Should().Be(fiveMinute.Durations.Low / 5).And.Be(1);
+        oneMinute.Durations.Target.Should().Be(fiveMinute.Durations.Target / 5).And.Be(2);
+        oneMinute.Durations.AboveRange.Should().Be(fiveMinute.Durations.AboveRange / 5).And.Be(3);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Durations_CreditAGapWithOneIntervalOnly()
+    {
+        // Five-minute readings, then a two-hour gap the sensor did not cover, then two more.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 200, Timestamp = start },
+            new SensorGlucose { Mgdl = 200, Timestamp = start.AddMinutes(5) },
+            new SensorGlucose { Mgdl = 200, Timestamp = start.AddMinutes(10) },
+            new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(130) },
+            new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(135) },
+        };
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        // The reading before the gap is credited one interval, not the 120 minutes it spans.
+        result.Durations.High.Should().Be(15);
+        result.Durations.Target.Should().Be(10);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Durations_CreditReadingsStampedAtTheSameInstantWithOneInterval()
+    {
+        // Readings sharing a timestamp cover no time between them, so only the last is credited.
+        var at = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = Enumerable
+            .Range(0, 4)
+            .Select(_ => new SensorGlucose { Mgdl = 100, Timestamp = at })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Durations.Target.Should().Be(5);
+        result.Percentages.Target.Should().Be(100);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_AverageDailyMinutes_AddToAWholeDayThroughAGap()
+    {
+        // Five-minute readings, a two-hour gap the sensor did not cover, then two more. The
+        // percentages count readings, so they still sum to 100 and the zones still fill a day.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 200, Timestamp = start },
+            new SensorGlucose { Mgdl = 200, Timestamp = start.AddMinutes(5) },
+            new SensorGlucose { Mgdl = 200, Timestamp = start.AddMinutes(10) },
+            new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(130) },
+            new SensorGlucose { Mgdl = 45, Timestamp = start.AddMinutes(135) },
+        };
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        var average = result.AverageDailyMinutes;
+        (average.Target + average.Low + average.High).Should().BeApproximately(1440, 1);
+        average.Target.Should().BeApproximately(result.Percentages.Target / 100 * 1440, 0.001);
+        average.Low.Should().BeApproximately((result.Percentages.Low + result.Percentages.VeryLow) / 100 * 1440, 0.001);
+        average.High.Should().BeApproximately((result.Percentages.High + result.Percentages.VeryHigh) / 100 * 1440, 0.001);
+    }
+
+    private static SensorGlucose[] Sequence(params int[] mgdl) => Sequence(5, mgdl);
+
+    private static SensorGlucose[] Sequence(double cadenceMinutes, params int[] mgdl)
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        return mgdl
+            .Select((value, i) => new SensorGlucose
+            {
+                Mgdl = value,
+                Timestamp = start.AddMinutes(i * cadenceMinutes),
+            })
+            .ToArray();
+    }
+
+    [Fact]
+    public void CalculatePersonalRangeTime_WithTimeOfDaySchedule_SplitsReadingsByActiveEntry()
+    {
+        // Arrange — midnight entry targets 100-180, 06:00 entry targets 80-160.
+        var schedule = new List<TargetRangeEntry>
+        {
+            new() { Time = "00:00", TimeAsSeconds = 0, Low = 100, High = 180 },
+            new() { Time = "06:00", TimeAsSeconds = 6 * 3600, Low = 80, High = 160 },
+        };
+        var day = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            // 03:00 — active entry is midnight's 100-180
+            new SensorGlucose { Mgdl = 90, Timestamp = day.AddHours(3) }, // below (90 < 100)
+            new SensorGlucose { Mgdl = 150, Timestamp = day.AddHours(3.1) }, // within
+            // 09:00 — active entry is 06:00's 80-160
+            new SensorGlucose { Mgdl = 170, Timestamp = day.AddHours(9) }, // above (170 > 160)
+            new SensorGlucose { Mgdl = 100, Timestamp = day.AddHours(9.1) }, // within
+        };
+
+        // Act
+        var result = _statisticsService.CalculatePersonalRangeTime(entries, schedule, TimeZoneInfo.Utc);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.BelowRangePercent.Should().BeApproximately(25.0, 0.1);
+        result.InRangePercent.Should().BeApproximately(50.0, 0.1);
+        result.AboveRangePercent.Should().BeApproximately(25.0, 0.1);
+        result.Entries.Should().BeSameAs(schedule);
+    }
+
+    [Fact]
+    public void CalculatePersonalRangeTime_RespectsTenantTimezone()
+    {
+        // Arrange — a reading at 02:00 UTC is 12:00 in UTC+10, so it must be evaluated
+        // against the 06:00 entry, not the midnight one.
+        var schedule = new List<TargetRangeEntry>
+        {
+            new() { Time = "00:00", TimeAsSeconds = 0, Low = 100, High = 180 },
+            new() { Time = "06:00", TimeAsSeconds = 6 * 3600, Low = 80, High = 160 },
+        };
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 170, Timestamp = new DateTime(2026, 1, 1, 2, 0, 0, DateTimeKind.Utc) },
+        };
+        var plusTen = TimeZoneInfo.CreateCustomTimeZone("UTC+10", TimeSpan.FromHours(10), "UTC+10", "UTC+10");
+
+        // Act
+        var result = _statisticsService.CalculatePersonalRangeTime(entries, schedule, plusTen);
+
+        // Assert — 170 is above the 06:00 entry's 160, but within the midnight entry's 180.
+        result.Should().NotBeNull();
+        result!.AboveRangePercent.Should().Be(100);
+    }
+
+    [Fact]
+    public void CalculatePersonalRangeTime_WithNoValidReadingsOrNoSchedule_ReturnsNull()
+    {
+        var schedule = new List<TargetRangeEntry> { new() { Time = "00:00", TimeAsSeconds = 0, Low = 80, High = 160 } };
+        var invalidEntries = new[]
+        {
+            new SensorGlucose { Mgdl = 0, Timestamp = DateTime.UtcNow },
+            new SensorGlucose { Mgdl = 700, Timestamp = DateTime.UtcNow },
+        };
+        var validEntries = new[] { new SensorGlucose { Mgdl = 100, Timestamp = DateTime.UtcNow } };
+
+        _statisticsService.CalculatePersonalRangeTime(invalidEntries, schedule, TimeZoneInfo.Utc).Should().BeNull();
+        _statisticsService.CalculatePersonalRangeTime(validEntries, [], TimeZoneInfo.Utc).Should().BeNull();
+    }
+
+    #endregion
+
+    #region Weekday Averages Tests
+
+    /// <summary>2026-07-20 is a Monday.</summary>
+    private static readonly DateTime WeekdayMonday = new(2026, 7, 20, 0, 0, 0, DateTimeKind.Utc);
+
+    private static SensorGlucose ReadingAt(DateTime utc, int mgdl) =>
+        new() { Mgdl = mgdl, Timestamp = DateTime.SpecifyKind(utc, DateTimeKind.Utc) };
+
+    [Fact]
+    public void CalculateWeekdayAverages_KeysAReadingByWeekdayAndFiveMinuteSlot()
+    {
+        var slots = _statisticsService
+            .CalculateWeekdayAverages([ReadingAt(WeekdayMonday.AddHours(8).AddMinutes(3), 120)], TimeZoneInfo.Utc)
+            .ToList();
+
+        var slot = slots.Should().ContainSingle().Subject;
+        slot.MinuteOfDay.Should().Be(480);
+        slot.Mean.Should().Equal(new Dictionary<DayOfWeek, double> { [DayOfWeek.Monday] = 120 });
+    }
+
+    [Fact]
+    public void CalculateWeekdayAverages_MeansEveryReadingInACellEqually()
+    {
+        // A running (previous + next) / 2 would give 165 for these three.
+        var entries = new[]
+        {
+            ReadingAt(WeekdayMonday.AddHours(8), 60),
+            ReadingAt(WeekdayMonday.AddHours(8).AddMinutes(1), 120),
+            ReadingAt(WeekdayMonday.AddHours(8).AddMinutes(2), 240),
+        };
+
+        var slots = _statisticsService.CalculateWeekdayAverages(entries, TimeZoneInfo.Utc).ToList();
+
+        slots.Should().ContainSingle().Which.Mean[DayOfWeek.Monday].Should().Be(140);
+    }
+
+    [Fact]
+    public void CalculateWeekdayAverages_MergesAWeekdayAcrossWeeksAndKeepsWeekdaysApartInACell()
+    {
+        var entries = new[]
+        {
+            ReadingAt(WeekdayMonday.AddDays(-7).AddHours(8), 100),
+            ReadingAt(WeekdayMonday.AddHours(8), 200),
+            ReadingAt(WeekdayMonday.AddDays(1).AddHours(8), 150),
+        };
+
+        var slot = _statisticsService
+            .CalculateWeekdayAverages(entries, TimeZoneInfo.Utc)
+            .Should().ContainSingle().Subject;
+
+        slot.Mean.Should().Equal(new Dictionary<DayOfWeek, double>
+        {
+            [DayOfWeek.Monday] = 150,
+            [DayOfWeek.Tuesday] = 150,
+        });
+    }
+
+    [Fact]
+    public void CalculateWeekdayAverages_FloorsToFiveMinutesAndOrdersSlotsByTimeOfDay()
+    {
+        var entries = new[]
+        {
+            ReadingAt(WeekdayMonday.AddHours(20), 100),
+            ReadingAt(WeekdayMonday.AddHours(8).AddMinutes(8), 300),
+            ReadingAt(WeekdayMonday.AddHours(8).AddMinutes(1), 100),
+            ReadingAt(WeekdayMonday.AddHours(8).AddMinutes(2), 200),
+        };
+
+        var slots = _statisticsService.CalculateWeekdayAverages(entries, TimeZoneInfo.Utc).ToList();
+
+        slots.Select(s => s.MinuteOfDay).Should().Equal(480, 485, 1200);
+        slots[0].Mean[DayOfWeek.Monday].Should().Be(150);
+        slots[1].Mean[DayOfWeek.Monday].Should().Be(300);
+    }
+
+    [Fact]
+    public void CalculateWeekdayAverages_BucketsOnTheTenantClock()
+    {
+        // 22:30 UTC on Monday is 08:30 on Tuesday in Sydney (UTC+10 in July).
+        var sydney = TimeZoneHelper.GetTimeZoneInfoFromId("Australia/Sydney");
+        sydney.Should().NotBe(TimeZoneInfo.Utc);
+
+        var slot = _statisticsService
+            .CalculateWeekdayAverages([ReadingAt(WeekdayMonday.AddHours(22).AddMinutes(30), 100)], sydney)
+            .Should().ContainSingle().Subject;
+
+        slot.MinuteOfDay.Should().Be(510);
+        slot.Mean.Keys.Should().Equal(DayOfWeek.Tuesday);
+    }
+
+    [Fact]
+    public void CalculateWeekdayAverages_SkipsReadingsWithoutAValueOrTimestamp()
+    {
+        var entries = new[] { ReadingAt(WeekdayMonday.AddHours(8), 0), new SensorGlucose { Mgdl = 100 } };
+
+        _statisticsService.CalculateWeekdayAverages(entries, TimeZoneInfo.Utc).Should().BeEmpty();
+        _statisticsService.CalculateWeekdayAverages([], TimeZoneInfo.Utc).Should().BeEmpty();
+    }
+
+    #endregion
+
+    #region Glucose Distribution Tests
+
+    [Fact]
+    public void CalculateGlucoseDistribution_WithValidEntries_ShouldReturnDistribution()
+    {
+        // Arrange
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 75, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now).UtcDateTime }, // 70-80 range
+            new SensorGlucose { Mgdl = 95, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 1).UtcDateTime }, // 90-100 range
+            new SensorGlucose { Mgdl = 125, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 2).UtcDateTime }, // 120-130 range
+            new SensorGlucose { Mgdl = 175, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 3).UtcDateTime }, // 150-180 range
+        };
+
+        // Act
+        var result = _statisticsService.CalculateGlucoseDistribution(entries).ToList();
+
+        // Assert
+        result.Should().NotBeEmpty();
+        result.Should().HaveCount(4);
+        result.Sum(r => r.Percent).Should().Be(100.0);
+        result.All(r => r.Count == 1).Should().BeTrue();
+        result.All(r => r.Percent == 25.0).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CalculateAveragedStats_WithValidEntries_ShouldReturn24HourStats()
+    {
+        // Arrange
+        var baseTime = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero);
+        var entries = Enumerable
+            .Range(0, 24)
+            .Select(hour => new SensorGlucose
+            {
+                Mgdl = 100 + hour * 2, // Gradually increasing glucose
+                Timestamp = baseTime.AddHours(hour).UtcDateTime,
+            });
+
+        // Act
+        var result = _statisticsService.CalculateAveragedStats(entries, TimeZoneInfo.Utc).ToList();
+
+        // Assert
+        result.Should().HaveCount(24);
+        result.All(r => r.Hour >= 0 && r.Hour < 24).Should().BeTrue();
+        result.Where(r => r.Count > 0).Should().HaveCount(24);
+    }
+
+    [Fact]
+    public void CalculateAveragedStats_WithEmptyEntries_ShouldReturnEmpty24HourStats()
+    {
+        // Arrange
+        var entries = Array.Empty<SensorGlucose>();
+
+        // Act
+        var result = _statisticsService.CalculateAveragedStats(entries, TimeZoneInfo.Utc).ToList();
+
+        // Assert
+        result.Should().HaveCount(24);
+        result.All(r => r.Count == 0).Should().BeTrue();
+        result.All(r => r.Mean == 0).Should().BeTrue();
+    }
+
+    #endregion
+
+    #region Treatment Statistics Tests
+
+    [Fact]
+    public void CalculateTreatmentSummary_WithValidData_ShouldReturnSummary()
+    {
+        // Arrange
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var boluses = new[]
+        {
+            new Bolus
+            {
+                Insulin = 5.0,
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now).UtcDateTime,
+                Automatic = false,
+            }, // Meal bolus
+            new Bolus
+            {
+                Insulin = 2.0,
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 1).UtcDateTime,
+                Automatic = false,
+            }, // Correction bolus
+        };
+        var carbIntakes = new[]
+        {
+            new CarbIntake
+            {
+                Carbs = 45,
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now).UtcDateTime,
+            },
+            new CarbIntake { Carbs = 15, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 1).UtcDateTime },
+        };
+
+        // Act
+        var result = _statisticsService.CalculateTreatmentSummary(boluses, carbIntakes);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.TreatmentCount.Should().Be(4);
+        result.Totals.Insulin.Bolus.Should().Be(7.0);
+        result.Totals.Food.Carbs.Should().Be(60);
+    }
+
+    /// <summary>
+    /// Every numeric field reachable from <see cref="TreatmentSummary"/> must be something the
+    /// calculation fills. A field it never writes reads as 0 and is mistaken for a real total.
+    /// </summary>
+    [Fact]
+    public void CalculateTreatmentSummary_FillsEveryNumericField()
+    {
+        var carbIntake = new CarbIntake { Id = Guid.NewGuid(), Carbs = 60 };
+        var foods = new Dictionary<Guid, List<TreatmentFood>>
+        {
+            [carbIntake.Id] =
+            [
+                new TreatmentFood
+                {
+                    CarbIntakeId = carbIntake.Id,
+                    Portions = 2,
+                    FatPerPortion = 5,
+                    ProteinPerPortion = 8,
+                },
+            ],
+        };
+
+        var result = _statisticsService.CalculateTreatmentSummary(
+            [new Bolus { Insulin = 6.0 }],
+            [carbIntake],
+            foods,
+            dayCount: 2
+        );
+
+        var unfilled = NumericLeaves(result, nameof(TreatmentSummary))
+            .Where(leaf => leaf.Value == 0)
+            .Select(leaf => leaf.Path);
+        unfilled.Should().BeEmpty();
+        result.Totals.Insulin.Bolus.Should().Be(6.0);
+        result.CarbToInsulinRatio.Should().Be(10.0, "60 g over 6 U of bolus insulin");
+    }
+
+    private static IEnumerable<(string Path, double Value)> NumericLeaves(object node, string path)
+    {
+        foreach (var property in node.GetType().GetProperties())
+        {
+            var value = property.GetValue(node);
+            var childPath = $"{path}.{property.Name}";
+            switch (value)
+            {
+                case double d:
+                    yield return (childPath, d);
+                    break;
+                case int i:
+                    yield return (childPath, i);
+                    break;
+                case not null when property.PropertyType.Namespace == typeof(TreatmentSummary).Namespace
+                    && property.PropertyType.IsClass:
+                    foreach (var leaf in NumericLeaves(value, childPath))
+                        yield return leaf;
+                    break;
+            }
+        }
+    }
+
+    #endregion
+
+    #region Formatting Tests
+
+    [Fact]
+    public void FormatPercentageDisplay_WithValidValue_ShouldFormatToOneDecimal()
+    {
+        // Arrange & Act & Assert
+        _statisticsService.FormatPercentageDisplay(50.12345).Should().Be("50.1");
+        _statisticsService.FormatPercentageDisplay(100.0).Should().Be("100.0");
+    }
+
+    [Fact]
+    public void RoundInsulinToPumpPrecision_WithVariousValues_ShouldRoundCorrectly()
+    {
+        // Arrange & Act & Assert
+        _statisticsService.RoundInsulinToPumpPrecision(0.03).Should().Be(0.05);
+        _statisticsService.RoundInsulinToPumpPrecision(0.07).Should().Be(0.05);
+        _statisticsService.RoundInsulinToPumpPrecision(0.08).Should().Be(0.10);
+        _statisticsService.RoundInsulinToPumpPrecision(1.23).Should().Be(1.25);
+    }
+
+    #endregion
+
+    #region Unit Conversion Tests
+
+    [Fact]
+    public void MgdlToMMOL_WithValidValues_ShouldConvertCorrectly()
+    {
+        // Arrange & Act & Assert
+        _statisticsService.MgdlToMMOL(99).Should().BeApproximately(5.5, 0.1);
+        _statisticsService.MgdlToMMOL(180).Should().BeApproximately(10.0, 0.1);
+    }
+
+    [Fact]
+    public void MmolToMGDL_WithValidValues_ShouldConvertCorrectly()
+    {
+        // Arrange & Act & Assert
+        _statisticsService.MmolToMGDL(5.5).Should().BeApproximately(99, 1);
+        _statisticsService.MmolToMGDL(10.0).Should().BeApproximately(180, 1);
+    }
+
+    [Fact]
+    public void MgdlToMMOLString_WithValidValue_ShouldReturnFormattedString()
+    {
+        // Arrange & Act & Assert
+        _statisticsService.MgdlToMMOLString(99).Should().Be("5.5");
+        _statisticsService.MgdlToMMOLString(180).Should().Be("10.0");
+    }
+
+    #endregion
+
+    #region Validation Tests
+
+    [Fact]
+    public void ValidateTreatmentData_WithValidTreatment_ShouldReturnTrue()
+    {
+        // Arrange
+        var validTreatment = new Treatment
+        {
+            Id = "test123",
+            Timestamp = DateTimeOffset.UtcNow.ToString("o"),
+            Insulin = 5.0,
+            Carbs = 45,
+        };
+
+        // Act
+        var result = _statisticsService.ValidateTreatmentData(validTreatment);
+
+        // Assert
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ValidateTreatmentData_WithInvalidTreatment_ShouldReturnFalse()
+    {
+        // Arrange
+        var invalidTreatment = new Treatment
+        {
+            Id = "", // Invalid empty ID
+            Timestamp = null, // Invalid null timestamp
+        };
+
+        // Act
+        var result = _statisticsService.ValidateTreatmentData(invalidTreatment);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ValidateTreatmentData_WithNegativeValues_ShouldReturnFalse()
+    {
+        // Arrange
+        var invalidTreatment = new Treatment
+        {
+            Id = "test123",
+            Timestamp = DateTimeOffset.UtcNow.ToString("o"),
+            Insulin = -5.0, // Invalid negative insulin
+        };
+
+        // Act
+        var result = _statisticsService.ValidateTreatmentData(invalidTreatment);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CleanTreatmentData_WithMixedTreatments_ShouldFilterValidOnes()
+    {
+        // Arrange
+        var treatments = new[]
+        {
+            new Treatment
+            {
+                Id = "valid1",
+                Timestamp = "2023-01-01T00:00:01.000Z",
+                Insulin = 5.0,
+            },
+            new Treatment
+            {
+                Id = "",
+                Timestamp = "2023-01-01T00:00:02.000Z",
+                Insulin = 3.0,
+            }, // Invalid ID
+            new Treatment
+            {
+                Id = "valid2",
+                Timestamp = "2023-01-01T00:00:03.000Z",
+                Carbs = 15,
+            },
+            new Treatment
+            {
+                Id = "invalid",
+                Timestamp = null,
+                Insulin = 2.0,
+            }, // Invalid timestamp
+        };
+
+        // Act
+        var result = _statisticsService.CleanTreatmentData(treatments).ToList();
+
+        // Assert
+        result.Should().HaveCount(2);
+        result.Should().Contain(t => t.Id == "valid1");
+        result.Should().Contain(t => t.Id == "valid2");
+    }
+
+    #endregion
+
+    #region Reliability Assessment Tests
+
+    [Theory]
+    [InlineData(14, 100, 14, 14, true)] // Meets days + has readings
+    [InlineData(30, 500, 30, 14, true)] // Exceeds recommended days
+    [InlineData(10, 100, 30, 14, false)] // Below recommended days
+    [InlineData(14, 0, 14, 14, false)] // No readings
+    [InlineData(0, 0, 14, 14, false)] // No data at all
+    [InlineData(1, 288, 1, 1, true)] // 1-day window, 1 day of data
+    [InlineData(2, 576, 3, 3, false)] // 3-day window, 2 days of data
+    [InlineData(7, 2016, 7, 7, true)] // 7-day window, 7 days of data
+    [InlineData(5, 1440, 5, 5, true)] // 5-day window, 5 days of data
+    [InlineData(10, 2880, 10, 10, true)] // 10-day window, 10 days of data
+    [InlineData(5, 1440, 7, 7, false)] // 7-day window, 5 days of data
+    [InlineData(13, 3744, 90, 14, false)] // 90-day window still wants 14 days
+    public void AssessReliability_WithVariousInputs_ShouldReturnCorrectMeetsReliabilityCriteria(
+        int daysOfData,
+        int readingCount,
+        int windowDays,
+        int expectedMinimumDays,
+        bool expectedMeetsReliability
+    )
+    {
+        var result = _statisticsService.AssessReliability(daysOfData, readingCount, windowDays);
+
+        result.MeetsReliabilityCriteria.Should().Be(expectedMeetsReliability);
+        result.DaysOfData.Should().Be(daysOfData);
+        result.RecommendedMinimumDays.Should().Be(expectedMinimumDays);
+        result.ReadingCount.Should().Be(readingCount);
+    }
+
+    private static readonly TimeZoneInfo UtcPlusTen =
+        TimeZoneInfo.CreateCustomTimeZone("UTC+10", TimeSpan.FromHours(10), "UTC+10", "UTC+10");
+
+    // A UTC+10 local day: 14:00 UTC the day before to 14:00 UTC.
+    private static readonly DateTime LocalDayStartUtc = new(2026, 3, 9, 14, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void AnalyzeGlucoseData_ALocalDayCrossingUtcMidnight_IsOneDayOfData()
+    {
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(LocalDayStartUtc, 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            windowDays: 1, timeZone: UtcPlusTen);
+
+        result.Reliability!.DaysOfData.Should().Be(1);
+        result.Reliability.RecommendedMinimumDays.Should().Be(1);
+        result.Reliability.MeetsReliabilityCriteria.Should().BeTrue();
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_WithoutAZone_CountsUtcDays()
+    {
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(LocalDayStartUtc, 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            windowDays: 1);
+
+        result.Reliability!.DaysOfData.Should().Be(2);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_AThirtyDayWindowWithOneDay_StillWantsFourteen()
+    {
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(LocalDayStartUtc, 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            windowDays: 30, timeZone: UtcPlusTen);
+
+        result.Reliability!.DaysOfData.Should().Be(1);
+        result.Reliability.RecommendedMinimumDays.Should().Be(14);
+        result.Reliability.MeetsReliabilityCriteria.Should().BeFalse();
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_ACallerWithNoWindow_IsJudgedAgainstTheClinicalMinimum()
+    {
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(LocalDayStartUtc, 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            StatisticsService.ClinicalMinimumDays, timeZone: UtcPlusTen);
+
+        result.Reliability!.RecommendedMinimumDays.Should().Be(14);
+        result.Reliability.MeetsReliabilityCriteria.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(2026, 4, 5, 25)] // Sydney clocks go back: a 25 hour day
+    [InlineData(2026, 10, 4, 23)] // Sydney clocks go forward: a 23 hour day
+    public void ADaylightSavingDay_IsOneDayWindowAndOneDayOfData(int year, int month, int day, int hours)
+    {
+        var sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        var localMidnight = new DateTime(year, month, day, 0, 0, 0, DateTimeKind.Unspecified);
+        var start = TimeZoneInfo.ConvertTimeToUtc(localMidnight, sydney);
+        var end = TimeZoneInfo.ConvertTimeToUtc(localMidnight.AddDays(1), sydney).AddMilliseconds(-1);
+
+        (end - start).TotalHours.Should().BeApproximately(hours, 0.01);
+        var windowDays = StatisticsService.WindowDays(start, end);
+        windowDays.Should().Be(1);
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(start, 5, hours * 12), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            windowDays, timeZone: sydney);
+
+        result.Reliability!.DaysOfData.Should().Be(1);
+        result.Reliability.MeetsReliabilityCriteria.Should().BeTrue();
+    }
+
+    #endregion
+
+    #region GMI on GlycemicVariability Tests
+
+    [Fact]
+    public void CalculateGlycemicVariability_WithValidData_ShouldPopulateGmiAndEstimatedA1c()
+    {
+        // Arrange
+        var values = new double[] { 70, 100, 130, 160, 190, 140, 110, 80 };
+        var entries = values.Select(
+            (v, i) =>
+                new SensorGlucose
+                {
+                    Mgdl = v,
+                    Timestamp = DateTimeOffset.UtcNow.AddMinutes(i * 5).UtcDateTime,
+                }
+        );
+
+        // Act
+        var result = _statisticsService.CalculateGlycemicVariability(values, entries)!;
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Gmi.Should().NotBeNull();
+        result.Gmi!.Value.Should().BeGreaterThan(0);
+        result.EstimatedA1c.Should().BeGreaterThan(0);
+    }
+
+    #endregion
+
+    #region CGM Active Percent Tests
+
+    [Fact]
+    public void AnalyzeGlucoseDataExtended_MeasuresDataSufficiencyAgainstTheWholeWindow()
+    {
+        var tenCompleteDays = AtCadence(new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), 5, 10 * 288);
+
+        var result = _statisticsService.AnalyzeGlucoseDataExtended(tenCompleteDays, [], [], windowDays: 30);
+
+        result.DataSufficiency.TotalDays.Should().Be(30);
+        result.DataSufficiency.IsSufficient.Should().BeFalse();
+    }
+
+    private static SensorGlucose[] AtCadence(
+        DateTime start,
+        double cadenceMinutes,
+        int count,
+        Guid? patientDeviceId = null
+    ) =>
+        Enumerable
+            .Range(0, count)
+            .Select(i => new SensorGlucose
+            {
+                Mgdl = 120,
+                Timestamp = start.AddMinutes(i * cadenceMinutes),
+                PatientDeviceId = patientDeviceId,
+            })
+            .ToArray();
+
+    /// <summary>
+    /// One warm-up per sensor session, recorded or inferred, however many records the change left:
+    /// here xDrip logs a change and a start for one insertion and AAPS a copy, two days later
+    /// Nocturne infers the next one, and a site change is no sensor session at all.
+    /// </summary>
+    [Fact]
+    public void AnalyzeGlucoseData_CountsOneSensorWarmupPerSession()
+    {
+        var start = DateTime.UtcNow.AddDays(-3);
+        DeviceEvent Event(DeviceEventType type, DateTime at, string source) =>
+            new() { EventType = type, Timestamp = at, DataSource = source };
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(start, 5, 864), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14,
+            deviceEvents:
+            [
+                Event(DeviceEventType.SensorChange, start.AddHours(2), "xdrip"),
+                Event(DeviceEventType.SensorStart, start.AddHours(2).AddMinutes(3), "xdrip"),
+                Event(DeviceEventType.SensorStart, start.AddHours(2).AddMinutes(9), "aaps"),
+                Event(DeviceEventType.SensorStart, start.AddDays(2), "sensor-session-inference"),
+                Event(DeviceEventType.SiteChange, start.AddDays(1), "aaps"),
+            ]);
+
+        result.DataQuality.SensorWarmups.Should().Be(2);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_WithoutDeviceEvents_CountsNoSensorWarmups()
+    {
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(DateTime.UtcNow.AddDays(-1), 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14);
+
+        result.DataQuality.SensorWarmups.Should().Be(0);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_HalfCoverage_Returns50PercentCgmActive()
+    {
+        // 144 five-minute readings cover twelve hours of a twenty-four hour report.
+        var start = DateTime.UtcNow.AddDays(-1);
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(start, 5, 144), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14,
+            startDate: start, endDate: start.AddDays(1));
+
+        result.DataQuality.CgmActivePercent.Should().BeApproximately(50.0, 1.0);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_FullCoverage_Returns100PercentCgmActive()
+    {
+        var start = DateTime.UtcNow.AddDays(-1);
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(start, 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14,
+            startDate: start, endDate: start.AddDays(1));
+
+        result.DataQuality.CgmActivePercent.Should().Be(100.0);
+    }
+
+    [Theory]
+    [InlineData(1, 60, 100.0)]
+    [InlineData(1, 30, 50.0)]
+    [InlineData(5, 12, 100.0)]
+    [InlineData(10, 6, 100.0)]
+    [InlineData(15, 4, 100.0)]
+    [InlineData(15, 2, 50.0)]
+    public void AnalyzeGlucoseData_ScoresCoverageAgainstTheSeriesOwnCadence(
+        int cadenceMinutes,
+        int readingCount,
+        double expectedPercent
+    )
+    {
+        var start = DateTime.UtcNow.AddHours(-1);
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(start, cadenceMinutes, readingCount),
+            Array.Empty<Bolus>(),
+            Array.Empty<CarbIntake>(), windowDays: 14,
+            startDate: start,
+            endDate: start.AddHours(1));
+
+        result.DataQuality.CgmActivePercent.Should().BeApproximately(expectedPercent, 1.0);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_HoleInAFiveMinuteSeries_CountsTheReadingsItOwed()
+    {
+        var start = DateTime.UtcNow.AddHours(-2);
+        var entries = AtCadence(start, 5, 7).Concat(AtCadence(start.AddMinutes(60), 5, 7));
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14);
+
+        result.DataQuality.GapAnalysis.Gaps.Should().HaveCount(1);
+        result.DataQuality.GapAnalysis.LongestGap.Should().Be(30);
+        result.DataQuality.MissingReadings.Should().Be(5);
+    }
+
+    [Theory]
+    [InlineData(30, 0, 0)]
+    [InlineData(40, 0, 0)]
+    [InlineData(50, 1, 2)]
+    [InlineData(60, 1, 3)]
+    public void AnalyzeGlucoseData_GapThresholdFollowsTheCadence(
+        double holeMinutes,
+        int expectedGaps,
+        int expectedMissing
+    )
+    {
+        // A fifteen-minute sensor: one interval missed is jitter, three are a gap.
+        var start = DateTime.UtcNow.AddHours(-4);
+        var entries = AtCadence(start, 15, 6)
+            .Concat(AtCadence(start.AddMinutes(75 + holeMinutes), 15, 6));
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14);
+
+        result.DataQuality.GapAnalysis.Gaps.Should().HaveCount(expectedGaps);
+        result.DataQuality.MissingReadings.Should().Be(expectedMissing);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_SensorSwitchMidReport_ScoresEachStreamAtItsOwnCadence()
+    {
+        // Twelve hours of a one-minute Libre, then twelve of a five-minute Dexcom.
+        var start = DateTime.UtcNow.AddDays(-1);
+        var entries = AtCadence(start, 1, 720, Guid.NewGuid())
+            .Concat(AtCadence(start.AddHours(12), 5, 144, Guid.NewGuid()));
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14,
+            startDate: start, endDate: start.AddDays(1));
+
+        result.DataQuality.CgmActivePercent.Should().BeApproximately(100.0, 1.0);
+        result.DataQuality.DataCompleteness.Should().BeApproximately(100.0, 1.0);
+        result.DataQuality.GapAnalysis.Gaps.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_NoReportPeriod_InfersFromEntries()
+    {
+        var start = DateTime.UtcNow.AddHours(-12);
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(start, 5, 144), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14);
+
+        result.DataQuality.CgmActivePercent.Should().BeApproximately(100.0, 2.0);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_WithARegisteredDevice_CreditsTheCatalogueCadence()
+    {
+        // The catalogue publishes five minutes and the device uploads every one: its 144 readings
+        // stand for twelve hours of the twenty-four hour report, not for 144 minutes of it.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var device = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start, 1, 144, device),
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(device, start, start.AddDays(1), 5) });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_DeviceOutlivingTheReport_MeasuresAgainstTheReportPeriod()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var device = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start, 5, 144, device),
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(device, start.AddDays(-30), start.AddDays(30), 5) });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_DeviceRegisteredMidReport_MeasuresAgainstItsOwnWindow()
+    {
+        // Twelve hours of five-minute readings from a device registered for those twelve hours is
+        // a device that never missed a reading, whatever the other half of the report holds.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var device = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start.AddHours(12), 5, 144, device),
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(device, start.AddHours(12), null, 5) });
+
+        result.Should().BeApproximately(100.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_DeviceWithNoStartDate_TakesTheReportStart()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var device = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start.AddHours(12), 5, 144, device),
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(device, null, null, 5) });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_WithNoDevices_ScoresEachStreamAtItsOwnCadence()
+    {
+        // Six hours of a one-minute Libre, then six of a five-minute Dexcom: twelve of the
+        // twenty-four hours the report covers.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = AtCadence(start, 1, 360, Guid.NewGuid())
+            .Concat(AtCadence(start.AddHours(12), 5, 72, Guid.NewGuid()))
+            .ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(entries, start, start.AddDays(1));
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_TwoDevicesRegisteredAtOnce_MeasuresAgainstOnePeriod()
+    {
+        // Both registered for the whole report, the canonical stream switching from one to the
+        // other halfway: a day of five-minute readings covering a day, not half of two days.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var entries = AtCadence(start, 5, 144, first)
+            .Concat(AtCadence(start.AddHours(12), 5, 144, second))
+            .ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            entries,
+            start,
+            start.AddDays(1),
+            new[]
+            {
+                new CgmDeviceWindow(first, start, start.AddDays(1), 5),
+                new CgmDeviceWindow(second, start, start.AddDays(1), 5),
+            });
+
+        result.Should().BeApproximately(100.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_ReadingsOutsideEveryWindow_AreNotCredited()
+    {
+        // The device was registered for the second half of the report and delivered half of it;
+        // the readings from before it existed are not its coverage.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var device = Guid.NewGuid();
+        var entries = AtCadence(start.AddHours(12), 5, 72, device)
+            .Concat(AtCadence(start, 5, 144))
+            .ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            entries,
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(device, start.AddHours(12), start.AddDays(1), 5) });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_ReadingsStampedWithAnUnregisteredDevice_UseDerivedCadence()
+    {
+        // A device row the report never saw — deleted, or another category — is no more attributed
+        // than an unstamped reading: twelve hours of one-minute readings, credited as twelve.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var registered = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start, 1, 720, Guid.NewGuid()),
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(registered, start, start.AddDays(1), 5) });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_DeviceEntirelyOutsideTheReport_ClaimsNoPeriod()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var reporting = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start, 5, 144, reporting),
+            start,
+            start.AddDays(1),
+            new[]
+            {
+                new CgmDeviceWindow(reporting, start, start.AddDays(1), 5),
+                new CgmDeviceWindow(Guid.NewGuid(), start.AddDays(2), start.AddDays(3), 5),
+            });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_UnattributedReadings_CountAtTheirOwnCadence()
+    {
+        // Six hours from the registered device, then six from an upload nothing stamped: the
+        // unattributed stretch is credited the cadence it reports, against the same period.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var device = Guid.NewGuid();
+        var entries = AtCadence(start, 5, 72, device)
+            .Concat(AtCadence(start.AddHours(6), 1, 360))
+            .ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            entries,
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(device, start, start.AddDays(1), 5) });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_SparseInPeriodStream_KeepsTheCadenceOfTheWholeStream()
+    {
+        // Two devices a day apart, each delivering half its day, and an unclaimed one-minute
+        // stream running through the day between them that no window covers. The two readings of
+        // that stream which do fall inside a window are a day apart; the stream's cadence is a
+        // minute all the same.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var entries = AtCadence(start, 5, 144, first)
+            .Concat(AtCadence(start.AddDays(2), 5, 144, second))
+            .Concat(AtCadence(start.AddMinutes(1435), 5, 1))
+            .Concat(AtCadence(start.AddDays(1).AddMinutes(1), 1, 1439))
+            .Concat(AtCadence(start.AddDays(2), 1, 1))
+            .ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            entries,
+            start,
+            start.AddDays(3),
+            new[]
+            {
+                new CgmDeviceWindow(first, start, start.AddDays(1), 5),
+                new CgmDeviceWindow(second, start.AddDays(2), start.AddDays(3), 5),
+            });
+
+        result.Should().BeApproximately(50.1, 0.2);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_PartlyOverlappingWindows_RunToTheLaterEnd()
+    {
+        // Worn 00:00-18:00 and 12:00-24:00: one period of twenty-four hours, delivered for twelve.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var early = Guid.NewGuid();
+        var late = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start, 5, 144, early),
+            start,
+            start.AddDays(1),
+            new[]
+            {
+                new CgmDeviceWindow(early, start, start.AddHours(18), 5),
+                new CgmDeviceWindow(late, start.AddHours(12), start.AddDays(1), 5),
+            });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_WindowNestedInsideAnother_AddsNoPeriod()
+    {
+        // The nested window is listed first, so a period built in the order given would start at
+        // 06:00 and lose the readings before it.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var spare = Guid.NewGuid();
+        var worn = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start, 5, 144, worn),
+            start,
+            start.AddDays(1),
+            new[]
+            {
+                new CgmDeviceWindow(spare, start.AddHours(6), start.AddHours(12), 5),
+                new CgmDeviceWindow(worn, start, start.AddDays(1), 5),
+            });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_WithNoReadings_IsUnknown()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            Array.Empty<SensorGlucose>(),
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(Guid.NewGuid(), null, null, 5) });
+
+        result.Should().BeNull();
+    }
+
+    #endregion
+
+    #region Comprehensive Analytics Tests
+
+    [Fact]
+    public void AnalyzeGlucoseData_WithValidData_ShouldReturnCompleteAnalytics()
+    {
+        // Arrange
+        var entries = Enumerable
+            .Range(0, 100)
+            .Select(i => new SensorGlucose
+            {
+                Mgdl = 100 + (i % 50 - 25), // Glucose values ranging from 75-125
+                Timestamp = DateTimeOffset.UtcNow.AddMinutes(i * 5).UtcDateTime,
+            });
+
+        var boluses = new[]
+        {
+            new Bolus
+            {
+                Insulin = 5.0,
+                Timestamp = DateTimeOffset.UtcNow.UtcDateTime,
+                Automatic = false,
+            },
+        };
+
+        var carbIntakes = new[]
+        {
+            new CarbIntake { Carbs = 45, Timestamp = DateTimeOffset.UtcNow.UtcDateTime },
+        };
+
+        // Act
+        var result = _statisticsService.AnalyzeGlucoseData(entries, boluses, carbIntakes, windowDays: 14);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.BasicStats.Should().NotBeNull();
+        result.BasicStats.Count.Should().BeGreaterThan(0);
+        result.TimeInRange.Should().NotBeNull();
+        result.GlycemicVariability.Should().NotBeNull();
+        result.DataQuality.Should().NotBeNull();
+        result.Time.Should().NotBeNull();
+        result.Time.TimeOfAnalysis.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_WithEmptyData_ShouldReturnEmptyAnalytics()
+    {
+        // Arrange
+        var entries = Array.Empty<SensorGlucose>();
+        var boluses = Array.Empty<Bolus>();
+        var carbIntakes = Array.Empty<CarbIntake>();
+
+        // Act
+        var result = _statisticsService.AnalyzeGlucoseData(entries, boluses, carbIntakes, windowDays: 14);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.BasicStats.Count.Should().Be(0);
+        result.TimeInRange.Percentages.Target.Should().Be(0);
+    }
+
+    #endregion
+}

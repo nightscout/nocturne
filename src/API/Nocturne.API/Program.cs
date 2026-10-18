@@ -4,10 +4,12 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Audit;
+using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.DevOnly;
@@ -26,6 +28,7 @@ using Nocturne.API.OpenApi;
 using Scalar.AspNetCore;
 using Nocturne.Aspire.Scalar;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Extensions;
 using Nocturne.Core.Contracts.Entries;
@@ -79,6 +82,7 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 
 builder.AddServiceDefaults();
+builder.Services.AddRequestPathRedactor<CredentialPathRedactor>();
 
 builder.Host.UseDefaultServiceProvider(options =>
 {
@@ -148,6 +152,7 @@ builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
 builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
 builder.Services.AddHostedService<GoogleHealthWorker>();
 builder.Services.AddDevOnlyGoogleHealthMock(builder.Environment, builder.Configuration);
+builder.Services.AddDevOnlyEversenseMock(builder.Environment, builder.Configuration);
 
 // Consumed by the dev-only admin controllers (Development) and the demo admin
 // controller's seed-extras endpoint (demo container, all environments).
@@ -286,7 +291,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-var loopApnsKeyId = app.Configuration["Loop:ApnsKeyId"];
+var loopApnsKeyId = app.Services.GetRequiredService<IOptions<LoopConfiguration>>().Value.ApnsKeyId;
 app.Logger.LogInformation(
     "Loop configuration loaded - APNS Key ID: {LoopApnsKeyId}",
     string.IsNullOrEmpty(loopApnsKeyId) ? "Not configured" : $"{loopApnsKeyId[..Math.Min(4, loopApnsKeyId.Length)]}****");
@@ -519,7 +524,7 @@ app.MapGet(
             new
             {
                 name = "Nocturne API",
-                version = "1.0.0",
+                version = AppVersion.Current,
                 description = "Modern C# rewrite of Nightscout API",
                 api_documentation = "/openapi/v1.json",
                 aspire_dashboard_note = "API documentation is available via Scalar in the Aspire dashboard",
@@ -539,6 +544,9 @@ app.MapGet(
 );
 
 app.MapDefaultEndpoints();
+
+app.Services.GetRequiredService<CredentialPathRedactor>()
+    .Load(((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints));
 
 // Skip database migrations when running in NSwag/OpenAPI generation mode
 // NSwag launches the app to extract the OpenAPI schema, but we don't need DB access for that
@@ -574,7 +582,8 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
 
         // Background job records left Pending/Running by a previous process are orphans —
         // the detached tasks died with it. Mark them Interrupted so polls report the truth.
-        await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(migratorConnectionString, logger);
+        await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(
+            migratorConnectionString, Nocturne.API.Services.BackgroundJobLiveStates.ByTable, logger);
     }
 
     // Validate RLS, ownership, default privileges, and pool reset-on-close under the app role.

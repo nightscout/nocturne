@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Tidepool.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Tidepool.Mappers;
 
@@ -19,7 +20,7 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
 
         if (boluses != null)
         {
-            foreach (var bolus in boluses.Where(b => b.Time.HasValue))
+            foreach (var bolus in ConnectorFaults.NonNullRecords(boluses, _logger, _connectorSource, "Tidepool bolus").Where(b => b.Time.HasValue))
             {
                 try
                 {
@@ -27,9 +28,9 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
                     if (mapped != null)
                         mappedBoluses.Add((bolus, mapped));
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
                 {
-                    _logger.LogWarning(ex, "Error mapping Tidepool bolus: {Id}", bolus.Id);
+                    _logger.LogWarning(ex, "Skipped malformed Tidepool bolus {Id}", bolus.Id);
                 }
             }
         }
@@ -45,7 +46,7 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
         // Process foods: correlate with bolus at same timestamp if present
         if (foods != null)
         {
-            foreach (var food in foods.Where(f => f.Time.HasValue))
+            foreach (var food in ConnectorFaults.NonNullRecords(foods, _logger, _connectorSource, "Tidepool food").Where(f => f.Time.HasValue))
             {
                 try
                 {
@@ -97,9 +98,9 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
                         });
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
                 {
-                    _logger.LogWarning(ex, "Error mapping Tidepool food: {Id}", food.Id);
+                    _logger.LogWarning(ex, "Skipped malformed Tidepool food {Id}", food.Id);
                 }
             }
         }

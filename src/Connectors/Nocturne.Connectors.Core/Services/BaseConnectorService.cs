@@ -12,10 +12,6 @@ using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Core.Services;
 
-/// <summary>
-///     Base implementation for connector services with common Nightscout upload functionality
-/// </summary>
-/// <typeparam name="TConfig">The connector-specific configuration type</typeparam>
 public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     where TConfig : BaseConnectorConfiguration
 {
@@ -40,13 +36,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     // publish-origin memos above are.
     private ISyncProgressReporter? _progressReporter;
 
-    /// <summary>
-    ///     Base constructor for connector services using IHttpClientFactory pattern
-    /// </summary>
-    /// <param name="httpClient">HttpClient instance from IHttpClientFactory (will not be disposed)</param>
-    /// <param name="serverResolver">Resolves the base server URL from per-tenant config</param>
-    /// <param name="logger">Logger instance for this connector</param>
-    /// <param name="publisher">Optional publisher for Nocturne mode</param>
+    /// <param name="httpClient">Owned by IHttpClientFactory; never disposed here.</param>
+    /// <param name="publisher"><c>null</c> when running detached, e.g. dry-run tooling.</param>
     protected BaseConnectorService(
         HttpClient httpClient,
         IConnectorServerResolver<TConfig> serverResolver,
@@ -60,9 +51,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         _publisher = publisher;
     }
 
-    /// <summary>
-    ///     Unique identifier for this connector service type
-    /// </summary>
     protected abstract string ConnectorSource { get; }
 
     public abstract string ServiceName { get; }
@@ -227,10 +215,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>
-    ///     Get the timestamp of the most recent entry from the Nocturne API
-    ///     This enables "catch up" functionality to fetch only new data since the last upload
-    /// </summary>
     private async Task<DateTime?> FetchLatestEntryTimestampAsync(TConfig config)
     {
         if (_publisher is not { IsAvailable: true })
@@ -241,41 +225,25 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return null;
         }
 
-        try
-        {
-            var timestamp = await _publisher.Glucose.GetLatestEntryTimestampAsync(ConnectorSource);
-            if (timestamp.HasValue)
-                _logger.LogInformation(
-                    "Latest entry timestamp from API for {ConnectorSource}: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
-                    ConnectorSource,
-                    timestamp.Value
-                );
-            else
-                _logger.LogDebug(
-                    "No existing entries found for {ConnectorSource}",
-                    ConnectorSource
-                );
-            return timestamp;
-        }
-        catch (Exception ex)
-        {
-            // Do not swallow: a null watermark means "no prior data", which triggers an
-            // initial backfill — unbounded for connectors with a null InitialSyncFloor.
-            // A transient read failure must fail this cycle (retried next interval), not
-            // be amplified into a full-history recrawl and republish.
-            _logger.LogError(
-                ex,
-                "Failed to fetch latest entry timestamp for {ConnectorSource}",
+        // A failed read propagates rather than reading as null: a null watermark means "no prior
+        // data", which triggers an initial backfill, unbounded for connectors with a null
+        // InitialSyncFloor. A transient read failure must fail this cycle (retried next interval),
+        // not be amplified into a full-history recrawl and republish.
+        var timestamp = await _publisher.Glucose.GetLatestEntryTimestampAsync(ConnectorSource);
+        if (timestamp.HasValue)
+            _logger.LogInformation(
+                "Latest entry timestamp from API for {ConnectorSource}: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
+                ConnectorSource,
+                timestamp.Value
+            );
+        else
+            _logger.LogDebug(
+                "No existing entries found for {ConnectorSource}",
                 ConnectorSource
             );
-            throw;
-        }
+        return timestamp;
     }
 
-    /// <summary>
-    ///     Get the timestamp of the most recent treatment from the Nocturne API
-    ///     This enables "catch up" functionality to fetch only new data since the last upload
-    /// </summary>
     private async Task<DateTime?> FetchLatestTreatmentTimestampAsync(TConfig config)
     {
         if (_publisher is not { IsAvailable: true })
@@ -286,39 +254,22 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return null;
         }
 
-        try
-        {
-            var timestamp = await _publisher.Treatments.GetLatestTreatmentTimestampAsync(ConnectorSource);
-            if (timestamp.HasValue)
-                _logger.LogInformation(
-                    "Latest treatment timestamp from API for {ConnectorSource}: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
-                    ConnectorSource,
-                    timestamp.Value
-                );
-            else
-                _logger.LogDebug(
-                    "No existing treatments found for {ConnectorSource}",
-                    ConnectorSource
-                );
-            return timestamp;
-        }
-        catch (Exception ex)
-        {
-            // See FetchLatestEntryTimestampAsync: a swallowed failure reads as "no prior
-            // data" and triggers an unbounded initial backfill for null-floor connectors.
-            _logger.LogError(
-                ex,
-                "Failed to fetch latest treatment timestamp for {ConnectorSource}",
+        // A failed read propagates for the reason given in FetchLatestEntryTimestampAsync.
+        var timestamp = await _publisher.Treatments.GetLatestTreatmentTimestampAsync(ConnectorSource);
+        if (timestamp.HasValue)
+            _logger.LogInformation(
+                "Latest treatment timestamp from API for {ConnectorSource}: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
+                ConnectorSource,
+                timestamp.Value
+            );
+        else
+            _logger.LogDebug(
+                "No existing treatments found for {ConnectorSource}",
                 ConnectorSource
             );
-            throw;
-        }
+        return timestamp;
     }
 
-    /// <summary>
-    ///     Get the timestamp of the most recent device status from the Nocturne API
-    ///     This enables independent "catch up" for device status, decoupled from glucose
-    /// </summary>
     private async Task<DateTime?> FetchLatestDeviceStatusTimestampAsync(TConfig config)
     {
         if (_publisher is not { IsAvailable: true })
@@ -344,10 +295,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         }
     }
 
-    /// <summary>
-    ///     Get the timestamp of the most recent activity record from the Nocturne API
-    ///     This enables independent "catch up" for activity, decoupled from glucose
-    /// </summary>
     private async Task<DateTime?> FetchLatestActivityTimestampAsync(TConfig config)
     {
         if (_publisher is not { IsAvailable: true })
@@ -428,7 +375,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     protected async Task<DateTime?> CalculateTreatmentSinceTimestampAsync(TConfig config, SyncDataType type)
     {
         var latest = await FetchLatestWatermarkAsync(
-            () => _publisher!.Treatments.GetLatestTreatmentTimestampAsync(type, ConnectorSource), type.ToString());
+            () => _publisher!.Treatments.GetLatestTreatmentTimestampAsync(type, ConnectorSource));
 
         return CalculateSinceFromTimestamp(latest, type.ToString());
     }
@@ -441,34 +388,21 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     protected async Task<DateTime?> CalculateStateSpanSinceTimestampAsync(TConfig config)
     {
         var latest = await FetchLatestWatermarkAsync(
-            () => _publisher!.Metadata.GetLatestStateSpanTimestampAsync(ConnectorSource), "state spans");
+            () => _publisher!.Metadata.GetLatestStateSpanTimestampAsync(ConnectorSource));
 
         return CalculateSinceFromTimestamp(latest, "state spans");
     }
 
     /// <summary>
-    ///     Reads one resume watermark, re-throwing a failed read for the reason given in
+    ///     Reads one resume watermark. A failed read propagates for the reason given in
     ///     <see cref="FetchLatestEntryTimestampAsync"/>.
     /// </summary>
-    private async Task<DateTime?> FetchLatestWatermarkAsync(Func<Task<DateTime?>> read, string dataType)
+    private async Task<DateTime?> FetchLatestWatermarkAsync(Func<Task<DateTime?>> read)
     {
         if (_publisher is not { IsAvailable: true })
             return null;
 
-        try
-        {
-            return await read();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to fetch latest {DataType} timestamp for {ConnectorSource}",
-                dataType,
-                ConnectorSource
-            );
-            throw;
-        }
+        return await read();
     }
 
     /// <summary>
@@ -534,7 +468,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     {
         if (latestTimestamp.HasValue && latestTimestamp.Value > DateTime.MinValue.AddMinutes(10))
         {
-            // Add a small overlap to ensure we don't miss any data due to clock drift
             var sinceWithOverlap = latestTimestamp.Value.AddMinutes(-5);
 
             _logger?.LogInformation(
@@ -550,8 +483,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Helper method to calculate the since timestamp from a latest timestamp.
-    ///     When no prior data exists, falls back to <see cref="InitialSyncFloor"/> — which may be
+    ///     When no prior data exists, falls back to <see cref="InitialSyncFloor"/>, which may be
     ///     <c>null</c> (no lower bound) for connectors that import the source's full history.
     /// </summary>
     private DateTime? CalculateSinceFromTimestamp(DateTime? latestTimestamp, string dataType)
@@ -690,9 +622,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return await _publisher.Glucose.PublishEntriesAsync(entries, ConnectorSource, await GlucosePublishOriginAsync(), cancellationToken);
     }
 
-    /// <summary>
-    ///     Submits treatment data directly to the API via HTTP
-    /// </summary>
     protected virtual async Task<bool> PublishTreatmentDataAsync(
         IEnumerable<Treatment> treatments,
         TConfig config,
@@ -712,9 +641,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
     }
 
-    /// <summary>
-    ///     Submits device status data directly to the API via HTTP
-    /// </summary>
     protected virtual async Task<bool> PublishDeviceStatusAsync(
         IEnumerable<DeviceStatus> deviceStatuses,
         TConfig config,
@@ -734,9 +660,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
     }
 
-    /// <summary>
-    ///     Submits profile data directly to the API via HTTP
-    /// </summary>
     protected virtual async Task<bool> PublishProfileDataAsync(
         IEnumerable<Profile> profiles,
         TConfig config,
@@ -752,9 +675,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return await _publisher.Metadata.PublishProfilesAsync(profiles, ConnectorSource, WriteOrigin.Live, cancellationToken); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
-    /// <summary>
-    ///     Submits food data directly to the API via HTTP
-    /// </summary>
     protected virtual async Task<bool> PublishFoodDataAsync(
         IEnumerable<Food> foods,
         TConfig config,
@@ -770,9 +690,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return await _publisher.Metadata.PublishFoodAsync(foods, ConnectorSource, WriteOrigin.Live, cancellationToken); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
-    /// <summary>
-    ///     Submits activity data directly to the API via HTTP
-    /// </summary>
     protected virtual async Task<bool> PublishActivityDataAsync(
         IEnumerable<Activity> activities,
         TConfig config,
@@ -792,9 +709,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
-    /// <summary>
-    ///     Submits state span data directly to the API via HTTP
-    /// </summary>
     protected virtual async Task<bool> PublishStateSpanDataAsync(
         IEnumerable<StateSpan> stateSpans,
         TConfig config,
@@ -815,8 +729,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Submits system event data directly to the API via HTTP. System events have no
-    ///     <see cref="SyncDataType"/> of their own, so a connector routing them through
+    ///     System events have no <see cref="SyncDataType"/> of their own, so a connector routing them through
     ///     <see cref="PublishRecordTypeAsync{T}"/> gates and counts them under
     ///     <see cref="SyncDataType.DeviceEvents"/>.
     /// </summary>
@@ -840,9 +753,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Reusable helper that checks whether a data type is active, reports publish progress,
-    ///     publishes a batch of records, and records the outcome through
-    ///     <see cref="RecordPublishOutcome"/>.
+    ///     Publishes one record type's batch when the type is active, reporting progress and
+    ///     recording the outcome through <see cref="RecordPublishOutcome"/>.
     /// </summary>
     /// <param name="context">
     ///     Detail about this batch — where it came from, or what it held — appended to the success log
@@ -980,6 +892,29 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// <inheritdoc cref="FetchFailedMessage"/>
     protected const string PublishFailedMessage = "Sync failed while publishing data";
 
+    /// <summary>
+    ///     Records an exception that stopped one record type, so the run's other types still sync
+    ///     and the run reports failure.
+    /// </summary>
+    protected void RecordTypeSyncError(SyncResult result, string dataType, Exception ex)
+    {
+        result.Success = false;
+        result.Errors.Add($"Failed to sync {dataType}: {ex.Message}");
+        _logger.LogError(ex, "Failed to sync {DataType} for {Connector}", dataType, ConnectorSource);
+    }
+
+    /// <summary>
+    ///     Records an exception that stopped the run part-way. Caught rather than left to the
+    ///     caller, which would also log and report it, because a thrown run loses the counts of the
+    ///     types it had already published and the tenant's sync card would show them as unchecked.
+    /// </summary>
+    protected void RecordSyncError(SyncResult result, Exception ex)
+    {
+        _logger.LogError(ex, "[{ConnectorSource}] Sync failed", ConnectorSource);
+        result.Success = false;
+        result.Errors.Add($"Sync error: {ex.Message}");
+    }
+
     private static void RecordFailure(SyncResult result, string error, string message)
     {
         if (result.Errors.Count == 0)
@@ -1023,11 +958,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         _ => SyncPhase.Syncing,
     };
 
-    #region V4 Publishing Methods
-
-    /// <summary>
-    ///     Submits V4 SensorGlucose data directly to the API
-    /// </summary>
     protected virtual async Task<bool> PublishSensorGlucoseDataAsync(
         IEnumerable<SensorGlucose> records,
         TConfig config,
@@ -1040,7 +970,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        // Stamp glucose processing metadata from connector config
         var processing = config.GlucoseProcessing;
         foreach (var record in records)
         {
@@ -1055,9 +984,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
     }
 
-    /// <summary>
-    ///     Submits V4 Bolus data directly to the API
-    /// </summary>
     protected virtual async Task<bool> PublishBolusDataAsync(
         IEnumerable<Bolus> records,
         TConfig config,
@@ -1073,9 +999,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return await _publisher.Treatments.PublishBolusesAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
     }
 
-    /// <summary>
-    ///     Submits V4 CarbIntake data directly to the API
-    /// </summary>
     protected virtual async Task<bool> PublishCarbIntakeDataAsync(
         IEnumerable<CarbIntake> records,
         TConfig config,
@@ -1095,9 +1018,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
     }
 
-    /// <summary>
-    ///     Submits V4 BGCheck data directly to the API
-    /// </summary>
     protected virtual async Task<bool> PublishBGCheckDataAsync(
         IEnumerable<BGCheck> records,
         TConfig config,
@@ -1113,9 +1033,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return await _publisher.Treatments.PublishBGChecksAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
     }
 
-    /// <summary>
-    ///     Submits V4 BolusCalculation data directly to the API
-    /// </summary>
     protected virtual async Task<bool> PublishBolusCalculationDataAsync(
         IEnumerable<BolusCalculation> records,
         TConfig config,
@@ -1135,9 +1052,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
     }
 
-    /// <summary>
-    ///     Submits V4 Note data directly to the API
-    /// </summary>
     protected virtual async Task<bool> PublishNoteDataAsync(
         IEnumerable<Note> records,
         TConfig config,
@@ -1207,9 +1121,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return await _publisher.Metadata.PublishHeartRatesAsync(records, ConnectorSource, cancellationToken);
     }
 
-    /// <summary>
-    ///     Submits V4 DeviceEvent data directly to the API
-    /// </summary>
     protected virtual async Task<bool> PublishDeviceEventDataAsync(
         IEnumerable<DeviceEvent> records,
         TConfig config,
@@ -1229,9 +1140,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
     }
 
-    /// <summary>
-    ///     Submits V4 TempBasal data directly to the API
-    /// </summary>
     protected virtual async Task<bool> PublishTempBasalDataAsync(
         IEnumerable<TempBasal> records,
         TConfig config,
@@ -1251,9 +1159,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
     }
 
-    /// <summary>
-    ///     Submits V4 BasalInjection data directly to the API
-    /// </summary>
     protected virtual async Task<bool> PublishBasalInjectionDataAsync(
         IEnumerable<BasalInjection> records,
         TConfig config,
@@ -1273,11 +1178,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
     }
 
-    #endregion
-
-    /// <summary>
-    ///     Publishes messages in batches to optimize throughput
-    /// </summary>
     protected virtual async Task<bool> PublishGlucoseDataInBatchesAsync(
         IEnumerable<Entry> entries,
         TConfig config,
@@ -1322,9 +1222,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return allSuccessful;
     }
 
-    /// <summary>
-    ///     Publishes treatment messages in batches to optimize throughput
-    /// </summary>
     protected virtual async Task<bool> PublishTreatmentDataInBatchesAsync(
         IEnumerable<Treatment> treatments,
         TConfig config,
@@ -1369,10 +1266,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return allSuccessful;
     }
 
-    /// <summary>
-    ///     Main sync method for background synchronization.
-    ///     Uses PerformSyncInternalAsync for sequential processing.
-    /// </summary>
     public virtual Task<SyncResult> SyncDataAsync(
         TConfig config,
         CancellationToken cancellationToken = default,
@@ -1396,14 +1289,12 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
         try
         {
-            // Authenticate if needed
             if (!await AuthenticateAsync())
             {
                 _logger.LogError("Authentication failed for {ConnectorSource}", ConnectorSource);
                 return AuthenticationFailedResult();
             }
 
-            // Determine catch-up timestamp
             var sinceTimestamp = since ?? await CalculateSinceTimestampAsync(config);
 
             var request = CreateBackgroundSyncRequest(sinceTimestamp);
@@ -1417,7 +1308,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                     ConnectorSource
                 );
 
-                // Log details of what was synced
                 foreach (var type in result.ItemsSynced.Keys)
                     if (result.ItemsSynced[type] > 0)
                         _logger.LogInformation(
@@ -1463,8 +1353,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         // HttpClient is managed by IHttpClientFactory - do not dispose
     }
 
-    #region Failure Tracking
-
     private string? _authenticationFailureReason;
 
     /// <summary>
@@ -1500,23 +1388,14 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         _authenticationFailureReason = null;
     }
 
-    #endregion
-
-    #region Retry and HTTP Helpers
-
     /// <summary>
     ///     Executes an async operation under the shared connector retry loop, tracking success and
     ///     failure. See <see cref="ConnectorRetryLoop.RunAsync{T}"/> for the attempt-budget and
     ///     delay contract.
     /// </summary>
-    /// <typeparam name="T">The return type of the operation</typeparam>
-    /// <param name="operation">The async operation to execute</param>
-    /// <param name="retryStrategy">Strategy for calculating retry delays</param>
-    /// <param name="reAuthenticateOnUnauthorized">Optional callback to re-authenticate on 401 responses</param>
-    /// <param name="maxRetries">Total attempts, not retries on top of a first try; clamped to a floor of one (default: 3).</param>
-    /// <param name="operationName">Name of the operation for logging</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The result of the operation, or default(T) on failure</returns>
+    /// <param name="reAuthenticateOnUnauthorized">Called on a 401; <c>true</c> retries at once.</param>
+    /// <param name="maxRetries">Total attempts, not retries on top of a first try; clamped to a floor of one.</param>
+    /// <returns><c>default</c> when the operation failed.</returns>
     protected async Task<T?> ExecuteWithRetryAsync<T>(
         Func<Task<T?>> operation,
         IRetryDelayStrategy retryStrategy,
@@ -1651,15 +1530,23 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Sends an HTTP request with optional custom headers.
-    ///     Useful for APIs that require per-request headers like Account-Id.
+    ///     The <c>reAuthenticateOnUnauthorized</c> answer to <see cref="ExecuteWithRetryAsync{T}"/> for a
+    ///     connector holding a cached token: drop the token the source refused, sign in again, and
+    ///     hand the retry the new one through <paramref name="useToken"/>.
     /// </summary>
-    /// <param name="method">HTTP method</param>
-    /// <param name="url">Request URL</param>
-    /// <param name="additionalHeaders">Optional headers to add to the request</param>
-    /// <param name="content">Optional request content</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>HTTP response message</returns>
+    protected static Func<Task<bool>> ReauthenticateWith(
+        AuthTokenProviderBase<TConfig> tokenProvider,
+        TConfig config,
+        Action<string> useToken,
+        CancellationToken cancellationToken = default) => async () =>
+    {
+        tokenProvider.InvalidateToken();
+        var token = await tokenProvider.GetValidTokenAsync(config, cancellationToken);
+        if (string.IsNullOrEmpty(token)) return false;
+        useToken(token);
+        return true;
+    };
+
     protected async Task<HttpResponseMessage> SendWithHeadersAsync(
         HttpMethod method,
         string url,
@@ -1680,9 +1567,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return await _httpClient.SendAsync(request, cancellationToken);
     }
 
-    /// <summary>
-    ///     Sends a GET request with optional custom headers.
-    /// </summary>
     protected Task<HttpResponseMessage> GetWithHeadersAsync(
         string url,
         Dictionary<string, string>? additionalHeaders = null,
@@ -1698,9 +1582,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
     }
 
-    /// <summary>
-    ///     Sends a POST request with optional custom headers and content.
-    /// </summary>
     protected Task<HttpResponseMessage> PostWithHeadersAsync(
         string url,
         HttpContent? content = null,
@@ -1717,9 +1598,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
     }
 
-    /// <summary>
-    ///     Deserializes JSON content from an HTTP response using case-insensitive options.
-    /// </summary>
     protected async Task<T?> DeserializeResponseAsync<T>(
         HttpResponseMessage response,
         CancellationToken cancellationToken = default
@@ -1729,5 +1607,4 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return JsonSerializer.Deserialize<T>(content, JsonDefaults.CaseInsensitive);
     }
 
-    #endregion
 }

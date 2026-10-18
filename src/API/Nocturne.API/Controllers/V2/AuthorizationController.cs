@@ -59,7 +59,7 @@ public class AuthorizationController : ControllerBase
     [ProducesResponseType(401)]
     [ErrorEnvelope]
     public async Task<ActionResult<AuthorizationResponse>> GenerateJwtFromAccessToken(
-        string accessToken
+        [CredentialRouteValue] string accessToken
     )
     {
         _logger.LogDebug("JWT generation requested for access token");

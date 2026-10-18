@@ -229,6 +229,8 @@ public class TenantController : ControllerBase
     [RemoteCommand(Invalidates = ["GetMemberCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RemovePasskeyCredential(
         Guid id, Guid subjectId, Guid credentialId,
         [FromServices] ISubjectService subjectService,
@@ -238,7 +240,7 @@ public class TenantController : ControllerBase
             return Forbid();
 
         var result = await subjectService.TryRemovePasskeyCredentialAsync(subjectId, credentialId);
-        return result == FactorRemovalResult.Removed ? NoContent() : FactorRemovalRefusal(result, "Passkey");
+        return result == FactorRemovalResult.Removed ? NoContent() : this.FactorRemovalRefusal(result, "Passkey");
     }
 
     /// <summary>Removes an OIDC identity from a member subject.</summary>
@@ -246,6 +248,8 @@ public class TenantController : ControllerBase
     [RemoteCommand(Invalidates = ["GetMemberCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RemoveOidcIdentity(
         Guid id, Guid subjectId, Guid identityId,
         [FromServices] ISubjectService subjectService,
@@ -255,7 +259,7 @@ public class TenantController : ControllerBase
             return Forbid();
 
         var result = await subjectService.TryRemoveOidcIdentityAsync(subjectId, identityId);
-        return result == FactorRemovalResult.Removed ? NoContent() : FactorRemovalRefusal(result, "OIDC identity");
+        return result == FactorRemovalResult.Removed ? NoContent() : this.FactorRemovalRefusal(result, "OIDC identity");
     }
 
     /// <summary>
@@ -301,17 +305,6 @@ public class TenantController : ControllerBase
 
         return Ok(issued);
     }
-
-    private ObjectResult FactorRemovalRefusal(FactorRemovalResult result, string factor) =>
-        Problem(
-            detail: result switch
-            {
-                FactorRemovalResult.NotFound => $"{factor} not found.",
-                FactorRemovalResult.LastPrimaryFactor => "Cannot remove the member's only remaining sign-in method.",
-                _ => throw new InvalidOperationException($"Unexpected FactorRemovalResult: {result}"),
-            },
-            statusCode: 400,
-            title: "Bad Request");
 
     /// <summary>
     /// Verifies the authenticated caller is a member of the specified tenant

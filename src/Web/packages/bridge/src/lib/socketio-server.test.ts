@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createServer } from 'http';
 import SocketIOServer, { pickHandshakeHost, resolveTenantSlug } from './socketio-server.js';
 import { signHandshakeTicket } from './handshake-ticket.js';
+import MessageTranslator from './message-translator.js';
 
 const SECRET = 'test-instance-key-0123456789';
 
@@ -10,27 +11,23 @@ describe('resolveTenantSlug', () => {
   const base = 'nocturne.run';
 
   it('resolves a subdomain to its slug', () => {
-    expect(resolveTenantSlug('rhys.nocturne.run', base, [])).toBe('rhys');
+    expect(resolveTenantSlug('rhys.nocturne.run', base, null)).toBe('rhys');
   });
 
-  it('resolves the apex domain to the sole tenant', () => {
-    expect(resolveTenantSlug('nocturne.run', base, ['only'])).toBe('only');
+  it('resolves the apex domain to the tenant the API serves there', () => {
+    expect(resolveTenantSlug('nocturne.run', base, 'only')).toBe('only');
   });
 
-  it('returns null on the apex when more than one tenant exists', () => {
-    expect(resolveTenantSlug('nocturne.run', base, ['a', 'b'])).toBeNull();
-  });
-
-  it('returns null on the apex when no tenants are known yet', () => {
-    expect(resolveTenantSlug('nocturne.run', base, [])).toBeNull();
+  it('returns null on the apex when the API serves no tenant there', () => {
+    expect(resolveTenantSlug('nocturne.run', base, null)).toBeNull();
   });
 
   it('returns null for a foreign domain', () => {
-    expect(resolveTenantSlug('evil.com', base, ['only'])).toBeNull();
+    expect(resolveTenantSlug('evil.com', base, 'only')).toBeNull();
   });
 
   it('ignores a port on the host', () => {
-    expect(resolveTenantSlug('rhys.nocturne.run:443', base, [])).toBe('rhys');
+    expect(resolveTenantSlug('rhys.nocturne.run:443', base, null)).toBe('rhys');
   });
 });
 
@@ -58,8 +55,8 @@ describe('pickHandshakeHost', () => {
 
 type HandshakeHeaders = Record<string, string | string[] | undefined>;
 
-function makeServer(tenantSlugs: string[] = []): SocketIOServer {
-  return new SocketIOServer(createServer(), {}, 'nocturne.run', tenantSlugs, SECRET);
+function makeServer(apexTenantSlug: string | null = null): SocketIOServer {
+  return new SocketIOServer(createServer(), {}, 'nocturne.run', apexTenantSlug, SECRET);
 }
 
 function fakeSocket(headers: HandshakeHeaders, auth: { token?: string } = {}) {
@@ -197,7 +194,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
   });
 
   it('admits an apex connection for the sole tenant with an apex ticket', async () => {
-    const server = makeServer(['only']);
+    const server = makeServer('only');
     const next = vi.fn();
     const socket = fakeSocket(
       { host: 'nocturne.run' },
@@ -296,7 +293,7 @@ describe('SocketIOServer.handleAuthorize', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       apiBaseUrl,
     );
@@ -476,7 +473,7 @@ describe('SocketIOServer tracker broadcast fan-out', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       'http://api.internal',
     );
@@ -521,7 +518,7 @@ describe('SocketIOServer in-app notification fan-out', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       'http://api.internal',
     );
@@ -574,7 +571,7 @@ describe('SocketIOServer v3 /storage namespace', () => {
   });
 
   function makeStorageServer(apiBaseUrl = 'http://api.internal') {
-    return new SocketIOServer(createServer(), {}, 'nocturne.run', [], SECRET, apiBaseUrl);
+    return new SocketIOServer(createServer(), {}, 'nocturne.run', null, SECRET, apiBaseUrl);
   }
 
   /** A fake socket carrying a pending tenant slug (post-handshake state). */
@@ -617,9 +614,39 @@ describe('SocketIOServer v3 /storage namespace', () => {
 
     expect(ack).toHaveBeenCalledWith({
       success: true,
-      collections: ['devicestatus', 'entries', 'profile', 'treatments', 'foods', 'settings'],
+      collections: ['devicestatus', 'entries', 'profile', 'treatments', 'food', 'settings'],
     });
     expect(socket.join).toHaveBeenCalledTimes(6);
+  });
+
+  it.each([
+    [['food'], ['food']],
+    [['foods'], ['foods']],
+    [['food', 'entries'], ['food', 'entries']],
+    [['foods', 'food'], ['foods']],
+    [['food', 'foods'], ['food']],
+  ])('subscribes %j, acks %j and joins only those rooms', async (requested, acked) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    const server = makeStorageServer();
+    const socket = storageSocket('rhys');
+    const ack = vi.fn();
+
+    await server.handleStorageSubscribe(socket as never, { accessToken: 'tok', collections: requested }, ack);
+
+    expect(ack).toHaveBeenCalledWith({ success: true, collections: acked });
+    expect(socket.join.mock.calls.map(([room]) => room)).toEqual(acked.map((name) => `storage:rhys:${name}`));
+  });
+
+  it('authorises food against the food read endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 403 });
+    vi.stubGlobal('fetch', fetchMock);
+    const server = makeStorageServer();
+    const socket = storageSocket('rhys');
+
+    await server.handleStorageSubscribe(socket as never, { accessToken: 'tok', collections: ['food'] });
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/v3/food');
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
   });
 
   it('filters out unknown collection names', async () => {
@@ -745,7 +772,7 @@ describe('SocketIOServer v3 /storage broadcast fan-out', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       'http://api.internal',
     );
@@ -783,18 +810,21 @@ describe('SocketIOServer v3 /storage broadcast fan-out', () => {
     server.getIO()!.close();
   });
 
-  it('amends the payload colName for food -> foods', async () => {
+  it.each(['food', 'foods'])('delivers a %s broadcast to each spelling room under that spelling', async (broadcast) => {
     const server = await startedServer();
     const storageNsp = server.getIO()!.of('/storage');
 
-    const emitted: { event: string; payload: unknown }[] = [];
-    vi.spyOn(storageNsp, 'to').mockReturnValue({
-      emit: (event: string, payload: unknown) => emitted.push({ event, payload }),
-    } as never);
+    const emitted: { room: string; payload: { colName: string } }[] = [];
+    vi.spyOn(storageNsp, 'to').mockImplementation(((room: string) => ({
+      emit: (_event: string, payload: { colName: string }) => emitted.push({ room, payload }),
+    })) as never);
 
-    server.broadcastStorageEvent('create', { colName: 'food', doc: {} }, 'rhys');
+    server.broadcastStorageEvent('create', { colName: broadcast, doc: {} }, 'rhys');
 
-    expect((emitted[0].payload as { colName: string }).colName).toBe('foods');
+    expect(emitted).toEqual([
+      { room: 'storage:rhys:food', payload: { colName: 'food', doc: {} } },
+      { room: 'storage:rhys:foods', payload: { colName: 'foods', doc: {} } },
+    ]);
     server.getIO()!.close();
   });
 
@@ -821,7 +851,7 @@ describe('SocketIOServer v3 /alarm namespace', () => {
   });
 
   function makeAlarmServer(apiBaseUrl = 'http://api.internal') {
-    return new SocketIOServer(createServer(), {}, 'nocturne.run', [], SECRET, apiBaseUrl);
+    return new SocketIOServer(createServer(), {}, 'nocturne.run', null, SECRET, apiBaseUrl);
   }
 
   function alarmSocket(pendingTenantSlug?: string) {
@@ -946,7 +976,7 @@ describe('SocketIOServer v3 /alarm broadcast fan-out', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       'http://api.internal',
     );
@@ -954,36 +984,147 @@ describe('SocketIOServer v3 /alarm broadcast fan-out', () => {
     return server;
   }
 
-  it('fans an alarm out to the /alarm tenant room', async () => {
+  function relayTo(server: SocketIOServer) {
+    const io = server.getIO()!;
+    const tenantEmit = vi.fn();
+    const alarmEmit = vi.fn();
+    const tenantTo = vi.spyOn(io, 'to').mockReturnValue({ emit: tenantEmit } as never);
+    const alarmTo = vi.spyOn(io.of('/alarm'), 'to').mockReturnValue({ emit: alarmEmit } as never);
+    const expectRooms = () => {
+      expect(tenantTo).toHaveBeenCalledExactlyOnceWith('tenant:rhys');
+      expect(alarmTo).toHaveBeenCalledExactlyOnceWith('alarm:rhys');
+    };
+    return {
+      translator: new MessageTranslator(server, 'rhys'),
+      tenantEmit,
+      alarmEmit,
+      expectRooms,
+    };
+  }
+
+  const urgentNotification = {
+    level: 2,
+    title: 'Urgent High',
+    message: 'BG 15.1',
+    group: 'default',
+    plugin: 'simplealarms',
+    timestamp: 1700000000000,
+    clear: false,
+  };
+
+  it('relays an urgent notification as urgent_alarm with its numeric level on both namespaces', async () => {
     const server = await startedServer();
-    const alarmNsp = server.getIO()!.of('/alarm');
-    const toSpy = vi.spyOn(alarmNsp, 'to');
+    const { translator, tenantEmit, alarmEmit, expectRooms } = relayTo(server);
 
-    server.broadcastAlarm({ level: 'urgent', message: 'HIGH' }, 'rhys');
+    translator.handleAlarm('urgent_alarm', urgentNotification);
 
-    expect(toSpy).toHaveBeenCalledWith('alarm:rhys');
+    for (const emit of [tenantEmit, alarmEmit]) {
+      expect(emit).toHaveBeenCalledExactlyOnceWith(
+        'urgent_alarm',
+        expect.objectContaining({ level: 2, title: 'Urgent High', group: 'default' }),
+      );
+    }
+    expectRooms();
     server.getIO()!.close();
   });
 
-  it('fans a clear_alarm out to the /alarm tenant room', async () => {
+  it('relays a warn notification as alarm with its numeric level on both namespaces', async () => {
     const server = await startedServer();
-    const alarmNsp = server.getIO()!.of('/alarm');
-    const toSpy = vi.spyOn(alarmNsp, 'to');
+    const { translator, tenantEmit, alarmEmit, expectRooms } = relayTo(server);
 
-    server.broadcastClearAlarm('rhys');
+    translator.handleAlarm('alarm', { ...urgentNotification, level: 1, title: 'Warning High' });
 
-    expect(toSpy).toHaveBeenCalledWith('alarm:rhys');
+    for (const emit of [tenantEmit, alarmEmit]) {
+      expect(emit).toHaveBeenCalledExactlyOnceWith(
+        'alarm',
+        expect.objectContaining({ level: 1, title: 'Warning High' }),
+      );
+    }
+    expectRooms();
     server.getIO()!.close();
   });
 
-  it('fans an announcement out to the /alarm tenant room', async () => {
+  it('gives a level-less alarm the numeric level of the event it arrived on', async () => {
     const server = await startedServer();
-    const alarmNsp = server.getIO()!.of('/alarm');
-    const toSpy = vi.spyOn(alarmNsp, 'to');
+    const { translator, tenantEmit } = relayTo(server);
 
-    server.broadcastAnnouncement({ message: 'sensor change' }, 'rhys');
+    translator.handleAlarm('urgent_alarm', { title: 'No level' });
+    translator.handleAlarm('alarm', { title: 'No level' });
 
-    expect(toSpy).toHaveBeenCalledWith('alarm:rhys');
+    expect(tenantEmit).toHaveBeenNthCalledWith(1, 'urgent_alarm', expect.objectContaining({ level: 2 }));
+    expect(tenantEmit).toHaveBeenNthCalledWith(2, 'alarm', expect.objectContaining({ level: 1 }));
+    server.getIO()!.close();
+  });
+
+  it('relays clear_alarm with the clearing notification on both namespaces', async () => {
+    const server = await startedServer();
+    const { translator, tenantEmit, alarmEmit, expectRooms } = relayTo(server);
+    const clear = {
+      clear: true,
+      title: 'Alarm Cleared - default',
+      message: 'Level 2 alarm has been acknowledged and cleared',
+      group: 'default',
+      level: 2,
+    };
+
+    translator.handleClearAlarm(clear);
+
+    expect(tenantEmit).toHaveBeenCalledExactlyOnceWith('clear_alarm', clear);
+    expect(alarmEmit).toHaveBeenCalledExactlyOnceWith('clear_alarm', clear);
+    expectRooms();
+    server.getIO()!.close();
+  });
+
+  const apiAnnouncement = {
+    level: 0,
+    title: 'Sensor change',
+    message: 'Change the sensor',
+    group: 'default',
+    plugin: 'announcement',
+    timestamp: 1700000000000,
+    isAnnouncement: true,
+  };
+
+  it('relays an announcement with its numeric level to the tenant room and /alarm', async () => {
+    const server = await startedServer();
+    const { translator, tenantEmit, alarmEmit, expectRooms } = relayTo(server);
+
+    translator.handleAnnouncement(apiAnnouncement);
+
+    for (const emit of [tenantEmit, alarmEmit]) {
+      expect(emit).toHaveBeenCalledExactlyOnceWith(
+        'announcement',
+        expect.objectContaining({ level: 0, title: 'Sensor change', isAnnouncement: true }),
+      );
+    }
+    expectRooms();
+    server.getIO()!.close();
+  });
+
+  it('relays a notification with its numeric level to /alarm', async () => {
+    const server = await startedServer();
+    const { translator, alarmEmit } = relayTo(server);
+
+    translator.handleNotification({ ...apiAnnouncement, level: 1, isAnnouncement: false });
+
+    expect(alarmEmit).toHaveBeenCalledExactlyOnceWith(
+      'notification',
+      expect.objectContaining({ level: 1, title: 'Sensor change', group: 'default' }),
+    );
+    server.getIO()!.close();
+  });
+
+  it('keeps relaying a notification to the tenant room', async () => {
+    const server = await startedServer();
+    const { translator, tenantEmit, expectRooms } = relayTo(server);
+
+    translator.handleNotification({ ...apiAnnouncement, level: 1, isAnnouncement: false });
+
+    expect(tenantEmit).toHaveBeenCalledExactlyOnceWith(
+      'notification',
+      expect.objectContaining({ level: 1, title: 'Sensor change' }),
+    );
+    expectRooms();
     server.getIO()!.close();
   });
 });

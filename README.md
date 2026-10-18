@@ -150,7 +150,7 @@ declared proxy vouched for — but only from those ranges, so nobody else can cl
 they aren't. This works for any CDN, not just Cloudflare. Leave it alone if no CDN is in front, and
 never set it empty: an empty value is a Caddy startup error, not a way to turn the feature off.
 
-The production compose includes [Watchtower](https://github.com/nicholas-fedor/watchtower) for automatic container updates (checks daily), and omits the Aspire dashboard and Scalar API explorer. Watchtower will automatically pull new images as they are published — no manual updates needed. It runs in label-only mode and every service in the bundle carries `com.centurylinklabs.watchtower.enable=true`, so it only ever updates Nocturne's own containers — anything else on the same Docker host is left alone.
+The production compose includes [Watchtower](https://github.com/nicholas-fedor/watchtower) for automatic container updates (checks daily), and omits the Aspire dashboard and Scalar API explorer. Watchtower will automatically pull new images as they are published. It runs in label-only mode and every service in the bundle carries a `com.centurylinklabs.watchtower.enable` label, so it only ever updates Nocturne's own containers and leaves anything else on the same Docker host alone. Caddy and Postgres carry `false`: they take their config from Compose, which Watchtower does not carry across a recreate. Update them with `docker compose pull && docker compose up -d`. An install from before this change still has `true` on `caddy`: set the label to `false` there, or download the new bundle, then run `docker compose up -d` to recreate it.
 
 ### First-run setup
 

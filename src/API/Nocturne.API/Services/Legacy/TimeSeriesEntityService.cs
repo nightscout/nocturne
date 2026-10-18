@@ -27,6 +27,37 @@ public abstract class TimeSeriesEntityService<TDomain, TEntity>(
         query.OrderByDescending(e => e.Timestamp);
 
     /// <summary>
+    /// Retrieves a page of records newest first, optionally limited to those observed in
+    /// <c>[from, to]</c>.
+    /// </summary>
+    /// <param name="count">Maximum number of records to return.</param>
+    /// <param name="skip">Number of records to skip for pagination.</param>
+    /// <param name="from">Inclusive lower bound, or <see langword="null"/> for none.</param>
+    /// <param name="to">Inclusive upper bound, or <see langword="null"/> for none.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    protected async Task<IEnumerable<TDomain>> GetNewestFirstAsync(
+        int count,
+        int skip,
+        DateTime? from,
+        DateTime? to,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var query = EntitySet.AsNoTracking();
+        if (from is { } fromValue)
+            query = query.Where(e => e.Timestamp >= fromValue);
+        if (to is { } toValue)
+            query = query.Where(e => e.Timestamp <= toValue);
+
+        var entities = await OrderByTimestamp(query)
+            .Skip(skip)
+            .Take(count)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(ToDomainModel);
+    }
+
+    /// <summary>
     /// Retrieves records observed in <c>[from, to)</c>, oldest first. A <see langword="null"/>
     /// <paramref name="count"/> returns every record in the range.
     /// </summary>

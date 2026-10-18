@@ -4,7 +4,7 @@
  */
 import { z } from "zod";
 import { getRequestEvent, query } from "$app/server";
-import { DiabetesPopulation, ClusterConfidence } from "$lib/api";
+import { ClusterConfidence } from "$lib/api";
 import { fetchAllGlucose } from "./glucose-pagination";
 import { DateRangeSchema, resolveReportRange } from "./report-range";
 import { readable } from "$lib/server/patient-timezone";
@@ -85,32 +85,6 @@ export const getBolusesAndCarbs = query(
         to: endDate,
       },
     };
-  }
-);
-
-/** Get glucose analysis for entries, boluses, and carb intakes */
-export const getAnalysis = query(
-  z.object({
-    entries: z.array(z.any()),
-    boluses: z.array(z.any()),
-    carbIntakes: z.array(z.any()),
-    population: z.enum(DiabetesPopulation).optional(),
-  }),
-  async ({
-    entries,
-    boluses,
-    carbIntakes,
-    population = DiabetesPopulation.Type1Adult,
-  }) => {
-    const { locals } = getRequestEvent();
-    const { apiClient } = locals;
-
-    return apiClient.statistics.analyzeGlucoseDataExtended({
-      entries,
-      boluses,
-      carbIntakes,
-      population,
-    });
   }
 );
 

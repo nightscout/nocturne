@@ -10,12 +10,9 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// On each tick it enumerates active tenants and calls
 /// <see cref="IDeduplicationService.ReconcileNewLinksAsync(int, int, CancellationToken)"/> for each,
 /// merging duplicate canonical groups created since the tenant's persisted cursor, then
-/// <see cref="IDeduplicationService.PruneSingletonLinksAsync(int, int, CancellationToken)"/>.
+/// <see cref="IDeduplicationService.PruneSingletonLinksAsync(int, int, CancellationToken)"/>. A tenant
+/// another instance is reconciling is left to it until the next tick.
 /// </summary>
-/// <remarks>
-/// Single-instance deployment only. If the API is ever scaled out, gate per-tenant reconcile with a
-/// Postgres advisory lock (pg_advisory_xact_lock) so instances don't both reconcile the same tenant.
-/// </remarks>
 internal sealed class DeduplicationReconciliationBackgroundService : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(2);

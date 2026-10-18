@@ -1,4 +1,3 @@
-using System.Reflection;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
 
@@ -44,13 +43,11 @@ public class VersionService : IVersionService
     {
         _logger.LogDebug("Getting version information");
 
-        var assembly = Assembly.GetExecutingAssembly();
-        var version = assembly.GetName().Version?.ToString() ?? "1.0.0";
-        var assemblyName = assembly.GetName().Name ?? "Nocturne";
+        var assemblyName = typeof(VersionService).Assembly.GetName().Name ?? "Nocturne";
 
         var response = new VersionResponse
         {
-            Version = version,
+            Version = AppVersion.Current,
             Name = assemblyName,
             ServerTime = DateTime.UtcNow,
             Head = Environment.GetEnvironmentVariable("GIT_COMMIT") ?? "unknown",

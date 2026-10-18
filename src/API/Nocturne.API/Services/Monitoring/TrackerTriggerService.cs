@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts.Events;
@@ -14,6 +13,7 @@ namespace Nocturne.API.Services.Monitoring;
 /// Advances tracker instances when a matching <see cref="DeviceEvent"/> is written: a site change
 /// completes the running infusion-site instance and starts a new one, a sensor change does the same
 /// for the sensor tracker, and so on for whatever a definition lists in its trigger event types.
+/// Deleting the event undoes the advance (<see cref="OnDeletedAsync"/>).
 /// </summary>
 /// <remarks>
 /// Registered as the <see cref="IDeviceEventReactor"/> adapter, so it runs from the device-event write
@@ -97,7 +97,10 @@ public class TrackerTriggerService : IDeviceEventReactor
     }
 
     /// <inheritdoc />
-    public async Task OnCreatedAsync(IReadOnlyList<DeviceEvent> created, CancellationToken ct = default)
+    public Task OnCreatedAsync(IReadOnlyList<DeviceEvent> created, CancellationToken ct = default)
+        => AdvanceAllAsync(created, replay: false, ct);
+
+    private async Task AdvanceAllAsync(IReadOnlyList<DeviceEvent> created, bool replay, CancellationToken ct)
     {
         if (created.Count == 0)
             return;
@@ -130,9 +133,72 @@ public class TrackerTriggerService : IDeviceEventReactor
                 if (!MatchesNotesFilter(definition, deviceEvent))
                     continue;
 
-                await AdvanceAsync(definition, deviceEvent, ct);
+                await AdvanceAsync(definition, deviceEvent, replay, ct);
             }
         }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A deleted change never happened, so the run it started is undone and the run it replaced
+    /// resumes (<see cref="ITrackerRepository.RevertStartAsync"/>). Only a run still going is undone:
+    /// once a later change has replaced it, it is the tracker's history, unless that change is
+    /// deleted too. The run is found by the event's id alone, so it is undone even when its
+    /// definition no longer follows that kind of event.
+    /// </remarks>
+    public async Task OnDeletedAsync(IReadOnlyList<DeviceEvent> deleted, CancellationToken ct = default)
+    {
+        if (deleted.Count == 0)
+            return;
+
+        var deletedIds = deleted.Select(e => e.Id.ToString()).ToHashSet();
+        // Newest first, so of a chain of deleted changes each undo exposes the run the next one started.
+        var pending = new Stack<TrackerInstanceEntity>(
+            (await _trackerRepository.GetRunningStartedByAsync(deletedIds, ct)).OrderBy(i => i.StartedAt));
+
+        while (pending.TryPop(out var run))
+        {
+            var revert = await _trackerRepository.ExecuteUnderDefinitionLockAsync(
+                run.DefinitionId,
+                token => _trackerRepository.RevertStartAsync(run.DefinitionId, run.StartTreatmentId!, token),
+                async (attempt, token) =>
+                    attempt is not null && await _trackerRepository.GetInstanceByIdAsync(attempt.Removed.Id, token) is null,
+                ct);
+            if (revert is null)
+                continue;
+
+            _logger.LogInformation(
+                "Undid tracker instance {InstanceId} for {DefinitionName}: the change that started it was deleted",
+                revert.Removed.Id,
+                run.Definition.Name);
+
+            await _broadcast.BroadcastTrackerUpdateAsync(
+                "delete", TrackerInstanceDto.FromEntity(revert.Removed), run.Definition.UserId, run.Definition.Visibility);
+            foreach (var reopened in revert.Reopened)
+            {
+                await _broadcast.BroadcastTrackerUpdateAsync(
+                    "reopen", TrackerInstanceDto.FromEntity(reopened), run.Definition.UserId, run.Definition.Visibility);
+                if (reopened.StartTreatmentId is { } startedBy && deletedIds.Contains(startedBy))
+                    pending.Push(reopened);
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public Task OnReplayedAsync(IReadOnlyList<DeviceEvent> events, CancellationToken ct = default)
+        => AdvanceAllAsync(events, replay: true, ct);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<Guid>> GetFollowedAsync(IReadOnlyCollection<Guid> eventIds, CancellationToken ct = default)
+    {
+        if (eventIds.Count == 0)
+            return new HashSet<Guid>();
+
+        var running = await _trackerRepository.GetRunningStartedByAsync(eventIds.Select(id => id.ToString()).ToList(), ct);
+        return running
+            .Select(i => Guid.TryParse(i.StartTreatmentId, out var id) ? id : (Guid?)null)
+            .OfType<Guid>()
+            .ToHashSet();
     }
 
     /// <summary>
@@ -142,6 +208,7 @@ public class TrackerTriggerService : IDeviceEventReactor
     private async Task AdvanceAsync(
         TrackerDefinitionEntity definition,
         DeviceEvent deviceEvent,
+        bool replay,
         CancellationToken ct
     )
     {
@@ -168,7 +235,8 @@ public class TrackerTriggerService : IDeviceEventReactor
                 cancellationToken: token
             ),
             ct,
-            alreadyStarted: running => running.Any(i => i.StartTreatmentId == startTreatmentId)
+            alreadyStarted: running => running.Any(i => i.StartTreatmentId == startTreatmentId),
+            replay
         );
         if (succession.Started is not { } newInstance)
         {

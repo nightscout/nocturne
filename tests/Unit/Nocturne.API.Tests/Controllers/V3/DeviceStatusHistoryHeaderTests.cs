@@ -39,7 +39,7 @@ public class DeviceStatusHistoryHeaderTests
             AidAlgorithm = AidAlgorithm.Loop,
         };
 
-        var controller = Controller(new HistoryRecord<ApsSnapshot>(aps, Deleted: false));
+        var controller = Controller(new HistoryRecord<DeviceStatusGroup>(new(aps, null, null, null, aps.ModifiedAt), Deleted: false));
 
         await controller.GetDeviceStatusHistory(0);
 
@@ -60,24 +60,27 @@ public class DeviceStatusHistoryHeaderTests
             AidAlgorithm = AidAlgorithm.Loop,
         };
 
-        var result = await Controller(new HistoryRecord<ApsSnapshot>(aps, Deleted: true))
+        var result = await Controller(new HistoryRecord<DeviceStatusGroup>(new(aps, null, null, null, aps.ModifiedAt), Deleted: true))
             .GetDeviceStatusHistory(0);
 
-        var body = JsonSerializer.SerializeToElement(result.Should().BeOfType<OkObjectResult>().Subject.Value);
+        var body = JsonSerializer.SerializeToElement(
+            result.Should().BeOfType<OkObjectResult>().Subject.Value,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
         var status = body.GetProperty("result").EnumerateArray().Should().ContainSingle().Subject;
         status.GetProperty("isValid").GetBoolean().Should().BeFalse();
         status.GetProperty("srvModified").GetInt64()
             .Should().Be(new DateTimeOffset(aps.ModifiedAt).ToUnixTimeMilliseconds());
     }
 
-    private static DeviceStatusController Controller(params HistoryRecord<ApsSnapshot>[] page)
+    private static DeviceStatusController Controller(params HistoryRecord<DeviceStatusGroup>[] page)
     {
-        var apsRepo = new Mock<IApsSnapshotRepository>();
-        apsRepo
+        var groupRepo = new Mock<IDeviceStatusGroupRepository>();
+        groupRepo
             .Setup(r => r.GetModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(page);
         var projection = new DeviceStatusProjectionService(
-            apsRepo.Object,
+            groupRepo.Object,
+            Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IPumpSnapshotRepository>(),
             Mock.Of<IUploaderSnapshotRepository>(),
             Mock.Of<IStateSpanRepository>(),

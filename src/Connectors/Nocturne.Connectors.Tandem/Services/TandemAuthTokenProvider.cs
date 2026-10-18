@@ -90,25 +90,22 @@ public class TandemAuthTokenProvider(
 
         try
         {
-            // 1. Prime the SSO session, then post credentials to the login API.
+            // Primes the SSO session cookies the login API expects.
             await client.GetAsync(TandemConstants.LoginPageUrl, cancellationToken);
 
             var login = await LoginAsync(client, region, config, cancellationToken);
             if (!login.Succeeded)
                 return (null, DateTime.MinValue, null, login.ShouldRetry);
 
-            // 2. PKCE authorize → authorization code.
             var (verifier, challenge) = GeneratePkcePair();
             var (code, authorizeShouldRetry) = await AuthorizeAsync(client, region, challenge, cancellationToken);
             if (code == null)
                 return (null, DateTime.MinValue, null, authorizeShouldRetry);
 
-            // 3. Exchange the code for tokens.
             var (tokens, exchangeShouldRetry) = await ExchangeCodeAsync(client, region, code, verifier, cancellationToken);
             if (tokens?.AccessToken == null || tokens.IdToken == null)
                 return (null, DateTime.MinValue, null, exchangeShouldRetry);
 
-            // 4. Extract pumper/account ids from the id_token claims.
             var (pumperId, accountId) = ExtractIds(tokens.IdToken);
             if (pumperId == null)
             {

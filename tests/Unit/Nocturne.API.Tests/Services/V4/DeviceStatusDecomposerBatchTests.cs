@@ -226,7 +226,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeBatchAsync_ProjectedStatusesKeepTheirOwnPumpAndUploader()
+    public async Task DecomposeBatchAsync_GivesEachStatusItsOwnCorrelation()
     {
         var statuses = new List<DeviceStatus>
         {
@@ -240,48 +240,21 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         var result = await _decomposer.DecomposeBatchAsync(statuses, source: null, WriteOrigin.Live);
         var created = result.CreatedRecords;
 
-        var apsRepo = new Mock<IApsSnapshotRepository>();
-        apsRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(created.OfType<V4Models.ApsSnapshot>().ToList());
-        var pumpRepo = new Mock<IPumpSnapshotRepository>();
-        pumpRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(created.OfType<V4Models.PumpSnapshot>().ToList());
-        pumpRepo
-            .Setup(r => r.GetByCorrelationIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(created.OfType<V4Models.PumpSnapshot>().ToList());
-        var uploaderRepo = new Mock<IUploaderSnapshotRepository>();
-        uploaderRepo
-            .Setup(r => r.GetByCorrelationIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(created.OfType<V4Models.UploaderSnapshot>().ToList());
-        var extrasRepo = new Mock<IDeviceStatusExtrasRepository>();
-        extrasRepo
-            .Setup(r => r.GetByCorrelationIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(created.OfType<V4Models.DeviceStatusExtras>().ToList());
-        var stateSpanRepo = new Mock<IStateSpanRepository>();
-        stateSpanRepo
-            .Setup(r => r.GetByCategory(
-                It.IsAny<StateSpanCategory>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+        var groups = created
+            .OfType<V4Models.IV4Record>()
+            .GroupBy(r => r.CorrelationId)
+            .ToList();
 
-        var projection = new DeviceStatusProjectionService(
-            apsRepo.Object, pumpRepo.Object, uploaderRepo.Object, stateSpanRepo.Object, extrasRepo.Object,
-            NullLogger<DeviceStatusProjectionService>.Instance);
-
-        var projected = (await projection.GetAsync(10, 0, null, CancellationToken.None)).ToList();
-
-        projected.Should().HaveCount(3);
+        groups.Should().HaveCount(3);
+        groups.Should().OnlyContain(g => g.Key.HasValue);
         foreach (var status in statuses)
         {
-            var ds = projected.Single(p => p.Mills == status.Mills);
-            ds.Pump!.Reservoir.Should().Be(status.Pump!.Reservoir);
-            ds.Uploader!.Battery.Should().Be(status.Uploader!.Battery);
+            var group = groups.Single(g => g.OfType<V4Models.ApsSnapshot>().Single().Mills == status.Mills);
+            group.OfType<V4Models.PumpSnapshot>().Single().Reservoir.Should().Be(status.Pump!.Reservoir);
+            group.OfType<V4Models.UploaderSnapshot>().Single().Battery.Should().Be(status.Uploader!.Battery);
         }
+        created.OfType<V4Models.DeviceStatusExtras>().Select(e => (Guid?)e.CorrelationId)
+            .Should().BeEquivalentTo(groups.Select(g => g.Key));
     }
 
     private static DeviceStatus FullStatus(string id, long mills, double reservoir) => new()

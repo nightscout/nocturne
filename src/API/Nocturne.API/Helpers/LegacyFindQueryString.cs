@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.Queries;
+
 namespace Nocturne.API.Helpers;
 
 /// <summary>
@@ -24,4 +26,12 @@ public static class LegacyFindQueryString
 
         return string.IsNullOrEmpty(boundFind) ? null : boundFind;
     }
+
+    /// <summary>
+    /// <c>false</c> when <paramref name="find"/> parses to no conditions: absent, <c>{}</c>, a query
+    /// string with no <c>find[…]</c> key, or one the parser cannot read. A legacy bulk delete refuses
+    /// such a find rather than reading it as a request to delete everything, and the decomposers
+    /// refuse it too through <see cref="FindQuery.IsEmpty"/>.
+    /// </summary>
+    public static bool HasConditions(string? find) => !FindQuery.Parse(find).IsEmpty;
 }

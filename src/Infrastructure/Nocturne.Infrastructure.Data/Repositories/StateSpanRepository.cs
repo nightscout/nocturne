@@ -105,11 +105,29 @@ public class StateSpanRepository : IStateSpanRepository
         var query = BuildFilteredQuery(category, state, from, to, source, active);
 
         var ordered = descending
-            ? query.OrderByDescending(s => s.StartTimestamp)
-            : query.OrderBy(s => s.StartTimestamp);
+            ? query.OrderByDescending(s => s.StartTimestamp).ThenByDescending(s => s.Id)
+            : query.OrderBy(s => s.StartTimestamp).ThenBy(s => s.Id);
 
         var entities = await ordered
             .Skip(skip)
+            .Take(count)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(StateSpanMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
+        StateSpanCategory category,
+        string? source,
+        DateTime from,
+        int count,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var entities = await BuildFilteredQuery(category, null, null, null, source, null)
+            .Where(s => s.StartTimestamp >= from)
+            .OrderBy(s => s.StartTimestamp)
             .Take(count)
             .ToListAsync(cancellationToken);
 
@@ -749,10 +767,17 @@ public class StateSpanRepository : IStateSpanRepository
         string? type = null,
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default
     )
     {
         var query = _context.StateSpans.AsNoTracking().Where(s => ActivityCategories.Contains(s.Category));
+
+        if (from is { } fromValue)
+            query = query.Where(s => s.StartTimestamp >= fromValue);
+        if (to is { } toValue)
+            query = query.Where(s => s.StartTimestamp <= toValue);
 
         // Filter by type/state if provided
         if (!string.IsNullOrEmpty(type))

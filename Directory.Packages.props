@@ -72,8 +72,6 @@
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="FluentAssertions" Version="8.8.0" />
     <PackageVersion Include="Verify.Xunit" Version="28.13.0" />
-    <!-- WASM Runtime packages -->
-    <PackageVersion Include="Wasmtime" Version="34.0.2" />
     <!-- Testcontainers packages -->
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
     <!-- Keep MongoDB testcontainer for migration testing only -->

@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Queries;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Infrastructure.Data.Mappers;
 
@@ -44,6 +45,11 @@ public class ActivityService : IActivityService
     /// what a caller may request.
     /// </summary>
     private const int MaxOverFetch = 100_000;
+
+    /// <summary>
+    /// Rows read from each source when a field filter is evaluated in memory after the fetch.
+    /// </summary>
+    private const int MaxFilteredFetch = 10_000;
 
     /// <summary>
     /// Every source <see cref="CountActivitiesByCategoryAsync"/> knows how to count, named by the
@@ -114,55 +120,68 @@ public class ActivityService : IActivityService
                 actualSkip
             );
 
+            var query = FindQuery.Parse(find);
+            var from = query.FromMills is { } fromMills
+                ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime
+                : (DateTime?)null;
+            var to = query.ToMills is { } toMills
+                ? DateTimeOffset.FromUnixTimeMilliseconds(toMills).UtcDateTime
+                : (DateTime?)null;
+
             // Over-fetch from each source so we can merge and re-paginate. Clamped into range: a
             // large skip overflows the sum, and a non-positive fetch count faults every source
-            // query. Callers with no ceiling of their own rely on the upper bound here.
-            var fetchCount = (int)Math.Clamp((long)actualCount + actualSkip, 1, MaxOverFetch);
+            // query. Callers with no ceiling of their own rely on the upper bound here. A residual
+            // field filter runs after the fetch, so the page cannot be pushed down either.
+            var fetchCount = query.HasFieldFilters
+                ? MaxFilteredFetch
+                : (int)Math.Clamp((long)actualCount + actualSkip, 1, MaxOverFetch);
 
-            // Source 1: Regular activities from StateSpans (exercise, illness, travel — no longer sleep)
             var stateSpanActivities = await _stateSpanService.GetActivitiesAsync(
-                type: find,
                 count: fetchCount,
                 skip: 0,
+                from: from,
+                to: to,
                 cancellationToken: cancellationToken
             );
 
-            // Source 2: Heart rate records converted to Activity format
             var heartRates = await _heartRateService.GetHeartRatesAsync(
                 count: fetchCount,
                 skip: 0,
+                from: from,
+                to: to,
                 cancellationToken: cancellationToken
             );
             var heartRateActivities = heartRates.Select(ActivityDecomposer.HeartRateToActivity);
 
-            // Source 3: Step count records converted to Activity format
             var stepCounts = await _stepCountService.GetStepCountsAsync(
                 count: fetchCount,
                 skip: 0,
+                from: from,
+                to: to,
                 cancellationToken: cancellationToken
             );
             var stepCountActivities = stepCounts.Select(ActivityDecomposer.StepCountToActivity);
 
-            // Source 4: Sleep sessions projected back to Activity format.
-            // Sleep used to be a StateSpan filtered by `find`; honour that filter here
-            // so a request scoped to another type (e.g. exercise) doesn't pull in sleep.
-            var sleepActivities = Enumerable.Empty<Activity>();
-            if (string.IsNullOrEmpty(find) || ActivityStateSpanMapper.IsSleepType(find))
-            {
-                var sleepSessions = await _sleepService.GetSessionsAsync(
-                    limit: fetchCount,
-                    offset: 0,
-                    descending: true,
-                    cancellationToken: cancellationToken
-                );
-                sleepActivities = sleepSessions.Select(ActivityStateSpanMapper.SleepSessionToActivity);
-            }
+            var sleepSessions = await _sleepService.GetSessionsAsync(
+                from: from,
+                to: to,
+                limit: fetchCount,
+                offset: 0,
+                descending: true,
+                cancellationToken: cancellationToken
+            );
+            // The sleep read bounds by overlap; every other source bounds by start, as the find does.
+            var sleepActivities = sleepSessions
+                .Select(ActivityStateSpanMapper.SleepSessionToActivity)
+                .Where(a => (query.FromMills is not { } lower || a.Mills >= lower)
+                    && (query.ToMills is not { } upper || a.Mills <= upper));
 
-            // Merge all sources, sort by Mills descending, apply pagination
-            var merged = stateSpanActivities
+            var sources = stateSpanActivities
                 .Concat(heartRateActivities)
                 .Concat(stepCountActivities)
-                .Concat(sleepActivities)
+                .Concat(sleepActivities);
+
+            var merged = (query.HasFieldFilters ? sources.Where(a => query.MatchesResidual(a)) : sources)
                 .OrderByDescending(a => a.Mills)
                 .Skip(actualSkip)
                 .Take(actualCount)

@@ -37,7 +37,7 @@ public class EversenseSensorGlucoseMapperTests
     }
 
     [Theory]
-    [InlineData(0, GlucoseDirection.None)]
+    [InlineData(0, GlucoseDirection.NotComputable)]
     [InlineData(3, GlucoseDirection.Flat)]
     [InlineData(4, GlucoseDirection.FortyFiveUp)]
     [InlineData(5, GlucoseDirection.SingleUp)]
@@ -86,6 +86,58 @@ public class EversenseSensorGlucoseMapperTests
         result.Should().NotBeNull();
         var expectedMills = new DateTimeOffset(2026, 4, 24, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
         result!.Timestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(expectedMills).UtcDateTime);
+    }
+
+    [Fact]
+    public void Map_PatientWithoutReading_ReturnsNull()
+    {
+        var patient = CreatePatient(glucose: 0, trend: 0, cgTime: "0001-01-01T00:00:00");
+
+        var result = _mapper.Map(patient);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void MapHistory_KeepsSensorGlucoseRowsOnly()
+    {
+        var events = new List<EversenseUserEvent>
+        {
+            new() { EventTypeId = 1, Value = 110, EventDate = "2026-10-16T10:00:00" },
+            new() { EventTypeId = 2, Value = 140, EventDate = "2026-10-16T10:02:00" },
+            new() { EventTypeId = 10, Value = 105, EventDate = "2026-10-16T10:03:00" },
+            new() { EventTypeId = 1, Value = 0, EventDate = "2026-10-16T10:04:00" },
+            new() { EventTypeId = 1, Value = 115, EventDate = "not-a-date" },
+            new() { EventTypeId = 1, Value = 120, EventDate = "2026-10-16T10:05:00" },
+        };
+
+        var result = _mapper.MapHistory(events);
+
+        result.Select(r => r.Mgdl).Should().Equal(110, 120);
+        result.Should().OnlyContain(r => r.Direction == null && r.DataSource == DataSources.EversenseConnector);
+    }
+
+    [Fact]
+    public void MapHistory_ReadsZonelessEventDateAsUtc()
+    {
+        var events = new List<EversenseUserEvent>
+        {
+            new() { EventTypeId = 1, Value = 110, EventDate = "2026-10-16T10:00:00" },
+        };
+
+        var result = _mapper.MapHistory(events);
+
+        result.Single().Timestamp.Should().Be(new DateTime(2026, 10, 16, 10, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void MapHistory_SharesLegacyIdWithLatestReadingAtSameInstant()
+    {
+        var history = _mapper.MapHistory(
+            [new EversenseUserEvent { EventTypeId = 1, Value = 110, EventDate = "2026-10-16T10:00:00" }]);
+        var latest = _mapper.Map(CreatePatient(glucose: 110, cgTime: "2026-10-16T10:00:00"));
+
+        history.Single().LegacyId.Should().Be(latest!.LegacyId);
     }
 
     private static EversensePatientDatum CreatePatient(

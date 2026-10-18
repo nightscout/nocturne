@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Tidepool.Models;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Tidepool.Mappers;
 
@@ -14,7 +15,7 @@ public class TidepoolSensorGlucoseMapper(ILogger logger, string connectorSource)
     {
         if (bgValues == null || bgValues.Length == 0) return [];
 
-        return bgValues
+        return ConnectorFaults.NonNullRecords(bgValues, _logger, _connectorSource, "Tidepool BG value")
             .Where(bg => bg.Value > 0 && bg.Time.HasValue)
             .Select(ConvertBgValue)
             .Where(sg => sg != null)
@@ -45,9 +46,9 @@ public class TidepoolSensorGlucoseMapper(ILogger logger, string connectorSource)
                 ModifiedAt = now
             };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
         {
-            _logger.LogWarning(ex, "Error converting Tidepool BG value: {Id}", bgValue.Id);
+            _logger.LogWarning(ex, "Skipped malformed Tidepool BG value {Id}", bgValue.Id);
             return null;
         }
     }

@@ -357,23 +357,14 @@ public static class AuditedBulkDeleteExtensions
         if (count == 0 || auditContext.IsSystemMutation())
             return;
 
-        context.Set<MutationAuditLogEntity>().Add(new MutationAuditLogEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = context.TenantId,
-            EntityType = AuditEntityTypeName<T>(),
-            EntityId = null,
-            Action = "bulk_delete",
-            ChangesJson = JsonSerializer.Serialize(new BulkDeleteSummary(count, scope), JsonOptions),
-            SubjectId = auditContext?.SubjectId,
-            SubjectName = auditContext?.SubjectName,
-            AuthType = auditContext?.AuthType,
-            IpAddress = auditContext?.IpAddress,
-            TokenId = auditContext?.TokenId,
-            TraceId = auditContext?.TraceId,
-            Endpoint = auditContext?.Endpoint,
-            CreatedAt = DateTime.UtcNow
-        });
+        context.Set<MutationAuditLogEntity>().Add(MutationAuditLogEntity.Create(
+            context.TenantId,
+            auditContext,
+            AuditEntityTypeName<T>(),
+            null,
+            "bulk_delete",
+            JsonSerializer.Serialize(new BulkDeleteSummary(count, scope), JsonOptions),
+            DateTime.UtcNow));
 
         await context.SaveChangesAsync(ct);
     }
@@ -416,23 +407,14 @@ public static class AuditedBulkDeleteExtensions
                 snapshot[prop.Metadata.Name] = isRedacted ? "[redacted]" : prop.CurrentValue;
             }
 
-            return new MutationAuditLogEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = context.TenantId,
-                EntityType = entityTypeName,
-                EntityId = (Guid)entry.Property("Id").CurrentValue!,
-                Action = "delete",
-                ChangesJson = JsonSerializer.Serialize(snapshot, JsonOptions),
-                SubjectId = auditContext?.SubjectId,
-                SubjectName = auditContext?.SubjectName,
-                AuthType = auditContext?.AuthType,
-                IpAddress = auditContext?.IpAddress,
-                TokenId = auditContext?.TokenId,
-                TraceId = auditContext?.TraceId,
-                Endpoint = auditContext?.Endpoint,
-                CreatedAt = now
-            };
+            return MutationAuditLogEntity.Create(
+                context.TenantId,
+                auditContext,
+                entityTypeName,
+                (Guid)entry.Property("Id").CurrentValue!,
+                "delete",
+                JsonSerializer.Serialize(snapshot, JsonOptions),
+                now);
         }).ToList();
     }
 

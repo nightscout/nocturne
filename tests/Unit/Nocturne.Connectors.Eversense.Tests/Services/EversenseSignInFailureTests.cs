@@ -31,19 +31,53 @@ public class EversenseSignInFailureTests
         result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
     }
 
-    /// <summary>Eversense's OAuth token endpoint answers a wrong password with 400 invalid_grant, never 401.</summary>
+    /// <summary>
+    ///     Eversense's token endpoint answers a wrong password with 400 invalid_grant and code 6008, as
+    ///     the Eversense 365 app reads it (<c>IamTokenError</c>), never 401.
+    /// </summary>
     [Fact]
     public async Task Sync_WhenEversenseRefusesTheSignIn_SendsTheTenantToTheirCredentials()
     {
-        var result = await SyncAgainst(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+        var requests = 0;
+        var result = await SyncAgainst(_ =>
         {
-            Content = new StringContent(
-                "{\"error\":\"invalid_grant\",\"error_description\":\"Invalid username or password\"}")
+            requests++;
+            return new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent(
+                    "{\"error\":\"invalid_grant\",\"error_description\":\"invalid credentials.RemainingAttempt:2\",\"error_code\":6008}")
+            };
         });
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("did not accept this sign-in");
         result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
+        requests.Should().Be(1);
+    }
+
+    /// <summary>
+    ///     A locked account (code 5005) is not retried even when the status looks transient: every
+    ///     attempt would extend the 30-minute lockout.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task Sync_WhenEversenseHasLockedTheAccount_SignsInOnceAndBlamesTheCredentials(HttpStatusCode status)
+    {
+        var requests = 0;
+        var result = await SyncAgainst(_ =>
+        {
+            requests++;
+            return new HttpResponseMessage(status)
+            {
+                Content = new StringContent(
+                    "{\"error\":\"invalid_grant\",\"error_description\":\"locked out\",\"error_code\":5005}")
+            };
+        });
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("did not accept this sign-in");
+        requests.Should().Be(1);
     }
 
     private static async Task<SyncResult> SyncAgainst(Func<HttpRequestMessage, HttpResponseMessage> answer)

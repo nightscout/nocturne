@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
@@ -94,8 +95,8 @@ public class DndWindowsController : ControllerBase
         if (request.Scope is not { } scope)
             return BadRequest("scope is required (lows | highs | all).");
 
-        var startedAt = AsUtc(request.StartedAt);
-        var endsAt = request.EndsAt is { } e ? AsUtc(e) : (DateTime?)null;
+        var startedAt = request.StartedAt.AsUtc();
+        var endsAt = request.EndsAt is { } e ? e.AsUtc() : (DateTime?)null;
         if (endsAt is { } ends && ends <= startedAt)
             return BadRequest("ends_at must be after started_at.");
 
@@ -214,14 +215,6 @@ public class DndWindowsController : ControllerBase
         ClearedBy = w.ClearedBy,
         Source = w.Source,
         CreatedAt = w.CreatedAt,
-    };
-
-    /// <summary>Normalises an incoming instant to UTC (the windows columns are UTC instants).</summary>
-    private static DateTime AsUtc(DateTime value) => value.Kind switch
-    {
-        DateTimeKind.Utc => value,
-        DateTimeKind.Local => value.ToUniversalTime(),
-        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
     };
 }
 

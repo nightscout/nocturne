@@ -8,6 +8,9 @@ namespace Nocturne.Connectors.Tandem.Configurations;
 /// </summary>
 public static class TandemConstants
 {
+    /// <summary>The name the connector is registered and its configuration row is stored under.</summary>
+    public const string ConnectorName = "Tandem";
+
     /// <summary>SSO landing page, shared between regions; used as the login Referer.</summary>
     public const string LoginPageUrl = "https://sso.tandemdiabetes.com/";
 
