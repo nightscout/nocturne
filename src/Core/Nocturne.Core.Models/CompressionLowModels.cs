@@ -68,7 +68,6 @@ public class DetectionResult
     [JsonPropertyName("totalSuggestionsCreated")]
     public int TotalSuggestionsCreated { get; set; }
 
-    /// <summary>Number of nights that were analyzed</summary>
     [JsonPropertyName("nightsProcessed")]
     public int NightsProcessed { get; set; }
 

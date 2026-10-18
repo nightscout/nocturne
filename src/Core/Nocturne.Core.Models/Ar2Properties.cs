@@ -63,9 +63,6 @@ public class ForecastPoint
     /// </summary>
     public int Mgdl { get; set; }
 
-    /// <summary>
-    /// Color for visualization
-    /// </summary>
     public string Color { get; set; } = "cyan";
 }
 
@@ -79,9 +76,6 @@ public class Ar2State
     /// </summary>
     public long ForecastTime { get; set; }
 
-    /// <summary>
-    /// Forecast points
-    /// </summary>
     public List<ForecastPoint> Points { get; set; } = new();
 
     /// <summary>

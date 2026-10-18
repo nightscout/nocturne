@@ -35,13 +35,7 @@ public class DeviceStatusExtras
     /// </summary>
     public Dictionary<string, object?>? Extras { get; set; }
 
-    /// <summary>
-    /// When the record was created.
-    /// </summary>
     public DateTime CreatedAt { get; set; }
 
-    /// <summary>
-    /// When the record was last modified.
-    /// </summary>
     public DateTime ModifiedAt { get; set; }
 }

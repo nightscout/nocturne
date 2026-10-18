@@ -8,7 +8,6 @@ namespace Nocturne.Core.Models.Authorization;
 /// <seealso cref="OidcProvider"/>
 public class SubjectOidcIdentity
 {
-    /// <summary>Unique identifier for this link record.</summary>
     public Guid Id { get; set; }
 
     /// <summary>The <see cref="Subject"/> this identity is linked to.</summary>

@@ -11,15 +11,9 @@ namespace Nocturne.Core.Models;
 /// <seealso cref="ProcessableDocumentBase"/>
 public class Settings : ProcessableDocumentBase
 {
-    /// <summary>
-    /// Unique identifier for the setting record
-    /// </summary>
     [JsonPropertyName("_id")]
     public override string? Id { get; set; }
 
-    /// <summary>
-    /// The setting key/name
-    /// </summary>
     [JsonPropertyName("key")]
     [Required]
     [Sanitizable]

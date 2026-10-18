@@ -12,9 +12,7 @@ namespace Nocturne.Core.Models.V4;
 [JsonConverter(typeof(JsonStringEnumConverter<BiologicalSex>))]
 public enum BiologicalSex
 {
-    /// <summary>Female.</summary>
     Female,
 
-    /// <summary>Male.</summary>
     Male
 }

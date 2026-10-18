@@ -27,9 +27,6 @@ public class DirectionInfo
     /// </summary>
     public string? Display { get; set; }
 
-    /// <summary>
-    /// Direction enum value
-    /// </summary>
     public Direction Value { get; set; }
 
     /// <summary>
@@ -45,14 +42,8 @@ public class DirectionInfo
 /// <seealso cref="Entry"/>
 public class DeltaInfo
 {
-    /// <summary>
-    /// Absolute delta value
-    /// </summary>
     public double Absolute { get; set; }
 
-    /// <summary>
-    /// Display string for the delta
-    /// </summary>
     public string Display { get; set; } = string.Empty;
 
     /// <summary>
@@ -80,24 +71,12 @@ public class DeltaInfo
     /// </summary>
     public double? Mgdl { get; set; }
 
-    /// <summary>
-    /// Scaled delta value
-    /// </summary>
     public double? Scaled { get; set; }
 
-    /// <summary>
-    /// Previous entry
-    /// </summary>
     public Entry? Previous { get; set; }
 
-    /// <summary>
-    /// Current entry
-    /// </summary>
     public Entry? Current { get; set; }
 
-    /// <summary>
-    /// Time information for entries
-    /// </summary>
     public Dictionary<string, long> Times { get; set; } = new();
 }
 
@@ -111,15 +90,9 @@ public class TimePatternQuery
     /// </summary>
     public string Pattern { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Expanded time ranges
-    /// </summary>
     public List<TimeRange> Ranges { get; set; } = new();
 }
 
-/// <summary>
-/// Time range for queries
-/// </summary>
 public class TimeRange
 {
     /// <summary>
@@ -133,9 +106,6 @@ public class TimeRange
     public long End { get; set; }
 }
 
-/// <summary>
-/// Time query echo response
-/// </summary>
 public class TimeQueryEcho
 {
     /// <summary>
@@ -164,8 +134,5 @@ public class TimeQueryRequest
     /// </summary>
     public Dictionary<string, string?> Params { get; set; } = new();
 
-    /// <summary>
-    /// Query string parameters
-    /// </summary>
     public Dictionary<string, object> Query { get; set; } = new();
 }

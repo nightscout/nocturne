@@ -606,7 +606,6 @@ public class AlertTrackerState
 /// <seealso cref="Alerts.AlertRuleSeverity"/>
 public class AlertRule
 {
-    /// <summary>Unique identifier for the rule.</summary>
     public Guid Id { get; set; }
 
     /// <summary>Human-readable rule name.</summary>
@@ -647,7 +646,6 @@ public class AlertRule
     /// <summary>JSON-serialized auto-resolve parameters (e.g. delay, mode), or null if unused.</summary>
     public string? AutoResolveParams { get; set; }
 
-    /// <summary>When this rule was created.</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>When this rule was last modified.</summary>
@@ -661,19 +659,16 @@ public class AlertRule
 /// <seealso cref="AlertTrackerState"/>
 public class AlertExcursion
 {
-    /// <summary>Unique identifier for this excursion.</summary>
     public Guid Id { get; set; }
 
     /// <summary>The <see cref="AlertRule"/> that triggered this excursion.</summary>
     public Guid AlertRuleId { get; set; }
 
-    /// <summary>When the excursion began.</summary>
     public DateTime StartedAt { get; set; }
 
     /// <summary>When the excursion ended. Null if still active.</summary>
     public DateTime? EndedAt { get; set; }
 
-    /// <summary>When a user acknowledged this excursion.</summary>
     public DateTime? AcknowledgedAt { get; set; }
 
     /// <summary>Identifier of the user who acknowledged this excursion.</summary>

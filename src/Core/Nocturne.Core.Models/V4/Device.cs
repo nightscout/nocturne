@@ -51,9 +51,6 @@ public class Device
     /// </summary>
     public string Type { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Device serial number
-    /// </summary>
     public string Serial { get; set; } = string.Empty;
 
     /// <summary>

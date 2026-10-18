@@ -31,7 +31,6 @@ public enum GlycomicRiskInterpretation
     [JsonPropertyName("poor")]
     Poor,
 
-    /// <summary>Unknown risk interpretation</summary>
     [JsonPropertyName("unknown")]
     Unknown,
 }
@@ -81,11 +80,9 @@ public enum GlucoseManagementIndicatorLevel
     [JsonPropertyName("wellControlled")]
     WellControlled,
 
-    /// <summary>Moderate control</summary>
     [JsonPropertyName("moderateControl")]
     ModerateControl,
 
-    /// <summary>Suboptimal control</summary>
     [JsonPropertyName("suboptimalControl")]
     SuboptimalControl,
 
@@ -94,9 +91,6 @@ public enum GlucoseManagementIndicatorLevel
     PoorControl,
 }
 
-/// <summary>
-/// Data sufficiency status
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum DataSufficiencyStatus
 {

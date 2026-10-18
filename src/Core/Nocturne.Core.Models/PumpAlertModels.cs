@@ -67,9 +67,6 @@ public class PumpPreferences
     /// </summary>
     public bool WarnOnSuspend { get; set; } = false;
 
-    /// <summary>
-    /// Whether pump alerts are enabled
-    /// </summary>
     public bool EnableAlerts { get; set; } = false;
 
     /// <summary>
@@ -99,9 +96,6 @@ public class PumpPreferences
 /// <seealso cref="PumpSnapshot"/>
 public class PumpStatusResult
 {
-    /// <summary>
-    /// Overall alert level
-    /// </summary>
     public PumpAlertLevel Level { get; set; }
 
     /// <summary>
@@ -134,19 +128,10 @@ public class PumpStatusResult
     /// </summary>
     public PumpFieldStatus? Status { get; set; }
 
-    /// <summary>
-    /// Device identifier
-    /// </summary>
     public PumpFieldStatus? Device { get; set; }
 
-    /// <summary>
-    /// Pump manufacturer
-    /// </summary>
     public string? Manufacturer { get; set; }
 
-    /// <summary>
-    /// Pump model
-    /// </summary>
     public string? Model { get; set; }
 
     /// <summary>
@@ -154,9 +139,6 @@ public class PumpStatusResult
     /// </summary>
     public Dictionary<string, object?>? Extended { get; set; }
 
-    /// <summary>
-    /// The source pump snapshot used for this result
-    /// </summary>
     [JsonIgnore]
     public PumpSnapshot? SourcePumpSnapshot { get; set; }
 }
@@ -166,9 +148,6 @@ public class PumpStatusResult
 /// </summary>
 public class PumpFieldStatus
 {
-    /// <summary>
-    /// Raw value of the field
-    /// </summary>
     public object? Value { get; set; }
 
     /// <summary>
@@ -186,9 +165,6 @@ public class PumpFieldStatus
     /// </summary>
     public string? Unit { get; set; }
 
-    /// <summary>
-    /// Alert level for this field
-    /// </summary>
     public PumpAlertLevel Level { get; set; }
 
     /// <summary>
@@ -207,19 +183,10 @@ public enum PumpAlertLevel
     /// </summary>
     None = 0,
 
-    /// <summary>
-    /// Informational level
-    /// </summary>
     Info = 1,
 
-    /// <summary>
-    /// Warning level
-    /// </summary>
     Warn = 2,
 
-    /// <summary>
-    /// Urgent/critical level
-    /// </summary>
     Urgent = 3
 }
 

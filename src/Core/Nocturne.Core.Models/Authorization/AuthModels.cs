@@ -7,9 +7,6 @@ namespace Nocturne.Core.Models.Authorization;
 /// <seealso cref="AuthType"/>
 public class AuthResult
 {
-    /// <summary>
-    /// Whether authentication succeeded
-    /// </summary>
     public bool Succeeded { get; set; }
 
     /// <summary>
@@ -69,14 +66,8 @@ public class AuthResult
 /// </summary>
 public class AuthContext
 {
-    /// <summary>
-    /// Whether the user is authenticated
-    /// </summary>
     public bool IsAuthenticated { get; set; }
 
-    /// <summary>
-    /// Type of authentication used
-    /// </summary>
     public AuthType AuthType { get; set; }
 
     /// <summary>
@@ -84,14 +75,8 @@ public class AuthContext
     /// </summary>
     public Guid? SubjectId { get; set; }
 
-    /// <summary>
-    /// Resolved tenant ID for this request
-    /// </summary>
     public Guid? TenantId { get; set; }
 
-    /// <summary>
-    /// Subject name for display
-    /// </summary>
     public string? SubjectName { get; set; }
 
     /// <summary>
@@ -99,14 +84,8 @@ public class AuthContext
     /// </summary>
     public string? Email { get; set; }
 
-    /// <summary>
-    /// External OIDC subject ID
-    /// </summary>
     public string? OidcSubjectId { get; set; }
 
-    /// <summary>
-    /// OIDC issuer URL
-    /// </summary>
     public string? OidcIssuer { get; set; }
 
     /// <summary>
@@ -142,9 +121,6 @@ public class AuthContext
     /// </summary>
     public string? CredentialFingerprint { get; set; }
 
-    /// <summary>
-    /// When the authentication expires
-    /// </summary>
     public DateTimeOffset? ExpiresAt { get; set; }
 
     /// <summary>
@@ -181,9 +157,6 @@ public class AuthContext
     /// </summary>
     public bool IsActingAsFollower => ActingAsSubjectId.HasValue;
 
-    /// <summary>
-    /// Create an unauthenticated context.
-    /// </summary>
     /// <returns>An <see cref="AuthContext"/> with <see cref="IsAuthenticated"/> set to <c>false</c>.</returns>
     public static AuthContext Unauthenticated() =>
         new() { IsAuthenticated = false, AuthType = AuthType.None };
@@ -259,9 +232,6 @@ public enum AuthType
     /// </summary>
     ApiKey,
 
-    /// <summary>
-    /// Session cookie
-    /// </summary>
     SessionCookie,
 
     /// <summary>

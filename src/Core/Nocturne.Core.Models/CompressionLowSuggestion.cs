@@ -36,9 +36,6 @@ public class CompressionLowSuggestion
     [JsonPropertyName("confidence")]
     public double Confidence { get; set; }
 
-    /// <summary>
-    /// Current status of the suggestion
-    /// </summary>
     [JsonPropertyName("status")]
     public CompressionLowStatus Status { get; set; }
 
@@ -94,9 +91,6 @@ public class CompressionLowSuggestion
 /// </summary>
 public class CompressionLowSuggestionWithEntries
 {
-    /// <summary>
-    /// The compression low suggestion
-    /// </summary>
     [JsonPropertyName("suggestion")]
     public CompressionLowSuggestion Suggestion { get; set; } = new();
 

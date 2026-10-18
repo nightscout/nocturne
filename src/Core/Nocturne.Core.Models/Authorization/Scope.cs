@@ -31,7 +31,6 @@ public static class Scope
     public const string GlucoseReadWrite = "glucose.readwrite";
     /// <summary>Read-only access to treatments (boluses, carbs, temp basals, etc.).</summary>
     public const string TreatmentsRead = "treatments.read";
-    /// <summary>Read and write access to treatments.</summary>
     public const string TreatmentsReadWrite = "treatments.readwrite";
     /// <summary>Read-only access to device status records.</summary>
     public const string DevicesRead = "devices.read";

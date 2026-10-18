@@ -71,9 +71,6 @@ public class TempBasal : IV4Record, IDeviceAttributed
     /// </summary>
     public int? UtcOffset { get; set; }
 
-    /// <summary>
-    /// Device identifier that set this temp basal
-    /// </summary>
     public string? Device { get; set; }
 
     /// <summary>
@@ -81,9 +78,6 @@ public class TempBasal : IV4Record, IDeviceAttributed
     /// </summary>
     public string? App { get; set; }
 
-    /// <summary>
-    /// Origin data source identifier
-    /// </summary>
     public string? DataSource { get; set; }
 
     /// <summary>
@@ -96,14 +90,8 @@ public class TempBasal : IV4Record, IDeviceAttributed
     /// </summary>
     public string? LegacyId { get; set; }
 
-    /// <summary>
-    /// When this record was created
-    /// </summary>
     public DateTime CreatedAt { get; set; }
 
-    /// <summary>
-    /// When this record was last modified
-    /// </summary>
     public DateTime ModifiedAt { get; set; }
 
     /// <summary>

@@ -41,9 +41,6 @@ public class V3VersionResult
     /// </summary>
     public long SrvDate { get; set; }
 
-    /// <summary>
-    /// Storage backend information
-    /// </summary>
     public StorageInfo Storage { get; set; } = new();
 }
 

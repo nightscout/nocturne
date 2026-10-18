@@ -14,9 +14,6 @@ public class PermissionTrie
 {
     private readonly HashSet<string> _permissions = new();
 
-    /// <summary>
-    /// Number of permissions in the trie
-    /// </summary>
     public int Count => _permissions.Count;
 
     /// <summary>
@@ -27,7 +24,6 @@ public class PermissionTrie
     /// <summary>
     /// Add a single permission to the trie
     /// </summary>
-    /// <param name="permission">Permission to add</param>
     public void Add(string permission)
     {
         _permissions.Add(permission);
@@ -36,7 +32,6 @@ public class PermissionTrie
     /// <summary>
     /// Add multiple permissions to the trie
     /// </summary>
-    /// <param name="permissions">Permissions to add</param>
     public void Add(IEnumerable<string> permissions)
     {
         foreach (var permission in permissions)
@@ -49,7 +44,6 @@ public class PermissionTrie
     /// Check if a permission is granted by the trie
     /// This supports wildcard permissions and hierarchical checking
     /// </summary>
-    /// <param name="permission">Permission to check</param>
     /// <returns>True if permission is granted</returns>
     public bool Check(string permission)
     {
@@ -89,10 +83,6 @@ public class PermissionTrie
         return _permissions.Contains(permission);
     }
 
-    /// <summary>
-    /// Get all permissions in the trie
-    /// </summary>
-    /// <returns>Collection of all permissions</returns>
     public IEnumerable<string> GetAll()
     {
         return _permissions.ToList();
@@ -114,9 +104,6 @@ public class AuthorizationResponse
     /// </summary>
     public long Exp { get; set; }
 
-    /// <summary>
-    /// Subject identifier
-    /// </summary>
     public string Sub { get; set; } = string.Empty;
 
     /// <summary>
@@ -125,9 +112,6 @@ public class AuthorizationResponse
     public long Iat { get; set; }
 }
 
-/// <summary>
-/// Permission information
-/// </summary>
 public class Permission
 {
     /// <summary>
@@ -140,14 +124,8 @@ public class Permission
     /// </summary>
     public int Count { get; set; }
 
-    /// <summary>
-    /// First time this permission was seen
-    /// </summary>
     public DateTime FirstSeen { get; set; }
 
-    /// <summary>
-    /// Last time this permission was seen
-    /// </summary>
     public DateTime LastSeen { get; set; }
 }
 
@@ -156,9 +134,6 @@ public class Permission
 /// </summary>
 public class PermissionsResponse
 {
-    /// <summary>
-    /// List of all permissions
-    /// </summary>
     public List<Permission> Permissions { get; set; } = new();
 }
 
@@ -167,9 +142,6 @@ public class PermissionsResponse
 /// </summary>
 public class PermissionTrieResponse
 {
-    /// <summary>
-    /// Root node of the permission trie
-    /// </summary>
     public PermissionTrieNode Root { get; set; } = new();
 
     /// <summary>
@@ -183,9 +155,6 @@ public class PermissionTrieResponse
 /// </summary>
 public class PermissionTrieNode
 {
-    /// <summary>
-    /// Name of this node
-    /// </summary>
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
@@ -193,9 +162,6 @@ public class PermissionTrieNode
     /// </summary>
     public bool IsLeaf { get; set; }
 
-    /// <summary>
-    /// Child nodes
-    /// </summary>
     public Dictionary<string, PermissionTrieNode> Children { get; set; } = new();
 }
 
@@ -209,9 +175,6 @@ public class PermissionTrieNode
 /// <seealso cref="Subject"/>
 public class Role
 {
-    /// <summary>
-    /// Unique identifier for the role
-    /// </summary>
     public string? Id { get; set; }
 
     /// <summary>
@@ -219,9 +182,6 @@ public class Role
     /// </summary>
     public string? _id { get; set; }
 
-    /// <summary>
-    /// Name of the role
-    /// </summary>
     [Required]
     public string Name { get; set; } = string.Empty;
 
@@ -230,9 +190,6 @@ public class Role
     /// </summary>
     public List<string> Permissions { get; set; } = new();
 
-    /// <summary>
-    /// Optional notes about the role
-    /// </summary>
     public string? Notes { get; set; }
 
     /// <summary>
@@ -258,9 +215,6 @@ public class Role
 /// <seealso cref="Role"/>
 public class Subject
 {
-    /// <summary>
-    /// Unique identifier for the subject
-    /// </summary>
     public string? Id { get; set; }
 
     /// <summary>
@@ -268,9 +222,6 @@ public class Subject
     /// </summary>
     public string? _id { get; set; }
 
-    /// <summary>
-    /// Name of the subject
-    /// </summary>
     [Required]
     public string Name { get; set; } = string.Empty;
 
@@ -279,14 +230,8 @@ public class Subject
     /// </summary>
     public List<string> Roles { get; set; } = new();
 
-    /// <summary>
-    /// Access token for this subject
-    /// </summary>
     public string AccessToken { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Optional notes about the subject
-    /// </summary>
     public string? Notes { get; set; }
 
     /// <summary>

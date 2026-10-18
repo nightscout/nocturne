@@ -48,8 +48,6 @@ public class UISettingsConfiguration
     public DataQualitySettings DataQuality { get; set; } = new();
 }
 
-#region Device Settings
-
 /// <summary>
 /// Settings for connected devices
 /// </summary>
@@ -109,10 +107,6 @@ public class CgmConfiguration
     [JsonPropertyName("sensorWarmupHours")]
     public int SensorWarmupHours { get; set; } = 2;
 }
-
-#endregion
-
-#region Algorithm Settings
 
 /// <summary>
 /// Algorithm settings for predictions, autosens, and closed loop
@@ -212,10 +206,6 @@ public class SafetyLimits
     [JsonPropertyName("maxDailyBasalMultiplier")]
     public double MaxDailyBasalMultiplier { get; set; } = 3.0;
 }
-
-#endregion
-
-#region Feature Settings
 
 /// <summary>
 /// Feature settings including display preferences and plugins
@@ -524,9 +514,6 @@ public class BatteryDisplaySettings
     [JsonPropertyName("urgentThreshold")]
     public int UrgentThreshold { get; set; } = 20;
 
-    /// <summary>
-    /// Whether to enable battery low alerts
-    /// </summary>
     [JsonPropertyName("enableAlerts")]
     public bool EnableAlerts { get; set; } = true;
 
@@ -580,10 +567,6 @@ public class TrackerPillsSettings
     public string Visibility { get; set; } = "always";
 }
 
-#endregion
-
-#region Notification Settings
-
 /// <summary>
 /// Notification settings using the modern xDrip+-style alarm profile configuration.
 /// This class now directly wraps UserAlarmConfiguration for full customization.
@@ -597,11 +580,6 @@ public class NotificationSettings
     [JsonPropertyName("alarmConfiguration")]
     public UserAlarmConfiguration AlarmConfiguration { get; set; } = new();
 }
-
-#endregion
-
-
-#region Services Settings
 
 /// <summary>
 /// Services settings including connected services/connectors
@@ -692,10 +670,6 @@ public class SyncSettings
     public bool BackgroundRefresh { get; set; } = true;
 }
 
-#endregion
-
-#region Data Quality Settings
-
 /// <summary>
 /// Data quality settings including sleep schedule and compression low detection
 /// </summary>
@@ -707,9 +681,6 @@ public class DataQualitySettings
     [JsonPropertyName("sleepSchedule")]
     public SleepScheduleSettings SleepSchedule { get; set; } = new();
 
-    /// <summary>
-    /// Compression low detection settings
-    /// </summary>
     [JsonPropertyName("compressionLowDetection")]
     public CompressionLowDetectionSettings CompressionLowDetection { get; set; } = new();
 }
@@ -740,9 +711,6 @@ public class SleepScheduleSettings
     public string? Timezone { get; set; }
 }
 
-/// <summary>
-/// Compression low detection settings
-/// </summary>
 public class CompressionLowDetectionSettings
 {
     /// <summary>
@@ -758,5 +726,3 @@ public class CompressionLowDetectionSettings
     [JsonPropertyName("excludeFromStatistics")]
     public bool ExcludeFromStatistics { get; set; } = true;
 }
-
-#endregion

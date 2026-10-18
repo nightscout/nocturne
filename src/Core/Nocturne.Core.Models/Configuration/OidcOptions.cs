@@ -5,19 +5,10 @@ namespace Nocturne.Core.Models.Configuration;
 /// </summary>
 public class OidcOptions
 {
-    /// <summary>
-    /// Configuration section name
-    /// </summary>
     public const string SectionName = "Oidc";
 
-    /// <summary>
-    /// Session configuration
-    /// </summary>
     public SessionOptions Session { get; set; } = new();
 
-    /// <summary>
-    /// Cookie configuration
-    /// </summary>
     public CookieSettings Cookie { get; set; } = new();
 
     /// <summary>
@@ -114,9 +105,6 @@ public class CookieSettings
     /// </remarks>
     public string? StateDomain { get; set; }
 
-    /// <summary>
-    /// Cookie path
-    /// </summary>
     public string Path { get; set; } = "/";
 
     /// <summary>
@@ -129,19 +117,10 @@ public class CookieSettings
     /// </summary>
     public bool HttpOnly { get; set; } = true;
 
-    /// <summary>
-    /// SameSite mode for the cookie
-    /// </summary>
     public SameSiteMode SameSite { get; set; } = SameSiteMode.Lax;
 
-    /// <summary>
-    /// Name of the access token cookie
-    /// </summary>
     public string AccessTokenName { get; set; } = ".Nocturne.AccessToken";
 
-    /// <summary>
-    /// Name of the refresh token cookie
-    /// </summary>
     public string RefreshTokenName { get; set; } = ".Nocturne.RefreshToken";
 
     /// <summary>
@@ -158,9 +137,6 @@ public class CookieSettings
 /// </summary>
 public class StateOptions
 {
-    /// <summary>
-    /// State cookie lifetime
-    /// </summary>
     public TimeSpan Lifetime { get; set; } = TimeSpan.FromMinutes(15);
 }
 

@@ -29,9 +29,6 @@ public class ExternalUrls
 /// </summary>
 public class ConnectorDocsUrls
 {
-    /// <summary>
-    /// Dexcom connector documentation
-    /// </summary>
     public required string Dexcom { get; init; }
 
     /// <summary>
@@ -49,8 +46,5 @@ public class ConnectorDocsUrls
     /// </summary>
     public required string Nightscout { get; init; }
 
-    /// <summary>
-    /// Glooko connector documentation
-    /// </summary>
     public required string Glooko { get; init; }
 }

@@ -44,9 +44,6 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     /// </summary>
     public string ProfileName { get; set; } = "Default";
 
-    /// <summary>
-    /// Timezone for this profile
-    /// </summary>
     public string? Timezone { get; set; }
 
     /// <summary>

@@ -10,7 +10,6 @@ namespace Nocturne.Core.Models;
 /// <seealso cref="DiscrepancyType"/>
 public class DiscrepancyAnalysisDto
 {
-    /// <summary>Unique identifier for this analysis record</summary>
     public Guid Id { get; set; }
 
     /// <summary>
@@ -22,7 +21,6 @@ public class DiscrepancyAnalysisDto
     [JsonPropertyName("correlationId")]
     public string TraceId { get; set; } = string.Empty;
 
-    /// <summary>When the analysis was performed</summary>
     public DateTimeOffset AnalysisTimestamp { get; set; }
 
     /// <summary>HTTP method of the compared request (e.g., "GET", "POST")</summary>
@@ -46,7 +44,6 @@ public class DiscrepancyAnalysisDto
     /// <summary>HTTP status code returned by the legacy Nightscout instance</summary>
     public int? NightscoutStatusCode { get; set; }
 
-    /// <summary>HTTP status code returned by Nocturne</summary>
     public int? NocturneStatusCode { get; set; }
 
     /// <summary>Response time of the legacy Nightscout instance in milliseconds</summary>
@@ -104,9 +101,6 @@ public class ForwardedDiscrepancyDto
     /// </summary>
     public DateTimeOffset ReceivedAt { get; set; }
 
-    /// <summary>
-    /// The discrepancy analysis data
-    /// </summary>
     public DiscrepancyAnalysisDto Analysis { get; set; } = new();
 }
 
@@ -118,13 +112,11 @@ public class ForwardedDiscrepancyDto
 /// <seealso cref="DiscrepancySeverity"/>
 public class DiscrepancyDetailDto
 {
-    /// <summary>Unique identifier for this discrepancy detail record</summary>
     public Guid Id { get; set; }
 
     /// <summary>Category of discrepancy (status code, body, header, etc.)</summary>
     public DiscrepancyType DiscrepancyType { get; set; }
 
-    /// <summary>Severity level of this discrepancy</summary>
     public DiscrepancySeverity Severity { get; set; }
 
     /// <summary>JSON path or field name where the discrepancy was found (e.g., "entries[0].sgv")</summary>
@@ -139,7 +131,6 @@ public class DiscrepancyDetailDto
     /// <summary>Human-readable description of the discrepancy</summary>
     public string Description { get; set; } = string.Empty;
 
-    /// <summary>When this discrepancy detail was recorded</summary>
     public DateTimeOffset RecordedAt { get; set; }
 }
 
@@ -157,7 +148,6 @@ public class CompatibilityStatus
     /// <summary>Health status string (e.g., "healthy", "degraded", "critical")</summary>
     public string HealthStatus { get; set; } = string.Empty;
 
-    /// <summary>When this status was last recalculated</summary>
     public DateTimeOffset LastUpdated { get; set; }
 
     /// <summary>Number of open <see cref="DiscrepancySeverity.Critical"/> issues</summary>
@@ -172,9 +162,6 @@ public class CompatibilityStatus
 
 
 
-/// <summary>
-/// Type of response match
-/// </summary>
 public enum ResponseMatchType
 {
     /// <summary>
@@ -202,9 +189,6 @@ public enum ResponseMatchType
     /// </summary>
     NightscoutMissing,
 
-    /// <summary>
-    /// Nocturne response is missing
-    /// </summary>
     NocturneMissing,
 
     /// <summary>

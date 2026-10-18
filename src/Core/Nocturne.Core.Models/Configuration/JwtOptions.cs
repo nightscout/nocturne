@@ -13,14 +13,8 @@ public class JwtOptions
     /// </summary>
     public string SecretKey { get; set; } = string.Empty;
 
-    /// <summary>
-    /// JWT token issuer.
-    /// </summary>
     public string Issuer { get; set; } = "nocturne";
 
-    /// <summary>
-    /// JWT token audience.
-    /// </summary>
     public string Audience { get; set; } = "nocturne-api";
 
     /// <summary>

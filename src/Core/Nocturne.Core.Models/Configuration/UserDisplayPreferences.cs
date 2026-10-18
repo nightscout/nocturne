@@ -204,7 +204,6 @@ public class UserDisplayPreferences
     [JsonPropertyName("nightModeSchedule")]
     public bool? NightModeSchedule { get; set; }
 
-    /// <summary>Prediction display preferences.</summary>
     [JsonPropertyName("prediction")]
     public PredictionPreferences? Prediction { get; set; }
 

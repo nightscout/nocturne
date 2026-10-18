@@ -10,15 +10,9 @@ namespace Nocturne.Core.Models;
 /// <seealso cref="EventTypeConfigurations"/>
 public class EventTypeConfiguration
 {
-    /// <summary>
-    /// The event type enum value
-    /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public TreatmentEventType EventType { get; set; }
 
-    /// <summary>
-    /// Display name for the event type
-    /// </summary>
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
@@ -26,34 +20,16 @@ public class EventTypeConfiguration
     /// </summary>
     public bool Bg { get; set; }
 
-    /// <summary>
-    /// Whether insulin field is applicable
-    /// </summary>
     public bool Insulin { get; set; }
 
-    /// <summary>
-    /// Whether carbs field is applicable
-    /// </summary>
     public bool Carbs { get; set; }
 
-    /// <summary>
-    /// Whether protein field is applicable
-    /// </summary>
     public bool Protein { get; set; }
 
-    /// <summary>
-    /// Whether fat field is applicable
-    /// </summary>
     public bool Fat { get; set; }
 
-    /// <summary>
-    /// Whether prebolus field is applicable
-    /// </summary>
     public bool Prebolus { get; set; }
 
-    /// <summary>
-    /// Whether duration field is applicable
-    /// </summary>
     public bool Duration { get; set; }
 
     /// <summary>
@@ -61,24 +37,12 @@ public class EventTypeConfiguration
     /// </summary>
     public bool Percent { get; set; }
 
-    /// <summary>
-    /// Whether absolute field is applicable
-    /// </summary>
     public bool Absolute { get; set; }
 
-    /// <summary>
-    /// Whether profile field is applicable
-    /// </summary>
     public bool Profile { get; set; }
 
-    /// <summary>
-    /// Whether split field is applicable
-    /// </summary>
     public bool Split { get; set; }
 
-    /// <summary>
-    /// Whether sensor field is applicable
-    /// </summary>
     public bool Sensor { get; set; }
 }
 

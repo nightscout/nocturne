@@ -192,9 +192,6 @@ public enum DashboardVisibility
     Urgent
 }
 
-/// <summary>
-/// Mode of tracker operation
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<TrackerMode>))]
 public enum TrackerMode
 {

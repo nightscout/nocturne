@@ -92,13 +92,11 @@ public enum BolusType
     /// <summary>Generic bolus with no specific meal context</summary>
     Bolus,
 
-    /// <summary>Bolus given with a meal</summary>
     MealBolus,
 
     /// <summary>Correction bolus to bring glucose into range</summary>
     CorrectionBolus,
 
-    /// <summary>Bolus given with a snack</summary>
     SnackBolus,
 
     /// <summary>Bolus delivered via the pump's built-in wizard</summary>
