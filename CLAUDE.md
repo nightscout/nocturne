@@ -383,8 +383,9 @@ Design notes:
   key itself, and invalidation clears a key family across every partition. What a value
   in `full` may contain is stated on `ITenantCache`. The one exception is
   `StatusService`'s `status:system` key, which varies by whether the caller is
-  authenticated rather than by the rows it can read. A read that fans out in a fresh DI scope (`TenantOverviewService`)
-  carries the caller's clamp into that scope's `ICategoryReadContext` and reads through it.
+  authenticated rather than by the rows it can read. A read that fans out in a fresh DI
+  scope (`TenantOverviewService`) carries the caller's clamp into that scope's
+  `ICategoryReadContext` and reads through it.
 
 ## Testing
 
