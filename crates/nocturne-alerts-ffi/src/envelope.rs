@@ -18,7 +18,7 @@ use nocturne_alerts_core::engine::{
 use nocturne_alerts_core::enums::WireEnum;
 use nocturne_alerts_core::eval::{Env, eval_node};
 use nocturne_alerts_core::excursion::{ExcursionTracker, TrackerState, TrackerStateKind};
-use nocturne_alerts_core::facts::{ContextFact, RuleConditions, references_any, rule_reads};
+use nocturne_alerts_core::facts::{self, ContextFact, RuleConditions};
 use nocturne_alerts_core::model::{ConditionKind, Container, Node, parse_payload_structure};
 use nocturne_alerts_core::paths::node_child_path;
 use nocturne_alerts_core::sustained::{TimerOp, TimerStore};
@@ -296,8 +296,6 @@ struct RuleConditionsRequest {
     auto_resolve_enabled: bool,
     #[serde(default)]
     auto_resolve_params: Option<Value>,
-    #[serde(default)]
-    facts: Option<Vec<String>>,
 }
 
 impl RuleConditionsRequest {
@@ -326,33 +324,40 @@ pub(crate) fn wall_clock(request_json: &str) -> Result<Value, String> {
 
 /// The context facts a rule reads (engine-semantics.md §5.2), by wire name.
 /// An unknown type or unevaluable body reads none, not an error.
-pub(crate) fn reads(request_json: &str) -> Result<Value, String> {
+pub(crate) fn rule_reads(request_json: &str) -> Result<Value, String> {
     let req = RuleConditionsRequest::read(request_json)?;
-    let names: Vec<&str> = rule_reads(&req.rule())
+    let names: Vec<&str> = facts::rule_reads(&req.rule())
         .into_iter()
         .map(ContextFact::name)
         .collect();
     Ok(ok(json!({ "reads": names })))
 }
 
+/// [`RuleConditionsRequest`] plus the fact names to match.
+#[derive(Deserialize)]
+struct ReferencesAnyRequest {
+    #[serde(flatten)]
+    rule: RuleConditionsRequest,
+    facts: Vec<String>,
+}
+
 /// Whether a rule reads any of the request's `facts`. A fact name this crate
 /// does not know is an error: ignoring it could skip a rule the host meant to
 /// evaluate.
-pub(crate) fn references_any_fact(request_json: &str) -> Result<Value, String> {
-    let req = RuleConditionsRequest::read(request_json)?;
+pub(crate) fn references_any(request_json: &str) -> Result<Value, String> {
+    let req: ReferencesAnyRequest = read_request(request_json, |r: &ReferencesAnyRequest| {
+        r.rule.schema_version
+    })?;
     let facts = req
         .facts
-        .as_deref()
-        .ok_or("missing field facts")?
         .iter()
         .map(|name| {
             ContextFact::from_name(name)
                 .ok_or_else(|| format!("unknown fact '{}'", name.escape_default()))
         })
         .collect::<Result<Vec<_>, String>>()?;
-    Ok(ok(
-        json!({ "references_any": references_any(&req.rule(), &facts) }),
-    ))
+    let matched = facts::references_any(&req.rule.rule(), &facts);
+    Ok(ok(json!({ "references_any": matched })))
 }
 
 /// Every node slot's condition path and the leaves' paths by leaf id. Input

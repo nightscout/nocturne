@@ -10,26 +10,9 @@ use crate::model::{ConditionKind, Node, parse_payload};
 
 wire_enum! {
     /// A group of [`SensorContext`](crate::context::SensorContext) fields
-    /// that a host fills from one source. [`WireEnum::name`] is the wire name.
-    ///
-    /// | Fact | Fields |
-    /// |---|---|
-    /// | `glucose` | `latest_value`, `latest_timestamp`, `last_reading_at`, `trend_rate`, `trend_bucket`, `glucose_bucket` |
-    /// | `predictions` | `predictions` |
-    /// | `insulin` | `iob_units`, `last_bolus_at`, `active_temp_basal` |
-    /// | `carbs` | `cob_grams`, `last_carb_at` |
-    /// | `pump` | `reservoir_units`, `reservoir_is_lower_bound`, `pump_battery_percent`, `has_ever_pump_snapshot` |
-    /// | `aps` | `last_aps_cycle_at`, `last_aps_enacted_at`, `has_ever_aps_cycled`, `sensitivity_ratio`, `has_ever_aps_sensitivity` |
-    /// | `uploader` | `uploader_battery_percent`, `has_ever_uploader_snapshot` |
-    /// | `state_spans` | `active_override`, `active_pump_suspension`, `active_pump_state`, `active_state_spans` |
-    /// | `device_ages` | `last_site_change_at`, `last_sensor_start_at` |
-    /// | `trackers` | `active_trackers` |
-    /// | `sleep` | `sleep_session_active` |
-    /// | `active_alerts` | `active_alerts` |
-    /// | `do_not_disturb` | `active_do_not_disturb` |
-    /// | `time_zone` | `tenant_time_zone_id` |
-    ///
-    /// `now` is not a fact: it is an argument to evaluation, not context.
+    /// that a host fills from one source; engine-semantics.md §5.2 lists each
+    /// group's fields. [`WireEnum::name`] is the wire name. `now` is not a
+    /// fact: it is an argument to evaluation, not context.
     pub enum ContextFact {
         Glucose = "glucose",
         Predictions = "predictions",
@@ -86,13 +69,13 @@ pub fn reads(kind: ConditionKind) -> &'static [ContextFact] {
 
 /// A stored rule's condition trees, as [`WireRule`] carries them.
 ///
-/// Its kinds are read as evaluation reads them. The root kind is
-/// `condition_type`, a kind's wire name ignoring ASCII case; anything else
-/// gives the rule no kinds. The root kind counts whatever the body. The body's
-/// kinds count only when it can be evaluated, nested kinds resolving as node
-/// dispatch resolves them (engine-semantics.md §1.2). The auto-resolve tree's
-/// kinds count only while `auto_resolve_enabled`, and only when the tree is
-/// present, not `null` and evaluable, as evaluation reads it.
+/// The root kind is `condition_type`, a kind's wire name ignoring ASCII case;
+/// anything else gives the rule no kinds. The root kind counts whatever the
+/// body. The body's kinds count only when it can be evaluated, nested kinds
+/// resolving as node dispatch resolves them (engine-semantics.md §1.2). The
+/// auto-resolve tree's kinds count whenever `auto_resolve_enabled` and the
+/// tree is present, not `null` and evaluable, even when the body is not and
+/// evaluation would skip the rule.
 #[derive(Debug, Clone, Copy)]
 pub struct RuleConditions<'a> {
     pub condition_type: &'a str,
@@ -593,6 +576,20 @@ mod tests {
         for &kind in ConditionKind::ALL.iter().filter(|&&k| !is_container(k)) {
             assert!(evaluate(kind, reads(kind)), "{kind:?} with its facts");
             assert!(!evaluate(kind, &[]), "{kind:?} with no facts");
+        }
+    }
+
+    #[test]
+    fn every_fact_a_leaf_kind_reads_is_needed() {
+        for &kind in ConditionKind::ALL.iter().filter(|&&k| !is_container(k)) {
+            for &fact in reads(kind) {
+                let without: Vec<ContextFact> = ContextFact::ALL
+                    .iter()
+                    .copied()
+                    .filter(|&f| f != fact)
+                    .collect();
+                assert!(!evaluate(kind, &without), "{kind:?} without {fact:?}");
+            }
         }
     }
 

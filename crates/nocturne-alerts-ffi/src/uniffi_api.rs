@@ -39,14 +39,14 @@ pub(crate) fn references_wall_clock(request_json: &str) -> String {
 #[uniffi::export]
 #[must_use]
 pub(crate) fn rule_reads(request_json: &str) -> String {
-    envelope_string(|| envelope::reads(request_json))
+    envelope_string(|| envelope::rule_reads(request_json))
 }
 
 /// `nocturne_alerts_references_any`.
 #[uniffi::export]
 #[must_use]
 pub(crate) fn references_any(request_json: &str) -> String {
-    envelope_string(|| envelope::references_any_fact(request_json))
+    envelope_string(|| envelope::references_any(request_json))
 }
 
 /// `nocturne_alerts_leaf_paths`.

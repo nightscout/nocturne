@@ -1013,7 +1013,7 @@ fn references_any_matches_facts_by_wire_name() {
             nocturne_alerts_references_any,
             &high_rule_resolving_on_cob().to_string(),
         ),
-        "missing field facts",
+        "missing field `facts`",
     );
 }
 
