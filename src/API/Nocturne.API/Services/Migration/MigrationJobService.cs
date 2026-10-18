@@ -665,8 +665,8 @@ internal class MigrationJob
             run.State = _state.ToString();
             run.StartedAt = _startedAt == default ? _info.CreatedAt : _startedAt;
             run.CompletedAt = _completedAt;
-            run.DateRangeStart = AsUtc(_request.StartDate);
-            run.DateRangeEnd = AsUtc(_request.EndDate);
+            run.DateRangeStart = _request.StartDate?.AsUtc();
+            run.DateRangeEnd = _request.EndDate?.AsUtc();
             run.ErrorMessage = _errorMessage;
             run.EntriesMigrated = (int)Math.Min(int.MaxValue, MigratedCount("entries"));
             run.TreatmentsMigrated = (int)Math.Min(int.MaxValue, MigratedCount("treatments"));
@@ -751,14 +751,6 @@ internal class MigrationJob
     /// <summary>Canonical source identifier for a MongoDB-mode migration: a non-usable digest, never the connection string itself.</summary>
     internal static string MongoSourceIdentifier(string connectionString) =>
         HashUtils.Sha256Hex(connectionString);
-
-    /// <summary>Npgsql rejects Local/Unspecified kinds for timestamptz; normalize optional caller-supplied dates.</summary>
-    private static DateTime? AsUtc(DateTime? value) => value switch
-    {
-        null => null,
-        { Kind: DateTimeKind.Unspecified } v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
-        { } v => v.ToUniversalTime(),
-    };
 
     /// <summary>Reconstructs a status snapshot from a persisted run (post-restart lookups).</summary>
     public static MigrationJobStatus StatusFromRecord(MigrationRunEntity run)
