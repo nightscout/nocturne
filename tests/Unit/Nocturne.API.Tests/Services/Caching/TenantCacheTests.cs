@@ -112,8 +112,10 @@ public sealed class TenantCacheTests : IDisposable
     }
 
     [Fact]
-    public async Task Shares_with_different_full_history_flags_do_not_share_a_value()
+    public async Task A_share_without_full_history_is_clamped_and_gets_no_partition()
     {
+        new ReaderCachePartition(Share(Scope.GlucoseRead, fullHistory: false)).Current.Should().BeNull();
+
         await WriteAsync(Cache(Share(Scope.GlucoseRead, fullHistory: true)), "full-history");
         (await ReadAsync(Cache(Share(Scope.GlucoseRead, fullHistory: false)))).Should().BeNull();
 
@@ -202,6 +204,23 @@ public sealed class TenantCacheTests : IDisposable
         (await ReadAsync(Cache(Share(Scope.GlucoseRead)))).Should().BeNull();
         (await Cache(Owner()).GetAsync<Box>("other:key")).Should().BeNull();
         (await ReadAsync(Cache(Owner(), TenantB))).Should().Be("tenant b");
+    }
+
+    [Fact]
+    public async Task Without_a_resolved_tenant_reads_miss_writes_drop_and_removal_does_nothing()
+    {
+        await WriteAsync(Cache(Owner()), "owner");
+        var tenant = new Mock<ITenantAccessor>();
+        var unresolved = new TenantCache(
+            _distributed, _local, tenant.Object, new ReaderCachePartition(Owner()), Mock.Of<IDemoModeService>());
+
+        (await ReadAsync(unresolved)).Should().BeNull();
+        await WriteAsync(unresolved, "unresolved");
+        unresolved.SetLocal("family:local", "unresolved", Ttl);
+        unresolved.TryGetLocal<string>("family:local", out _).Should().BeFalse();
+        await unresolved.RemoveFamilyAsync("family");
+
+        (await ReadAsync(Cache(Owner()))).Should().Be("owner");
     }
 
     [Fact]
