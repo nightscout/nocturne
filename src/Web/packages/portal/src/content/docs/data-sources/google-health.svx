@@ -73,8 +73,8 @@ Set these in your `.env` and restart Nocturne:
 | `GOOGLE_HEALTH_CLIENT_SECRET` | The client secret. |
 | `GOOGLE_HEALTH_REDIRECT_URI` | Optional. Only needed when Nocturne cannot work the address out from `BASE_DOMAIN`, for example when `BASE_DOMAIN` is unset. It must end in `/api/v4/google-health/oauth/callback` and match the URI you registered exactly. |
 
-The **Connect Google Health** button appears for everyone on the server once all three are in
-place.
+The **Connect Google Health** button appears for everyone on the server once the client ID and
+secret are set and Nocturne has a redirect URI, from `BASE_DOMAIN` or the variable.
 
 ### 3. Who can connect
 
