@@ -237,8 +237,8 @@ public class NutritionControllerMealsTests : IDisposable
     }
 
     /// <remarks>
-    /// The unrelated rows land inside each upsert, between the meal's own write and the controller's
-    /// next statement, so a status read off table size sees each table grow.
+    /// Unrelated rows land inside each upsert, after the meal's own write and before the controller
+    /// decides the status.
     /// </remarks>
     [Fact]
     public async Task CreateMeal_ResentWhileOtherRecordsLand_Returns200()

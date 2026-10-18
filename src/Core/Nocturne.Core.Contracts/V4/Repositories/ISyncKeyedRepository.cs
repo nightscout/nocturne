@@ -28,9 +28,6 @@ public interface ISyncKeyedRepository<T> where T : class, IV4Record
     /// <see cref="IV4Repository{T}.CreateAsync"/>, also reporting whether the write inserted a row or
     /// updated in place the live row holding the same (DataSource, SyncIdentifier).
     /// </summary>
-    /// <param name="model">The record to create.</param>
-    /// <param name="origin">Whether the write is live or a backfill import.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <exception cref="RecreationBlockedException">The key is held by a row the user deleted.</exception>
     Task<SyncUpsert<T>> UpsertAsync(T model, WriteOrigin origin, CancellationToken ct = default);
 }
