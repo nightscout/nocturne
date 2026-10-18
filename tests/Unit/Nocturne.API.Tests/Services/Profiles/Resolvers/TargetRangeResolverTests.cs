@@ -76,6 +76,23 @@ public class TargetRangeResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task RangeReturnsBothTargetsFromOneResolution()
+    {
+        _activeProfileResolver.Setup(r => r.GetActiveProfileNameAsync(NoonMills, default))
+            .ReturnsAsync("Night");
+        var schedule = MakeSchedule((0, 80.0, 120.0), (6 * 3600, 90.0, 130.0));
+        _repo.Setup(r => r.GetActiveAtAsync("Night", It.IsAny<DateTime>(), default))
+            .ReturnsAsync(schedule);
+
+        var (low, high) = await _sut.GetBGTargetRangeAsync(NoonMills);
+
+        low.Should().Be(90.0);
+        high.Should().Be(130.0);
+        _activeProfileResolver.Verify(r => r.GetActiveProfileNameAsync(NoonMills, default), Times.Once);
+        _activeProfileResolver.Verify(r => r.GetCircadianAdjustmentAsync(NoonMills, default), Times.Once);
+    }
+
+    [Fact]
     public async Task DoesNotApplyCcpAdjustmentToTargets()
     {
         var schedule = MakeSchedule((0, 80.0, 120.0));

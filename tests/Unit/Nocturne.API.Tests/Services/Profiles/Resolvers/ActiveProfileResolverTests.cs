@@ -528,6 +528,33 @@ public class ActiveProfileResolverTests : IDisposable
             early.Should().BeNull();
         }
 
+        /// <summary>
+        /// The minute's candidates are shared by every lookup in it, so the overlap bound is the
+        /// minute's start, not the lookup time: a later lookup must not drop a span that ended
+        /// mid-minute and an earlier lookup still needs.
+        /// </summary>
+        [Fact]
+        public async Task QueriesSpansOverlappingTheWholeMinute()
+        {
+            SetupSpansStartedBy(SwitchAtHalfPast());
+
+            await _sut.GetActiveProfileNameAsync(NoonMills + 45_000);
+
+            _stateSpanService.Verify(
+                s => s.GetStateSpansAsync(
+                    StateSpanCategory.Profile,
+                    It.IsAny<string?>(),
+                    DateTimeOffset.FromUnixTimeMilliseconds(NoonMills).UtcDateTime,
+                    DateTimeOffset.FromUnixTimeMilliseconds(NoonMills + 59_999).UtcDateTime,
+                    It.IsAny<string?>(),
+                    It.IsAny<bool?>(),
+                    It.IsAny<int>(),
+                    It.IsAny<int>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+
         [Fact]
         public async Task LookupsWithinOneMinute_ShareOneQuery()
         {
