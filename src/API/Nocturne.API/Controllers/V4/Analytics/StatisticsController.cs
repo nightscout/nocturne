@@ -357,6 +357,7 @@ public class StatisticsController : ControllerBase
             request.Entries,
             request.Boluses ?? Enumerable.Empty<Bolus>(),
             request.CarbIntakes ?? Enumerable.Empty<CarbIntake>(),
+            StatisticsService.ClinicalMinimumDays,
             request.Config
         );
         return Ok(result);
@@ -370,16 +371,22 @@ public class StatisticsController : ControllerBase
     [HttpPost("extended-analytics")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(Scope.ReportsRead)]
-    public ActionResult<ExtendedGlucoseAnalytics> AnalyzeGlucoseDataExtended(
-        [FromBody] ExtendedGlucoseAnalyticsRequest request
+    public async Task<ActionResult<ExtendedGlucoseAnalytics>> AnalyzeGlucoseDataExtended(
+        [FromBody] ExtendedGlucoseAnalyticsRequest request,
+        CancellationToken cancellationToken = default
     )
     {
+        var clock = await ResolveTenantTimeZoneAsync(cancellationToken);
         var result = _statisticsService.AnalyzeGlucoseDataExtended(
             request.Entries,
             request.Boluses ?? Enumerable.Empty<Bolus>(),
             request.CarbIntakes ?? Enumerable.Empty<CarbIntake>(),
+            request.StartDate is { } start && request.EndDate is { } end
+                ? StatisticsService.WindowDays(start, end)
+                : StatisticsService.ClinicalMinimumDays,
             request.Population,
-            request.Config
+            request.Config,
+            clock.Zone
         );
         return Ok(result);
     }
@@ -474,7 +481,14 @@ public class StatisticsController : ControllerBase
 
         var result = new ReportAnalysisResult
         {
-            Analysis = _statisticsService.AnalyzeGlucoseDataExtended(entries, boluses, carbs, population),
+            Analysis = _statisticsService.AnalyzeGlucoseDataExtended(
+                entries,
+                boluses,
+                carbs,
+                StatisticsService.WindowDays(startDt, endDt),
+                population,
+                timeZone: clock.Zone
+            ),
             AveragedStats = _statisticsService.CalculateAveragedStats(entries, clock.Zone).ToList(),
             HourlyBandThresholds = _statisticsService.HourlyBandThresholds,
             ContributingDevices = contributingDevices,
@@ -836,6 +850,7 @@ public class StatisticsController : ControllerBase
         var allGlucose = (await glucoseTask).ToList();
         var allCarbs = (await carbTask).ToList();
         var allDeviceEvents = await sessionTask;
+        var clock = await ResolveTenantTimeZoneAsync(cancellationToken);
 
         foreach (var days in periods)
         {
@@ -861,7 +876,9 @@ public class StatisticsController : ControllerBase
                     filteredEntries,
                     filteredBoluses,
                     filteredCarbs,
-                    deviceEvents: allDeviceEvents.Where(e => e.Timestamp >= startDate).ToList()
+                    deviceEvents: allDeviceEvents.Where(e => e.Timestamp >= startDate).ToList(),
+                    windowDays: days,
+                    timeZone: clock.Zone
                 );
 
                 treatmentSummary = _statisticsService.CalculateTreatmentSummary(
@@ -892,26 +909,7 @@ public class StatisticsController : ControllerBase
             {
                 periodGmi = _statisticsService.CalculateGMI(analytics.BasicStats.Mean);
 
-                var actualDaysWithData = filteredEntries
-                    .Where(e => e.Mills > 0)
-                    .Select(e => DateTimeOffset.FromUnixTimeMilliseconds(e.Mills).Date)
-                    .Distinct()
-                    .Count();
-
-                // Context-appropriate recommended minimums:
-                // Short periods can't reasonably need 14 days
-                var recommendedDays = days switch
-                {
-                    <= 3 => days,
-                    <= 7 => 7,
-                    _ => 14, // clinical standard for 30/90 day periods
-                };
-
-                periodReliability = _statisticsService.AssessReliability(
-                    actualDaysWithData,
-                    filteredEntries.Count,
-                    recommendedDays
-                );
+                periodReliability = analytics.Reliability;
 
                 periodGmi.Reliability = periodReliability;
             }
@@ -1585,6 +1583,16 @@ public class ExtendedGlucoseAnalyticsRequest
     /// Optional extended analysis configuration
     /// </summary>
     public ExtendedAnalysisConfig? Config { get; set; }
+
+    /// <summary>
+    /// Start of the window the readings were requested for. With <see cref="EndDate"/> it sets the reliability minimum.
+    /// </summary>
+    public DateTime? StartDate { get; set; }
+
+    /// <summary>
+    /// End of the window the readings were requested for.
+    /// </summary>
+    public DateTime? EndDate { get; set; }
 }
 
 /// <summary>

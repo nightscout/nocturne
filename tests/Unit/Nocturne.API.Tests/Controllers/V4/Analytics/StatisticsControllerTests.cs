@@ -161,10 +161,12 @@ public class StatisticsControllerTests
                 It.IsAny<IEnumerable<SensorGlucose>>(),
                 It.IsAny<IEnumerable<Bolus>>(),
                 It.IsAny<IEnumerable<CarbIntake>>(),
+                It.IsAny<int>(),
                 It.IsAny<DiabetesPopulation>(),
-                It.IsAny<ExtendedAnalysisConfig?>()))
-            .Callback<IEnumerable<SensorGlucose>, IEnumerable<Bolus>, IEnumerable<CarbIntake>, DiabetesPopulation, ExtendedAnalysisConfig?>(
-                (entries, _, _, _, _) => analysedEntries = entries.ToList())
+                It.IsAny<ExtendedAnalysisConfig?>(),
+                It.IsAny<TimeZoneInfo?>()))
+            .Callback<IEnumerable<SensorGlucose>, IEnumerable<Bolus>, IEnumerable<CarbIntake>, int, DiabetesPopulation, ExtendedAnalysisConfig?, TimeZoneInfo?>(
+                (entries, _, _, _, _, _, _) => analysedEntries = entries.ToList())
             .Returns(analysis);
         _statsServiceMock
             .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
@@ -203,8 +205,10 @@ public class StatisticsControllerTests
                 It.IsAny<IEnumerable<SensorGlucose>>(),
                 It.IsAny<IEnumerable<Bolus>>(),
                 It.IsAny<IEnumerable<CarbIntake>>(),
+                It.IsAny<int>(),
                 It.IsAny<DiabetesPopulation>(),
-                It.IsAny<ExtendedAnalysisConfig?>()))
+                It.IsAny<ExtendedAnalysisConfig?>(),
+                It.IsAny<TimeZoneInfo?>()))
             .Returns(new ExtendedGlucoseAnalytics());
         _statsServiceMock
             .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
@@ -220,8 +224,10 @@ public class StatisticsControllerTests
             It.IsAny<IEnumerable<SensorGlucose>>(),
             It.IsAny<IEnumerable<Bolus>>(),
             It.IsAny<IEnumerable<CarbIntake>>(),
+            It.IsAny<int>(),
             DiabetesPopulation.Type1Adult,
-            It.IsAny<ExtendedAnalysisConfig?>()), Times.Once);
+            It.IsAny<ExtendedAnalysisConfig?>(),
+            It.IsAny<TimeZoneInfo?>()), Times.Once);
     }
 
     private static readonly GlycemicThresholds BandThresholds = new();
@@ -234,8 +240,10 @@ public class StatisticsControllerTests
                 It.IsAny<IEnumerable<SensorGlucose>>(),
                 It.IsAny<IEnumerable<Bolus>>(),
                 It.IsAny<IEnumerable<CarbIntake>>(),
+                It.IsAny<int>(),
                 It.IsAny<DiabetesPopulation>(),
-                It.IsAny<ExtendedAnalysisConfig?>()))
+                It.IsAny<ExtendedAnalysisConfig?>(),
+                It.IsAny<TimeZoneInfo?>()))
             .Returns(new ExtendedGlucoseAnalytics());
         _statsServiceMock
             .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
@@ -1202,6 +1210,103 @@ public class StatisticsControllerTests
         _basalSegmentsMock
             .Setup(s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .Returns(() => AsAsync(segments));
+    }
+
+    [Fact]
+    public async Task GetMultiPeriodStatistics_ScalesTheRecommendedMinimumToEachPeriod()
+    {
+        SetupMultiPeriodWithProfile([]);
+
+        var result = await CreateController(statisticsService: new StatisticsService())
+            .GetMultiPeriodStatistics();
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<MultiPeriodStatistics>().Subject;
+        var periods = new[] { payload.LastDay, payload.Last3Days, payload.LastWeek, payload.LastMonth, payload.Last90Days };
+        periods.Select(p => p.Reliability!.RecommendedMinimumDays).Should().Equal(1, 3, 7, 14, 14);
+    }
+
+    [Fact]
+    public async Task AnalyzeGlucoseDataExtended_PassesTheRequestedWindowAndTheTenantZone()
+    {
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Australia/Sydney");
+        _statsServiceMock
+            .Setup(s => s.AnalyzeGlucoseDataExtended(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<IEnumerable<Bolus>>(),
+                It.IsAny<IEnumerable<CarbIntake>>(),
+                It.IsAny<int>(),
+                It.IsAny<DiabetesPopulation>(),
+                It.IsAny<ExtendedAnalysisConfig?>(),
+                It.IsAny<TimeZoneInfo?>()))
+            .Returns(new ExtendedGlucoseAnalytics());
+
+        await CreateController().AnalyzeGlucoseDataExtended(new ExtendedGlucoseAnalyticsRequest
+        {
+            StartDate = new DateTime(2026, 3, 9, 13, 0, 0, DateTimeKind.Utc),
+            EndDate = new DateTime(2026, 3, 10, 13, 0, 0, DateTimeKind.Utc),
+        });
+
+        _statsServiceMock.Verify(s => s.AnalyzeGlucoseDataExtended(
+            It.IsAny<IEnumerable<SensorGlucose>>(),
+            It.IsAny<IEnumerable<Bolus>>(),
+            It.IsAny<IEnumerable<CarbIntake>>(),
+            1,
+            It.IsAny<DiabetesPopulation>(),
+            It.IsAny<ExtendedAnalysisConfig?>(),
+            It.Is<TimeZoneInfo?>(z => z != null && z.Id == "Australia/Sydney")), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetRangeAnalytics_PassesTheRequestedWindowAndTheTenantZone()
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        SetupEmptyTreatments();
+        SetupAnalysis();
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Australia/Sydney");
+
+        await CreateController().GetRangeAnalytics(
+            new DateTime(2026, 2, 28, 13, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 3, 7, 12, 59, 59, 999, DateTimeKind.Utc));
+
+        _statsServiceMock.Verify(s => s.AnalyzeGlucoseDataExtended(
+            It.IsAny<IEnumerable<SensorGlucose>>(),
+            It.IsAny<IEnumerable<Bolus>>(),
+            It.IsAny<IEnumerable<CarbIntake>>(),
+            7,
+            It.IsAny<DiabetesPopulation>(),
+            It.IsAny<ExtendedAnalysisConfig?>(),
+            It.Is<TimeZoneInfo?>(z => z != null && z.Id == "Australia/Sydney")), Times.Once);
+    }
+
+    [Fact]
+    public async Task AnalyzeGlucoseDataExtended_WithNoWindow_PassesTheClinicalMinimum()
+    {
+        _statsServiceMock
+            .Setup(s => s.AnalyzeGlucoseDataExtended(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<IEnumerable<Bolus>>(),
+                It.IsAny<IEnumerable<CarbIntake>>(),
+                It.IsAny<int>(),
+                It.IsAny<DiabetesPopulation>(),
+                It.IsAny<ExtendedAnalysisConfig?>(),
+                It.IsAny<TimeZoneInfo?>()))
+            .Returns(new ExtendedGlucoseAnalytics());
+
+        await CreateController().AnalyzeGlucoseDataExtended(new ExtendedGlucoseAnalyticsRequest());
+
+        _statsServiceMock.Verify(s => s.AnalyzeGlucoseDataExtended(
+            It.IsAny<IEnumerable<SensorGlucose>>(),
+            It.IsAny<IEnumerable<Bolus>>(),
+            It.IsAny<IEnumerable<CarbIntake>>(),
+            StatisticsService.ClinicalMinimumDays,
+            It.IsAny<DiabetesPopulation>(),
+            It.IsAny<ExtendedAnalysisConfig?>(),
+            It.IsAny<TimeZoneInfo?>()), Times.Once);
     }
 
     private async Task<InsulinDeliveryStatistics> MultiPeriodLastDayDelivery()
