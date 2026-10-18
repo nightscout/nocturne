@@ -16,7 +16,6 @@ namespace Nocturne.Connectors.FreeStyle.Services;
 
 /// <summary>
 ///     Connector service for LibreLinkUp data source.
-///     Writes SensorGlucose records directly instead of legacy Entry objects.
 /// </summary>
 public class LibreConnectorService(
     HttpClient httpClient,

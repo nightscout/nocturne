@@ -31,7 +31,7 @@ public class GlookoStateSpanMapper
 
         var series = graphData.Series;
 
-        // SuspendBasal -> PumpMode StateSpan only (BasalDelivery now handled by GlookoTempBasalMapper)
+        // Pump mode only: the zero-rate delivery is a TempBasal from GlookoTempBasalMapper.
         if (series.SuspendBasal != null)
             foreach (var suspend in ConnectorFaults.NonNullRecords(series.SuspendBasal, _logger, _connectorSource, "V3 suspendBasal"))
             {
@@ -60,7 +60,7 @@ public class GlookoStateSpanMapper
                 );
             }
 
-        // LgsPlgs -> PumpMode StateSpan only (BasalDelivery now handled by GlookoTempBasalMapper)
+        // Pump mode only: the zero-rate delivery is a TempBasal from GlookoTempBasalMapper.
         if (series.LgsPlgs != null)
             foreach (var lgsEvent in ConnectorFaults.NonNullRecords(series.LgsPlgs, _logger, _connectorSource, "V3 lgsPlgs"))
             {
@@ -98,7 +98,6 @@ public class GlookoStateSpanMapper
                 );
             }
 
-        // ProfileChange -> Profile StateSpan (unchanged)
         if (series.ProfileChange != null)
         {
             var profileChanges = ConnectorFaults.NonNullRecords(series.ProfileChange, _logger, _connectorSource, "V3 profileChange").OrderBy(p => p.X).ToList();
@@ -128,9 +127,6 @@ public class GlookoStateSpanMapper
                 );
             }
         }
-
-        // TemporaryBasal and ScheduledBasal BasalDelivery spans removed -
-        // now produced as TempBasal records by GlookoTempBasalMapper
 
         _logger.LogInformation(
             "[{ConnectorSource}] Transformed {Count} state spans from v3 data",
@@ -273,10 +269,7 @@ public class GlookoStateSpanMapper
         if (batchData == null)
             return stateSpans;
 
-        // TempBasals and ScheduledBasals BasalDelivery spans removed -
-        // now produced as TempBasal records by GlookoTempBasalMapper
-
-        // SuspendBasals -> PumpMode StateSpan only (BasalDelivery now handled by GlookoTempBasalMapper)
+        // Pump mode only: the zero-rate delivery is a TempBasal from GlookoTempBasalMapper.
         if (batchData.SuspendBasals != null)
             foreach (var suspend in ConnectorFaults.NonNullRecords(batchData.SuspendBasals, _logger, _connectorSource, "V2 suspend basal"))
             {

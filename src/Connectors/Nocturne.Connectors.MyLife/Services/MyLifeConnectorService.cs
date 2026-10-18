@@ -15,9 +15,8 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.Connectors.MyLife.Services;
 
 /// <summary>
-/// MyLife connector service that syncs data using granular models.
-/// This connector creates SensorGlucose, Bolus, CarbIntake, BGCheck, Note,
-/// DeviceEvent, and TempBasal records directly instead of legacy Entry/Treatment.
+/// MyLife connector service. Publishes SensorGlucose, Bolus, CarbIntake, BGCheck, Note,
+/// DeviceEvent and TempBasal records.
 /// </summary>
 public class MyLifeConnectorService(
     HttpClient httpClient,

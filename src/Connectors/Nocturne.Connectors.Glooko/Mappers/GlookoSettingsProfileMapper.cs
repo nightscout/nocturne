@@ -82,7 +82,6 @@ public class GlookoSettingsProfileMapper
         var store = new Dictionary<string, ProfileData>();
         var dia = settings.ActiveInsulinTime > 0 ? settings.ActiveInsulinTime / 3600.0 : 3.0;
 
-        // Basal programs
         if (settings.BasalSettings != null)
             foreach (var basal in ConnectorFaults.NonNullRecords(settings.BasalSettings, _logger, _connectorSource, "SSV2 basal setting"))
             {
@@ -96,7 +95,6 @@ public class GlookoSettingsProfileMapper
                     .ToList();
             }
 
-        // Bolus programs (ISF, ICR, target BG)
         if (settings.BolusSettings != null)
             foreach (var bolus in ConnectorFaults.NonNullRecords(settings.BolusSettings, _logger, _connectorSource, "SSV2 bolus setting"))
             {
