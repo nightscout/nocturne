@@ -26,7 +26,7 @@ The crate is pure evaluation: no I/O, no clock, no persistence.
 - Out of scope, host-side: context enrichment, persistence, delivery and DND
   suppression, and sweep scheduling. [`wall_clock::references_wall_clock`]
   says which rules the sweep must evaluate (semantics §5.1), and
-  [`facts::references_any`] which rules a write can change (semantics §5.2).
+  [`facts::rule_reads`] which context facts a rule reads (semantics §5.2).
 
 ## Layout
 

@@ -18,6 +18,7 @@ use nocturne_alerts_core::engine::{
 use nocturne_alerts_core::enums::WireEnum;
 use nocturne_alerts_core::eval::{Env, eval_node};
 use nocturne_alerts_core::excursion::{ExcursionTracker, TrackerState, TrackerStateKind};
+use nocturne_alerts_core::facts::{ContextFact, RuleConditions, references_any, rule_reads};
 use nocturne_alerts_core::model::{ConditionKind, Container, Node, parse_payload_structure};
 use nocturne_alerts_core::paths::node_child_path;
 use nocturne_alerts_core::sustained::{TimerOp, TimerStore};
@@ -283,13 +284,75 @@ pub(crate) fn classify_rule(request_json: &str) -> Result<Value, String> {
     Ok(ok(json!({ "scope_class": class.wire() })))
 }
 
+/// A stored rule's condition trees: the body as for [`RuleBodyRequest`],
+/// plus the auto-resolve configuration as a rule carries it.
+#[derive(Deserialize)]
+struct RuleConditionsRequest {
+    schema_version: i64,
+    condition_type: String,
+    #[serde(default)]
+    condition_params: Value,
+    #[serde(default)]
+    auto_resolve_enabled: bool,
+    #[serde(default)]
+    auto_resolve_params: Option<Value>,
+    #[serde(default)]
+    facts: Option<Vec<String>>,
+}
+
+impl RuleConditionsRequest {
+    fn read(request_json: &str) -> Result<Self, String> {
+        read_request(request_json, |r: &Self| r.schema_version)
+    }
+
+    fn rule(&self) -> RuleConditions<'_> {
+        RuleConditions {
+            condition_type: &self.condition_type,
+            condition_params: &self.condition_params,
+            auto_resolve_enabled: self.auto_resolve_enabled,
+            auto_resolve_params: self.auto_resolve_params.as_ref(),
+        }
+    }
+}
+
 /// Whether a rule must also be evaluated on a timer, not only per reading
 /// (engine-semantics.md §5.1). An unknown type or unevaluable body is
 /// `false`, not an error.
 pub(crate) fn wall_clock(request_json: &str) -> Result<Value, String> {
-    let req = read_rule_body(request_json)?;
-    let wall_clock = references_wall_clock(&req.condition_type, &req.condition_params);
+    let req = RuleConditionsRequest::read(request_json)?;
+    let wall_clock = references_wall_clock(&req.rule());
     Ok(ok(json!({ "references_wall_clock": wall_clock })))
+}
+
+/// The context facts a rule reads (engine-semantics.md §5.2), by wire name.
+/// An unknown type or unevaluable body reads none, not an error.
+pub(crate) fn reads(request_json: &str) -> Result<Value, String> {
+    let req = RuleConditionsRequest::read(request_json)?;
+    let names: Vec<&str> = rule_reads(&req.rule())
+        .into_iter()
+        .map(ContextFact::name)
+        .collect();
+    Ok(ok(json!({ "reads": names })))
+}
+
+/// Whether a rule reads any of the request's `facts`. A fact name this crate
+/// does not know is an error: ignoring it could skip a rule the host meant to
+/// evaluate.
+pub(crate) fn references_any_fact(request_json: &str) -> Result<Value, String> {
+    let req = RuleConditionsRequest::read(request_json)?;
+    let facts = req
+        .facts
+        .as_deref()
+        .ok_or("missing field facts")?
+        .iter()
+        .map(|name| {
+            ContextFact::from_name(name)
+                .ok_or_else(|| format!("unknown fact '{}'", name.escape_default()))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok(ok(
+        json!({ "references_any": references_any(&req.rule(), &facts) }),
+    ))
 }
 
 /// Every node slot's condition path and the leaves' paths by leaf id. Input
