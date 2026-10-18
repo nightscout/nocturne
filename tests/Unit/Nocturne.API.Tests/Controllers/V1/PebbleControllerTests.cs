@@ -14,6 +14,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V1;
@@ -46,6 +47,10 @@ public class PebbleControllerTests
         tenantAccessor.SetupGet(t => t.TenantId).Returns(TenantId);
 
         var projection = new DeviceStatusProjectionService(
+            Mock.Of<IDeviceStatusGroupRepository>(r => r.GetAsync(
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>())
+                == Task.FromResult<IReadOnlyList<DeviceStatusGroup>>(Array.Empty<DeviceStatusGroup>())),
             Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IPumpSnapshotRepository>(),
             Mock.Of<IUploaderSnapshotRepository>(),

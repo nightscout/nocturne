@@ -322,59 +322,34 @@ public class LegacyReadCountCapTests
     [Theory]
     [InlineData(AtMergedCap, AtMergedCap)]
     [InlineData(AboveMergedCap, AtMergedCap)]
-    public async Task DeviceStatus_ClampsCountPassedToTheSnapshotRepository(
+    public async Task DeviceStatus_ClampsCountPassedToTheStatusRepository(
         int requested,
         int expected
     )
     {
-        var apsRepo = new Mock<IApsSnapshotRepository>();
+        var groupRepo = new Mock<IDeviceStatusGroupRepository>();
         int? observedLimit = null;
-        apsRepo
+        groupRepo
             .Setup(x =>
                 x.GetAsync(
                     It.IsAny<DateTime?>(),
                     It.IsAny<DateTime?>(),
                     It.IsAny<string?>(),
-                    It.IsAny<string?>(),
                     It.IsAny<int>(),
                     It.IsAny<int>(),
-                    It.IsAny<bool>(),
                     It.IsAny<CancellationToken>()
                 )
             )
             .Callback(
-                (
-                    DateTime? _,
-                    DateTime? _,
-                    string? _,
-                    string? _,
-                    int limit,
-                    int _,
-                    bool _,
-                    CancellationToken _
-                ) => observedLimit = limit
+                (DateTime? _, DateTime? _, string? _, int limit, int _, CancellationToken _) =>
+                    observedLimit = limit
             )
-            .ReturnsAsync(Array.Empty<ApsSnapshot>());
-
-        var pumpRepo = new Mock<IPumpSnapshotRepository>();
-        pumpRepo
-            .Setup(x =>
-                x.GetAsync(
-                    It.IsAny<DateTime?>(),
-                    It.IsAny<DateTime?>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<bool>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(Array.Empty<PumpSnapshot>());
+            .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
 
         var projection = new DeviceStatusProjectionService(
-            apsRepo.Object,
-            pumpRepo.Object,
+            groupRepo.Object,
+            Mock.Of<IApsSnapshotRepository>(),
+            Mock.Of<IPumpSnapshotRepository>(),
             Mock.Of<IUploaderSnapshotRepository>(),
             Mock.Of<IStateSpanRepository>(),
             Mock.Of<IDeviceStatusExtrasRepository>(),

@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;

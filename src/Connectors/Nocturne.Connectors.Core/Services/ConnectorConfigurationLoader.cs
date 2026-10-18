@@ -47,17 +47,7 @@ public class ConnectorConfigurationLoader<TConfig>(
             if (secrets.Count > 0)
                 ConnectorConfigurationBinder.ApplySecretsToConfig(secrets, config);
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (InvalidOperationException ex)
-        {
-            logger.LogWarning(ex,
-                "Failed to load database configuration for {ConnectorName}",
-                registration.ConnectorName);
-        }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is InvalidOperationException or JsonException)
         {
             logger.LogWarning(ex,
                 "Failed to load database configuration for {ConnectorName}",
@@ -111,10 +101,6 @@ public class ConnectorConfigurationLoader<TConfig>(
                 lastErrorAt: DateTime.UtcNow,
                 isHealthy: false,
                 ct: ct);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
         }
         catch (InvalidOperationException ex)
         {

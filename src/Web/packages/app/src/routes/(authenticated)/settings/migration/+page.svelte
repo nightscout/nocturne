@@ -114,8 +114,7 @@
       const runningJob = historyResult?.find(
         (j) =>
           j.state === MigrationJobState.Running ||
-          j.state === MigrationJobState.Pending ||
-          j.state === MigrationJobState.Validating
+          j.state === MigrationJobState.Pending
       );
       if (runningJob?.id) {
         void pollMigrationStatus(runningJob.id);
@@ -197,8 +196,6 @@
     switch (state) {
       case MigrationJobState.Pending:
         return { variant: "secondary", label: "Pending" };
-      case MigrationJobState.Validating:
-        return { variant: "secondary", label: "Validating" };
       case MigrationJobState.Running:
         return { variant: "default", label: "Running" };
       case MigrationJobState.Completed:
@@ -218,7 +215,6 @@
   const hasActiveMigration = $derived(
     activeMigration &&
       (activeMigration.state === MigrationJobState.Pending ||
-        activeMigration.state === MigrationJobState.Validating ||
         activeMigration.state === MigrationJobState.Running)
   );
 

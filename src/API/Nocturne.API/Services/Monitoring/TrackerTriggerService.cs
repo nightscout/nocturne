@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts.Events;

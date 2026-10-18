@@ -57,6 +57,25 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
         return DeviceStatusExtrasMapper.ToDomainModel(entity);
     }
 
+    /// <inheritdoc />
+    public async Task<DeviceStatusExtras?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entity = await ctx.DeviceStatusExtras.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id, ct);
+        return entity is null ? null : DeviceStatusExtrasMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<DeviceStatusExtras?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entity = await ctx.DeviceStatusExtras.AsNoTracking()
+            .Where(e => e.Id >= low && e.Id <= high)
+            .OrderBy(e => e.Id)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : DeviceStatusExtrasMapper.ToDomainModel(entity);
+    }
+
     /// <summary>
     /// Gets device status extras records by correlation IDs.
     /// </summary>

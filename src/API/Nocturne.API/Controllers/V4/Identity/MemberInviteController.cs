@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
@@ -185,7 +186,7 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(typeof(JoinInviteInfo), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetInviteInfo(string token, CancellationToken ct)
+    public async Task<IActionResult> GetInviteInfo([CredentialRouteValue] string token, CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
         var invite = await _memberInviteService.GetInviteByTokenAsync(token, tenantId);
@@ -242,7 +243,7 @@ public class MemberInviteController : ControllerBase
     [RemoteCommand]
     [ProducesResponseType(typeof(AcceptMemberInviteResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> AcceptInvite(string token)
+    public async Task<IActionResult> AcceptInvite([CredentialRouteValue] string token)
     {
         var subjectId = HttpContext.GetSubjectId();
         if (subjectId == null)

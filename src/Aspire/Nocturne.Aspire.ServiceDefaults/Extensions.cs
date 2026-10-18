@@ -99,6 +99,9 @@ public static class Extensions
         {
             logging.IncludeFormattedMessage = true;
             logging.IncludeScopes = true;
+            logging.AddProcessor(sp =>
+                new RequestPathRedactingLogProcessor(sp.GetService<IRequestPathRedactor>())
+            );
             if (logToConsole)
             {
                 logging.AddConsoleExporter();
@@ -119,6 +122,9 @@ public static class Extensions
             {
                 tracing
                     .AddAspNetCoreInstrumentation()
+                    .AddProcessor(sp =>
+                        new RequestPathRedactingActivityProcessor(sp.GetService<IRequestPathRedactor>())
+                    )
                     // Uncomment the following line to enable gRPC instrumentation (requires the OpenTelemetry.Instrumentation.GrpcNetClient package)
                     //.AddGrpcClientInstrumentation()
                     .AddHttpClientInstrumentation();

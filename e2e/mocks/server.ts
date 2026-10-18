@@ -11,9 +11,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { nightscout } from "./vendors/nightscout.ts";
 import { nightscoutMigration } from "./vendors/nightscout-migration.ts";
 import { googleHealth } from "./vendors/google-health.ts";
+import { eversense } from "./vendors/eversense.ts";
 import type { Vendor, VendorRequest } from "./vendors/vendor.ts";
 
-const vendors: Record<string, Vendor> = { nightscout, "nightscout-migration": nightscoutMigration, googlehealth: googleHealth };
+const vendors: Record<string, Vendor> = { nightscout, "nightscout-migration": nightscoutMigration, googlehealth: googleHealth, eversense };
 const seen: Record<string, VendorRequest[]> = Object.fromEntries(Object.keys(vendors).map((k) => [k, []]));
 
 function send(res: ServerResponse, status: number, body: unknown) {

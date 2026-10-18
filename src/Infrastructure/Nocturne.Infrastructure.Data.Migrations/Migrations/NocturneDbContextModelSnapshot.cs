@@ -7219,7 +7219,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("CorrelationId")
                         .HasDatabaseName("ix_device_status_extras_correlation_id");
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("TenantId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_device_status_extras_tenant_timestamp")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "SysUpdatedAt", "Id")
+                        .HasDatabaseName("ix_device_status_extras_tenant_history");
 
                     b.ToTable("device_status_extras");
                 });
@@ -7900,9 +7906,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("PatientDeviceId");
 
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("IX_pump_snapshots_tenant_id");
-
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_pump_snapshots_timestamp");
@@ -7926,6 +7929,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_pump_snapshots_tenant_source_timestamp")
                         .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "SysUpdatedAt", "Id")
+                        .HasDatabaseName("ix_pump_snapshots_tenant_history");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_pump_snapshots_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_pump_snapshots_tenant_legacy_id_user_deleted")
@@ -8778,9 +8784,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("DeviceId");
 
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("IX_uploader_snapshots_tenant_id");
-
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_uploader_snapshots_timestamp");
@@ -8804,6 +8807,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_uploader_snapshots_tenant_source_timestamp")
                         .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "SysUpdatedAt", "Id")
+                        .HasDatabaseName("ix_uploader_snapshots_tenant_history");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_uploader_snapshots_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_uploader_snapshots_tenant_legacy_id_user_deleted")

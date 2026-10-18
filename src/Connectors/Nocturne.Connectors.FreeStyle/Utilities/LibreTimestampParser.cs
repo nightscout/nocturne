@@ -11,7 +11,6 @@ public static class LibreTimestampParser
     ///     Parses LibreLinkUp timestamp format which uses locale-dependent date strings.
     ///     LibreLinkUp uses formats like "1/14/2025 3:30:00 PM" (US) or "14/1/2025 15:30:00" (EU).
     /// </summary>
-    /// <param name="value">The timestamp string from LibreLinkUp API</param>
     /// <returns>Parsed DateTime in UTC</returns>
     /// <exception cref="FormatException">Thrown if the timestamp cannot be parsed</exception>
     public static DateTime Parse(string value)

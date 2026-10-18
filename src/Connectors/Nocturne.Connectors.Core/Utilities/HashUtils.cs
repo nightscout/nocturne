@@ -13,7 +13,6 @@ public static class HashUtils
     ///     Computes SHA256 hash and returns as lowercase hex string.
     ///     Used for secure hashing of sensitive identifiers.
     /// </summary>
-    /// <param name="input">The string to hash</param>
     /// <returns>Lowercase hex string of the SHA256 hash</returns>
     public static string Sha256Hex(string input)
     {
@@ -27,7 +26,6 @@ public static class HashUtils
     ///     <c>api-secret</c> wire protocol mandates as SHA-1. Internal hashing we
     ///     control uses SHA-256 (see <see cref="Sha256Hex"/>) — do not use SHA-1 for new code.
     /// </summary>
-    /// <param name="input">The string to hash</param>
     /// <returns>Lowercase hex string of the SHA1 hash</returns>
     public static string Sha1Hex(string input)
     {

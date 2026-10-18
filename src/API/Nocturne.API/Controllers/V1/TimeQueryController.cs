@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Nocturne.API.Extensions;
 using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -32,6 +33,11 @@ public class TimeQueryController : ControllerBase
     /// asserts.
     /// </summary>
     internal static readonly string[] SliceableStorage = ["entries", "treatments", "devicestatus"];
+
+    private static readonly Regex SafeFieldName = new(
+        @"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*\z",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant
+    );
 
     private readonly ITimeQueryService _timeQueryService;
     private readonly ILogger<TimeQueryController> _logger;
@@ -139,23 +145,13 @@ public class TimeQueryController : ControllerBase
                 return BadRequest($"Count must be non-negative, got {count}");
             }
 
-            // Extract query parameters for additional filtering
-            var queryParameters = new Dictionary<string, object>();
-            foreach (var param in Request.Query)
-            {
-                if (param.Key != "count" && param.Key != "format")
-                {
-                    queryParameters[param.Key] = param.Value.ToString() ?? "";
-                }
-            }
-
             // Execute time-based query
             var entries = await _timeQueryService.ExecuteTimeQueryAsync(
                 prefix: prefix,
                 regex: regex,
                 storage: "entries",
                 fieldName: "dateString",
-                queryParameters: queryParameters,
+                find: FindParameters(),
                 cancellationToken: cancellationToken
             );
 
@@ -552,14 +548,10 @@ public class TimeQueryController : ControllerBase
                 return BadRequest("Storage and field parameters are required");
             }
 
-            // Extract query parameters for additional filtering
-            var queryParameters = new Dictionary<string, object>();
-            foreach (var param in Request.Query)
+            if (!SafeFieldName.IsMatch(field))
             {
-                if (param.Key != "count" && param.Key != "format")
-                {
-                    queryParameters[param.Key] = param.Value.ToString() ?? "";
-                }
+                _logger.LogWarning("Invalid field parameter: {Field}", field);
+                return BadRequest("Field must be a field name made of letters, digits, '_' and '.'");
             }
 
             // Execute slice query
@@ -569,7 +561,7 @@ public class TimeQueryController : ControllerBase
                 type: type,
                 prefix: prefix,
                 regex: regex,
-                queryParameters: queryParameters,
+                find: FindParameters(),
                 cancellationToken: cancellationToken
             );
 
@@ -625,6 +617,15 @@ public class TimeQueryController : ControllerBase
             );
         }
     }
+
+    /// <summary>
+    /// The request's <c>find[...]</c> pairs alone, so no other key (<c>token</c>, <c>secret</c>, a
+    /// cache buster) reaches the read services or anything they key on.
+    /// </summary>
+    private string FindParameters() =>
+        QueryString.Create(
+            Request.Query.Where(q => q.Key.StartsWith("find[", StringComparison.OrdinalIgnoreCase))
+        ).Value?.TrimStart('?') ?? "";
 
     /// <summary>
     /// Refuses a collection these routes do not dispatch on. Checked ahead of the scope gate so the

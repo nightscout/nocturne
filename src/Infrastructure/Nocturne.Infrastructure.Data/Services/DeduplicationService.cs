@@ -1235,65 +1235,100 @@ public class DeduplicationService : IDeduplicationService
         return merged;
     }
 
+    private const int MergeLockClass = 0x4E44_5550;
+
+    /// <summary>
+    /// Takes the tenant's merge lock (<see cref="AdvisoryLockExtensions"/>), waiting for any holder.
+    /// A merge reads a group's rows and re-points them in separate statements, so of two merges of
+    /// one tenant at once the later can strand rows the earlier re-pointed in a group with no primary.
+    /// </summary>
+    private Task LockTenantMergesAsync(CancellationToken ct) =>
+        _context.LockForTransactionAsync(MergeLockClass, _context.TenantId, ct);
+
+    /// <summary>
+    /// <see cref="LockTenantMergesAsync"/> without the wait.
+    /// </summary>
+    /// <returns>Whether this transaction now holds the lock.</returns>
+    private Task<bool> TryLockTenantMergesAsync(CancellationToken ct) =>
+        _context.TryLockForTransactionAsync(MergeLockClass, _context.TenantId, ct);
+
     /// <inheritdoc />
+    /// <remarks>
+    /// Each batch is one transaction that holds the tenant's merge lock
+    /// (<see cref="LockTenantMergesAsync"/>) while it reads the cursor, merges and advances it. A
+    /// batch that finds the lock held ends the pass.
+    /// </remarks>
     public async Task<ReconcileResult> ReconcileNewLinksAsync(
         int batchSize,
         int maxBatches,
         CancellationToken cancellationToken = default)
     {
-        var cursor = await GetCursorAsync(cancellationToken);
         var horizon = DateTime.UtcNow - CommitVisibilityLag;
-
         var merged = 0;
-        var caughtUp = false;
 
         for (var batchNo = 0; batchNo < maxBatches; batchNo++)
         {
-            var batch = await LinksAfter(cursor, horizon).Take(batchSize).ToListAsync(cancellationToken);
+            var batch = await _context.ExecuteInTransactionAsync(
+                ct => ReconcileNextBatchAsync(batchSize, horizon, ct), ct: cancellationToken);
 
-            if (batch.Count == 0)
-            {
-                caughtUp = true;
+            if (batch is not { } step)
                 break;
+
+            merged += step.Merged;
+            if (step.Drained)
+                return new ReconcileResult(merged, true);
+        }
+
+        return new ReconcileResult(merged, false);
+    }
+
+    /// <summary>
+    /// Reconciles the batch after the tenant's cursor and advances it.
+    /// </summary>
+    /// <returns>
+    /// The groups merged and whether the batch drained everything up to <paramref name="horizon"/>,
+    /// or null when another transaction holds the tenant's merge lock.
+    /// </returns>
+    private async Task<(int Merged, bool Drained)?> ReconcileNextBatchAsync(
+        int batchSize,
+        DateTime horizon,
+        CancellationToken ct)
+    {
+        if (!await TryLockTenantMergesAsync(ct))
+            return null;
+
+        var cursor = await GetCursorAsync(ct);
+        var batch = await LinksAfter(cursor, horizon).Take(batchSize).ToListAsync(ct);
+        if (batch.Count == 0)
+            return (0, true);
+
+        var merged = 0;
+        foreach (var group in batch.GroupBy(l => l.RecordType))
+        {
+            if (ParseRecordType(group.Key) is not { } type)
+            {
+                continue;
             }
 
-            // Reconcile per record type: parse the lowercased RecordType string back to the enum
-            // and merge each type's candidate canonical groups.
-            foreach (var group in batch.GroupBy(l => l.RecordType))
+            var candidateCanonicalIds = group.Select(l => l.CanonicalId).ToHashSet();
+            try
             {
-                if (ParseRecordType(group.Key) is not { } type)
-                {
-                    continue;
-                }
-
-                var candidateCanonicalIds = group.Select(l => l.CanonicalId).ToHashSet();
-                try
-                {
-                    // GroupsMerged is the reduction in group count (k canonicals -> 1 == k-1), matching MergeDuplicateGroupsAsync.
-                    merged += await MergeDuplicateGroupsAsync(type, candidateCanonicalIds, cancellationToken);
-                }
-                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-                {
-                    _logger.LogError(ex,
-                        "Dedup reconcile for tenant {TenantId} failed merging {RecordType}; the cursor stays at {CursorCreatedAt} {CursorLinkId} and every pass retries this batch until it succeeds",
-                        _context.TenantId, type, cursor?.CreatedAt, cursor?.Id);
-                    throw;
-                }
+                // GroupsMerged is the reduction in group count (k canonicals -> 1 == k-1), matching MergeDuplicateGroupsAsync.
+                merged += await MergeDuplicateGroupsAsync(type, candidateCanonicalIds, ct);
             }
-
-            var last = batch[^1];
-            cursor = new ReconcileCursor(last.SysCreatedAt, last.Id);
-            await SetCursorAsync(cursor.Value, cancellationToken);
-
-            // A partial batch means we've drained everything up to the horizon.
-            if (batch.Count < batchSize)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                caughtUp = true;
-                break;
+                _logger.LogError(ex,
+                    "Dedup reconcile for tenant {TenantId} failed merging {RecordType}; the cursor stays at {CursorCreatedAt} {CursorLinkId} and every pass retries this batch until it succeeds",
+                    _context.TenantId, type, cursor?.CreatedAt, cursor?.Id);
+                throw;
             }
         }
 
-        return new ReconcileResult(merged, caughtUp);
+        var last = batch[^1];
+        await SetCursorAsync(new ReconcileCursor(last.SysCreatedAt, last.Id), ct);
+
+        return (merged, batch.Count < batchSize);
     }
 
     /// <summary>
@@ -2032,9 +2067,15 @@ public class DeduplicationService : IDeduplicationService
         // Only wide-eligible types can hold such a split — the tight window never stopped working
         // — and this pass loads every primary of the type, which for a dense stream like
         // SensorGlucose would be hundreds of thousands of rows for nothing.
+        // Unlike a reconcile batch it waits for the tenant's merge lock: a skipped pass would leave
+        // the splits unhealed until the job is run again.
         if (WideMatchableTypes.Contains(recordType))
         {
-            totalDuplicates += await MergeDuplicateGroupsAsync(recordType, null, ct);
+            totalDuplicates += await _context.ExecuteInTransactionAsync(async token =>
+            {
+                await LockTenantMergesAsync(token);
+                return await MergeDuplicateGroupsAsync(recordType, null, token);
+            }, ct: ct);
         }
 
         return (totalProcessed, totalGroups, totalLinked, totalDuplicates);
@@ -2121,7 +2162,6 @@ public class DeduplicationService : IDeduplicationService
 
         if (state is null)
         {
-            // single-threaded per tenant; PK guards accidental concurrent insert
             state = new DedupReconcileStateEntity { TenantId = _context.TenantId };
             _context.DedupReconcileState.Add(state);
         }

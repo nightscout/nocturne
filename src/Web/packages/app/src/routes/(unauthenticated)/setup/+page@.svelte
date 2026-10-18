@@ -222,7 +222,6 @@
         (j) =>
           j.state === MigrationJobState.Running ||
           j.state === MigrationJobState.Pending ||
-          j.state === MigrationJobState.Validating ||
           j.state === MigrationJobState.Completed
       );
       if (existing?.id) {

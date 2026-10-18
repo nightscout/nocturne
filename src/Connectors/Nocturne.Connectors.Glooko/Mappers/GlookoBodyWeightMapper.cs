@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
@@ -25,7 +26,7 @@ public class GlookoBodyWeightMapper(string connectorSource, GlookoTimeMapper tim
     {
         var results = new List<BodyWeight>();
 
-        foreach (var w in weights)
+        foreach (var w in ConnectorFaults.NonNullRecords(weights, _logger, _connectorSource, "SSV2 weight"))
         {
             try
             {
@@ -37,9 +38,9 @@ public class GlookoBodyWeightMapper(string connectorSource, GlookoTimeMapper tim
 
                 results.Add(BuildWeight(w.Timestamp, weightKg, bodyFat: null, "ssv2_weight", w.Guid));
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping SSV2 weight", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed SSV2 weight {Guid}", _connectorSource, w.Guid);
             }
         }
 
@@ -54,7 +55,7 @@ public class GlookoBodyWeightMapper(string connectorSource, GlookoTimeMapper tim
     {
         var results = new List<BodyWeight>();
 
-        foreach (var w in weights)
+        foreach (var w in ConnectorFaults.NonNullRecords(weights, _logger, _connectorSource, "SSV2 Validic weight"))
         {
             try
             {
@@ -64,9 +65,9 @@ public class GlookoBodyWeightMapper(string connectorSource, GlookoTimeMapper tim
 
                 results.Add(BuildWeight(w.Timestamp, weightKg, bodyFat: null, "ssv2_validic_weight", w.Guid));
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping SSV2 validic weight", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed SSV2 validic weight {Guid}", _connectorSource, w.Guid);
             }
         }
 

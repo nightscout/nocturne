@@ -14,6 +14,7 @@
   import YearOverviewFilters from "$lib/components/reports/year-overview/YearOverviewFilters.svelte";
   import HeatmapLegend from "$lib/components/reports/year-overview/HeatmapLegend.svelte";
   import YearHeatmap from "$lib/components/reports/year-overview/YearHeatmap.svelte";
+  import VisibleChart from "$lib/components/reports/year-overview/VisibleChart.svelte";
   import type {
     DailySummaryDay,
     GriTimelinePeriod,
@@ -806,11 +807,13 @@
 
           {@const griPeriods = griTimelineData.get(year) ?? []}
           {#if griPeriods.length > 1}
-            <div class="mt-4 border-t border-border pt-4">
-              <GlycemicRiskIndexChart
-                gri={griPeriods[griPeriods.length - 1]?.gri ?? { score: 0 }}
-                timeSeriesData={griPeriods}
-              />
+            <div class="@container mt-4 border-t border-border pt-4">
+              <VisibleChart label={`${year} monthly GRI chart`} eager={yearIndex === 0} placeholderClass="h-[calc(100cqw+15rem)] @md:h-[250px]">
+                <GlycemicRiskIndexChart
+                  gri={griPeriods[griPeriods.length - 1]?.gri ?? { score: 0 }}
+                  timeSeriesData={griPeriods}
+                />
+              </VisibleChart>
             </div>
           {/if}
         {/each}

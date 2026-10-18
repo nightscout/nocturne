@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
