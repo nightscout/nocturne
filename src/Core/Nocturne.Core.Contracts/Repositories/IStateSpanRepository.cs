@@ -22,7 +22,6 @@ public interface IStateSpanRepository
     /// <param name="active">When set, filters to only active or only ended spans.</param>
     /// <param name="count">Maximum number of records to return.</param>
     /// <param name="skip">Number of records to skip for pagination.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A collection of matching <see cref="StateSpan"/> records.</returns>
     Task<IEnumerable<StateSpan>> GetStateSpansAsync(
         StateSpanCategory? category = null,
@@ -57,7 +56,6 @@ public interface IStateSpanRepository
     /// <param name="to">Optional end of the time range (inclusive).</param>
     /// <param name="source">Optional data source filter.</param>
     /// <param name="active">When set, filters to only active or only ended spans.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The total number of matching records.</returns>
     Task<int> CountStateSpansAsync(
         StateSpanCategory? category = null,
@@ -71,8 +69,6 @@ public interface IStateSpanRepository
     /// <summary>
     /// Returns a single state span by its identifier.
     /// </summary>
-    /// <param name="id">The state span identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The <see cref="StateSpan"/> if found, or <c>null</c>.</returns>
     Task<StateSpan?> GetStateSpanByIdAsync(
         string id,
@@ -82,7 +78,6 @@ public interface IStateSpanRepository
     /// Creates or updates a state span, matched by its identifier or original ID.
     /// </summary>
     /// <param name="stateSpan">The <see cref="StateSpan"/> to upsert.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The persisted <see cref="StateSpan"/>.</returns>
     Task<StateSpan> UpsertStateSpanAsync(
         StateSpan stateSpan,
@@ -91,8 +86,6 @@ public interface IStateSpanRepository
     /// <summary>
     /// Bulk upserts multiple state spans, typically used by connector imports.
     /// </summary>
-    /// <param name="stateSpans">The state spans to upsert.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The number of records upserted.</returns>
     Task<int> BulkUpsertAsync(
         IEnumerable<StateSpan> stateSpans,
@@ -101,9 +94,7 @@ public interface IStateSpanRepository
     /// <summary>
     /// Updates an existing state span by ID.
     /// </summary>
-    /// <param name="id">The state span identifier.</param>
     /// <param name="stateSpan">The updated <see cref="StateSpan"/> data.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The updated <see cref="StateSpan"/>, or <c>null</c> if not found.</returns>
     Task<StateSpan?> UpdateStateSpanAsync(
         string id,
@@ -113,8 +104,6 @@ public interface IStateSpanRepository
     /// <summary>
     /// Deletes a state span by ID, with every other copy in its duplicate group.
     /// </summary>
-    /// <param name="id">The state span identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The spans deleted, the requested one first; empty if not found.</returns>
     Task<IReadOnlyList<StateSpan>> DeleteStateSpanAsync(
         string id,
@@ -124,7 +113,6 @@ public interface IStateSpanRepository
     /// Deletes all state spans originating from the specified data source.
     /// </summary>
     /// <param name="source">The data source identifier (e.g., "demo-service").</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The number of records deleted.</returns>
     Task<long> DeleteBySourceAsync(
         string source,
@@ -134,7 +122,6 @@ public interface IStateSpanRepository
     /// Returns the current pump operational mode, derived from the most recently started
     /// open-ended <see cref="StateSpanCategory.PumpMode"/> span.
     /// </summary>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The active <see cref="PumpModeState"/>, or <c>null</c> if no open pump-mode span exists or its state is unrecognized.</returns>
     Task<PumpModeState?> GetCurrentPumpModeAsync(CancellationToken cancellationToken = default);
 
@@ -148,7 +135,6 @@ public interface IStateSpanRepository
     /// <param name="category">The category to filter by.</param>
     /// <param name="state">Optional <c>State</c> filter; <c>null</c> matches any state.</param>
     /// <param name="at">The instant to evaluate.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task<StateSpan?> GetActiveAtAsync(
         StateSpanCategory category,
         string? state,
@@ -175,7 +161,6 @@ public interface IStateSpanRepository
     /// <param name="categories">The set of <see cref="StateSpanCategory"/> values to query.</param>
     /// <param name="from">Optional start of the time range (inclusive).</param>
     /// <param name="to">Optional end of the time range (inclusive).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A dictionary mapping each category to its matching <see cref="StateSpan"/> records.</returns>
     Task<Dictionary<StateSpanCategory, List<StateSpan>>> GetByCategories(
         IEnumerable<StateSpanCategory> categories,
@@ -194,7 +179,6 @@ public interface IStateSpanRepository
     /// <param name="skip">Number of records to skip for pagination.</param>
     /// <param name="from">Inclusive lower bound on the span's start, or <c>null</c> for none.</param>
     /// <param name="to">Inclusive upper bound on the span's start, or <c>null</c> for none.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A collection of activity <see cref="StateSpan"/> records, newest start first.</returns>
     Task<IEnumerable<StateSpan>> GetActivityStateSpansAsync(
         string? type = null,
@@ -210,7 +194,6 @@ public interface IStateSpanRepository
     /// has written no activity span.
     /// </summary>
     /// <param name="source">The data source to scope to.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task<DateTime?> GetLatestActivityTimestampAsync(
         string source,
         CancellationToken cancellationToken = default);
@@ -222,7 +205,6 @@ public interface IStateSpanRepository
     /// (<see cref="GetLatestActivityTimestampAsync"/>) and would otherwise advance this one.
     /// </summary>
     /// <param name="source">The data source to scope to.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task<DateTime?> GetLatestNonActivityTimestampAsync(
         string source,
         CancellationToken cancellationToken = default);
@@ -230,8 +212,6 @@ public interface IStateSpanRepository
     /// <summary>
     /// Returns a single activity state span by its identifier.
     /// </summary>
-    /// <param name="id">The state span identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The activity <see cref="StateSpan"/> if found, or <c>null</c>.</returns>
     Task<StateSpan?> GetActivityStateSpanByIdAsync(
         string id,
@@ -240,8 +220,6 @@ public interface IStateSpanRepository
     /// <summary>
     /// Creates multiple activities as state spans.
     /// </summary>
-    /// <param name="stateSpans">The state spans representing activities to create.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
     /// The created or updated <see cref="StateSpan"/> records. A span whose original id the user
     /// deleted is not written and not returned.
@@ -250,12 +228,7 @@ public interface IStateSpanRepository
         IEnumerable<StateSpan> stateSpans,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Updates an activity state span by ID.
-    /// </summary>
-    /// <param name="id">The state span identifier.</param>
     /// <param name="stateSpan">The updated <see cref="StateSpan"/> data.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The updated <see cref="StateSpan"/>, or <c>null</c> if not found.</returns>
     Task<StateSpan?> UpdateActivityStateSpanAsync(
         string id,
@@ -265,8 +238,6 @@ public interface IStateSpanRepository
     /// <summary>
     /// Deletes an activity state span by ID, with every other copy in its duplicate group.
     /// </summary>
-    /// <param name="id">The state span identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The spans deleted, the requested one first; empty if not found.</returns>
     Task<IReadOnlyList<StateSpan>> DeleteActivityStateSpanAsync(
         string id,

@@ -31,8 +31,6 @@ public interface IStateSpanService
     /// <param name="active">Optional active status filter</param>
     /// <param name="count">Maximum number of state spans to return</param>
     /// <param name="skip">Number of state spans to skip for pagination</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Collection of state spans</returns>
     Task<IEnumerable<StateSpan>> GetStateSpansAsync(
         StateSpanCategory? category = null,
         string? state = null,
@@ -68,7 +66,6 @@ public interface IStateSpanService
     /// <param name="to">Optional end time filter</param>
     /// <param name="source">Optional source filter</param>
     /// <param name="active">Optional active status filter</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Total count of matching state spans</returns>
     Task<int> CountStateSpansAsync(
         StateSpanCategory? category = null,
@@ -82,8 +79,6 @@ public interface IStateSpanService
     /// <summary>
     /// Get a specific state span by ID
     /// </summary>
-    /// <param name="id">State span ID</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>State span if found, null otherwise</returns>
     Task<StateSpan?> GetStateSpanByIdAsync(
         string id,
@@ -93,17 +88,11 @@ public interface IStateSpanService
     /// Create or update a state span (upsert by originalId)
     /// </summary>
     /// <param name="stateSpan">State span to create or update</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Created or updated state span</returns>
     Task<StateSpan> UpsertStateSpanAsync(
         StateSpan stateSpan,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Delete a state span
-    /// </summary>
-    /// <param name="id">State span ID to delete</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if deleted successfully, false otherwise</returns>
     Task<bool> DeleteStateSpanAsync(
         string id,
@@ -112,9 +101,7 @@ public interface IStateSpanService
     /// <summary>
     /// Update an existing state span
     /// </summary>
-    /// <param name="id">State span ID to update</param>
     /// <param name="stateSpan">Updated state span data</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Updated state span if successful, null otherwise</returns>
     Task<StateSpan?> UpdateStateSpanAsync(
         string id,
@@ -130,14 +117,11 @@ public interface IStateSpanService
     /// <param name="category">The category to filter by.</param>
     /// <param name="state">Optional <c>State</c> filter; <c>null</c> matches any state.</param>
     /// <param name="at">The instant to evaluate.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task<StateSpan?> GetActiveAtAsync(
         StateSpanCategory category,
         string? state,
         DateTime at,
         CancellationToken cancellationToken = default);
-
-    #region Activity Compatibility Methods
 
     /// <summary>
     /// Get activities stored as StateSpans for v1 API compatibility
@@ -147,7 +131,6 @@ public interface IStateSpanService
     /// <param name="skip">Number of activities to skip for pagination</param>
     /// <param name="from">Inclusive lower bound on the activity's start, or <c>null</c> for none</param>
     /// <param name="to">Inclusive upper bound on the activity's start, or <c>null</c> for none</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Collection of activities, newest first</returns>
     Task<IEnumerable<Activity>> GetActivitiesAsync(
         string? type = null,
@@ -162,7 +145,6 @@ public interface IStateSpanService
     /// <paramref name="source"/>, or <c>null</c> when it has written none.
     /// </summary>
     /// <param name="source">The data source to scope to.</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     Task<DateTime?> GetLatestActivityTimestampAsync(
         string source,
         CancellationToken cancellationToken = default);
@@ -173,7 +155,6 @@ public interface IStateSpanService
     /// written none.
     /// </summary>
     /// <param name="source">The data source to scope to.</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     Task<DateTime?> GetLatestNonActivityTimestampAsync(
         string source,
         CancellationToken cancellationToken = default);
@@ -181,8 +162,6 @@ public interface IStateSpanService
     /// <summary>
     /// Get a specific activity by ID
     /// </summary>
-    /// <param name="id">Activity ID</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Activity if found, null otherwise</returns>
     Task<Activity?> GetActivityByIdAsync(
         string id,
@@ -191,9 +170,6 @@ public interface IStateSpanService
     /// <summary>
     /// Create activities and store as StateSpans
     /// </summary>
-    /// <param name="activities">Activities to create</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Created activities</returns>
     Task<IEnumerable<Activity>> CreateActivitiesAsync(
         IEnumerable<Activity> activities,
         CancellationToken cancellationToken = default);
@@ -201,9 +177,7 @@ public interface IStateSpanService
     /// <summary>
     /// Update an existing activity (stored as StateSpan)
     /// </summary>
-    /// <param name="id">Activity ID to update</param>
     /// <param name="activity">Updated activity data</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Updated activity if successful, null otherwise</returns>
     Task<Activity?> UpdateActivityAsync(
         string id,
@@ -213,14 +187,10 @@ public interface IStateSpanService
     /// <summary>
     /// Delete an activity (stored as StateSpan), with every other copy in its duplicate group
     /// </summary>
-    /// <param name="id">Activity ID to delete</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>
     /// The activity ids deleted: <paramref name="id"/> as given, then the copies'. Empty if not found.
     /// </returns>
     Task<IReadOnlyList<string>> DeleteActivityAsync(
         string id,
         CancellationToken cancellationToken = default);
-
-    #endregion
 }

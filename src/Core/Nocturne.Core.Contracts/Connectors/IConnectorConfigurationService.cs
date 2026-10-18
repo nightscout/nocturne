@@ -27,14 +27,8 @@ public class ConnectorConfigurationResponse
     /// </summary>
     public int SchemaVersion { get; set; } = 1;
 
-    /// <summary>
-    /// Whether this configuration is currently active.
-    /// </summary>
     public bool IsActive { get; set; } = true;
 
-    /// <summary>
-    /// When the configuration was last modified.
-    /// </summary>
     public DateTimeOffset LastModified { get; set; }
 
     /// <summary>
@@ -57,9 +51,6 @@ public class ConnectorConfigurationResponse
     /// </summary>
     public string? LastErrorMessage { get; set; }
 
-    /// <summary>
-    /// When the error occurred.
-    /// </summary>
     public DateTime? LastErrorAt { get; set; }
 
     /// <summary>
@@ -68,14 +59,8 @@ public class ConnectorConfigurationResponse
     public bool IsHealthy { get; set; } = true;
 }
 
-/// <summary>
-/// Status information for a connector.
-/// </summary>
 public class ConnectorStatusInfo
 {
-    /// <summary>
-    /// The connector name.
-    /// </summary>
     public string ConnectorName { get; set; } = string.Empty;
 
     /// <summary>
@@ -88,14 +73,8 @@ public class ConnectorStatusInfo
     /// </summary>
     public bool HasDatabaseConfig { get; set; }
 
-    /// <summary>
-    /// Whether the connector has secrets configured.
-    /// </summary>
     public bool HasSecrets { get; set; }
 
-    /// <summary>
-    /// When the configuration was last modified.
-    /// </summary>
     public DateTimeOffset? LastModified { get; set; }
 }
 
@@ -111,7 +90,6 @@ public interface IConnectorConfigurationService
     /// Secrets are never included - use GetSecretsAsync for internal connector use.
     /// </summary>
     /// <param name="connectorName">The connector name (e.g., "Dexcom")</param>
-    /// <param name="ct">Cancellation token</param>
     /// <returns>Configuration response or null if not found</returns>
     Task<ConnectorConfigurationResponse?> GetConfigurationAsync(string connectorName, CancellationToken ct = default);
 
@@ -119,10 +97,8 @@ public interface IConnectorConfigurationService
     /// Saves or updates runtime configuration for a connector.
     /// Only properties marked with [RuntimeConfigurable] are stored.
     /// </summary>
-    /// <param name="connectorName">The connector name</param>
     /// <param name="configuration">Runtime configuration values as JSON</param>
     /// <param name="modifiedBy">Who is making the change</param>
-    /// <param name="ct">Cancellation token</param>
     /// <returns>The saved configuration</returns>
     Task<ConnectorConfigurationResponse> SaveConfigurationAsync(string connectorName, JsonDocument configuration, string? modifiedBy = null, CancellationToken ct = default);
 
@@ -130,18 +106,14 @@ public interface IConnectorConfigurationService
     /// Saves encrypted secrets for a connector.
     /// Secrets are encrypted using AES-256-GCM before storage.
     /// </summary>
-    /// <param name="connectorName">The connector name</param>
     /// <param name="secrets">Dictionary of secret property names to plaintext values</param>
     /// <param name="modifiedBy">Who is making the change</param>
-    /// <param name="ct">Cancellation token</param>
     /// <exception cref="InvalidOperationException">Thrown when secret encryption is not configured.</exception>
     Task SaveSecretsAsync(string connectorName, Dictionary<string, string> secrets, string? modifiedBy = null, CancellationToken ct = default);
 
     /// <summary>
     /// Gets decrypted secrets for a connector (for internal use by connectors only).
     /// </summary>
-    /// <param name="connectorName">The connector name</param>
-    /// <param name="ct">Cancellation token</param>
     /// <returns>Dictionary of secret property names to plaintext values</returns>
     Task<Dictionary<string, string>> GetSecretsAsync(string connectorName, CancellationToken ct = default);
 
@@ -149,32 +121,24 @@ public interface IConnectorConfigurationService
     /// Gets the JSON Schema for a connector's configuration.
     /// Schema is generated from the connector's configuration class attributes.
     /// </summary>
-    /// <param name="connectorName">The connector name</param>
-    /// <param name="ct">Cancellation token</param>
     /// <returns>JSON Schema document</returns>
     Task<JsonDocument> GetSchemaAsync(string connectorName, CancellationToken ct = default);
 
     /// <summary>
     /// Gets status information for all registered connectors.
     /// </summary>
-    /// <param name="ct">Cancellation token</param>
-    /// <returns>List of connector status information</returns>
     Task<IReadOnlyList<ConnectorStatusInfo>> GetAllConnectorStatusAsync(CancellationToken ct = default);
 
     /// <summary>
     /// Enables or disables a connector configuration.
     /// </summary>
-    /// <param name="connectorName">The connector name</param>
     /// <param name="isActive">Whether the connector should be active</param>
     /// <param name="modifiedBy">Who is making the change</param>
-    /// <param name="ct">Cancellation token</param>
     Task SetActiveAsync(string connectorName, bool isActive, string? modifiedBy = null, CancellationToken ct = default);
 
     /// <summary>
     /// Deletes all configuration and secrets for a connector.
     /// </summary>
-    /// <param name="connectorName">The connector name</param>
-    /// <param name="ct">Cancellation token</param>
     /// <returns>True if configuration was deleted, false if it didn't exist</returns>
     Task<bool> DeleteConfigurationAsync(string connectorName, CancellationToken ct = default);
 
@@ -182,33 +146,20 @@ public interface IConnectorConfigurationService
     /// Gets the effective configuration from a running connector.
     /// This returns the actual runtime values including those resolved from environment variables.
     /// </summary>
-    /// <param name="connectorName">The connector name</param>
-    /// <param name="ct">Cancellation token</param>
     /// <returns>Dictionary of property names to effective values, or null if connector is not reachable</returns>
     Task<Dictionary<string, object?>?> GetEffectiveConfigurationAsync(string connectorName, CancellationToken ct = default);
 
-    /// <summary>
-    /// Gets the health state for a connector
-    /// </summary>
-    /// <param name="connectorName">The name of the connector</param>
-    /// <param name="ct">Cancellation token</param>
     /// <returns>The health state, or null if the connector is not found</returns>
     Task<ConnectorHealthStateDto?> GetHealthStateAsync(
         string connectorName,
         CancellationToken ct = default
     );
 
-    /// <summary>
-    /// Updates the health state for a connector
-    /// </summary>
-    /// <param name="connectorName">The name of the connector</param>
     /// <param name="lastSyncAttempt">When the connector last attempted to sync</param>
     /// <param name="lastSuccessfulSync">When the connector last successfully completed a sync</param>
     /// <param name="lastErrorMessage">The error message from the most recent failure</param>
     /// <param name="lastErrorAt">When the error occurred</param>
     /// <param name="isHealthy">Current health status</param>
-    /// <param name="ct">Cancellation token</param>
-    /// <returns>A task representing the async operation</returns>
     Task UpdateHealthStateAsync(
         string connectorName,
         DateTime? lastSyncAttempt = null,

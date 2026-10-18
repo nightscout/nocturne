@@ -2,15 +2,8 @@ using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Platform;
 
-/// <summary>
-/// Service interface for status operations
-/// </summary>
 public interface IStatusService
 {
-    /// <summary>
-    /// Get the current system status
-    /// </summary>
-    /// <returns>Status response with system information</returns>
     Task<StatusResponse> GetSystemStatusAsync();
 
     /// <summary>

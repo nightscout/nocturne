@@ -15,7 +15,6 @@ public interface ICollectionEffectDescriptor
     /// Get exact cache keys that should be removed after a write to this collection.
     /// </summary>
     /// <param name="tenantCacheId">Tenant-scoped cache ID prefix.</param>
-    /// <returns>List of cache keys to remove.</returns>
     IReadOnlyList<string> GetCacheKeysToRemove(string tenantCacheId);
 
     /// <summary>

@@ -29,7 +29,6 @@ public interface IOAuthDeviceCodeService
     /// <param name="userCode">The code the user typed.</param>
     /// <param name="subjectId">The approving subject.</param>
     /// <param name="limitTo24Hours">Whether the grant may read only the last 24 hours.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<bool> ApproveDeviceCodeAsync(
         string userCode,
         Guid subjectId,
@@ -84,7 +83,6 @@ public class DeviceCodeInfo
     /// <summary>Whether the client comes from the bundled known-app directory.</summary>
     public bool IsKnownClient { get; set; }
 
-    /// <summary>Scopes requested by the device.</summary>
     public List<string> Scopes { get; set; } = new();
 
     /// <summary>Whether the device code has passed its expiry time.</summary>

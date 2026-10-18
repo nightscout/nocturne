@@ -72,7 +72,6 @@ public sealed class ReplayWindowTooLargeException : Exception
     /// <summary>The resolved window span the caller asked for.</summary>
     public TimeSpan Requested { get; }
 
-    /// <summary>The configured maximum span.</summary>
     public TimeSpan Maximum { get; }
 }
 

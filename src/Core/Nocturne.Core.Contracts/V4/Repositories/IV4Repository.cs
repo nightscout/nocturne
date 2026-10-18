@@ -27,7 +27,6 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// <param name="limit">Maximum number of records to return.</param>
     /// <param name="offset">Number of records to skip for pagination.</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first; otherwise oldest-first.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Matching records in the requested order.</returns>
     Task<IEnumerable<T>> GetAsync(DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending, CancellationToken ct = default);
@@ -36,7 +35,6 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// Retrieve a single record by its UUID v7 identifier.
     /// </summary>
     /// <param name="id">UUID v7 record identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The record, or <c>null</c> if not found.</returns>
     Task<T?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
@@ -48,16 +46,13 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// </summary>
     /// <param name="low">Inclusive lower bound (objectId + <c>00000000</c>).</param>
     /// <param name="high">Inclusive upper bound (objectId + <c>ffffffff</c>).</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The matching record, or <c>null</c>.</returns>
     Task<T?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default);
 
     /// <summary>
     /// Persist a new record and return the saved entity with any server-assigned fields populated.
     /// </summary>
-    /// <param name="model">Record to create.</param>
     /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The created record as persisted.</returns>
     /// <exception cref="RecreationBlockedException">
     /// The record's external identity — its (DataSource, SyncIdentifier) or its LegacyId — is
@@ -71,7 +66,6 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// <param name="id">UUID v7 identifier of the record to update.</param>
     /// <param name="model">Updated record data.</param>
     /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The updated record as persisted.</returns>
     Task<T> UpdateAsync(Guid id, T model, WriteOrigin origin, CancellationToken ct = default);
 
@@ -81,7 +75,6 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// </summary>
     /// <param name="id">UUID v7 identifier of the record to delete.</param>
     /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>
-    /// <param name="ct">Cancellation token.</param>
     Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
@@ -89,7 +82,6 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// </summary>
     /// <param name="id">UUID v7 identifier of the soft-deleted record.</param>
     /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The restored record.</returns>
     /// <exception cref="KeyNotFoundException">If no soft-deleted record with the given ID exists.</exception>
     /// <exception cref="RecreationBlockedException">
@@ -102,7 +94,6 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// </summary>
     /// <param name="ids">UUID v7 identifiers of the soft-deleted records.</param>
     /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>
     /// The restored records (only those that were actually soft-deleted), and the ids left deleted
     /// per <see cref="BulkRestoreResult{T}.Conflicts"/>.
@@ -114,14 +105,12 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// </summary>
     /// <param name="limit">Maximum number of records to return.</param>
     /// <param name="offset">Number of records to skip for pagination.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Soft-deleted records ordered by DeletedAt descending.</returns>
     Task<IEnumerable<T>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default);
 
     /// <summary>
     /// Count soft-deleted records.
     /// </summary>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of soft-deleted records.</returns>
     Task<int> CountDeletedAsync(CancellationToken ct = default);
 
@@ -130,7 +119,6 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// </summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records in the range.</returns>
     Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 }

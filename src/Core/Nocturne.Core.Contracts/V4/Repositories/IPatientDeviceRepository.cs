@@ -26,13 +26,11 @@ public interface IPatientDeviceRepository
     /// <summary>Returns a device by its ID, or null if not found.</summary>
     Task<PatientDevice?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Creates a new patient device record.</summary>
     Task<PatientDevice> CreateAsync(PatientDevice model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Updates an existing patient device record.</summary>
     Task<PatientDevice> UpdateAsync(Guid id, PatientDevice model, WriteOrigin origin, CancellationToken ct = default);
 
-    /// <summary>Deletes a patient device record by ID.</summary>
     Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>

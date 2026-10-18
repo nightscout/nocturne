@@ -45,7 +45,6 @@ public interface IPasskeyService
     /// <summary>Returns all registered passkey credentials for the specified subject.</summary>
     Task<List<PasskeyCredentialInfo>> GetCredentialsAsync(Guid subjectId);
 
-    /// <summary>Removes a passkey credential from the specified subject.</summary>
     Task RemoveCredentialAsync(Guid credentialId, Guid subjectId, Guid tenantId);
 
     /// <summary>Returns the number of passkey credentials registered to the specified subject.</summary>

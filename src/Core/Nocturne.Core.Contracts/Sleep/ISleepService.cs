@@ -59,8 +59,5 @@ public interface ISleepService
     /// </exception>
     Task<SleepSession?> UpdateSessionAsync(Guid id, SleepSession session, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Deletes a sleep session by ID.
-    /// </summary>
     Task<bool> DeleteSessionAsync(Guid id, CancellationToken cancellationToken = default);
 }

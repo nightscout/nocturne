@@ -14,10 +14,8 @@ public interface IAr2Service
     /// Calculate AR2 forecast for glucose predictions
     /// </summary>
     /// <param name="ddata">Data containing recent glucose readings</param>
-    /// <param name="bgNowProperties">Current BG properties</param>
     /// <param name="deltaProperties">Delta properties including mean5MinsAgo</param>
     /// <param name="settings">User settings including thresholds</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>AR2 forecast properties</returns>
     Task<Ar2Properties> CalculateForecastAsync(
         DData ddata,
@@ -31,10 +29,8 @@ public interface IAr2Service
     /// Generate forecast cone points for visualization
     /// </summary>
     /// <param name="ddata">Data containing recent glucose readings</param>
-    /// <param name="bgNowProperties">Current BG properties</param>
     /// <param name="deltaProperties">Delta properties including mean5MinsAgo</param>
     /// <param name="coneFactor">Cone factor for prediction uncertainty (default 2.0)</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of forecast cone points</returns>
     Task<List<ForecastPoint>> GenerateForecastConeAsync(
         DData ddata,
@@ -47,8 +43,6 @@ public interface IAr2Service
     /// <summary>
     /// Check if conditions are suitable for forecasting
     /// </summary>
-    /// <param name="bgNowProperties">Current BG properties</param>
-    /// <param name="deltaProperties">Delta properties</param>
     /// <returns>True if forecasting is possible</returns>
     bool CanForecast(
         Dictionary<string, object> bgNowProperties,

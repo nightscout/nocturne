@@ -63,10 +63,8 @@ public interface IOAuthTokenService
     /// <param name="clientEntityId">The OAuth client entity ID</param>
     /// <param name="subjectId">The subject ID who approved the consent</param>
     /// <param name="scopes">The approved scopes</param>
-    /// <param name="redirectUri">The redirect URI</param>
     /// <param name="codeChallenge">The PKCE code challenge</param>
     /// <param name="limitTo24Hours">When true, data requests should only return data from the last 24 hours</param>
-    /// <param name="ct">Cancellation token</param>
     Task<string> GenerateAuthorizationCodeAsync(
         Guid clientEntityId,
         Guid subjectId,

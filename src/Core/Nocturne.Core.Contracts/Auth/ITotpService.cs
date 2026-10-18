@@ -43,7 +43,6 @@ public interface ITotpService
     /// <summary>Returns all registered TOTP credentials for the specified subject.</summary>
     Task<List<TotpCredentialInfo>> GetCredentialsAsync(Guid subjectId);
 
-    /// <summary>Removes a TOTP credential from the specified subject.</summary>
     Task RemoveCredentialAsync(Guid credentialId, Guid subjectId);
 
     /// <summary>Returns the number of TOTP credentials registered to the specified subject.</summary>

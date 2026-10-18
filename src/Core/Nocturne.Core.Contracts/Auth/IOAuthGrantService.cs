@@ -13,7 +13,6 @@ public interface IOAuthGrantService
     /// Create a new grant (user approved app for scopes).
     /// If an active grant already exists for this client+subject, it is updated with the new scopes.
     /// </summary>
-    /// <param name="clientEntityId">The OAuth client entity ID</param>
     /// <param name="subjectId">The subject (user) ID who is granting access</param>
     /// <param name="scopes">The scopes being granted</param>
     /// <param name="grantType">The type of grant (app or follower)</param>
@@ -22,7 +21,6 @@ public interface IOAuthGrantService
     /// Whether tokens minted from the grant may read only the last 24 hours. The latest consent
     /// sets it, as it does the label.
     /// </param>
-    /// <param name="ct">Cancellation token</param>
     Task<OAuthGrantInfo> CreateOrUpdateGrantAsync(
         Guid clientEntityId,
         Guid subjectId,
@@ -57,7 +55,6 @@ public interface IOAuthGrantService
     /// </summary>
     /// <param name="grantId">The grant ID to look up</param>
     /// <param name="ownerSubjectId">The owner subject ID (for authorization check)</param>
-    /// <param name="ct">Cancellation token</param>
     Task<OAuthGrantInfo?> GetGrantForSubjectAsync(
         Guid grantId,
         Guid ownerSubjectId,
@@ -77,7 +74,6 @@ public interface IOAuthGrantService
     /// <param name="grantId">The grant id carried by the access token.</param>
     /// <param name="tenantId">The tenant the presented token is pinned to, already verified against
     /// the request's tenant by the caller. Used to scope the lookup.</param>
-    /// <param name="ct">Cancellation token</param>
     Task<bool> IsGrantRevokedAsync(Guid grantId, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
@@ -93,11 +89,7 @@ public interface IOAuthGrantService
     /// <summary>
     /// Update grant label and/or scopes. Returns null if grant not found or not owned.
     /// </summary>
-    /// <param name="grantId">The grant ID to update</param>
     /// <param name="ownerSubjectId">The owner subject ID (for authorization check)</param>
-    /// <param name="label">Optional new label</param>
-    /// <param name="scopes">Optional new scopes</param>
-    /// <param name="ct">Cancellation token</param>
     Task<OAuthGrantInfo?> UpdateGrantAsync(
         Guid grantId,
         Guid ownerSubjectId,
@@ -107,21 +99,15 @@ public interface IOAuthGrantService
     );
 }
 
-/// <summary>
-/// Grant information returned by the grant service.
-/// </summary>
 public class OAuthGrantInfo
 {
-    /// <summary>Internal grant entity ID.</summary>
     public Guid Id { get; set; }
 
-    /// <summary>Tenant this grant belongs to.</summary>
     public Guid TenantId { get; set; }
 
     /// <summary>Internal entity ID of the OAuth client, or null for follower grants without a registered client.</summary>
     public Guid? ClientEntityId { get; set; }
 
-    /// <summary>The OAuth client_id string.</summary>
     public string ClientId { get; set; } = string.Empty;
 
     /// <summary>Display name of the client shown on the consent screen, if any.</summary>
@@ -142,13 +128,11 @@ public class OAuthGrantInfo
     /// <summary>Grant type: "app" for standard OAuth apps, "follower" for follower access.</summary>
     public string GrantType { get; set; } = OAuthGrantTypes.App;
 
-    /// <summary>OAuth scopes granted.</summary>
     public List<string> Scopes { get; set; } = new();
 
     /// <summary>User-friendly label for the grant, if any.</summary>
     public string? Label { get; set; }
 
-    /// <summary>When the grant was created.</summary>
     public DateTime CreatedAt { get; set; }
 
     /// <summary>When the grant was last used to exchange or refresh a token, if ever.</summary>
@@ -160,7 +144,6 @@ public class OAuthGrantInfo
     /// <summary>User-agent of the most recent token exchange, if any.</summary>
     public string? LastUsedUserAgent { get; set; }
 
-    /// <summary>Whether the grant has been revoked.</summary>
     public bool IsRevoked { get; set; }
 
     /// <summary>Whether tokens minted from the grant may read only the last 24 hours.</summary>

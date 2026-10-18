@@ -2,9 +2,6 @@ using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Platform;
 
-/// <summary>
-/// Service interface for version operations
-/// </summary>
 public interface IVersionService
 {
     /// <summary>

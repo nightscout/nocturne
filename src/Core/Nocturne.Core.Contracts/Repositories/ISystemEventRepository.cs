@@ -44,16 +44,10 @@ public interface ISystemEventRepository
         IEnumerable<SystemEvent> events,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Delete a system event.
-    /// </summary>
     Task<bool> DeleteSystemEventAsync(
         string id,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Delete all system events with the specified data source.
-    /// </summary>
     Task<long> DeleteBySourceAsync(
         string source,
         CancellationToken cancellationToken = default);

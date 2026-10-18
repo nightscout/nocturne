@@ -11,7 +11,6 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <remarks>
 /// A collection expression builds one with nothing skipped.
 /// </remarks>
-/// <typeparam name="TRecord">The record type written.</typeparam>
 [CollectionBuilder(typeof(BulkWrite), nameof(BulkWrite.Create))]
 public sealed class BulkWrite<TRecord>(IReadOnlyList<TRecord> written, int skippedDeleted) : IReadOnlyList<TRecord>
 {

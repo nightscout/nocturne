@@ -18,7 +18,6 @@ public interface IActogramReportService
     /// </summary>
     /// <param name="startTime">Start of the time range in Unix milliseconds (inclusive).</param>
     /// <param name="endTime">End of the time range in Unix milliseconds (exclusive).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task<ActogramReportData> GetAsync(
         long startTime,
         long endTime,

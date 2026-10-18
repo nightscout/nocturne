@@ -22,7 +22,6 @@ public interface IDeviceAttributionWriter
 /// Reads and writes the unattributed backlog of one <see cref="IDeviceAttributed"/> record type,
 /// so a device registration can back-stamp the history it explains.
 /// </summary>
-/// <typeparam name="TRecord">The device-attributed record type.</typeparam>
 public interface IDeviceAttributedRepository<TRecord> : IDeviceAttributionWriter
     where TRecord : IDeviceAttributed
 {

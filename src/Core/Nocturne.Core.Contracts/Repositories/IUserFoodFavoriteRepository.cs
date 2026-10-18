@@ -10,9 +10,6 @@ namespace Nocturne.Core.Contracts.Repositories;
 /// <seealso cref="IFoodRepository"/>
 public interface IUserFoodFavoriteRepository
 {
-    /// <summary>
-    /// Get favorite food entities for a user.
-    /// </summary>
     Task<IReadOnlyList<Food>> GetFavoriteFoodsAsync(
         string userId,
         CancellationToken cancellationToken = default);

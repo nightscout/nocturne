@@ -16,13 +16,11 @@ public interface IRotationSuccessorCache
     /// <param name="oldTokenHash">SHA-256 hash of the rotated (now revoked) token.</param>
     /// <param name="successorToken">Plaintext successor refresh token.</param>
     /// <param name="ttl">How long replay is allowed (the rotation grace period).</param>
-    /// <param name="ct">Cancellation token.</param>
     Task StoreAsync(string oldTokenHash, string successorToken, TimeSpan ttl, CancellationToken ct = default);
 
     /// <summary>
     /// Look up the successor of a rotated token. Returns null when absent or expired.
     /// </summary>
     /// <param name="oldTokenHash">SHA-256 hash of the rotated token being replayed.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<string?> GetAsync(string oldTokenHash, CancellationToken ct = default);
 }

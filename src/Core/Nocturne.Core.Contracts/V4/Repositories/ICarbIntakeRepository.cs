@@ -28,7 +28,6 @@ public interface ICarbIntakeRepository
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
     /// <param name="nativeOnly">When <c>true</c>, excludes records projected from legacy V1/V2/V3 treatments.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<CarbIntake>> GetAsync(
         DateTime? from,
         DateTime? to,
@@ -52,7 +51,6 @@ public interface ICarbIntakeRepository
     /// <summary>Delete <see cref="CarbIntake"/> records matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>
     /// <param name="syncIdentifier">The external sync identifier (e.g., UUID from the uploading system).</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default);
 
@@ -61,12 +59,10 @@ public interface ICarbIntakeRepository
     /// </summary>
     /// <remarks>Used by connectors to resume per-source sync without re-fetching already-stored data.</remarks>
     /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>Retrieve all <see cref="CarbIntake"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking a carb entry to its associated bolus or meal.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<CarbIntake>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default

@@ -20,7 +20,6 @@ public interface ISyncKeyedRepository<T> where T : class, IV4Record
     /// </remarks>
     /// <param name="dataSource">The connector or uploader that minted the key.</param>
     /// <param name="syncIdentifier">The key's per-source identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<bool> IsRecreationBlockedAsync(
         string dataSource, string syncIdentifier, CancellationToken ct = default);
 

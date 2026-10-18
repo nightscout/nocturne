@@ -6,10 +6,6 @@ namespace Nocturne.Core.Contracts.Auth;
 /// </summary>
 public interface ISecretEncryptionService
 {
-    /// <summary>
-    /// Encrypts a plaintext secret value.
-    /// </summary>
-    /// <param name="plaintext">The secret value to encrypt</param>
     /// <returns>Base64-encoded ciphertext (nonce || ciphertext || tag)</returns>
     /// <exception cref="InvalidOperationException">Thrown when encryption is not configured (api-secret not set).</exception>
     string Encrypt(string plaintext);

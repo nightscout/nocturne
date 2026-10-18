@@ -15,7 +15,6 @@ public interface IAnalyticsService
     /// <param name="method">HTTP method (GET, POST, etc.)</param>
     /// <param name="responseTime">Response time in milliseconds</param>
     /// <param name="statusCode">HTTP status code</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     Task TrackApiCallAsync(
         string endpoint,
         string method,
@@ -29,7 +28,6 @@ public interface IAnalyticsService
     /// </summary>
     /// <param name="page">Page identifier (e.g., "dashboard", "reports")</param>
     /// <param name="userAgent">User agent string for device type detection</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     Task TrackPageViewAsync(
         string page,
         string? userAgent = null,
@@ -42,7 +40,6 @@ public interface IAnalyticsService
     /// <param name="feature">Feature name</param>
     /// <param name="action">Action taken (e.g., "enabled", "disabled", "used")</param>
     /// <param name="metadata">Additional anonymous metadata</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     Task TrackFeatureUsageAsync(
         string feature,
         string action,
@@ -53,10 +50,8 @@ public interface IAnalyticsService
     /// <summary>
     /// Track system events (startup, shutdown, errors)
     /// </summary>
-    /// <param name="eventType">Type of system event</param>
     /// <param name="message">Anonymous event message</param>
     /// <param name="severity">Event severity level</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     Task TrackSystemEventAsync(
         string eventType,
         string message,
@@ -64,11 +59,6 @@ public interface IAnalyticsService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Track custom analytics event
-    /// </summary>
-    /// <param name="analyticsEvent">Analytics event to track</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     Task TrackCustomEventAsync(
         AnalyticsEvent analyticsEvent,
         CancellationToken cancellationToken = default
@@ -83,13 +73,11 @@ public interface IAnalyticsService
     /// <summary>
     /// Get performance metrics for the current time period
     /// </summary>
-    /// <returns>Performance metrics</returns>
     PerformanceMetrics GetPerformanceMetrics();
 
     /// <summary>
     /// Get usage statistics for the current time period
     /// </summary>
-    /// <returns>Usage statistics</returns>
     UsageStatistics GetUsageStatistics();
 
     /// <summary>

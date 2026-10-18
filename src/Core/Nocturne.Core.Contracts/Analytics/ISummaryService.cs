@@ -16,7 +16,6 @@ public interface ISummaryService
     /// Gets summary data for the specified number of hours
     /// </summary>
     /// <param name="hours">Number of hours to include in summary (default 6)</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Summary response containing processed data</returns>
     Task<SummaryResponse> GetSummaryAsync(
         int hours = 6,
@@ -36,7 +35,6 @@ public interface ISummaryService
     /// Processes treatments for the summary endpoint
     /// Extracts insulin/carbs treatments and processes temp basals
     /// </summary>
-    /// <param name="treatments">List of treatments to process</param>
     /// <param name="profileData">Current profile data for basal processing</param>
     /// <param name="hours">Number of hours to include</param>
     /// <returns>Processed treatment data</returns>
@@ -64,8 +62,6 @@ public interface ISummaryService
     /// Constructs state information from sandbox properties
     /// Equivalent to legacy constructState() function
     /// </summary>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Current state information</returns>
     Task<SummaryState> ConstructStateAsync(CancellationToken cancellationToken = default);
 
     /// <summary>

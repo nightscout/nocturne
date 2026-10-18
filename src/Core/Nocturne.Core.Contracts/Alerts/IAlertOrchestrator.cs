@@ -17,8 +17,6 @@ public interface IAlertOrchestrator
     /// Called by the glucose ingest pipeline on each new reading.
     /// </summary>
     /// <param name="context">The current <see cref="SensorContext"/> containing the latest glucose reading and trend data.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A task that completes when all rules have been evaluated and any resulting alerts dispatched.</returns>
     Task EvaluateAsync(SensorContext context, CancellationToken ct);
 
     /// <summary>
@@ -33,7 +31,6 @@ public interface IAlertOrchestrator
     /// reference resolves when its target is in this set.
     /// </param>
     /// <param name="context">The base <see cref="SensorContext"/> to enrich and evaluate against.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task EvaluateRulesAsync(
         IReadOnlyList<AlertRuleSnapshot> rules,
         IReadOnlySet<Guid> enabledRuleIds,

@@ -38,7 +38,6 @@ public interface ITempBasalRepository
     /// </summary>
     /// <remarks>Used by connectors to resume per-source sync without re-fetching already-stored data.</remarks>
     /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>
@@ -58,7 +57,6 @@ public interface ITempBasalRepository
     /// <param name="to">Inclusive end of the reconcile range.</param>
     /// <param name="keepLegacyIds">Legacy ids still reported by the source in this window; rows with
     /// these ids are kept, all other active rows of this source in range are soft-deleted.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records soft-deleted.</returns>
     Task<int> SoftDeleteAbsentBySourceAndDateRangeAsync(
         string source,
@@ -80,6 +78,5 @@ public interface ITempBasalRepository
     /// at or after its start.
     /// </remarks>
     /// <param name="at">The instant to evaluate.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<TempBasal?> GetActiveAtAsync(DateTime at, CancellationToken ct = default);
 }

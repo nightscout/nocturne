@@ -8,14 +8,9 @@ namespace Nocturne.Core.Contracts.Auth;
 /// </summary>
 public interface IJwtService
 {
-    /// <summary>
-    /// Generate an access token JWT for a subject
-    /// </summary>
-    /// <param name="subject">Subject to generate token for</param>
     /// <param name="permissions">Resolved permissions to include</param>
     /// <param name="roles">Role names to include</param>
     /// <param name="lifetime">Optional custom lifetime (defaults to configuration)</param>
-    /// <returns>JWT access token string</returns>
     string GenerateAccessToken(
         SubjectInfo subject,
         IEnumerable<string> permissions,
@@ -27,7 +22,6 @@ public interface IJwtService
     /// Generate an access token JWT for a subject with OAuth scopes.
     /// Used by the OAuth token endpoint to issue scoped access tokens.
     /// </summary>
-    /// <param name="subject">Subject to generate token for</param>
     /// <param name="permissions">Resolved permissions to include</param>
     /// <param name="roles">Role names to include</param>
     /// <param name="scopes">OAuth scopes to include in the token</param>
@@ -43,7 +37,6 @@ public interface IJwtService
     /// stateless, so this is what lets a grant revocation invalidate them: the authenticating
     /// handler rejects a token whose grant is revoked. Omit only for tokens that have no grant
     /// behind them (platform access, recovery, connector link tokens).</param>
-    /// <returns>JWT access token string</returns>
     string GenerateAccessToken(
         SubjectInfo subject,
         IEnumerable<string> permissions,
@@ -57,17 +50,12 @@ public interface IJwtService
         Guid? grantId = null
     );
 
-    /// <summary>
-    /// Validate an access token JWT
-    /// </summary>
-    /// <param name="token">JWT token string</param>
     /// <returns>Validation result with claims if valid</returns>
     JwtValidationResult ValidateAccessToken(string token);
 
     /// <summary>
     /// Generate a refresh token (random string, stored in DB)
     /// </summary>
-    /// <returns>Refresh token string</returns>
     string GenerateRefreshToken();
 
     /// <summary>
@@ -80,13 +68,11 @@ public interface IJwtService
     /// <summary>
     /// Get the configured access token lifetime
     /// </summary>
-    /// <returns>Access token lifetime as TimeSpan</returns>
     TimeSpan GetAccessTokenLifetime();
 
     /// <summary>
     /// Get the configured refresh token lifetime
     /// </summary>
-    /// <returns>Refresh token lifetime as TimeSpan</returns>
     TimeSpan GetRefreshTokenLifetime();
 }
 
@@ -100,9 +86,6 @@ public class SubjectInfo
     /// </summary>
     public Guid Id { get; set; }
 
-    /// <summary>
-    /// Display name
-    /// </summary>
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
@@ -112,14 +95,8 @@ public class SubjectInfo
 
 }
 
-/// <summary>
-/// Result of JWT validation
-/// </summary>
 public class JwtValidationResult
 {
-    /// <summary>
-    /// Whether the token is valid
-    /// </summary>
     public bool IsValid { get; set; }
 
     /// <summary>
@@ -160,29 +137,14 @@ public class JwtValidationResult
 /// </summary>
 public class JwtClaims
 {
-    /// <summary>
-    /// Subject ID
-    /// </summary>
     public Guid SubjectId { get; set; }
 
-    /// <summary>
-    /// Subject name
-    /// </summary>
     public string? Name { get; set; }
 
-    /// <summary>
-    /// Email address
-    /// </summary>
     public string? Email { get; set; }
 
-    /// <summary>
-    /// Role names
-    /// </summary>
     public List<string> Roles { get; set; } = new();
 
-    /// <summary>
-    /// Permissions
-    /// </summary>
     public List<string> Permissions { get; set; } = new();
 
     /// <summary>
@@ -226,14 +188,8 @@ public class JwtClaims
     /// </summary>
     public string? JwtId { get; set; }
 
-    /// <summary>
-    /// Issued at
-    /// </summary>
     public DateTimeOffset IssuedAt { get; set; }
 
-    /// <summary>
-    /// Expires at
-    /// </summary>
     public DateTimeOffset ExpiresAt { get; set; }
 }
 
@@ -277,8 +233,5 @@ public enum JwtValidationError
     /// </summary>
     MissingClaims,
 
-    /// <summary>
-    /// Unknown error
-    /// </summary>
     Unknown,
 }

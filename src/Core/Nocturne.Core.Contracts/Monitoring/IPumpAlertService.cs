@@ -9,9 +9,6 @@ namespace Nocturne.Core.Contracts.Monitoring;
 /// </summary>
 public interface IPumpAlertService
 {
-    /// <summary>
-    /// Gets pump preferences from extended settings
-    /// </summary>
     PumpPreferences GetPreferences(
         Dictionary<string, object?>? extendedSettings,
         double? dayStart = null,
@@ -54,9 +51,6 @@ public interface IPumpAlertService
     /// </summary>
     (string title, string response) HandleVirtualAssistantReservoir(PumpStatusResult status);
 
-    /// <summary>
-    /// Handles virtual assistant "pump battery" request
-    /// </summary>
     (string title, string response) HandleVirtualAssistantBattery(PumpStatusResult status);
 }
 
