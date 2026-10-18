@@ -52,6 +52,69 @@ public class LibreConnectorServiceTests
         result.ItemsSynced[SyncDataType.Glucose].Should().Be(0);
     }
 
+    /// <summary>
+    /// A null in the vendor's array is one malformed record. It is dropped before mapping, so the
+    /// readings beside it still publish and the run stays green.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_NullMeasurementInGraphData_PublishesItsSiblings()
+    {
+        var fixture = new ServiceFixture(
+            connectionsJson: "{\"data\":[null,{\"patientId\":\"p1\",\"firstName\":\"A\",\"lastName\":\"B\"}]}",
+            graphJson: "{\"data\":{\"connection\":{\"glucoseMeasurement\":"
+                       + "{\"factoryTimestamp\":\"1/1/2024 12:10:00 AM\",\"valueInMgPerDl\":110,\"trendArrow\":3}},"
+                       + "\"graphData\":[null,{\"factoryTimestamp\":\"1/1/2024 12:05:00 AM\",\"valueInMgPerDl\":105,\"trendArrow\":3}]}}");
+        IEnumerable<SensorGlucose>? published = null;
+        fixture.Glucose
+            .Setup(g => g.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<SensorGlucose>, string, WriteOrigin, CancellationToken>(
+                (records, _, _, _) => published = records.ToList())
+            .ReturnsAsync(true);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        published.Should().NotBeNull().And.HaveCount(2, "the graph reading and the latest one both survive");
+        published!.Select(sg => sg.Mgdl).Should().BeEquivalentTo([105.0, 110.0]);
+    }
+
+    /// <summary>
+    /// A caller who cancels has to stop the request in flight and see the cancellation, rather than
+    /// wait out LibreLinkUp's answer and have the run reported as failed.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_CallerCancelsDuringTheFetch_AbortsTheRequest()
+    {
+        using var caller = new CancellationTokenSource();
+        var requestAborted = false;
+        var fixture = new ServiceFixture(
+            connectionsJson: "{\"data\":[{\"patientId\":\"p1\",\"firstName\":\"A\",\"lastName\":\"B\"}]}",
+            graphJson: "{\"data\":{\"connection\":{\"glucoseMeasurement\":"
+                       + "{\"factoryTimestamp\":\"1/1/2024 12:10:00 AM\",\"valueInMgPerDl\":110,\"trendArrow\":3}},"
+                       + "\"graphData\":[]}}",
+            onGraph: async requestToken =>
+            {
+                await caller.CancelAsync();
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), requestToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    requestAborted = true;
+                    throw;
+                }
+            });
+
+        await FluentActions.Awaiting(() => fixture.Service.SyncDataAsync(
+                new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, caller.Token))
+            .Should().ThrowAsync<OperationCanceledException>();
+        requestAborted.Should().BeTrue("the caller's token has to reach the graph request");
+    }
+
     private const string Connections = "{\"data\":[{\"patientId\":\"p1\",\"firstName\":\"A\",\"lastName\":\"B\"}]}";
 
     private static string GraphWithSensor(string sensorJson) =>
@@ -132,21 +195,26 @@ public class LibreConnectorServiceTests
         }
     }
 
-    private sealed class RoutingHandler(string? connectionsJson, string? graphJson) : HttpMessageHandler
+    private sealed class RoutingHandler(
+        string? connectionsJson, string? graphJson, Func<CancellationToken, Task>? onGraph)
+        : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri?.PathAndQuery ?? string.Empty;
 
+            if (path.EndsWith("/graph", StringComparison.OrdinalIgnoreCase) && onGraph != null)
+                await onGraph(cancellationToken);
+
             if (path.EndsWith("/graph", StringComparison.OrdinalIgnoreCase) && graphJson != null)
-                return Task.FromResult(Json(graphJson));
+                return Json(graphJson);
 
             if (path.Contains(LibreLinkUpConstants.ApiPaths.Connections, StringComparison.OrdinalIgnoreCase)
                 && connectionsJson != null)
-                return Task.FromResult(Json(connectionsJson));
+                return Json(connectionsJson);
 
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
         }
     }
 
@@ -155,11 +223,13 @@ public class LibreConnectorServiceTests
         public LibreConnectorService Service { get; }
         public LibreLinkUpConnectorConfiguration Config { get; }
         public Mock<IConnectorPublisher> Publisher { get; }
+        public Mock<IGlucosePublisher> Glucose { get; } = new();
 
         public ServiceFixture(
             string? tokenToReturn = "valid-token",
             string? connectionsJson = null,
-            string? graphJson = null)
+            string? graphJson = null,
+            Func<CancellationToken, Task>? onGraph = null)
         {
             Config = new LibreLinkUpConnectorConfiguration
             {
@@ -167,13 +237,14 @@ public class LibreConnectorServiceTests
                 Password = "test-password",
             };
 
-            var httpClient = new HttpClient(new RoutingHandler(connectionsJson, graphJson))
+            var httpClient = new HttpClient(new RoutingHandler(connectionsJson, graphJson, onGraph))
             {
                 BaseAddress = new Uri("https://api-eu.libreview.io")
             };
 
             Publisher = new Mock<IConnectorPublisher>();
             Publisher.Setup(p => p.IsAvailable).Returns(true);
+            Publisher.Setup(p => p.Glucose).Returns(Glucose.Object);
 
             var tokenProvider = new FakeLibreAuthTokenProvider(tokenToReturn);
 

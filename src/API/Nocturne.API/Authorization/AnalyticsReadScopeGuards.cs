@@ -1,4 +1,5 @@
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Widget;

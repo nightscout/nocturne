@@ -57,6 +57,8 @@ export const getDayInReviewData = query(
 					boluses,
 					carbIntakes,
 					population: 0 as const, // Type1Adult
+					startDate: dayStart,
+					endDate: dayEnd,
 				})
 			: null;
 

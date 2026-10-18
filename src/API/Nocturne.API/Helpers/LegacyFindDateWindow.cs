@@ -49,10 +49,12 @@ public static class LegacyFindDateWindow
         var minDate = (now - DefaultWindow).UtcDateTime
             .ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
 
-        if (parsed.IsEmpty)
+        // A query-string find that parses empty may still hold unreadable find[...] keys, which
+        // match nothing; it takes the window appended, so those keys survive.
+        if (string.IsNullOrWhiteSpace(find) || (parsed.IsEmpty && find.TrimStart().StartsWith('{')))
             return $"find[created_at][$gte]={Uri.EscapeDataString(minDate)}";
 
-        if (find!.TrimStart().StartsWith('{'))
+        if (find.TrimStart().StartsWith('{'))
         {
             // Spliced into the text rather than rebuilt through JsonNode, which throws on the
             // duplicate keys FindQuery.Parse accepts; the original members parse unchanged.

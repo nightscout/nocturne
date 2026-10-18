@@ -17,7 +17,7 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// Retrieve a page of <see cref="ApsSnapshot"/> records filtered by time range, device, and source.
     /// </summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end of the time window, or <c>null</c> for no upper bound.</param>
+    /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
     /// <param name="device">Optional device identifier filter.</param>
     /// <param name="source">Optional data source filter.</param>
     /// <param name="limit">Maximum number of records to return (default 100).</param>
@@ -39,12 +39,6 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// <param name="to">Inclusive end of the time window.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<ApsIobCobPoint>> GetIobCobPointsAsync(DateTime from, DateTime to, CancellationToken ct = default);
-
-    /// <summary>
-    /// Counts the snapshots <see cref="GetAsync"/> reads for the same window and device, with no
-    /// source filter.
-    /// </summary>
-    Task<int> CountAsync(DateTime? from, DateTime? to, string? device, CancellationToken ct = default);
 
     /// <summary>Retrieve <see cref="ApsSnapshot"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>

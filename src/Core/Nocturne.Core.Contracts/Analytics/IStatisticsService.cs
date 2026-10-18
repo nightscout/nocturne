@@ -77,14 +77,15 @@ public interface IStatisticsService
     );
 
     /// <summary>
-    /// Assess the reliability of a statistics block based on data duration and completeness.
+    /// Assess the reliability of a statistics block based on data duration and reading count.
     /// Returns raw facts (days of data, reading count, recommended minimum) so the frontend
-    /// can compose a plain-English reliability message.
+    /// can compose a plain-English reliability message. The recommended minimum follows
+    /// <paramref name="windowDays"/>, the length of the requested window, up to the 14-day clinical standard.
     /// </summary>
     StatisticReliability AssessReliability(
         int daysOfData,
         int readingCount,
-        int recommendedMinimumDays = 14
+        int windowDays
     );
 
     /// <summary>
@@ -94,8 +95,10 @@ public interface IStatisticsService
         IEnumerable<SensorGlucose> entries,
         IEnumerable<Bolus> boluses,
         IEnumerable<CarbIntake> carbIntakes,
+        int windowDays,
         DiabetesPopulation population = DiabetesPopulation.Type1Adult,
-        ExtendedAnalysisConfig? config = null
+        ExtendedAnalysisConfig? config = null,
+        TimeZoneInfo? timeZone = null
     );
 
     // Glycemic Variability
@@ -312,6 +315,8 @@ public interface IStatisticsService
     double MmolToMGDL(double mmol);
 
     // Comprehensive Analytics
+    /// <param name="windowDays">Length of the requested window in days, which sets the reliability minimum. A caller with no window passes 14.</param>
+    /// <param name="timeZone">Zone in which readings are counted into days of data. Without it, UTC.</param>
     /// <param name="deviceEvents">The period's device events, from which
     /// <see cref="DataQuality.SensorWarmups"/> counts the sensor sessions begun, recorded or inferred,
     /// one per change however many sources logged it. Without them it is 0.</param>
@@ -319,10 +324,12 @@ public interface IStatisticsService
         IEnumerable<SensorGlucose> entries,
         IEnumerable<Bolus> boluses,
         IEnumerable<CarbIntake> carbIntakes,
+        int windowDays,
         ExtendedAnalysisConfig? config = null,
         DateTime? startDate = null,
         DateTime? endDate = null,
-        IEnumerable<DeviceEvent>? deviceEvents = null
+        IEnumerable<DeviceEvent>? deviceEvents = null,
+        TimeZoneInfo? timeZone = null
     );
 
     /// <summary>

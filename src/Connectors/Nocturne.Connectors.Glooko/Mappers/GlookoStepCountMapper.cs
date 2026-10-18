@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
@@ -24,7 +25,7 @@ public class GlookoStepCountMapper(string connectorSource, GlookoTimeMapper time
     {
         var results = new List<StepCount>();
 
-        foreach (var r in routines)
+        foreach (var r in ConnectorFaults.NonNullRecords(routines, _logger, _connectorSource, "SSV2 routine"))
         {
             try
             {
@@ -49,9 +50,9 @@ public class GlookoStepCountMapper(string connectorSource, GlookoTimeMapper time
                     DataSource = _connectorSource,
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping SSV2 routine", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed SSV2 routine {Guid}", _connectorSource, r.Guid);
             }
         }
 

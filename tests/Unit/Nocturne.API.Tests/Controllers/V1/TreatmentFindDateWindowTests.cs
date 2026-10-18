@@ -86,6 +86,16 @@ public class TreatmentFindDateWindowTests
         FindQuery.Parse(windowed).FromMills.Should().Be(WindowStartMills);
     }
 
+    [Fact]
+    public void WindowingUnfilteredFinds_KeepsAnUnreadableFindKey()
+    {
+        var windowed = LegacyFindDateWindow.Apply("find[a][b][c][d]=x", Now, windowUnfiltered: true);
+
+        windowed.Should().StartWith("find[a][b][c][d]=x&");
+        FindQuery.Parse(windowed).Matches(new Treatment { CreatedAt = Now.ToString("o") })
+            .Should().BeFalse();
+    }
+
     [Theory]
     [InlineData("find[created_at][$gte]=2020-01-01")]
     [InlineData("find[dateString][$lte]=2020-01-01")]
@@ -274,7 +284,7 @@ public class TreatmentFindDateWindowTests
         httpContext.Request.QueryString = new QueryString(queryString);
         return new CountController(
             Mock.Of<IEntryStore>(), store,
-            CountControllerTests.DeviceStatusProjection(new Mock<IApsSnapshotRepository>(), new Mock<IPumpSnapshotRepository>()),
+            CountControllerTests.DeviceStatusProjection(new Mock<IDeviceStatusGroupRepository>()),
             Mock.Of<IProfileProjectionService>(), Mock.Of<IFoodRepository>(),
             Mock.Of<IActivityService>(), new FakeTimeProvider(Now), NullLogger<CountController>.Instance)
         {

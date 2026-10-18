@@ -91,9 +91,7 @@ public class MigrationJobService : IMigrationJobService
 
     private bool IsTerminal(Guid jobId) =>
         _jobs.TryGetValue(jobId, out var job)
-        && job.GetStatus().State is MigrationJobState.Completed
-            or MigrationJobState.Failed
-            or MigrationJobState.Cancelled;
+        && !job.GetStatus().State.IsLive();
 
     public async Task<MigrationJobInfo> StartMigrationAsync(
         StartMigrationRequest request,
@@ -576,7 +574,7 @@ internal class MigrationJob
         // Leave terminal states untouched — cancelling a job that already Completed/Failed must
         // not rewrite its (now persisted) outcome, which would also un-satisfy the startup
         // "was this source ever migrated?" check.
-        if (_state is MigrationJobState.Pending or MigrationJobState.Validating or MigrationJobState.Running)
+        if (_state.IsLive())
             _state = MigrationJobState.Cancelled;
     }
 
@@ -665,8 +663,8 @@ internal class MigrationJob
             run.State = _state.ToString();
             run.StartedAt = _startedAt == default ? _info.CreatedAt : _startedAt;
             run.CompletedAt = _completedAt;
-            run.DateRangeStart = AsUtc(_request.StartDate);
-            run.DateRangeEnd = AsUtc(_request.EndDate);
+            run.DateRangeStart = _request.StartDate?.AsUtc();
+            run.DateRangeEnd = _request.EndDate?.AsUtc();
             run.ErrorMessage = _errorMessage;
             run.EntriesMigrated = (int)Math.Min(int.MaxValue, MigratedCount("entries"));
             run.TreatmentsMigrated = (int)Math.Min(int.MaxValue, MigratedCount("treatments"));
@@ -751,14 +749,6 @@ internal class MigrationJob
     /// <summary>Canonical source identifier for a MongoDB-mode migration: a non-usable digest, never the connection string itself.</summary>
     internal static string MongoSourceIdentifier(string connectionString) =>
         HashUtils.Sha256Hex(connectionString);
-
-    /// <summary>Npgsql rejects Local/Unspecified kinds for timestamptz; normalize optional caller-supplied dates.</summary>
-    private static DateTime? AsUtc(DateTime? value) => value switch
-    {
-        null => null,
-        { Kind: DateTimeKind.Unspecified } v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
-        { } v => v.ToUniversalTime(),
-    };
 
     /// <summary>Reconstructs a status snapshot from a persisted run (post-restart lookups).</summary>
     public static MigrationJobStatus StatusFromRecord(MigrationRunEntity run)

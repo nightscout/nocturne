@@ -35,6 +35,9 @@ internal sealed class GlookoSyncContext
 
     internal GlookoConnectorConfiguration Config { get; }
 
+    /// <summary>The run's cancellation, for the fetch helpers that take only the context.</summary>
+    internal CancellationToken CancellationToken { get; init; }
+
     internal GlookoTimeMapper TimeMapper { get; }
     internal GlookoSensorGlucoseMapper SensorGlucoseMapper { get; }
     internal GlookoV4TreatmentMapper V4TreatmentMapper { get; }

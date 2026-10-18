@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -93,7 +94,7 @@ public class TenantAlertSettingsController : ControllerBase
         // response would report DndManualActive=false despite the request saying true.
         // Only when the request is actually turning the mute on: with the toggle absent the
         // expiry is never read, so rejecting a stale echo of it would 400 a schedule-only save.
-        if (request.DndManualActive == true && AsUtc(request.DndManualUntil) is { } until && until <= now)
+        if (request.DndManualActive == true && request.DndManualUntil?.AsUtc() is { } until && until <= now)
             return BadRequest("dnd_manual_until must be in the future.");
 
         var entity = await db.TenantAlertSettings.FirstOrDefaultAsync(ct);
@@ -121,7 +122,7 @@ public class TenantAlertSettingsController : ControllerBase
             var activeAll = await ActiveAllWindowsAsync(db, now, ct);
             if (manualActive)
             {
-                var endsAt = AsUtc(request.DndManualUntil);
+                var endsAt = request.DndManualUntil?.AsUtc();
                 if (activeAll.Count == 0)
                 {
                     db.DndWindows.Add(new DndWindowEntity
@@ -182,14 +183,6 @@ public class TenantAlertSettingsController : ControllerBase
                         && w.StartedAt <= now && (w.EndsAt == null || now < w.EndsAt))
             .OrderBy(w => w.StartedAt)
             .FirstOrDefaultAsync(ct);
-
-    private static DateTime? AsUtc(DateTime? value) => value switch
-    {
-        null => null,
-        { Kind: DateTimeKind.Utc } v => v,
-        { Kind: DateTimeKind.Local } v => v.ToUniversalTime(),
-        { } v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
-    };
 
     private static TenantAlertSettingsResponse MapToResponse(
         TenantAlertSettingsEntity e, DndWindowEntity? manual) => new()

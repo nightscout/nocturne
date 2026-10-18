@@ -114,7 +114,7 @@ public class AlertInvitesController : ControllerBase
     [ProducesResponseType(typeof(AlertInviteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status410Gone)]
-    public async Task<ActionResult<AlertInviteResponse>> ValidateInvite(string token, CancellationToken ct)
+    public async Task<ActionResult<AlertInviteResponse>> ValidateInvite([CredentialRouteValue] string token, CancellationToken ct)
     {
         await using var db = await _contextFactory.CreateAsync(ct);
 
@@ -153,7 +153,7 @@ public class AlertInvitesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status410Gone)]
-    public async Task<ActionResult> RedeemInvite(string token, CancellationToken ct)
+    public async Task<ActionResult> RedeemInvite([CredentialRouteValue] string token, CancellationToken ct)
     {
         await using var db = await _contextFactory.CreateAsync(ct);
 

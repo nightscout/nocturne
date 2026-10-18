@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -15,7 +16,6 @@ namespace Nocturne.Connectors.FreeStyle.Services;
 
 /// <summary>
 ///     Connector service for LibreLinkUp data source.
-///     Writes SensorGlucose records directly instead of legacy Entry objects.
 /// </summary>
 public class LibreConnectorService(
     HttpClient httpClient,
@@ -73,9 +73,10 @@ public class LibreConnectorService(
     public override string ServiceName => "LibreLinkUp";
     protected override string ConnectorSource => DataSources.LibreConnector;
 
-    private async Task<bool> AuthenticateWithConfigAsync(LibreLinkUpConnectorConfiguration config)
+    private async Task<bool> AuthenticateWithConfigAsync(
+        LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        var token = await _tokenProvider.GetValidTokenAsync(config);
+        var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
         if (token == null)
         {
             _accountIdHash = string.Empty;
@@ -104,7 +105,7 @@ public class LibreConnectorService(
 
         _bearerToken = token;
 
-        await LoadConnectionsAsync(config);
+        await LoadConnectionsAsync(config, cancellationToken);
 
         TrackSuccessfulRequest();
         return true;
@@ -116,7 +117,7 @@ public class LibreConnectorService(
     ///     nothing new.
     /// </summary>
     private async Task<List<SensorGlucose>?> FetchSensorGlucoseAsync(
-        LibreLinkUpConnectorConfiguration config, DateTime? since = null)
+        LibreLinkUpConnectorConfiguration config, DateTime? since, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_selectedConnection?.PatientId))
         {
@@ -131,16 +132,17 @@ public class LibreConnectorService(
         await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         var result = await ExecuteWithRetryAsync(
-            async () => await FetchSensorGlucoseCoreAsync(url, since),
+            async () => await FetchSensorGlucoseCoreAsync(url, since, cancellationToken),
             _retryDelayStrategy,
             async () =>
             {
                 _tokenProvider.InvalidateToken();
                 _selectedConnection = null;
-                return await AuthenticateWithConfigAsync(config);
+                return await AuthenticateWithConfigAsync(config, cancellationToken);
             },
             maxRetries: config.MaxRetryAttempts,
-            operationName: "FetchSensorGlucoseData"
+            operationName: "FetchSensorGlucoseData",
+            cancellationToken: cancellationToken
         );
 
         return result;
@@ -166,7 +168,7 @@ public class LibreConnectorService(
         if (_tokenProvider.IsTokenExpired || _selectedConnection == null)
         {
             _logger.LogInformation("Token expired or missing connection, attempting to re-authenticate");
-            if (!await AuthenticateWithConfigAsync(config))
+            if (!await AuthenticateWithConfigAsync(config, cancellationToken))
             {
                 _logger.LogError("Failed to authenticate with LibreLinkUp");
                 return AuthenticationFailedResult();
@@ -175,7 +177,7 @@ public class LibreConnectorService(
 
         try
         {
-            var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From);
+            var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From, cancellationToken);
 
             if (sensorGlucose == null)
             {
@@ -191,23 +193,23 @@ public class LibreConnectorService(
             await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
                 sensorStarts, PublishDeviceEventDataAsync, config, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            _logger.LogError(ex, "Error during LibreLinkUp sync");
-            result.Success = false;
-            result.Errors.Add($"Sync error: {ex.Message}");
+            RecordSyncError(result, ex);
         }
 
         return result;
     }
 
-    private async Task LoadConnectionsAsync(LibreLinkUpConnectorConfiguration config)
+    private async Task LoadConnectionsAsync(
+        LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken)
     {
         try
         {
             var response = await GetWithHeadersAsync(
                 _serverResolver.BuildUrl(config, LibreLinkUpConstants.ApiPaths.Connections),
-                RequestHeaders);
+                RequestHeaders,
+                cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -217,20 +219,22 @@ public class LibreConnectorService(
 
             var connectionsResponse = await DeserializeResponseAsync<LibreConnectionsResponse>(response);
 
-            if (connectionsResponse?.Data == null || connectionsResponse.Data.Length == 0)
+            var connections = ConnectorFaults.NonNullRecords(
+                connectionsResponse?.Data, _logger, ConnectorSource, "LibreLinkUp connection");
+            if (connections.Count == 0)
             {
                 _logger.LogWarning("No LibreLinkUp connections found");
                 return;
             }
 
             if (!string.IsNullOrEmpty(config.PatientId))
-                _selectedConnection = connectionsResponse.Data.FirstOrDefault(c =>
+                _selectedConnection = connections.FirstOrDefault(c =>
                     c.PatientId == config.PatientId
                 );
 
             if (_selectedConnection == null)
             {
-                _selectedConnection = connectionsResponse.Data.First();
+                _selectedConnection = connections[0];
                 _logger.LogInformation(
                     "Selected LibreLinkUp connection: {PatientName} ({PatientId})",
                     _selectedConnection.FirstName + " " + _selectedConnection.LastName,
@@ -238,25 +242,18 @@ public class LibreConnectorService(
                 );
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex, cancellationToken))
         {
             _logger.LogError(ex, "Error loading LibreLinkUp connections");
         }
     }
 
-    private async Task<List<SensorGlucose>?> FetchSensorGlucoseCoreAsync(string url, DateTime? since)
+    private async Task<List<SensorGlucose>?> FetchSensorGlucoseCoreAsync(
+        string url, DateTime? since, CancellationToken cancellationToken)
     {
-        var response = await GetWithHeadersAsync(url, RequestHeaders);
+        var response = await GetWithHeadersAsync(url, RequestHeaders, cancellationToken);
 
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorContent = await response.Content.ReadAsStringAsync();
-            throw new HttpRequestException(
-                $"HTTP {(int)response.StatusCode} {response.StatusCode}: {errorContent}",
-                null,
-                response.StatusCode
-            );
-        }
+        await response.EnsureSuccessWithBodyAsync();
 
         var graphResponse = await DeserializeResponseAsync<LibreGraphResponse>(response);
         _currentSensor = graphResponse?.Data?.Connection?.Sensor;
@@ -267,7 +264,8 @@ public class LibreConnectorService(
             return [];
         }
 
-        var measurements = graphResponse.Data.GraphData.ToList();
+        var measurements = ConnectorFaults.NonNullRecords(
+            graphResponse.Data.GraphData, _logger, ConnectorSource, "LibreLinkUp measurement").ToList();
         var latestMeasurement = graphResponse.Data.Connection.GlucoseMeasurement;
 
         var latestTimestamp = latestMeasurement.FactoryTimestamp;

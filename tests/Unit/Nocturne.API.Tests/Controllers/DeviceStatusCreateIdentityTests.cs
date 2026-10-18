@@ -40,6 +40,7 @@ public class DeviceStatusCreateIdentityTests
     }
 
     private DeviceStatusProjectionService Projection() => new(
+        Mock.Of<IDeviceStatusGroupRepository>(),
         Mock.Of<IApsSnapshotRepository>(),
         Mock.Of<IPumpSnapshotRepository>(),
         _uploaderRepo.Object,

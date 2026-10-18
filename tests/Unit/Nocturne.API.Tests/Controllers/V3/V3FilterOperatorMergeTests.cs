@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -166,17 +167,18 @@ public class V3FilterOperatorMergeTests
         string queryString)
     {
         (DateTime? From, DateTime? To, string? Device) captured = default;
-        var apsRepo = new Mock<IApsSnapshotRepository>();
-        apsRepo
+        var groupRepo = new Mock<IDeviceStatusGroupRepository>();
+        groupRepo
             .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Callback<DateTime?, DateTime?, string?, string?, int, int, bool, CancellationToken>(
-                (from, to, device, _, _, _, _, _) => captured = (from, to, device))
-            .ReturnsAsync(Array.Empty<ApsSnapshot>());
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<DateTime?, DateTime?, string?, int, int, CancellationToken>(
+                (from, to, device, _, _, _) => captured = (from, to, device))
+            .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
 
         var projection = new DeviceStatusProjectionService(
-            apsRepo.Object,
+            groupRepo.Object,
+            Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IPumpSnapshotRepository>(),
             Mock.Of<IUploaderSnapshotRepository>(),
             Mock.Of<IStateSpanRepository>(),
@@ -197,6 +199,100 @@ public class V3FilterOperatorMergeTests
         await controller.GetDeviceStatus();
 
         return captured;
+    }
+
+    private const string AwkwardValue = "a&b+c=d";
+
+    private static string FilterQuery(string json) => QueryString.Create("filter", json).Value!;
+
+    private static async Task<(string? Type, string? Find)> CaptureEntriesRead(string queryString)
+    {
+        (string? Type, string? Find) captured = default;
+        var entries = new Mock<IEntryService>();
+        entries
+            .Setup(s => s.GetEntriesWithAdvancedFilterAsync(
+                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Callback<string?, int, int, string?, string?, bool, CancellationToken>(
+                (type, _, _, find, _, _, _) => captured = (type, find))
+            .ReturnsAsync(Array.Empty<Entry>());
+
+        var controller = new EntriesController(
+            Mock.Of<IDocumentProcessingService>(),
+            entries.Object,
+            Mock.Of<ICanonicalAlertEvaluator>(),
+            NullLogger<EntriesController>.Instance)
+        {
+            ControllerContext = Context(queryString),
+        };
+
+        await controller.GetEntries();
+
+        return captured;
+    }
+
+    private static void AssertSameJson(string? actual, string expected)
+    {
+        actual.Should().NotBeNull();
+        JsonNode.DeepEquals(JsonNode.Parse(actual!), JsonNode.Parse(expected)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Entries_JsonFilterWithNestedOperatorsAndAwkwardValues_ReachesTheServiceUnchanged()
+    {
+        var filter = $$$"""
+            {"type":"sgv","$or":[{"device":{"$regex":"{{{AwkwardValue}}}"}},{"direction":"{{{AwkwardValue}}}"}],"sgv":{"$gte":100,"$lte":180}}
+            """;
+
+        var (type, find) = await CaptureEntriesRead(FilterQuery(filter));
+
+        type.Should().Be("sgv");
+        AssertSameJson(find, filter);
+        var query = FindQuery.Parse(find);
+        query.GetEqualityValue("type").Should().Be("sgv");
+        query.Matches(new { type = "sgv", device = "x", direction = AwkwardValue, sgv = 120 }).Should().BeTrue();
+        query.Matches(new { type = "sgv", device = "x", direction = "a b c", sgv = 120 }).Should().BeFalse();
+        query.Matches(new { type = "sgv", device = "x", direction = AwkwardValue, sgv = 250 }).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Entries_JsonFilterWithoutType_RoutesNoType()
+    {
+        var (type, find) = await CaptureEntriesRead(FilterQuery("""{"sgv":{"$gte":100}}"""));
+
+        type.Should().BeNull();
+        AssertSameJson(find, """{"sgv":{"$gte":100}}""");
+    }
+
+    [Fact]
+    public async Task Treatments_JsonFilterWithNestedOperatorsAndAwkwardValues_ReachesTheServiceUnchanged()
+    {
+        var filter = $$$"""
+            {"$or":[{"notes":{"$regex":"{{{AwkwardValue}}}"}},{"enteredBy":"{{{AwkwardValue}}}"}],"carbs":{"$gte":10,"$lte":50},"eventType":{"$in":["Meal Bolus","Note"]}}
+            """;
+
+        var find = await CaptureTreatmentsFind(FilterQuery(filter));
+
+        AssertSameJson(find, filter);
+        var query = FindQuery.Parse(find);
+        query.Matches(new { notes = "n", enteredBy = AwkwardValue, carbs = 30, eventType = "Note" }).Should().BeTrue();
+        query.Matches(new { notes = "n", enteredBy = "a b c", carbs = 30, eventType = "Note" }).Should().BeFalse();
+        query.Matches(new { notes = "n", enteredBy = AwkwardValue, carbs = 30, eventType = "Temp Basal" }).Should().BeFalse();
+        query.Matches(new { notes = "n", enteredBy = AwkwardValue, carbs = 90, eventType = "Note" }).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeviceStatus_JsonFilter_NarrowsToTheDeviceAndWindow()
+    {
+        var filter = $$$"""
+            {"device":"loop://iPhone","created_at":{"$gte":{{{From}}},"$lte":{{{To}}}}}
+            """;
+
+        var (from, to, device) = await CaptureDeviceStatusRead(FilterQuery(filter));
+
+        from.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(From).UtcDateTime);
+        to.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(To).UtcDateTime);
+        device.Should().Be("loop://iPhone");
     }
 
     [Theory]

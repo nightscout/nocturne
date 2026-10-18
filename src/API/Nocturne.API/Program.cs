@@ -82,6 +82,7 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 
 builder.AddServiceDefaults();
+builder.Services.AddRequestPathRedactor<CredentialPathRedactor>();
 
 builder.Host.UseDefaultServiceProvider(options =>
 {
@@ -151,6 +152,7 @@ builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
 builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
 builder.Services.AddHostedService<GoogleHealthWorker>();
 builder.Services.AddDevOnlyGoogleHealthMock(builder.Environment, builder.Configuration);
+builder.Services.AddDevOnlyEversenseMock(builder.Environment, builder.Configuration);
 
 // Consumed by the dev-only admin controllers (Development) and the demo admin
 // controller's seed-extras endpoint (demo container, all environments).
@@ -543,6 +545,9 @@ app.MapGet(
 
 app.MapDefaultEndpoints();
 
+app.Services.GetRequiredService<CredentialPathRedactor>()
+    .Load(((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints));
+
 // Skip database migrations when running in NSwag/OpenAPI generation mode
 // NSwag launches the app to extract the OpenAPI schema, but we don't need DB access for that
 var isNSwagGeneration = IsRunningInNSwagContext();
@@ -577,7 +582,8 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
 
         // Background job records left Pending/Running by a previous process are orphans —
         // the detached tasks died with it. Mark them Interrupted so polls report the truth.
-        await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(migratorConnectionString, logger);
+        await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(
+            migratorConnectionString, Nocturne.API.Services.BackgroundJobLiveStates.ByTable, logger);
     }
 
     // Validate RLS, ownership, default privileges, and pool reset-on-close under the app role.
