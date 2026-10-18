@@ -1235,15 +1235,28 @@ public class DeduplicationService : IDeduplicationService
         return merged;
     }
 
-    private const int ReconcileLockClass = 0x4E44_5550;
+    private const int MergeLockClass = 0x4E44_5550;
+
+    /// <summary>
+    /// Takes the tenant's merge lock (<see cref="AdvisoryLockExtensions"/>), waiting for any holder.
+    /// A merge reads a group's rows and re-points them in separate statements, so of two merges of
+    /// one tenant at once the later can strand rows the earlier re-pointed in a group with no primary.
+    /// </summary>
+    private Task LockTenantMergesAsync(CancellationToken ct) =>
+        _context.LockForTransactionAsync(MergeLockClass, _context.TenantId, ct);
+
+    /// <summary>
+    /// <see cref="LockTenantMergesAsync"/> without the wait.
+    /// </summary>
+    /// <returns>Whether this transaction now holds the lock.</returns>
+    private Task<bool> TryLockTenantMergesAsync(CancellationToken ct) =>
+        _context.TryLockForTransactionAsync(MergeLockClass, _context.TenantId, ct);
 
     /// <inheritdoc />
     /// <remarks>
-    /// Each batch is one transaction that holds the tenant's reconcile lock
-    /// (<see cref="AdvisoryLockExtensions"/>) while it reads the cursor, merges and advances it.
-    /// Unlocked, two instances would merge the same groups at once, and as a merge reads a group's
-    /// rows and re-points them in separate statements, the later one can strand rows the earlier
-    /// re-pointed in a group with no primary. A batch that finds the lock held ends the pass.
+    /// Each batch is one transaction that holds the tenant's merge lock
+    /// (<see cref="LockTenantMergesAsync"/>) while it reads the cursor, merges and advances it. A
+    /// batch that finds the lock held ends the pass.
     /// </remarks>
     public async Task<ReconcileResult> ReconcileNewLinksAsync(
         int batchSize,
@@ -1274,14 +1287,14 @@ public class DeduplicationService : IDeduplicationService
     /// </summary>
     /// <returns>
     /// The groups merged and whether the batch drained everything up to <paramref name="horizon"/>,
-    /// or null when another transaction holds the tenant's reconcile lock.
+    /// or null when another transaction holds the tenant's merge lock.
     /// </returns>
     private async Task<(int Merged, bool Drained)?> ReconcileNextBatchAsync(
         int batchSize,
         DateTime horizon,
         CancellationToken ct)
     {
-        if (!await _context.TryLockForTransactionAsync(ReconcileLockClass, _context.TenantId, ct))
+        if (!await TryLockTenantMergesAsync(ct))
             return null;
 
         var cursor = await GetCursorAsync(ct);
@@ -2054,9 +2067,15 @@ public class DeduplicationService : IDeduplicationService
         // Only wide-eligible types can hold such a split — the tight window never stopped working
         // — and this pass loads every primary of the type, which for a dense stream like
         // SensorGlucose would be hundreds of thousands of rows for nothing.
+        // Unlike a reconcile batch it waits for the tenant's merge lock: a skipped pass would leave
+        // the splits unhealed until the job is run again.
         if (WideMatchableTypes.Contains(recordType))
         {
-            totalDuplicates += await MergeDuplicateGroupsAsync(recordType, null, ct);
+            totalDuplicates += await _context.ExecuteInTransactionAsync(async token =>
+            {
+                await LockTenantMergesAsync(token);
+                return await MergeDuplicateGroupsAsync(recordType, null, token);
+            }, ct: ct);
         }
 
         return (totalProcessed, totalGroups, totalLinked, totalDuplicates);
