@@ -317,8 +317,7 @@ public class OidcTokenHandler : IAuthHandler
         var permissions = await subjectService.GetSubjectPermissionsAsync(subject.Id);
         var roles = await subjectService.GetSubjectRolesAsync(subject.Id);
 
-        // Update last login
-        _ = subjectService.UpdateLastLoginAsync(subject.Id);
+        _ = RecordLastLoginAsync(_scopeFactory, _logger, subject.Id);
 
         // Extract expiration from token
         var expClaim = claims.FindFirst("exp")?.Value;
@@ -354,5 +353,27 @@ public class OidcTokenHandler : IAuthHandler
         public string? Error { get; set; }
         public ClaimsPrincipal? Claims { get; set; }
         public JwtSecurityToken? Token { get; set; }
+    }
+
+    /// <summary>
+    /// Stamps <paramref name="subjectId"/>'s last login, started fire-and-forget once the token has
+    /// authenticated. It runs on a scope of its own: the request's handler scope is disposed when
+    /// <see cref="AuthenticateAsync"/> returns, which can be before this write runs. A failure is
+    /// logged and never reaches the request.
+    /// </summary>
+    internal static async Task RecordLastLoginAsync(
+        IServiceScopeFactory scopeFactory,
+        ILogger logger,
+        Guid subjectId)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<ISubjectService>().UpdateLastLoginAsync(subjectId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to update last login for subject {SubjectId}", subjectId);
+        }
     }
 }
