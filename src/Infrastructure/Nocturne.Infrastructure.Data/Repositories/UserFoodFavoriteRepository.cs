@@ -80,7 +80,10 @@ public class UserFoodFavoriteRepository : IUserFoodFavoriteRepository
     )
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var exists = await IsFavoriteAsync(userId, foodId, cancellationToken);
+        var exists = await db
+            .Set<UserFoodFavoriteEntity>()
+            .AsNoTracking()
+            .AnyAsync(f => f.UserId == userId && f.FoodId == foodId, cancellationToken);
         if (exists)
         {
             return null;

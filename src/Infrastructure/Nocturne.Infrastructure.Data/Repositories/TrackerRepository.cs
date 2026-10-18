@@ -422,12 +422,14 @@ public class TrackerRepository : ITrackerRepository
     )
     {
         await using var lease = await OpenAsync(cancellationToken);
-        var db = lease.Context;
-        return await db
-            .TrackerInstances.AsNoTracking()
+        return await InstanceByIdAsync(lease.Context, id, cancellationToken);
+    }
+
+    private static Task<TrackerInstanceEntity?> InstanceByIdAsync(
+        NocturneDbContext db, Guid id, CancellationToken cancellationToken) =>
+        db.TrackerInstances.AsNoTracking()
             .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
             .FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
-    }
 
     /// <summary>
     /// Start a new tracker instance
@@ -496,7 +498,7 @@ public class TrackerRepository : ITrackerRepository
                 cancellationToken
             );
 
-        return updated == 0 ? null : await GetInstanceByIdAsync(instanceId, cancellationToken);
+        return updated == 0 ? null : await InstanceByIdAsync(db, instanceId, cancellationToken);
     }
 
     /// <inheritdoc />
