@@ -29,6 +29,7 @@ msgstr "Error ID: {0}"
 #: src/lib/components/connectors/DataSourceSelectionView.svelte
 #: src/lib/components/connectors/DataSourceSelectionView.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(unauthenticated)/auth/bot/authorize/done/+page.svelte
 msgid "Connected"
 msgstr "Connected"
@@ -48,15 +49,11 @@ msgstr "Connecting..."
 msgid "Establishing connection"
 msgstr "Establishing connection"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Reconnecting..."
-msgstr "Reconnecting..."
+#~ msgid "Reconnecting..."
+#~ msgstr "Reconnecting..."
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Attempting to reconnect"
-msgstr "Attempting to reconnect"
+#~ msgid "Attempting to reconnect"
+#~ msgstr "Attempting to reconnect"
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -68,12 +65,10 @@ msgstr "Disconnected"
 msgid "Using cached data"
 msgstr "Using cached data"
 
-#: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/lib/components/settings/DataSourceRow.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
@@ -84,8 +79,6 @@ msgstr "Using cached data"
 msgid "Error"
 msgstr "Error"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Connection failed"
 msgstr "Connection failed"
@@ -344,13 +337,11 @@ msgstr "Failed to load historical data"
 #~ msgid "Connected to real-time data"
 #~ msgstr "Connected to real-time data"
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Real-time data disconnected"
-msgstr "Real-time data disconnected"
+#~ msgid "Real-time data disconnected"
+#~ msgstr "Real-time data disconnected"
 
-#: src/lib/stores/realtime-store.svelte.ts
-msgid "Failed to connect to real-time data"
-msgstr "Failed to connect to real-time data"
+#~ msgid "Failed to connect to real-time data"
+#~ msgstr "Failed to connect to real-time data"
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
@@ -1576,6 +1567,7 @@ msgstr "Search types..."
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Status"
 msgstr "Status"
 
@@ -2105,15 +2097,14 @@ msgstr "Hours"
 msgid "{0} hour{1}"
 msgstr "{0} hour{1}"
 
-#: src/lib/components/clock-builder/ElementInspector.svelte
-msgid "Format"
-msgstr "Format"
+#~ msgid "Format"
+#~ msgstr "Format"
 
-#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 msgid "12-hour"
 msgstr "12-hour"
 
-#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "24-hour"
 msgstr "24-hour"
@@ -2226,6 +2217,7 @@ msgid "System"
 msgstr "System"
 
 #: src/lib/components/clock-builder/TextStyleControls.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Weight"
 msgstr "Weight"
 
@@ -2561,6 +2553,7 @@ msgstr "Connector Offline"
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Configured"
 msgstr "Configured"
 
@@ -3204,6 +3197,8 @@ msgid "<0/> Has Data"
 msgstr "<0/> Has Data"
 
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Not Configured"
 msgstr "Not Configured"
 
@@ -4264,6 +4259,7 @@ msgstr "Boost"
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Sleep"
 msgstr "Sleep"
 
@@ -4588,6 +4584,7 @@ msgstr "Guest access — read only"
 msgid "Notification"
 msgstr "Notification"
 
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/routes/(unauthenticated)/setup/account/+page.svelte
 msgid "Loading..."
 msgstr "Loading..."
@@ -6135,10 +6132,8 @@ msgstr "Total:"
 msgid "Click to view"
 msgstr "Click to view"
 
-#. 0: reliability.daysOfData ?? 0; 1: reliability.recommendedMinimumDays ?? 14
-#: src/lib/components/reports/ReliabilityBadge.svelte
-msgid "Based on {0} days of data ({1} recommended)"
-msgstr "Based on {0} days of data ({1} recommended)"
+#~ msgid "Based on {0} days of data ({1} recommended)"
+#~ msgstr "Based on {0} days of data ({1} recommended)"
 
 #~ msgid "Period Averages"
 #~ msgstr "Period Averages"
@@ -6367,6 +6362,7 @@ msgstr "Median-75th"
 #~ msgstr "Avg Before"
 
 #: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -7238,6 +7234,7 @@ msgstr "Basal IOB"
 #: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Activity"
 msgstr "Activity"
 
@@ -9026,12 +9023,8 @@ msgstr "Something went wrong"
 #~ msgid "{0} readings analyzed"
 #~ msgstr "{0} readings analyzed"
 
-#: src/routes/(authenticated)/reports/agp/+page.svelte
-#: src/routes/(authenticated)/reports/comparison/+page.svelte
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-#: src/routes/(authenticated)/reports/idp/+page.svelte
-msgid "Est. A1C"
-msgstr "Est. A1C"
+#~ msgid "Est. A1C"
+#~ msgstr "Est. A1C"
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 msgid "Variability"
@@ -9873,6 +9866,7 @@ msgstr "Connect"
 msgid "Import your history"
 msgstr "Import your history"
 
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(unauthenticated)/setup/+page@.svelte
 msgid "Import"
 msgstr "Import"
@@ -10082,6 +10076,7 @@ msgid "No data today"
 msgstr "No data today"
 
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Connection"
 msgstr "Connection"
 
@@ -10645,6 +10640,7 @@ msgid "Mmol"
 msgstr "Mmol"
 
 #: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "mmol/L"
@@ -11697,9 +11693,8 @@ msgstr "<0/> Time in Range"
 msgid "Time Breakdown (per day avg)"
 msgstr "Time Breakdown (per day avg)"
 
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "<0/> Estimated A1C"
-msgstr "<0/> Estimated A1C"
+#~ msgid "<0/> Estimated A1C"
+#~ msgstr "<0/> Estimated A1C"
 
 #~ msgid "Great! Below the 7% target"
 #~ msgstr "Great! Below the 7% target"
@@ -11710,9 +11705,8 @@ msgstr "<0/> Estimated A1C"
 #~ msgid "Room for improvement"
 #~ msgstr "Room for improvement"
 
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "<0>What is eA1C?</0> This estimates what your lab A1C would be based on your average glucose."
-msgstr "<0>What is eA1C?</0> This estimates what your lab A1C would be based on your average glucose."
+#~ msgid "<0>What is eA1C?</0> This estimates what your lab A1C would be based on your average glucose."
+#~ msgstr "<0>What is eA1C?</0> This estimates what your lab A1C would be based on your average glucose."
 
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "Clinical details"
@@ -11876,9 +11870,8 @@ msgstr "Hourly Distribution"
 msgid "Percentage of time in each glucose range by hour of day"
 msgstr "Percentage of time in each glucose range by hour of day"
 
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
-msgid "A1c Estimation"
-msgstr "A1c Estimation"
+#~ msgid "A1c Estimation"
+#~ msgstr "A1c Estimation"
 
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "Based on average glucose"
@@ -11890,12 +11883,8 @@ msgstr "Based on average glucose"
 #~ msgid "A1c (IFCC)"
 #~ msgstr "A1c (IFCC)"
 
-#. 0: Math.round(toIfccMmolMol(percent))
-#. 0: Math.round(value)
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "{0} mmol/mol"
-msgstr "{0} mmol/mol"
+#~ msgid "{0} mmol/mol"
+#~ msgstr "{0} mmol/mol"
 
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "Glycemic Variability"
@@ -12419,6 +12408,7 @@ msgstr "<0/> Step Count Actogram"
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 #: src/routes/(authenticated)/reports/steps/+page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Steps"
 msgstr "Steps"
 
@@ -13016,6 +13006,7 @@ msgstr "<0/> Units & Formats"
 msgid "Blood glucose units"
 msgstr "Blood glucose units"
 
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Time format"
 msgstr "Time format"
@@ -14631,6 +14622,7 @@ msgid "Data is {0} old"
 msgstr "Data is {0} old"
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Inferred"
 msgstr "Inferred"
 
@@ -15955,6 +15947,14 @@ msgid "Hyper Events"
 msgstr "Hyper Events"
 
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Hypo Duration"
+msgstr "Hypo Duration"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Hypo Events"
+msgstr "Hypo Events"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
 msgid "Preset"
 msgstr "Preset"
 
@@ -16897,7 +16897,7 @@ msgid "{0} not linked — connect it in Connectors & Apps to enable delivery."
 msgstr "{0} not linked — connect it in Connectors & Apps to enable delivery."
 
 #: src/lib/components/alerts/ChannelsSection.svelte
-#: src/lib/components/dashboard/WidgetGrid.svelte
+#: src/lib/components/dashboard/widgets/WidgetPlaceholder.svelte
 msgid "Loading"
 msgstr "Loading"
 
@@ -17665,9 +17665,8 @@ msgstr "Food database entries and nutritional information"
 msgid "Statistics"
 msgstr "Statistics"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Time-in-range, A1c estimates, and averages"
-msgstr "Time-in-range, A1c estimates, and averages"
+#~ msgid "Time-in-range, A1c estimates, and averages"
+#~ msgstr "Time-in-range, A1c estimates, and averages"
 
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
@@ -18243,7 +18242,11 @@ msgstr "{0} pp"
 #. 0: e.event.timeToNadirHours.toFixed(1)
 #. 0: v.toFixed(1)
 #. 0: signed(d)
+#. 0: v.toFixed(1)
+#. 0: signed(d)
 #: src/lib/components/reports/sensor-integrity/HypoAfterNoiseLog.svelte
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
 msgid "{0} h"
@@ -18838,6 +18841,7 @@ msgstr "Nocturne is free and open source software, created by people with diabet
 msgid "Weight History - Settings - Nocturne"
 msgstr "Weight History - Settings - Nocturne"
 
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(authenticated)/settings/weight/+page.svelte
 msgid "Weight history"
 msgstr "Weight history"
@@ -19237,10 +19241,8 @@ msgstr "<0/> Loading connectors..."
 msgid "This tenant has no configured connectors."
 msgstr "This tenant has no configured connectors."
 
-#. 0: jobStatus.completedConnectors; 1: jobStatus.totalConnectors
-#: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
-msgid "{0} / {1} connectors"
-msgstr "{0} / {1} connectors"
+#~ msgid "{0} / {1} connectors"
+#~ msgstr "{0} / {1} connectors"
 
 #: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
 msgid "<0/> Failed"
@@ -19948,8 +19950,9 @@ msgstr "Interactive API documentation powered by Scalar. Explore endpoints, test
 #~ msgid "Authentication"
 #~ msgstr "Authentication"
 
-#~ msgid "Sign in with Google"
-#~ msgstr "Sign in with Google"
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sign in with Google"
+msgstr "Sign in with Google"
 
 #~ msgid "Sign in with GitHub"
 #~ msgstr "Sign in with GitHub"
@@ -20658,9 +20661,8 @@ msgstr "In Portainer, navigate to your <0>nocturne</0> stack. All containers sho
 #~ msgid "Once running, the bundled Caddy proxy obtains Let's Encrypt TLS certificates automatically and serves the stack at <0/> on ports 80 and 443 — no certificate files to manage. Each tenant subdomain gets its own certificate on demand the first time it is visited."
 #~ msgstr "Once running, the bundled Caddy proxy obtains Let's Encrypt TLS certificates automatically and serves the stack at <0/> on ports 80 and 443 — no certificate files to manage. Each tenant subdomain gets its own certificate on demand the first time it is visited."
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Watchtower is included and checks for image updates daily. To update manually in Portainer:"
-msgstr "Watchtower is included and checks for image updates daily. To update manually in Portainer:"
+#~ msgid "Watchtower is included and checks for image updates daily. To update manually in Portainer:"
+#~ msgstr "Watchtower is included and checks for image updates daily. To update manually in Portainer:"
 
 #~ msgid "Data source connectors (Dexcom, LibreLinkUp, Glooko, etc.) are configured through the Nocturne UI after deployment — no compose changes required."
 #~ msgstr "Data source connectors (Dexcom, LibreLinkUp, Glooko, etc.) are configured through the Nocturne UI after deployment — no compose changes required."
@@ -20717,9 +20719,8 @@ msgstr "Already run your own reverse proxy (nginx, Traefik, Caddy)? Use the brin
 msgid "Step 4: Verify the installation"
 msgstr "Step 4: Verify the installation"
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Watchtower checks for image updates daily. To update manually:"
-msgstr "Watchtower checks for image updates daily. To update manually:"
+#~ msgid "Watchtower checks for image updates daily. To update manually:"
+#~ msgstr "Watchtower checks for image updates daily. To update manually:"
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Check the logs for error details:"
@@ -21416,9 +21417,8 @@ msgstr "Point your CGM app or loop system at your new Nocturne URL. See <0>Conne
 msgid "Invite the people who follow you, or create a <0>share link</0>."
 msgstr "Invite the people who follow you, or create a <0>share link</0>."
 
-#: ../portal/src/lib/components/docs/NextSteps.svelte
-msgid "Watchtower is included and checks for image updates daily; no action required."
-msgstr "Watchtower is included and checks for image updates daily; no action required."
+#~ msgid "Watchtower is included and checks for image updates daily; no action required."
+#~ msgstr "Watchtower is included and checks for image updates daily; no action required."
 
 #~ msgid "Four things Nocturne is <0>good at.</0>"
 #~ msgstr "Four things Nocturne is <0>good at.</0>"
@@ -21623,10 +21623,8 @@ msgstr "Failed to load preview"
 msgid "Copy link"
 msgstr "Copy link"
 
-#: src/lib/components/clock-builder/ElementInspector.svelte
-#: src/lib/components/clock-builder/ElementInspector.svelte
-msgid "Match my preference"
-msgstr "Match my preference"
+#~ msgid "Match my preference"
+#~ msgstr "Match my preference"
 
 #~ msgid "Couldn't copy the code to the clipboard. Copy it manually instead."
 #~ msgstr "Couldn't copy the code to the clipboard. Copy it manually instead."
@@ -22015,9 +22013,8 @@ msgstr "Target {0}"
 #~ msgid "Time in Range, glucose variability and estimated A1C over the last {0} days, each shown with the consensus target it is read against."
 #~ msgstr "Time in Range, glucose variability and estimated A1C over the last {0} days, each shown with the consensus target it is read against."
 
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "Target: below 7%. Your care team sets your individual target."
-msgstr "Target: below 7%. Your care team sets your individual target."
+#~ msgid "Target: below 7%. Your care team sets your individual target."
+#~ msgstr "Target: below 7%. Your care team sets your individual target."
 
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "No estimate for this window"
@@ -22052,11 +22049,9 @@ msgstr "Target: at least 70% CGM active time over 14 days; the statistics on thi
 msgid "No readings in this date range"
 msgstr "No readings in this date range"
 
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
-msgid "Distribution, A1c estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
-msgstr "Distribution, A1c estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
+#~ msgid "Distribution, A1c estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
+#~ msgstr "Distribution, A1c estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
 
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
@@ -22918,15 +22913,11 @@ msgstr "Bravo target"
 msgid "Charlie target"
 msgstr "Charlie target"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Starting"
-msgstr "Starting"
+#~ msgid "Starting"
+#~ msgstr "Starting"
 
-#: src/lib/components/WebSocketStatus.svelte
-#: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-msgid "Waiting to connect"
-msgstr "Waiting to connect"
+#~ msgid "Waiting to connect"
+#~ msgstr "Waiting to connect"
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -23081,33 +23072,26 @@ msgstr "Failed to save lab result"
 msgid "Failed to delete lab result"
 msgstr "Failed to delete lab result"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0/> Estimated HbA1c (eHbA1c)"
-msgstr "<0/> Estimated HbA1c (eHbA1c)"
+#~ msgid "<0/> Estimated HbA1c (eHbA1c)"
+#~ msgstr "<0/> Estimated HbA1c (eHbA1c)"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average glucose in mg/dL + 46.7) / 28.7."
-msgstr "eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average glucose in mg/dL + 46.7) / 28.7."
+#~ msgid "eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average glucose in mg/dL + 46.7) / 28.7."
+#~ msgstr "eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average glucose in mg/dL + 46.7) / 28.7."
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Show as percent"
-msgstr "Show as percent"
+#~ msgid "Show as percent"
+#~ msgstr "Show as percent"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Show as mmol/mol"
-msgstr "Show as mmol/mol"
+#~ msgid "Show as mmol/mol"
+#~ msgstr "Show as mmol/mol"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "mmol/mol"
-msgstr "mmol/mol"
+#~ msgid "mmol/mol"
+#~ msgstr "mmol/mol"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0/> Loading eHbA1c timeline..."
-msgstr "<0/> Loading eHbA1c timeline..."
+#~ msgid "<0/> Loading eHbA1c timeline..."
+#~ msgstr "<0/> Loading eHbA1c timeline..."
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Failed to load eHbA1c data. Please try again later."
-msgstr "Failed to load eHbA1c data. Please try again later."
+#~ msgid "Failed to load eHbA1c data. Please try again later."
+#~ msgstr "Failed to load eHbA1c data. Please try again later."
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Not enough glucose history yet — each point needs at least a month of readings within the trailing 90 days."
@@ -23141,9 +23125,8 @@ msgstr "Lab result (not included in the calculation)"
 msgid "Lab results"
 msgstr "Lab results"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not included in the eHbA1c calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
-msgstr "Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not included in the eHbA1c calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
+#~ msgid "Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not included in the eHbA1c calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
+#~ msgstr "Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not included in the eHbA1c calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "No lab results added yet."
@@ -23157,7 +23140,7 @@ msgstr "Delete lab result"
 msgid "Date of blood draw"
 msgstr "Date of blood draw"
 
-#. 0: a1cUnit === "percent" ? "%" \\: "mmol/mol"
+#. 0: a1cUnits.current === "percent" ? "%" \\: "mmol/mol"
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Result ({0})"
 msgstr "Result ({0})"
@@ -23166,7 +23149,7 @@ msgstr "Result ({0})"
 msgid "<0/> Add lab result"
 msgstr "<0/> Add lab result"
 
-#. 0: formatA1c(point.data.valuePercent); 1: formatLongDate(point.data.date); 2: point.data.note ? ` — ${point.data.note}` \\: ""
+#. 0: formatA1c(point.data.a1cDisplay); 1: formatLongDate(point.data.date); 2: point.data.note ? ` — ${point.data.note}` \\: ""
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lab result: {0} ({1}){2}"
 msgstr "Lab result: {0} ({1}){2}"
@@ -23175,7 +23158,7 @@ msgstr "Lab result: {0} ({1}){2}"
 msgid "Delete this lab result?"
 msgstr "Delete this lab result?"
 
-#. 0: formatA1c(pendingDeleteLabResult.valuePercent ?? 0); 1: formatLongDate(toDate(pendingDeleteLabResult.measuredAt))
+#. 0: formatA1c(pendingDeleteLabResult.a1cDisplay); 1: formatLongDate(toDate(pendingDeleteLabResult.measuredAt))
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Delete the {0} lab result from {1}."
 msgstr "Delete the {0} lab result from {1}."
@@ -23448,29 +23431,24 @@ msgstr "Default scale"
 msgid "BASE_DOMAIN=nocturne.example.com bash <(curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/oracle-cloud-install.sh)"
 msgstr "BASE_DOMAIN=nocturne.example.com bash <(curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/oracle-cloud-install.sh)"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "An <0>Oracle Cloud account</0>. Sign-up asks for a payment card to verify your identity. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage; this guide uses half the processor and memory and a quarter of the storage, so nothing is charged. Oracle reduced that allowance in June 2026, so older guides quoting 4 cores and 24 GB are out of date."
-msgstr "An <0>Oracle Cloud account</0>. Sign-up asks for a payment card to verify your identity. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage; this guide uses half the processor and memory and a quarter of the storage, so nothing is charged. Oracle reduced that allowance in June 2026, so older guides quoting 4 cores and 24 GB are out of date."
+#~ msgid "An <0>Oracle Cloud account</0>. Sign-up asks for a payment card to verify your identity. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage; this guide uses half the processor and memory and a quarter of the storage, so nothing is charged. Oracle reduced that allowance in June 2026, so older guides quoting 4 cores and 24 GB are out of date."
+#~ msgstr "An <0>Oracle Cloud account</0>. Sign-up asks for a payment card to verify your identity. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage; this guide uses half the processor and memory and a quarter of the storage, so nothing is charged. Oracle reduced that allowance in June 2026, so older guides quoting 4 cores and 24 GB are out of date."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from deSEC works well; see below."
-msgstr "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from deSEC works well; see below."
+#~ msgid "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from deSEC works well; see below."
+#~ msgstr "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from deSEC works well; see below."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "A decision about how to keep the server from being reclaimed as idle. It changes the command you run, so make it before you start."
 msgstr "A decision about how to keep the server from being reclaimed as idle. It changes the command you run, so make it before you start."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Create an account at desec.io and confirm your email address."
-msgstr "Create an account at desec.io and confirm your email address."
+#~ msgid "Create an account at desec.io and confirm your email address."
+#~ msgstr "Create an account at desec.io and confirm your email address."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Under <0>Domains</0>, add a dynDNS domain and pick a name. Your domain is then <1/>."
-msgstr "Under <0>Domains</0>, add a dynDNS domain and pick a name. Your domain is then <1/>."
+#~ msgid "Under <0>Domains</0>, add a dynDNS domain and pick a name. Your domain is then <1/>."
+#~ msgstr "Under <0>Domains</0>, add a dynDNS domain and pick a name. Your domain is then <1/>."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Under <0>Token management</0>, create a token and copy the long secret it shows you once — not the name you gave the token. You can delete the token afterwards."
-msgstr "Under <0>Token management</0>, create a token and copy the long secret it shows you once — not the name you gave the token. You can delete the token afterwards."
+#~ msgid "Under <0>Token management</0>, create a token and copy the long secret it shows you once — not the name you gave the token. You can delete the token afterwards."
+#~ msgstr "Under <0>Token management</0>, create a token and copy the long secret it shows you once — not the name you gave the token. You can delete the token afterwards."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Which one should you pick?"
@@ -23484,25 +23462,21 @@ msgstr "Option 1: upgrade the account to Pay As You Go (recommended)"
 msgid "In the Oracle console, open <0>Billing & Cost Management</0>, then <1>Upgrade and Manage Payment</1>, and choose Pay As You Go. Your card is already on file from sign-up. Always Free resources stay free after the upgrade, and Oracle's own terms exempt Pay As You Go accounts from idle reclamation. Everything this installer creates is within the free allowance, so the upgrade does not by itself cost anything."
 msgstr "In the Oracle console, open <0>Billing & Cost Management</0>, then <1>Upgrade and Manage Payment</1>, and choose Pay As You Go. Your card is already on file from sign-up. Always Free resources stay free after the upgrade, and Oracle's own terms exempt Pay As You Go accounts from idle reclamation. Everything this installer creates is within the free allowance, so the upgrade does not by itself cost anything."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "What changes is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends: it refuses a server size above the free allowance, and it writes an Oracle quota policy that stops the account creating anything outside the Always Free compute shapes at all, whether or not you have upgraded. That policy is a real limit rather than a warning: Oracle refuses the request instead of billing you for it. On top of that it sets a spending alert that emails you the moment the account is billed one unit of your currency. Nothing needs adding to the command in Step 2."
-msgstr "What changes is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends: it refuses a server size above the free allowance, and it writes an Oracle quota policy that stops the account creating anything outside the Always Free compute shapes at all, whether or not you have upgraded. That policy is a real limit rather than a warning: Oracle refuses the request instead of billing you for it. On top of that it sets a spending alert that emails you the moment the account is billed one unit of your currency. Nothing needs adding to the command in Step 2."
+#~ msgid "What changes is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends: it refuses a server size above the free allowance, and it writes an Oracle quota policy that stops the account creating anything outside the Always Free compute shapes at all, whether or not you have upgraded. That policy is a real limit rather than a warning: Oracle refuses the request instead of billing you for it. On top of that it sets a spending alert that emails you the moment the account is billed one unit of your currency. Nothing needs adding to the command in Step 2."
+#~ msgstr "What changes is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends: it refuses a server size above the free allowance, and it writes an Oracle quota policy that stops the account creating anything outside the Always Free compute shapes at all, whether or not you have upgraded. That policy is a real limit rather than a warning: Oracle refuses the request instead of billing you for it. On top of that it sets a spending alert that emails you the moment the account is billed one unit of your currency. Nothing needs adding to the command in Step 2."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Option 2: stay on the trial and donate spare time to Folding@home"
-msgstr "Option 2: stay on the trial and donate spare time to Folding@home"
+#~ msgid "Option 2: stay on the trial and donate spare time to Folding@home"
+#~ msgstr "Option 2: stay on the trial and donate spare time to Folding@home"
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "<0>Folding@home</0> is a research project that simulates how proteins fold, to help understand diseases such as Alzheimer's, cancer and, yes, diabetes. With this option the installer adds its client to the server and runs it from 02:00 to 04:00 UTC each night. Two hours a day of real computation is well above Oracle's idle threshold, so the server is never a candidate for reclamation, and the time goes to something useful."
 msgstr "<0>Folding@home</0> is a research project that simulates how proteins fold, to help understand diseases such as Alzheimer's, cancer and, yes, diabetes. With this option the installer adds its client to the server and runs it from 02:00 to 04:00 UTC each night. Two hours a day of real computation is well above Oracle's idle threshold, so the server is never a candidate for reclamation, and the time goes to something useful."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "The client runs at the lowest priority the system has, so Nocturne and its alarms always come first. To choose this option, add <0/> to the command in Step 2:"
-msgstr "The client runs at the lowest priority the system has, so Nocturne and its alarms always come first. To choose this option, add <0/> to the command in Step 2:"
+#~ msgid "The client runs at the lowest priority the system has, so Nocturne and its alarms always come first. To choose this option, add <0/> to the command in Step 2:"
+#~ msgstr "The client runs at the lowest priority the system has, so Nocturne and its alarms always come first. To choose this option, add <0/> to the command in Step 2:"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Work is contributed anonymously by default. To count it towards a team, add <0/> as well. Trial accounts cannot be charged, but the installer still creates the spending alert in case the account is upgraded later."
-msgstr "Work is contributed anonymously by default. To count it towards a team, add <0/> as well. Trial accounts cannot be charged, but the installer still creates the spending alert in case the account is upgraded later."
+#~ msgid "Work is contributed anonymously by default. To count it towards a team, add <0/> as well. Trial accounts cannot be charged, but the installer still creates the spending alert in case the account is upgraded later."
+#~ msgstr "Work is contributed anonymously by default. To count it towards a team, add <0/> as well. Trial accounts cannot be charged, but the installer still creates the spending alert in case the account is upgraded later."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Keep the run alive if Cloud Shell disconnects"
@@ -23564,17 +23538,15 @@ msgstr "If anything goes wrong, run it again"
 msgid "Running the installer a second time is the fix for almost any failure. It looks every resource up before creating it, and checks the server itself on every run, so a run that was interrupted or stopped part-way carries on from where it got to rather than starting over. It remembers your domain, so the command on its own is enough."
 msgstr "Running the installer a second time is the fix for almost any failure. It looks every resource up before creating it, and checks the server itself on every run, so a run that was interrupted or stopped part-way carries on from where it got to rather than starting over. It remembers your domain, so the command on its own is enough."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "The script ends by printing your <0>instance key</0>. It is the master credential for this installation, used for administrative API access and account recovery. Save it in a password manager. Running the script again shows it again."
-msgstr "The script ends by printing your <0>instance key</0>. It is the master credential for this installation, used for administrative API access and account recovery. Save it in a password manager. Running the script again shows it again."
+#~ msgid "The script ends by printing your <0>instance key</0>. It is the master credential for this installation, used for administrative API access and account recovery. Save it in a password manager. Running the script again shows it again."
+#~ msgstr "The script ends by printing your <0>instance key</0>. It is the master credential for this installation, used for administrative API access and account recovery. Save it in a password manager. Running the script again shows it again."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Download the SSH key the script created. It lives only in your Cloud Shell home, which Oracle deletes after six months without a Cloud Shell session. Use the Cloud Shell menu, <0>Download</0>, and enter <1/>. Nocturne keeps running without it, but it is your only way onto the server."
 msgstr "Download the SSH key the script created. It lives only in your Cloud Shell home, which Oracle deletes after six months without a Cloud Shell session. Use the Cloud Shell menu, <0>Download</0>, and enter <1/>. Nocturne keeps running without it, but it is your only way onto the server."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Updates are automatic. Watchtower checks for new Nocturne images daily."
-msgstr "Updates are automatic. Watchtower checks for new Nocturne images daily."
+#~ msgid "Updates are automatic. Watchtower checks for new Nocturne images daily."
+#~ msgstr "Updates are automatic. Watchtower checks for new Nocturne images daily."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Nocturne starts again by itself when the server reboots."
@@ -23584,9 +23556,8 @@ msgstr "Nocturne starts again by itself when the server reboots."
 msgid "To get a shell on the server, run the SSH command the script printed. Everything lives in <0/>."
 msgstr "To get a shell on the server, run the SSH command the script printed. Everything lives in <0/>."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups, so take them by hand and delete old ones rather than attaching a scheduled policy."
-msgstr "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups, so take them by hand and delete old ones rather than attaching a scheduled policy."
+#~ msgid "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups, so take them by hand and delete old ones rather than attaching a scheduled policy."
+#~ msgstr "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups, so take them by hand and delete old ones rather than attaching a scheduled policy."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "To remove everything, terminate the instance in the Oracle console, then delete the reserved public IP and the <0>nocturne</0> virtual cloud network."
@@ -23600,29 +23571,24 @@ msgstr "Run Nocturne on Oracle Cloud's Always Free tier. One command in the brow
 msgid "What you need"
 msgstr "What you need"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "No domain yet? Get one from deSEC"
-msgstr "No domain yet? Get one from deSEC"
+#~ msgid "No domain yet? Get one from deSEC"
+#~ msgstr "No domain yet? Get one from deSEC"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "<0>deSEC</0> is a non-profit DNS provider that gives out free names under <1>dedyn.io</1>. With one of those, the installer creates the DNS records for you and there is nothing to configure by hand."
-msgstr "<0>deSEC</0> is a non-profit DNS provider that gives out free names under <1>dedyn.io</1>. With one of those, the installer creates the DNS records for you and there is nothing to configure by hand."
+#~ msgid "<0>deSEC</0> is a non-profit DNS provider that gives out free names under <1>dedyn.io</1>. With one of those, the installer creates the DNS records for you and there is nothing to configure by hand."
+#~ msgstr "<0>deSEC</0> is a non-profit DNS provider that gives out free names under <1>dedyn.io</1>. With one of those, the installer creates the DNS records for you and there is nothing to configure by hand."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "The same works for a domain you already own if its DNS is hosted at deSEC. If it is hosted elsewhere, you add two records by hand in Step 3."
-msgstr "The same works for a domain you already own if its DNS is hosted at deSEC. If it is hosted elsewhere, you add two records by hand in Step 3."
+#~ msgid "The same works for a domain you already own if its DNS is hosted at deSEC. If it is hosted elsewhere, you add two records by hand in Step 3."
+#~ msgstr "The same works for a domain you already own if its DNS is hosted at deSEC. If it is hosted elsewhere, you add two records by hand in Step 3."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Before you start: keeping it free"
 msgstr "Before you start: keeping it free"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Oracle switches off Always Free servers on trial accounts that it judges idle for seven days in a row. Its measure is whether the processor, network and memory each stayed below 20 percent of capacity for nearly all of that week. A Nocturne server for one person does very little work by that yardstick, so left alone it is likely to be stopped after its first quiet week. There are two ways to prevent that, and one of them changes the command in Step 2, so pick now rather than later."
-msgstr "Oracle switches off Always Free servers on trial accounts that it judges idle for seven days in a row. Its measure is whether the processor, network and memory each stayed below 20 percent of capacity for nearly all of that week. A Nocturne server for one person does very little work by that yardstick, so left alone it is likely to be stopped after its first quiet week. There are two ways to prevent that, and one of them changes the command in Step 2, so pick now rather than later."
+#~ msgid "Oracle switches off Always Free servers on trial accounts that it judges idle for seven days in a row. Its measure is whether the processor, network and memory each stayed below 20 percent of capacity for nearly all of that week. A Nocturne server for one person does very little work by that yardstick, so left alone it is likely to be stopped after its first quiet week. There are two ways to prevent that, and one of them changes the command in Step 2, so pick now rather than later."
+#~ msgstr "Oracle switches off Always Free servers on trial accounts that it judges idle for seven days in a row. Its measure is whether the processor, network and memory each stayed below 20 percent of capacity for nearly all of that week. A Nocturne server for one person does very little work by that yardstick, so left alone it is likely to be stopped after its first quiet week. There are two ways to prevent that, and one of them changes the command in Step 2, so pick now rather than later."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Pay As You Go suits most people: it is a single change in the Oracle console, adds nothing to the server, and paying accounts are served first when Ampere capacity is scarce. The trade-off is that the card already on file <0>can</0> be charged if anything outside the free allowance is ever created. Choose Folding@home instead if you would rather the account stay a trial that cannot be billed at all, and you do not mind a second piece of software with network access on the server that holds your health data."
-msgstr "Pay As You Go suits most people: it is a single change in the Oracle console, adds nothing to the server, and paying accounts are served first when Ampere capacity is scarce. The trade-off is that the card already on file <0>can</0> be charged if anything outside the free allowance is ever created. Choose Folding@home instead if you would rather the account stay a trial that cannot be billed at all, and you do not mind a second piece of software with network access on the server that holds your health data."
+#~ msgid "Pay As You Go suits most people: it is a single change in the Oracle console, adds nothing to the server, and paying accounts are served first when Ampere capacity is scarce. The trade-off is that the card already on file <0>can</0> be charged if anything outside the free allowance is ever created. Choose Folding@home instead if you would rather the account stay a trial that cannot be billed at all, and you do not mind a second piece of software with network access on the server that holds your health data."
+#~ msgstr "Pay As You Go suits most people: it is a single change in the Oracle console, adds nothing to the server, and paying accounts are served first when Ampere capacity is scarce. The trade-off is that the card already on file <0>can</0> be charged if anything outside the free allowance is ever created. Choose Folding@home instead if you would rather the account stay a trial that cannot be billed at all, and you do not mind a second piece of software with network access on the server that holds your health data."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Step 1: Open Cloud Shell"
@@ -23636,21 +23602,18 @@ msgstr "Sign in to the <0>Oracle Cloud console</0> and click the terminal icon i
 msgid "Step 2: Run the installer"
 msgstr "Step 2: Run the installer"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Paste this into Cloud Shell, replacing <0/> with your domain. Nocturne will answer on that name and every site you create gets a subdomain under it, so pick something you are happy to keep. If you chose Folding@home above, add <1/> in front."
-msgstr "Paste this into Cloud Shell, replacing <0/> with your domain. Nocturne will answer on that name and every site you create gets a subdomain under it, so pick something you are happy to keep. If you chose Folding@home above, add <1/> in front."
+#~ msgid "Paste this into Cloud Shell, replacing <0/> with your domain. Nocturne will answer on that name and every site you create gets a subdomain under it, so pick something you are happy to keep. If you chose Folding@home above, add <1/> in front."
+#~ msgstr "Paste this into Cloud Shell, replacing <0/> with your domain. Nocturne will answer on that name and every site you create gets a subdomain under it, so pick something you are happy to keep. If you chose Folding@home above, add <1/> in front."
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Early on it asks for a deSEC token. <0>Nothing appears on screen as you paste it</0> — the token is hidden, and the installer tells you how many characters it read so you can see the paste landed. If deSEC does not accept it you can paste another. Press Enter with nothing pasted and it prints two records for you to create by hand instead. Either way it keeps working while the server boots, and waits for the records before it requests certificates."
-msgstr "Early on it asks for a deSEC token. <0>Nothing appears on screen as you paste it</0> — the token is hidden, and the installer tells you how many characters it read so you can see the paste landed. If deSEC does not accept it you can paste another. Press Enter with nothing pasted and it prints two records for you to create by hand instead. Either way it keeps working while the server boots, and waits for the records before it requests certificates."
+#~ msgid "Early on it asks for a deSEC token. <0>Nothing appears on screen as you paste it</0> — the token is hidden, and the installer tells you how many characters it read so you can see the paste landed. If deSEC does not accept it you can paste another. Press Enter with nothing pasted and it prints two records for you to create by hand instead. Either way it keeps working while the server boots, and waits for the records before it requests certificates."
+#~ msgstr "Early on it asks for a deSEC token. <0>Nothing appears on screen as you paste it</0> — the token is hidden, and the installer tells you how many characters it read so you can see the paste landed. If deSEC does not accept it you can paste another. Press Enter with nothing pasted and it prints two records for you to create by hand instead. Either way it keeps working while the server boots, and waits for the records before it requests certificates."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Step 3: Add the DNS records"
 msgstr "Step 3: Add the DNS records"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Skip this step if you gave the installer a deSEC token. Otherwise, at your domain provider, create two <0>A</0> records pointing at the IP address the script printed:"
-msgstr "Skip this step if you gave the installer a deSEC token. Otherwise, at your domain provider, create two <0>A</0> records pointing at the IP address the script printed:"
+#~ msgid "Skip this step if you gave the installer a deSEC token. Otherwise, at your domain provider, create two <0>A</0> records pointing at the IP address the script printed:"
+#~ msgstr "Skip this step if you gave the installer a deSEC token. Otherwise, at your domain provider, create two <0>A</0> records pointing at the IP address the script printed:"
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "The second one is a wildcard. It makes every site's subdomain resolve without a record each. If you use Cloudflare, leave the proxy off for both records, shown as a grey cloud. Cloudflare's proxy cannot carry the certificates Nocturne issues for its own subdomains."
@@ -23660,9 +23623,8 @@ msgstr "The second one is a wildcard. It makes every site's subdomain resolve wi
 msgid "Step 4: Create your first site"
 msgstr "Step 4: Create your first site"
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Once the script reports that Nocturne is answering, open <0/> in a browser. You are taken to the setup page to name your first site and register a passkey, which is your phone's or computer's built-in unlock. Register a second device as soon as you can, because there is no password to fall back on."
-msgstr "Once the script reports that Nocturne is answering, open <0/> in a browser. You are taken to the setup page to name your first site and register a passkey, which is your phone's or computer's built-in unlock. Register a second device as soon as you can, because there is no password to fall back on."
+#~ msgid "Once the script reports that Nocturne is answering, open <0/> in a browser. You are taken to the setup page to name your first site and register a passkey, which is your phone's or computer's built-in unlock. Register a second device as soon as you can, because there is no password to fall back on."
+#~ msgstr "Once the script reports that Nocturne is answering, open <0/> in a browser. You are taken to the setup page to name your first site and register a passkey, which is your phone's or computer's built-in unlock. Register a second device as soon as you can, because there is no password to fall back on."
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Afterwards"
@@ -24045,10 +24007,8 @@ msgstr "Change"
 msgid "Showing {0} only"
 msgstr "Showing {0} only"
 
-#. 0: bgOr(stats?.mean); 1: bgLabel(); 2: dayCount
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "Calculated using the ADAG formula: eA1C = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {0} {1} over {2} days."
-msgstr "Calculated using the ADAG formula: eA1C = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {0} {1} over {2} days."
+#~ msgid "Calculated using the ADAG formula: eA1C = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {0} {1} over {2} days."
+#~ msgstr "Calculated using the ADAG formula: eA1C = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {0} {1} over {2} days."
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Shown in % (NGSP)"
@@ -24058,15 +24018,14 @@ msgstr "Shown in % (NGSP)"
 msgid "Shown in mmol/mol (IFCC)"
 msgstr "Shown in mmol/mol (IFCC)"
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Lab HbA1c draws, shown as triangles on the chart above. They are not included in the eHbA1c calculation."
-msgstr "Lab HbA1c draws, shown as triangles on the chart above. They are not included in the eHbA1c calculation."
+#~ msgid "Lab HbA1c draws, shown as triangles on the chart above. They are not included in the eHbA1c calculation."
+#~ msgstr "Lab HbA1c draws, shown as triangles on the chart above. They are not included in the eHbA1c calculation."
 
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
-msgid "Est. A1c (DCCT %)"
-msgstr "Est. A1c (DCCT %)"
+#~ msgid "Est. A1c (DCCT %)"
+#~ msgstr "Est. A1c (DCCT %)"
 
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Heart rate"
 msgstr "Heart rate"
 
@@ -24396,9 +24355,8 @@ msgstr "· {0} readings"
 msgid "Consensus target: at least 70% of time in range."
 msgstr "Consensus target: at least 70% of time in range."
 
-#: src/routes/(authenticated)/reports/+page.svelte
-msgid "Estimated A1C"
-msgstr "Estimated A1C"
+#~ msgid "Estimated A1C"
+#~ msgstr "Estimated A1C"
 
 #: src/routes/(authenticated)/reports/+page.svelte
 msgid "Coefficient of variation"
@@ -24529,9 +24487,8 @@ msgstr "Charged: {0} ({1}% to {2}%)"
 msgid "Lasted: {0} ({1}% to {2}%)"
 msgstr "Lasted: {0} ({1}% to {2}%)"
 
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "Target: <7%"
-msgstr "Target: <7%"
+#~ msgid "Target: <7%"
+#~ msgstr "Target: <7%"
 
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "Standard deviation"
@@ -24759,13 +24716,11 @@ msgstr "Time spent in each glucose zone"
 msgid "Assess the reliability of your data"
 msgstr "Assess the reliability of your data"
 
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "Estimated HbA1c"
-msgstr "Estimated HbA1c"
+#~ msgid "Estimated HbA1c"
+#~ msgstr "Estimated HbA1c"
 
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "How your estimated HbA1c has trended over the years"
-msgstr "How your estimated HbA1c has trended over the years"
+#~ msgid "How your estimated HbA1c has trended over the years"
+#~ msgstr "How your estimated HbA1c has trended over the years"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Patterns & Trends"
@@ -25488,9 +25443,8 @@ msgstr "<0/> Snoozed until {0}"
 msgid "Snoozed until {0}"
 msgstr "Snoozed until {0}"
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Watchtower updates images, not the compose file. If you installed before the restart policy and log rotation below were added, download the new bundle and run <0/> to pick them up. That first run recreates the containers, which clears their old logs; your database data is kept."
-msgstr "Watchtower updates images, not the compose file. If you installed before the restart policy and log rotation below were added, download the new bundle and run <0/> to pick them up. That first run recreates the containers, which clears their old logs; your database data is kept."
+#~ msgid "Watchtower updates images, not the compose file. If you installed before the restart policy and log rotation below were added, download the new bundle and run <0/> to pick them up. That first run recreates the containers, which clears their old logs; your database data is kept."
+#~ msgstr "Watchtower updates images, not the compose file. If you installed before the restart policy and log rotation below were added, download the new bundle and run <0/> to pick them up. That first run recreates the containers, which clears their old logs; your database data is kept."
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
@@ -25509,9 +25463,8 @@ msgstr "Every service also logs to the <0/> driver, rotated at three files of 10
 msgid "The stack uses the same restart policy and log rotation as the <0>Docker Compose bundle</0>. Portainer stacks do not read override files, so to keep your own logging driver, edit the <1/> section of each service in the stack editor instead."
 msgstr "The stack uses the same restart policy and log rotation as the <0>Docker Compose bundle</0>. Portainer stacks do not read override files, so to keep your own logging driver, edit the <1/> section of each service in the stack editor instead."
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "eHbA1c"
-msgstr "eHbA1c"
+#~ msgid "eHbA1c"
+#~ msgstr "eHbA1c"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lab result"
@@ -25722,6 +25675,616 @@ msgstr "Minutes since carbs"
 msgid "min ago"
 msgstr "min ago"
 
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health"
+msgstr "Google Health"
+
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+msgid "Google Health needs attention. Open the connector for details and recovery options."
+msgstr "Google Health needs attention. Open the connector for details and recovery options."
+
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+msgid "Reconnect to resume importing"
+msgstr "Reconnect to resume importing"
+
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+msgid "Review available data and confirm the import selection"
+msgstr "Review available data and confirm the import selection"
+
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+msgid "Choose at least one data type to start importing"
+msgstr "Choose at least one data type to start importing"
+
+#. 0: lastSeen(connection.lastSync)
+#. 0: lastSeen(status.lastSync)
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Last successful sync: {0}"
+msgstr "Last successful sync: {0}"
+
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+msgid "Waiting for the first successful sync"
+msgstr "Waiting for the first successful sync"
+
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
+msgid "Import steps, heart rate, weight, and sleep from Google Health"
+msgstr "Import steps, heart rate, weight, and sleep from Google Health"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Step history"
+msgstr "Step history"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Heart-rate history"
+msgstr "Heart-rate history"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sleep history"
+msgstr "Sleep history"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Vitals"
+msgstr "Vitals"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Body measurement"
+msgstr "Body measurement"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nutrition"
+msgstr "Nutrition"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Cycle tracking"
+msgstr "Cycle tracking"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Save the Google configuration first."
+msgstr "Save the Google configuration first."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Check the client ID and import start date."
+msgstr "Check the client ID and import start date."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Use an HTTPS URL ending exactly in /settings/connectors/google-health/callback."
+msgstr "Use an HTTPS URL ending exactly in /settings/connectors/google-health/callback."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected the client ID or secret."
+msgstr "Google rejected the client ID or secret."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected a requested Health scope."
+msgstr "Google rejected a requested Health scope."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected the OAuth request."
+msgstr "Google rejected the OAuth request."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google did not return a usable session."
+msgstr "Google did not return a usable session."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "A Google client secret is required."
+msgstr "A Google client secret is required."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Review and save the available data types before importing."
+msgstr "Review and save the available data types before importing."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Select at least one data type before starting an import."
+msgstr "Select at least one data type before starting an import."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Only the user who created this connection can change it."
+msgstr "Only the user who created this connection can change it."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnect before changing these settings."
+msgstr "Disconnect before changing these settings."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "This is a different Google account. Purge the old import before switching."
+msgstr "This is a different Google account. Purge the old import before switching."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The sign-in attempt expired. Start again."
+msgstr "The sign-in attempt expired. Start again."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google did not grant background access. Revoke access and reconnect."
+msgstr "Google did not grant background access. Revoke access and reconnect."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Not every requested permission was granted."
+msgstr "Not every requested permission was granted."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google denied access."
+msgstr "Google denied access."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google access expired or was revoked. Reconnect."
+msgstr "Google access expired or was revoked. Reconnect."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google's request limit was reached. Nocturne will retry later."
+msgstr "Google's request limit was reached. Nocturne will retry later."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google is temporarily unavailable. Existing data was preserved."
+msgstr "Google is temporarily unavailable. Existing data was preserved."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "This Google account is not linked to Fitbit."
+msgstr "This Google account is not linked to Fitbit."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected the data request."
+msgstr "Google rejected the data request."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "This account cannot access this API version."
+msgstr "This account cannot access this API version."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "This data type is unavailable for this account."
+msgstr "This data type is unavailable for this account."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google does not permit this data type to be read."
+msgstr "Google does not permit this data type to be read."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected this date range. Choose a later start date."
+msgstr "Google rejected this date range. Choose a later start date."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected Nocturne's time filter."
+msgstr "Google rejected Nocturne's time filter."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected the filter for this data type."
+msgstr "Google rejected the filter for this data type."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google did not recognise this data type."
+msgstr "Google did not recognise this data type."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google could not reconcile the sources."
+msgstr "Google could not reconcile the sources."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google returned an incomplete response."
+msgstr "Google returned an incomplete response."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google returned no measurements for this date range."
+msgstr "Google returned no measurements for this date range."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The saved connection cannot be read. Configure it again."
+msgstr "The saved connection cannot be read. Configure it again."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The saved selection contains an unsupported type."
+msgstr "The saved selection contains an unsupported type."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnected locally. Revoke the app in Google as well."
+msgstr "Disconnected locally. Revoke the app in Google as well."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google exceeded the pagination safety limit. Try a later start date, or report the technical code if this persists."
+msgstr "Google exceeded the pagination safety limit. Try a later start date, or report the technical code if this persists."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google returned an unexpected data format."
+msgstr "Google returned an unexpected data format."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google returned overlapping measurements."
+msgstr "Google returned overlapping measurements."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google returned data outside the requested range."
+msgstr "Google returned data outside the requested range."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nocturne could not retrieve every page."
+msgstr "Nocturne could not retrieve every page."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nocturne could not complete the import. Check the server log for the technical code and stage."
+msgstr "Nocturne could not complete the import. Check the server log for the technical code and stage."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The import is running in the background. You can leave this page and return later."
+msgstr "The import is running in the background. You can leave this page and return later."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health import completed."
+msgstr "Google Health import completed."
+
+#. 0: item.errorCode
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Read failed ({0})"
+msgstr "Read failed ({0})"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Not yet supported by Nocturne"
+msgstr "Not yet supported by Nocturne"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Permission not granted"
+msgstr "Permission not granted"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import needs attention"
+msgstr "Import needs attention"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import enabled"
+msgstr "Import enabled"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import enabled; no data found"
+msgstr "Import enabled; no data found"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Available to connect"
+msgstr "Available to connect"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Supported, but no data found"
+msgstr "Supported, but no data found"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Waiting for the background worker"
+msgstr "Waiting for the background worker"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Refreshing the Google session"
+msgstr "Refreshing the Google session"
+
+#. 0: dataTypeLabel(status.syncDataType)
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Reading {0}"
+msgstr "Reading {0}"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Reading Google Health data"
+msgstr "Reading Google Health data"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Validating the downloaded data"
+msgstr "Validating the downloaded data"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Updating Nocturne health records"
+msgstr "Updating Nocturne health records"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Preparing the import"
+msgstr "Preparing the import"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import status is temporarily unavailable. Retrying."
+msgstr "Import status is temporarily unavailable. Retrying."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google sign-in failed or was cancelled."
+msgstr "Google sign-in failed or was cancelled."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google did not grant the requested read access."
+msgstr "Google did not grant the requested read access."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The Nocturne session was missing after the Google redirect. Sign in and reconnect in the same browser."
+msgstr "The Nocturne session was missing after the Google redirect. Sign in and reconnect in the same browser."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health · Connectors & Apps"
+msgstr "Google Health · Connectors & Apps"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Server connector for health and fitness data"
+msgstr "Server connector for health and fitness data"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The import could not be completed."
+msgstr "The import could not be completed."
+
+#. 0: status.errorDataTypes?.length ? ` · ${status.errorDataTypes.join(", ")}` \\: ""
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Technical code: <0/> {0}"
+msgstr "Technical code: <0/> {0}"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import running in the background"
+msgstr "Import running in the background"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health import progress"
+msgstr "Google Health import progress"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Historical import progress"
+msgstr "Historical import progress"
+
+#~ msgid "Synchronized back through {0}."
+#~ msgstr "Synchronized back through {0}."
+
+#. 0: day(status.backfillSyncedThrough)
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Synchronized back through {0}. <0/>"
+msgstr "Synchronized back through {0}. <0/>"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The requested history is complete."
+msgstr "The requested history is complete."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Each sync refreshes today and imports one older calendar month."
+msgstr "Each sync refreshes today and imports one older calendar month."
+
+#. 0: status.syncCompletedDataTypes; 1: status.syncTotalDataTypes
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "{0} of {1} data types read"
+msgstr "{0} of {1} data types read"
+
+#. 0: status.syncPagesRead; 1: status.syncPagesRead === 1 ? "page" \\: "pages"
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "{0} Google {1} read for this data type"
+msgstr "{0} Google {1} read for this data type"
+
+#. 0: status.syncProgressPercent ?? 0
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "{0}% complete"
+msgstr "{0}% complete"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "You can keep using Nocturne or leave this page. The server will continue the import."
+msgstr "You can keep using Nocturne or leave this page. The server will continue the import."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Read-only OAuth connection to the Google Health API"
+msgstr "Read-only OAuth connection to the Google Health API"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Loading connection status…"
+msgstr "Loading connection status…"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google client ID <0/>"
+msgstr "Google client ID <0/>"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Client secret <0/>"
+msgstr "Client secret <0/>"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Callback URL <0/>"
+msgstr "Callback URL <0/>"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import data from <0/>"
+msgstr "Import data from <0/>"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nocturne retrieves every available page from this date. An early start date can make the first import take longer."
+msgstr "Nocturne retrieves every available page from this date. An early start date can make the first import take longer."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Save and connect"
+msgstr "Save and connect"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "<0/>Disconnect"
+msgstr "<0/>Disconnect"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Leave empty to keep the saved secret"
+msgstr "Leave empty to keep the saved secret"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Save and reconnect"
+msgstr "Save and reconnect"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Edit connection settings"
+msgstr "Edit connection settings"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The encrypted Google Cloud configuration is saved."
+msgstr "The encrypted Google Cloud configuration is saved."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is connected. Review the available data below, then save your selection to start importing."
+msgstr "Google Health is connected. Review the available data below, then save your selection to start importing."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is connected. Imports are paused because no data types are selected."
+msgstr "Google Health is connected. Imports are paused because no data types are selected."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is connected. Automatic sync runs approximately every 15 minutes."
+msgstr "Google Health is connected. Automatic sync runs approximately every 15 minutes."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "<0/>Sync now"
+msgstr "<0/>Sync now"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Change the import start date and selection below without reconnecting. Disconnect only to change OAuth settings."
+msgstr "Change the import start date and selection below without reconnecting. Disconnect only to change OAuth settings."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health data"
+msgstr "Google Health data"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Detected data types and how Nocturne can use them"
+msgstr "Detected data types and how Nocturne can use them"
+
+#. 0: group.selectedCount; 1: group.entries.length
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "{0}/{1} selected"
+msgstr "{0}/{1} selected"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Data type"
+msgstr "Data type"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Found"
+msgstr "Found"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nocturne destination"
+msgstr "Nocturne destination"
+
+#. 0: dataTypeLabel(item.dataType)
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import {0}"
+msgstr "Import {0}"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Not scanned"
+msgstr "Not scanned"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "No permission"
+msgstr "No permission"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Scan failed"
+msgstr "Scan failed"
+
+#. 0: item.count
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Yes ({0})"
+msgstr "Yes ({0})"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "No"
+msgstr "No"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "No destination yet"
+msgstr "No destination yet"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Scanning the selected history in Google Health…"
+msgstr "Scanning the selected history in Google Health…"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "This runs separately, so the rest of the page remains available."
+msgstr "This runs separately, so the rest of the page remains available."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "No inventory has been loaded yet."
+msgstr "No inventory has been loaded yet."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Scanning inventory…"
+msgstr "Scanning inventory…"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Refresh inventory"
+msgstr "Refresh inventory"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Save import settings"
+msgstr "Save import settings"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Save selection and import"
+msgstr "Save selection and import"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Choose an earlier date to import older data shared with Google Health. Empty results are not errors. Clear all selections and save to pause imports; previously imported data is kept."
+msgstr "Choose an earlier date to import older data shared with Google Health. Empty results are not errors. Clear all selections and save to pause imports; previously imported data is kept."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Enable the Google Health API and create an OAuth Web application client."
+msgstr "Enable the Google Health API and create an OAuth Web application client."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Add your account as a test user while the consent screen is in testing."
+msgstr "Add your account as a test user while the consent screen is in testing."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Register the callback URL above as an Authorized redirect URI."
+msgstr "Register the callback URL above as an Authorized redirect URI."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Keep the client secret private."
+msgstr "Keep the client secret private."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Cloud setup"
+msgstr "Google Cloud setup"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google setup documentation"
+msgstr "Google setup documentation"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Delete imported Google Health data?"
+msgstr "Delete imported Google Health data?"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Delete imported data"
+msgstr "Delete imported data"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Measurements imported through Google Health will be deleted from Nocturne. Data stored by Google is unchanged."
+msgstr "Measurements imported through Google Health will be deleted from Nocturne. Data stored by Google is unchanged."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Delete imported Google Health data"
+msgstr "Delete imported Google Health data"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "<0/>Connectors & Apps"
+msgstr "<0/>Connectors & Apps"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import recovery"
+msgstr "Import recovery"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "If a historical import stops or needs to be repeated, reset the Google Health connector from a chosen date. The reset re-reads the range and keeps the normal duplicate protection."
+msgstr "If a historical import stops or needs to be repeated, reset the Google Health connector from a chosen date. The reset re-reads the range and keeps the normal duplicate protection."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The reset runs in the background. Platform administrators can monitor or cancel it from the connector reset page."
+msgstr "The reset runs in the background. Platform administrators can monitor or cancel it from the connector reset page."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Open connector reset"
+msgstr "Open connector reset"
+
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "PostgreSQL host-directory storage"
 msgstr "PostgreSQL host-directory storage"
@@ -25825,3 +26388,403 @@ msgstr "For bind-data with the BYO-proxy override:"
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Omitting the bind-data override changes the declared storage back to the named volume."
 msgstr "Omitting the bind-data override changes the declared storage back to the named volume."
+
+#: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
+msgid "One or more connectors failed; review the connector details and retry the failed range."
+msgstr "One or more connectors failed; review the connector details and retry the failed range."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sleep sessions and stages"
+msgstr "Sleep sessions and stages"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Active energy burned"
+msgstr "Active energy burned"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Total calories"
+msgstr "Total calories"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Distance"
+msgstr "Distance"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Floors"
+msgstr "Floors"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Workouts"
+msgstr "Workouts"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Body fat"
+msgstr "Body fat"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Height"
+msgstr "Height"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nutrition log"
+msgstr "Nutrition log"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Hydration"
+msgstr "Hydration"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Blood glucose"
+msgstr "Blood glucose"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Oxygen saturation"
+msgstr "Oxygen saturation"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Heart rate variability"
+msgstr "Heart rate variability"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Resting heart rate"
+msgstr "Resting heart rate"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Daily oxygen saturation"
+msgstr "Daily oxygen saturation"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Daily respiratory rate"
+msgstr "Daily respiratory rate"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sleep respiratory rate"
+msgstr "Sleep respiratory rate"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Core body temperature"
+msgstr "Core body temperature"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Menstrual period"
+msgstr "Menstrual period"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Ovulation test"
+msgstr "Ovulation test"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Cervical mucus"
+msgstr "Cervical mucus"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sexual activity"
+msgstr "Sexual activity"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Unknown data type"
+msgstr "Unknown data type"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health currently provides no read-only scope for this type."
+msgstr "Google Health currently provides no read-only scope for this type."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Not exposed as a readable Google Health API data type."
+msgstr "Not exposed as a readable Google Health API data type."
+
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
+msgid "Status unavailable"
+msgstr "Status unavailable"
+
+#~ msgid "Disconnecting…"
+#~ msgstr "Disconnecting…"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnecting Google Health. The current scan or import is being stopped."
+msgstr "Disconnecting Google Health. The current scan or import is being stopped."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is disconnected. Your imported data has been kept."
+msgstr "Google Health is disconnected. Your imported data has been kept."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "<0/>Disconnecting…"
+msgstr "<0/>Disconnecting…"
+
+#: src/lib/stores/realtime-store.svelte.ts
+msgid "Real-time data unavailable"
+msgstr "Real-time data unavailable"
+
+#. 0: a1cLabel()
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Estimated {0}"
+msgstr "Estimated {0}"
+
+#. 0: a1cLabel(true)
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "How your {0} has trended over the years"
+msgstr "How your {0} has trended over the years"
+
+#. 0: a1cLabel(true)
+#: src/lib/components/rbac/PermissionCategorySelector.svelte
+msgid "Time-in-range, {0} estimates, and averages"
+msgstr "Time-in-range, {0} estimates, and averages"
+
+#. 0: a1cLabel()
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "{0} display name"
+msgstr "{0} display name"
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Estimated values retain the e prefix: eHbA1c or eA1c."
+msgstr "Estimated values retain the e prefix: eHbA1c or eA1c."
+
+#. 0: a1cLabel()
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "{0} display unit"
+msgstr "{0} display unit"
+
+#. 0: a1cLabel()
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {0}. Blood glucose units are set separately."
+msgstr "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {0}. Blood glucose units are set separately."
+
+#. 0: formatA1c(variability.a1cTarget)
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "Target: <{0}"
+msgstr "Target: <{0}"
+
+#. 0: formatA1c(variability?.a1cTarget)
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "Target: below {0}. Your care team sets your individual target."
+msgstr "Target: below {0}. Your care team sets your individual target."
+
+#. 0: a1cLabel(true); 1: bgOr(stats?.mean); 2: bgLabel(); 3: dayCount
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "Calculated using the ADAG formula (NGSP %): {0} = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {1} {2} over {3} days."
+msgstr "Calculated using the ADAG formula (NGSP %): {0} = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {1} {2} over {3} days."
+
+#. 0.0: a1cLabel(true); 0: a1cLabel()
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "<0>What is {0}?</0> This estimates what your lab {0} would be based on your average glucose."
+msgstr "<0>What is {0}?</0> This estimates what your lab {0} would be based on your average glucose."
+
+#. 0: a1cLabel(true)
+#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
+msgid "Distribution, {0} estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
+msgstr "Distribution, {0} estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
+
+#. 0: a1cLabel(); 1: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "<0/> Estimated {0} ({1})"
+msgstr "<0/> Estimated {0} ({1})"
+
+#. 0: a1cLabel(true); 1: a1cLabel(); 2: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "{0} estimates what a lab {1} test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to NGSP percent with the ADAG formula: {2} (%) = (average glucose in mg/dL + 46.7) / 28.7."
+msgstr "{0} estimates what a lab {1} test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to NGSP percent with the ADAG formula: {2} (%) = (average glucose in mg/dL + 46.7) / 28.7."
+
+#. 0: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "<0/> Loading {0} timeline..."
+msgstr "<0/> Loading {0} timeline..."
+
+#. 0: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Failed to load {0} data. Please try again later."
+msgstr "Failed to load {0} data. Please try again later."
+
+#. 0: a1cLabel(); 1: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Lab {0} draws, shown as triangles on the chart above. They are not included in the {1} calculation."
+msgstr "Lab {0} draws, shown as triangles on the chart above. They are not included in the {1} calculation."
+
+#. 0: a1cLabel(); 1: a1cLabel(true); 2: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Enter a lab {0} result here — shown as a triangle marker on the chart above, so you can see how closely the {1} estimate tracks an actual lab draw. Lab results are not included in the {2} calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
+msgstr "Enter a lab {0} result here — shown as a triangle marker on the chart above, so you can see how closely the {1} estimate tracks an actual lab draw. Lab results are not included in the {2} calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
+
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "Glucose units"
+msgstr "Glucose units"
+
+#: src/lib/components/meals/MealBolusDialog.svelte
+msgid "Edit bolus"
+msgstr "Edit bolus"
+
+#: src/lib/components/meals/MealBolusDialog.svelte
+msgid "Delete bolus"
+msgstr "Delete bolus"
+
+#: src/routes/(authenticated)/reports/+layout.svelte
+msgid "Unable to load the complete report. Please try again before printing."
+msgstr "Unable to load the complete report. Please try again before printing."
+
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "Some year data could not be loaded."
+msgstr "Some year data could not be loaded."
+
+#. 0: year
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "Retry {0}"
+msgstr "Retry {0}"
+
+#. 0: year
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "Scroll to load {0} data"
+msgstr "Scroll to load {0} data"
+
+#: src/routes/(authenticated)/reports/year-overview/+page.svelte
+msgid "This overview is incomplete. Use the report's Print button to load all years before printing."
+msgstr "This overview is incomplete. Use the report's Print button to load all years before printing."
+
+#: src/routes/(authenticated)/reports/year-overview/YearOverview.test-harness.svelte
+msgid "Prepare print"
+msgstr "Prepare print"
+
+#: src/routes/(authenticated)/clock/config/[id]/+page.svelte
+msgid "Failed to reset clock face"
+msgstr "Failed to reset clock face"
+
+#: src/lib/components/layout/UserMenuHarness.test.svelte
+msgid "Guest User"
+msgstr "Guest User"
+
+#. 0: jobStatus.completedConnectors; 1: jobStatus.totalConnectors
+#: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
+msgid "{0} / {1} processed"
+msgstr "{0} / {1} processed"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Another Google Health import is already running. The inventory will be available when it finishes; refresh this page afterwards."
+msgstr "Another Google Health import is already running. The inventory will be available when it finishes; refresh this page afterwards."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nocturne downloaded the data, but could not store it locally. Retry the same range; if it persists, use the technical stage from the server log."
+msgstr "Nocturne downloaded the data, but could not store it locally. Retry the same range; if it persists, use the technical stage from the server log."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Scanning the selected history in Google Health… The catalog remains available while the inventory is loading."
+msgstr "Scanning the selected history in Google Health… The catalog remains available while the inventory is loading."
+
+#: ../portal/src/lib/components/docs/NextSteps.svelte
+msgid "Watchtower is included and checks for image updates daily. It does not update Caddy or Postgres; see the update steps on this page."
+msgstr "Watchtower is included and checks for image updates daily. It does not update Caddy or Postgres; see the update steps on this page."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Watchtower checks for image updates daily, except for Caddy and Postgres. To update everything, including Caddy and Postgres:"
+msgstr "Watchtower checks for image updates daily, except for Caddy and Postgres. To update everything, including Caddy and Postgres:"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Watchtower updates images, not the compose file. If you installed before the restart policy and log rotation below were added, download the new bundle and run <0/> to pick them up. That first run recreates the containers, which clears their old logs; your database data is kept. If you installed before Caddy was excluded from Watchtower, set <1/> to <2/> on the <3/> service, or download the new bundle, then run <4/> to recreate it."
+msgstr "Watchtower updates images, not the compose file. If you installed before the restart policy and log rotation below were added, download the new bundle and run <0/> to pick them up. That first run recreates the containers, which clears their old logs; your database data is kept. If you installed before Caddy was excluded from Watchtower, set <1/> to <2/> on the <3/> service, or download the new bundle, then run <4/> to recreate it."
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Watchtower is included and checks for image updates daily, except for Caddy and Postgres. To update everything, including Caddy and Postgres, in Portainer:"
+msgstr "Watchtower is included and checks for image updates daily, except for Caddy and Postgres. To update everything, including Caddy and Postgres, in Portainer:"
+
+#~ msgid "Watchtower checks for new Nocturne images daily. It does not update Caddy or Postgres; update them with <0/>."
+#~ msgstr "Watchtower checks for new Nocturne images daily. It does not update Caddy or Postgres; update them with <0/>."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "An <0>Oracle Cloud account</0>. Sign-up asks for a payment card to verify your identity. The region you pick at sign-up becomes your home region. The free server can only be created there, and the choice cannot be changed later, so pick the region closest to you. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage. Oracle halved the cores and memory in June 2026, so older guides that quote 4 cores and 24 GB are out of date. This guide uses half the cores and memory and a quarter of the storage, which stays well inside the free allowance."
+msgstr "An <0>Oracle Cloud account</0>. Sign-up asks for a payment card to verify your identity. The region you pick at sign-up becomes your home region. The free server can only be created there, and the choice cannot be changed later, so pick the region closest to you. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage. Oracle halved the cores and memory in June 2026, so older guides that quote 4 cores and 24 GB are out of date. This guide uses half the cores and memory and a quarter of the storage, which stays well inside the free allowance."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS works well; <0>see below</0>."
+msgstr "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS works well; <0>see below</0>."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Sign in at duckdns.org with one of the accounts it offers, such as GitHub or Google."
+msgstr "Sign in at duckdns.org with one of the accounts it offers, such as GitHub or Google."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Under <0>domains</0>, type a name and click <1>add domain</1>. Your domain is then <2/>."
+msgstr "Under <0>domains</0>, type a name and click <1>add domain</1>. Your domain is then <2/>."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Copy the <0>token</0> shown at the top of the page. It looks like <1/>. It controls every name on your account, so keep it to yourself."
+msgstr "Copy the <0>token</0> shown at the top of the page. It looks like <1/>. It controls every name on your account, so keep it to yourself."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "What changes is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends: it refuses a server size above the free allowance, and it writes an Oracle quota policy that stops the account creating anything outside the Always Free compute shapes at all, whether or not you have upgraded. That policy is a real limit rather than a warning: Oracle refuses the request instead of billing you for it. The installer also sets a spending alert that emails you the moment the account is billed one unit of your currency. Nothing needs adding to the command in <0>Step 2</0>."
+msgstr "What changes is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends: it refuses a server size above the free allowance, and it writes an Oracle quota policy that stops the account creating anything outside the Always Free compute shapes at all, whether or not you have upgraded. That policy is a real limit rather than a warning: Oracle refuses the request instead of billing you for it. The installer also sets a spending alert that emails you the moment the account is billed one unit of your currency. Nothing needs adding to the command in <0>Step 2</0>."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Option 2: stay on an Always Free account and donate spare time to Folding@home"
+msgstr "Option 2: stay on an Always Free account and donate spare time to Folding@home"
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "The client runs at the lowest priority the system has, so Nocturne and its alarms always come first. To choose this option, add <0/> to the command in <1>Step 2</1>:"
+msgstr "The client runs at the lowest priority the system has, so Nocturne and its alarms always come first. To choose this option, add <0/> to the command in <1>Step 2</1>:"
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Work is contributed anonymously by default. To count it towards a team, add <0/> as well. Always Free accounts cannot be charged, but the installer still creates the spending alert in case the account is upgraded later."
+msgstr "Work is contributed anonymously by default. To count it towards a team, add <0/> as well. Always Free accounts cannot be charged, but the installer still creates the spending alert in case the account is upgraded later."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Points your DuckDNS name at that address when you give it the token; for any other domain, it prints the two records to create by hand"
+msgstr "Points your DuckDNS name at that address when you give it the token; for any other domain, it prints the two records to create by hand"
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "The script ends by printing your <0>instance key</0>. It is the master credential for this installation, used for administrative API access and account recovery. Save it in a password manager. Running the script a second time prints it once more."
+msgstr "The script ends by printing your <0>instance key</0>. It is the master credential for this installation, used for administrative API access and account recovery. Save it in a password manager. Running the script a second time prints it once more."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "To update Caddy and Postgres, run <0/> on the server."
+msgstr "To update Caddy and Postgres, run <0/> on the server."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups, so take them by hand and delete old ones rather than attaching a scheduled policy, which would keep more than five and be charged."
+msgstr "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups, so take them by hand and delete old ones rather than attaching a scheduled policy, which would keep more than five and be charged."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "No domain yet? Get one from DuckDNS"
+msgstr "No domain yet? Get one from DuckDNS"
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "<0>DuckDNS</0> is a free dynamic DNS service that gives out names under <1>duckdns.org</1>, each with a wildcard for the subdomains below it. The installer uses your DuckDNS token to point your name at your server, so there is nothing to set up by hand."
+msgstr "<0>DuckDNS</0> is a free dynamic DNS service that gives out names under <1>duckdns.org</1>, each with a wildcard for the subdomains below it. The installer uses your DuckDNS token to point your name at your server, so there is nothing to set up by hand."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "For a domain you already own, you add two records by hand at your DNS provider in <0>Step 3</0>."
+msgstr "For a domain you already own, you add two records by hand at your DNS provider in <0>Step 3</0>."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Oracle switches off servers on Always Free accounts that it judges idle for seven days in a row. Its measure is whether the processor, network and memory each stayed below 20 percent of capacity for nearly all of that week. A Nocturne server for one person does very little work by that yardstick, so left alone it is likely to be stopped after its first quiet week. There are two ways to prevent that, and one of them changes the command in <0>Step 2</0>, so pick now rather than later."
+msgstr "Oracle switches off servers on Always Free accounts that it judges idle for seven days in a row. Its measure is whether the processor, network and memory each stayed below 20 percent of capacity for nearly all of that week. A Nocturne server for one person does very little work by that yardstick, so left alone it is likely to be stopped after its first quiet week. There are two ways to prevent that, and one of them changes the command in <0>Step 2</0>, so pick now rather than later."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Pay As You Go suits most people: it is a single change in the Oracle console, adds nothing to the server, and paying accounts are served first when Ampere capacity is scarce. The trade-off is that the card already on file <0>can</0> be charged if anything outside the free allowance is ever created. Choose Folding@home instead if you would rather keep an Always Free account that cannot be billed at all, and you do not mind a second piece of software with network access on the server that holds your health data."
+msgstr "Pay As You Go suits most people: it is a single change in the Oracle console, adds nothing to the server, and paying accounts are served first when Ampere capacity is scarce. The trade-off is that the card already on file <0>can</0> be charged if anything outside the free allowance is ever created. Choose Folding@home instead if you would rather keep an Always Free account that cannot be billed at all, and you do not mind a second piece of software with network access on the server that holds your health data."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Paste this into Cloud Shell, replacing <0/> with your domain, such as <1/>. Nocturne will answer on that name and every site you create gets a subdomain under it, so pick something you are happy to keep. If you chose Folding@home above, add <2/> in front."
+msgstr "Paste this into Cloud Shell, replacing <0/> with your domain, such as <1/>. Nocturne will answer on that name and every site you create gets a subdomain under it, so pick something you are happy to keep. If you chose Folding@home above, add <2/> in front."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "If your domain is under duckdns.org, the installer asks early on for your DuckDNS token. <0>Nothing appears on screen as you paste it</0> – the token is hidden, and the installer tells you how many characters it read so you can see the paste landed. If DuckDNS does not accept it you can paste another. Press Enter with nothing pasted and it tells you the address to set yourself in <1>Step 3</1> instead. For any other domain, it prints the two records to create by hand. Either way it keeps working while the server boots, and waits for DNS before it requests certificates."
+msgstr "If your domain is under duckdns.org, the installer asks early on for your DuckDNS token. <0>Nothing appears on screen as you paste it</0> – the token is hidden, and the installer tells you how many characters it read so you can see the paste landed. If DuckDNS does not accept it you can paste another. Press Enter with nothing pasted and it tells you the address to set yourself in <1>Step 3</1> instead. For any other domain, it prints the two records to create by hand. Either way it keeps working while the server boots, and waits for DNS before it requests certificates."
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Skip this step if you gave the installer a DuckDNS token. For a DuckDNS name without one, sign in at duckdns.org, put the IP address the script printed into the <0>current ip</0> box next to your name and click <1>update ip</1>. For any other domain, create two <2>A</2> records at your domain provider, pointing at that address:"
+msgstr "Skip this step if you gave the installer a DuckDNS token. For a DuckDNS name without one, sign in at duckdns.org, put the IP address the script printed into the <0>current ip</0> box next to your name and click <1>update ip</1>. For any other domain, create two <2>A</2> records at your domain provider, pointing at that address:"
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Once the script reports that Nocturne is answering, open <0/> in a browser. You are taken to the setup page to name your first site and create the owner account, with a passkey or a sign-in provider. A passkey is your phone's or computer's built-in unlock. If you choose one, register a second device as soon as you can, because there is no password to fall back on."
+msgstr "Once the script reports that Nocturne is answering, open <0/> in a browser. You are taken to the setup page to name your first site and create the owner account, with a passkey or a sign-in provider. A passkey is your phone's or computer's built-in unlock. If you choose one, register a second device as soon as you can, because there is no password to fall back on."
+
+#. 0: daysOfData; 1: daysOfData === 1 ? "day" \\: "days"; 2: reliability.recommendedMinimumDays ?? 14
+#: src/lib/components/reports/ReliabilityBadge.svelte
+msgid "Based on {0} {1} of data ({2} recommended)"
+msgstr "Based on {0} {1} of data ({2} recommended)"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Nocturne inferred this sensor start from the warm-up gap in your CGM's readings. Correct the time if it is off, or delete it if this was not a sensor change."
+msgstr "Nocturne inferred this sensor start from the warm-up gap in your CGM's readings. Correct the time if it is off, or delete it if this was not a sensor change."
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Failed to read migration status"
+msgstr "Failed to read migration status"

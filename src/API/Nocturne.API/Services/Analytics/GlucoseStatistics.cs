@@ -62,6 +62,19 @@ public static class GlucoseStatistics
             : sortedValues[sortedValues.Count / 2];
 
     /// <summary>
+    /// <paramref name="values"/> in ascending order, for <see cref="Median"/> and percentiles. An
+    /// in-place array sort orders doubles exactly as <c>OrderBy</c> does, NaN first, at a fraction
+    /// of the cost; the two can differ only in the order of equal values, which a median or a
+    /// percentile cannot tell apart.
+    /// </summary>
+    public static double[] Ascending(IEnumerable<double> values)
+    {
+        var sorted = values.ToArray();
+        Array.Sort(sorted);
+        return sorted;
+    }
+
+    /// <summary>
     /// Whether <paramref name="mgdl"/> is a glucose reading at all. A <c>&gt; 0</c> test does not
     /// settle it: PostgreSQL orders NaN above every number, so a NaN stored in a
     /// <c>double precision</c> column passes that test when it runs in SQL. Admitted into a

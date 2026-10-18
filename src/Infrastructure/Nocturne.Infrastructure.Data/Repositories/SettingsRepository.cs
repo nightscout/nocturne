@@ -250,42 +250,6 @@ public class SettingsRepository : ISettingsRepository
     }
 
     /// <summary>
-    /// Bulk delete settings with query
-    /// </summary>
-    /// <param name="findQuery">The search query for deletion.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<long> BulkDeleteSettingsAsync(
-        string findQuery,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var query = _context.Settings.AsQueryable();
-
-        // Apply find query filter
-        if (!string.IsNullOrEmpty(findQuery))
-        {
-            // Simple text search across key, notes, and value
-            query = query.Where(s =>
-                s.Key.Contains(findQuery)
-                || (s.Notes != null && s.Notes.Contains(findQuery))
-                || (s.Value != null && s.Value.Contains(findQuery))
-            );
-        }
-
-        var entities = await query.ToListAsync(cancellationToken);
-        var count = entities.Count;
-
-        if (count > 0)
-        {
-            _context.Settings.RemoveRange(entities);
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-
-        return count;
-    }
-
-    /// <summary>
     /// Count settings
     /// </summary>
     /// <param name="findQuery">Optional search query string.</param>

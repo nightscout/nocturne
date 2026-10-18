@@ -190,6 +190,8 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         if (page.Count > 0)
             page = ExtendToMillisecondAsync(page, ordered);
 
+        page = await WithLiveMealPartnersAsync(page, ct);
+
         var treatments = await AssembleAsync(page, ct);
 
         return treatments.OrderBy(t => t.SrvModified ?? t.Mills);
@@ -222,6 +224,42 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             .ThenBy(r => LegacyTreatmentTables.OrderOf(r.Table))
             .ThenBy(RecordId)
             .ToList();
+    }
+
+    /// <summary>
+    /// Adds to <paramref name="page"/> the live boluses and carb intakes correlated with a deleted one
+    /// in it, stamped with that delete. A live meal is served under its bolus id, so deleting one half
+    /// changes what the other reads as: a surviving carb intake becomes a standalone treatment under
+    /// its own id, a surviving bolus loses its carbs under the meal's id. Neither survivor's own row
+    /// moved, so without this the client keeps the meal (carbs deleted) or loses the carbs (bolus
+    /// deleted). Stamped at or below the page's newest row, the added rows leave its cursor where it was.
+    /// </summary>
+    private async Task<List<FetchedRecord>> WithLiveMealPartnersAsync(
+        List<FetchedRecord> page, CancellationToken ct)
+    {
+        var deletes = new Dictionary<Guid, DateTime>();
+        foreach (var row in page.Where(r => r.Deleted && r.Record is Bolus or CarbIntake))
+        {
+            if (((IV4Record)row.Record).CorrelationId is not { } correlationId)
+                continue;
+            if (!deletes.TryGetValue(correlationId, out var stamp) || row.Modified > stamp)
+                deletes[correlationId] = row.Modified;
+        }
+
+        if (deletes.Count == 0)
+            return page;
+
+        var seen = page.Select(RecordId).ToHashSet();
+        var partners = new List<FetchedRecord>();
+        foreach (var table in LegacyTreatmentTables.MealTables)
+        {
+            var live = await FetchSafe(table, t => t.LiveByCorrelationAsync(_dbContext, deletes.Keys, ct));
+            partners.AddRange(live
+                .Where(row => seen.Add(RecordId(row)))
+                .Select(row => row with { Modified = deletes[((IV4Record)row.Record).CorrelationId!.Value] }));
+        }
+
+        return [.. page, .. partners];
     }
 
     private static Guid RecordId(FetchedRecord row) => row.Id;

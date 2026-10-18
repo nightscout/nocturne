@@ -19,6 +19,7 @@ public class LegacyStorageReadScopeTests
     [InlineData("devicestatus", Scope.DevicesRead)]
     [InlineData("profile", Scope.TherapyRead)]
     [InlineData("food", Scope.FoodRead)]
+    [InlineData("settings", Scope.TherapyRead)]
     public void EachStorage_MapsToItsCategory(string storage, string expected)
     {
         LegacyStorageReadScopes.RequiredReadScope(storage).Should().Be(expected);

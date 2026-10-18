@@ -43,8 +43,10 @@ public class UserDisplayPreferences
     public string Serialize() => JsonSerializer.Serialize(this, JsonOptions);
 
     // Allowed values for the constrained string preferences (mirror the frontend literal unions).
-    private static readonly HashSet<string> AllowedGlucoseUnits = new(StringComparer.Ordinal) { "mg/dl", "mmol" };
-    private static readonly HashSet<string> AllowedTimeFormats = new(StringComparer.Ordinal) { "12", "24" };
+    internal static readonly HashSet<string> AllowedGlucoseUnits = new(StringComparer.Ordinal) { "mg/dl", "mmol" };
+    internal static readonly HashSet<string> AllowedTimeFormats = new(StringComparer.Ordinal) { "12", "24" };
+    private static readonly HashSet<string> AllowedA1cNames = new(StringComparer.Ordinal) { "HbA1c", "A1c" };
+    private static readonly HashSet<string> AllowedA1cUnits = new(StringComparer.Ordinal) { "percent", "mmol/mol" };
 
     /// <summary>
     /// Regional formats offered to the user. Empty string means "follow the display language".
@@ -73,6 +75,8 @@ public class UserDisplayPreferences
     {
         var stringError =
             Check("glucoseUnits", GlucoseUnits, AllowedGlucoseUnits)
+            ?? Check("a1cName", A1cName, AllowedA1cNames)
+            ?? Check("a1cUnits", A1cUnits, AllowedA1cUnits)
             ?? Check("timeFormat", TimeFormat, AllowedTimeFormats)
             ?? Check("regionFormat", RegionFormat, AllowedRegionFormats)
             ?? Check("colorTheme", ColorTheme, AllowedColorThemes)
@@ -99,12 +103,12 @@ public class UserDisplayPreferences
         }
 
         return YearOverviewColors?.Validate();
-
-        static string? Check(string field, string? value, HashSet<string> allowed) =>
-            value != null && !allowed.Contains(value)
-                ? $"{field}: '{value}' is not allowed. Valid values: {string.Join(", ", allowed)}"
-                : null;
     }
+
+    internal static string? Check(string field, string? value, HashSet<string> allowed) =>
+        value != null && !allowed.Contains(value)
+            ? $"{field}: '{value}' is not allowed. Valid values: {string.Join(", ", allowed)}"
+            : null;
 
     /// <summary>
     /// Merges the non-null fields of <paramref name="incoming"/> into this instance so unset
@@ -114,6 +118,8 @@ public class UserDisplayPreferences
     public void MergeWith(UserDisplayPreferences incoming)
     {
         GlucoseUnits = incoming.GlucoseUnits ?? GlucoseUnits;
+        A1cName = incoming.A1cName ?? A1cName;
+        A1cUnits = incoming.A1cUnits ?? A1cUnits;
         TimeFormat = incoming.TimeFormat ?? TimeFormat;
         RegionFormat = incoming.RegionFormat ?? RegionFormat;
         ColorTheme = incoming.ColorTheme ?? ColorTheme;
@@ -161,6 +167,8 @@ public class UserDisplayPreferences
     public UserDisplayPreferences ToPresentationOnly() => new()
     {
         GlucoseUnits = GlucoseUnits,
+        A1cName = A1cName,
+        A1cUnits = A1cUnits,
         TimeFormat = TimeFormat,
         RegionFormat = RegionFormat,
         ColorTheme = ColorTheme,
@@ -172,6 +180,9 @@ public class UserDisplayPreferences
     /// <summary>Glucose units: "mg/dl" or "mmol".</summary>
     [JsonPropertyName("glucoseUnits")]
     public string? GlucoseUnits { get; set; }
+
+    public string? A1cName { get; set; }
+    public string? A1cUnits { get; set; }
 
     /// <summary>Time format: "12" or "24".</summary>
     [JsonPropertyName("timeFormat")]

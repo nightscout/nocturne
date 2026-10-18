@@ -86,6 +86,14 @@ public class DeviceStatus : ProcessableDocumentBase
     }
 
     /// <summary>
+    /// <c>false</c> on a deleted document, which a v3 history read still returns so a syncing client
+    /// learns of the delete; unset on a live one, as Nightscout leaves it.
+    /// </summary>
+    [JsonPropertyName("isValid")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsValid { get; set; }
+
+    /// <summary>
     /// Resolves the V3 compatibility timestamps: Mills, then <c>date</c>, then <c>created_at</c>.
     /// Loop and xDrip+ upload a devicestatus carrying neither <c>mills</c> nor <c>date</c>, and
     /// the broadcast document is the raw upload, so without the <c>created_at</c> leg those

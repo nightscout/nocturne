@@ -462,4 +462,47 @@ public class IobCobComputeStageTests
 
         second.IobSeries.Should().ContainSingle().Which.Value.Should().Be(1.5);
     }
+
+    [Fact]
+    public async Task ExecuteAsync_BasalSeriesGetsOnlyDisplayTempBasals_WhileIobSeesPreWindowTempBasal()
+    {
+        var startTime = TestMills;
+        var endTime = TestMills + 30 * 60 * 1000;
+        var preWindow = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startTime - 60 * 60 * 1000).UtcDateTime,
+            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startTime - 30 * 60 * 1000).UtcDateTime,
+            Rate = 3.0,
+            Origin = TempBasalOrigin.Algorithm,
+        };
+
+        List<TempBasal>? firstTickBasals = null;
+        _mockIobCalculator
+            .Setup(s => s.FromTempBasals(It.IsAny<List<TempBasal>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
+            .Callback<List<TempBasal>, TherapySnapshot, long>((tbs, _, t) =>
+            {
+                if (t == startTime)
+                    firstTickBasals = tbs;
+            })
+            .Returns(new IobResult { BasalIob = 0.4 });
+
+        var context = new ChartDataContext
+        {
+            StartTime = startTime,
+            EndTime = endTime,
+            IntervalMinutes = 5,
+            DefaultBasalRate = 1.0,
+            TempBasalList = [preWindow],
+            DisplayTempBasals = [],
+        };
+
+        var result = await _stage.ExecuteAsync(context, CancellationToken.None);
+
+        firstTickBasals.Should().ContainSingle().Which.Should().BeSameAs(preWindow);
+        result.IobSeries[0].Value.Should().BeApproximately(0.4, 1e-9);
+        _mockBasalSeriesBuilder.Verify(b => b.BuildAsync(
+            It.Is<List<TempBasal>>(l => l.Count == 0),
+            startTime, endTime, It.IsAny<double>(), It.IsAny<TherapyTimeline>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
 }

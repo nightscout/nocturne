@@ -106,7 +106,6 @@ public class BatchResendMatchesSingleTests : IDisposable
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
             _audit,
-            _dedup,
             NullLogger<TreatmentDecomposer>.Instance);
 
         Treatment Carbs(double carbs) => new()

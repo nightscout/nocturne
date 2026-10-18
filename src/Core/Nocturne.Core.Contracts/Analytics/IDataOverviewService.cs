@@ -7,6 +7,8 @@ namespace Nocturne.Core.Contracts.Analytics;
 /// </summary>
 public interface IDataOverviewService
 {
+    Task<YearSummaryResponse> GetYearSummaryAsync(int year, string[]? dataSources = null, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Get the list of years that contain data and available data sources
     /// </summary>

@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Nocturne.API.Tests.TestDoubles;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Controllers.V4.Treatments;
@@ -478,26 +478,6 @@ public class BolusControllerTests
             .Which.Detail.Should().Contain("sync identifier 'sync-1'");
     }
 
-    /// <remarks>
-    /// The MVC-registered factory is exercised end to end by
-    /// <see cref="GoldenFiles.RecreationBlockedPipelineTests"/>; here it only has to carry the
-    /// status, title and detail the filter hands it.
-    /// </remarks>
-    private static ProblemDetailsFactory EchoingProblemDetailsFactory()
-    {
-        var factory = new Mock<ProblemDetailsFactory>();
-        factory
-            .Setup(f => f.CreateProblemDetails(
-                It.IsAny<HttpContext>(), It.IsAny<int?>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
-            .Returns((HttpContext _, int? status, string? title, string? type, string? detail, string? instance) =>
-                new ProblemDetails
-                {
-                    Status = status, Title = title, Type = type, Detail = detail, Instance = instance,
-                });
-        return factory.Object;
-    }
-
     private static ObjectResult RunRecreationBlockedFilter(ControllerBase controller, Exception exception)
     {
         var context = new ExceptionContext(
@@ -507,7 +487,7 @@ public class BolusControllerTests
             Exception = exception,
         };
 
-        new RecreationBlockedFilter(EchoingProblemDetailsFactory(), Options.Create(new JsonOptions())).OnException(context);
+        new RecreationBlockedFilter(new EchoingProblemDetailsFactory(), Options.Create(new JsonOptions())).OnException(context);
 
         context.ExceptionHandled.Should().BeTrue();
         return context.Result.Should().BeOfType<ObjectResult>().Subject;

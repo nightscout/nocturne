@@ -98,11 +98,15 @@ class Program
 
         if (!useRemoteDb)
         {
-            // AddParameter resolves "Parameters:postgres-username" from config
-            // (or env var Parameters__postgres-username) automatically.
+            // Read from config explicitly: the AddParameter overload taking a value uses it
+            // as-is and never consults "Parameters:postgres-username". POSTGRES_USER only
+            // applies when a data volume is first initialised, so a volume created under
+            // another bootstrap user would otherwise fail every health check once the
+            // persistent container is recreated with the default.
             var postgresUsername = builder.AddParameter(
                 ServiceNames.Parameters.PostgresUsername,
-                ServiceNames.Defaults.PostgresUsername,
+                builder.Configuration[$"Parameters:{ServiceNames.Parameters.PostgresUsername}"]
+                    ?? ServiceNames.Defaults.PostgresUsername,
                 secret: false
             ).WithPublishMetadata(
                 "PostgreSQL bootstrap username",

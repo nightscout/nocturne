@@ -34,7 +34,7 @@ public class CgmComparisonControllerTests
 
     private void RegisterReadings(Guid patientDeviceId, params (double Minutes, double Mgdl)[] readings) =>
         _glucose
-            .Setup(g => g.GetAsync(
+            .Setup(g => g.GetForAnalyticsAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(),
@@ -53,7 +53,7 @@ public class CgmComparisonControllerTests
     }
 
     private void VerifyNoRead() =>
-        _glucose.Verify(g => g.GetAsync(
+        _glucose.Verify(g => g.GetForAnalyticsAsync(
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
             It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
             It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>()),

@@ -23,8 +23,8 @@ public class LinkedRecordsFilterBenchmarks
         _fixture = new PostgresFixture();
         await _fixture.InitializeAsync();
 
-        _tenantId = Guid.CreateVersion7();
-        await using var ctx = _fixture.CreateContext();
+        _tenantId = await _fixture.CreateTenantAsync();
+        await using var ctx = _fixture.CreateContext(_tenantId);
         await DataSeeder.SeedSensorGlucoseAsync(ctx, _tenantId, RowCount);
 
         if (DuplicatePercent > 0)
@@ -33,8 +33,14 @@ public class LinkedRecordsFilterBenchmarks
                 .Where(sg => sg.TenantId == _tenantId)
                 .Select(sg => sg.Id)
                 .ToListAsync();
+            if (ids.Count != RowCount)
+                throw new InvalidOperationException($"Expected {RowCount} sensor glucose rows, found {ids.Count}.");
             await DataSeeder.SeedLinkedRecordsAsync(
                 ctx, _tenantId, "sensorglucose", ids, DuplicatePercent);
+            var linkedCount = await ctx.LinkedRecords.CountAsync(lr => lr.RecordType == "sensorglucose");
+            var expectedLinkedCount = 2 * (int)(RowCount * DuplicatePercent);
+            if (linkedCount != expectedLinkedCount)
+                throw new InvalidOperationException($"Expected {expectedLinkedCount} linked rows, found {linkedCount}.");
         }
     }
 
@@ -48,7 +54,7 @@ public class LinkedRecordsFilterBenchmarks
     public async Task<List<SensorGlucoseEntity>> WithFilter()
     {
         if (!_fixture.IsInitialized) return [];
-        await using var ctx = _fixture.CreateContext();
+        await using var ctx = _fixture.CreateContext(_tenantId);
         var now = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(RowCount * 5);
         var from = now.AddDays(-7);
 
@@ -66,7 +72,7 @@ public class LinkedRecordsFilterBenchmarks
     public async Task<List<SensorGlucoseEntity>> WithoutFilter()
     {
         if (!_fixture.IsInitialized) return [];
-        await using var ctx = _fixture.CreateContext();
+        await using var ctx = _fixture.CreateContext(_tenantId);
         var now = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(RowCount * 5);
         var from = now.AddDays(-7);
 

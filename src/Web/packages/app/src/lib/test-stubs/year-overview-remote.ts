@@ -21,3 +21,12 @@ export const getDailySummary = (request: {
   dataSources?: string[];
 }) => effectAwareQuery(() => yearOverviewMocks.days(request));
 export const getGriTimeline = () => effectAwareQuery(yearOverviewMocks.gri);
+
+export const getYearSummary = (request: {
+  year: number;
+  dataSources?: string[];
+}) =>
+  effectAwareQuery(async () => ({
+    dailySummary: await yearOverviewMocks.days(request),
+    griTimeline: await yearOverviewMocks.gri(),
+  }));

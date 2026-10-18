@@ -45,7 +45,7 @@ internal sealed class CanonicalGlucoseService : ICanonicalGlucoseService
         IReadOnlyList<SensorGlucose> readings,
         CancellationToken ct = default)
     {
-        if (!IsMultiStream(readings))
+        if (!CanonicalGlucoseStream.HasMultipleStreams(readings))
             return readings;
 
         _devices ??= (await _patientDeviceRepository.GetAllAsync(ct)).ToList();
@@ -78,17 +78,5 @@ internal sealed class CanonicalGlucoseService : ICanonicalGlucoseService
             recent = recent.Where(r => !DataSources.IsEphemeral(r.DataSource)).ToList();
 
         return await SelectAsync(recent, ct);
-    }
-
-    private static bool IsMultiStream(IReadOnlyList<SensorGlucose> readings)
-    {
-        if (readings.Count < 2) return false;
-        var first = CanonicalGlucoseStream.StreamKey(readings[0]);
-        for (var i = 1; i < readings.Count; i++)
-        {
-            if (CanonicalGlucoseStream.StreamKey(readings[i]) != first)
-                return true;
-        }
-        return false;
     }
 }

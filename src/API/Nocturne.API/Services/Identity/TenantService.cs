@@ -343,13 +343,8 @@ public partial class TenantService : ITenantService
         if (member.Subject?.IsSystemSubject == true)
             return new MemberRemovalResult(false, "Cannot remove system subject memberships");
 
-        var isOwner = await context.TenantMemberRoles
-            .AnyAsync(mr => mr.TenantMemberId == member.Id
-                && mr.TenantRole!.Slug == RoleSeeds.Owner, ct);
-
-        // A deactivated or system-subject peer is not a remaining owner.
-        if (isOwner && !await context.TenantMembers.OwnersOf(tenantId).AnyAsync(m => m.Id != member.Id, ct))
-            return new MemberRemovalResult(false, "Cannot remove the last owner of a tenant");
+        if (await context.TenantMembers.IsLastOwnerAsync(tenantId, member.Id, ct))
+            return new MemberRemovalResult(false, TenantOwnerFilter.LastOwnerRefusal);
 
         // Chat identity directory rows are global and carry no membership join, so a link left
         // behind here would keep answering bot commands for this tenant. It goes in the same
@@ -374,7 +369,6 @@ public partial class TenantService : ITenantService
         await using var context = await _factory.CreateSubjectPinnedContextAsync(subjectId, ct);
         return await context.TenantMembers.AsNoTracking()
             .Where(tm => tm.SubjectId == subjectId)
-            .Include(tm => tm.Tenant)
             .OrderByDescending(tm => tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
             .ThenBy(tm => tm.SysCreatedAt)
             .ThenBy(tm => tm.Tenant!.Slug)

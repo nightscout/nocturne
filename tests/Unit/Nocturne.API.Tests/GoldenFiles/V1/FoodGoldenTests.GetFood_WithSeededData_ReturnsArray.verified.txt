@@ -16,7 +16,9 @@
       gi: 2,
       unit: g,
       position: 99999,
-      created_at: DateTimeOffset_1
+      created_at: DateTimeOffset_1,
+      srvModified: {Scrubbed},
+      srvCreated: {Scrubbed}
     },
     {
       _id: eeeeeeeeeeeeeeeeeeeee002,
@@ -32,7 +34,9 @@
       gi: 2,
       unit: g,
       position: 99999,
-      created_at: DateTimeOffset_1
+      created_at: DateTimeOffset_1,
+      srvModified: {Scrubbed},
+      srvCreated: {Scrubbed}
     },
     {
       _id: eeeeeeeeeeeeeeeeeeeee003,
@@ -48,7 +52,9 @@
       gi: 2,
       unit: g,
       position: 99999,
-      created_at: DateTimeOffset_1
+      created_at: DateTimeOffset_1,
+      srvModified: {Scrubbed},
+      srvCreated: {Scrubbed}
     }
   ]
 }

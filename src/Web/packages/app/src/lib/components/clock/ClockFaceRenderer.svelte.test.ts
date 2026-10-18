@@ -76,9 +76,18 @@ describe("ClockFaceRenderer", () => {
   it("shows the reading in its glucose colour", () => {
     const { text, glucoseColor } = face(reading);
 
-    expect(text).toContain("55");
+    expect(text).toContain("55 mg/dL");
     expect(text).toContain("7m ago");
-    expect(glucoseColor("55")).not.toBe(WHITE);
+    expect(glucoseColor("55 mg/dL")).not.toBe(WHITE);
+  });
+
+  it("renders in the face's units, not the viewer's", () => {
+    const mmolFace: ClockFaceConfig = {
+      ...config,
+      settings: { ...config.settings, glucoseUnits: "mmol", timeFormat: "24" },
+    };
+
+    expect(face(reading, mmolFace).text).toContain("3.1 mmol/L");
   });
 
   it("paints a muted element in the theme's muted foreground", () => {

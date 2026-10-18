@@ -234,6 +234,7 @@ public class DeviceStatusProjectionService
     /// <summary>
     /// Returns <see cref="DeviceStatus"/> documents projected from APS snapshots
     /// modified since the given Unix millisecond threshold. Used for AAPS incremental sync.
+    /// A deleted snapshot projects with <c>isValid: false</c>.
     /// </summary>
     /// <param name="lastModified">Unix millisecond timestamp threshold.</param>
     /// <param name="limit">Maximum number of results.</param>
@@ -241,10 +242,12 @@ public class DeviceStatusProjectionService
     public async Task<IEnumerable<DeviceStatus>> GetModifiedSinceAsync(
         long lastModified, int limit, CancellationToken ct)
     {
-        var apsSnapshots = (await _apsRepo.GetModifiedSinceAsync(lastModified, limit, ct)).ToList();
+        var page = await _apsRepo.GetModifiedSinceAsync(lastModified, limit, ct);
 
-        if (apsSnapshots.Count == 0)
+        if (page.Count == 0)
             return Enumerable.Empty<DeviceStatus>();
+
+        var apsSnapshots = page.Select(r => r.Record).ToList();
 
         var correlationIds = apsSnapshots
             .Where(a => a.CorrelationId.HasValue)
@@ -269,14 +272,18 @@ public class DeviceStatusProjectionService
         // Load override state spans the same way as GetAsync/GetByIdAsync
         var overrides = await LoadOverridesForSnapshots(apsSnapshots, ct);
 
-        return apsSnapshots.Select(aps =>
+        return page.Select(row =>
         {
+            var aps = row.Record;
             var cid = aps.CorrelationId;
             var pump = cid.HasValue ? pumpByCorrelation[cid.Value].FirstOrDefault() : null;
             var uploader = cid.HasValue ? uploaderByCorrelation[cid.Value].FirstOrDefault() : null;
             var extra = cid.HasValue ? extrasByCorrelation[cid.Value].FirstOrDefault() : null;
             var overrideSpan = FindOverrideForTimestamp(overrides, aps.Timestamp);
-            return ProjectFromSnapshots(aps, pump, uploader, overrideSpan, extra, _logger);
+            var status = ProjectFromSnapshots(aps, pump, uploader, overrideSpan, extra, _logger);
+            if (row.Deleted)
+                status.IsValid = false;
+            return status;
         });
     }
 
@@ -557,7 +564,8 @@ public class DeviceStatusProjectionService
     /// <item>URL query string: <c>find[device]=openaps&amp;find[created_at][$gte]=2024-01-01</c></item>
     /// <item>JSON object: <c>{"device":"openaps","created_at":{"$gte":"2024-01-01"}}</c></item>
     /// </list>
-    /// Only <c>device</c> (exact match) and <c>created_at</c> with <c>$gte/$gt/$lte/$lt</c> operators are supported.
+    /// Honours <c>device</c> as a string or <c>$eq</c>, and <c>created_at</c> with <c>$gte/$gt/$lte/$lt</c>,
+    /// plus <c>$eq</c> or a bare instant in JSON.
     /// </summary>
     internal static (string? Device, DateTime? From, DateTime? To) ParseFindQuery(string? find)
     {
@@ -608,35 +616,34 @@ public class DeviceStatusProjectionService
 
             foreach (var field in root.EnumerateObject())
             {
-                if (field.Name == "device" && field.Value.ValueKind == JsonValueKind.String)
+                if (field.Name == "device")
                 {
-                    device = field.Value.GetString();
-                }
-                else if (field.Name == "created_at" && field.Value.ValueKind == JsonValueKind.Object)
-                {
-                    foreach (var prop in field.Value.EnumerateObject())
-                    {
-                        var dateStr = prop.Value.ValueKind == JsonValueKind.String ? prop.Value.GetString() : null;
-                        if (dateStr == null || !TryParseDateTime(dateStr, out var dt))
-                        {
-                            unhonoured = true;
-                            continue;
-                        }
+                    var operators = field.Value.ValueKind == JsonValueKind.Object
+                        ? field.Value.EnumerateObject().Select(prop => (prop.Name, prop.Value)).ToList()
+                        : [("$eq", field.Value)];
 
-                        switch (prop.Name)
-                        {
-                            case "$gte":
-                            case "$gt":
-                                from = dt;
-                                break;
-                            case "$lte":
-                            case "$lt":
-                                to = dt;
-                                break;
-                            default:
-                                unhonoured = true;
-                                break;
-                        }
+                    if (operators.Count == 0)
+                        unhonoured = true;
+
+                    foreach (var (op, operand) in operators)
+                    {
+                        if (op == "$eq" && operand.ValueKind == JsonValueKind.String)
+                            device = operand.GetString();
+                        else
+                            unhonoured = true;
+                    }
+                }
+                else if (field.Name == "created_at")
+                {
+                    var operators = field.Value.ValueKind == JsonValueKind.Object
+                        ? field.Value.EnumerateObject().Select(prop => (prop.Name, prop.Value)).ToList()
+                        : [("$eq", field.Value)];
+
+                    foreach (var (op, operand) in operators)
+                    {
+                        if (!TryParseDateTime(operand, out var dt)
+                            || !TryApplyCreatedAtCondition(op, dt, ref from, ref to))
+                            unhonoured = true;
                     }
                 }
                 else
@@ -674,24 +681,23 @@ public class DeviceStatusProjectionService
                 continue;
             }
 
+            var createdAtOp = key.ToLowerInvariant() switch
+            {
+                "find[created_at][$gte]" => "$gte",
+                "find[created_at][$gt]" => "$gt",
+                "find[created_at][$lte]" => "$lte",
+                "find[created_at][$lt]" => "$lt",
+                _ => null,
+            };
+
             if (key.Equals("find[device]", StringComparison.OrdinalIgnoreCase))
             {
                 device = value;
             }
-            else if (key.Equals("find[created_at][$gte]", StringComparison.OrdinalIgnoreCase)
-                     || key.Equals("find[created_at][$gt]", StringComparison.OrdinalIgnoreCase))
+            else if (createdAtOp is not null)
             {
-                if (TryParseDateTime(value, out var dt))
-                    from = dt;
-                else
-                    unhonoured = true;
-            }
-            else if (key.Equals("find[created_at][$lte]", StringComparison.OrdinalIgnoreCase)
-                     || key.Equals("find[created_at][$lt]", StringComparison.OrdinalIgnoreCase))
-            {
-                if (TryParseDateTime(value, out var dt))
-                    to = dt;
-                else
+                if (!TryParseDateTime(value, out var dt)
+                    || !TryApplyCreatedAtCondition(createdAtOp, dt, ref from, ref to))
                     unhonoured = true;
             }
             else
@@ -703,24 +709,78 @@ public class DeviceStatusProjectionService
         return (device, from, to, unhonoured);
     }
 
+    /// <summary>
+    /// Intersects one <c>created_at</c> condition into the window. The repositories are inclusive at
+    /// both ends, so a strict bound tightens by 1ms, as <c>FindQuery</c> does for its time bounds. A
+    /// strict bound with no representable instant beyond it returns false.
+    /// </summary>
+    private static bool TryApplyCreatedAtCondition(
+        string op, DateTime instant, ref DateTime? from, ref DateTime? to)
+    {
+        switch (op)
+        {
+            case "$gt" when instant > DateTime.MaxValue.AddMilliseconds(-1):
+            case "$lt" when instant < DateTime.MinValue.AddMilliseconds(1):
+                return false;
+            case "$gt":
+                instant = instant.AddMilliseconds(1);
+                goto case "$gte";
+            case "$gte":
+                from = from > instant ? from : instant;
+                return true;
+            case "$lt":
+                instant = instant.AddMilliseconds(-1);
+                goto case "$lte";
+            case "$lte":
+                to = to < instant ? to : instant;
+                return true;
+            case "$eq":
+                from = from > instant ? from : instant;
+                to = to < instant ? to : instant;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static bool TryParseDateTime(JsonElement value, out DateTime result)
+    {
+        if (value.ValueKind == JsonValueKind.Number)
+        {
+            result = default;
+            return value.TryGetInt64(out var mills) && TryFromMills(mills, out result);
+        }
+
+        if (value.ValueKind == JsonValueKind.String)
+            return TryParseDateTime(value.GetString()!, out result);
+
+        result = default;
+        return false;
+    }
+
     private static bool TryParseDateTime(string value, out DateTime result)
     {
-        // Try ISO 8601 first, then fall back to general DateTime parsing
         if (DateTime.TryParse(value, CultureInfo.InvariantCulture,
                 DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out result))
         {
             return true;
         }
 
-        // Try Unix milliseconds
-        if (long.TryParse(value, out var mills))
+        result = default;
+        return long.TryParse(value, out var mills) && TryFromMills(mills, out result);
+    }
+
+    private static bool TryFromMills(long mills, out DateTime result)
+    {
+        if (mills < DateTimeOffset.MinValue.ToUnixTimeMilliseconds()
+            || mills > DateTimeOffset.MaxValue.ToUnixTimeMilliseconds())
         {
-            result = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
-            return true;
+            result = default;
+            return false;
         }
 
-        result = default;
-        return false;
+        result = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
+        return true;
     }
 
     private async Task<List<StateSpan>> LoadOverridesForSnapshots(

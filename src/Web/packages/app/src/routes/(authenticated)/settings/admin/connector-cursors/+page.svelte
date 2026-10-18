@@ -360,10 +360,14 @@
               {/if}
               <span class="font-medium">{jobStatus.state}</span>
               <span class="text-muted-foreground">
-                {jobStatus.completedConnectors} / {jobStatus.totalConnectors} connectors
+                {jobStatus.completedConnectors} / {jobStatus.totalConnectors} processed
               </span>
               {#if jobStatus.errorMessage}
-                <span class="text-destructive">{jobStatus.errorMessage}</span>
+                <span class="text-destructive">
+                  {jobStatus.errorMessage === "connector_reset_failed"
+                    ? "One or more connectors failed; review the connector details and retry the failed range."
+                    : jobStatus.errorMessage}
+                </span>
               {/if}
             </div>
           {/if}

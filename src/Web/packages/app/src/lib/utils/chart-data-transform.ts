@@ -110,15 +110,6 @@ export function transformChartData(data: DashboardChartData) {
       time: new Date(t.time ?? 0),
       color: resolveChartColor(t.color ?? "muted-foreground"),
     })),
-
-    heartRateSeries: (data.heartRateSeries ?? []).map((p) => ({
-      time: new Date(p.time ?? 0),
-      bpm: p.bpm ?? 0,
-    })),
-    stepSeries: (data.stepSeries ?? []).map((p) => ({
-      time: new Date(p.time ?? 0),
-      steps: p.steps ?? 0,
-    })),
   };
 }
 

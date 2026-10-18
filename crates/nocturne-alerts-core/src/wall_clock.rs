@@ -3,11 +3,8 @@
 //! still. A host must evaluate a rule that contains one on a timer as well as
 //! per reading, or it can stay unfired for as long as no reading arrives.
 
-use serde_json::Value;
-
-use crate::enums::WireEnum;
-use crate::leaf_identity::collect_leaves;
-use crate::model::{ConditionKind, Node, parse_payload};
+use crate::facts::RuleConditions;
+use crate::model::ConditionKind;
 
 /// Whether `kind` measures elapsed time against an anchor a reading does not
 /// move. Containers are not: a `sustained` over a reading-driven child only
@@ -52,36 +49,22 @@ pub fn is_wall_clock(kind: ConditionKind) -> bool {
     }
 }
 
-/// Whether a stored rule's root kind, or any leaf of its tree, is wall-clock
-/// sensitive. The root kind is `condition_type` as evaluation reads it, a
-/// kind's wire name ignoring ASCII case; anything else is false. A wall-clock
-/// root is true whatever its body. Otherwise the body is read as evaluation
-/// reads it, and one that cannot be evaluated is false; nested kinds resolve
-/// as node dispatch resolves them (engine-semantics.md §1.2).
+/// Whether any kind of `rule` ([`RuleConditions`]) is wall-clock sensitive.
+/// A wall-clock root is true whatever its body.
 #[must_use]
-pub fn references_wall_clock(condition_type: &str, condition_params: &Value) -> bool {
-    let Some(kind) = ConditionKind::from_name(condition_type) else {
-        return false;
-    };
-    if is_wall_clock(kind) {
-        return true;
-    }
-    let Ok(payload) = parse_payload(kind, condition_params) else {
-        return false;
-    };
-    let root = Node::from_rule(kind, Some(payload));
-    collect_leaves(&root).into_iter().flatten().any(|leaf| {
-        leaf.type_str
-            .as_deref()
-            .and_then(ConditionKind::resolve)
-            .is_some_and(is_wall_clock)
-    })
+pub fn references_wall_clock(rule: &RuleConditions<'_>) -> bool {
+    rule.kinds().into_iter().any(is_wall_clock)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use crate::enums::WireEnum;
+    use serde_json::{Value, json};
+
+    fn body_references_wall_clock(condition_type: &str, condition_params: &Value) -> bool {
+        references_wall_clock(&RuleConditions::body(condition_type, condition_params))
+    }
 
     fn manifest_names(key: &str) -> Vec<String> {
         let path = concat!(
@@ -117,11 +100,11 @@ mod tests {
 
     #[test]
     fn wall_clock_root_is_selected_whatever_its_payload() {
-        assert!(references_wall_clock(
+        assert!(body_references_wall_clock(
             "signal_loss",
             &json!({"timeout_minutes": 15})
         ));
-        assert!(references_wall_clock(
+        assert!(body_references_wall_clock(
             "tracker_age",
             &json!("not an object")
         ));
@@ -129,24 +112,27 @@ mod tests {
 
     #[test]
     fn reading_driven_root_is_not_selected() {
-        assert!(!references_wall_clock(
+        assert!(!body_references_wall_clock(
             "threshold",
             &json!({"direction": "below", "value": 70})
         ));
-        assert!(!references_wall_clock("no_such_kind", &json!({})));
+        assert!(!body_references_wall_clock("no_such_kind", &json!({})));
     }
 
     #[test]
     fn a_root_that_is_not_a_wire_name_is_not_selected() {
-        assert!(references_wall_clock(
+        assert!(body_references_wall_clock(
             "SIGNAL_LOSS",
             &json!({"timeout_minutes": 15})
         ));
-        assert!(!references_wall_clock(
+        assert!(!body_references_wall_clock(
             "SignalLoss",
             &json!({"timeout_minutes": 15})
         ));
-        assert!(!references_wall_clock("2", &json!({"timeout_minutes": 15})));
+        assert!(!body_references_wall_clock(
+            "2",
+            &json!({"timeout_minutes": 15})
+        ));
     }
 
     #[test]
@@ -163,7 +149,7 @@ mod tests {
                 } } }
             ]
         });
-        assert!(references_wall_clock("composite", &tree));
+        assert!(body_references_wall_clock("composite", &tree));
     }
 
     #[test]
@@ -177,6 +163,6 @@ mod tests {
                     { "type": "iob", "iob": { "operator": ">", "value": 2 } } } }
             ]
         });
-        assert!(!references_wall_clock("composite", &tree));
+        assert!(!body_references_wall_clock("composite", &tree));
     }
 }

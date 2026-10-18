@@ -5,6 +5,7 @@ import {
   deleteAll as deleteAllRemote,
 } from "$lib/api/generated/coachMarks.generated.remote";
 import { errorStatus } from "$lib/forms/submit-error";
+import { whenIdle } from "$lib/utils/when-idle";
 import { isOneOf, isRecord } from "$lib/utils/type-guards";
 
 const LOCAL_STORAGE_KEY = "nocturne:coach-marks";
@@ -51,7 +52,8 @@ function isAuthError(err: unknown): boolean {
 
 /**
  * Creates a {@link CoachMarkAdapter} backed by the generated remote functions,
- * with localStorage fallback when unauthenticated.
+ * with localStorage fallback when unauthenticated. The stored marks are read once the page is
+ * idle.
  *
  * @param localOnly Skip the remote functions entirely and keep every mark in localStorage. Set
  * this where the coach-mark endpoints cannot answer — they are tenant-scoped, so a host that
@@ -65,8 +67,10 @@ export function createCoachMarkAdapter(localOnly = false): CoachMarkAdapter {
     async fetchAll(): Promise<MarkState[]> {
       if (usingLocal) return [...readLocal().values()];
 
+      await new Promise<void>((resolve) => whenIdle(resolve));
+
       try {
-        const states = await getAll();
+        const states = await getAll().run();
         // Authenticated — merge any localStorage marks into the server response
         // then clear local storage so we don't drift.
         const local = readLocal();

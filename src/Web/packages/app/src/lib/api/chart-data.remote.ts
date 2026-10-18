@@ -16,5 +16,6 @@ const chartDataSchema = z.object({
 
 export const getChartData = query(
   chartDataSchema,
-  async (input) => transformChartData(await getDashboardChartData(input))
+  async (input) =>
+    transformChartData(await getDashboardChartData({ ...input, includeHealthSeries: false }))
 );

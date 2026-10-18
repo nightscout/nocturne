@@ -115,7 +115,7 @@ public class ActogramReportServiceTests
         };
 
         _glucose
-            .Setup(g => g.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+            .Setup(g => g.GetForAnalyticsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
                 It.IsAny<int>(), 0, false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { glucoseRow });
         _sleep
@@ -129,8 +129,8 @@ public class ActogramReportServiceTests
                 It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { stepRow });
         _heartRates
-            .Setup(h => h.GetHeartRatesByDateRangeAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Setup(h => h.GetHeartRateMinuteAveragesByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { hrRow });
         _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
@@ -285,7 +285,7 @@ public class ActogramReportServiceTests
     private void SetupEmpty()
     {
         _glucose
-            .Setup(g => g.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+            .Setup(g => g.GetForAnalyticsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
                 It.IsAny<int>(), 0, false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
         _sleep
@@ -299,8 +299,8 @@ public class ActogramReportServiceTests
                 It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<StepCount>());
         _heartRates
-            .Setup(h => h.GetHeartRatesByDateRangeAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Setup(h => h.GetHeartRateMinuteAveragesByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<HeartRate>());
     }
 }

@@ -175,8 +175,12 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         remaining["reason"]!.GetValue<string>().Should().Be("Before the window");
         (await CountAsync(client)).Should().Be(1);
         (await CountAsync(client, "?find[eventType]=Temporary%20Target")).Should().Be(0);
-        (await GetV3ResultAsync(client, "/api/v3/treatments/history/0")).Should()
+        var history = await GetV3ResultAsync(client, "/api/v3/treatments/history/0");
+        history.Where(t => t!["isValid"]?.GetValue<bool>() is not false).Should()
             .ContainSingle().Which!["reason"]!.GetValue<string>().Should().Be("Before the window");
+        history.Where(t => t!["isValid"]?.GetValue<bool>() is false)
+            .Select(t => t!["eventType"]!.GetValue<string>())
+            .Should().BeEquivalentTo("Temporary Override", "Temporary Target", "Profile Switch", "Note");
     }
 
     [Fact]

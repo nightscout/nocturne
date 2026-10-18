@@ -14,6 +14,48 @@ namespace Nocturne.Infrastructure.Data.Tests.Rls;
 [Collection("RLS completeness")]
 public class SleepSessionTombstoneTests(RlsCompletenessFixture fx)
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Replacement_CascadesOldStagesAndSamples(bool update)
+    {
+        await using var conn = await OpenForNewTenantAsync();
+        var repository = new SleepSessionRepository(new TestTenantDbContextFactory(Context(conn)));
+        var original = Session("sleep-original");
+        original.Stages = [new SleepStageInterval
+        {
+            StartTime = original.StartTime, EndTime = original.StartTime.AddHours(1), Stage = SleepStageType.Light,
+        }];
+        original.BiometricSamples = [new SleepBiometricSample
+        {
+            Timestamp = original.StartTime, HeartRate = 60,
+        }];
+        var created = await repository.UpsertSessionAsync(original);
+        var replacement = Session("sleep-different-source-key");
+        replacement.Id = created.Id;
+        replacement.Stages = [new SleepStageInterval
+        {
+            StartTime = original.StartTime.AddHours(1), EndTime = original.StartTime.AddHours(2), Stage = SleepStageType.Deep,
+        }];
+        replacement.BiometricSamples = [new SleepBiometricSample
+        {
+            Timestamp = original.StartTime.AddHours(1), HeartRate = 55,
+        }];
+
+        if (update)
+            await repository.UpdateSessionAsync(Guid.Parse(created.Id!), replacement);
+        else
+            await repository.UpsertSessionAsync(replacement);
+
+        var persisted = await repository.GetSessionByIdAsync(Guid.Parse(created.Id!));
+        persisted!.Stages.Should().ContainSingle().Which.Stage.Should().Be(SleepStageType.Deep);
+        persisted.BiometricSamples.Should().ContainSingle().Which.HeartRate.Should().Be(55);
+        (await repository.CountSessionsAsync()).Should().Be(1);
+        await using var command = conn.CreateCommand();
+        command.CommandText = "SELECT (SELECT count(*) FROM sleep_stages) + (SELECT count(*) FROM sleep_biometric_samples)";
+        ((long)(await command.ExecuteScalarAsync())!).Should().Be(2);
+    }
+
     [Fact]
     public async Task UserTombstone_RefusesTheUpsertAndKeepsTheSessionDeleted()
     {
@@ -94,6 +136,39 @@ public class SleepSessionTombstoneTests(RlsCompletenessFixture fx)
 
         (await repository.CountSessionsAsync()).Should().Be(0);
         (await CountRowsAsync(conn, "sleep-to-delete")).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Replacement_PreservesIdentityAndCreatedAtAndReplacesStages(bool updateById)
+    {
+        await using var conn = await OpenForNewTenantAsync();
+        var repository = new SleepSessionRepository(new TestTenantDbContextFactory(Context(conn)));
+        var original = Session("sleep-replacement");
+        original.CreatedAt = new DateTime(2025, 12, 1, 0, 0, 0, DateTimeKind.Utc);
+        original.Stages = [new SleepStageInterval
+        {
+            StartTime = original.StartTime, EndTime = original.EndTime, Stage = SleepStageType.Light,
+        }];
+        var created = await repository.UpsertSessionAsync(original);
+
+        var replacement = Session("sleep-replacement");
+        replacement.CreatedAt = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc);
+        replacement.Stages = [new SleepStageInterval
+        {
+            StartTime = replacement.StartTime, EndTime = replacement.EndTime, Stage = SleepStageType.Deep,
+        }];
+        var updated = updateById
+            ? await repository.UpdateSessionAsync(Guid.Parse(created.Id!), replacement)
+            : await repository.UpsertSessionAsync(replacement);
+
+        updated!.Id.Should().Be(created.Id);
+        updated.CreatedAt.Should().Be(created.CreatedAt);
+        var stored = await repository.GetSessionByIdAsync(Guid.Parse(created.Id!));
+        stored!.CreatedAt.Should().Be(created.CreatedAt);
+        stored.Stages.Should().ContainSingle().Which.Stage.Should().Be(SleepStageType.Deep);
+        (await CountRowsAsync(conn, "sleep-replacement")).Should().Be(1);
     }
 
     private async Task<SleepSessionRepository> SeedTombstoneAsync(NpgsqlConnection conn, string originalId, bool byUser)

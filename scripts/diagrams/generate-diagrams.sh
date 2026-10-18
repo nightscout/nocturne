@@ -2,7 +2,7 @@
 # scripts/diagrams/generate-diagrams.sh — Regenerate auto-produced mermaid sources.
 #
 # Mermaid sources (.mmd) are inlined as fenced code blocks in the OpenAPI
-# spec; Scalar's docs page lazy-loads mermaid.esm and renders them in the
+# spec; Scalar's docs page lazy-loads pele and renders them in the
 # browser. No SVG output step is required.
 #
 # Prerequisites:

@@ -109,6 +109,6 @@ public class CgmComparisonController : ControllerBase
 
     private Task<IEnumerable<SensorGlucose>> ReadAsync(
         DateTime from, DateTime to, Guid patientDeviceId, CancellationToken ct) =>
-        _sensorGlucoseRepository.GetAsync(
+        _sensorGlucoseRepository.GetForAnalyticsAsync(
             from, to, null, null, int.MaxValue, descending: false, ct: ct, patientDeviceId: patientDeviceId);
 }

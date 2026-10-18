@@ -14,7 +14,8 @@ using Nocturne.Infrastructure.Data.Security;
 namespace Nocturne.API.Services.Auth;
 
 /// <summary>
-/// The one member of <see cref="IShareLinkService"/> a public share viewer is allowed to reach.
+/// The one member of <see cref="IShareLinkService"/> a public share viewer is allowed to reach, and
+/// the reader of the owner's display preferences for any caller that needs the tenant's units.
 /// </summary>
 /// <remarks>
 /// Separate so that <c>ShareAppearanceController</c>, which answers unauthenticated requests on a
