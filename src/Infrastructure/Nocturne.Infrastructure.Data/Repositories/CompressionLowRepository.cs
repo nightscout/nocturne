@@ -82,6 +82,19 @@ public class CompressionLowRepository : ICompressionLowRepository
         return CompressionLowMapper.ToDomainModel(entity);
     }
 
+    /// <inheritdoc />
+    public async Task CreateManyAsync(
+        IReadOnlyCollection<CompressionLowSuggestion> suggestions,
+        CancellationToken cancellationToken = default)
+    {
+        if (suggestions.Count == 0)
+            return;
+
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        db.CompressionLowSuggestions.AddRange(suggestions.Select(CompressionLowMapper.ToEntity));
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     /// <summary>
     /// Update an existing suggestion
     /// </summary>

@@ -43,6 +43,15 @@ public interface ICompressionLowRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Persist several new <see cref="CompressionLowSuggestion"/> records in one save.
+    /// </summary>
+    /// <param name="suggestions">Suggestions to create.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task CreateManyAsync(
+        IReadOnlyCollection<CompressionLowSuggestion> suggestions,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Update an existing <see cref="CompressionLowSuggestion"/>.
     /// </summary>
     /// <param name="suggestion">Suggestion with updated fields.</param>
