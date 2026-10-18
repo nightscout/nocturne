@@ -65,6 +65,7 @@ public class DataSourceServiceDiscoveryTests : IDisposable
         _calibrations.Object,
         Mock.Of<IAuditContext>(),
         _connectorConfig.Object,
+        Mock.Of<Nocturne.Core.Contracts.V4.ITreatmentDecomposer>(),
         NullLogger<DataSourceService>.Instance);
 
     private async Task<List<DataSourceInfo>> DiscoverAsync()

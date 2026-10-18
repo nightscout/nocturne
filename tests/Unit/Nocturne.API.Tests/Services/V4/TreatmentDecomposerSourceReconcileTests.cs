@@ -33,13 +33,14 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
 
     private static readonly DateTime At = new(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
 
+    private readonly Mock<IProfileDecomposer> _profiles = new();
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly TreatmentDecomposer _decomposer;
 
     public TreatmentDecomposerSourceReconcileTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
         _context = _db.CreateContext();
 
         _decomposer = new(
@@ -51,7 +52,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
             Mock.Of<ITreatmentFoodService>(),
             Mock.Of<IDeviceService>(),
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IProfileDecomposer>(),
+            _profiles.Object,
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
             new AuditContext { IsSystem = true },
@@ -124,6 +125,67 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         var stored = await _decomposer.GetLegacyIdsFromSourceAsync(Connector, At.AddHours(-1), At.AddHours(1));
 
         stored.Should().BeEquivalentTo(new Dictionary<string, DateTime> { ["in-window"] = At, ["temp-basal"] = At });
+    }
+
+    [Fact]
+    public async Task Stored_ids_include_the_spans_this_source_stored_treatments_as_in_the_window()
+    {
+        AddSpan("switch", "Profile", Connector, """{"utcOffset":0}""", At);
+        AddSpan("override", "Override", Connector, """{"collection":"treatments","utcOffset":0}""", At.AddMinutes(5));
+        AddSpan("target", "TemporaryTarget", Connector, """{"utcOffset":0}""", At.AddMinutes(10));
+        AddSpan("devicestatus-override", "Override", Connector, """{"reason":"devicestatus"}""", At);
+        AddSpan("other-source", "Profile", Other, """{"utcOffset":0}""", At);
+        AddSpan("before-window", "Profile", Connector, """{"utcOffset":0}""", At.AddHours(-3));
+        await _context.SaveChangesAsync();
+
+        var stored = await _decomposer.GetLegacyIdsFromSourceAsync(Connector, At.AddHours(-1), At.AddHours(1));
+
+        stored.Should().BeEquivalentTo(new Dictionary<string, DateTime>
+        {
+            ["switch"] = At, ["override"] = At.AddMinutes(5), ["target"] = At.AddMinutes(10),
+        });
+    }
+
+    [Fact]
+    public async Task A_profile_switch_stored_only_as_a_span_is_deleted_with_its_profile_rows_once_the_source_drops_it()
+    {
+        AddSpan("switch", "Profile", Connector, """{"profileJson":"{}","utcOffset":0}""", At);
+        AddSpan("kept", "Profile", Connector, """{"profileJson":"{}","utcOffset":0}""", At.AddMinutes(5));
+        await _context.SaveChangesAsync();
+        var upstream = new HashSet<string> { "kept" };
+
+        var gone = (await _decomposer.GetLegacyIdsFromSourceAsync(Connector, At.AddHours(-1), At.AddHours(1)))
+            .Keys.Where(id => !upstream.Contains(id)).ToHashSet();
+        await _decomposer.DeleteFromSourceAsync(Connector, gone);
+
+        gone.Should().BeEquivalentTo(["switch"]);
+        (await _context.StateSpans.IgnoreQueryFilters().AsNoTracking().SingleAsync(s => s.OriginalId == "switch"))
+            .DeletedAt.Should().NotBeNull();
+        (await _context.StateSpans.IgnoreQueryFilters().AsNoTracking().SingleAsync(s => s.OriginalId == "kept"))
+            .DeletedAt.Should().BeNull();
+        _profiles.Verify(p => p.DeleteByLegacyIdAsync("switch", WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
+        _profiles.VerifyNoOtherCalls();
+    }
+
+    private void AddSpan(string originalId, string category, string source, string metadataJson, DateTime start) =>
+        _context.StateSpans.Add(new StateSpanEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = originalId, Category = category,
+            State = "Active", StartTimestamp = start, Source = source, MetadataJson = metadataJson,
+        });
+
+    [Fact]
+    public async Task A_legacy_span_with_a_note_beside_it_counts_once()
+    {
+        AddSpan("legacy", "Override", Connector, """{"collection":"treatments","utcOffset":0}""", At);
+        _context.Notes.Add(new NoteEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "legacy", DataSource = Connector,
+            Timestamp = At, Text = "beside",
+        });
+        await _context.SaveChangesAsync();
+
+        (await _decomposer.DeleteFromSourceAsync(Connector, new HashSet<string> { "legacy" })).Should().Be(1);
     }
 
     [Fact]

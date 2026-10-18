@@ -9,6 +9,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
@@ -33,6 +34,7 @@ public class DataSourceService : IDataSourceService
     private readonly ICalibrationRepository _calibrations;
     private readonly IAuditContext _auditContext;
     private readonly IConnectorConfigurationService _connectorConfiguration;
+    private readonly ITreatmentDecomposer _treatmentDecomposer;
     private readonly ILogger<DataSourceService> _logger;
 
     public DataSourceService(
@@ -42,6 +44,7 @@ public class DataSourceService : IDataSourceService
         ICalibrationRepository calibrations,
         IAuditContext auditContext,
         IConnectorConfigurationService connectorConfiguration,
+        ITreatmentDecomposer treatmentDecomposer,
         ILogger<DataSourceService> logger
     )
     {
@@ -51,6 +54,7 @@ public class DataSourceService : IDataSourceService
         _calibrations = calibrations;
         _auditContext = auditContext;
         _connectorConfiguration = connectorConfiguration;
+        _treatmentDecomposer = treatmentDecomposer;
         _logger = logger;
     }
 
@@ -974,6 +978,8 @@ public class DataSourceService : IDataSourceService
         var tempBasalsDeleted = await _context.AuditedSoftDeleteAsync(
             _context.TempBasals.FromSource(source), _auditContext, scope, cancellationToken);
 
+        await _treatmentDecomposer.DeleteProfileSwitchSnapshotsFromSourceAsync(
+            source, WriteOrigin.Live, cancellationToken);
         var stateSpansDeleted = await _context.AuditedSoftDeleteAsync(
             _context.StateSpans.Where(s => s.Source == source), _auditContext, scope, cancellationToken);
 

@@ -401,17 +401,46 @@ public class TreatmentDecomposerDeleteTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteFromSource_LeavesTheProfileRowsOfALiveProfileSwitch()
+    public async Task DeleteFromSource_RemovesTheSourcesTreatmentSpansAndProfileRowsOnly()
     {
-        SeedStateSpan("ps-1", "Profile", "aaps", """{"profileName":"Weekend","profileJson":"{}"}""", Inside);
-        var profiles = new Mock<IProfileDecomposer>();
+        const string storeName = "Weekend@@@@@1672567200000";
+        SeedStateSpan("ps-1", "Profile", "aaps", """{"profileName":"Weekend","profileJson":"{}","utcOffset":0}""", Inside);
+        SeedStateSpan("override-1", "Override", "aaps", """{"collection":"treatments","utcOffset":0}""", Inside);
+        SeedStateSpan("tt-1", "TemporaryTarget", "aaps", """{"utcOffset":0}""", Inside);
+        SeedStateSpan("ps-2", "Profile", "loop", """{"profileName":"Weekend","profileJson":"{}","utcOffset":0}""", Inside);
+        SeedStateSpan("ps-unlisted", "Profile", "aaps", """{"utcOffset":0}""", Inside);
+        SeedStateSpan("ds-override", "Override", "aaps", """{"reason":"devicestatus"}""", Inside);
 
         await using var ctx = NewContext();
-        await CreateDecomposer(ctx, SystemAuditContext.ForService("connector:aaps"), profiles.Object)
-            .DeleteFromSourceAsync("aaps", new HashSet<string> { "ps-1" });
+        var factory = new TestTenantDbContextFactory(ctx);
+        var profiles = new ProfileDecomposer(
+            new TherapySettingsRepository(factory, _userAuditContext, NullLogger<TherapySettingsRepository>.Instance),
+            new BasalScheduleRepository(factory, _userAuditContext, NullLogger<BasalScheduleRepository>.Instance),
+            new CarbRatioScheduleRepository(factory, _userAuditContext, NullLogger<CarbRatioScheduleRepository>.Instance),
+            new SensitivityScheduleRepository(factory, _userAuditContext, NullLogger<SensitivityScheduleRepository>.Instance),
+            new TargetRangeScheduleRepository(factory, _userAuditContext, NullLogger<TargetRangeScheduleRepository>.Instance),
+            NullLogger<ProfileDecomposer>.Instance);
+        await profiles.DecomposeProfileSwitchAsync(ProfileDocument("ps-1", storeName), WriteOrigin.Live);
+        await profiles.DecomposeProfileSwitchAsync(ProfileDocument("ps-2", storeName), WriteOrigin.Live);
 
-        profiles.VerifyNoOtherCalls();
-        (await ctx.StateSpans.CountAsync()).Should().Be(1);
+        var deleted = await CreateDecomposer(ctx, SystemAuditContext.ForService("connector:aaps"), profiles)
+            .DeleteFromSourceAsync("aaps", new HashSet<string> { "ps-1", "override-1", "tt-1", "ds-override" });
+
+        deleted.Should().Be(3);
+        await using var db = NewContext();
+        var spans = await db.StateSpans.IgnoreQueryFilters().ToListAsync();
+        spans.Where(s => s.DeletedAt != null).Select(s => s.OriginalId)
+            .Should().BeEquivalentTo("ps-1", "override-1", "tt-1");
+        var snapshots = (await db.TherapySettings.IgnoreQueryFilters().ToListAsync()).Select(r => (r.LegacyId, r.DeletedAt))
+            .Concat((await db.BasalSchedules.IgnoreQueryFilters().ToListAsync()).Select(r => (r.LegacyId, r.DeletedAt)))
+            .Concat((await db.CarbRatioSchedules.IgnoreQueryFilters().ToListAsync()).Select(r => (r.LegacyId, r.DeletedAt)))
+            .Concat((await db.SensitivitySchedules.IgnoreQueryFilters().ToListAsync()).Select(r => (r.LegacyId, r.DeletedAt)))
+            .Concat((await db.TargetRangeSchedules.IgnoreQueryFilters().ToListAsync()).Select(r => (r.LegacyId, r.DeletedAt)))
+            .ToList();
+        snapshots.Where(r => r.LegacyId == $"ps-1:{storeName}").Should().HaveCount(5)
+            .And.AllSatisfy(r => r.DeletedAt.Should().NotBeNull());
+        snapshots.Where(r => r.LegacyId == $"ps-2:{storeName}").Should().HaveCount(5)
+            .And.AllSatisfy(r => r.DeletedAt.Should().BeNull());
     }
 
     [Fact]

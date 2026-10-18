@@ -51,6 +51,7 @@ public interface ITreatmentDecomposer
 
     /// <summary>
     /// Soft-deletes <paramref name="source"/>'s records decomposed from <paramref name="legacyIds"/>,
+    /// including the state spans those treatments served as and the profile rows of a Profile Switch,
     /// leaving every other source's rows under those ids alone. A deleted row that was a dedup
     /// group's primary hands the flag to a surviving member, so another source's copy of the
     /// event stays visible.
@@ -59,7 +60,14 @@ public interface ITreatmentDecomposer
     Task<int> DeleteFromSourceAsync(string source, IReadOnlySet<string> legacyIds, CancellationToken ct = default);
 
     /// <summary>
-    /// The legacy ids of <paramref name="source"/>'s live records whose event time falls in
+    /// Deletes the profile rows of every Profile Switch <paramref name="source"/> wrote. Call it
+    /// before the switches' spans are deleted: the spans are how the rows are found.
+    /// </summary>
+    Task DeleteProfileSwitchSnapshotsFromSourceAsync(string source, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
+    /// The legacy ids of <paramref name="source"/>'s live records, including the state spans its
+    /// Profile Switches, overrides and temporary targets were stored as, whose event time falls in
     /// [<paramref name="from"/>, <paramref name="to"/>], each with that event time.
     /// </summary>
     Task<IReadOnlyDictionary<string, DateTime>> GetLegacyIdsFromSourceAsync(

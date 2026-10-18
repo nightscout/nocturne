@@ -1631,11 +1631,18 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         var ids = legacyIds.ToArray();
         var scope = $"data_source={source}";
 
+        var spans = LegacyTreatmentTables.ServedStateSpansFromSource(_dbContext, source)
+            .Where(s => ids.Contains(s.OriginalId!));
+        await DeleteSnapshotRowsAsync(await ProfileSwitchIdsAsync(spans, ct), WriteOrigin.Live, ct);
+
         var (deleted, deviceEventIds) = await _dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using var transaction = await _dbContext.Database.BeginTransactionAsync(ct);
 
-            var count = 0;
+            var spanKeys = spans.Select(s => s.OriginalId!);
+            var count = -await _dbContext.Notes
+                .Where(n => n.DataSource == source && n.LegacyId != null && spanKeys.Contains(n.LegacyId))
+                .CountAsync(ct);
             List<Guid> deviceEvents = [];
             foreach (var table in DecomposedTables)
             {
@@ -1644,6 +1651,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 if (table.RecordType == RecordType.DeviceEvent)
                     deviceEvents = result.Entities;
             }
+
+            count += await _dbContext.AuditedSoftDeleteAsync(spans, _auditContext, scope, ct);
 
             await transaction.CommitAsync(ct);
             return (count, deviceEvents);
@@ -1687,8 +1696,22 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 stored.TryAdd(row.LegacyId, row.At);
         }
 
+        foreach (var span in await LegacyTreatmentTables.ServedStateSpansFromSource(_dbContext, source)
+                     .AsNoTracking()
+                     .Where(s => s.StartTimestamp >= from && s.StartTimestamp <= to)
+                     .Select(s => new { Id = s.OriginalId!, At = s.StartTimestamp })
+                     .ToListAsync(ct))
+            stored.TryAdd(span.Id, span.At);
+
         return stored;
     }
+
+    /// <inheritdoc />
+    public async Task DeleteProfileSwitchSnapshotsFromSourceAsync(
+        string source, WriteOrigin origin, CancellationToken ct = default) =>
+        await DeleteSnapshotRowsAsync(
+            await ProfileSwitchIdsAsync(LegacyTreatmentTables.ServedStateSpansFromSource(_dbContext, source), ct),
+            origin, ct);
 
     /// <inheritdoc />
     /// <remarks>

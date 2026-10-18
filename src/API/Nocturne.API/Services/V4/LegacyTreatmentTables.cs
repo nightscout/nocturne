@@ -440,10 +440,21 @@ internal static class LegacyTreatmentTables
     /// inclusive, as one tracked-entity query a bulk update can run against.
     /// </summary>
     internal static IQueryable<StateSpanEntity> ServedStateSpansInWindow(
-        NocturneDbContext context, DateTime? from, DateTime? to)
+        NocturneDbContext context, DateTime? from, DateTime? to) =>
+        TrackedSpans(context, table => table.InWindow(context, from, to));
+
+    /// <summary>
+    /// Every state span <see cref="StateSpanTables"/> serves that <paramref name="source"/> wrote,
+    /// as one tracked-entity query a bulk update can run against.
+    /// </summary>
+    internal static IQueryable<StateSpanEntity> ServedStateSpansFromSource(NocturneDbContext context, string source) =>
+        TrackedSpans(context, table => table.Rows(context).Where(s => s.Source == source));
+
+    private static IQueryable<StateSpanEntity> TrackedSpans(
+        NocturneDbContext context, Func<LegacyStateSpanTable, IQueryable<StateSpanEntity>> rows)
     {
         var served = StateSpanTables
-            .Select(table => table.InWindow(context, from, to).Select(s => s.Id))
+            .Select(table => rows(table).Select(s => s.Id))
             .Aggregate(Queryable.Concat);
         return context.StateSpans.Where(s => served.Contains(s.Id));
     }
