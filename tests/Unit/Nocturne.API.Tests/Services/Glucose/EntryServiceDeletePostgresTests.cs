@@ -289,7 +289,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         else
         {
             (await setup.V3Controller.GetEntry(legacyId)).Result.Should().BeOfType<OkObjectResult>();
-            (await setup.V3Controller.DeleteEntry(legacyId)).Should().BeOfType<NoContentResult>();
+            (await setup.V3Controller.DeleteEntry(legacyId)).Should().BeOfType<OkObjectResult>();
         }
 
         (await setup.Service.GetEntryByIdAsync(legacyId)).Should().BeNull();

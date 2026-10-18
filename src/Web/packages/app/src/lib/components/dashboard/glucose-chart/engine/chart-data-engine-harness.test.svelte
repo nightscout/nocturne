@@ -14,9 +14,10 @@
     entries: Entry[];
     options: ChartDataEngineOptions;
     onengine: (engine: ChartDataEngine) => void;
+    onstore?: (store: ReturnType<typeof createRealtimeStore>) => void;
   }
 
-  let { entries, options, onengine }: Props = $props();
+  let { entries, options, onengine, onstore }: Props = $props();
 
   const store = createRealtimeStore({
     url: "",
@@ -32,5 +33,14 @@
   store.entries = entries;
 
   // svelte-ignore state_referenced_locally
-  onengine(createChartDataEngine(options));
+  onstore?.(store);
+
+  // svelte-ignore state_referenced_locally
+  // Reads through the prop on every access, so a re-render with new options reaches the
+  // engine the way a page data prop does.
+  onengine(
+    createChartDataEngine(
+      new Proxy({} as ChartDataEngineOptions, { get: (_, key) => options[key as keyof ChartDataEngineOptions] })
+    )
+  );
 </script>

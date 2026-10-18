@@ -13,9 +13,6 @@ namespace Nocturne.API.Services.Notifications;
 /// JWT authentication requires all three of <see cref="LoopConfiguration.ApnsKey"/>,
 /// <see cref="LoopConfiguration.ApnsKeyId"/>, and <see cref="LoopConfiguration.DeveloperTeamId"/>
 /// to be non-empty, and the team ID must be exactly 10 characters (Apple's format).
-/// When <see cref="LoopConfiguration.ApnsServerOverrideUrl"/> is set the underlying
-/// <see cref="HttpClient"/> base address is replaced, which redirects pushes to a local mock
-/// server for integration testing.
 /// </remarks>
 /// <seealso cref="IApnsClientFactory"/>
 public class ApnsClientFactory : IApnsClientFactory
@@ -33,16 +30,6 @@ public class ApnsClientFactory : IApnsClientFactory
         _configuration = configuration.Value;
         _httpClient = httpClientFactory.CreateClient("dotAPNS");
         _logger = logger;
-
-        // Configure custom APNS server URL if provided (for testing)
-        if (!string.IsNullOrEmpty(_configuration.ApnsServerOverrideUrl))
-        {
-            _httpClient.BaseAddress = new Uri(_configuration.ApnsServerOverrideUrl);
-            _logger.LogInformation(
-                "APNS client factory configured to use custom server: {OverrideUrl}",
-                _configuration.ApnsServerOverrideUrl
-            );
-        }
     }
 
     /// <summary>

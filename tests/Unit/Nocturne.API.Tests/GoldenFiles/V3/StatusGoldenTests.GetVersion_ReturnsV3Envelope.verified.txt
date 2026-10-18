@@ -1,0 +1,16 @@
+﻿{
+  StatusCode: 200,
+  ContentType: application/json; charset=utf-8,
+  Body: {
+    status: 200,
+    result: {
+      version: {Scrubbed},
+      apiVersion: 3.0.5,
+      srvDate: {Scrubbed},
+      storage: {
+        storage: postgresql,
+        version: {Scrubbed}
+      }
+    }
+  }
+}

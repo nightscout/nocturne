@@ -21,7 +21,7 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// Retrieve a page of records filtered by time range, device, and data source.
     /// </summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end of the time window, or <c>null</c> for no upper bound.</param>
+    /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
     /// <param name="device">Optional device identifier filter.</param>
     /// <param name="source">Optional data source filter (e.g., connector name).</param>
     /// <param name="limit">Maximum number of records to return.</param>
@@ -76,7 +76,8 @@ public interface IV4Repository<T> where T : class, IV4Record
     Task<T> UpdateAsync(Guid id, T model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
-    /// Delete the record with the given identifier.
+    /// Delete the record with the given identifier, and every other source's copy deduplication
+    /// linked it to.
     /// </summary>
     /// <param name="id">UUID v7 identifier of the record to delete.</param>
     /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>
@@ -128,7 +129,7 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// Count records within an optional time range.
     /// </summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end of the time window, or <c>null</c> for no upper bound.</param>
+    /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records in the range.</returns>
     Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);

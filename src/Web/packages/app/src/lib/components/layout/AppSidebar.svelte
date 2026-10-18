@@ -12,6 +12,8 @@
   import { updateLanguagePreference } from "$api/user-preferences.remote";
   import { hasLanguagePreference } from "$lib/stores/appearance-store.svelte";
   import { getMyTenants } from "$lib/api/generated/myTenants.generated.remote";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { whenIdle } from "$lib/utils/when-idle";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Shield from "@lucide/svelte/icons/shield";
   import Eye from "@lucide/svelte/icons/eye";
@@ -88,7 +90,13 @@
   // Available tenants for the subdomain switcher. The switcher is valued by slug, so a host that
   // names no tenant needs a sentinel; a slug can never be one, having no underscores.
   const TENANTLESS = "__self__";
-  const myTenantsQuery = getMyTenants();
+  // Read once the page is idle: the list decides whether the switcher and the Tenants nav item
+  // render.
+  let idle = $state(false);
+  $effect(() => whenIdle(() => (idle = true)));
+  const isMember = $derived(user !== null && !isGuestSession);
+  const myTenantsQuery = $derived(idle && isMember ? getMyTenants() : null);
+  retainQuery(() => myTenantsQuery);
 
   function handleTenantChange(value: string | undefined) {
     if (!value || !baseDomain || value === TENANTLESS || value === currentSlug) {
@@ -108,7 +116,7 @@
   // after client-side login navigation.
   $effect(() => {
     if (!user || isGuestSession) return;
-    const tenants = myTenantsQuery.current;
+    const tenants = myTenantsQuery?.current;
     if (tenants === undefined) return;
 
     const switcher = resolveTenantSwitcher(tenants);
@@ -294,7 +302,7 @@
                     {#each item.children as child (child.href)}
                       <Sidebar.MenuSubItem>
                         {#if child.href === "/alerts/dnd"}
-                          <SidebarDndToggle />
+                          <SidebarDndToggle visible={openMenus[item.id] === true} />
                         {:else}
                           <Sidebar.MenuSubButton
                             href={child.href}

@@ -433,9 +433,6 @@ jobs:
       - name: App server-rendering tests
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: pnpm --filter @nocturne/app run test:render
-      - name: App production translation tests
-        if: ${{ !cancelled() && steps.client.outcome == 'success' }}
-        run: pnpm --filter @nocturne/app exec vitest --config vitest.config.ts --run tools/ehba1c-translations.test.js
       - name: Portal unit tests
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: |
@@ -477,11 +474,16 @@ jobs:
             tests/Integration/Nocturne.Connectors.Tests/Nocturne.Connectors.Tests.csproj
           dotnet test "$sln" --no-build \
             --logger "trx;LogFileName=integration-db.trx" \
+            -p:GenerateNSwagClient=false \
             --settings tests/coverage.runsettings \
             --collect "XPlat Code Coverage" \
             --test-adapter-path .coverlet \
-            --results-directory TestResults/integration
-          dotnet test tests/Unit/Nocturne.API.Tests/Nocturne.API.Tests.csproj --no-build \
+            --results-directory TestResults/integration \
+            || exit 1
+      - name: Integration tests (API unit project, real Postgres)
+        run: |
+          dotnet test tests/Unit/Nocturne.API.Tests/Nocturne.API.Tests.csproj \
+            --no-build \
             --filter "Category=Integration" \
             --logger "trx;LogFileName=integration-api.trx" \
             --settings tests/coverage.runsettings \

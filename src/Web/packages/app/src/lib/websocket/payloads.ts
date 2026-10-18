@@ -1,13 +1,14 @@
-import { z } from "zod";
 import type { InAppNotificationDto } from "$lib/api/generated/nocturne-api-client";
 import { isOneOf, isRecord, nonEmptyString } from "$lib/utils/type-guards";
 import { isoNow } from "$lib/utils/now";
+import { toIsoString } from "$lib/utils/api-date";
 import type {
   AlarmEvent,
   AnnouncementEvent,
   Entry,
   StatusEvent,
   StorageEvent,
+  SyncMessageType,
   SyncProgressEvent,
   TrackerUpdateEvent,
 } from "./types";
@@ -42,24 +43,32 @@ export function parseStorageEvent(data: unknown): StorageEvent {
   };
 }
 
+const NUMERIC_LEVELS: Readonly<Record<number, string>> = { 2: "urgent", 1: "warn", 0: "info" };
+
+const levelOf = (value: unknown): string | undefined =>
+  typeof value === "number" ? NUMERIC_LEVELS[value] : nonEmptyString(value);
+
+const timestampOf = (value: unknown): string | undefined =>
+  typeof value === "number" ? (toIsoString(new Date(value)) ?? undefined) : nonEmptyString(value);
+
 export function parseAnnouncement(data: unknown): AnnouncementEvent {
   const fields = fieldsOf(data);
   return {
     message: nonEmptyString(fields.message) ?? nonEmptyString(fields.text) ?? String(data),
     title: nonEmptyString(fields.title) ?? "Announcement",
-    level: nonEmptyString(fields.level) ?? "info",
-    timestamp: nonEmptyString(fields.timestamp) ?? isoNow(),
+    level: levelOf(fields.level) ?? "info",
+    timestamp: timestampOf(fields.timestamp) ?? isoNow(),
   };
 }
 
 export function parseAlarm(data: unknown): AlarmEvent {
   const fields = fieldsOf(data);
   return {
-    level: nonEmptyString(fields.level) ?? "warn",
+    level: levelOf(fields.level) ?? "warn",
     title: nonEmptyString(fields.title) ?? "Alarm",
     message: nonEmptyString(fields.message),
     plugin: nonEmptyString(fields.plugin) ?? nonEmptyString(fields.source),
-    timestamp: nonEmptyString(fields.timestamp) ?? isoNow(),
+    timestamp: timestampOf(fields.timestamp) ?? isoNow(),
     key: nonEmptyString(fields.key) ?? nonEmptyString(fields.id),
   };
 }
@@ -71,7 +80,7 @@ export function parseUrgentAlarm(data: unknown): AlarmEvent {
     title: nonEmptyString(fields.title),
     message: nonEmptyString(fields.message),
     plugin: nonEmptyString(fields.plugin),
-    timestamp: nonEmptyString(fields.timestamp),
+    timestamp: timestampOf(fields.timestamp),
     key: nonEmptyString(fields.key),
     level: "urgent",
   };
@@ -94,6 +103,7 @@ export function parseNotification(data: unknown): InAppNotificationDto | null {
 
 const TRACKER_ACTIONS = [
   "create",
+  "reopen",
   "delete",
   "complete",
   "ack",
@@ -114,27 +124,40 @@ export function parseTrackerUpdate(data: unknown): TrackerUpdateEvent | null {
   };
 }
 
-const SyncProgressSchema = z.object({
-  connectorId: z.string(),
-  connectorName: z.string().catch(""),
-  phase: z.enum(["Syncing", "Completed", "Failed"]),
-  errorMessage: z.string().nullable().catch(null),
-  timestamp: z.string().catch(""),
-  messageType: z
-    .enum([
-      "Authenticating",
-      "FetchingData",
-      "ProcessingDataType",
-      "PublishingDataType",
-      "SyncComplete",
-      "SyncFailed",
-    ])
-    .nullable()
-    .catch(null),
-  messageParams: z.record(z.string(), z.string()).nullable().catch(null),
-});
+const SYNC_PHASES = [
+  "Syncing",
+  "Completed",
+  "Failed",
+] as const satisfies readonly SyncProgressEvent["phase"][];
 
+const SYNC_MESSAGE_TYPES = [
+  "Authenticating",
+  "FetchingData",
+  "ProcessingDataType",
+  "PublishingDataType",
+  "SyncComplete",
+  "SyncFailed",
+] as const satisfies readonly SyncMessageType[];
+
+const isStringRecord = (value: unknown): value is Record<string, string> =>
+  isRecord(value) && Object.values(value).every((entry) => typeof entry === "string");
+
+const stringOr = <T>(value: unknown, fallback: T): string | T =>
+  typeof value === "string" ? value : fallback;
+
+/** A sync event needs a connector and a known phase; every other field falls
+ *  back to empty or null when missing or mistyped. */
 export function parseSyncProgress(data: unknown): SyncProgressEvent | null {
-  const result = SyncProgressSchema.safeParse(data);
-  return result.success ? result.data : null;
+  if (!isRecord(data) || typeof data.connectorId !== "string") return null;
+  if (!isOneOf(SYNC_PHASES, data.phase)) return null;
+
+  return {
+    connectorId: data.connectorId,
+    connectorName: stringOr(data.connectorName, ""),
+    phase: data.phase,
+    errorMessage: stringOr(data.errorMessage, null),
+    timestamp: stringOr(data.timestamp, ""),
+    messageType: isOneOf(SYNC_MESSAGE_TYPES, data.messageType) ? data.messageType : null,
+    messageParams: isStringRecord(data.messageParams) ? { ...data.messageParams } : null,
+  };
 }

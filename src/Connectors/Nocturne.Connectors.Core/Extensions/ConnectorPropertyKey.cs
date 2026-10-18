@@ -96,4 +96,17 @@ public enum ConnectorPropertyKey
 
     // Glooko-specific (appended so earlier members keep their values)
     AutoClockCorrection,
+
+    // Google Health-specific (appended so earlier members keep their values)
+    ClientId,
+    ClientSecret,
+    CallbackUrl,
+    ImportFrom,
+    PreviewOnly,
+    GrantedScopes,
+    SyncSteps,
+    SyncHeartRate,
+    SyncBodyWeight,
+    SyncSleep,
+
 }

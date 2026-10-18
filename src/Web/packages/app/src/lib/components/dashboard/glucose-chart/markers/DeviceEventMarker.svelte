@@ -9,10 +9,12 @@
     eventType?: DeviceEventType;
     color: string;
     treatmentId?: string;
+    /** Inferred from a warm-up gap rather than recorded; drawn with a dashed ring. */
+    isInferred?: boolean;
     onMarkerClick?: (treatmentId: string) => void;
   }
 
-  let { xPos, yPos, eventType, color, treatmentId, onMarkerClick }: Props =
+  let { xPos, yPos, eventType, color, treatmentId, isInferred = false, onMarkerClick }: Props =
     $props();
 
   const chart = getGlucoseChartContext();
@@ -29,6 +31,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <g
   transform="translate({xPos}, {yPos})"
+  data-inferred={isInferred || undefined}
   onclick={handleClick}
   class={handleClick ? "cursor-pointer" : ""}
 >
@@ -38,6 +41,7 @@
     fill="var(--background)"
     stroke={ink}
     stroke-width="2"
+    stroke-dasharray={isInferred ? "4 3" : undefined}
     class="opacity-95 {handleClick ? 'hover:opacity-100 transition-opacity' : ''}"
   />
   <!-- Icon using foreignObject to embed Lucide component -->

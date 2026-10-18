@@ -154,6 +154,9 @@ public class MemberInviteController : ControllerBase
         if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
+        if (IsCallersOwnMembership(subjectId))
+            return Problem(detail: SelfRemovalDetail, statusCode: 400);
+
         var result = await _tenantService.RemoveMemberAsync(_tenantAccessor.TenantId, subjectId, ct);
         return result.Ok
             ? NoContent()
@@ -320,7 +323,7 @@ public class MemberInviteController : ControllerBase
         if (member == null)
             return NotFound();
 
-        if (IsCallersOwnMembership(member))
+        if (IsCallersOwnMembership(member.SubjectId))
             return Problem(detail: SelfEditDetail, statusCode: 400);
 
         if (DeviceHolderDetail(member) is { } deviceHolder)
@@ -336,6 +339,11 @@ public class MemberInviteController : ControllerBase
             tenantId, request.RoleIds, HttpContext.GetGrantedScopes(), ct);
         if (!roleGrant.Ok)
             return RoleGrantProblem(roleGrant);
+
+        var keepsOwner = await _dbContext.TenantRoles.AnyAsync(
+            r => r.TenantId == tenantId && request.RoleIds.Contains(r.Id) && r.Slug == RoleSeeds.Owner, ct);
+        if (!keepsOwner && await _dbContext.TenantMembers.IsLastOwnerAsync(tenantId, member.Id, ct))
+            return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
 
         var rolesAfter = await _tenantRoleService.GetRolePermissionsAsync(tenantId, request.RoleIds, ct);
         if (await WouldExemptAClampedMemberAsync(member, rolesAfter.Concat(member.DirectPermissions ?? []), ct))
@@ -393,7 +401,7 @@ public class MemberInviteController : ControllerBase
         if (member == null)
             return NotFound();
 
-        if (IsCallersOwnMembership(member))
+        if (IsCallersOwnMembership(member.SubjectId))
             return Problem(detail: SelfEditDetail, statusCode: 400);
 
         if (DeviceHolderDetail(member) is { } deviceHolder)
@@ -498,7 +506,7 @@ public class MemberInviteController : ControllerBase
 
         // The clamp is enforced in RLS via app.history_clamped, so lifting your own is a
         // self-widening edit — the same class the role and permission editors refuse.
-        if (IsCallersOwnMembership(member))
+        if (IsCallersOwnMembership(member.SubjectId))
             return Problem(detail: SelfEditDetail, statusCode: 400);
 
         if (DeviceHolderDetail(member) is { } deviceHolder)
@@ -526,6 +534,9 @@ public class MemberInviteController : ControllerBase
     private const string SelfEditDetail =
         "Cannot change your own roles or permissions; ask another member with members.manage.";
 
+    private const string SelfRemovalDetail =
+        "Cannot remove your own membership; ask another member with members.manage.";
+
     /// <summary>
     /// True when a history-clamped caller's edit would leave a clamped member holding permissions
     /// that exempt it (<see cref="MemberScopeResolver.IsExemptFromHistoryClamp"/>), lifting the
@@ -543,10 +554,12 @@ public class MemberInviteController : ControllerBase
     /// True when the target membership belongs to the calling subject. Role and permission
     /// edits are routed away from the caller's own membership: a self-edit is the only way a
     /// grant decision can widen the granter's own ceiling within a request, and it is also the
-    /// path by which a sole owner can strip their own administrative access.
+    /// path by which a sole owner can strip their own administrative access. Removal is refused
+    /// too: it signs the caller out of the tenant with no way back in, and it
+    /// passes the last-owner check whenever another owner row exists, whether or not that owner can sign in.
     /// </summary>
-    private bool IsCallersOwnMembership(TenantMemberEntity member)
-        => HttpContext.GetSubjectId() is { } subjectId && member.SubjectId == subjectId;
+    private bool IsCallersOwnMembership(Guid targetSubjectId)
+        => HttpContext.GetSubjectId() is { } subjectId && targetSubjectId == subjectId;
 
     /// <summary>
     /// An unknown permission is malformed input; exceeding the ceiling is a refusal. Either way the

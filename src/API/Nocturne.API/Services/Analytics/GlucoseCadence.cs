@@ -127,8 +127,8 @@ internal static class GlucoseCadence
     /// </summary>
     internal static double SeriesCadenceMinutes(IEnumerable<double> intervals)
     {
-        var elapsed = intervals.Where(interval => interval > 0).Order().ToList();
-        return elapsed.Count == 0 ? DefaultCadenceMinutes : GlucoseStatistics.Median(elapsed);
+        var elapsed = GlucoseStatistics.Ascending(intervals.Where(interval => interval > 0));
+        return elapsed.Length == 0 ? DefaultCadenceMinutes : GlucoseStatistics.Median(elapsed);
     }
 
     /// <summary>

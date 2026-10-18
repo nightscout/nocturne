@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.Core.Models;
 
@@ -54,6 +55,51 @@ public class ClockFaceConfig
     /// </summary>
     [JsonPropertyName("settings")]
     public ClockSettings Settings { get; set; } = new();
+
+    /// <summary>
+    /// Returns a "field: message" description of the first invalid setting, or null when the
+    /// config can be saved.
+    /// </summary>
+    public string? Validate() => Settings is null ? "settings: must be an object" : Settings.Validate();
+
+    /// <summary>
+    /// The layout every new face starts from: glucose and trend arrow, then delta, then reading
+    /// age. It takes the creator's units and time format, which the face then keeps whoever
+    /// views it; a preference the creator never set, or one outside the allowed set, leaves the
+    /// <see cref="ClockSettings"/> default.
+    /// </summary>
+    public static ClockFaceConfig Starter(UserDisplayPreferences creator)
+    {
+        var settings = new ClockSettings();
+        if (creator.GlucoseUnits is { } units && UserDisplayPreferences.AllowedGlucoseUnits.Contains(units))
+        {
+            settings.GlucoseUnits = units;
+        }
+        if (creator.TimeFormat is { } timeFormat && UserDisplayPreferences.AllowedTimeFormats.Contains(timeFormat))
+        {
+            settings.TimeFormat = timeFormat;
+        }
+
+        return new ClockFaceConfig
+        {
+            Rows =
+            [
+                new ClockRow { Elements = [Element("sg", 40, "dynamic"), Element("arrow", 25, "dynamic")] },
+                new ClockRow { Elements = [Element("delta", 14, "dynamic", showUnits: true)] },
+                new ClockRow { Elements = [Element("age", 10, color: null, opacity: 0.7)] },
+            ],
+            Settings = settings,
+        };
+
+        static ClockElement Element(
+            string type, int size, string? color, bool? showUnits = null, double opacity = 1.0) => new()
+        {
+            Type = type,
+            Size = size,
+            ShowUnits = showUnits,
+            Style = new ClockElementStyle { Color = color, Font = "system", FontWeight = "medium", Opacity = opacity },
+        };
+    }
 }
 
 /// <summary>
@@ -86,7 +132,7 @@ public class ClockElement
     public int? Size { get; set; }
 
     /// <summary>
-    /// Whether to show units (for delta element)
+    /// Whether to show units (for sg and delta elements); shown unless false
     /// </summary>
     [JsonPropertyName("showUnits")]
     public bool? ShowUnits { get; set; }
@@ -114,12 +160,6 @@ public class ClockElement
     /// </summary>
     [JsonPropertyName("minutesAhead")]
     public int? MinutesAhead { get; set; }
-
-    /// <summary>
-    /// Time format for time element: "auto" (follow the viewer's preference), "12h", or "24h"
-    /// </summary>
-    [JsonPropertyName("format")]
-    public string? Format { get; set; }
 
     /// <summary>
     /// Tracker definition ID (for single tracker element)
@@ -319,6 +359,25 @@ public class ClockSettings
     /// </summary>
     [JsonPropertyName("screensaverMode")]
     public bool ScreensaverMode { get; set; }
+
+    /// <summary>
+    /// Glucose units the face shows: "mg/dl" or "mmol". Carried by the face rather than read from
+    /// the viewer, because a clock link is opened by people who are not its owner.
+    /// </summary>
+    [JsonPropertyName("glucoseUnits")]
+    public string GlucoseUnits { get; set; } = "mg/dl";
+
+    /// <summary>Time format the face shows: "12" or "24". Every time element uses it.</summary>
+    [JsonPropertyName("timeFormat")]
+    public string TimeFormat { get; set; } = "12";
+
+    /// <summary>
+    /// Validates against the <see cref="UserDisplayPreferences"/> vocabulary. A face saved before
+    /// these settings existed deserialises to the defaults, so only an explicit value can fail.
+    /// </summary>
+    public string? Validate() =>
+        UserDisplayPreferences.Check("settings.glucoseUnits", GlucoseUnits ?? "null", UserDisplayPreferences.AllowedGlucoseUnits)
+        ?? UserDisplayPreferences.Check("settings.timeFormat", TimeFormat ?? "null", UserDisplayPreferences.AllowedTimeFormats);
 }
 
 /// <summary>
@@ -332,9 +391,10 @@ public class CreateClockFaceRequest
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
-    /// Clock face configuration
+    /// Clock face configuration. Omitted, the face starts from <see cref="ClockFaceConfig.Starter"/>
+    /// with the creator's preferences.
     /// </summary>
-    public ClockFaceConfig Config { get; set; } = new();
+    public ClockFaceConfig? Config { get; set; }
 }
 
 /// <summary>

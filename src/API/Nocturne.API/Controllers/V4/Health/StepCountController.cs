@@ -28,7 +28,7 @@ public class StepCountController(IStepCountService stepCountService)
     protected override string RecordTypeName => "Step count";
 
     protected override Task<IEnumerable<StepCount>> ReadPageAsync(int count, int skip, CancellationToken ct) =>
-        stepCountService.GetStepCountsAsync(count, skip, ct);
+        stepCountService.GetStepCountsAsync(count, skip, cancellationToken: ct);
 
     protected override Task<IEnumerable<StepCount>> ReadRangeAsync(
         DateTime from, DateTime to, int count, int skip, CancellationToken ct) =>

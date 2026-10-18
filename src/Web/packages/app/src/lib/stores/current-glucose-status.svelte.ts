@@ -14,18 +14,27 @@ let failedRefreshMills = $state<number | undefined>();
  * classification follows the realtime store's newest entry. Call exactly once,
  * from the layout that creates the store: every reader of
  * {@link currentGlucoseStatus} sees the refreshed query.
+ *
+ * While `enabled`, the first load starts straight away rather than once the
+ * store has a reading, so it runs alongside the store's own initial load
+ * instead of a round-trip after it.
  */
 export function refreshSummaryOnNewReading(
-  currentMills: () => number | undefined
+  currentMills: () => number | undefined,
+  enabled: () => boolean
 ): void {
   $effect(() => {
+    if (!enabled()) return;
     const mills = currentMills();
+    const summary = untrack(() => getSummary());
+    // Tracked so the effect runs once more when the first load lands: started before the
+    // store had a reading, it may describe an older one than the store now shows.
+    const firstLoadSettled = summary.ready;
     if (!mills) return;
     untrack(() => {
-      const summary = getSummary();
-      // The first load already reads the newest reading; refreshing it would be a second
-      // request. A later refresh in flight may predate this reading, so it does not count.
-      const firstLoadInFlight = !summary.ready && summary.loading;
+      // The first load reads the newest reading when it lands; refreshing it now would be a
+      // second request. A later refresh in flight may predate this reading, so it does not count.
+      const firstLoadInFlight = !firstLoadSettled && summary.loading;
       if (firstLoadInFlight || summary.current?.current?.mills === mills)
         return;
       // The tile falls back to neutral until a later reading retries; there is nothing to report.

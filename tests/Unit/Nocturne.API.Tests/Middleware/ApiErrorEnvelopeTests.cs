@@ -4,8 +4,11 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Middleware;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
@@ -31,9 +34,11 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
     private const string TwentyFourHexId = "aaaaaaaaaaaaaaaaaaaaaaaa";
 
     private readonly HttpClient _client;
+    private readonly ThrowingServiceFactory _factory;
 
     public ApiErrorEnvelopeTests(ThrowingServiceFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
         _client.DefaultRequestHeaders.Add(
             "api-secret",
@@ -130,6 +135,21 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
         Assert.DoesNotContain(BoomMessage, raw);
     }
 
+    [Fact]
+    public async Task ThrowingAction_LogsTheRouteTemplate_NotTheCredentialInThePath()
+    {
+        const string token = "noc_credentialthatmustnotbelogged";
+
+        await _client.GetAsync($"/api/v2/authorization/request/{token}");
+
+        var messages = _factory.HandlerLogger.Entries
+            .Where(e => e.Level == LogLevel.Error)
+            .Select(e => e.Message)
+            .ToList();
+        messages.Should().Contain(m => m.Contains("api/v2/authorization/request/{accessToken}"));
+        messages.Should().NotContain(m => m.Contains(token));
+    }
+
     private static string Sha1Hex(string value) =>
         Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
@@ -139,12 +159,15 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
     /// </summary>
     public sealed class ThrowingServiceFactory : AuthenticationTestFactory
     {
+        internal ListLogger<ApiErrorEnvelopeHandler> HandlerLogger { get; } = new();
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             base.ConfigureWebHost(builder);
 
             builder.ConfigureServices(services =>
             {
+                services.AddSingleton<ILogger<ApiErrorEnvelopeHandler>>(HandlerLogger);
                 var entries = new Mock<IEntryService>();
                 entries
                     .Setup(s =>

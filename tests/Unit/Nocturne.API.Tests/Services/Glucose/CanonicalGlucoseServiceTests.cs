@@ -52,6 +52,22 @@ public class CanonicalGlucoseServiceTests
         _deviceRepo.Verify(r => r.GetAllAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Theory]
+    [InlineData(null, null, "", "")]
+    [InlineData("a|b", "c", "a", "b|c")]
+    public async Task SelectAsync_PseudoDeviceKeyAliases_DoNotLoadDevices(
+        string? firstSource, string? firstDevice, string? secondSource, string? secondDevice)
+    {
+        var readings = new[]
+        {
+            new SensorGlucose { DataSource = firstSource, Device = firstDevice },
+            new SensorGlucose { DataSource = secondSource, Device = secondDevice },
+        };
+
+        (await _sut.SelectAsync(readings)).Should().BeSameAs(readings);
+        _deviceRepo.Verify(r => r.GetAllAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task SelectAsync_MultiStream_LoadsDevicesOnce_AndFiltersByRank()
     {

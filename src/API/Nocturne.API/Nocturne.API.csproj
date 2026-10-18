@@ -5,8 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Nocturne.API</RootNamespace>
     <AssemblyName>Nocturne.API</AssemblyName>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591;NU1608;NU1701</NoWarn>
     <!-- Container publishing configuration for Aspire -->
@@ -21,6 +21,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Nocturne.API.Tests" />
+    <InternalsVisibleTo Include="Nocturne.Alerts.ParityCorpus.Generator" />
   </ItemGroup>
   <!-- Build provenance baked into the published container image. CI passes the source
        commit and build timestamp; the status endpoint surfaces them in the About panel. -->
@@ -50,24 +51,14 @@
     <PackageReference Include="ShiroTrie" />
     <PackageReference Include="SixLabors.ImageSharp" />
     <PackageReference Include="SocketIOClient" />
-    <PackageReference Include="Wasmtime" />
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="Yarp.ReverseProxy" />
     <PackageReference Include="MongoDB.Driver" />
   </ItemGroup>
   <ItemGroup>
-    <!-- oref.wasm is optional — only needed when Predictions:Source=OrefWasm.
-         Download from https://github.com/nightscout/nocturne-heuristics-wasm/releases
-         and place in the build output directory. -->
-    <Content Include="oref.wasm" Link="oref.wasm" CopyToOutputDirectory="PreserveNewest" Condition="Exists('oref.wasm')" />
-  </ItemGroup>
-  <ItemGroup>
     <!-- Source for the Scalar docs theme; see NocturneScalarTheme. -->
     <EmbeddedResource Include="..\..\Web\packages\ui\src\theme.css" LogicalName="Nocturne.API.ScalarTheme.theme.css" />
     <EmbeddedResource Include="..\..\Web\packages\ui\src\styles\nocturne-theme.css" LogicalName="Nocturne.API.ScalarTheme.nocturne-theme.css" />
-  </ItemGroup>
-  <ItemGroup>
-    <InternalsVisibleTo Include="Nocturne.API.Tests" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Aspire\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj" />
@@ -84,6 +75,7 @@
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Eversense\Nocturne.Connectors.Eversense.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Gluroo\Nocturne.Connectors.Gluroo.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Glooko\Nocturne.Connectors.Glooko.csproj" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.GoogleHealth\Nocturne.Connectors.GoogleHealth.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.FreeStyle\Nocturne.Connectors.FreeStyle.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyLife\Nocturne.Connectors.MyLife.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Tidepool\Nocturne.Connectors.Tidepool.csproj" />

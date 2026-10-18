@@ -1,6 +1,8 @@
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Mappers.V4;
+using Nocturne.Performance.Tests.Shared;
 
 namespace Nocturne.Infrastructure.Data.Performance.Tests.Infrastructure;
 
@@ -11,35 +13,29 @@ public static class DataSeeder
     public static async Task SeedSensorGlucoseAsync(
         NocturneDbContext context, Guid tenantId, int count, CancellationToken ct = default)
     {
-        var baseTime = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         const int batchSize = 5000;
+        var generated = DemoFixtureGenerator.GenerateSensorGlucose(
+            count, new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
-        for (int batch = 0; batch < count; batch += batchSize)
+        var batch = new List<SensorGlucoseEntity>(batchSize);
+        foreach (var sensorGlucose in generated)
         {
-            var chunk = Math.Min(batchSize, count - batch);
-            for (int i = 0; i < chunk; i++)
+            var entity = SensorGlucoseMapper.ToEntity(sensorGlucose);
+            entity.TenantId = tenantId;
+            entity.SysCreatedAt = DateTime.UtcNow;
+            entity.SysUpdatedAt = DateTime.UtcNow;
+            batch.Add(entity);
+            if (batch.Count == batchSize)
             {
-                var idx = batch + i;
-                var ts = baseTime.AddMinutes(idx * 5);
-                var hoursIntoDay = ts.TimeOfDay.TotalHours;
-                var mealEffect = 30 * Math.Sin((hoursIntoDay - 8) * Math.PI / 4)
-                               + 20 * Math.Sin((hoursIntoDay - 13) * Math.PI / 3)
-                               + 25 * Math.Sin((hoursIntoDay - 19) * Math.PI / 3);
-                var noise = (Rng.NextDouble() - 0.5) * 20;
-                var mgdl = Math.Clamp(120 + mealEffect + noise, 40, 400);
-
-                context.SensorGlucose.Add(new SensorGlucoseEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenantId,
-                    Timestamp = ts,
-                    Mgdl = mgdl,
-                    Direction = "Flat",
-                    SysCreatedAt = DateTime.UtcNow,
-                    SysUpdatedAt = DateTime.UtcNow,
-                });
+                context.SensorGlucose.AddRange(batch);
+                await context.SaveChangesAsync(ct);
+                context.ChangeTracker.Clear();
+                batch.Clear();
             }
-
+        }
+        if (batch.Count > 0)
+        {
+            context.SensorGlucose.AddRange(batch);
             await context.SaveChangesAsync(ct);
             context.ChangeTracker.Clear();
         }
@@ -48,29 +44,27 @@ public static class DataSeeder
     public static async Task SeedBolusesAsync(
         NocturneDbContext context, Guid tenantId, int count, CancellationToken ct = default)
     {
-        var baseTime = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         const int batchSize = 1000;
-
-        for (int batch = 0; batch < count; batch += batchSize)
+        var batch = new List<BolusEntity>(batchSize);
+        foreach (var bolus in DemoFixtureGenerator.GenerateBolusStressProjection(
+                     count, new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc)))
         {
-            var chunk = Math.Min(batchSize, count - batch);
-            for (int i = 0; i < chunk; i++)
+            var entity = BolusMapper.ToEntity(bolus);
+            entity.TenantId = tenantId;
+            entity.SysCreatedAt = DateTime.UtcNow;
+            entity.SysUpdatedAt = DateTime.UtcNow;
+            batch.Add(entity);
+            if (batch.Count == batchSize)
             {
-                var idx = batch + i;
-                context.Boluses.Add(new BolusEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenantId,
-                    Timestamp = baseTime.AddMinutes(idx * 60),
-                    Insulin = Math.Round(0.5 + Rng.NextDouble() * 9.5, 1),
-                    BolusType = "Normal",
-                    BolusKind = "Manual",
-                    Automatic = false,
-                    SysCreatedAt = DateTime.UtcNow,
-                    SysUpdatedAt = DateTime.UtcNow,
-                });
+                context.Boluses.AddRange(batch);
+                await context.SaveChangesAsync(ct);
+                context.ChangeTracker.Clear();
+                batch.Clear();
             }
-
+        }
+        if (batch.Count > 0)
+        {
+            context.Boluses.AddRange(batch);
             await context.SaveChangesAsync(ct);
             context.ChangeTracker.Clear();
         }
@@ -82,10 +76,7 @@ public static class DataSeeder
         double duplicatePercent, CancellationToken ct = default)
     {
         var dupeCount = (int)(recordIds.Count * duplicatePercent);
-        var indices = Enumerable.Range(0, recordIds.Count)
-            .OrderBy(_ => Rng.Next())
-            .Take(dupeCount)
-            .ToList();
+        var indices = Enumerable.Range(0, dupeCount).ToList();
 
         const int batchSize = 1000;
         for (int batch = 0; batch < indices.Count; batch += batchSize)
@@ -102,7 +93,7 @@ public static class DataSeeder
                     TenantId = tenantId,
                     CanonicalId = canonicalId,
                     RecordType = recordType,
-                    RecordId = recordIds[idx],
+                    RecordId = recordIds[dupeCount + idx],
                     SourceTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                     DataSource = "source-a",
                     IsPrimary = true,
@@ -116,7 +107,7 @@ public static class DataSeeder
                     TenantId = tenantId,
                     CanonicalId = canonicalId,
                     RecordType = recordType,
-                    RecordId = Guid.CreateVersion7(), // fake dupe record ID
+                    RecordId = recordIds[idx],
                     SourceTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                     DataSource = "source-b",
                     IsPrimary = false,
@@ -132,29 +123,27 @@ public static class DataSeeder
     public static async Task SeedTempBasalsAsync(
         NocturneDbContext context, Guid tenantId, int count, CancellationToken ct = default)
     {
-        var baseTime = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         const int batchSize = 1000;
-
-        for (int batch = 0; batch < count; batch += batchSize)
+        var batch = new List<TempBasalEntity>(batchSize);
+        foreach (var tempBasal in DemoFixtureGenerator.GenerateTempBasals(
+                     count, new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc)))
         {
-            var chunk = Math.Min(batchSize, count - batch);
-            for (int i = 0; i < chunk; i++)
+            var entity = TempBasalMapper.ToEntity(tempBasal);
+            entity.TenantId = tenantId;
+            entity.SysCreatedAt = DateTime.UtcNow;
+            entity.SysUpdatedAt = DateTime.UtcNow;
+            batch.Add(entity);
+            if (batch.Count == batchSize)
             {
-                var idx = batch + i;
-                var start = baseTime.AddMinutes(idx * 5);
-                context.TempBasals.Add(new TempBasalEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenantId,
-                    Timestamp = start,
-                    EndTimestamp = start.AddMinutes(5),
-                    Rate = Math.Round(0.5 + Rng.NextDouble() * 2.0, 2),
-                    Origin = "Unknown",
-                    SysCreatedAt = DateTime.UtcNow,
-                    SysUpdatedAt = DateTime.UtcNow,
-                });
+                context.TempBasals.AddRange(batch);
+                await context.SaveChangesAsync(ct);
+                context.ChangeTracker.Clear();
+                batch.Clear();
             }
-
+        }
+        if (batch.Count > 0)
+        {
+            context.TempBasals.AddRange(batch);
             await context.SaveChangesAsync(ct);
             context.ChangeTracker.Clear();
         }
@@ -163,26 +152,27 @@ public static class DataSeeder
     public static async Task SeedCarbIntakesAsync(
         NocturneDbContext context, Guid tenantId, int count, CancellationToken ct = default)
     {
-        var baseTime = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         const int batchSize = 1000;
-
-        for (int batch = 0; batch < count; batch += batchSize)
+        var batch = new List<CarbIntakeEntity>(batchSize);
+        foreach (var carbIntake in DemoFixtureGenerator.GenerateCarbStressProjection(
+                     count, new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc)))
         {
-            var chunk = Math.Min(batchSize, count - batch);
-            for (int i = 0; i < chunk; i++)
+            var entity = CarbIntakeMapper.ToEntity(carbIntake);
+            entity.TenantId = tenantId;
+            entity.SysCreatedAt = DateTime.UtcNow;
+            entity.SysUpdatedAt = DateTime.UtcNow;
+            batch.Add(entity);
+            if (batch.Count == batchSize)
             {
-                var idx = batch + i;
-                context.CarbIntakes.Add(new CarbIntakeEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenantId,
-                    Timestamp = baseTime.AddMinutes(idx * 30),
-                    Carbs = Math.Round(10 + Rng.NextDouble() * 90, 1),
-                    SysCreatedAt = DateTime.UtcNow,
-                    SysUpdatedAt = DateTime.UtcNow,
-                });
+                context.CarbIntakes.AddRange(batch);
+                await context.SaveChangesAsync(ct);
+                context.ChangeTracker.Clear();
+                batch.Clear();
             }
-
+        }
+        if (batch.Count > 0)
+        {
+            context.CarbIntakes.AddRange(batch);
             await context.SaveChangesAsync(ct);
             context.ChangeTracker.Clear();
         }

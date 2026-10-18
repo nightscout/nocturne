@@ -2,16 +2,22 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { flushSync } from "svelte";
 import { refreshSummaryOnNewReading } from "./current-glucose-status.svelte";
 
-const summary = vi.hoisted(() => ({
+const queries = vi.hoisted(() => ({ created: 0 }));
+
+vi.mock("$api/generated/summaries.generated.remote", () => ({
+  getSummary: () => {
+    queries.created++;
+    return summary;
+  },
+}));
+
+// Reactive, as the real query is: the first load landing is what re-runs the check.
+const summary = $state({
   ready: true,
   loading: false,
   current: undefined as { current?: { mills: number } } | undefined,
   refresh: vi.fn(() => Promise.resolve()),
-}));
-
-vi.mock("$api/generated/summaries.generated.remote", () => ({
-  getSummary: () => summary,
-}));
+});
 
 const roots: Array<() => void> = [];
 
@@ -19,11 +25,14 @@ const roots: Array<() => void> = [];
  * Each call re-runs the effect even for an equal `mills`, so a repeat reaches
  * the already-described check instead of being absorbed by `$state` equality.
  */
-function startWithReading(initial: number | undefined) {
+function startWithReading(initial: number | undefined, enabled = true) {
   let reading = $state({ mills: initial });
   roots.push(
     $effect.root(() => {
-      refreshSummaryOnNewReading(() => reading.mills);
+      refreshSummaryOnNewReading(
+        () => reading.mills,
+        () => enabled
+      );
     })
   );
   flushSync();
@@ -43,6 +52,7 @@ afterEach(() => {
   summary.loading = false;
   summary.current = undefined;
   summary.refresh.mockClear();
+  queries.created = 0;
 });
 
 describe("refreshSummaryOnNewReading", () => {
@@ -88,6 +98,46 @@ describe("refreshSummaryOnNewReading", () => {
     setMills(2000);
 
     expect(summary.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts the first load before the store has a reading", () => {
+    startWithReading(undefined);
+
+    expect(queries.created).toBeGreaterThan(0);
+    expect(summary.refresh).not.toHaveBeenCalled();
+  });
+
+  it("starts nothing for a viewer without realtime data", () => {
+    startWithReading(1000, false);
+
+    expect(queries.created).toBe(0);
+    expect(summary.refresh).not.toHaveBeenCalled();
+  });
+
+  it("refreshes when the first load lands describing an older reading", () => {
+    summary.ready = false;
+    summary.loading = true;
+    startWithReading(1000);
+
+    summary.current = { current: { mills: 500 } };
+    summary.loading = false;
+    summary.ready = true;
+    flushSync();
+
+    expect(summary.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refresh when the first load lands describing the reading", () => {
+    summary.ready = false;
+    summary.loading = true;
+    startWithReading(1000);
+
+    summary.current = { current: { mills: 1000 } };
+    summary.loading = false;
+    summary.ready = true;
+    flushSync();
+
+    expect(summary.refresh).not.toHaveBeenCalled();
   });
 
   it("retries on the next reading after the first load failed", () => {

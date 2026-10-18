@@ -24,7 +24,14 @@ public interface IClockFaceService
     Task<IEnumerable<ClockFaceListItem>> GetByUserAsync(string userId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Create a new clock face
+    /// The <see cref="ClockFaceConfig.Starter"/> layout with the user's current display preferences
+    /// </summary>
+    /// <param name="userId">User ID (the creator)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<ClockFaceConfig> GetStarterConfigAsync(string userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Create a new clock face, starting from <see cref="GetStarterConfigAsync"/> when the request carries no config
     /// </summary>
     /// <param name="userId">User ID (owner)</param>
     /// <param name="request">Create request with name and config</param>

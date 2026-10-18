@@ -25,7 +25,7 @@ public interface ISensorGlucoseRepository
     /// Retrieve a page of <see cref="SensorGlucose"/> records filtered by time range, device, source, and origin.
     /// </summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end of the time window, or <c>null</c> for no upper bound.</param>
+    /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
     /// <param name="device">Optional device identifier filter.</param>
     /// <param name="source">Optional data source filter (e.g., connector name).</param>
     /// <param name="limit">Maximum number of records to return (default 100).</param>
@@ -51,6 +51,16 @@ public interface ISensorGlucoseRepository
         CancellationToken ct = default,
         Guid? patientDeviceId = null
     );
+
+    /// <summary>
+    /// Partial readings for statistics and canonical selection only; these must not be returned
+    /// as raw records or projected into legacy entries. Includes the per-reading UTC offset.
+    /// </summary>
+    Task<IEnumerable<SensorGlucose>> GetForAnalyticsAsync(
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit = 100, int offset = 0, bool descending = true, bool nativeOnly = false,
+        DateTime? afterTimestamp = null, Guid? afterId = null,
+        CancellationToken ct = default, Guid? patientDeviceId = null);
 
     // Explicit base-interface bridge — delegates to the extended overload
     Task<IEnumerable<SensorGlucose>> IV4Repository<SensorGlucose>.GetAsync(
@@ -143,8 +153,18 @@ public interface ISensorGlucoseRepository
     /// Delete all records within the given time range.
     /// </summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
+    /// <param name="to">Inclusive end, or <c>null</c> for no upper bound.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Every live reading attributed to <paramref name="patientDeviceId"/> in [<paramref name="from"/>,
+    /// <paramref name="to"/>], oldest first, carrying only <see cref="V4RecordBase.Timestamp"/> and
+    /// <see cref="V4RecordBase.UtcOffset"/>. Unlike the other reads it includes the copies
+    /// deduplication hides behind another source's primary: the attributed copy of a reading need not
+    /// be the one that is shown, and the device's own series must not lose it.
+    /// </summary>
+    Task<IReadOnlyList<SensorGlucose>> GetAttributedReadingTimesAsync(
+        Guid patientDeviceId, DateTime from, DateTime to, CancellationToken ct = default);
 }

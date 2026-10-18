@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4.Profiles;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -30,8 +31,133 @@ public class ClockFacesControllerTests
         {
             HttpContext = new DefaultHttpContext()
         };
+        controller.ProblemDetailsFactory = new EchoingProblemDetailsFactory();
 
         return controller;
+    }
+
+    private static ClockFaceConfig ConfigWith(string glucoseUnits, string timeFormat) => new()
+    {
+        Settings = new ClockSettings { GlucoseUnits = glucoseUnits, TimeFormat = timeFormat },
+    };
+
+    public static TheoryData<string, string, string> InvalidSettings => new()
+    {
+        { "mmol/L", "24", "settings.glucoseUnits" },
+        { "", "24", "settings.glucoseUnits" },
+        { "mmol", "24h", "settings.timeFormat" },
+        { "mmol", "auto", "settings.timeFormat" },
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidSettings))]
+    public async Task Create_RejectsAnInvalidUnitOrTimeFormat(
+        string glucoseUnits, string timeFormat, string field)
+    {
+        var result = await CreateController().Create(new CreateClockFaceRequest
+        {
+            Name = "Bedside",
+            Config = ConfigWith(glucoseUnits, timeFormat),
+        });
+
+        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(400);
+        ((ProblemDetails)problem.Value!).Detail.Should().StartWith(field);
+        _clockFaceServiceMock.Verify(
+            s => s.CreateAsync(It.IsAny<string>(), It.IsAny<CreateClockFaceRequest>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_RejectsAConfigWithNoSettings()
+    {
+        var result = await CreateController().Create(new CreateClockFaceRequest
+        {
+            Name = "Bedside",
+            Config = new ClockFaceConfig { Settings = null! },
+        });
+
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidSettings))]
+    public async Task Update_RejectsAnInvalidUnitOrTimeFormat(
+        string glucoseUnits, string timeFormat, string field)
+    {
+        var result = await CreateController().Update(Guid.NewGuid(), new UpdateClockFaceRequest
+        {
+            Config = ConfigWith(glucoseUnits, timeFormat),
+        });
+
+        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(400);
+        ((ProblemDetails)problem.Value!).Detail.Should().StartWith(field);
+        _clockFaceServiceMock.Verify(
+            s => s.UpdateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<UpdateClockFaceRequest>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_AllowsARenameThatCarriesNoConfig()
+    {
+        var id = Guid.NewGuid();
+        _clockFaceServiceMock
+            .Setup(s => s.UpdateAsync(id, It.IsAny<string>(), It.IsAny<UpdateClockFaceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClockFace { Id = id });
+
+        var result = await CreateController().Update(id, new UpdateClockFaceRequest { Name = "Kitchen" });
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task Create_SavesAFaceThatLeavesUnitsAndTimeFormatAtTheirDefaults()
+    {
+        _clockFaceServiceMock
+            .Setup(s => s.CreateAsync(It.IsAny<string>(), It.IsAny<CreateClockFaceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClockFace { Id = Guid.NewGuid() });
+
+        var result = await CreateController().Create(new CreateClockFaceRequest
+        {
+            Name = "Bedside",
+            Config = new ClockFaceConfig(),
+        });
+
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
+    }
+
+    [Fact]
+    public async Task Create_WithoutAConfig_LeavesTheStarterLayoutToTheService()
+    {
+        _clockFaceServiceMock
+            .Setup(s => s.CreateAsync(It.IsAny<string>(), It.IsAny<CreateClockFaceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClockFace { Id = Guid.NewGuid() });
+
+        var result = await CreateController().Create(new CreateClockFaceRequest { Name = "Bedside" });
+
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
+        _clockFaceServiceMock.Verify(
+            s => s.CreateAsync(It.IsAny<string>(), It.Is<CreateClockFaceRequest>(r => r.Config == null), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Theory]
+    [InlineData("mg/dl", "12")]
+    [InlineData("mmol", "24")]
+    public async Task Create_SavesAFaceWithValidUnitsAndTimeFormat(string glucoseUnits, string timeFormat)
+    {
+        _clockFaceServiceMock
+            .Setup(s => s.CreateAsync(It.IsAny<string>(), It.IsAny<CreateClockFaceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClockFace { Id = Guid.NewGuid() });
+
+        var result = await CreateController().Create(new CreateClockFaceRequest
+        {
+            Name = "Bedside",
+            Config = ConfigWith(glucoseUnits, timeFormat),
+        });
+
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
     }
 
     [Fact]

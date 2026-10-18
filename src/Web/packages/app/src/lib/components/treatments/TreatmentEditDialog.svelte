@@ -35,6 +35,7 @@
   import Clock from "@lucide/svelte/icons/clock";
   import Database from "@lucide/svelte/icons/database";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import WandSparkles from "@lucide/svelte/icons/wand-sparkles";
   import { formatDateForInput, formatDateTimeCompact } from "$lib/utils/formatting";
   import * as patientRemote from "$api/generated/patientRecords.generated.remote";
   import { getCatalog } from "$api/generated/insulinCatalogs.generated.remote";
@@ -518,6 +519,22 @@
         {:else if activeRecord.kind === "note"}
           <NoteFormFields bind:form={noteForm} />
         {:else if activeRecord.kind === "deviceEvent"}
+          {#if activeRecord.data.isInferred}
+            <div
+              data-testid="inferred-device-event"
+              class="flex gap-2 rounded-lg border border-dashed p-3 text-sm text-muted-foreground"
+            >
+              <WandSparkles class="mt-0.5 h-4 w-4 shrink-0" />
+              <div class="space-y-1">
+                <Badge variant="outline">Inferred</Badge>
+                <p>
+                  Nocturne inferred this sensor start from the warm-up gap in your CGM's
+                  readings. Correct the time if it is off, or delete it if this was not a
+                  sensor change.
+                </p>
+              </div>
+            </div>
+          {/if}
           <DeviceEventFormFields bind:form={deviceEventForm} />
         {:else if activeRecord.kind === "basalInjection"}
           <BasalInjectionFormFields

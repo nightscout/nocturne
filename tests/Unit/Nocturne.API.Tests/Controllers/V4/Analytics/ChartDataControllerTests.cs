@@ -20,7 +20,7 @@ public class ChartDataControllerTests
     {
         _service
             .Setup(s => s.GetDashboardChartDataAsync(
-                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DashboardChartData());
         _service
             .Setup(s => s.GetBasalSeriesAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
@@ -40,7 +40,7 @@ public class ChartDataControllerTests
         OverCapDetail(result.Result).Should().Be($"Date range must not exceed {V4ReadLimits.MaxDateSpanDays} days.");
         _service.Verify(
             s => s.GetDashboardChartDataAsync(
-                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -50,6 +50,30 @@ public class ChartDataControllerTests
         var result = await _controller.GetDashboardChartData(Start, AtCap);
 
         result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GetDashboardChartData_forwards_includeHealthSeries(bool includeHealthSeries)
+    {
+        await _controller.GetDashboardChartData(Start, Start + 1, includeHealthSeries: includeHealthSeries);
+
+        _service.Verify(
+            s => s.GetDashboardChartDataAsync(
+                Start, Start + 1, 5, includeHealthSeries, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetDashboardChartData_includes_health_series_by_default()
+    {
+        await _controller.GetDashboardChartData(Start, Start + 1);
+
+        _service.Verify(
+            s => s.GetDashboardChartDataAsync(
+                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), true, It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

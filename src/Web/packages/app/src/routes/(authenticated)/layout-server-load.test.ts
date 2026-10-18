@@ -1,12 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const environment = vi.hoisted(() => ({ browser: false }));
+vi.mock("$app/environment", () => ({
+  get browser() {
+    return environment.browser;
+  },
+  building: false,
+  dev: false,
+}));
 import { isRedirect, type Cookies } from "@sveltejs/kit";
 import { classifyHost, isTenantlessHost } from "$lib/server/tenantless-host";
 import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 import { load } from "./+layout.server";
+import { load as universalLoad } from "./+layout";
 
 /**
- * The authenticated shell's load, exercised end to end from a hostname rather than through the
- * host-classification helpers it depends on.
+ * The authenticated shell's loads (server, then universal), exercised end to end from a hostname
+ * rather than through the host-classification helpers they depend on.
  *
  * Those helpers were unit-tested and correct while the shell still bounced every tenantless host
  * to /setup, because the redirect lived above the branch that reads them — a shape no test over
@@ -15,6 +25,7 @@ import { load } from "./+layout.server";
  */
 
 type LoadEvent = Parameters<typeof load>[0];
+type UniversalLoadEvent = Parameters<typeof universalLoad>[0];
 
 const BASE = "nocturne.run";
 
@@ -27,7 +38,7 @@ interface Situation {
   dashboardSlugs?: string[];
   /** The /api/v4/status document; a number rejects with that HTTP status. */
   status:
-    | { status?: string; tenantSlug?: string | null; anonymousReadAccess?: boolean }
+    | { status?: string; tenantSlug?: string | null; anonymousReadAccess?: boolean; isDemo?: boolean }
     | number;
   /** The passkey auth-status answer; a number rejects with that HTTP status. */
   authStatus: { onboardingCompleted?: boolean } | number;
@@ -39,7 +50,32 @@ interface Situation {
   cookies?: Record<string, string>;
 }
 
-function runLoad(situation: Situation) {
+/** URL properties the server load read outside `untrack`, which SvelteKit would re-run it on. */
+let trackedUrlReads: string[] = [];
+
+function trackingUrl(href: string): { url: URL; untrack: <T>(fn: () => T) => T } {
+  trackedUrlReads = [];
+  let untracked = false;
+  const target = new URL(href);
+  const url = new Proxy(target, {
+    get(obj, prop) {
+      if (!untracked) trackedUrlReads.push(String(prop));
+      const value: unknown = Reflect.get(obj, prop, obj);
+      return typeof value === "function" ? value.bind(obj) : value;
+    },
+  });
+  const untrack = <T>(fn: () => T): T => {
+    untracked = true;
+    try {
+      return fn();
+    } finally {
+      untracked = false;
+    }
+  };
+  return { url, untrack };
+}
+
+async function runLoad(situation: Situation) {
   const { kind } = classifyHost(situation.host, BASE, situation.dashboardSlugs ?? []);
   const tenantless = isTenantlessHost(kind, situation.apexResolvesTenant ?? false);
   const shareHost = kind === "share";
@@ -77,14 +113,21 @@ function runLoad(situation: Situation) {
     },
   };
 
+  const { url, untrack } = trackingUrl(`https://${situation.host}${situation.pathname ?? "/"}`);
   const event = {
     locals,
     cookies,
-    url: new URL(`https://${situation.host}${situation.pathname ?? "/"}`),
+    url,
+    untrack,
     parent: async () => ({ tenantless }),
   };
 
-  return load(event as unknown as LoadEvent);
+  const data = await load(event as unknown as LoadEvent);
+  return universalLoad({
+    data,
+    url: new URL(`https://${situation.host}${situation.pathname ?? "/"}`),
+    parent: async () => ({ tenantless }),
+  } as unknown as UniversalLoadEvent);
 }
 
 /** The page data the load returned, for situations that render rather than redirect. */
@@ -322,6 +365,33 @@ describe("(authenticated) layout load — the public share host", () => {
   });
 });
 
+describe("(authenticated) layout load — demo tenant sign-in", () => {
+  const demo = {
+    host: `demo.${BASE}`,
+    status: { status: "ok", isDemo: true },
+    authStatus: { onboardingCompleted: true },
+    signedIn: false,
+  } as const;
+
+  it("sends a signed-out visitor straight to the demo session, not by way of the login page", async () => {
+    await expect(redirectLocation({ ...demo, pathname: "/reports" })).resolves.toBe(
+      "/api/v4/demo/session?redirect=%2Freports%3F__autologin%3D1"
+    );
+  });
+
+  it("falls back to the login page once the one auto-login attempt has been spent", async () => {
+    await expect(
+      redirectLocation({ ...demo, pathname: "/reports?__autologin=1" })
+    ).resolves.toBe("/auth/login?returnUrl=%2Freports%3F__autologin%3D1");
+  });
+
+  it("keeps a tenant that is not a demo on the login page", async () => {
+    await expect(
+      redirectLocation({ ...demo, status: { status: "ok", isDemo: false } })
+    ).resolves.toBe("/auth/login?returnUrl=%2F");
+  });
+});
+
 describe("(authenticated) layout load — realtime data", () => {
   it("withholds realtime data on a tenantless host from a platform admin holding *", async () => {
     // On a tenantless host /api/v4/me/permissions reports the raw JWT scopes, and a platform
@@ -360,5 +430,166 @@ describe("(authenticated) layout load — realtime data", () => {
       authStatus: { onboardingCompleted: true },
     });
     expect(data.canViewRealtimeData).toBe(false);
+  });
+});
+
+describe("(authenticated) layout load — client navigation", () => {
+  it("reads the URL only untracked, so navigating does not re-run the server load", async () => {
+    await loadedData({
+      host: `acme.${BASE}`,
+      pathname: "/reports",
+      status: { status: "ok", tenantSlug: "acme" },
+      authStatus: { onboardingCompleted: true },
+    });
+    expect(trackedUrlReads).toEqual([]);
+  });
+
+  it("reads the URL only untracked on the redirect to login", async () => {
+    await expect(
+      redirectLocation({
+        host: `acme.${BASE}`,
+        signedIn: false,
+        pathname: "/reports?range=7d",
+        status: { status: "ok", tenantSlug: "acme" },
+        authStatus: { onboardingCompleted: true },
+      })
+    ).resolves.toBe("/auth/login?returnUrl=%2Freports%3Frange%3D7d");
+    expect(trackedUrlReads).toEqual([]);
+  });
+
+  it("bounces a client navigation to a tenant-scoped route on a tenantless host", async () => {
+    // The server load's data is reused across navigations, so the guard lives in the universal
+    // load, which SvelteKit runs again whenever the pathname it reads changes.
+    const navigate = async (pathname: string) =>
+      universalLoad({
+        data: { user: null },
+        url: new URL(`https://${BASE}${pathname}`),
+        parent: async () => ({ tenantless: true }),
+      } as unknown as UniversalLoadEvent);
+
+    await expect(navigate("/settings/account")).resolves.toEqual({ user: null });
+    await expect(navigate("/reports")).rejects.toSatisfy(
+      (err) => isRedirect(err) && err.location === "/"
+    );
+  });
+
+  it("returns the server data unchanged on a tenant host", async () => {
+    const data = { user: null, canViewRealtimeData: true };
+    await expect(
+      universalLoad({
+        data,
+        url: new URL(`https://acme.${BASE}/reports`),
+        parent: async () => ({ tenantless: false }),
+      } as unknown as UniversalLoadEvent)
+    ).resolves.toBe(data);
+  });
+});
+
+describe("(authenticated) layout load — a session that ended since the server load ran", () => {
+  afterEach(() => {
+    environment.browser = false;
+    vi.unstubAllGlobals();
+  });
+
+  /** A client navigation on `host` with the server data the shell was rendered with. */
+  function navigate({
+    host = `acme.${BASE}`,
+    cookie,
+    data = { user: { subjectId: "s1", name: "Sam" }, isGuestSession: false },
+    inBrowser = true,
+  }: {
+    host?: string;
+    cookie: string;
+    data?: Record<string, unknown>;
+    inBrowser?: boolean;
+  }) {
+    environment.browser = inBrowser;
+    vi.stubGlobal("document", { cookie });
+    vi.stubGlobal("location", { hostname: host });
+    return universalLoad({
+      data,
+      url: new URL(`https://${host}/reports?range=7d`),
+      parent: async () => ({ tenantless: false }),
+    } as unknown as UniversalLoadEvent);
+  }
+
+  async function locationOf(result: ReturnType<typeof navigate>): Promise<string | null> {
+    try {
+      await result;
+      return null;
+    } catch (err) {
+      if (isRedirect(err)) return err.location;
+      throw err;
+    }
+  }
+
+  it("stays put while the browser holds the session marker", async () => {
+    await expect(
+      locationOf(navigate({ cookie: "nocturne-language=en; IsAuthenticated=true" }))
+    ).resolves.toBeNull();
+  });
+
+  it("sends a member whose session marker is gone to login", async () => {
+    await expect(locationOf(navigate({ cookie: "nocturne-language=en" }))).resolves.toBe(
+      "/auth/login?returnUrl=%2Freports%3Frange%3D7d"
+    );
+  });
+
+  it("does not take a similarly named cookie for the marker", async () => {
+    await expect(
+      locationOf(navigate({ cookie: "WasIsAuthenticated=true" }))
+    ).resolves.not.toBeNull();
+  });
+
+  it("never checks on the server", async () => {
+    await expect(locationOf(navigate({ cookie: "", inBrowser: false }))).resolves.toBeNull();
+  });
+
+  it("never checks for a guest session", async () => {
+    await expect(
+      locationOf(
+        navigate({
+          cookie: "",
+          data: { user: { subjectId: "g1", name: "Guest" }, isGuestSession: true },
+        })
+      )
+    ).resolves.toBeNull();
+  });
+
+  /** Server data for a guest link that expires `offsetMs` from now. */
+  const guestExpiringIn = (offsetMs: number) => ({
+    user: { subjectId: "g1", name: "Guest" },
+    isGuestSession: true,
+    guestExpiresAt: new Date(Date.now() + offsetMs).toISOString(),
+  });
+
+  it("keeps a guest whose link has not expired", async () => {
+    await expect(
+      locationOf(navigate({ cookie: "", data: guestExpiringIn(60_000) }))
+    ).resolves.toBeNull();
+  });
+
+  it("sends a guest whose link has expired to login", async () => {
+    await expect(
+      locationOf(navigate({ cookie: "", data: guestExpiringIn(-60_000) }))
+    ).resolves.toBe("/auth/login?returnUrl=%2Freports%3Frange%3D7d");
+  });
+
+  it("never checks a guest's expiry on the server", async () => {
+    await expect(
+      locationOf(navigate({ cookie: "", data: guestExpiringIn(-60_000), inBrowser: false }))
+    ).resolves.toBeNull();
+  });
+
+  it("never checks on the share host", async () => {
+    await expect(
+      locationOf(navigate({ cookie: "", host: `k7m2q9x4r3wt.share.${BASE}` }))
+    ).resolves.toBeNull();
+  });
+
+  it("never checks for a signed-out viewer", async () => {
+    await expect(
+      locationOf(navigate({ cookie: "", data: { user: null, isGuestSession: false } }))
+    ).resolves.toBeNull();
   });
 });

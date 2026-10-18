@@ -30,6 +30,9 @@
         <!-- Source generator for automatic connector extension generation -->
         <ProjectReference Include="..\Nocturne.Aspire.SourceGenerators\Nocturne.Aspire.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" IsAspireProjectResource="false" />
     </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Nocturne.Aspire.Host.Tests" />
+    </ItemGroup>
     <!-- Enable viewing generated files for debugging -->
     <PropertyGroup>
         <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>

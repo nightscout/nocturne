@@ -44,7 +44,9 @@ export default defineConfig(({ mode }) => {
       // different peers (vite, typescript), so pnpm installs it twice. A date
       // that fails bits-ui's `instanceof CalendarDate` check makes the
       // RangeCalendar throw "Unknown date type" (reports filter, date pickers).
-      dedupe: ["@internationalized/date", "bits-ui"],
+      // tailwind-variants is installed once per tailwindcss peer; tailwind-merge
+      // is listed so a workspace pin drifting again still bundles one copy.
+      dedupe: ["@internationalized/date", "bits-ui", "tailwind-merge", "tailwind-variants"],
     },
     ssr: {
       // Bundle the Resend adapter (and its React deps) into the SSR output so

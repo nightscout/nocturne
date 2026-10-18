@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
 using OpenApi.Remote.Attributes;
@@ -16,7 +18,10 @@ namespace Nocturne.API.Controllers.V2;
 /// <remarks>
 /// The actions require only <c>glucose.read</c> while the response also carries treatments,
 /// profiles and device status. This is the accepted narrowing described on
-/// <see cref="PropertiesController"/>, which names the per-category follow-up.
+/// <see cref="PropertiesController"/>, which names the per-category follow-up. The one exception
+/// is <c>activity</c> on <c>at</c> and <c>raw</c>: it merges heart rate, step count and sleep, so
+/// <see cref="ActivityReadScopeGuard"/> drops the records of every category the caller holds no
+/// read scope for, as the v1 activity read does.
 /// </remarks>
 /// <seealso cref="IDDataService"/>
 [ApiController]
@@ -28,16 +33,23 @@ namespace Nocturne.API.Controllers.V2;
 public class DDataController : ControllerBase
 {
     private readonly IDDataService _ddataService;
+    private readonly IActivityDecomposer _activityDecomposer;
     private readonly ILogger<DDataController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="DDataController"/>.
     /// </summary>
     /// <param name="ddataService">Service for assembling the combined DData response.</param>
+    /// <param name="activityDecomposer">Classifier mapping each activity to its required read scope.</param>
     /// <param name="logger">Logger instance.</param>
-    public DDataController(IDDataService ddataService, ILogger<DDataController> logger)
+    public DDataController(
+        IDDataService ddataService,
+        IActivityDecomposer activityDecomposer,
+        ILogger<DDataController> logger
+    )
     {
         _ddataService = ddataService;
+        _activityDecomposer = activityDecomposer;
         _logger = logger;
     }
 
@@ -74,63 +86,33 @@ public class DDataController : ControllerBase
     }
 
     /// <summary>
-    /// Get DData structure for a specific timestamp
-    /// Returns data relevant to the specified timestamp
+    /// Get the full DData structure for a timestamp, or for now when none is given
     /// </summary>
-    /// <param name="timestamp">Unix timestamp in milliseconds or ISO date string</param>
+    /// <param name="timestamp">Optional Unix timestamp in milliseconds or ISO date string</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>DData structure for the specified timestamp</returns>
     /// <response code="200">Returns the DData structure</response>
     /// <response code="400">If the timestamp parameter is invalid</response>
     /// <response code="500">If there was an internal server error</response>
-    [HttpGet("at/{timestamp}")]
-    [ProducesResponseType(typeof(DDataResponse), StatusCodes.Status200OK)]
+    [HttpGet("at/{timestamp?}")]
+    [ProducesResponseType(typeof(DData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     [RequireScope(Scope.GlucoseRead)]
-    public async Task<ActionResult<DDataResponse>> GetDDataAt(
-        string timestamp,
+    public async Task<ActionResult<DData>> GetDDataAt(
+        string? timestamp = null,
         CancellationToken cancellationToken = default
     )
     {
         try
         {
-            long unixTimestamp;
-
-            // Try to parse as Unix timestamp (milliseconds)
-            if (long.TryParse(timestamp, out unixTimestamp))
+            if (!TryResolveTimestamp(timestamp, out var unixTimestamp, out var error))
             {
-                // Validate reasonable timestamp range
-                if (
-                    unixTimestamp < 0
-                    || unixTimestamp
-                        > DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                            + (365L * 24 * 60 * 60 * 1000)
-                )
-                {
-                    return BadRequest(new { error = "Timestamp out of valid range" });
-                }
-            }
-            // Try to parse as ISO date string
-            else if (UploaderTimestamp.TryParse(timestamp, out var parsedDate))
-            {
-                unixTimestamp = parsedDate.ToUnixTimeMilliseconds();
-            }
-            else
-            {
-                return BadRequest(
-                    new
-                    {
-                        error = "Invalid timestamp format. Use Unix milliseconds or ISO date string.",
-                    }
-                );
+                return BadRequest(error);
             }
 
-            var result = await _ddataService.GetDDataWithRecentStatusesAsync(
-                unixTimestamp,
-                cancellationToken
-            );
-            return Ok(result);
+            var result = await _ddataService.GetDDataAsync(unixTimestamp, cancellationToken);
+            return Ok(WithReadableActivity(result));
         }
         catch (Exception ex)
         {
@@ -161,46 +143,64 @@ public class DDataController : ControllerBase
     {
         try
         {
-            long unixTimestamp;
-
-            if (string.IsNullOrEmpty(timestamp))
+            if (!TryResolveTimestamp(timestamp, out var unixTimestamp, out var error))
             {
-                unixTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            }
-            else if (long.TryParse(timestamp, out unixTimestamp))
-            {
-                // Validate reasonable timestamp range
-                if (
-                    unixTimestamp < 0
-                    || unixTimestamp
-                        > DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                            + (365L * 24 * 60 * 60 * 1000)
-                )
-                {
-                    return BadRequest(new { error = "Timestamp out of valid range" });
-                }
-            }
-            else if (UploaderTimestamp.TryParse(timestamp, out var parsedDate))
-            {
-                unixTimestamp = parsedDate.ToUnixTimeMilliseconds();
-            }
-            else
-            {
-                return BadRequest(
-                    new
-                    {
-                        error = "Invalid timestamp format. Use Unix milliseconds or ISO date string.",
-                    }
-                );
+                return BadRequest(error);
             }
 
             var result = await _ddataService.GetDDataAsync(unixTimestamp, cancellationToken);
-            return Ok(result);
+            return Ok(WithReadableActivity(result));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting raw DData for timestamp {Timestamp}", timestamp);
             return StatusCode(500, new { error = "Internal server error" });
         }
+    }
+
+    private DData WithReadableActivity(DData ddata)
+    {
+        ddata.Activity = ActivityReadScopeGuard.Filter(
+            ddata.Activity,
+            _activityDecomposer,
+            HttpContext.GetGrantedScopes()
+        );
+        return ddata;
+    }
+
+    private static bool TryResolveTimestamp(string? timestamp, out long unixTimestamp, out object? error)
+    {
+        error = null;
+        if (string.IsNullOrEmpty(timestamp))
+        {
+            unixTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            return true;
+        }
+
+        if (long.TryParse(timestamp, out unixTimestamp))
+        {
+            if (
+                unixTimestamp < 0
+                || unixTimestamp
+                    > DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + (365L * 24 * 60 * 60 * 1000)
+            )
+            {
+                error = new { error = "Timestamp out of valid range" };
+                return false;
+            }
+            return true;
+        }
+
+        if (UploaderTimestamp.TryParse(timestamp, out var parsedDate))
+        {
+            unixTimestamp = parsedDate.ToUnixTimeMilliseconds();
+            return true;
+        }
+
+        error = new
+        {
+            error = "Invalid timestamp format. Use Unix milliseconds or ISO date string.",
+        };
+        return false;
     }
 }

@@ -543,12 +543,7 @@ describe("Shared date shapes", () => {
 
 describe("prefersHour12", () => {
 
-	it("follows the time-format preference when not overridden", () => {
+	it("follows the time-format preference", () => {
 		expect(prefersHour12()).toBe(true);
-	});
-
-	it("lets a caller pin the format", () => {
-		expect(prefersHour12(false)).toBe(false);
-		expect(prefersHour12(true)).toBe(true);
 	});
 });

@@ -164,6 +164,39 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     )
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await BuildReadQuery(ctx, from, to, device, source, limit, offset,
+            descending, nativeOnly, afterTimestamp, afterId, patientDeviceId).ToListAsync(ct);
+        return entities.Select(SensorGlucoseMapper.ToDomainModel);
+    }
+
+    public async Task<IEnumerable<SensorGlucose>> GetForAnalyticsAsync(
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit = 100, int offset = 0, bool descending = true, bool nativeOnly = false,
+        DateTime? afterTimestamp = null, Guid? afterId = null,
+        CancellationToken ct = default, Guid? patientDeviceId = null)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
+                descending, nativeOnly, afterTimestamp, afterId, patientDeviceId)
+            .Select(e => new SensorGlucose
+            {
+                Id = e.Id,
+                Timestamp = e.Timestamp,
+                Mgdl = e.Mgdl,
+                PatientDeviceId = e.PatientDeviceId,
+                DataSource = e.DataSource,
+                Device = e.Device,
+                UtcOffset = e.UtcOffset,
+                Direction = SensorGlucoseMapper.ParseDirection(e.Direction),
+            })
+            .ToListAsync(ct);
+    }
+
+    private IQueryable<SensorGlucoseEntity> BuildReadQuery(
+        NocturneDbContext ctx, DateTime? from, DateTime? to, string? device, string? source,
+        int limit, int offset, bool descending, bool nativeOnly,
+        DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId)
+    {
         var query = ctx.SensorGlucose.AsNoTracking().AsQueryable();
         if (from.HasValue)
             query = query.Where(e => e.Timestamp >= from.Value);
@@ -200,15 +233,15 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             query = query.Skip(offset);
         }
 
-        var entities = await query.Take(limit).ToListAsync(ct);
-        return entities.Select(SensorGlucoseMapper.ToDomainModel);
+        return query.Take(limit);
     }
 
     /// <inheritdoc />
-    public override async Task<SensorGlucose> CreateAsync(SensorGlucose model, WriteOrigin origin, CancellationToken ct = default)
+    public override async Task<SyncUpsert<SensorGlucose>> UpsertAsync(
+        SensorGlucose model, WriteOrigin origin, CancellationToken ct = default)
     {
-        var written = await base.CreateAsync(model, origin, ct);
-        await AdvanceTenantLastReadingAsync([written], ct);
+        var written = await base.UpsertAsync(model, origin, ct);
+        await AdvanceTenantLastReadingAsync([written.Record], ct);
         return written;
     }
 
@@ -378,6 +411,18 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<SensorGlucose>> GetAttributedReadingTimesAsync(
+        Guid patientDeviceId, DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await ctx.SensorGlucose.AsNoTracking()
+            .Where(e => e.PatientDeviceId == patientDeviceId && e.Timestamp >= from && e.Timestamp <= to)
+            .OrderBy(e => e.Timestamp)
+            .Select(e => new SensorGlucose { Timestamp = e.Timestamp, UtcOffset = e.UtcOffset })
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<DiscoveredSource>> GetDiscoveredSourcesAsync(DateTime since, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
@@ -420,7 +465,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// Deletes all sensor glucose records within the given time range.
     /// </summary>
     /// <param name="from">Inclusive start, or null for no lower bound.</param>
-    /// <param name="to">Exclusive end, or null for no upper bound.</param>
+    /// <param name="to">Inclusive end, or null for no upper bound.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
@@ -431,7 +476,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         if (from.HasValue)
             query = query.Where(e => e.Timestamp >= from.Value);
         if (to.HasValue)
-            query = query.Where(e => e.Timestamp < to.Value);
+            query = query.Where(e => e.Timestamp <= to.Value);
 
         return await ctx.AuditedSoftDeleteAsync(query, AuditContext, $"timestamp={from:O}..{to:O}", ct);
     }

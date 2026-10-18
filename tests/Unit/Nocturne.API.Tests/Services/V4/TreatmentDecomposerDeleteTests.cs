@@ -85,7 +85,6 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         Mock.Of<IActiveProfileResolver>(),
         Mock.Of<IPatientInsulinRepository>(),
         auditContext,
-        Mock.Of<IDeduplicationService>(),
         NullLogger<TreatmentDecomposer>.Instance);
 
     /// <summary>One record of every type the sweep covers, plus a bolus outside the window.</summary>

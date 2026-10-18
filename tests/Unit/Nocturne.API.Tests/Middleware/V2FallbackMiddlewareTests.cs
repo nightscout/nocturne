@@ -1,7 +1,10 @@
+using System.Reflection;
 using FluentAssertions;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Patterns;
+using Microsoft.AspNetCore.Routing.Template;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Middleware;
 using Xunit;
@@ -49,6 +52,23 @@ public class V2FallbackMiddlewareTests
         await middleware.InvokeAsync(context);
 
         return (context.Request.Path, nextCalled);
+    }
+
+    [Fact]
+    public async Task ApiV2Alexa_IsServedAsTheRouteAlexaControllerDeclares()
+    {
+        var template = typeof(Nocturne.API.Controllers.V1.AlexaController)
+            .GetCustomAttribute<RouteAttribute>()!
+            .Template.Replace("[controller]", "alexa");
+
+        var (path, nextCalled) = await Run("/api/v2/alexa");
+
+        nextCalled.Should().BeTrue();
+        TemplateParser.Parse(template)
+            .Should()
+            .Match<RouteTemplate>(parsed =>
+                new TemplateMatcher(parsed, new RouteValueDictionary())
+                    .TryMatch(path, new RouteValueDictionary()));
     }
 
     [Theory]

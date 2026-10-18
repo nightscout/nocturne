@@ -79,14 +79,14 @@ public class HistoryPagedIndexTests
     ];
 
     private static bool IsHistoryIndex(IIndex index) =>
-        index.GetDatabaseName() == $"ix_{index.DeclaringEntityType.GetTableName()}_tenant_sys_updated_at"
+        index.GetDatabaseName() == $"ix_{index.DeclaringEntityType.GetTableName()}_tenant_history"
         && index.Properties.Select(p => p.Name).SequenceEqual([
             nameof(ITenantScoped.TenantId),
             nameof(ISystemTimestamped.SysUpdatedAt),
             nameof(IIdentified.Id)])
         && !index.IsUnique
         && !(index.IsDescending ?? []).Contains(true)
-        && index.GetFilter() == "deleted_at IS NULL";
+        && index.GetFilter() is null;
 
     /// <summary>
     /// Index sort order lives only on the design-time model. Building it opens no connection.

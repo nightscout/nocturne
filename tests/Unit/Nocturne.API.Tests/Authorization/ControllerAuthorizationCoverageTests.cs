@@ -63,6 +63,13 @@ public class ControllerAuthorizationCoverageTests
             // already display.
             ["Nocturne.API.Controllers.V4.Identity.ShareAppearanceController"] = "presentation-only, share-host-only; fallback rejects an empty trie",
 
+            // ── V3 status and lastModified ──────────────────────────────────────────────────
+            // A share host reaches these with its public scopes and no authenticated user, so
+            // [Authorize] would 401 every share. The fallback answers anonymous and bad-token
+            // callers with the v3 401, and lastModified lists only the collections the caller reads.
+            ["Nocturne.API.Controllers.V3.StatusController"] = "v3 credential probe; fallback rejects an empty trie",
+            ["Nocturne.API.Controllers.V3.LastModifiedController"] = "scoped to readable collections; fallback rejects an empty trie",
+
             // ── V4 caller-scoped identity read ──────────────────────────────────────────────
             // Answers with the caller's own resolved grant, which discloses nothing a request of
             // theirs would not. The share view needs it to offer only the reports it can load, and

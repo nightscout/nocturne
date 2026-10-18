@@ -14,7 +14,6 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Tests.GoldenFiles.Infrastructure;
 
@@ -40,13 +39,6 @@ public class GoldenFileWebAppFactory : SqliteWebAppFactoryBase<Program>
                 context.TenantId = tenantAccessor.TenantId;
             }
             return context;
-        });
-
-        services.AddScoped<ITenantDbContextFactory>(sp =>
-        {
-            var factory = sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-            var tenantAccessor = sp.GetService<ITenantAccessor>();
-            return new TestTenantDbContextFactory(factory, tenantAccessor);
         });
 
         // DefaultValue.Empty so GetAsync<T>() returns a completed Task<T?> with default(T)
@@ -122,22 +114,5 @@ public class TestAuthHandlerImpl : IAuthHandler
             Permissions = ["*"],
             Roles = ["admin"],
         }));
-    }
-}
-
-/// <summary>
-/// Test-only <see cref="ITenantDbContextFactory"/> that creates tenant-scoped contexts
-/// from the shared <see cref="IDbContextFactory{NocturneDbContext}"/> mock.
-/// </summary>
-file sealed class TestTenantDbContextFactory(
-    IDbContextFactory<NocturneDbContext> pool,
-    ITenantAccessor? tenantAccessor) : ITenantDbContextFactory
-{
-    public async ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
-    {
-        var ctx = await pool.CreateDbContextAsync(ct);
-        if (tenantAccessor?.IsResolved == true)
-            ctx.TenantId = tenantAccessor.TenantId;
-        return ctx;
     }
 }

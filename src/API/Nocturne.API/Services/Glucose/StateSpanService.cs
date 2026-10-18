@@ -103,7 +103,7 @@ public class StateSpanService : IStateSpanService
     {
         _logger.LogDebug("Deleting state span with ID: {Id}", id);
 
-        return await _repository.DeleteStateSpanAsync(id, cancellationToken);
+        return (await _repository.DeleteStateSpanAsync(id, cancellationToken)).Count > 0;
     }
 
     /// <inheritdoc />
@@ -136,6 +136,8 @@ public class StateSpanService : IStateSpanService
         string? type = null,
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -147,6 +149,8 @@ public class StateSpanService : IStateSpanService
             type: type,
             count: count,
             skip: skip,
+            from: from,
+            to: to,
             cancellationToken: cancellationToken);
 
         // Convert each StateSpan to an Activity using the mapper
@@ -242,18 +246,19 @@ public class StateSpanService : IStateSpanService
     }
 
     /// <inheritdoc />
-    public async Task<bool> DeleteActivityAsync(
+    public async Task<IReadOnlyList<string>> DeleteActivityAsync(
         string id,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Deleting activity with ID: {Id}", id);
 
         var deleted = await _repository.DeleteActivityStateSpanAsync(id, cancellationToken);
+        if (deleted.Count == 0)
+            return [];
 
-        if (deleted)
-            _logger.LogDebug("Successfully deleted activity with ID: {Id}", id);
-
-        return deleted;
+        _logger.LogDebug("Successfully deleted activity with ID: {Id}", id);
+        // The copies under the id an activity read serves them by (ActivityStateSpanMapper.ToActivity).
+        return [id, .. deleted.Skip(1).Select(span => span.OriginalId ?? span.Id).OfType<string>()];
     }
 
     #endregion

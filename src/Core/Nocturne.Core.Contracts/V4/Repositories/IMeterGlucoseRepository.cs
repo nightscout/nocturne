@@ -18,7 +18,7 @@ public interface IMeterGlucoseRepository : ILegacyKeyedRepository<MeterGlucose>,
 {
     /// <summary>Retrieve a page of <see cref="MeterGlucose"/> records filtered by time range, device, and source.</summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end of the time window, or <c>null</c> for no upper bound.</param>
+    /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
     /// <param name="device">Optional device identifier filter.</param>
     /// <param name="source">Optional data source filter.</param>
     /// <param name="limit">Maximum number of records to return (default 100).</param>
@@ -71,7 +71,7 @@ public interface IMeterGlucoseRepository : ILegacyKeyedRepository<MeterGlucose>,
     /// Delete all records within the given time range.
     /// </summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
+    /// <param name="to">Inclusive end, or <c>null</c> for no upper bound.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default);

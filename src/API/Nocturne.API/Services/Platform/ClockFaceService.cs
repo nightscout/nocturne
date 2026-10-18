@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -90,17 +91,32 @@ public class ClockFaceService : IClockFaceService
     }
 
     /// <inheritdoc />
+    public async Task<ClockFaceConfig> GetStarterConfigAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        var preferences = Guid.TryParse(userId, out var subjectId)
+            ? await _dbContext.Subjects
+                .AsNoTracking()
+                .Where(s => s.Id == subjectId)
+                .Select(s => s.Preferences)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+
+        return ClockFaceConfig.Starter(UserDisplayPreferences.Deserialize(preferences));
+    }
+
+    /// <inheritdoc />
     public async Task<ClockFace> CreateAsync(string userId, CreateClockFaceRequest request, CancellationToken cancellationToken = default)
     {
         try
         {
             _logger.LogDebug("Creating clock face for user: {UserId}, name: {Name}", userId, request.Name);
 
+            var config = request.Config ?? await GetStarterConfigAsync(userId, cancellationToken);
             var entity = new ClockFaceEntity
             {
                 UserId = userId,
                 Name = request.Name,
-                ConfigJson = JsonSerializer.Serialize(request.Config, JsonOptions),
+                ConfigJson = Serialize(config),
             };
 
             _dbContext.ClockFaces.Add(entity);
@@ -139,7 +155,7 @@ public class ClockFaceService : IClockFaceService
 
             if (request.Config != null)
             {
-                entity.ConfigJson = JsonSerializer.Serialize(request.Config, JsonOptions);
+                entity.ConfigJson = Serialize(request.Config);
             }
 
             entity.UpdatedAt = DateTime.UtcNow;
@@ -184,6 +200,9 @@ public class ClockFaceService : IClockFaceService
             throw;
         }
     }
+
+    /// <summary>The <c>clock_faces.config</c> storage form, shared with the sample-data seeder.</summary>
+    public static string Serialize(ClockFaceConfig config) => JsonSerializer.Serialize(config, JsonOptions);
 
     private static ClockFace MapToModel(ClockFaceEntity entity)
     {

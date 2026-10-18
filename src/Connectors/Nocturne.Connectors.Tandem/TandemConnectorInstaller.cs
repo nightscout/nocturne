@@ -9,7 +9,7 @@ public class TandemConnectorInstaller()
     : ConnectorInstaller<TandemConnectorConfiguration, TandemConnectorService, TandemAuthTokenProvider>(
         new ConnectorOptions
         {
-            ConnectorName = "Tandem",
+            ConnectorName = TandemConstants.ConnectorName,
             // Long-running history fetches; allow generous timeouts and resilience policies.
             Timeout = TimeSpan.FromMinutes(5),
             ConnectTimeout = TimeSpan.FromSeconds(15),

@@ -1,6 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect, afterEach } from "vitest";
-import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+import type { ClockSettings } from "$lib/api";
+import { glucoseUnits, timeFormat } from "$lib/stores/appearance-store.svelte";
 import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
 import { renderClockElementValue } from "$lib/components/clock/element-value";
 import {
@@ -29,9 +30,17 @@ const noReading = {
   demoMode: false,
 };
 
-function preview(type: ClockElementType, source: ClockGlucoseSource = glucose) {
+const mgdl12: ClockSettings = { glucoseUnits: "mg/dl", timeFormat: "12" };
+const mmol24: ClockSettings = { glucoseUnits: "mmol", timeFormat: "24" };
+
+function preview(
+  type: ClockElementType,
+  settings: ClockSettings = mgdl12,
+  source: ClockGlucoseSource = glucose
+) {
   const { container } = render(ClockElementPreview, {
-    element: { _id: type, type, format: "24h" },
+    element: { _id: type, type },
+    settings,
     glucose: source,
     now,
     trackerDefinitions: [],
@@ -41,34 +50,40 @@ function preview(type: ClockElementType, source: ClockGlucoseSource = glucose) {
 
 afterEach(() => {
   glucoseUnits.current = "mg/dl";
+  timeFormat.current = "12";
 });
 
 describe("ClockElementPreview", () => {
-  it("renders the preview glucose in the tenant's units", () => {
-    glucoseUnits.current = "mmol";
-    expect(preview("sg")).toBe("6.7");
-    expect(preview("delta")).toBe("+0.3 mmol/L");
-
+  it("renders the preview in the face's units and time format, not the editor's", () => {
     glucoseUnits.current = "mg/dl";
-    expect(preview("sg")).toBe("120");
-    expect(preview("delta")).toBe("+5 mg/dL");
+    timeFormat.current = "12";
+    expect(preview("sg", mmol24)).toBe("6.7 mmol/L");
+    expect(preview("delta", mmol24)).toBe("+0.3 mmol/L");
+    expect(preview("time", mmol24)).toBe("14:05");
+
+    glucoseUnits.current = "mmol";
+    timeFormat.current = "24";
+    expect(preview("sg", mgdl12)).toBe("120 mg/dL");
+    expect(preview("delta", mgdl12)).toBe("+5 mg/dL");
   });
 
-  it.each(["mg/dl", "mmol"] as const)(
-    "shows what the saved face will show, in %s",
-    (units) => {
-      glucoseUnits.current = units;
+  it.each([mgdl12, mmol24])(
+    "shows what the saved face will show, in $glucoseUnits",
+    (settings) => {
       // Every type the picker offers, so a newly wired element is covered too.
       for (const type of ELEMENT_GROUPS.flatMap((group) => group.types)) {
         // Icon-only and chart elements have their own branch and no value text.
         if (type === "arrow" || type === "tracker" || type === "chart") continue;
         const value = renderClockElementValue(
-          { type, format: "24h" },
+          { type },
+          settings,
           glucose,
           now
         );
         // An element the runtime shows nothing for is named, never given a value.
-        expect(preview(type), type).toBe(value || elementInfo(type)?.name);
+        expect(preview(type, settings), type).toBe(
+          value || elementInfo(type)?.name
+        );
       }
     }
   );
@@ -79,14 +94,15 @@ describe("ClockElementPreview", () => {
   });
 
   it("shows the no-reading face, not a fabricated one, with no reading", () => {
-    expect(preview("sg", noReading)).toBe("--");
+    expect(preview("sg", mgdl12, noReading)).toBe("--");
     // No value to show, so the builder names the element instead.
-    expect(preview("delta", noReading)).toBe(elementInfo("delta")?.name);
-    expect(preview("age", noReading)).toBe(elementInfo("age")?.name);
+    expect(preview("delta", mgdl12, noReading)).toBe(
+      elementInfo("delta")?.name
+    );
+    expect(preview("age", mgdl12, noReading)).toBe(elementInfo("age")?.name);
   });
 
   it("follows the glucose source after mount", async () => {
-    glucoseUnits.current = "mg/dl";
     let setGlucose!: (next: ClockGlucoseSource) => void;
     const { container } = render(Harness, {
       props: {
@@ -97,8 +113,8 @@ describe("ClockElementPreview", () => {
       },
     });
 
-    expect(container.textContent?.trim()).toBe("120");
+    expect(container.textContent?.trim()).toBe("120 mg/dL");
     setGlucose({ ...glucose, currentBG: 87 });
-    await expect.poll(() => container.textContent?.trim()).toBe("87");
+    await expect.poll(() => container.textContent?.trim()).toBe("87 mg/dL");
   });
 });

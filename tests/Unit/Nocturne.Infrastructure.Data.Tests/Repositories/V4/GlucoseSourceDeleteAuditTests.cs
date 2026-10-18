@@ -77,6 +77,26 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
     }
 
     [Fact]
+    public async Task DeleteByTimeRangeAsync_ExactDateWindow_DeletesTheBoundaryRow()
+    {
+        // The v1 entries bulk remove parses an exact-date / $lte find into FindQuery.ToMills,
+        // which is an inclusive upper bound: the row at that millisecond is part of the matched
+        // set. The sweep must delete it. An exclusive `Timestamp < to` drops it, so an exact-date
+        // bulk remove reports success while leaving the row behind.
+        var boundary = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+        var justAfter = Seed(boundary.AddMilliseconds(1), dataSource: "dexcom");
+        var atBoundary = Seed(boundary, dataSource: "dexcom");
+        var beforeBoundary = Seed(boundary.AddMilliseconds(-1), dataSource: "dexcom");
+
+        var deleted = await DeleteByTimeRangeAsync(boundary, boundary);
+
+        deleted.Should().Be(1, "the exact-date window is [boundary, boundary] and inclusive at both ends");
+        (await ReadDeleteStateAsync(atBoundary)).DeletedAt.Should().NotBeNull("the row at the exact date is in scope");
+        (await ReadDeleteStateAsync(beforeBoundary)).DeletedAt.Should().BeNull("rows before the window are out of scope");
+        (await ReadDeleteStateAsync(justAfter)).DeletedAt.Should().BeNull("rows after the window are out of scope");
+    }
+
+    [Fact]
     public async Task DeleteByTimeRangeAsync_UserContext_StampsDeletedByUserAndWritesSummaryRow()
     {
         var from = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -85,19 +105,21 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
         var atLowerBound = Seed(from, dataSource: "dexcom");
         var inRange = Seed(new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc), dataSource: "dexcom");
         var atUpperBound = Seed(to, dataSource: "dexcom");
+        var afterTo = Seed(to.AddMilliseconds(1), dataSource: "dexcom");
 
         var deleted = await DeleteByTimeRangeAsync(from, to);
 
-        deleted.Should().Be(2);
+        deleted.Should().Be(3);
         (await ReadDeleteStateAsync(inRange)).DeletedByUser.Should().BeTrue();
         (await ReadDeleteStateAsync(atLowerBound)).DeletedAt.Should().NotBeNull("the lower bound is inclusive");
         (await ReadDeleteStateAsync(beforeFrom)).DeletedAt.Should().BeNull("rows before the window are out of scope");
-        (await ReadDeleteStateAsync(atUpperBound)).DeletedAt.Should().BeNull("the upper bound is exclusive");
+        (await ReadDeleteStateAsync(atUpperBound)).DeletedAt.Should().NotBeNull("the upper bound is inclusive");
+        (await ReadDeleteStateAsync(afterTo)).DeletedAt.Should().BeNull("rows after the window are out of scope");
 
         var log = (await ReadAuditLogAsync()).Should().ContainSingle().Subject;
         log.Action.Should().Be("bulk_delete");
         log.EntityType.Should().Be(AuditEntityType);
-        ReadSummary(log.ChangesJson).Should().Be((2, $"timestamp={from:O}..{to:O}"));
+        ReadSummary(log.ChangesJson).Should().Be((3, $"timestamp={from:O}..{to:O}"));
     }
 }
 
