@@ -13,8 +13,9 @@ namespace Nocturne.API.Tests.Integration.Auth;
 
 /// <summary>
 /// A full-history public share is not history-clamped, so it reads and writes the tenant-keyed
-/// caches. Row level security hides <c>notes</c>, <c>state_spans</c> and the therapy tables from
-/// every share, so whatever an owner's request leaves in those caches must not reach a share.
+/// caches. Row level security hides from a share every category it was not granted, and
+/// <c>notes</c>, <c>state_spans</c> and the therapy tables from every share, so whatever an owner's
+/// request leaves in those caches must not reach a share.
 /// </summary>
 /// <remarks>
 /// Each test anchors on a cold-cache share read, which only the database answers, and expects the
@@ -90,11 +91,37 @@ public class ShareReadsOwnerCacheIntegrationTests(ApiIntegrationTestFixture fixt
         warm.Should().Be(cold, "the owner's cached therapy settings must not reach the share");
     }
 
-    private async Task<HttpClient> CreateFullHistoryShareClientAsync()
+    [Fact]
+    public async Task Glucose_only_share_does_not_read_the_owner_cached_treatment_summary_from_multi_period_statistics()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var entries = Enumerable.Range(1, 12)
+            .Select(i => new { type = "sgv", sgv = 100 + i, date = now.AddMinutes(-5 * i).ToUnixTimeMilliseconds() })
+            .ToArray();
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/entries", entries)).EnsureSuccessStatusCode();
+        var bolus = new[] { new { eventType = "Correction Bolus", insulin = 2.0, created_at = now.AddMinutes(-15).ToString("O") } };
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", bolus)).EnsureSuccessStatusCode();
+        using var share = await CreateFullHistoryShareClientAsync([Scope.GlucoseRead]);
+        const string path = "/api/v4/statistics/periods";
+
+        ClearCaches();
+        var cold = await LastDayBolusCountAsync(share, path);
+        cold.Should().Be(0, "row level security hides the boluses from a glucose-only share");
+
+        ClearCaches();
+        (await LastDayBolusCountAsync(AuthenticatedClient, path)).Should().Be(1);
+
+        var warm = await LastDayBolusCountAsync(share, path);
+        warm.Should().Be(cold, "the owner's cached treatment summary must not reach the share");
+    }
+
+    private Task<HttpClient> CreateFullHistoryShareClientAsync() => CreateFullHistoryShareClientAsync(ShareScopes);
+
+    private async Task<HttpClient> CreateFullHistoryShareClientAsync(string[] scopes)
     {
         var link = await (await AuthenticatedClient.PostAsync("/api/v4/share/rotate", null))
             .EnsureSuccessStatusCode().Content.ReadFromJsonAsync<ShareLinkDto>();
-        (await AuthenticatedClient.PutAsJsonAsync("/api/v4/share/scopes", new { scopes = ShareScopes }))
+        (await AuthenticatedClient.PutAsJsonAsync("/api/v4/share/scopes", new { scopes }))
             .EnsureSuccessStatusCode();
         (await AuthenticatedClient.PutAsJsonAsync("/api/v4/share/full-history", new { fullHistory = true }))
             .EnsureSuccessStatusCode();
@@ -115,6 +142,17 @@ public class ShareReadsOwnerCacheIntegrationTests(ApiIntegrationTestFixture fixt
         return document.RootElement.EnumerateArray()
             .Select(treatment => treatment.TryGetProperty("eventType", out var type) ? type.GetString() : null)
             .ToList();
+    }
+
+    private static async Task<int> LastDayBolusCountAsync(HttpClient client, string path)
+    {
+        var response = await client.GetAsync(path);
+        var body = await response.Content.ReadAsStringAsync();
+        response.IsSuccessStatusCode.Should().BeTrue(body);
+        using var document = JsonDocument.Parse(body);
+        var lastDay = document.RootElement.GetProperty("lastDay");
+        lastDay.GetProperty("hasSufficientData").GetBoolean().Should().BeTrue(body);
+        return lastDay.GetProperty("treatmentSummary").GetProperty("bolusCount").GetInt32();
     }
 
     private static async Task<string> TimeZoneUnavailableReasonAsync(HttpClient client, string path)
