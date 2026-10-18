@@ -1,6 +1,7 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Services.Platform;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
 
@@ -16,7 +17,6 @@ namespace Nocturne.API.Controllers.V3;
 [ApiController]
 [Tags("V3")]
 [Route("api/v3/[controller]")]
-[AllowAnonymous]
 public class StatusController : ControllerBase
 {
     private readonly IStatusService _statusService;
@@ -34,13 +34,14 @@ public class StatusController : ControllerBase
     /// <returns>A <see cref="V3StatusResponse"/> containing authorization, permissions, and API version details.</returns>
     /// <remarks>
     /// On error, returns a minimal <see cref="V3StatusResponse"/> with <c>Status = "error"</c> to maintain
-    /// compatibility with clients that depend on this endpoint always returning 200.
+    /// compatibility with clients that depend on this endpoint returning 200.
     /// </remarks>
-    /// <response code="200">System status (always returns 200, even on internal errors).</response>
+    /// <response code="200">System status, also on internal errors.</response>
+    /// <response code="401">No credential, or one that was rejected.</response>
     [HttpGet]
     [NightscoutEndpoint("/api/v3/status")]
-    [ProducesResponseType(typeof(V3StatusResponse), 200)]
-    public async Task<ActionResult<V3StatusResponse>> GetStatus()
+    [ProducesResponseType(typeof(V3Envelope<V3StatusResponse>), 200)]
+    public async Task<ActionResult<V3Envelope<V3StatusResponse>>> GetStatus()
     {
         _logger.LogDebug(
             "V3 status endpoint requested from {RemoteIpAddress}",
@@ -53,36 +54,38 @@ public class StatusController : ControllerBase
 
             _logger.LogDebug("Successfully generated V3 status response");
 
-            return Ok(new { status = 200, result = status });
+            return Ok(new V3Envelope<V3StatusResponse> { Result = status });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error generating V3 status response");
 
             // Return minimal status response even on error to maintain compatibility
-            return Ok(new
-            {
-                status = 200,
-                result = new V3StatusResponse
+            return Ok(
+                new V3Envelope<V3StatusResponse>
                 {
-                    Status = "error",
-                    Name = "Nocturne",
-                    Version = "unknown",
-                    ServerTime = DateTime.UtcNow,
-                    Extended = new ExtendedStatusInfo
+                    Result = new V3StatusResponse
                     {
-                        Authorization = new AuthorizationInfo
+                        Status = "error",
+                        Name = "Nocturne",
+                        Version = AppVersion.Current,
+                        ApiVersion = ApplicationConstants.NightscoutApi.V3Version,
+                        ServerTime = DateTime.UtcNow,
+                        Extended = new ExtendedStatusInfo
                         {
-                            IsAuthorized = false,
-                            Scope = new List<string>(),
-                            Roles = new List<string>(),
+                            Authorization = new AuthorizationInfo
+                            {
+                                IsAuthorized = false,
+                                Scope = new List<string>(),
+                                Roles = new List<string>(),
+                            },
+                            Permissions = new Dictionary<string, bool>(),
+                            Collections = new List<string>(),
+                            ApiVersions = new Dictionary<string, bool> { ["v3"] = true },
                         },
-                        Permissions = new Dictionary<string, bool>(),
-                        Collections = new List<string>(),
-                        ApiVersions = new Dictionary<string, bool> { ["v3"] = true },
                     },
-                },
-            });
+                }
+            );
         }
     }
 }

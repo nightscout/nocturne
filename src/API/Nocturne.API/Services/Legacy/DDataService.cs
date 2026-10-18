@@ -20,6 +20,8 @@ namespace Nocturne.API.Services.Legacy;
 /// <seealso cref="IDDataService"/>
 public class DDataService : IDDataService
 {
+    private const long DeviceStatusWindowMills = 24L * 60 * 60 * 1000;
+
     private readonly IEntryStore _store;
     private readonly ITreatmentService _treatments;
     private readonly IProfileProjectionService _profiles;
@@ -722,10 +724,18 @@ public class DDataService : IDDataService
     {
         try
         {
+            var window = new Dictionary<string, object>
+            {
+                ["created_at"] = new Dictionary<string, string>
+                {
+                    ["$gte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp - DeviceStatusWindowMills).UtcDateTime.ToString("o"),
+                    ["$lte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime.ToString("o"),
+                },
+            };
             var deviceStatuses = await _projectionService.GetAsync(
                 count: 1000,
                 skip: 0,
-                find: null,
+                find: JsonSerializer.Serialize(window),
                 ct: cancellationToken
             );
             ddata.DeviceStatus = deviceStatuses.ToList();

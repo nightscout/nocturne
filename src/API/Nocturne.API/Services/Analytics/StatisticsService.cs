@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
@@ -607,14 +608,16 @@ public class StatisticsService : IStatisticsService
     /// <summary>
     /// Assess the reliability of a statistics block based on data duration and reading count.
     /// Returns raw facts so the frontend can compose a plain-English reliability message.
-    /// Clinical standard: 14 days of data with ≥70% completeness (per Bergenstal et al. / TIR Consensus).
+    /// Clinical standard: 14 days of data (per Bergenstal et al. / TIR Consensus). A window shorter
+    /// than that cannot hold 14 days, so it is measured against its own length.
     /// </summary>
     public StatisticReliability AssessReliability(
         int daysOfData,
         int readingCount,
-        int recommendedMinimumDays = 14
+        int windowDays
     )
     {
+        var recommendedMinimumDays = RecommendedMinimumDays(windowDays);
         var meetsReliability = daysOfData >= recommendedMinimumDays && readingCount >= 1;
 
         return new StatisticReliability
@@ -627,14 +630,28 @@ public class StatisticsService : IStatisticsService
     }
 
     /// <summary>
+    /// The days of data a window of <paramref name="windowDays"/> days should hold: its own length, up to
+    /// the 14-day clinical standard.
+    /// </summary>
+    private static int RecommendedMinimumDays(int windowDays) =>
+        Math.Clamp(windowDays, 1, ClinicalMinimumDays);
+
+    /// <summary>
+    /// Days of data the clinical standard asks of a report, and the window a caller with none is judged against.
+    /// </summary>
+    internal const int ClinicalMinimumDays = 14;
+
+    /// <summary>
     /// Calculate extended glucose analytics including GMI, GRI, and clinical assessment
     /// </summary>
     public ExtendedGlucoseAnalytics AnalyzeGlucoseDataExtended(
         IEnumerable<SensorGlucose> entries,
         IEnumerable<Bolus> boluses,
         IEnumerable<CarbIntake> carbIntakes,
+        int windowDays,
         DiabetesPopulation population = DiabetesPopulation.Type1Adult,
-        ExtendedAnalysisConfig? config = null
+        ExtendedAnalysisConfig? config = null,
+        TimeZoneInfo? timeZone = null
     )
     {
         var entriesList = entries.ToList();
@@ -642,7 +659,14 @@ public class StatisticsService : IStatisticsService
         var carbIntakesList = carbIntakes.ToList();
 
         // Get base analytics
-        var baseAnalytics = AnalyzeGlucoseData(entriesList, bolusesList, carbIntakesList, config);
+        var baseAnalytics = AnalyzeGlucoseData(
+            entriesList,
+            bolusesList,
+            carbIntakesList,
+            windowDays,
+            config,
+            timeZone: timeZone
+        );
 
         // Calculate GMI
         var gmi = CalculateGMI(baseAnalytics.BasicStats.Mean);
@@ -653,8 +677,8 @@ public class StatisticsService : IStatisticsService
         // Assess against clinical targets
         var clinicalAssessment = AssessAgainstTargets(baseAnalytics, population);
 
-        // Assess data sufficiency (default 14 days)
-        var dataSufficiency = AssessDataSufficiency(entriesList, 14);
+        // Assess data sufficiency
+        var dataSufficiency = AssessDataSufficiency(entriesList, windowDays);
 
         // Calculate treatment summary if data available
         TreatmentSummary? treatmentSummary = null;
@@ -2902,9 +2926,12 @@ public class StatisticsService : IStatisticsService
         IEnumerable<SensorGlucose> entries,
         IEnumerable<Bolus> boluses,
         IEnumerable<CarbIntake> carbIntakes,
+        int windowDays,
         ExtendedAnalysisConfig? config = null,
         DateTime? startDate = null,
-        DateTime? endDate = null
+        DateTime? endDate = null,
+        IEnumerable<DeviceEvent>? deviceEvents = null,
+        TimeZoneInfo? timeZone = null
     )
     {
         config ??= new ExtendedAnalysisConfig();
@@ -2931,17 +2958,17 @@ public class StatisticsService : IStatisticsService
         var basicStats = CalculateBasicStats(glucoseValues);
         var timeInRange = CalculateTimeInRange(sortedEntries, config.Thresholds);
         var glycemicVariability = CalculateGlycemicVariability(glucoseValues, sortedEntries);
-        var dataQuality = AssessDataQuality(sortedEntries, startDate, endDate);
+        var dataQuality = AssessDataQuality(sortedEntries, startDate, endDate, deviceEvents);
 
         var timeStart = sortedEntries.FirstOrDefault()?.Mills ?? 0;
         var timeEnd = sortedEntries.LastOrDefault()?.Mills ?? 0;
 
-        // Calculate reliability from data span
+        var tz = timeZone ?? TimeZoneInfo.Utc;
         var daysOfData = sortedEntries
-            .Select(e => DateTimeOffset.FromUnixTimeMilliseconds(e.Mills).Date)
+            .Select(e => LocalDay(e.Mills, tz))
             .Distinct()
             .Count();
-        var reliability = AssessReliability(daysOfData, sortedEntries.Count);
+        var reliability = AssessReliability(daysOfData, sortedEntries.Count, windowDays);
 
         return new GlucoseAnalytics
         {
@@ -2967,7 +2994,8 @@ public class StatisticsService : IStatisticsService
     private DataQuality AssessDataQuality(
         IList<SensorGlucose> entries,
         DateTime? reportStart = null,
-        DateTime? reportEnd = null)
+        DateTime? reportEnd = null,
+        IEnumerable<DeviceEvent>? deviceEvents = null)
     {
         var totalReadings = entries.Count;
         var gaps = new List<DataGap>();
@@ -3026,7 +3054,7 @@ public class StatisticsService : IStatisticsService
             },
             NoiseLevel = 0,
             CalibrationEvents = 0,
-            SensorWarmups = 0,
+            SensorWarmups = deviceEvents is null ? 0 : SensorSessionInference.DistinctSessions(deviceEvents).Count,
         };
     }
 

@@ -183,12 +183,16 @@ public interface IStateSpanRepository
     /// <param name="type">Optional activity type filter.</param>
     /// <param name="count">Maximum number of records to return.</param>
     /// <param name="skip">Number of records to skip for pagination.</param>
+    /// <param name="from">Inclusive lower bound on the span's start, or <c>null</c> for none.</param>
+    /// <param name="to">Inclusive upper bound on the span's start, or <c>null</c> for none.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A collection of activity <see cref="StateSpan"/> records.</returns>
+    /// <returns>A collection of activity <see cref="StateSpan"/> records, newest start first.</returns>
     Task<IEnumerable<StateSpan>> GetActivityStateSpansAsync(
         string? type = null,
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

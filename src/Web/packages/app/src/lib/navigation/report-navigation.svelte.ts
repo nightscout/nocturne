@@ -1,3 +1,4 @@
+import { a1cLabel } from "$lib/utils/a1c-formatting";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type IconComponent = any;
 import Activity from "@lucide/svelte/icons/activity";
@@ -73,6 +74,10 @@ const READ = {
  */
 export const reportsOverviewScopes: string[] = [READ.glucose, READ.reports];
 
+export function estimatedA1cTitle(): string {
+  return `Estimated ${a1cLabel()}`;
+}
+
 /**
  * Built per call so the titles are read in the current locale: wuchale
  * translates strings inside a function on each call, and a module-level
@@ -120,9 +125,9 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Estimated HbA1c",
-          sidebarTitle: "eHbA1c",
-          description: "How your estimated HbA1c has trended over the years",
+          title: estimatedA1cTitle(),
+          sidebarTitle: a1cLabel(true),
+          description: `How your ${a1cLabel(true)} has trended over the years`,
           href: "/reports/ehba1c",
           scopes: [READ.glucose, READ.reports],
           icon: Activity,

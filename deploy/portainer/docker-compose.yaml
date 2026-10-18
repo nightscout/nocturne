@@ -38,7 +38,7 @@ services:
       retries: 12
       start_period: 60s
     labels:
-      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.enable: "false"
   nocturne-api:
     image: "${NOCTURNE_API_IMAGE}"
     environment:
@@ -245,7 +245,7 @@ services:
       target: /etc/caddy/Caddyfile
       mode: 420
     labels:
-      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.enable: "false"
   watchtower:
     image: "ghcr.io/nicholas-fedor/watchtower:latest"
     environment:

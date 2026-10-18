@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
@@ -186,35 +187,21 @@ public class DeviceStatusController : ControllerBase
 
         try
         {
-            DeviceStatus[] deviceStatusEntries;
-
-            // Handle both single object and array of device status entries (Nightscout compatibility)
-            if (body.ValueKind == JsonValueKind.Array)
-            {
-                deviceStatusEntries = JsonSerializer.Deserialize<DeviceStatus[]>(body.GetRawText())
-                    ?? Array.Empty<DeviceStatus>();
-            }
-            else if (body.ValueKind == JsonValueKind.Object)
-            {
-                var singleEntry = JsonSerializer.Deserialize<DeviceStatus>(body.GetRawText());
-                deviceStatusEntries = singleEntry != null
-                    ? new[] { singleEntry }
-                    : Array.Empty<DeviceStatus>();
-            }
-            else
+            var deviceStatusEntries = NightscoutJsonBody.ReadObjects<DeviceStatus>(body);
+            if (deviceStatusEntries is null)
             {
                 _logger.LogWarning("Invalid JSON format for device status");
                 return BadRequest("Invalid JSON format. Expected object or array of device status entries.");
             }
 
-            if (deviceStatusEntries.Length == 0)
+            if (deviceStatusEntries.Count == 0)
             {
                 _logger.LogWarning("Device status creation requested with no entries");
                 return BadRequest("At least one device status entry is required");
             }
 
             // Validate entries - device name is required (Relaxed for parity with Nightscout V1)
-            for (int i = 0; i < deviceStatusEntries.Length; i++)
+            for (int i = 0; i < deviceStatusEntries.Count; i++)
             {
                 var deviceStatus = deviceStatusEntries[i];
                 if (deviceStatus.Device == null)

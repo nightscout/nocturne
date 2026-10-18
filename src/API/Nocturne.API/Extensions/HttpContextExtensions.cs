@@ -140,19 +140,6 @@ public static class HttpContextExtensions
     }
 
     /// <summary>
-    /// Check if the current request has read permissions
-    /// </summary>
-    /// <param name="context">HTTP context</param>
-    /// <returns>True if has read permissions</returns>
-    public static bool CanRead(this HttpContext context)
-    {
-        return context.HasPermission("*")
-            || context.HasPermission("api:*")
-            || context.HasPermission("api:*:read")
-            || context.HasPermission("readable");
-    }
-
-    /// <summary>
     /// Get the resolved OAuth scopes for the current request.
     /// These are populated by the auth middleware from either OAuth token claims
     /// or translated from legacy Shiro-style permissions.

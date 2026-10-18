@@ -47,9 +47,8 @@
   }: Props = $props();
 
   /**
-   * The server refuses role and permission changes to the caller's own membership, so the
-   * editor is not offered on your own row. Without this the card still rendered every
-   * checkbox and a Save that always failed.
+   * The server refuses role and permission changes and removal on the caller's own membership,
+   * so neither the editor nor the remove action is offered on your own row.
    */
   const isSelf = $derived(!!currentSubjectId && member.subjectId === currentSubjectId);
 
@@ -148,7 +147,7 @@
             {isExpanded ? "Close" : "Edit"}
           </Button>
         {/if}
-        {#if canManage}
+        {#if canManage && !isSelf}
           <ConfirmDialog
             title="Remove member"
             confirmLabel="Remove"

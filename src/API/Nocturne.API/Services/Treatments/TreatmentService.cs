@@ -27,6 +27,9 @@ namespace Nocturne.API.Services.Treatments;
 /// <seealso cref="CobCalculator"/>
 public class TreatmentService : ITreatmentService
 {
+    private const int DefaultCount = 100;
+    private const int DefaultFindCount = 1000;
+
     private readonly ITreatmentStore _store;
     private readonly ITreatmentDecomposer _decomposer;
     private readonly ITreatmentCache _cache;
@@ -87,7 +90,7 @@ public class TreatmentService : ITreatmentService
         var query = new TreatmentQuery
         {
             Find = find,
-            Count = count ?? 10,
+            Count = count ?? (string.IsNullOrEmpty(find) ? DefaultCount : DefaultFindCount),
             Skip = skip ?? 0
         };
 
@@ -176,7 +179,20 @@ public class TreatmentService : ITreatmentService
     public async Task<Treatment?> UpdateTreatmentAsync(
         string id, Treatment treatment, CancellationToken cancellationToken = default)
     {
-        var updated = await _store.UpdateAsync(id, treatment, cancellationToken);
+        Treatment? updated;
+        var completed = false;
+        try
+        {
+            updated = await _store.UpdateAsync(id, treatment, cancellationToken);
+            completed = true;
+        }
+        finally
+        {
+            // A failed update may have committed some of its records, and cached reads would keep serving the old treatment.
+            if (!completed)
+                await _cache.InvalidateAsync(CancellationToken.None);
+        }
+
         if (updated is null) return null;
 
         await _cache.InvalidateAsync(cancellationToken);

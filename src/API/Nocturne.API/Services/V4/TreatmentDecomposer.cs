@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Infrastructure;
@@ -17,6 +18,8 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers.V4;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -48,6 +51,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     private readonly IBGCheckRepository _bgCheckRepository;
     private readonly INoteRepository _noteRepository;
     private readonly IDeviceEventRepository _deviceEventRepository;
+    private readonly IDeviceEventReactor? _deviceEventReactor;
     private readonly IBolusCalculationRepository _bolusCalculationRepository;
     private readonly IStateSpanService _stateSpanService;
     private readonly ITreatmentFoodService _treatmentFoodService;
@@ -85,9 +89,11 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         IActiveProfileResolver activeProfileResolver,
         IPatientInsulinRepository insulinRepo,
         IAuditContext auditContext,
-        ILogger<TreatmentDecomposer> logger)
+        ILogger<TreatmentDecomposer> logger,
+        IDeviceEventReactor? deviceEventReactor = null)
         : base(logger)
     {
+        _deviceEventReactor = deviceEventReactor;
         _dbContext = dbContext;
         _bolusRepository = bolusRepository;
         _tempBasalRepository = tempBasalRepository;
@@ -854,12 +860,11 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         // back next to the field it changes
         if (treatment.AdditionalProperties is { } props
             && TryGetString(props, "basalOrigin", out var stored)
-            && Enum.TryParse<V4Models.TempBasalOrigin>(stored, ignoreCase: true, out var origin)
-            && Enum.IsDefined(origin))
+            && TryParseDefinedName<V4Models.TempBasalOrigin>(stored, out var origin))
             return origin;
 
         return IsLoopUpload(treatment)
-            ? V4Models.TempBasalOrigin.Algorithm // Loop 2.x omits the flag, which Loop reads as automatic
+            ? V4Models.TempBasalOrigin.Algorithm // Loop 2.x omits the flag, so its open-loop enactments also read as Algorithm
             : V4Models.TempBasalOrigin.Manual;
     }
 
@@ -1001,7 +1006,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             "normal" => V4Models.BolusType.Normal,
             "square" => V4Models.BolusType.Square,
             "dual" => V4Models.BolusType.Dual,
-            _ => Enum.TryParse<V4Models.BolusType>(bolusType, ignoreCase: true, out var parsed) ? parsed : null
+            _ => TryParseDefinedName<V4Models.BolusType>(bolusType, out var parsed) ? parsed : null
         };
     }
 
@@ -1014,7 +1019,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             "finger" => V4Models.GlucoseType.Finger,
             "sensor" => V4Models.GlucoseType.Sensor,
-            _ => Enum.TryParse<V4Models.GlucoseType>(glucoseType, ignoreCase: true, out var parsed) ? parsed : null
+            _ => TryParseDefinedName<V4Models.GlucoseType>(glucoseType, out var parsed) ? parsed : null
         };
     }
 
@@ -1027,7 +1032,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             "mg/dl" or "mgdl" or "mg" => V4Models.GlucoseUnit.MgDl,
             "mmol" or "mmol/l" => V4Models.GlucoseUnit.Mmol,
-            _ => Enum.TryParse<V4Models.GlucoseUnit>(units, ignoreCase: true, out var parsed) ? parsed : null
+            _ => TryParseDefinedName<V4Models.GlucoseUnit>(units, out var parsed) ? parsed : null
         };
     }
 
@@ -1553,18 +1558,27 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// </remarks>
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
-        // origin is accepted for interface uniformity; the v4-native delete broadcast is deferred to the glucose-unification follow-up (deletes here bypass the repository chokepoint).
-        var deleted = await _dbContext.ExecuteInTransactionAsync(async token =>
+        // These deletes bypass the repository chokepoint. Its device-event reaction is run below; the v4-native delete broadcast is deferred to the glucose-unification follow-up.
+        var (deleted, deviceEventIds) = await _dbContext.ExecuteInTransactionAsync(async token =>
         {
             var count = 0;
+            List<Guid> deviceEvents = [];
             foreach (var table in DecomposedTables)
-                count += (await table.SoftDeleteAsync(
-                    [legacyId], source: null, $"legacy_id={legacyId}", DuplicateDelete.EveryCopy, token)).Count;
-            return count;
+            {
+                var result = await table.SoftDeleteAsync(
+                    [legacyId], source: null, $"legacy_id={legacyId}", DuplicateDelete.EveryCopy, token);
+                count += result.Count;
+                if (table.RecordType == RecordType.DeviceEvent)
+                    deviceEvents = result.Entities;
+            }
+            return (count, deviceEvents);
         }, ct: ct);
 
         if (deleted > 0)
             Logger.LogDebug("Soft-deleted {Count} v4 records for legacy treatment {LegacyId}", deleted, legacyId);
+
+        if (origin == WriteOrigin.Live)
+            await ReactToDeletedDeviceEventsAsync(deviceEventIds, ct);
 
         return deleted;
     }
@@ -1579,17 +1593,49 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         var ids = legacyIds.ToArray();
         var scope = $"data_source={source}";
 
-        return await _dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        var (deleted, deviceEventIds) = await _dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using var transaction = await _dbContext.Database.BeginTransactionAsync(ct);
 
-            var deleted = 0;
+            var count = 0;
+            List<Guid> deviceEvents = [];
             foreach (var table in DecomposedTables)
-                deleted += (await table.SoftDeleteAsync(ids, source, scope, DuplicateDelete.PromoteSurvivor, ct)).Count;
+            {
+                var result = await table.SoftDeleteAsync(ids, source, scope, DuplicateDelete.PromoteSurvivor, ct);
+                count += result.Count;
+                if (table.RecordType == RecordType.DeviceEvent)
+                    deviceEvents = result.Entities;
+            }
 
             await transaction.CommitAsync(ct);
-            return deleted;
+            return (count, deviceEvents);
         });
+
+        await ReactToDeletedDeviceEventsAsync(deviceEventIds, ct);
+        return deleted;
+    }
+
+    /// <summary>
+    /// Runs the <see cref="IDeviceEventReactor"/> the repository chokepoint would have, for device
+    /// events these deletes took out around it. Failures are swallowed for the reason
+    /// <see cref="DeviceEventRepository"/> swallows its own.
+    /// </summary>
+    private async Task ReactToDeletedDeviceEventsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct)
+    {
+        if (_deviceEventReactor is null || ids.Count == 0)
+            return;
+
+        try
+        {
+            var entities = await _dbContext.DeviceEvents.IgnoreQueryFilters().AsNoTracking()
+                .Where(e => e.TenantId == _dbContext.TenantId && ids.Contains(e.Id))
+                .ToListAsync(ct);
+            await _deviceEventReactor.OnDeletedAsync(entities.Select(DeviceEventMapper.ToDomainModel).ToList(), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogError(ex, "Device event reaction failed for {Count} deleted event(s)", ids.Count);
+        }
     }
 
     /// <inheritdoc />

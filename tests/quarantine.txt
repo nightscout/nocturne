@@ -33,7 +33,6 @@ Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithData_
 Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithFindFilter_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
 Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithFindTypeFilter_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
 Nocturne.API.Tests.Integration.Parity.V1.FoodParityTests.GetFoodQuickpicks_WithData_ReturnsSameShape | food/quickpicks returns a food Nightscout does not list
-Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfileCurrent_Empty_ReturnsSameShape | /api/v1/profile/current with no profile answers []; Nightscout null
 Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfileCurrent_WithData_ReturnsSameShape | null-valued profile store fields (perGIvalues, carbs_hr_*, delay_*) are dropped
 Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfile_MultipleProfiles_ReturnsSameShape | several v1 profiles read back with their stores merged into the wrong documents
 Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfile_WithData_ReturnsSameShape | null-valued profile store fields (perGIvalues, carbs_hr_*, delay_*) are dropped
@@ -47,7 +46,7 @@ Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_Wit
 Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_WithEventTypeFilter_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
 Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_WithFindFilter_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
 Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.PostTreatment_TempBasal_ReturnsSameShape | a temp basal loses percent
-Nocturne.API.Tests.Integration.Parity.V2.DDataParityTests.GetDDataAt_IsoDateString_ReturnsSameShape | ddata/at picks a different sgv and drops rssi
+Nocturne.API.Tests.Integration.Parity.V2.DDataParityTests.GetDDataAt_IsoDateString_ReturnsSameShape | ddata/at sgv order and rssi differ, and the frame omits upstream entries, dbstats sizes and a null lastProfileFromSwitch, and adds page
 Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_Empty_ReturnsSameShape | v2 properties omit buckets/upbat/pump and differ on sage/cage/bwp
 Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_Pretty_ReturnsSameShape | v2 properties omit buckets/upbat/pump and differ on sage/cage/bwp
 Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_WithData_ReturnsSameShape | v2 properties omit buckets/upbat/pump and differ on sage/cage/bwp
@@ -101,3 +100,10 @@ Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithSort_R
 Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_ReturnsSameShape | v3 /version lacks the {status, result} envelope
 Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_WithData_ReturnsSameShape | v3 /version lacks the {status, result} envelope
 Nocturne.API.Tests.Integration.V4.BasalInjectionIntegrationTests.POST_with_same_SyncIdentifier_after_soft_delete_creates_new_row | a soft-deleted basal injection still holds its sync identifier (409 on re-POST)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_IntentRequest_MetricNow_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_MissingVersion_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_InvalidRequest_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_IntentRequest_NSStatus_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_LaunchRequest_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_UnknownIntent_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_SessionEndedRequest_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)

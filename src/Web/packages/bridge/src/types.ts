@@ -80,8 +80,10 @@ export interface ClientInfo {
   userAgent: string | undefined;
 }
 
-/** An alarm as the bridge relays it: an `urgent` level goes out as `urgent_alarm`, every
- *  other field passes through from the API. */
+/** The Socket.IO event an alarm goes out as, named by the SignalR event it arrived on. */
+export type AlarmEvent = 'alarm' | 'urgent_alarm';
+
+/** An alarm as the bridge relays it: every field passes through from the API. */
 export interface AlarmData {
   level?: unknown;
   [key: string]: unknown;

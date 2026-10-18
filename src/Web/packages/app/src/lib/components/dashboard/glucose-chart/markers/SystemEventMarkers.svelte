@@ -3,6 +3,7 @@
   import { getChartContext } from "layerchart";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import SystemEventMarker from "./SystemEventMarker.svelte";
+  import { markerKey } from "$lib/utils/chart-data-merge";
 
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();
@@ -14,7 +15,7 @@
 
 {#if visible}
   <ChartClipPath>
-    {#each events as event (event.id)}
+    {#each events as event, i (markerKey(event.id, event.time, i))}
       {@const xPos = chartCtx.xScale(event.time)}
       {@const yPos = chartCtx.yScale(lowY)}
       <SystemEventMarker

@@ -4,6 +4,7 @@ using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -15,9 +16,14 @@ namespace Nocturne.API.Controllers.V1;
 /// <seealso cref="IAuthorizationService"/>
 [ApiController]
 [Tags("V1")]
-[Route("api/[controller]")]
+[Route("api/v1/[controller]")]
 public class AlexaController : ControllerBase
 {
+    /// <summary>
+    /// What the intents read: only the latest glucose entry. Widen this when an intent reads more.
+    /// </summary>
+    private static readonly string[] RequiredReadScopes = [Scope.GlucoseRead];
+
     private readonly IAlexaService _alexaService;
     private readonly IAuthorizationService _authorizationService;
     private readonly ILogger<AlexaController> _logger;
@@ -36,13 +42,13 @@ public class AlexaController : ControllerBase
     /// <summary>
     /// Handle Alexa Skills Kit requests for voice assistant integration
     /// Processes LaunchRequest, IntentRequest, and SessionEndedRequest types
-    /// Maintains complete compatibility with legacy /api/alexa endpoint
+    /// Maintains complete compatibility with the legacy /api/v1/alexa endpoint
     /// </summary>
     /// <param name="request">Alexa Skills Kit request from Amazon</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Alexa response with speech output and session handling</returns>
     [HttpPost]
-    [NightscoutEndpoint("/api/alexa")]
+    [NightscoutEndpoint("/api/v1/alexa")]
     [ProducesResponseType(typeof(AlexaResponse), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(401)]
@@ -61,10 +67,7 @@ public class AlexaController : ControllerBase
                 _logger.LogWarning("Invalid Alexa request received - missing request details");
                 return BadRequest("Invalid Alexa request format");
             }
-            // Legacy code passed "api" where CheckPermissionAsync expects a subject GUID, so
-            // every request failed Guid.TryParse and got 401. Ask the request's own trie instead,
-            // which the auth middleware built from the caller's scopes.
-            if (!HttpContext.CanRead())
+            if (!RequiredReadScopes.All(HttpContext.HasScope))
             {
                 _logger.LogWarning(
                     "Unauthorized Alexa request from {RemoteIpAddress}",

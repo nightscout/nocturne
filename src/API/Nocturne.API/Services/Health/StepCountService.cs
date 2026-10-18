@@ -46,8 +46,10 @@ public class StepCountService(
     public Task<IEnumerable<StepCount>> GetStepCountsAsync(
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default
-    ) => GetAllAsync(count, skip, cancellationToken);
+    ) => GetNewestFirstAsync(count, skip, from, to, cancellationToken);
 
     public Task<IEnumerable<StepCount>> GetStepCountsByDateRangeAsync(
         DateTime from,

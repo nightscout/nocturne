@@ -210,6 +210,7 @@ public class ChartDataService : IChartDataService
                 Notes = e.Notes,
                 TreatmentId = e.LegacyId ?? e.Id.ToString(),
                 Color = ChartColorMapper.FromDeviceEvent(e.EventType),
+                IsInferred = e.IsInferred,
             })
             .ToList();
     }

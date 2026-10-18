@@ -2,6 +2,7 @@
   import { getChartContext } from "layerchart";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import { getGlucoseColor } from "$lib/utils/chart-colors";
+  import { markerKey } from "$lib/utils/chart-data-merge";
 
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();
@@ -12,7 +13,7 @@
 </script>
 
 {#if markers.length > 0}
-    {#each markers as marker (marker.treatmentId ?? `${marker.time.getTime()}`)}
+    {#each markers as marker, i (markerKey(marker.treatmentId, marker.time, i))}
       {@const xPos = chartCtx.xScale(marker.time)}
       {@const yPos = chartCtx.yScale(glucoseScale(marker.glucose))}
       {@const color = getGlucoseColor(marker.glucose, thresholds)}

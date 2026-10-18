@@ -80,7 +80,7 @@ internal static class ControllerActionReflection
 
     private static bool HasGate(IEnumerable<object> attributes) =>
         attributes.Any(a => a is IAuthorizeData
-                            or RequirePermissionAttribute // covers [RequireAdmin]/[RequireRead]/[RequireWrite]
+                            or RequirePermissionAttribute // covers [RequireAdmin]
                             or RequireScopeAttribute
                             or RequireInstanceKeyAuthAttribute
                             or RequireAuthenticationAttribute);

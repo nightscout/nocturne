@@ -93,6 +93,11 @@ jobs:
           pnpm --filter @nocturne/app exec svelte-kit sync
           pnpm --filter @nocturne/portal exec svelte-kit sync
 
+      # Extract first; see Dockerfile.web.
+      - name: Sync translations
+        working-directory: src/Web
+        run: pnpm run translations:sync
+
       - name: Build portal
         working-directory: src/Web/packages/portal
         env:

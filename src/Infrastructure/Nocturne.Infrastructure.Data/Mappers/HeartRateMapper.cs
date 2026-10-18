@@ -39,6 +39,7 @@ public static class HeartRateMapper
         {
             Id = entity.OriginalId ?? entity.Id.ToString(),
             Timestamp = entity.Timestamp,
+            CreatedAt = MapperHelpers.CreatedAtFromReading(entity.Timestamp),
             Bpm = entity.Bpm,
             Accuracy = entity.Accuracy,
             Type = entity.Type,

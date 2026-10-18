@@ -14,6 +14,27 @@ public class FindQueryTests
 {
     private static JsonElement Doc(string json) => JsonDocument.Parse(json).RootElement;
 
+    [Fact]
+    public void MatchesResidual_IgnoresCapturedTimeBoundsButKeepsFieldConditions()
+    {
+        var query = FindQuery.Parse(
+            "find[created_at][$gte]=2026-01-01&find[created_at][$lte]=2026-01-31&find[type]=Swim");
+
+        query.MatchesResidual(Doc("{\"type\":\"Swim\",\"created_at\":\"2026-06-01T00:00:00Z\"}")).Should().BeTrue();
+        query.MatchesResidual(Doc("{\"type\":\"Run\",\"created_at\":\"2026-01-10T00:00:00Z\"}")).Should().BeFalse();
+        query.Matches(Doc("{\"type\":\"Swim\",\"created_at\":\"2026-06-01T00:00:00Z\"}")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void MatchesResidual_StillEvaluatesATimeConditionInsideAnOr()
+    {
+        var query = FindQuery.Parse("find[$or][0][created_at][$gte]=2026-01-01&find[$or][1][type]=Run");
+
+        query.MatchesResidual(Doc("{\"type\":\"Swim\",\"created_at\":\"2025-06-01T00:00:00Z\"}")).Should().BeFalse();
+        query.MatchesResidual(Doc("{\"type\":\"Swim\",\"created_at\":\"2026-06-01T00:00:00Z\"}")).Should().BeTrue();
+        query.MatchesResidual(Doc("{\"type\":\"Run\",\"created_at\":\"2025-06-01T00:00:00Z\"}")).Should().BeTrue();
+    }
+
     #region Parsing / shape
 
     [Theory]
