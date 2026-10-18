@@ -7,8 +7,13 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.Calibration
 /// </summary>
 [Table("calibrations")]
-public class CalibrationEntity : V4TimeSeriesEntityBase
+public class CalibrationEntity : V4TimeSeriesEntityBase, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <summary>
     /// Calibration slope value
     /// </summary>

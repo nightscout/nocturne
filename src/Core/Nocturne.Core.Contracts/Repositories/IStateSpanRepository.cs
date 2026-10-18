@@ -77,6 +77,14 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// <see cref="UpsertStateSpanAsync"/>, saying whether the span was inserted, updated the live
+    /// span holding its original id, or was refused by a span the user deleted.
+    /// </summary>
+    Task<StateSpanUpsert> UpsertStateSpanWithOutcomeAsync(
+        StateSpan stateSpan,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Bulk upserts multiple state spans, typically used by connector imports.
     /// </summary>
     /// <param name="stateSpans">The state spans to upsert.</param>

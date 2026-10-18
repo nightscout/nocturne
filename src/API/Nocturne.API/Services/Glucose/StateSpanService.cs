@@ -97,6 +97,12 @@ public class StateSpanService : IStateSpanService
     }
 
     /// <inheritdoc />
+    public Task<StateSpanUpsert> UpsertStateSpanWithOutcomeAsync(
+        StateSpan stateSpan,
+        CancellationToken cancellationToken = default)
+        => _repository.UpsertStateSpanWithOutcomeAsync(stateSpan, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<bool> DeleteStateSpanAsync(
         string id,
         CancellationToken cancellationToken = default)

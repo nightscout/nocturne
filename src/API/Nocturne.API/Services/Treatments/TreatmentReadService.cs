@@ -176,6 +176,8 @@ public class TreatmentReadService : ITreatmentStore
         IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
     {
         var results = new List<Treatment>();
+        var withheld = new List<Treatment>();
+        var updated = new List<Treatment>();
         var skippedDeleted = 0;
 
         foreach (var treatment in treatments)
@@ -184,7 +186,13 @@ public class TreatmentReadService : ITreatmentStore
             {
                 var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
                 skippedDeleted += result.SkippedDeleted;
-                results.Add(await ToCreatedAsync(treatment, result, ct));
+                var updatedStored = UpdatedStoredRecord(treatment, result);
+                var created = await ToCreatedAsync(treatment, result, ct);
+                results.Add(created);
+                if (result.SkippedDeleted > 0 && result.CreatedRecords.Count == 0 && result.UpdatedRecords.Count == 0)
+                    withheld.Add(created);
+                else if (updatedStored)
+                    updated.Add(created);
             }
             catch (OperationCanceledException)
             {
@@ -199,7 +207,7 @@ public class TreatmentReadService : ITreatmentStore
         }
 
         _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
-        return new BulkWrite<Treatment>(results, skippedDeleted);
+        return new BulkWrite<Treatment>(results, skippedDeleted) { Withheld = withheld, Updated = updated };
     }
 
     /// <inheritdoc />
@@ -318,10 +326,23 @@ public class TreatmentReadService : ITreatmentStore
     #region Private - stored record resolution
 
     /// <summary>
+    /// Whether decomposing <paramref name="treatment"/> updated a record already stored for it: one of
+    /// its records, or the span it is stored as (an override, a temporary target, a profile switch),
+    /// which carries the treatment's id as its original id. Another span the decomposition updated,
+    /// such as the suspension a pump resume closes, belongs to another treatment. Read before
+    /// <see cref="ToCreatedAsync"/> rewrites the treatment's id.
+    /// </summary>
+    private static bool UpdatedStoredRecord(Treatment treatment, DecompositionResult result) =>
+        result.UpdatedRecords.Any(r => r is IV4Record
+            || (r is StateSpan { OriginalId: { Length: > 0 } originalId } && originalId == treatment.Id));
+
+    /// <summary>
     /// The create response for a decomposed treatment. It carries the id every read serves for the
     /// treatment, so a client that keeps the response id (Loop's objectIdCache, AAPS's nightscoutId)
     /// can edit and delete by it later; the client's own id stays stored as the records' LegacyId.
-    /// A treatment that wrote none of the projected tables keeps the id it was sent with.
+    /// That legacy id rides along as <see cref="Treatment.LegacyId"/>, the key write-back sends the
+    /// treatment upstream under. A treatment that wrote none of the projected tables keeps the id it
+    /// was sent with.
     /// </summary>
     private async Task<Treatment> ToCreatedAsync(Treatment treatment, DecompositionResult result, CancellationToken ct)
     {
@@ -329,8 +350,11 @@ public class TreatmentReadService : ITreatmentStore
         if (written.OfType<Core.Models.V4.TempBasal>().FirstOrDefault() is { } tempBasal)
             return TempBasalToTreatmentMapper.ToTreatment(tempBasal);
 
-        if (written.OfType<StateSpan>().FirstOrDefault(IsServedStateSpan) is { OriginalId: { } spanKey })
+        if (written.OfType<StateSpan>().FirstOrDefault(IsServedStateSpan) is { OriginalId: { } spanKey } span)
         {
+            treatment.LegacyId = spanKey;
+            if (Guid.TryParse(span.Id, out var spanRecordId))
+                treatment.RecordId = spanRecordId;
             if (await _projection.GetProjectedStateSpanTreatmentAsync(spanKey, ct) is { Id: { } spanId })
                 treatment.Id = spanId;
             return treatment;
@@ -340,7 +364,11 @@ public class TreatmentReadService : ITreatmentStore
             .Select(type => written.OfType<IV4Record>().FirstOrDefault(type.IsInstanceOfType))
             .FirstOrDefault(record => record is not null);
         if (served is not null)
+        {
+            treatment.LegacyId = served.LegacyId;
+            treatment.RecordId = served.Id;
             treatment.Id = served.Id.ToString();
+        }
 
         return treatment;
     }

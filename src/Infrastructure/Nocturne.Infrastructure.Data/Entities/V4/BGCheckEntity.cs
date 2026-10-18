@@ -8,8 +8,13 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.BGCheck
 /// </summary>
 [Table("bg_checks")]
-public class BGCheckEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFingerprinted
+public class BGCheckEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFingerprinted, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <inheritdoc />
     [AuditIgnored]
     [Column("upstream_fingerprint")]

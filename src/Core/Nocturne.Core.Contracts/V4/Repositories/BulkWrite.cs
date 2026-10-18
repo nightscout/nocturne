@@ -28,6 +28,13 @@ public sealed class BulkWrite<TRecord>(IReadOnlyList<TRecord> written, int skipp
     /// </summary>
     public IReadOnlyList<TRecord> Updated { get; init; } = [];
 
+    /// <summary>
+    /// The returned records that wrote nothing because the user had deleted them, for a service that
+    /// returns them as it did before it carried <see cref="SkippedDeleted"/>. The same instances the
+    /// collection enumerates; empty where a writer returns only what it wrote.
+    /// </summary>
+    public IReadOnlyList<TRecord> Withheld { get; init; } = [];
+
     public int Count => written.Count;
 
     public TRecord this[int index] => written[index];

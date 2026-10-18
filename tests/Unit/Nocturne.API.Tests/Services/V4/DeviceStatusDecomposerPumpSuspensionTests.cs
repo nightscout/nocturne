@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
@@ -62,6 +63,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<StateSpan>());
 
+        _pumpRepoMock.ForwardCreateOrUpsertToCreate<IPumpSnapshotRepository, V4Models.PumpSnapshot>();
         // CreateAsync echoes the model with an Id assigned, like a real repo.
         _pumpRepoMock
             .Setup(r => r.CreateAsync(It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))

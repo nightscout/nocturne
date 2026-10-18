@@ -22,6 +22,16 @@ public abstract class ProcessableDocumentBase : IProcessableDocument
     [JsonIgnore]
     public abstract string? Id { get; set; }
 
+    /// <summary>
+    /// The <c>identifier</c> an upstream Nightscout returned the document with. Nightscout
+    /// write-back sends a record's own key there, because Nightscout 15.0.7 and later replace a
+    /// <c>_id</c> that is not an ObjectId (and, for a treatment carrying an identifier, any
+    /// <c>_id</c>) with one it mints, so the pulled-back copy is only recognisable by it. Set by the
+    /// Nightscout connector's reads alone; never on the wire.
+    /// </summary>
+    [JsonIgnore]
+    public string? UpstreamIdentifier { get; set; }
+
     /// <inheritdoc />
     public abstract string? CreatedAt { get; set; }
 

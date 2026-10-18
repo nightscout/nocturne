@@ -85,12 +85,12 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
         => PublishUnheldAsync(
-            entries, e => e.Id,
+            entries,
             unheld => PublishEntriesAsync(unheld, source, origin, cancellationToken),
             source,
-            ids => _sensorGlucoseRepository.GetHeldLegacyIdsAsync(ids, cancellationToken),
-            ids => _meterGlucoseRepository.GetHeldLegacyIdsAsync(ids, cancellationToken),
-            ids => _calibrationRepository.GetHeldLegacyIdsAsync(ids, cancellationToken));
+            ids => HeldAsync(_sensorGlucoseRepository, ids, cancellationToken),
+            ids => HeldAsync(_meterGlucoseRepository, ids, cancellationToken),
+            ids => HeldAsync(_calibrationRepository, ids, cancellationToken));
 
     /// <remarks>
     /// Alert evaluation after the write is this publisher's one addition to the shared shape.

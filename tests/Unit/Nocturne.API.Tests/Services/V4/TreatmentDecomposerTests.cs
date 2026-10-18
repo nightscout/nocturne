@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Devices;
@@ -51,10 +52,15 @@ public class TreatmentDecomposerTests : IDisposable
         _stateSpanServiceMock = new Mock<IStateSpanService>();
         _treatmentFoodServiceMock = new Mock<ITreatmentFoodService>();
         _tempBasalRepoMock = new Mock<ITempBasalRepository>();
+        _tempBasalRepoMock.ForwardCreateOrUpsertToCreate<ITempBasalRepository, V4Models.TempBasal>();
         _deviceServiceMock = new Mock<IDeviceService>();
         _profileDecomposerMock = new Mock<IProfileDecomposer>();
         _activeProfileResolverMock = new Mock<IActiveProfileResolver>();
         _insulinRepoMock = new Mock<IPatientInsulinRepository>();
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan ss, CancellationToken _) => Inserted(ss));
 
         // Default: DeviceService returns null (no device resolved)
         _deviceServiceMock
@@ -81,6 +87,135 @@ public class TreatmentDecomposerTests : IDisposable
         _context.Dispose();
         GC.SuppressFinalize(this);
     }
+
+    private static StateSpanUpsert Inserted(StateSpan span) => new(span, StateSpanUpsertOutcome.Inserted);
+
+    #region Re-uploads are reported as updates (#1804)
+
+    /// <summary>
+    /// A treatment sent again under another id, naming its stored record only by its sync key,
+    /// updates that record and is reported as the update it is, so it is announced as an edit and
+    /// write-back looks for the record's copy upstream before writing. The record keeps the legacy id
+    /// it was first stored, answered and written back under.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeAsync_ASyncKeyReupload_IsReportedAsAnUpdateOfTheStoredRecord()
+    {
+        var first = await _decomposer.DecomposeAsync(new Treatment
+        {
+            Id = "sync-first", EventType = "Correction Bolus", Mills = 1700000000000, Insulin = 1.0,
+            DataSource = "loop", SyncIdentifier = "loop-sync-1",
+        }, WriteOrigin.Live);
+        var stored = first.CreatedRecords.OfType<V4Models.Bolus>().Single();
+
+        var again = await _decomposer.DecomposeAsync(new Treatment
+        {
+            Id = "sync-again", EventType = "Correction Bolus", Mills = 1700000000000, Insulin = 1.5,
+            DataSource = "loop", SyncIdentifier = "loop-sync-1",
+        }, WriteOrigin.Live);
+
+        again.CreatedRecords.Should().BeEmpty();
+        var updated = again.UpdatedRecords.OfType<V4Models.Bolus>().Single();
+        updated.Id.Should().Be(stored.Id);
+        updated.Insulin.Should().Be(1.5);
+        updated.LegacyId.Should().Be("sync-first");
+        _context.Boluses.IgnoreQueryFilters().Should().ContainSingle();
+    }
+
+    public static TheoryData<string, StateSpanCategory> SpanTreatments => new()
+    {
+        { "Profile Switch", StateSpanCategory.Profile },
+        { "Temporary Override", StateSpanCategory.Override },
+        { "Temporary Target", StateSpanCategory.TemporaryTarget },
+    };
+
+    private static Treatment SpanTreatment(string eventType) => new()
+    {
+        Id = $"span-{eventType.Replace(' ', '-')}", EventType = eventType, Mills = 1700000000000, Duration = 30,
+        Profile = "Default", TargetTop = 120, TargetBottom = 100,
+    };
+
+    /// <summary>
+    /// A treatment stored as a span, sent again, updates the span holding its id: it is reported
+    /// updated, not created, so it is announced as an edit.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(SpanTreatments))]
+    public async Task DecomposeAsync_AReuploadOfAStoredSpan_IsReportedAsAnUpdate(string eventType, StateSpanCategory category)
+    {
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan ss, CancellationToken _) => new StateSpanUpsert(ss, StateSpanUpsertOutcome.Updated));
+
+        var result = await _decomposer.DecomposeAsync(SpanTreatment(eventType), WriteOrigin.Live);
+
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.OfType<StateSpan>().Should().ContainSingle(s => s.Category == category);
+    }
+
+    /// <summary>A treatment stored as a span the user deleted, sent again, writes nothing and is counted as withheld.</summary>
+    [Theory]
+    [MemberData(nameof(SpanTreatments))]
+    public async Task DecomposeAsync_AReuploadOfADeletedSpan_IsCountedAsSkipped(string eventType, StateSpanCategory category)
+    {
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan ss, CancellationToken _) => new StateSpanUpsert(ss, StateSpanUpsertOutcome.Blocked));
+
+        var result = await _decomposer.DecomposeAsync(SpanTreatment(eventType), WriteOrigin.Live);
+
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.Should().BeEmpty();
+        result.SkippedDeleted.Should().Be(1);
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanWithOutcomeAsync(It.Is<StateSpan>(ss => ss.Category == category), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    /// A profile switch the user deleted is withheld whole: its inline profile writes no therapy
+    /// settings, which would otherwise report the create as an update and write it back as an edit.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeAsync_AReuploadOfADeletedProfileSwitchWithInlineProfile_WritesNoTherapySettings()
+    {
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan ss, CancellationToken _) => new StateSpanUpsert(ss, StateSpanUpsertOutcome.Blocked));
+        var treatment = SpanTreatment("Profile Switch");
+        treatment.ProfileJson = """{"dia":3,"units":"mg/dl"}""";
+
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.Should().BeEmpty();
+        result.SkippedDeleted.Should().Be(1);
+        _profileDecomposerMock.Verify(
+            p => p.DecomposeProfileSwitchAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    /// <inheritdoc cref="DecomposeAsync_AReuploadOfADeletedProfileSwitchWithInlineProfile_WritesNoTherapySettings"/>
+    [Fact]
+    public async Task DecomposeBatchAsync_AReuploadOfADeletedProfileSwitchWithInlineProfile_WritesNoTherapySettings()
+    {
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan ss, CancellationToken _) => new StateSpanUpsert(ss, StateSpanUpsertOutcome.Blocked));
+        var treatment = SpanTreatment("Profile Switch");
+        treatment.ProfileJson = """{"dia":3,"units":"mg/dl"}""";
+
+        var result = await _decomposer.DecomposeBatchAsync([treatment], WriteOrigin.Live);
+
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.Should().BeEmpty();
+        result.SkippedDeleted.Should().Be(1);
+        _profileDecomposerMock.Verify(
+            p => p.DecomposeProfileSwitchAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    #endregion
 
     #region Meal Bolus → Bolus + CarbIntake
 
@@ -493,8 +628,8 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Inserted(expectedStateSpan));
 
         // Act
         var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
@@ -504,7 +639,7 @@ public class TreatmentDecomposerTests : IDisposable
         result.CreatedRecords[0].Should().BeOfType<StateSpan>();
 
         _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
+            s => s.UpsertStateSpanWithOutcomeAsync(
                 It.Is<StateSpan>(ss =>
                     ss.Category == StateSpanCategory.Profile
                     && ss.State == "Active"
@@ -1376,8 +1511,8 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Inserted(expectedStateSpan));
 
         // Act
         var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
@@ -1387,7 +1522,7 @@ public class TreatmentDecomposerTests : IDisposable
         result.CreatedRecords[0].Should().BeOfType<StateSpan>();
 
         _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
+            s => s.UpsertStateSpanWithOutcomeAsync(
                 It.Is<StateSpan>(ss =>
                     ss.Category == StateSpanCategory.Override
                     && ss.State == "Custom"
@@ -2109,13 +2244,13 @@ public class TreatmentDecomposerTests : IDisposable
             StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime
         };
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Inserted(expectedStateSpan));
 
         await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
+            s => s.UpsertStateSpanWithOutcomeAsync(
                 It.Is<StateSpan>(ss =>
                     ss.EndMills == 1700000000000 + (120 * 60 * 1000)),
                 It.IsAny<CancellationToken>()),
@@ -2135,14 +2270,14 @@ public class TreatmentDecomposerTests : IDisposable
 
         var expectedStateSpan = new StateSpan { Id = "ss-2", Category = StateSpanCategory.Profile };
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Inserted(expectedStateSpan));
 
         await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Duration defaults to 0 in Treatment; 0 is NOT > 0, so EndMills should be null
         _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
+            s => s.UpsertStateSpanWithOutcomeAsync(
                 It.Is<StateSpan>(ss => ss.EndMills == null),
                 It.IsAny<CancellationToken>()),
             Times.Once);
@@ -2166,13 +2301,13 @@ public class TreatmentDecomposerTests : IDisposable
 
         var expectedStateSpan = new StateSpan { Id = "ss-3", Category = StateSpanCategory.Override };
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Inserted(expectedStateSpan));
 
         await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
+            s => s.UpsertStateSpanWithOutcomeAsync(
                 It.Is<StateSpan>(ss =>
                     ss.EndMills == 1700000000000 + (60 * 60 * 1000)),
                 It.IsAny<CancellationToken>()),
@@ -2202,9 +2337,9 @@ public class TreatmentDecomposerTests : IDisposable
         };
         StateSpan? written = null;
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
             .Callback<StateSpan, CancellationToken>((span, _) => written = span)
-            .ReturnsAsync((StateSpan span, CancellationToken _) => span);
+            .ReturnsAsync((StateSpan span, CancellationToken _) => Inserted(span));
 
         var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
@@ -2224,9 +2359,9 @@ public class TreatmentDecomposerTests : IDisposable
             """)!;
         StateSpan? written = null;
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
             .Callback<StateSpan, CancellationToken>((span, _) => written = span)
-            .ReturnsAsync((StateSpan span, CancellationToken _) => span);
+            .ReturnsAsync((StateSpan span, CancellationToken _) => Inserted(span));
 
         await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
@@ -2636,8 +2771,8 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Inserted(expectedStateSpan));
 
         var treatment = new Treatment
         {
@@ -2660,7 +2795,7 @@ public class TreatmentDecomposerTests : IDisposable
         result.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
 
         _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
+            s => s.UpsertStateSpanWithOutcomeAsync(
                 It.Is<StateSpan>(ss =>
                     ss.Category == StateSpanCategory.PumpMode
                     && ss.State == "Suspended"
@@ -2779,8 +2914,8 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Inserted(expectedStateSpan));
 
         // Act
         var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
@@ -2790,7 +2925,7 @@ public class TreatmentDecomposerTests : IDisposable
         result.CreatedRecords[0].Should().BeOfType<StateSpan>();
 
         _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
+            s => s.UpsertStateSpanWithOutcomeAsync(
                 It.Is<StateSpan>(ss =>
                     ss.Category == StateSpanCategory.TemporaryTarget
                     && ss.State == "Active"
@@ -2826,8 +2961,8 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Inserted(expectedStateSpan));
 
         // Act
         var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
@@ -2836,7 +2971,7 @@ public class TreatmentDecomposerTests : IDisposable
         result.CreatedRecords.Should().HaveCount(1);
 
         _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
+            s => s.UpsertStateSpanWithOutcomeAsync(
                 It.Is<StateSpan>(ss =>
                     ss.Category == StateSpanCategory.TemporaryTarget
                     && ss.State == "Cancelled"
@@ -2865,15 +3000,15 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Inserted(expectedStateSpan));
 
         // Act
         await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
+            s => s.UpsertStateSpanWithOutcomeAsync(
                 It.Is<StateSpan>(ss =>
                     ss.State == "Cancelled"
                     && ss.EndTimestamp == null),
@@ -3171,9 +3306,9 @@ public class TreatmentDecomposerTests : IDisposable
 
         StateSpan? capturedSpan = null;
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
             .Callback<StateSpan, CancellationToken>((ss, _) => capturedSpan = ss)
-            .ReturnsAsync((StateSpan ss, CancellationToken _) => ss);
+            .ReturnsAsync((StateSpan ss, CancellationToken _) => Inserted(ss));
 
         // Act
         await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
@@ -3214,8 +3349,8 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Inserted(expectedStateSpan));
 
         var profileDecompResult = new V4Models.DecompositionResult();
         profileDecompResult.CreatedRecords.Add(new V4Models.TherapySettings { ProfileName = "Day Profile@@@@@1700000000000" });
@@ -3234,7 +3369,7 @@ public class TreatmentDecomposerTests : IDisposable
 
         // Verify state span was created
         _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
+            s => s.UpsertStateSpanWithOutcomeAsync(
                 It.Is<StateSpan>(ss =>
                     ss.Category == StateSpanCategory.Profile
                     && ss.OriginalId == "profile-switch-json-1"),
@@ -3274,8 +3409,8 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Inserted(expectedStateSpan));
 
         // Act
         await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
@@ -3516,8 +3651,8 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((StateSpan ss, CancellationToken _) => ss);
+            .Setup(s => s.UpsertStateSpanWithOutcomeAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan ss, CancellationToken _) => Inserted(ss));
 
         _tempBasalRepoMock
             .Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))

@@ -99,7 +99,7 @@ public class NightscoutTreatmentReconcileTests
 
         await harness.SyncAsync();
 
-        harness.Lookups.Should().Equal($"find[id]={TrioKept}");
+        harness.Lookups.Should().Equal($"find[id]={TrioKept}", $"find[identifier][$in]={TrioKept},{MongoObjectId.Coerce(TrioKept)}");
         harness.Deleted.Should().BeEmpty();
     }
 
@@ -311,6 +311,64 @@ public class NightscoutTreatmentReconcileTests
         harness.Lookups.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// Nocturne stores a treatment it wrote back under its own key, and Nightscout 15.0.7+ returns
+    /// the copy under a <c>_id</c> it minted, with that key as <c>identifier</c>. The read therefore
+    /// counts the identifier, and the lookup falls back to it, or the treatment would be deleted as
+    /// gone from the source.
+    /// </summary>
+    [Fact]
+    public async Task A_treatment_nocturne_wrote_back_is_recognised_by_its_identifier()
+    {
+        const string ownKey = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
+        const string missingKey = "0198c2a4-1f3b-7c2d-9e55-000000000000";
+        var harness = new Harness
+        {
+            Upstream =
+            [
+                WrittenBack(MongoIdA, ownKey, Now.AddMinutes(-30)),
+                Trio(MongoIdB, TrioKept, Now.AddMinutes(-20)),
+            ],
+            Stored = [ownKey, TrioKept, missingKey],
+            AlsoUpstreamByIdentifier = [missingKey],
+        };
+
+        await harness.SyncAsync();
+
+        harness.Deleted.Should().BeEmpty();
+        harness.Lookups.Should().ContainInOrder(
+            $"find[id]={missingKey}", $"find[identifier][$in]={missingKey},{MongoObjectId.Coerce(missingKey)}");
+    }
+
+    /// <summary>
+    /// A row written before write-back coerced its key is relabelled to the connector under that
+    /// key, while its copy upstream sits under the key's coerced form as <c>identifier</c>, the uuid
+    /// prefix or the hash. Missing from the read, it is looked up under both forms at once, and kept.
+    /// </summary>
+    [Theory]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-0000000000aa")]
+    [InlineData("pump-history-42")]
+    public async Task A_relabelled_row_whose_copy_sits_under_its_coerced_key_is_kept(string storedKey)
+    {
+        var coerced = MongoObjectId.Coerce(storedKey)!;
+        var harness = new Harness
+        {
+            Upstream = [Trio(MongoIdB, TrioKept, Now.AddMinutes(-20))],
+            Stored = [TrioKept, storedKey],
+            AlsoUpstreamByIdentifier = [coerced],
+        };
+
+        await harness.SyncAsync();
+
+        harness.Deleted.Should().BeEmpty();
+        harness.Lookups.Should().Contain($"find[identifier][$in]={storedKey},{coerced}");
+        harness.Lookups.Count(l => l.StartsWith("find[identifier]", StringComparison.Ordinal)).Should().Be(1,
+            "the canary was found by id, and the stored key's forms share one query");
+    }
+
+    private static string WrittenBack(string mongoId, string identifier, DateTimeOffset at) =>
+        $$"""{"_id":"{{mongoId}}","identifier":"{{identifier}}","enteredBy":"nocturne","eventType":"Carb Correction","carbs":20,"created_at":"{{at.UtcDateTime:o}}"}""";
+
     private static string Trio(string mongoId, string trioId, DateTimeOffset at) =>
         $$"""{"_id":"{{mongoId}}","id":"{{trioId}}","enteredBy":"Trio","eventType":"Carb Correction","carbs":20,"created_at":"{{at.UtcDateTime:o}}"}""";
 
@@ -334,6 +392,7 @@ public class NightscoutTreatmentReconcileTests
         public DateTimeOffset LatestStored { get; init; } = Now.AddMinutes(-10);
         public List<string> Upstream { get; init; } = [];
         public HashSet<string> AlsoUpstream { get; init; } = [];
+        public HashSet<string> AlsoUpstreamByIdentifier { get; init; } = [];
         public HashSet<string> Stored { get; init; } = [];
         public bool ReadFails { get; init; }
         public bool LookupFails { get; init; }
@@ -369,16 +428,20 @@ public class NightscoutTreatmentReconcileTests
                 return Task.FromResult(Json([]));
 
             var lookup = System.Text.RegularExpressions.Regex.Match(url, @"find\[(_id|id)\]=(.+)$");
-            if (lookup.Success)
+            var byIdentifier = System.Text.RegularExpressions.Regex.Matches(url, @"&find\[identifier\]\[\$in\]\[\d+\]=([^&]+)");
+            if (lookup.Success || byIdentifier.Count > 0)
             {
-                var (field, id) = (lookup.Groups[1].Value, lookup.Groups[2].Value);
-                Lookups.Add($"find[{field}]={id}");
+                var (field, ids) = lookup.Success
+                    ? (lookup.Groups[1].Value, new[] { lookup.Groups[2].Value })
+                    : ("identifier", byIdentifier.Select(m => m.Groups[1].Value).ToArray());
+                Lookups.Add(lookup.Success ? $"find[{field}]={ids[0]}" : $"find[identifier][$in]={string.Join(',', ids)}");
                 LookupUrls.Add(url);
                 if (LookupFails)
                     return Task.FromResult(Failure());
 
-                var found = !LookupFindsNothing && (AlsoUpstream.Contains(id) || Upstream.Any(doc =>
-                    doc.Contains(field == "_id" ? $"\"_id\":\"{id}\"" : $"\"id\":\"{id}\"", StringComparison.Ordinal)));
+                var found = !LookupFindsNothing && ids.Any(id =>
+                    (field == "identifier" ? AlsoUpstreamByIdentifier : AlsoUpstream).Contains(id)
+                    || Upstream.Any(doc => doc.Contains($"\"{field}\":\"{id}\"", StringComparison.Ordinal)));
                 return Task.FromResult(Json(found ? [Upstream.FirstOrDefault() ?? "{}"] : []));
             }
 

@@ -9,8 +9,13 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.MeterGlucose
 /// </summary>
 [Table("meter_glucose")]
-public class MeterGlucoseEntity : V4TimeSeriesEntityBase, IDeviceAttributedEntity
+public class MeterGlucoseEntity : V4TimeSeriesEntityBase, IDeviceAttributedEntity, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <summary>
     /// FK to the PatientDevice (meter) this reading is attributed to
     /// </summary>

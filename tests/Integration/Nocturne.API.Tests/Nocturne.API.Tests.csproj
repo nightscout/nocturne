@@ -37,6 +37,9 @@
     <ProjectReference Include="../../Shared/Nocturne.Tests.Shared/Nocturne.Tests.Shared.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="../../Unit/Nocturne.Connectors.Nightscout.Tests/TestSupport/FakeNightscoutTreatments.cs" Link="TestSupport/FakeNightscoutTreatments.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="Migration\Fixtures\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

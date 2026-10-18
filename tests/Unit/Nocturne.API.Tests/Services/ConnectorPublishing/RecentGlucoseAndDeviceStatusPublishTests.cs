@@ -101,6 +101,59 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
         decomposed.Should().Equal("ds-late");
     }
 
+    /// <summary>
+    /// Nightscout 15.0.7 and later give a written-back copy a <c>_id</c> of their own, so the copy is
+    /// held under the identifier it comes back with, the key write-back sent.
+    /// </summary>
+    [Fact]
+    public async Task A_written_back_entry_is_held_under_the_identifier_it_returns_with()
+    {
+        var publisher = RealGlucosePublisher();
+        await publisher.PublishEntriesAsync([Sgv("dexcom_7f3c2a91", 1700000000000, 120)], Source, WriteOrigin.Live);
+        _context.ChangeTracker.Clear();
+        var echo = Sgv("66f0a1b2c3d4e0f6a7b8c9d0", 1700000000000, 120);
+        echo.UpstreamIdentifier = "dexcom_7f3c2a91";
+
+        var written = await publisher.PublishRecentEntriesAsync([echo], Source, WriteOrigin.Live);
+
+        written.Should().Be(0);
+        _context.SensorGlucose.Select(e => e.LegacyId).Should().Equal("dexcom_7f3c2a91");
+    }
+
+    [Fact]
+    public async Task A_written_back_device_status_is_held_under_the_identifier_it_returns_with()
+    {
+        var decomposer = new Mock<IDeviceStatusDecomposer>();
+        decomposer.Setup(d => d.HasLegacyKeyedSnapshot(It.IsAny<DeviceStatus>())).Returns(true);
+        var decomposed = new List<string?>();
+        decomposer
+            .Setup(d => d.DecomposeAsync(
+                It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<DeviceStatus, string?, WriteOrigin, CancellationToken>((ds, _, _, _) => decomposed.Add(ds.Id))
+            .ReturnsAsync(new DecompositionResult());
+        var aps = new Mock<IApsSnapshotRepository>();
+        aps.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<string> ids, CancellationToken _) =>
+                ids.Where(i => i == "loop_status_42").ToHashSet());
+        var pump = new Mock<IPumpSnapshotRepository>();
+        pump.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string>());
+        var uploader = new Mock<IUploaderSnapshotRepository>();
+        uploader.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string>());
+        var publisher = DevicePublisher(decomposer.Object, aps.Object, pump.Object, uploader.Object);
+
+        var written = await publisher.PublishRecentDeviceStatusAsync(
+            [
+                new DeviceStatus { Id = "66f0a1b2c3d4e0f6a7b8c9d0", UpstreamIdentifier = "loop_status_42" },
+                new DeviceStatus { Id = "ds-late" },
+            ],
+            Source, WriteOrigin.Live);
+
+        written.Should().Be(1);
+        decomposed.Should().Equal("ds-late");
+    }
+
     [Fact]
     public async Task A_failed_lookup_writes_nothing_and_reports_the_failure()
     {

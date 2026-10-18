@@ -91,6 +91,11 @@ public interface IStateSpanService
         StateSpan stateSpan,
         CancellationToken cancellationToken = default);
 
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.UpsertStateSpanWithOutcomeAsync" />
+    Task<StateSpanUpsert> UpsertStateSpanWithOutcomeAsync(
+        StateSpan stateSpan,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Delete a state span
     /// </summary>
