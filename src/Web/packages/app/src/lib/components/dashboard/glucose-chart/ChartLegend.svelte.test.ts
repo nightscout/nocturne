@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import ChartLegend from "./ChartLegend.svelte";
 import { SystemEventType } from "$lib/api";
+import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
 
 function createDefaultProps(
 	overrides: Partial<Parameters<typeof ChartLegend>[1]> = {},
@@ -149,5 +150,21 @@ describe("ChartLegend", () => {
 		await expect
 			.element(page.getByText("Alarms (2)"))
 			.toBeVisible();
+	});
+
+	it("names each range's printed bounds in the units it is given, not the viewer's", async () => {
+		glucoseUnits.current = "mg/dl";
+		render(
+			ChartLegend,
+			createDefaultProps({
+				glucoseUnits: "mmol",
+				glucoseData: [{ sgv: 300 }, { sgv: 200 }, { sgv: 60 }, { sgv: 40 }],
+			}),
+		);
+
+		for (const bounds of ["3.9–10", ">13.9", ">10", "<3.9", "<3", "Range limits 3.9 / 10"]) {
+			await expect.element(page.getByText(bounds, { exact: true })).toBeInTheDocument();
+		}
+		await expect.element(page.getByText("70–180", { exact: true })).not.toBeInTheDocument();
 	});
 });

@@ -112,6 +112,34 @@ describe("ClockFaceRenderer", () => {
     });
   });
 
+  it("draws a background chart's axis ticks in the face's units, not the viewer's", async () => {
+    glucoseUnits.current = "mg/dl";
+    const backgroundFace: ClockFaceConfig = {
+      rows: [
+        {
+          elements: [
+            { type: "chart", hours: 3, chartConfig: { asBackground: true } },
+            { type: "sg", size: 40 },
+          ],
+        },
+      ],
+      settings: { glucoseUnits: "mmol" },
+    };
+    const { container } = render(Harness, {
+      config: backgroundFace,
+      glucose: reading,
+      showCharts: true,
+    });
+
+    await vi.waitFor(() => {
+      const ticks = [...container.querySelectorAll(".lc-axis-tick-label")].map(
+        (t) => t.textContent?.trim() ?? ""
+      );
+      expect(ticks.length).toBeGreaterThan(0);
+      expect(ticks.some((t) => /^\d+\.\d$/.test(t))).toBe(true);
+    });
+  });
+
   it("paints a muted element in the theme's muted foreground", () => {
     const muted: ClockFaceConfig = {
       rows: [{ elements: [{ type: "age", size: 14, style: { color: "muted" } }] }],
