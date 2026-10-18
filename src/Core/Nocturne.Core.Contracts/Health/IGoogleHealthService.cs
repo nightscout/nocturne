@@ -16,7 +16,7 @@ public interface IGoogleHealthService
     Task DisconnectAsync(Guid subject, CancellationToken ct);
     Task ResumeDisconnectAsync(Guid subject, Guid requestId);
     Task PurgeAsync(Guid subject, CancellationToken ct);
-    Task<GoogleHealthPreview> PreviewAsync(Guid subject, CancellationToken ct);
+    Task<GoogleHealthStatus> PreviewAsync(Guid subject, CancellationToken ct);
     Task QueueSyncAsync(CancellationToken ct);
 }
 

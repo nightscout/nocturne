@@ -7,11 +7,12 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.GoogleHealth.Configurations;
-using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Health;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
@@ -20,22 +21,20 @@ public sealed class GoogleHealthService(
     GoogleHealthCoordinator coordinator,
     GoogleHealthClient google,
     GoogleHealthAuthTokenProvider oauth,
+    GoogleHealthSessionStore sessions,
     IConnectorConfigurationService connectorConfigurations,
     IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> configurationLoader,
     ITenantAccessor tenantAccessor,
     IConnectorSyncCursorStore cursorStore,
+    IPatientRecordRepository patientRecords,
     IOptions<GoogleHealthPlatformOptions> platformOptions,
     GoogleHealthOAuthState oauthState,
-    IGoogleHealthReadingWriter? writer = null,
-    ILogger<GoogleHealthService>? logger = null) : IGoogleHealthService
+    IGoogleHealthReadingWriter writer,
+    ILogger<GoogleHealthService> logger) : IGoogleHealthService
 {
     private const string ConnectorName = "GoogleHealth";
-    private const string AccountKeySecret = "accountKey";
-    // Read back as GoogleHealthConnectorConfiguration.SessionClientId.
-    private const string SessionClientIdKey = "clientId";
-    private const string LegacyClientSecretKey = "clientSecret";
+    private const string InventoryKey = "inventory";
     private static readonly TimeSpan FlowLifetime = TimeSpan.FromMinutes(10);
-    private static readonly TimeSpan AccessTokenSafety = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan PreviewWindow = TimeSpan.FromDays(7);
     private static readonly TimeSpan PreviewGateTimeout = TimeSpan.FromSeconds(5);
     // Dense heart-rate inventories can require minutes of paging even within a seven-day window.
@@ -44,62 +43,33 @@ public sealed class GoogleHealthService(
     private Guid TenantId => tenantAccessor.TenantId;
     private GoogleHealthPlatformOptions Platform => platformOptions.Value;
 
-    private async Task<GoogleHealthOptions?> StoredOptionsOrNullAsync(CancellationToken ct)
+    private async Task<GoogleHealthConnectorConfiguration?> StoredConfigurationOrNullAsync(CancellationToken ct) =>
+        await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct) is null
+            ? null
+            : await configurationLoader.LoadForTenantAsync(ct);
+
+    private async Task<GoogleHealthConnectorConfiguration> StoredConfigurationAsync(CancellationToken ct) =>
+        await StoredConfigurationOrNullAsync(ct) ?? throw new GoogleHealthException("configure_first");
+
+    private bool HasLiveSession(GoogleHealthConnectorConfiguration configuration) =>
+        !string.IsNullOrWhiteSpace(configuration.RefreshToken) && !sessions.IssuedToAnotherClient(configuration);
+
+    private static GoogleHealthOptions Options(GoogleHealthConnectorConfiguration configuration) => new()
     {
-        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
-        if (stored is null) return null;
-
-        var configuration = await configurationLoader.LoadForTenantAsync(ct);
-        DateTimeOffset? importFrom = null;
-        if (!string.IsNullOrWhiteSpace(configuration.ImportFrom))
-            importFrom = DateTimeOffset.Parse(
-                configuration.ImportFrom,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind);
-
-        return new GoogleHealthOptions
-        {
-            DataTypes = SelectedTypes(configuration),
-            HistoryDays = configuration.HistoryDays,
-            ImportFrom = importFrom,
-            PreviewOnly = configuration.PreviewOnly
-        };
-    }
-
-    private async Task<GoogleHealthOptions> StoredOptionsAsync(CancellationToken ct) =>
-        await StoredOptionsOrNullAsync(ct) ?? throw new GoogleHealthException("configure_first");
-
-    private async Task<GoogleHealthTokenSession?> StoredSessionAsync(CancellationToken ct)
-    {
-        var configuration = await configurationLoader.LoadForTenantAsync(ct);
-        if (string.IsNullOrWhiteSpace(configuration.RefreshToken)) return null;
-
-        var scopes = (configuration.GrantedScopes ?? string.Empty)
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
-        try
-        {
-            var cached = await oauth.GetCurrentSessionAsync();
-            if (cached is not null &&
-                string.Equals(cached.RefreshToken, configuration.RefreshToken, StringComparison.Ordinal) &&
-                cached.Scopes.Order(StringComparer.Ordinal).SequenceEqual(scopes.Order(StringComparer.Ordinal)))
-                return cached;
-        }
-        catch (GoogleHealthException)
-        {
-            oauth.InvalidateToken();
-        }
-
-        return new GoogleHealthTokenSession(configuration.RefreshToken, scopes);
-    }
+        DataTypes = SelectedTypes(configuration),
+        HistoryDays = configuration.HistoryDays,
+        ImportFrom = string.IsNullOrWhiteSpace(configuration.ImportFrom)
+            ? null
+            : DateTimeOffset.Parse(configuration.ImportFrom, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+        PreviewOnly = configuration.PreviewOnly
+    };
 
     private async Task SaveOptionsAsync(GoogleHealthOptions options, Guid subject, CancellationToken ct)
     {
         var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
         var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
         var configuration = stored?.Configuration.RootElement.Deserialize<JsonObject>(Json) ?? new JsonObject();
+        configuration.Remove("callbackUrl");
         configuration["enabled"] = !string.IsNullOrWhiteSpace(secrets.GetValueOrDefault("refreshToken"));
         configuration["lookbackDays"] = options.HistoryDays;
         configuration["importFrom"] = options.ImportFrom?.ToString("O", CultureInfo.InvariantCulture);
@@ -113,120 +83,65 @@ public sealed class GoogleHealthService(
             ConnectorName, document, subject.ToString(), ct);
     }
 
-    private async Task SetEnabledAsync(bool enabled, Guid subject, CancellationToken ct)
-    {
-        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
-        if (stored?.Configuration is null) return;
-        var configuration = JsonNode.Parse(stored.Configuration.RootElement.GetRawText())!.AsObject();
-        configuration["enabled"] = enabled;
-        using var document = JsonDocument.Parse(configuration.ToJsonString(Json));
-        await connectorConfigurations.SaveConfigurationAsync(
-            ConnectorName, document, subject.ToString(), ct);
-    }
-
-    private async Task SaveSessionAsync(
-        GoogleHealthTokenSession token,
-        string accountKey,
-        Guid subject,
-        CancellationToken ct)
-    {
-        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
-        secrets.Remove(LegacyClientSecretKey);
-        secrets[SessionClientIdKey] = Platform.ClientId;
-        secrets["refreshToken"] = token.RefreshToken;
-        secrets["grantedScopes"] = string.Join(' ', token.Scopes.Distinct(StringComparer.Ordinal));
-        secrets[AccountKeySecret] = accountKey;
-        await connectorConfigurations.SaveSecretsAsync(
-            ConnectorName, secrets, subject.ToString(), ct);
-        await SetEnabledAsync(true, subject, ct);
-        await oauth.StoreSessionAsync(token);
-    }
-
-    private async Task RemoveSessionAsync(Guid subject, bool removeAccount, CancellationToken ct)
-    {
-        await SetEnabledAsync(false, subject, ct);
-        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
-        secrets.Remove("refreshToken");
-        secrets.Remove("grantedScopes");
-        secrets.Remove(SessionClientIdKey);
-        if (removeAccount) secrets.Remove(AccountKeySecret);
-        await connectorConfigurations.SaveSecretsAsync(
-            ConnectorName, secrets, subject.ToString(), ct);
-    }
-
-    private async Task<GoogleHealthTokenSession> RefreshSessionAsync(
-        GoogleHealthTokenSession token,
-        CancellationToken ct,
-        bool forceRefresh = false)
-    {
-        await oauth.SeedSessionAsync(token);
-        if (forceRefresh) oauth.InvalidateToken();
-        var accessToken = await oauth.GetValidTokenAsync(
-            await configurationLoader.LoadForTenantAsync(ct), ct);
-        if (string.IsNullOrWhiteSpace(accessToken))
-            throw new GoogleHealthException("invalid_token_response", stage: "token_refresh");
-        return await oauth.GetCurrentSessionAsync() ??
-            throw new GoogleHealthException("invalid_token_response", stage: "token_cache");
-    }
-
     public async Task<GoogleHealthStatus> StatusAsync(CancellationToken ct)
     {
         try
         {
-            var settings = await StoredOptionsOrNullAsync(ct);
-            if (settings is null)
-                return await WithProgressAsync(new GoogleHealthStatus
-                {
-                    Capabilities = GoogleHealthClient.Capabilities,
-                    Available = Platform.IsConfigured
-                });
+            var configuration = await StoredConfigurationOrNullAsync(ct);
+            if (configuration is null)
+                return await WithProgressAsync(new GoogleHealthStatus());
 
+            var settings = Options(configuration);
             var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
-            var session = await StoredSessionAsync(ct);
+            var clientChanged = sessions.IssuedToAnotherClient(configuration);
+            var session = clientChanged ? null : await sessions.CurrentAsync(configuration);
             var selected = settings.DataTypes
                 .Where(type => GoogleHealthClient.SupportedTypes.Contains(type, StringComparer.Ordinal))
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
             var storedError = GoogleHealthErrorCode.Decode(stored?.LastErrorMessage);
-            var resume = await cursorStore.GetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource, ct);
-            var backfillProgress = BackfillProgress(GoogleHealthConnectorService.ParseRuntimeState(resume?.LastGuid));
+            var runtime = await RuntimeStateAsync(ct);
+            var backfillProgress = BackfillProgress(runtime);
             var missingScopes = selected
                 .Where(type => session is not null &&
                     !session.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal))
                 .ToArray();
+            var errorCode = clientChanged
+                ? "client_changed"
+                : selected.Length != settings.DataTypes.Length
+                    ? "unsupported_type"
+                    : missingScopes.Length > 0 ? "partial_consent" : storedError.Code;
+            var errorDataTypes = missingScopes.Length > 0 ? missingScopes : storedError.DataTypes;
 
             return await WithProgressAsync(new GoogleHealthStatus
             {
-                Capabilities = GoogleHealthClient.Capabilities,
-                Available = Platform.IsConfigured,
                 Configured = true,
                 Connected = session is not null,
                 SelectedTypes = selected,
-                GrantedTypes = GoogleHealthClient.SupportedTypes
-                    .Where(type => session?.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal) == true)
-                    .ToArray(),
+                Categories = GoogleHealthInventory.Categories(Inventory(runtime), new(
+                    session?.Scopes ?? [],
+                    selected,
+                    settings.PreviewOnly,
+                    errorCode,
+                    errorDataTypes,
+                    await IncludeCycleTrackingAsync(ct))),
                 HistoryDays = settings.HistoryDays,
                 ImportFrom = settings.ImportFrom,
-                AccessTokenExpiresAt = session?.AccessTokenExpiresAt,
                 LastAttempt = AsOffset(stored?.LastSyncAttempt),
                 LastSync = AsOffset(stored?.LastSuccessfulSync),
                 BackfillSyncedThrough = backfillProgress.SyncedThrough,
                 BackfillComplete = backfillProgress.Complete,
-                ErrorCode = selected.Length != settings.DataTypes.Length
-                    ? "unsupported_type"
-                    : missingScopes.Length > 0 ? "partial_consent" : storedError.Code,
-                ErrorDataTypes = missingScopes.Length > 0 ? missingScopes : storedError.DataTypes,
+                ErrorCode = errorCode,
+                ErrorDataTypes = errorDataTypes,
                 PreviewRequired = settings.PreviewOnly
             });
         }
         catch (Exception ex) when (ex is JsonException or FormatException or InvalidOperationException)
         {
-            logger?.LogWarning(ex,
+            logger.LogWarning(ex,
                 "Google Health configuration could not be read for tenant {TenantId}", TenantId);
             return await WithProgressAsync(new GoogleHealthStatus
             {
-                Capabilities = GoogleHealthClient.Capabilities,
-                Available = Platform.IsConfigured,
                 Configured = true,
                 ErrorCode = "stored_google_configuration_unreadable"
             });
@@ -250,19 +165,18 @@ public sealed class GoogleHealthService(
     {
         ValidateOptions(options);
         await using var gate = await coordinator.AcquireAsync(TenantId, ct);
-        var prior = await StoredOptionsOrNullAsync(ct);
+        var configuration = await StoredConfigurationOrNullAsync(ct);
+        var prior = configuration is null ? null : Options(configuration);
         await ClearFlowAsync(ct);
         if (prior is not null && (options.ImportFrom != prior.ImportFrom || options.HistoryDays != prior.HistoryDays ||
                                  !options.DataTypes.Order(StringComparer.Ordinal).SequenceEqual(prior.DataTypes.Order(StringComparer.Ordinal))))
         {
-            var cursor = await cursorStore.GetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource, ct);
-            var state = GoogleHealthConnectorService.ParseRuntimeState(cursor?.LastGuid);
+            var state = await RuntimeStateAsync(ct);
             foreach (var key in new[] { "backfillCursorDate", "backfillFloorDate", "backfillComplete", "backfillChunkDays" })
                 state.Remove(key);
             if (!options.DataTypes.Order(StringComparer.Ordinal).SequenceEqual(prior.DataTypes.Order(StringComparer.Ordinal)))
                 state.Remove("lastSyncedTo");
-            await cursorStore.SetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource,
-                new(null, JsonSerializer.Serialize(state, Json)), ct);
+            await SaveRuntimeStateAsync(state, ct);
         }
         await SaveOptionsAsync(options, subject, ct);
     }
@@ -272,13 +186,15 @@ public sealed class GoogleHealthService(
         if (!Platform.IsConfigured)
             throw new GoogleHealthException("platform_not_configured");
         await using var gate = await coordinator.AcquireAsync(TenantId, ct);
-        if (await StoredSessionAsync(ct) is not null)
+        var configuration = await StoredConfigurationAsync(ct);
+        if (sessions.IssuedToAnotherClient(configuration))
+            await sessions.ClearAsync(removeAccount: false, subject, ct);
+        else if (!string.IsNullOrWhiteSpace(configuration.RefreshToken))
             throw new GoogleHealthException("disconnect_first");
-        await StoredOptionsAsync(ct);
         var verifier = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(48));
         var expires = DateTimeOffset.UtcNow.Add(FlowLifetime);
         var state = oauthState.Protect(tenantSlug, expires);
-        var flow = new GoogleHealthCoordinator.Flow(state, verifier, subject, Fingerprint(), expires);
+        var flow = new GoogleHealthCoordinator.Flow(state, verifier, subject, expires);
         var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
         secrets["oauthFlow"] = JsonSerializer.Serialize(flow, Json);
         await connectorConfigurations.SaveSecretsAsync(ConnectorName, secrets, subject.ToString(), ct);
@@ -319,9 +235,6 @@ public sealed class GoogleHealthService(
                     Encoding.UTF8.GetBytes(flow.State), Encoding.UTF8.GetBytes(callback.State)))
                 throw new GoogleHealthException("expired_signin");
 
-            if (Fingerprint() != flow.Settings)
-                throw new GoogleHealthException("expired_signin");
-
             await ClearFlowAsync(ct);
             var requestedScopes = GoogleHealthClient.SupportedTypes
                 .Select(GoogleHealthClient.ScopeFor).Append("openid")
@@ -329,14 +242,13 @@ public sealed class GoogleHealthService(
             var token = await oauth.ExchangeAuthorizationCodeAsync(
                 callback.Code, flow.Verifier, requestedScopes, ct);
             var account = await oauth.AccountKeyAsync(token.AccessToken!, ct);
-            var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
-            if (secrets.GetValueOrDefault(AccountKeySecret) is { } priorAccount && priorAccount != account)
+            if (await sessions.AccountKeyAsync(ct) is { } priorAccount && priorAccount != account)
             {
                 await oauth.RevokeAsync(token.RefreshToken, ct);
                 throw new GoogleHealthException("account_mismatch");
             }
 
-            await SaveSessionAsync(token, account, subject, ct);
+            await sessions.SaveAsync(token, account, subject, ct);
             await connectorConfigurations.UpdateHealthStateAsync(
                 ConnectorName,
                 lastErrorMessage: string.Empty,
@@ -374,17 +286,16 @@ public sealed class GoogleHealthService(
         await using var gate = await coordinator.AcquireAsync(TenantId, CancellationToken.None);
         if ((await coordinator.DisconnectRequestAsync(TenantId, CancellationToken.None))?.RequestId != request) return;
         await coordinator.CompleteAsync(TenantId);
-        var token = await StoredSessionAsync(CancellationToken.None);
+        var refreshToken = (await configurationLoader.LoadForTenantAsync(CancellationToken.None)).RefreshToken;
         await ClearFlowAsync(CancellationToken.None);
-        oauth.InvalidateToken();
-        await RemoveSessionAsync(subject, removeAccount: false, CancellationToken.None);
+        await sessions.ClearAsync(removeAccount: false, subject, CancellationToken.None);
         var revokeFailed = false;
-        if (token is not null)
+        if (!string.IsNullOrWhiteSpace(refreshToken))
         {
             try
             {
                 using var revokeCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                revokeFailed = !await oauth.RevokeAsync(token.RefreshToken, revokeCancellation.Token);
+                revokeFailed = !await oauth.RevokeAsync(refreshToken, revokeCancellation.Token);
             }
             catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or Polly.ExecutionRejectedException)
             {
@@ -403,12 +314,11 @@ public sealed class GoogleHealthService(
     public async Task PurgeAsync(Guid subject, CancellationToken ct)
     {
         await using var gate = await coordinator.AcquireAsync(TenantId, ct);
-        if (await StoredSessionAsync(ct) is not null)
+        if (HasLiveSession(await configurationLoader.LoadForTenantAsync(ct)))
             throw new GoogleHealthException("disconnect_first");
         await ClearFlowAsync(ct);
-        oauth.InvalidateToken();
         await coordinator.CompleteAsync(TenantId);
-        if (writer is not null) await writer.PurgeAsync(ct);
+        await writer.PurgeAsync(ct);
         await cursorStore.SetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource, new(null, null), ct);
         var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
         if (stored?.Configuration is not null)
@@ -420,10 +330,10 @@ public sealed class GoogleHealthService(
             using var document = JsonDocument.Parse(configuration.ToJsonString(Json));
             await connectorConfigurations.SaveConfigurationAsync(ConnectorName, document, subject.ToString(), ct);
         }
-        await RemoveSessionAsync(subject, removeAccount: true, ct);
+        await sessions.ClearAsync(removeAccount: true, subject, ct);
     }
 
-    public async Task<GoogleHealthPreview> PreviewAsync(Guid subject, CancellationToken ct)
+    public async Task<GoogleHealthStatus> PreviewAsync(Guid subject, CancellationToken ct)
     {
         if (!Platform.IsConfigured)
             throw new GoogleHealthException("platform_not_configured", stage: "preview");
@@ -437,94 +347,57 @@ public sealed class GoogleHealthService(
             using var previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
             previewCancellation.CancelAfter(PreviewTimeout);
             var previewCt = previewCancellation.Token;
-            GoogleHealthTokenSession? token;
+            GoogleHealthConnectorConfiguration configuration;
             try
             {
-                await StoredOptionsAsync(ct);
-                token = await StoredSessionAsync(ct);
+                configuration = await StoredConfigurationAsync(ct);
             }
             catch (Exception ex) when (ex is JsonException or FormatException)
             {
                 throw new GoogleHealthException("stored_google_configuration_unreadable", stage: "preview");
             }
 
-            if (token is null)
+            if (string.IsNullOrWhiteSpace(configuration.RefreshToken))
                 throw new GoogleHealthException("configure_first");
-            var now = DateTimeOffset.UtcNow;
-            if (string.IsNullOrWhiteSpace(token.AccessToken) || token.AccessTokenExpiresAt is null ||
-                token.AccessTokenExpiresAt <= now.Add(AccessTokenSafety))
-            {
-                token = await RefreshSessionAsync(token, previewCt);
-                var account = await AccountKeyAsync(previewCt) ??
-                    await oauth.AccountKeyAsync(token.AccessToken!, previewCt);
-                await SaveSessionAsync(token, account, subject, previewCt);
-            }
-
-            var from = now - PreviewWindow;
-            try
-            {
-                return await ReadInventoryAsync(token, from, now, previewCt);
-            }
-            catch (GoogleHealthException first) when (first.Message == "access_token_rejected")
-            {
-                token = await RefreshSessionAsync(token, previewCt, forceRefresh: true);
-                var account = await AccountKeyAsync(previewCt) ??
-                    await oauth.AccountKeyAsync(token.AccessToken!, previewCt);
-                await SaveSessionAsync(token, account, subject, previewCt);
-                try
-                {
-                    return await ReadInventoryAsync(token, from, now, previewCt);
-                }
-                catch (GoogleHealthException second) when (second.Message == "access_token_rejected")
-                {
-                    throw new GoogleHealthException("reconnect_required", stage: second.Stage,
-                        dataType: second.DataType, providerReason: second.ProviderReason,
-                        providerStatus: second.ProviderStatus);
-                }
-            }
+            var session = await sessions.RefreshAsync(configuration, force: false, previewCt);
+            var to = DateTimeOffset.UtcNow;
+            var inventory = await sessions.WithAccessTokenAsync(configuration, session.AccessToken!,
+                token => ReadInventoryAsync(token, configuration.ParsedGrantedScopes(), to - PreviewWindow, to, previewCt),
+                previewCt);
+            var state = await RuntimeStateAsync(ct);
+            state[InventoryKey] = JsonSerializer.SerializeToElement(inventory, Json);
+            await SaveRuntimeStateAsync(state, ct);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             throw new GoogleHealthException("google_unavailable", stage: "preview_timeout");
         }
-        catch (GoogleHealthException ex) when (ex.Message == "reconnect_required")
+        catch (GoogleHealthException ex) when (ex.RequiresReconnect)
         {
-            oauth.InvalidateToken();
-            await RemoveSessionAsync(subject, removeAccount: false, ct);
+            await sessions.ClearAsync(removeAccount: false, subject, ct);
             await connectorConfigurations.UpdateHealthStateAsync(ConnectorName,
                 lastErrorMessage: GoogleHealthErrorCode.Encode(ex.Message, ex.DataType is null ? null : [ex.DataType]),
                 lastErrorAt: DateTime.UtcNow, isHealthy: false, ct: ct);
             throw;
         }
+        return await StatusAsync(ct);
     }
 
-    private async Task<GoogleHealthPreview> ReadInventoryAsync(
-        GoogleHealthTokenSession token, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
-    {
-        var items = await Task.WhenAll(GoogleHealthClient.Capabilities.Select(async capability =>
+    private async Task<GoogleHealthInventoryItem[]> ReadInventoryAsync(
+        string accessToken, string[] grantedScopes, DateTimeOffset from, DateTimeOffset to, CancellationToken ct) =>
+        await Task.WhenAll(GoogleHealthClient.SupportedTypes.Select(async type =>
         {
-            var type = capability.DataType;
-            if (!capability.Supported)
-            {
-                return new GoogleHealthPreviewItem { DataType = type, Supported = false };
-            }
-            var granted = token.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal);
-            if (!granted)
-            {
-                return new GoogleHealthPreviewItem { DataType = type, Granted = false, Supported = true };
-            }
+            if (!grantedScopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal))
+                return new GoogleHealthInventoryItem(type, false, 0, null);
             try
             {
-                var count = await google.CountAsync(token.AccessToken!, type, from, to, ct);
-                return new GoogleHealthPreviewItem { DataType = type, Granted = true, Count = count, Supported = true };
+                return new GoogleHealthInventoryItem(type, true, await google.CountAsync(accessToken, type, from, to, ct), null);
             }
             catch (GoogleHealthException ex) when (ex.Message != "access_token_rejected")
             {
-                return new GoogleHealthPreviewItem { DataType = type, Granted = true, ErrorCode = ex.Message, Supported = true };
+                return new GoogleHealthInventoryItem(type, true, 0, ex.Message);
             }
         }));
-        return new GoogleHealthPreview { Items = items.ToArray() };
-    }
 
     public async Task QueueSyncAsync(CancellationToken ct)
     {
@@ -534,9 +407,10 @@ public sealed class GoogleHealthService(
         {
             if (await coordinator.DisconnectRequestAsync(TenantId, ct) is not null)
                 throw new GoogleHealthException("disconnect_first");
-            var settings = await StoredOptionsAsync(ct);
-            if (await StoredSessionAsync(ct) is null)
+            var configuration = await StoredConfigurationAsync(ct);
+            if (!HasLiveSession(configuration))
                 throw new GoogleHealthException("configure_first");
+            var settings = Options(configuration);
             if (settings.PreviewOnly) throw new GoogleHealthException("preview_required");
             if (settings.DataTypes.Length == 0) throw new GoogleHealthException("no_types_selected");
             if (!await coordinator.QueueAsync(TenantId, settings.DataTypes.Length, ct))
@@ -550,8 +424,10 @@ public sealed class GoogleHealthService(
 
     private async Task<GoogleHealthStatus> WithProgressAsync(GoogleHealthStatus status)
     {
+        status.Available = Platform.IsConfigured;
         status.IsDisconnecting = await coordinator.DisconnectRequestAsync(TenantId, CancellationToken.None) is not null;
         var progress = await coordinator.ProgressAsync(TenantId, CancellationToken.None);
+        status.ConnectionState = ConnectionState(status, progress is not null);
         if (progress is null) return status;
         status.IsSyncing = true;
         status.SyncPhase = progress.Phase;
@@ -569,6 +445,35 @@ public sealed class GoogleHealthService(
         return status;
     }
 
+    private static GoogleHealthConnectionState ConnectionState(GoogleHealthStatus status, bool syncing) => status switch
+    {
+        _ when syncing => GoogleHealthConnectionState.Syncing,
+        { Available: false } => GoogleHealthConnectionState.Unavailable,
+        { Connected: false } => GoogleHealthConnectionState.Disconnected,
+        { ErrorCode: not null } => GoogleHealthConnectionState.NeedsAttention,
+        { PreviewRequired: true } => GoogleHealthConnectionState.ReviewRequired,
+        { SelectedTypes.Length: 0 } => GoogleHealthConnectionState.NothingSelected,
+        _ => GoogleHealthConnectionState.Active
+    };
+
+    private async Task<bool> IncludeCycleTrackingAsync(CancellationToken ct) =>
+        (await patientRecords.GetAsync(ct))?.Sex != BiologicalSex.Male;
+
+    private async Task<Dictionary<string, JsonElement>> RuntimeStateAsync(CancellationToken ct) =>
+        GoogleHealthConnectorService.ParseRuntimeState(
+            (await cursorStore.GetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource, ct))?.LastGuid);
+
+    private Task SaveRuntimeStateAsync(Dictionary<string, JsonElement> state, CancellationToken ct) =>
+        cursorStore.SetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource,
+            new(null, JsonSerializer.Serialize(state, Json)), ct);
+
+    private static GoogleHealthInventoryItem[]? Inventory(IReadOnlyDictionary<string, JsonElement> state)
+    {
+        if (!state.TryGetValue(InventoryKey, out var inventory)) return null;
+        try { return inventory.Deserialize<GoogleHealthInventoryItem[]>(Json); }
+        catch (JsonException) { return null; }
+    }
+
     private async Task ClearFlowAsync(CancellationToken ct)
     {
         var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
@@ -576,11 +481,7 @@ public sealed class GoogleHealthService(
         await connectorConfigurations.SaveSecretsAsync(ConnectorName, secrets, ct: ct);
     }
 
-    private async Task<string?> AccountKeyAsync(CancellationToken ct) =>
-        (await connectorConfigurations.GetSecretsAsync(ConnectorName, ct))
-        .GetValueOrDefault(AccountKeySecret);
-
-    private void LogFailure(Exception ex, GoogleHealthException error) => logger?.LogError(ex,
+    private void LogFailure(Exception ex, GoogleHealthException error) => logger.LogError(ex,
         "Google Health request failed for tenant {TenantId} with code {Code} at stage {Stage} for data type {DataType}; provider status {ProviderStatus}, provider reason {ProviderReason}",
         TenantId, error.Message, error.Stage, error.DataType,
         error.ProviderStatus, error.ProviderReason);
@@ -611,7 +512,4 @@ public sealed class GoogleHealthService(
         if (configuration.SyncSleep) types.Add("sleep");
         return types.ToArray();
     }
-
-    private string Fingerprint() => Convert.ToHexString(SHA256.HashData(
-        Encoding.UTF8.GetBytes(Platform.ClientId + "\n" + Platform.RedirectUri)));
 }

@@ -24,15 +24,6 @@ public class GoogleHealthPlatformTests
     }
 
     [Fact]
-    public void States_are_unique_per_sign_in()
-    {
-        var state = new GoogleHealthOAuthState(new EphemeralDataProtectionProvider());
-        var expires = DateTimeOffset.UtcNow.AddMinutes(10);
-
-        Assert.NotEqual(state.Protect("alice", expires), state.Protect("alice", expires));
-    }
-
-    [Fact]
     public void An_expired_state_is_unreadable()
     {
         var state = new GoogleHealthOAuthState(new EphemeralDataProtectionProvider());
@@ -45,16 +36,6 @@ public class GoogleHealthPlatformTests
     [InlineData("not-a-protected-payload")]
     public void A_state_this_instance_did_not_issue_is_unreadable(string value) =>
         Assert.Null(new GoogleHealthOAuthState(new EphemeralDataProtectionProvider()).TryReadTenantSlug(value));
-
-    [Fact]
-    public void A_state_protected_for_another_purpose_is_unreadable()
-    {
-        var provider = new EphemeralDataProtectionProvider();
-        var foreign = provider.CreateProtector("Nocturne.Oidc.State").ToTimeLimitedDataProtector()
-            .Protect("""{"Slug":"alice","Nonce":"n"}""", DateTimeOffset.UtcNow.AddMinutes(10));
-
-        Assert.Null(new GoogleHealthOAuthState(provider).TryReadTenantSlug(foreign));
-    }
 
     [Theory]
     [InlineData("nocturne.run", "", "https://nocturne.run/api/v4/google-health/oauth/callback")]

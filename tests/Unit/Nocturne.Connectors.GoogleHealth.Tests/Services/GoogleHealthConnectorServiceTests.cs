@@ -975,7 +975,7 @@ public class GoogleHealthConnectorServiceTests
                 new HttpClient(),
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
                 new GoogleHealthClient(new HttpClient(handler, false)),
-                oauth,
+                new GoogleHealthSessionStore(configurations.Object, oauth, TestPlatform.Options()),
                 Writer.Object,
                 coordinator.Object,
                 configurations.Object,

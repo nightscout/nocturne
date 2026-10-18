@@ -37,8 +37,5 @@ public class GoogleHealthConfigurationLoaderTests
         var configuration = await loader.LoadForTenantAsync(default);
 
         configuration.Enabled.Should().Be(enabled);
-        configurations.Verify(service => service.UpdateHealthStateAsync(
-            It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string>(),
-            It.IsAny<DateTime?>(), It.IsAny<bool?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

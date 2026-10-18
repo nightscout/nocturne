@@ -27,9 +27,9 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
     public string? RefreshToken { get; set; }
 
     /// <summary>
-    /// The OAuth client <see cref="RefreshToken"/> was issued to. Google refuses a refresh token
-    /// presented by any other client, so a value that differs from
-    /// <see cref="GoogleHealthPlatformOptions.ClientId"/> means the tenant must reconnect.
+    /// The client <see cref="RefreshToken"/> was issued to, under the <c>clientId</c> key a former
+    /// per-tenant client was stored under, so such a session is checked against the instance client
+    /// like any other (<see cref="Services.GoogleHealthSessionStore.IssuedToAnotherClient"/>).
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.ClientId, Secret = true, Hidden = true)]
     public string? SessionClientId { get; set; }
@@ -45,6 +45,11 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
 
     [ConnectorProperty(ConnectorPropertyKey.GrantedScopes, Hidden = true)]
     public string? GrantedScopes { get; set; }
+
+    public string[] ParsedGrantedScopes() => (GrantedScopes ?? string.Empty)
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
 
     [ConnectorProperty(ConnectorPropertyKey.SyncSteps, DefaultValue = "true")]
     public bool SyncSteps { get; set; } = true;

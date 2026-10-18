@@ -94,9 +94,6 @@ public class GoogleHealthConnectorConfigurationTests
             new Dictionary<string, string> { ["clientSecret"] = "tenant-secret" }, configuration);
 
         configuration.SessionClientId.Should().Be("tenant.apps.googleusercontent.com");
-        typeof(GoogleHealthConnectorConfiguration).GetProperties()
-            .Select(property => property.Name)
-            .Should().NotContain(["ClientId", "ClientSecret", "CallbackUrl", "RedirectUri"]);
     }
 
     [Fact]

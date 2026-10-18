@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.WebUtilities;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
 
@@ -21,11 +20,7 @@ public sealed class GoogleHealthOAuthState(IDataProtectionProvider dataProtectio
     /// <param name="tenantSlug">The tenant subdomain the browser is on, or null on the apex.</param>
     /// <param name="expires">When the state stops being readable.</param>
     public string Protect(string? tenantSlug, DateTimeOffset expires) =>
-        protector.Protect(
-            JsonSerializer.Serialize(new Payload(
-                tenantSlug,
-                WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32)))),
-            expires);
+        protector.Protect(JsonSerializer.Serialize(new Payload(tenantSlug)), expires);
 
     /// <summary>The slug carried by an unexpired state this instance issued, else null.</summary>
     public string? TryReadTenantSlug(string? state)
@@ -41,5 +36,5 @@ public sealed class GoogleHealthOAuthState(IDataProtectionProvider dataProtectio
         }
     }
 
-    private sealed record Payload(string? Slug, string Nonce);
+    private sealed record Payload(string? Slug);
 }

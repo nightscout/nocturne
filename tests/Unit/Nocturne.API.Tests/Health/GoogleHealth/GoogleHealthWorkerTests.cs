@@ -18,7 +18,7 @@ public class GoogleHealthWorkerTests
     [Fact]
     public async Task Imports_are_concurrent_bounded_and_keep_claims_until_completion_or_shutdown()
     {
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinatorStore.Coordinator();
         var tenants = Enumerable.Range(0, 6).Select(_ => Guid.NewGuid()).ToArray();
         var releases = tenants.ToDictionary(id => id, _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
         var started = Channel.CreateUnbounded<Guid>();
@@ -85,7 +85,7 @@ public class GoogleHealthWorkerTests
     public async Task Scheduled_run_conflict_keeps_manual_request_until_retry_shutdown_or_cancellation(bool shutdown, bool cancel)
     {
         var tenant = Guid.NewGuid();
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinatorStore.Coordinator();
         var conflicted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var retried = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -178,7 +178,7 @@ public class GoogleHealthWorkerTests
     public async Task Infrastructure_failure_preserves_request_for_another_worker(string stage)
     {
         var tenant = Guid.NewGuid();
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinatorStore.Coordinator();
         var failed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Task<T> Fail<T>()
         {
@@ -227,7 +227,7 @@ public class GoogleHealthWorkerTests
     public async Task An_unconfigured_instance_drops_queued_imports_without_syncing_or_touching_health()
     {
         var tenant = Guid.NewGuid();
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinatorStore.Coordinator();
         var sync = new Mock<IConnectorSyncService>();
         var configurations = new Mock<IConnectorConfigurationService>();
         var services = new ServiceCollection();

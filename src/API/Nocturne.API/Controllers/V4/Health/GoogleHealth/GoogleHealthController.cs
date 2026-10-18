@@ -31,57 +31,60 @@ public class GoogleHealthController(
 
     [HttpPut("options"), RemoteCommand(Invalidates = [nameof(GetGoogleHealth)]), RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(GoogleHealthStatus), 200)]
-    public Task<ActionResult<GoogleHealthStatus>> SaveGoogleHealth(GoogleHealthOptions input, CancellationToken ct) => Run(async () => await service.SaveAsync(input, Subject, ct), ct);
+    public Task<ActionResult<GoogleHealthStatus>> SaveGoogleHealth(GoogleHealthOptions input, CancellationToken ct) =>
+        RunThenStatus(() => service.SaveAsync(input, Subject, ct), ct);
 
     [HttpPost("start"), RemoteCommand(Invalidates = [nameof(GetGoogleHealth)]), RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(GoogleHealthAuthorize), 200)]
-    public async Task<ActionResult<GoogleHealthAuthorize>> StartGoogleHealth(CancellationToken ct)
-    {
-        // A sign-in started on the apex (a single-tenant install) must come back to the apex.
-        var tenantSlug = SubdomainParser.Extract(Request.Host.Host, baseDomain.Value.BaseDomain);
-        try { return Ok(await service.StartAsync(Subject, tenantSlug, ct)); }
-        catch (GoogleHealthException ex) { return GoogleProblem(ex); }
-        catch (HttpRequestException) { return Problem(statusCode: 502, detail: "google_unavailable"); }
-    }
+    public Task<ActionResult<GoogleHealthAuthorize>> StartGoogleHealth(CancellationToken ct) =>
+        Run(() => service.StartAsync(
+            Subject, SubdomainParser.Extract(Request.Host.Host, baseDomain.Value.BaseDomain), ct));
 
     [HttpPost("complete"), RemoteCommand(Invalidates = [nameof(GetGoogleHealth)]), RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(GoogleHealthStatus), 200)]
-    public Task<ActionResult<GoogleHealthStatus>> CompleteGoogleHealth(GoogleHealthCallback input, CancellationToken ct) => Run(async () => await service.CompleteAsync(input, Subject, ct), ct);
+    public Task<ActionResult<GoogleHealthStatus>> CompleteGoogleHealth(GoogleHealthCallback input, CancellationToken ct) =>
+        RunThenStatus(() => service.CompleteAsync(input, Subject, ct), ct);
 
     [HttpPost("disconnect"), RemoteCommand(Invalidates = [nameof(GetGoogleHealth)]), RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(GoogleHealthStatus), 200)]
-    public Task<ActionResult<GoogleHealthStatus>> DisconnectGoogleHealth(CancellationToken ct) => Run(async () => await service.DisconnectAsync(Subject, ct), ct);
+    public Task<ActionResult<GoogleHealthStatus>> DisconnectGoogleHealth(CancellationToken ct) =>
+        RunThenStatus(() => service.DisconnectAsync(Subject, ct), ct);
 
     [HttpPost("sync"), RemoteCommand(Invalidates = [nameof(GetGoogleHealth)]), RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(GoogleHealthStatus), 200)]
-    [ProducesResponseType(typeof(ProblemDetails), 502)]
-    public Task<ActionResult<GoogleHealthStatus>> SyncGoogleHealth(CancellationToken ct) => Run(async () => await service.QueueSyncAsync(ct), ct);
+    public Task<ActionResult<GoogleHealthStatus>> SyncGoogleHealth(CancellationToken ct) =>
+        RunThenStatus(() => service.QueueSyncAsync(ct), ct);
 
     [HttpPost("preview"), RemoteCommand(Invalidates = [nameof(GetGoogleHealth)]), RequireScope(Scope.TenantSettings)]
-    [ProducesResponseType(typeof(GoogleHealthPreview), 200)]
-    public async Task<ActionResult<GoogleHealthPreview>> PreviewGoogleHealth(CancellationToken ct)
-    {
-        try { return Ok(await service.PreviewAsync(Subject, ct)); }
-        catch (GoogleHealthException ex) { return GoogleProblem(ex); }
-        catch (HttpRequestException) { return Problem(statusCode: 502, detail: "google_unavailable"); }
-    }
+    [ProducesResponseType(typeof(GoogleHealthStatus), 200)]
+    public Task<ActionResult<GoogleHealthStatus>> PreviewGoogleHealth(CancellationToken ct) =>
+        Run(() => service.PreviewAsync(Subject, ct));
 
     [HttpDelete("readings"), RemoteCommand(Invalidates = [nameof(GetGoogleHealth)]), RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(GoogleHealthStatus), 200)]
-    public Task<ActionResult<GoogleHealthStatus>> PurgeGoogleHealth(CancellationToken ct) => Run(async () => await service.PurgeAsync(Subject, ct), ct);
+    public Task<ActionResult<GoogleHealthStatus>> PurgeGoogleHealth(CancellationToken ct) =>
+        RunThenStatus(() => service.PurgeAsync(Subject, ct), ct);
 
-    private ObjectResult GoogleProblem(GoogleHealthException error) => Problem(
-        statusCode: error.Message switch
+    private Task<ActionResult<GoogleHealthStatus>> RunThenStatus(Func<Task> action, CancellationToken ct) =>
+        Run(async () =>
         {
-            "rate_limited" => StatusCodes.Status429TooManyRequests,
-            "google_unavailable" => StatusCodes.Status502BadGateway,
-            _ => StatusCodes.Status400BadRequest
-        }, detail: error.Message);
+            await action();
+            return await service.StatusAsync(ct);
+        });
 
-    private async Task<ActionResult<GoogleHealthStatus>> Run(Func<Task> action, CancellationToken ct)
+    private async Task<ActionResult<T>> Run<T>(Func<Task<T>> action)
     {
-        try { await action(); return Ok(await service.StatusAsync(ct)); }
-        catch (GoogleHealthException ex) { return GoogleProblem(ex); }
+        try { return Ok(await action()); }
+        catch (GoogleHealthException ex)
+        {
+            return Problem(
+                statusCode: ex.Message switch
+                {
+                    "rate_limited" => StatusCodes.Status429TooManyRequests,
+                    "google_unavailable" => StatusCodes.Status502BadGateway,
+                    _ => StatusCodes.Status400BadRequest
+                }, detail: ex.Message);
+        }
         catch (HttpRequestException) { return Problem(statusCode: 502, detail: "google_unavailable"); }
     }
 }
