@@ -174,7 +174,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
         EversenseConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var token = await _tokenProvider.GetValidTokenAsync(config);
+        var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
         if (string.IsNullOrEmpty(token))
         {
             _logger.LogWarning("[{ConnectorSource}] No valid token available for data fetch", ConnectorSource);
@@ -204,9 +204,10 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                 return ConnectorFaults.NonNullRecords(patients, _logger, ConnectorSource, "Eversense patient").ToList();
             },
             _retryDelayStrategy,
-            reAuthenticateOnUnauthorized: ReauthenticateWith(_tokenProvider, config, t => token = t),
+            reAuthenticateOnUnauthorized: ReauthenticateWith(_tokenProvider, config, t => token = t, cancellationToken),
             maxRetries: config.MaxRetryAttempts,
-            operationName: "FetchEversensePatientList"
+            operationName: "FetchEversensePatientList",
+            cancellationToken: cancellationToken
         );
 
         return result;

@@ -68,7 +68,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
     private async Task<bool> AuthenticateWithConfigAsync(GlookoSyncContext context)
     {
-        var token = await _tokenProvider.GetValidTokenAsync(context.Config);
+        var token = await _tokenProvider.GetValidTokenAsync(context.Config, context.CancellationToken);
         if (token == null)
         {
             TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
@@ -124,7 +124,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         var request = new HttpRequestMessage(HttpMethod.Get, absoluteUrl);
         GlookoHttpHelper.ApplyStandardHeaders(request, webOrigin, context.SessionCookie);
 
-        var response = await _httpClient.SendAsync(request);
+        var response = await _httpClient.SendAsync(request, context.CancellationToken);
 
         if (response.IsSuccessStatusCode)
         {
@@ -193,7 +193,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     lastException = ex;
                     _logger.LogError(ex, "Attempt {AttemptNumber} failed for {Url}", attempt + 1, url);
                 }
-                catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex))
+                catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex, context.CancellationToken))
                 {
                     _logger.LogError(ex, "Attempt {AttemptNumber} failed for {Url}", attempt + 1, url);
                     lastException = new HttpRequestException($"Request failed: {ex.Message}", ex);
@@ -208,7 +208,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 _logger.LogError("All {MaxRetries} attempts failed for {Url}", attempts, url);
                 throw lastException ?? new HttpRequestException($"All {attempts} attempts failed for {url}");
             },
-            CancellationToken.None,
+            context.CancellationToken,
             attempt => _logger.LogInformation("Applying retry backoff before retry {RetryNumber}", attempt + 2));
     }
 
@@ -283,7 +283,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             return JsonSerializer.Deserialize<GlookoV3GraphResponse>(result.Value.GetRawText());
         }
-        catch (Exception ex) when (ex is GlookoDataForbiddenException || ConnectorFaults.IsSourceFailure(ex))
+        catch (Exception ex) when (ex is GlookoDataForbiddenException || ConnectorFaults.IsSourceFailure(ex, context.CancellationToken))
         {
             _logger.LogWarning(ex,
                 "[{ConnectorSource}] Failed to fetch v3 pump-mode series; mode state spans skipped this pass",
@@ -306,7 +306,10 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         try
         {
             // See GlookoSyncContext: this run's entire working state lives here, never on the service.
-            var context = new GlookoSyncContext(config, ConnectorSource, _glookoLogger);
+            var context = new GlookoSyncContext(config, ConnectorSource, _glookoLogger)
+            {
+                CancellationToken = cancellationToken
+            };
 
             await ReportSyncMessageAsync(SyncMessageType.Authenticating, null, cancellationToken);
 
@@ -943,7 +946,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 if (fetchResult.HasValue)
                     handler(fetchResult.Value);
             }
-            catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex))
+            catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex, context.CancellationToken))
             {
                 // A payload that arrived but would not parse loses the same data as one that never
                 // arrived, so both land here.
@@ -998,7 +1001,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             return [];
         }
-        catch (Exception ex) when (ex is GlookoDataForbiddenException || ConnectorFaults.IsSourceFailure(ex))
+        catch (Exception ex) when (ex is GlookoDataForbiddenException || ConnectorFaults.IsSourceFailure(ex, context.CancellationToken))
         {
             _logger.LogWarning(ex, "[{ConnectorSource}] Failed to fetch V2 foods for metadata enrichment", ConnectorSource);
             return null;
@@ -1473,7 +1476,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             return profile;
         }
-        catch (Exception ex) when (ex is GlookoDataForbiddenException || ConnectorFaults.IsSourceFailure(ex))
+        catch (Exception ex) when (ex is GlookoDataForbiddenException || ConnectorFaults.IsSourceFailure(ex, context.CancellationToken))
         {
             _logger.LogError(ex, "Error fetching Glooko v3 user profile");
             return null;
@@ -1715,7 +1718,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             return graphData;
         }
-        catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex))
+        catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex, context.CancellationToken))
         {
             _logger.LogError(ex, "Error fetching Glooko v3 graph data");
             return null;
@@ -1748,7 +1751,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             return settings;
         }
-        catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex))
+        catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex, context.CancellationToken))
         {
             _logger.LogError(ex, "Error fetching Glooko v3 device settings");
             return null;
@@ -1791,7 +1794,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             return historiesData;
         }
-        catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex))
+        catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex, context.CancellationToken))
         {
             _logger.LogError(ex, "Error fetching Glooko v3 histories");
             return null;

@@ -80,6 +80,27 @@ public class LibreConnectorServiceTests
         published!.Select(sg => sg.Mgdl).Should().BeEquivalentTo([105.0, 110.0]);
     }
 
+    /// <summary>
+    /// A caller who cancels has withdrawn the run. It must see the cancellation rather than a sync
+    /// reported as failed, which would mark the connector unhealthy for something nobody did wrong.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_CallerCancelsDuringTheFetch_PropagatesCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        var fixture = new ServiceFixture(
+            connectionsJson: "{\"data\":[{\"patientId\":\"p1\",\"firstName\":\"A\",\"lastName\":\"B\"}]}",
+            onGraph: () =>
+            {
+                cts.Cancel();
+                throw new OperationCanceledException(cts.Token);
+            });
+
+        await FluentActions.Awaiting(() => fixture.Service.SyncDataAsync(
+                new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, cts.Token))
+            .Should().ThrowAsync<OperationCanceledException>();
+    }
+
     private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(body, Encoding.UTF8, "application/json")
@@ -107,12 +128,16 @@ public class LibreConnectorServiceTests
         }
     }
 
-    private sealed class RoutingHandler(string? connectionsJson, string? graphJson) : HttpMessageHandler
+    private sealed class RoutingHandler(string? connectionsJson, string? graphJson, Action? onGraph)
+        : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri?.PathAndQuery ?? string.Empty;
+
+            if (path.EndsWith("/graph", StringComparison.OrdinalIgnoreCase))
+                onGraph?.Invoke();
 
             if (path.EndsWith("/graph", StringComparison.OrdinalIgnoreCase) && graphJson != null)
                 return Task.FromResult(Json(graphJson));
@@ -135,7 +160,8 @@ public class LibreConnectorServiceTests
         public ServiceFixture(
             string? tokenToReturn = "valid-token",
             string? connectionsJson = null,
-            string? graphJson = null)
+            string? graphJson = null,
+            Action? onGraph = null)
         {
             Config = new LibreLinkUpConnectorConfiguration
             {
@@ -143,7 +169,7 @@ public class LibreConnectorServiceTests
                 Password = "test-password",
             };
 
-            var httpClient = new HttpClient(new RoutingHandler(connectionsJson, graphJson))
+            var httpClient = new HttpClient(new RoutingHandler(connectionsJson, graphJson, onGraph))
             {
                 BaseAddress = new Uri("https://api-eu.libreview.io")
             };
