@@ -82,6 +82,7 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 
 builder.AddServiceDefaults();
+builder.Services.AddRequestPathRedactor<CredentialPathRedactor>();
 
 builder.Host.UseDefaultServiceProvider(options =>
 {
@@ -542,6 +543,9 @@ app.MapGet(
 );
 
 app.MapDefaultEndpoints();
+
+app.Services.GetRequiredService<CredentialPathRedactor>()
+    .Load(((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints));
 
 // Skip database migrations when running in NSwag/OpenAPI generation mode
 // NSwag launches the app to extract the OpenAPI schema, but we don't need DB access for that

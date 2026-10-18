@@ -17,7 +17,10 @@ public class AuditContextMiddleware
         _next = next;
     }
 
-    public async Task InvokeAsync(HttpContext httpContext, IAuditContext auditContext)
+    public async Task InvokeAsync(
+        HttpContext httpContext,
+        IAuditContext auditContext,
+        IRequestPathRedactor pathRedactor)
     {
         if (auditContext is AuditContext mutableContext)
         {
@@ -29,7 +32,8 @@ public class AuditContextMiddleware
             mutableContext.TokenId = authContext?.TokenId;
             mutableContext.IpAddress = httpContext.Connection.RemoteIpAddress?.ToString();
             mutableContext.TraceId = httpContext.TraceIdentifier;
-            mutableContext.Endpoint = $"{httpContext.Request.Method} {httpContext.Request.Path}";
+            mutableContext.Endpoint =
+                $"{httpContext.Request.Method} {pathRedactor.Redact(httpContext.Request.Path.ToString())}";
         }
 
         await _next(httpContext);
