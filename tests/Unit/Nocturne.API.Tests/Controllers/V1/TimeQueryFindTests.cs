@@ -266,6 +266,7 @@ public class TimeQueryFindTests
             });
 
         var deviceStatuses = new DeviceStatusProjectionService(
+            new Mock<IDeviceStatusGroupRepository>().Object,
             new Mock<IApsSnapshotRepository>().Object,
             new Mock<IPumpSnapshotRepository>().Object,
             new Mock<IUploaderSnapshotRepository>().Object,

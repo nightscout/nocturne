@@ -80,6 +80,7 @@ public class V3CreateResponseTests
             .ReturnsAsync(new DecompositionResult());
         var controller = WithContext(new DeviceStatusController(
             new DeviceStatusProjectionService(
+                Mock.Of<IDeviceStatusGroupRepository>(),
                 Mock.Of<IApsSnapshotRepository>(),
                 Mock.Of<IPumpSnapshotRepository>(),
                 uploaders.Object,
