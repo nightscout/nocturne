@@ -860,12 +860,11 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         // back next to the field it changes
         if (treatment.AdditionalProperties is { } props
             && TryGetString(props, "basalOrigin", out var stored)
-            && Enum.TryParse<V4Models.TempBasalOrigin>(stored, ignoreCase: true, out var origin)
-            && Enum.IsDefined(origin))
+            && TryParseDefinedName<V4Models.TempBasalOrigin>(stored, out var origin))
             return origin;
 
         return IsLoopUpload(treatment)
-            ? V4Models.TempBasalOrigin.Algorithm // Loop 2.x omits the flag, which Loop reads as automatic
+            ? V4Models.TempBasalOrigin.Algorithm // Loop 2.x omits the flag, so its open-loop enactments also read as Algorithm
             : V4Models.TempBasalOrigin.Manual;
     }
 
@@ -1007,7 +1006,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             "normal" => V4Models.BolusType.Normal,
             "square" => V4Models.BolusType.Square,
             "dual" => V4Models.BolusType.Dual,
-            _ => Enum.TryParse<V4Models.BolusType>(bolusType, ignoreCase: true, out var parsed) ? parsed : null
+            _ => TryParseDefinedName<V4Models.BolusType>(bolusType, out var parsed) ? parsed : null
         };
     }
 
@@ -1020,7 +1019,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             "finger" => V4Models.GlucoseType.Finger,
             "sensor" => V4Models.GlucoseType.Sensor,
-            _ => Enum.TryParse<V4Models.GlucoseType>(glucoseType, ignoreCase: true, out var parsed) ? parsed : null
+            _ => TryParseDefinedName<V4Models.GlucoseType>(glucoseType, out var parsed) ? parsed : null
         };
     }
 
@@ -1033,7 +1032,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             "mg/dl" or "mgdl" or "mg" => V4Models.GlucoseUnit.MgDl,
             "mmol" or "mmol/l" => V4Models.GlucoseUnit.Mmol,
-            _ => Enum.TryParse<V4Models.GlucoseUnit>(units, ignoreCase: true, out var parsed) ? parsed : null
+            _ => TryParseDefinedName<V4Models.GlucoseUnit>(units, out var parsed) ? parsed : null
         };
     }
 
