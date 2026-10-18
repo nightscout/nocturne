@@ -429,11 +429,14 @@ public class DataOverviewService : IDataOverviewService
     /// Year <c>Y</c> reads local readings from <see cref="EHbA1cWindowDays"/> before 1 January of
     /// <c>Y</c> up to the end of <c>Y</c>, so a reading feeds its own local year and the year
     /// <see cref="EHbA1cWindowDays"/> later. A day either side absorbs the tenant's UTC offset and
-    /// a duplicate copy stamped moments apart, whose primary may change with the write.
+    /// a duplicate copy stamped moments apart, whose primary may change with the write. A timestamp
+    /// too near <see cref="DateTime.MinValue"/> or <see cref="DateTime.MaxValue"/> for that
+    /// arithmetic clears the whole family.
     /// </remarks>
     public static IReadOnlyList<string> EHbA1cCacheFamilies(IReadOnlyCollection<DateTime> touchedUtc)
     {
-        if (touchedUtc.Count == 0)
+        if (touchedUtc.Count == 0 || touchedUtc.Any(t =>
+                t < DateTime.MinValue.AddDays(1) || t > DateTime.MaxValue.AddDays(-(EHbA1cWindowDays + 1))))
             return [TenantCacheFamily.EHbA1c];
 
         var years = new SortedSet<int>();
@@ -554,8 +557,8 @@ public class DataOverviewService : IDataOverviewService
             return response;
 
         var isCurrentYear = year == localNow.Year;
-        // Completed years don't change barring backfills, which clear them (EHbA1cCacheFamilies);
-        // the current year is still accumulating days.
+        // Only V4 sensor and meter glucose writes clear a completed year (EHbA1cCacheFamilies);
+        // any other glucose writer's backfill shows once the 14 days run out.
         var expiry = isCurrentYear ? DateTime.UtcNow.AddHours(1) : DateTime.UtcNow.AddDays(14);
         await _cache.SetAsync(cacheKey, response, expiry, cancellationToken);
 

@@ -198,4 +198,22 @@ public class ClearsTenantCacheAttributeTests
 
         Cleared().Should().BeEquivalentTo(TenantCacheFamily.Entries, TenantCacheFamily.EHbA1c);
     }
+
+    [Theory]
+    [MemberData(nameof(ExtremeTimestamps))]
+    public async Task A_timestamp_at_the_edge_of_the_calendar_clears_every_ehba1c_year(DateTime extreme)
+    {
+        await RunAsync(
+            new ClearsTenantCacheAttribute(TenantCacheFamily.EHbA1c), HttpMethods.Post, new CreatedResult("/x", null),
+            footprint: [new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc), extreme]);
+
+        Cleared().Should().Equal(TenantCacheFamily.EHbA1c);
+    }
+
+    public static TheoryData<DateTime> ExtremeTimestamps() =>
+    [
+        DateTime.MinValue,
+        DateTime.MaxValue,
+        DateTime.MaxValue.AddDays(-50),
+    ];
 }
