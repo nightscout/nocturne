@@ -121,25 +121,6 @@ public class MemoryCacheService : ICacheService, IDisposable
     }
 
     /// <inheritdoc />
-    public Task RemoveAsync(string key, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var fullKey = GetFullKey(key);
-            _memoryCache.Remove(fullKey);
-            if (_trackedKeys.TryGetValue(Bucket(key), out var bucket))
-                bucket.TryRemove(fullKey, out _);
-            _logger.LogDebug("Removed cache entry for key: {Key}", key);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error removing cache entry for key: {Key}", key);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc />
     public Task RemoveByPatternAsync(string pattern, CancellationToken cancellationToken = default)
     {
         try
