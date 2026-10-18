@@ -14,9 +14,10 @@ namespace Nocturne.Infrastructure.Cache.Services;
 /// <remarks>
 /// <para>
 /// Pattern removal can only reach keys it tracks, so each tracked key holds the token of the entry
-/// that tracked it, and an eviction untracks the key only while the token is still its own. An
-/// overwrite evicts the replaced entry on a background thread, which may run after the new entry
-/// is tracked.
+/// that tracked it, and an eviction or a pattern removal untracks the key only while the token is
+/// still the one it saw: a write between the two steps tracks the key afresh. A replaced entry
+/// never untracks, since its key now belongs to the entry that replaced it, and its eviction runs
+/// on a background thread that may come after either writer has tracked the key.
 /// </para>
 /// <para>
 /// Keys are tracked in buckets by their first <c>:</c>-separated segment, so a pattern whose first
@@ -161,7 +162,7 @@ public class MemoryCacheService : ICacheService, IDisposable
                         continue;
 
                     _memoryCache.Remove(tracked.Key);
-                    bucket.TryRemove(tracked.Key, out _);
+                    bucket.TryRemove(tracked);
                     removed++;
                 }
             }
@@ -235,8 +236,10 @@ public class MemoryCacheService : ICacheService, IDisposable
         var bucket = _trackedKeys.GetOrAdd(Bucket(key), _ => new ConcurrentDictionary<string, object>());
         var token = new object();
         options.RegisterPostEvictionCallback(
-            static (evictedKey, _, _, state) =>
+            static (evictedKey, _, reason, state) =>
             {
+                if (reason == EvictionReason.Replaced)
+                    return;
                 var (bucket, token) = ((ConcurrentDictionary<string, object>, object))state!;
                 bucket.TryRemove(KeyValuePair.Create((string)evictedKey, token));
             },

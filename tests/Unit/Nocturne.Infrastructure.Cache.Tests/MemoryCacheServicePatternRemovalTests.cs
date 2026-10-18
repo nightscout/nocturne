@@ -35,6 +35,40 @@ public class MemoryCacheServicePatternRemovalTests
     }
 
     [Fact]
+    public async Task A_key_written_twice_concurrently_stays_tracked_whichever_writer_tracks_it_last()
+    {
+        // A commits value 1; before A tracks the key, B replaces it with value 2 and tracks it; then
+        // A tracks it, and only then does value 1's eviction run.
+        var ct = TestContext.Current.CancellationToken;
+        const string key = "tenant-a:full:live:entries:current";
+        _memory.AfterNextCommit = () =>
+            _cache.SetAsync(key, "second", TimeSpan.FromMinutes(5), ct).GetAwaiter().GetResult();
+        await _cache.SetAsync(key, "first", TimeSpan.FromMinutes(5), ct);
+
+        _memory.RunPendingEvictions();
+        await _cache.RemoveByPatternAsync("tenant-a:*", ct);
+
+        (await _cache.GetAsync<string>(key, ct)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_key_refilled_during_a_pattern_removal_stays_tracked()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        const string key = "tenant-a:full:live:entries:current";
+        await _cache.SetAsync(key, "stale", TimeSpan.FromMinutes(5), ct);
+        _memory.AfterNextRemove = () =>
+            _cache.SetAsync(key, "refilled", TimeSpan.FromMinutes(5), ct).GetAwaiter().GetResult();
+
+        await _cache.RemoveByPatternAsync("tenant-a:*", ct);
+        _memory.RunPendingEvictions();
+        (await _cache.GetAsync<string>(key, ct)).Should().Be("refilled");
+        await _cache.RemoveByPatternAsync("tenant-a:*", ct);
+
+        (await _cache.GetAsync<string>(key, ct)).Should().BeNull();
+    }
+
+    [Fact]
     public async Task A_pattern_with_a_literal_first_segment_leaves_other_segments_alone()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -69,6 +103,12 @@ public class MemoryCacheServicePatternRemovalTests
         private readonly Dictionary<object, Entry> _entries = [];
         private readonly List<Action> _pending = [];
 
+        /// <summary>Runs once, inside the next commit, after the entry is stored.</summary>
+        public Action? AfterNextCommit { get; set; }
+
+        /// <summary>Runs once, inside the next removal, after the entry is gone.</summary>
+        public Action? AfterNextRemove { get; set; }
+
         public void RunPendingEvictions()
         {
             foreach (var eviction in _pending.ToList())
@@ -89,6 +129,7 @@ public class MemoryCacheServicePatternRemovalTests
         {
             if (_entries.Remove(key, out var entry))
                 Defer(entry, EvictionReason.Removed);
+            Once(() => AfterNextRemove, () => AfterNextRemove = null);
         }
 
         public void Dispose()
@@ -100,6 +141,15 @@ public class MemoryCacheServicePatternRemovalTests
             if (_entries.Remove(entry.Key, out var replaced))
                 Defer(replaced, EvictionReason.Replaced);
             _entries[entry.Key] = entry;
+            Once(() => AfterNextCommit, () => AfterNextCommit = null);
+        }
+
+        private static void Once(Func<Action?> read, Action clear)
+        {
+            if (read() is not { } hook)
+                return;
+            clear();
+            hook();
         }
 
         private void Defer(Entry entry, EvictionReason reason) =>
