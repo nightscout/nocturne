@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
@@ -41,111 +42,67 @@ public class NotificationsController : ControllerBase
 
     /// <summary>
     /// Acknowledge a notification alarm to silence it
-    /// Implements the /notifications/ack endpoint from legacy notifications.js
+    /// Implements the /notifications/ack endpoint from legacy notifications-api.js
     /// </summary>
-    /// <param name="request">Acknowledgment request containing level, group, and silence time</param>
+    /// <param name="level">Alarm level to acknowledge (1=WARN, 2=URGENT)</param>
+    /// <param name="group">Alarm group, defaulting to <c>default</c></param>
+    /// <param name="time">Milliseconds to silence the alarm. Absent, zero or not a number means 30 minutes.</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Acknowledgment response indicating success or failure</returns>
-    /// <response code="200">Notification acknowledged successfully</response>
-    /// <response code="400">Invalid acknowledgment request</response>
-    /// <response code="500">Internal server error</response>
-    [HttpPost("notifications/ack")]
+    /// <response code="200">The body is <c>OK</c>, also when the alarm was already snoozed.</response>
+    /// <response code="400">The level is not 1 or 2.</response>
+    [HttpGet("notifications/ack")]
     [Authorize]
     [RequireScope(Scope.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v1/notifications/ack")]
-    [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(
-        typeof(NotificationAckResponse),
-        StatusCodes.Status500InternalServerError
-    )]
-    public async Task<ActionResult<NotificationAckResponse>> AckNotification(
-        [FromBody] NotificationAckRequest request,
+    [Produces("text/plain")]
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> AckNotification(
+        [FromQuery] int level,
+        [FromQuery] string? group,
+        [FromQuery] string? time,
         CancellationToken cancellationToken = default
     )
     {
-        var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
-        _logger.LogDebug(
-            "Notification ack endpoint requested from {RemoteAddress} for level {Level}, group {Group}",
-            remoteAddress,
-            request?.Level,
-            request?.Group
+        // NIGHTSCOUT-COMPAT: Nightscout acks whatever level it is given, NaN included. The alarm
+        // table here is keyed by the two real levels, so any other level is refused.
+        if (level is < 1 or > 2)
+        {
+            return PlainText(StatusCodes.Status400BadRequest, "Level must be 1 (WARN) or 2 (URGENT)");
+        }
+
+        await _notificationService.AckNotificationAsync(
+            new NotificationAckRequest
+            {
+                Level = level,
+                Group = string.IsNullOrEmpty(group) ? "default" : group,
+                Time = ParseSilenceTime(time),
+                SendClear = true,
+            },
+            cancellationToken
         );
 
-        try
-        {
-            if (request == null)
-            {
-                _logger.LogWarning(
-                    "Notification ack request body is null from {RemoteAddress}",
-                    remoteAddress
-                );
-                return BadRequest(
-                    new NotificationAckResponse
-                    {
-                        Success = false,
-                        Message = "Request body is required",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    }
-                );
-            }
-
-            if (request.Level < 1 || request.Level > 2)
-            {
-                _logger.LogWarning(
-                    "Invalid notification level {Level} from {RemoteAddress}",
-                    request.Level,
-                    remoteAddress
-                );
-                return BadRequest(
-                    new NotificationAckResponse
-                    {
-                        Success = false,
-                        Message = "Level must be 1 (WARN) or 2 (URGENT)",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    }
-                );
-            }
-
-            var response = await _notificationService.AckNotificationAsync(
-                request,
-                cancellationToken
-            );
-
-            if (!response.Success)
-            {
-                _logger.LogWarning(
-                    "Notification ack failed from {RemoteAddress}: {Message}",
-                    remoteAddress,
-                    response.Message
-                );
-                return BadRequest(response);
-            }
-
-            _logger.LogDebug(
-                "Notification acknowledged successfully from {RemoteAddress}",
-                remoteAddress
-            );
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error processing notification ack from {RemoteAddress}",
-                remoteAddress
-            );
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new NotificationAckResponse
-                {
-                    Success = false,
-                    Message = "Internal server error processing acknowledgment",
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                }
-            );
-        }
+        return PlainText(StatusCodes.Status200OK, "OK");
     }
+
+    private static int? ParseSilenceTime(string? time)
+    {
+        if (
+            !double.TryParse(time, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+            || double.IsNaN(parsed)
+            || parsed == 0
+        )
+        {
+            return null;
+        }
+
+        // NIGHTSCOUT-COMPAT: Nightscout silences for any number of milliseconds. The service holds
+        // the silence time as an int, so a longer silence is capped at about 24.8 days.
+        return (int)Math.Clamp(parsed, int.MinValue, int.MaxValue);
+    }
+
+    private static ContentResult PlainText(int statusCode, string content) =>
+        new() { StatusCode = statusCode, Content = content, ContentType = "text/plain; charset=utf-8" };
 
     /// <summary>
     /// Handle Pushover webhook callbacks for notification acknowledgments
