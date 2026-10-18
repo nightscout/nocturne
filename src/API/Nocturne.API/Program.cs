@@ -577,7 +577,8 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
 
         // Background job records left Pending/Running by a previous process are orphans —
         // the detached tasks died with it. Mark them Interrupted so polls report the truth.
-        await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(migratorConnectionString, logger);
+        await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(
+            migratorConnectionString, Nocturne.API.Services.BackgroundJobLiveStates.ByTable, logger);
     }
 
     // Validate RLS, ownership, default privileges, and pool reset-on-close under the app role.

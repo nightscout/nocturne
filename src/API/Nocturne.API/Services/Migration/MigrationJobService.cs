@@ -91,9 +91,7 @@ public class MigrationJobService : IMigrationJobService
 
     private bool IsTerminal(Guid jobId) =>
         _jobs.TryGetValue(jobId, out var job)
-        && job.GetStatus().State is MigrationJobState.Completed
-            or MigrationJobState.Failed
-            or MigrationJobState.Cancelled;
+        && !job.GetStatus().State.IsLive();
 
     public async Task<MigrationJobInfo> StartMigrationAsync(
         StartMigrationRequest request,
@@ -576,7 +574,7 @@ internal class MigrationJob
         // Leave terminal states untouched — cancelling a job that already Completed/Failed must
         // not rewrite its (now persisted) outcome, which would also un-satisfy the startup
         // "was this source ever migrated?" check.
-        if (_state is MigrationJobState.Pending or MigrationJobState.Validating or MigrationJobState.Running)
+        if (_state.IsLive())
             _state = MigrationJobState.Cancelled;
     }
 
