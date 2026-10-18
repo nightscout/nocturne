@@ -146,6 +146,14 @@ describe("Google Health source presentation", () => {
       guidance: "Reconnect to resume importing",
     },
     {
+      change: {
+        connectionState: GoogleHealthConnectionState.Disconnected,
+        errorCode: "client_changed",
+      },
+      label: "Offline",
+      guidance: "Reconnect to resume importing",
+    },
+    {
       change: { connectionState: GoogleHealthConnectionState.Unavailable },
       label: "Offline",
       guidance: "Not enabled on this Nocturne server",

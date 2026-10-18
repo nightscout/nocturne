@@ -1286,6 +1286,68 @@ public class GoogleHealthTests
             type => Assert.Equal(GoogleHealthTypeState.NotScanned, type.State));
     }
 
+    [Theory]
+    [InlineData(false, true, false, 1, true, GoogleHealthConnectionState.Unavailable)]
+    [InlineData(false, false, false, 1, true, GoogleHealthConnectionState.Unavailable)]
+    [InlineData(true, false, false, 1, true, GoogleHealthConnectionState.Disconnected)]
+    [InlineData(true, true, true, 1, true, GoogleHealthConnectionState.ReviewRequired)]
+    [InlineData(true, true, false, 0, true, GoogleHealthConnectionState.NothingSelected)]
+    [InlineData(true, true, false, 1, true, GoogleHealthConnectionState.Syncing)]
+    [InlineData(true, true, false, 1, false, GoogleHealthConnectionState.Active)]
+    public void Connection_state_is_the_first_lifecycle_stage_that_applies_whatever_the_error(
+        bool available, bool connected, bool previewRequired, int selected, bool syncing,
+        GoogleHealthConnectionState expected)
+    {
+        var status = new GoogleHealthStatus
+        {
+            Available = available,
+            Connected = connected,
+            PreviewRequired = previewRequired,
+            SelectedTypes = selected == 0 ? [] : ["steps"],
+            ErrorCode = "partial_consent"
+        };
+
+        Assert.Equal(expected, GoogleHealthService.ConnectionState(status, syncing));
+    }
+
+    [Fact]
+    public async Task A_different_google_account_is_refused_even_when_its_token_cannot_be_revoked()
+    {
+        var accounts = 0;
+        var store = new TestConnectorStore();
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
+            "/v1/userinfo" => Json($$"""{"sub":"account-{{++accounts}}"}"""),
+            "/revoke" => throw new HttpRequestException("unreachable"),
+            _ => Json("{}")
+        });
+        var service = Service(store, handler, Guid.NewGuid());
+        await ConnectAsync(service);
+        await service.DisconnectAsync(Guid.NewGuid(), default);
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => ConnectAsync(service));
+
+        Assert.Equal("account_mismatch", error.Message);
+        Assert.False(store.Secrets.ContainsKey("refreshToken"));
+    }
+
+    [Fact]
+    public async Task Only_a_rate_limit_tells_the_caller_when_to_retry()
+    {
+        var controller = new GoogleHealthController(
+            new ThrowingGoogleHealthService(new GoogleHealthException("google_unavailable", TimeSpan.FromSeconds(30))),
+            Microsoft.Extensions.Options.Options.Create(new BaseDomainOptions()))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext() }
+        };
+
+        var result = await controller.SyncGoogleHealth(default);
+
+        Assert.Equal(502, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        Assert.False(controller.Response.Headers.ContainsKey("Retry-After"));
+    }
+
     private static HttpResponseMessage Revoked(HttpRequestMessage request, List<string> revoked)
     {
         revoked.Add(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());

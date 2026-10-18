@@ -7,7 +7,6 @@ using Nocturne.API.Controllers.V4.Health;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.Connectors.GoogleHealth.Configurations;
-using Nocturne.Core.Models.Health;
 using Xunit;
 
 namespace Nocturne.API.Tests.Health.GoogleHealth;
@@ -74,29 +73,5 @@ public class GoogleHealthPlatformTests
         Assert.Equal("/settings/connectors/google-health/callback?code=abc&state=xyz",
             controller.Response.Headers.Location.ToString());
         Assert.Equal("no-store", controller.Response.Headers.CacheControl.ToString());
-    }
-
-    [Theory]
-    [InlineData(false, true, false, 1, true, GoogleHealthConnectionState.Unavailable)]
-    [InlineData(false, false, false, 1, true, GoogleHealthConnectionState.Unavailable)]
-    [InlineData(true, false, false, 1, true, GoogleHealthConnectionState.Disconnected)]
-    [InlineData(true, true, true, 1, true, GoogleHealthConnectionState.ReviewRequired)]
-    [InlineData(true, true, false, 0, true, GoogleHealthConnectionState.NothingSelected)]
-    [InlineData(true, true, false, 1, true, GoogleHealthConnectionState.Syncing)]
-    [InlineData(true, true, false, 1, false, GoogleHealthConnectionState.Active)]
-    public void Connection_state_is_the_first_lifecycle_stage_that_applies_whatever_the_error(
-        bool available, bool connected, bool previewRequired, int selected, bool syncing,
-        GoogleHealthConnectionState expected)
-    {
-        var status = new Nocturne.Core.Models.Health.GoogleHealthStatus
-        {
-            Available = available,
-            Connected = connected,
-            PreviewRequired = previewRequired,
-            SelectedTypes = selected == 0 ? [] : ["steps"],
-            ErrorCode = "partial_consent"
-        };
-
-        Assert.Equal(expected, GoogleHealthService.ConnectionState(status, syncing));
     }
 }

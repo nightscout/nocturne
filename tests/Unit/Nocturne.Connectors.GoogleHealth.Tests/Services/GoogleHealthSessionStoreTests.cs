@@ -134,6 +134,20 @@ public class GoogleHealthSessionStoreTests
         (await revoke.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(outcome == "ok");
     }
 
+    [Fact]
+    public async Task Revocation_stops_when_the_caller_cancels()
+    {
+        var store = Store(out _, new RecordingHandler(async (_, ct) =>
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        }), revokeTimeout: TimeSpan.FromMinutes(5));
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => store.TryRevokeAsync("refresh", cancellation.Token).WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
     private sealed class RecordingHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond)
         : HttpMessageHandler
     {

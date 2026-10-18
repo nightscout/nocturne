@@ -244,7 +244,7 @@ public sealed class GoogleHealthService(
             var account = await oauth.AccountKeyAsync(token.AccessToken!, ct);
             if (await sessions.AccountKeyAsync(ct) is { } priorAccount && priorAccount != account)
             {
-                await oauth.RevokeAsync(token.RefreshToken, ct);
+                await sessions.TryRevokeAsync(token.RefreshToken, ct);
                 throw new GoogleHealthException("account_mismatch");
             }
 

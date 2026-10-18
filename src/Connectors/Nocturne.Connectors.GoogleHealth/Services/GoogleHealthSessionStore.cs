@@ -152,8 +152,8 @@ public sealed class GoogleHealthSessionStore(
     }
 
     /// <summary>
-    /// Asks Google to revoke <paramref name="refreshToken"/>, giving up after the revoke timeout
-    /// or when <paramref name="ct"/> is cancelled. Revocation needs no client credentials.
+    /// Asks Google to revoke <paramref name="refreshToken"/>, giving up after the revoke timeout.
+    /// Revocation needs no client credentials.
     /// </summary>
     /// <returns>Whether Google confirmed the revocation.</returns>
     public async Task<bool> TryRevokeAsync(string refreshToken, CancellationToken ct)
@@ -164,8 +164,11 @@ public sealed class GoogleHealthSessionStore(
             timeout.CancelAfter(revokeTimeout ?? TimeSpan.FromSeconds(5));
             return await oauth.RevokeAsync(refreshToken, timeout.Token);
         }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or
-                                       Polly.ExecutionRejectedException)
+        catch (HttpRequestException)
+        {
+            return false;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             return false;
         }
