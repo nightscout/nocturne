@@ -101,6 +101,22 @@ public class GlookoNullRecordTests
         profiles.Should().ContainSingle().Which.Store["Default"].Basal.Should().ContainSingle();
     }
 
+    [Fact]
+    public void DeviceSettingsMappers_NullDeviceMap_MapTheOtherDevices()
+    {
+        var settings = Deserialize<GlookoV3DeviceSettingsResponse>(
+            """
+            {"deviceSettings":{"pumps":{"pump-0":null,"pump-1":{"2026-01-10T00:00:00Z":{
+              "basalSettings":{"activeBasalProgram":"Default"},
+              "pumpProfilesBasal":[{"segments":{"profileName":"Default","current":true,
+                "data":[{"segmentStart":0.0,"duration":24.0,"value":0.8}]}}]}}}}}
+            """);
+        var mapper = new GlookoProfileMapper(Source, NullLogger.Instance);
+
+        mapper.TransformDeviceSettingsToProfiles(settings).Should().ContainSingle();
+        mapper.TransformDeviceSettingsToStateSpans(settings).Should().ContainSingle();
+    }
+
     private GlookoV4TreatmentMapper Treatments() => new(Source, _timeMapper, NullLogger.Instance);
 
     private static T Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json)!;

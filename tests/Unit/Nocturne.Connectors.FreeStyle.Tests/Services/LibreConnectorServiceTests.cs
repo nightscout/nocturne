@@ -81,24 +81,37 @@ public class LibreConnectorServiceTests
     }
 
     /// <summary>
-    /// A caller who cancels has withdrawn the run. It must see the cancellation rather than a sync
-    /// reported as failed, which would mark the connector unhealthy for something nobody did wrong.
+    /// A caller who cancels has to stop the request in flight and see the cancellation, rather than
+    /// wait out LibreLinkUp's answer and have the run reported as failed.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_CallerCancelsDuringTheFetch_PropagatesCancellation()
+    public async Task SyncDataAsync_CallerCancelsDuringTheFetch_AbortsTheRequest()
     {
-        using var cts = new CancellationTokenSource();
+        using var caller = new CancellationTokenSource();
+        var requestAborted = false;
         var fixture = new ServiceFixture(
             connectionsJson: "{\"data\":[{\"patientId\":\"p1\",\"firstName\":\"A\",\"lastName\":\"B\"}]}",
-            onGraph: () =>
+            graphJson: "{\"data\":{\"connection\":{\"glucoseMeasurement\":"
+                       + "{\"factoryTimestamp\":\"1/1/2024 12:10:00 AM\",\"valueInMgPerDl\":110,\"trendArrow\":3}},"
+                       + "\"graphData\":[]}}",
+            onGraph: async requestToken =>
             {
-                cts.Cancel();
-                throw new OperationCanceledException(cts.Token);
+                await caller.CancelAsync();
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), requestToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    requestAborted = true;
+                    throw;
+                }
             });
 
         await FluentActions.Awaiting(() => fixture.Service.SyncDataAsync(
-                new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, cts.Token))
+                new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, caller.Token))
             .Should().ThrowAsync<OperationCanceledException>();
+        requestAborted.Should().BeTrue("the caller's token has to reach the graph request");
     }
 
     private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK)
@@ -128,25 +141,26 @@ public class LibreConnectorServiceTests
         }
     }
 
-    private sealed class RoutingHandler(string? connectionsJson, string? graphJson, Action? onGraph)
+    private sealed class RoutingHandler(
+        string? connectionsJson, string? graphJson, Func<CancellationToken, Task>? onGraph)
         : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri?.PathAndQuery ?? string.Empty;
 
-            if (path.EndsWith("/graph", StringComparison.OrdinalIgnoreCase))
-                onGraph?.Invoke();
+            if (path.EndsWith("/graph", StringComparison.OrdinalIgnoreCase) && onGraph != null)
+                await onGraph(cancellationToken);
 
             if (path.EndsWith("/graph", StringComparison.OrdinalIgnoreCase) && graphJson != null)
-                return Task.FromResult(Json(graphJson));
+                return Json(graphJson);
 
             if (path.Contains(LibreLinkUpConstants.ApiPaths.Connections, StringComparison.OrdinalIgnoreCase)
                 && connectionsJson != null)
-                return Task.FromResult(Json(connectionsJson));
+                return Json(connectionsJson);
 
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
         }
     }
 
@@ -161,7 +175,7 @@ public class LibreConnectorServiceTests
             string? tokenToReturn = "valid-token",
             string? connectionsJson = null,
             string? graphJson = null,
-            Action? onGraph = null)
+            Func<CancellationToken, Task>? onGraph = null)
         {
             Config = new LibreLinkUpConnectorConfiguration
             {

@@ -31,7 +31,7 @@ public static class ConnectorFaults
     ///     <paramref name="cancellationToken"/> is not one; a timeout surfaces as the same exception type
     ///     without it.
     /// </summary>
-    public static bool IsSourceFailure(Exception ex, CancellationToken cancellationToken = default) =>
+    public static bool IsSourceFailure(Exception ex, CancellationToken cancellationToken) =>
         ex is HttpRequestException or TimeoutException or IOException or InvalidDataException
         || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested)
         || IsMalformedRecord(ex);

@@ -36,6 +36,35 @@ public class GlookoConnectorServiceFaultTests
     }
 
     /// <summary>
+    /// A device whose settings map is null is one malformed record; the devices beside it still yield
+    /// their profile and active-profile span.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SyncDataAsync_NullDeviceSettingsMap_PublishesTheOtherDevicesProfile(bool useV3Api)
+    {
+        var service = Service(GlookoConstants.V3DeviceSettingsPath, _ => Json(
+            """
+            {"deviceSettings":{"pumps":{"pump-0":null,"pump-1":{"2026-01-10T00:00:00Z":{
+              "basalSettings":{"activeBasalProgram":"Default"},
+              "pumpProfilesBasal":[{"segments":{"profileName":"Default","current":true,
+                "data":[{"segmentStart":0.0,"duration":24.0,"value":0.8}]}}]}}}}}
+            """));
+
+        var result = await service.SyncDataAsync(
+            new SyncRequest
+            {
+                DataTypes = [SyncDataType.Profiles, SyncDataType.StateSpans],
+                From = DateTime.UtcNow.AddDays(-3),
+            },
+            GlookoSyncHarness.Config(useV3Api), CancellationToken.None);
+
+        result.Success.Should().BeTrue(string.Join("; ", result.Errors));
+        service.Published.Should().Contain([PublishKind.Profiles, PublishKind.ProfileStateSpans]);
+    }
+
+    /// <summary>
     /// A defect in the connector is not something the next cycle will fix. Skipping it as a fetch
     /// failure would hide it behind a "Failed to fetch" that reads like a Glooko outage.
     /// </summary>

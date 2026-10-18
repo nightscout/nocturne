@@ -20,6 +20,22 @@ public class GlookoProfileMapper
     private IReadOnlyList<T> Records<T>(IEnumerable<T?>? records, string recordType) where T : class =>
         ConnectorFaults.NonNullRecords(records, _logger, _connectorSource, recordType);
 
+    private IEnumerable<(string DeviceGuid, Dictionary<string, GlookoV3PumpSettings> Snapshots)> NonNullDevices(
+        Dictionary<string, Dictionary<string, GlookoV3PumpSettings>> pumps)
+    {
+        foreach (var (deviceGuid, snapshots) in pumps)
+        {
+            if (snapshots == null)
+            {
+                _logger.LogInformation(
+                    "[{ConnectorSource}] Dropped null settings map for device {DeviceGuid}", _connectorSource, deviceGuid);
+                continue;
+            }
+
+            yield return (deviceGuid, snapshots);
+        }
+    }
+
     /// <summary>
     ///     Transforms Glooko device settings into Nocturne Profile objects.
     ///     Each historical settings snapshot becomes a separate Profile.
@@ -31,7 +47,7 @@ public class GlookoProfileMapper
         if (response.DeviceSettings?.Pumps == null)
             return profiles;
 
-        foreach (var (deviceGuid, settingsSnapshots) in response.DeviceSettings.Pumps)
+        foreach (var (deviceGuid, settingsSnapshots) in NonNullDevices(response.DeviceSettings.Pumps))
         {
             foreach (var (timestamp, settings) in settingsSnapshots)
             {
@@ -84,7 +100,7 @@ public class GlookoProfileMapper
         if (response.DeviceSettings?.Pumps == null)
             return stateSpans;
 
-        foreach (var (deviceGuid, settingsSnapshots) in response.DeviceSettings.Pumps)
+        foreach (var (deviceGuid, settingsSnapshots) in NonNullDevices(response.DeviceSettings.Pumps))
         {
             var ordered = settingsSnapshots
                 .Select(kv => (Key: kv.Key, Parsed: TryParseTimestamp(kv.Key), Settings: kv.Value))
@@ -164,7 +180,6 @@ public class GlookoProfileMapper
 
         var store = new Dictionary<string, ProfileData>();
 
-        // Map basal profiles
         if (settings.PumpProfilesBasal != null)
             foreach (var basalProfile in Records(settings.PumpProfilesBasal, "basal profile"))
             {
@@ -176,11 +191,9 @@ public class GlookoProfileMapper
                 profileData.Basal = MapSegmentsToTimeValues(Records(basalProfile.Segments.Data, "basal segment"));
             }
 
-        // Map bolus profiles (ISF, ICR, target BG)
         if (settings.ProfilesBolus != null)
             foreach (var bolusProfile in Records(settings.ProfilesBolus, "bolus profile"))
             {
-                // ISF
                 if (bolusProfile.IsfSegments?.Data is { Length: > 0 })
                 {
                     var profileName = bolusProfile.IsfSegments.ProfileName ?? "Default";
@@ -188,7 +201,6 @@ public class GlookoProfileMapper
                     profileData.Sens = MapSegmentsToTimeValues(Records(bolusProfile.IsfSegments.Data, "ISF segment"));
                 }
 
-                // ICR
                 if (bolusProfile.InsulinToCarbRatioSegments?.Data is { Length: > 0 })
                 {
                     var profileName = bolusProfile.InsulinToCarbRatioSegments.ProfileName ?? "Default";
@@ -196,7 +208,6 @@ public class GlookoProfileMapper
                     profileData.CarbRatio = MapSegmentsToTimeValues(Records(bolusProfile.InsulinToCarbRatioSegments.Data, "carb ratio segment"));
                 }
 
-                // Target BG
                 if (bolusProfile.TargetBgSegments?.Data is { Length: > 0 })
                 {
                     var profileName = bolusProfile.TargetBgSegments.ProfileName ?? "Default";
