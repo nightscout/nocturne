@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.API.Tests.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Profiles.Resolvers;
 
@@ -16,24 +17,20 @@ public class SensitivityResolverTests : IDisposable
     private readonly Mock<ITherapySettingsRepository> _therapyRepo = new();
     private readonly Mock<IPatientRecordRepository> _patientRecordRepo = new();
     private readonly Mock<IActiveProfileResolver> _activeProfileResolver = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessor = new();
-    private readonly Mock<ICategoryReadContext> _categoryReadContext = new();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
     private readonly SensitivityResolver _sut;
 
-    private static readonly Guid TenantId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     private const long NoonMills = 1705320000000;
 
     public SensitivityResolverTests()
     {
-        _tenantAccessor.Setup(t => t.TenantId).Returns(TenantId);
 
         _sut = new SensitivityResolver(
             _repo.Object,
             _therapyRepo.Object,
             _patientRecordRepo.Object,
             _activeProfileResolver.Object,
-            new ProfileVersionCache(_tenantAccessor.Object, _categoryReadContext.Object, _cache),
+            new ProfileVersionCache(TestTenantCache.Create(_cache)),
             NullLogger<SensitivityResolver>.Instance);
     }
 

@@ -9,31 +9,26 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.API.Tests.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Profiles.Resolvers;
 
 public class ActiveProfileResolverTests : IDisposable
 {
     private readonly Mock<IStateSpanService> _stateSpanService = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessor = new();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
     private readonly ActiveProfileResolver _sut;
 
-    private static readonly Guid TenantId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
 
     // 2024-01-15 12:00:00 UTC in milliseconds
     private const long NoonMills = 1705320000000;
 
     public ActiveProfileResolverTests()
     {
-        _tenantAccessor.Setup(t => t.TenantId).Returns(TenantId);
-        _tenantAccessor.Setup(t => t.Context).Returns(new TenantContext(TenantId, "test", "Test", true, IsDemo: false));
 
         _sut = new ActiveProfileResolver(
             _stateSpanService.Object,
-            _tenantAccessor.Object,
-            _cache,
-            Mock.Of<ICategoryReadContext>(),
+            TestTenantCache.Create(_cache),
             NullLogger<ActiveProfileResolver>.Instance);
     }
 
@@ -615,34 +610,22 @@ public class ActiveProfileResolverTests : IDisposable
         }
 
         [Theory]
-        [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
-        public async Task BypassingRequest_NeitherReadsNorWritesTheCache(string caller)
+        [MemberData(nameof(NarrowedReaders.All), MemberType = typeof(NarrowedReaders))]
+        public async Task NarrowedReader_NeverSharesTheOwnersCachedSpans(string reader)
         {
-            SetupSpans(MakeProfileSpan(startMills: NoonMills - 3_600_000, endMills: null, profileName: "Cached"));
-            var bypassing = new ActiveProfileResolver(
+            var narrowed = new ActiveProfileResolver(
                 _stateSpanService.Object,
-                _tenantAccessor.Object,
-                _cache,
-                CacheBypassingCallers.Context(caller),
+                NarrowedReaders.Cache(reader, _cache),
                 NullLogger<ActiveProfileResolver>.Instance);
 
-            await bypassing.GetActiveProfileNameAsync(NoonMills);
+            SetupSpans(MakeProfileSpan(startMills: NoonMills - 3_600_000, endMills: null, profileName: "Owner"));
             await _sut.GetActiveProfileNameAsync(NoonMills);
-            await bypassing.GetActiveProfileNameAsync(NoonMills);
+            SetupSpans(MakeProfileSpan(startMills: NoonMills - 3_600_000, endMills: null, profileName: "Narrowed"));
+            var narrowedName = await narrowed.GetActiveProfileNameAsync(NoonMills);
+            var ownerName = await _sut.GetActiveProfileNameAsync(NoonMills);
 
-            _stateSpanService.Verify(
-                s => s.GetStateSpansAsync(
-                    It.IsAny<StateSpanCategory?>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<DateTime?>(),
-                    It.IsAny<DateTime?>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<bool?>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<bool>(),
-                    It.IsAny<CancellationToken>()),
-                Times.Exactly(3));
+            narrowedName.Should().Be("Narrowed", "the owner's cached spans are not served");
+            ownerName.Should().Be("Owner", "the narrowed spans are not written over them");
         }
 
         [Fact]

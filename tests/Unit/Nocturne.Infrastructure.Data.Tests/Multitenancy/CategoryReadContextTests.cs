@@ -112,30 +112,4 @@ public class CategoryReadContextTests
 
         ctx.IsHistoryClamped.Should().BeFalse();
     }
-
-    [Fact]
-    public void New_DoesNotBypassTenantCaches()
-    {
-        new CategoryReadContext().BypassesTenantCaches.Should().BeFalse();
-    }
-
-    [Fact]
-    public void ClampMemberHistory_BypassesTenantCaches()
-    {
-        var ctx = new CategoryReadContext();
-
-        ctx.ClampMemberHistory();
-
-        ctx.BypassesTenantCaches.Should().BeTrue();
-    }
-
-    [Fact]
-    public void Share_BypassesTenantCaches_EvenWithFullHistory()
-    {
-        var ctx = new CategoryReadContext();
-        ctx.MarkShare();
-        ctx.SetFullHistory(true);
-
-        ctx.BypassesTenantCaches.Should().BeTrue("tables no granted scope governs stay hidden from a full-history share");
-    }
 }

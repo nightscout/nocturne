@@ -2,13 +2,13 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Clinical.Statistics;
+using Nocturne.API.Services.Caching;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
-using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
@@ -29,14 +29,8 @@ public class DataOverviewService : IDataOverviewService
     private readonly INocturneDbContextFactory _factory;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly IStatisticsService _statisticsService;
-    private readonly ICacheService _cacheService;
-    private readonly ITenantAccessor _tenantAccessor;
-    private readonly ICategoryReadContext _categoryReadContext;
+    private readonly ITenantCache _cache;
     private readonly ILogger<DataOverviewService> _logger;
-
-    private string TenantCacheId =>
-        _tenantAccessor.Context?.TenantId.ToString()
-        ?? throw new InvalidOperationException("Tenant context is not resolved");
 
     /// <summary>
     /// Initializes a new instance of <see cref="DataOverviewService"/>.
@@ -46,27 +40,20 @@ public class DataOverviewService : IDataOverviewService
     /// the categories they were granted.</param>
     /// <param name="therapySettingsResolver">Resolver for the user's active timezone and therapy settings.</param>
     /// <param name="statisticsService">Statistics service for per-day metric aggregation.</param>
-    /// <param name="cacheService">Cross-request cache for the eHbA1c timeline, keyed per tenant and year.</param>
-    /// <param name="tenantAccessor">Resolves the current tenant for cache-key scoping.</param>
-    /// <param name="categoryReadContext">Says whether this request bypasses the timeline cache, per
-    /// <see cref="ICategoryReadContext.BypassesTenantCaches"/>.</param>
+    /// <param name="cache">Cross-request cache for the eHbA1c timeline, keyed per year and source.</param>
     /// <param name="logger">The logger instance.</param>
     public DataOverviewService(
         INocturneDbContextFactory factory,
         ITherapySettingsResolver therapySettingsResolver,
         IStatisticsService statisticsService,
-        ICacheService cacheService,
-        ITenantAccessor tenantAccessor,
-        ICategoryReadContext categoryReadContext,
+        ITenantCache cache,
         ILogger<DataOverviewService> logger
     )
     {
         _factory = factory;
         _therapySettingsResolver = therapySettingsResolver;
         _statisticsService = statisticsService;
-        _cacheService = cacheService;
-        _tenantAccessor = tenantAccessor;
-        _categoryReadContext = categoryReadContext;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -465,14 +452,9 @@ public class DataOverviewService : IDataOverviewService
         var sourceKey = dataSources is { Length: > 0 }
             ? string.Join(",", dataSources.OrderBy(s => s, StringComparer.OrdinalIgnoreCase))
             : "all";
-        var cacheKey = $"ehba1c:{TenantCacheId}:{year}:{sourceKey}";
+        var cacheKey = $"ehba1c:{year}:{sourceKey}";
 
-        // Computed once per tenant/year/source combination and reused until it expires below —
-        // only a cache miss (new day, first view, or expiry) triggers recomputation.
-        var useCache = !_categoryReadContext.BypassesTenantCaches;
-        var cached = useCache
-            ? await _cacheService.GetAsync<EHbA1cTimelineResponse>(cacheKey, cancellationToken)
-            : null;
+        var cached = await _cache.GetAsync<EHbA1cTimelineResponse>(cacheKey, cancellationToken);
         if (cached != null)
             return cached;
 
@@ -546,8 +528,7 @@ public class DataOverviewService : IDataOverviewService
         // Completed years don't change (barring rare backfills), so cache them for a long time; the
         // current year is still accumulating days, so refresh it more often.
         var expiry = isCurrentYear ? DateTime.UtcNow.AddHours(1) : DateTime.UtcNow.AddDays(14);
-        if (useCache)
-            await _cacheService.SetAsync(cacheKey, response, expiry, cancellationToken);
+        await _cache.SetAsync(cacheKey, response, expiry, cancellationToken);
 
         return response;
     }

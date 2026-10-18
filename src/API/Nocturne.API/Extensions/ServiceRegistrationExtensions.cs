@@ -596,6 +596,7 @@ public static class ServiceRegistrationExtensions
     {
         // Demo mode
         services.AddSingleton<IDemoModeService, DemoModeService>();
+        services.AddScoped<Nocturne.API.Services.Caching.ITenantCache, Nocturne.API.Services.Caching.TenantCache>();
 
         services.AddScoped<IV4ToLegacyProjectionService, V4ToLegacyProjectionService>();
 

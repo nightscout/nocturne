@@ -16,18 +16,11 @@ configuration.
 
 ## Keys
 
-`CacheKeyBuilder` defines three key shapes, all tenant-scoped:
-
-```
-entries:current:{tenantId}[:{suffix}]                        # EntryCacheAdapter, SignalREntryEventSink
-entries:recent:{tenantId}:{count}[:type:{type}][:skip:{n}]   # EntryCacheAdapter
-treatments:recent:{tenantId}:{hours}h[:count:{n}][:skip:{n}] # TreatmentCacheAdapter
-```
-
-`BuildRecentEntriesPattern` and `BuildRecentTreatmentsPattern` produce the wildcard forms of the
-latter two, for the write paths and the demo tenant reset. Callers elsewhere assemble their own
-keys against `ICacheService` rather than going through the builder — `status:system:{tenantId}`,
-`oauth:revoked:{jti}` and `devicestatus:current:{tenantId}` among them.
+Tenant data read under row level security is cached through the API's `ITenantCache`, which
+prefixes every key with `{tenantId}:{partition}:{demo|live}:` and clears a key family with the
+pattern `{tenantId}:*:*:{family}:*`, so one invalidation reaches every reader partition. Other
+callers assemble their own keys against `ICacheService`: `status:system:{tenantId}`,
+`oauth:revoked:{jti}` among them.
 
 `MemoryCacheService.RemoveByPatternAsync` prepends the `nocturne:` prefix itself before anchoring
 the regex, so a caller's pattern must be written without that prefix, and must match the rest of
@@ -35,7 +28,7 @@ the key end to end. The only wildcards are `*` and `?`.
 
 ## TTLs
 
-The four keys below take their TTL from a `CacheConstants` member, passed explicitly by the
+The keys below take their TTL from a `CacheConstants` member, passed explicitly by the
 caller. Keys assembled outside this project set their own: `StatusService` hardcodes 2 minutes for
 `status:system:*`, and the statistics, OAuth-revocation and rotation-successor keys pass a TTL
 computed at the call site.
