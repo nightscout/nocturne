@@ -112,11 +112,8 @@ the job before starting another reset if it is still running.
 ## UI copy and translations
 
 The connector page and its shared source row use Wuchale PO catalogues, just like
-the rest of the application. When copy is added or moved, run the Wuchale
-extraction and keep every locale's `msgstr` non-empty; the lightweight
-`google-health-translations.test.js` check compiles representative production
-strings for every locale and verifies that `{0}` and `<0/>` placeholders are
-preserved. Product names such as **Google Health**, **Google Cloud**, **Fitbit**,
+the rest of the application. Production builds run the Wuchale extraction
+first, so new copy falls back to English until it is translated. Product names such as **Google Health**, **Google Cloud**, **Fitbit**,
 **Nocturne**, and **eHbA1c** remain unchanged where the translation service
 would otherwise split or translate the name.
 
