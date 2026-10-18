@@ -43,6 +43,13 @@ public class V3FoodProfileIdRoundTripIntegrationTests : ApiIntegrationTestBase
         return (await ResultAsync(response)).EnumerateArray().ToArray();
     }
 
+    private static async Task AssertDeletedAsync(HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        body.Should().Be("{\"status\":200}");
+    }
+
     private static string AddressOf(JsonElement listed, string storedId, Address address) =>
         address == Address.Identifier ? listed.GetProperty("identifier").GetString()! : storedId;
 
@@ -95,7 +102,7 @@ public class V3FoodProfileIdRoundTripIntegrationTests : ApiIntegrationTestBase
         replaced.GetProperty("identifier").GetString().Should().Be(identifier);
         replaced.GetProperty("carbs").GetDouble().Should().Be(25);
 
-        (await client.DeleteAsync($"/api/v3/food/{id}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        await AssertDeletedAsync(await client.DeleteAsync($"/api/v3/food/{id}"));
         (await ListAsync(client, "food")).Should().BeEmpty();
         (await client.GetAsync($"/api/v3/food/{identifier}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -193,7 +200,7 @@ public class V3FoodProfileIdRoundTripIntegrationTests : ApiIntegrationTestBase
         replaced.GetProperty("identifier").GetString().Should().Be(identifier);
         replaced.GetProperty("store").GetProperty(StoreName).GetProperty("dia").GetDouble().Should().Be(6);
 
-        (await client.DeleteAsync($"/api/v3/profile/{id}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        await AssertDeletedAsync(await client.DeleteAsync($"/api/v3/profile/{id}"));
         (await ListAsync(client, "profile")).Should().BeEmpty();
         (await client.GetAsync($"/api/v3/profile/{identifier}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
