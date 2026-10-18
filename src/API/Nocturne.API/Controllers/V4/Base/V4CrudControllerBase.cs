@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Caching;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
@@ -31,7 +34,7 @@ namespace Nocturne.API.Controllers.V4.Base;
 /// <seealso cref="IV4Repository{TModel}"/>
 /// <seealso cref="RequireDeclaredWriteScopeAttribute"/>
 public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateRequest, TRepository>(TRepository repository)
-    : V4ReadOnlyControllerBase<TModel, TRepository>(repository), IWriteScopedController
+    : V4ReadOnlyControllerBase<TModel, TRepository>(repository), IWriteScopedController, IAsyncActionFilter
     where TModel : class, IV4Record
     where TCreateRequest : class, IBulkUpsertRequest
     where TUpdateRequest : class
@@ -367,4 +370,26 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <param name="restored">The restored record.</param>
     /// <param name="ct">Cancellation token.</param>
     protected virtual Task OnAfterRestoreAsync(TModel restored, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>
+    /// Clears the tenant's <see cref="ITenantCache"/> after every write: the legacy entry and
+    /// treatment reads and the statistics it holds are projected from the rows these controllers
+    /// write.
+    /// </summary>
+    [NonAction]
+    public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+    {
+        var executed = await next();
+        if (HttpMethods.IsGet(Request.Method) || HttpMethods.IsHead(Request.Method))
+            return;
+        if (executed.Exception is not null && !executed.ExceptionHandled)
+            return;
+
+        var tenant = HttpContext.RequestServices.GetRequiredService<ITenantAccessor>();
+        if (tenant.IsResolved)
+        {
+            await HttpContext.RequestServices.GetRequiredService<ITenantCache>()
+                .RemoveTenantAsync(tenant.TenantId, HttpContext.RequestAborted);
+        }
+    }
 }
