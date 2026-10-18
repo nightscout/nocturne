@@ -510,6 +510,42 @@ public class IobCobComputeStageTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ProfileChange_InvalidatesCachedSeries()
+    {
+        var dia = 3.0;
+        _mockTherapyTimelineResolver
+            .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
+                new TherapyTimeline([new TherapySegment(from, to, new TherapySnapshot(
+                    dia, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour,
+                    null, null, 0, null, null, null))]));
+        _mockIobCalculator
+            .Setup(s => s.FromBoluses(It.IsAny<List<Bolus>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
+            .Returns((List<Bolus> _, TherapySnapshot snapshot, long _) => new IobResult { Iob = snapshot.Dia });
+        var context = new ChartDataContext
+        {
+            StartTime = TestMills,
+            EndTime = TestMills,
+            IntervalMinutes = 5,
+            DefaultBasalRate = 1.0,
+            BolusList = [new Bolus
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(TestMills - 5 * 60 * 1000).UtcDateTime,
+                Insulin = 3.0,
+            }],
+            CarbIntakeList = [],
+            TempBasalList = [],
+        };
+
+        var first = await _stage.ExecuteAsync(context, CancellationToken.None);
+        dia = 5.0;
+        var second = await _stage.ExecuteAsync(context, CancellationToken.None);
+
+        first.IobSeries.Should().ContainSingle().Which.Value.Should().Be(3.0);
+        second.IobSeries.Should().ContainSingle().Which.Value.Should().Be(5.0);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_BasalSeriesGetsOnlyDisplayTempBasals_WhileIobSeesPreWindowTempBasal()
     {
         var startTime = TestMills;

@@ -290,8 +290,9 @@ internal sealed class IobCobComputeStage(
     }
 
     /// <summary>
-    /// Generate a cache key for IOB/COB calculations based on data fingerprint and time range.
-    /// Uses SHA256 of individual bolus/carb intake mills and values for collision resistance.
+    /// Generate a cache key for IOB/COB calculations from a SHA-256 fingerprint of every input the
+    /// series depends on and the rounded time range. The therapy values are sampled at the same
+    /// ticks the calculation uses, without moving the timeline's cursor.
     /// </summary>
     private static string GenerateIobCobCacheKey(
         List<Bolus> boluses,
@@ -350,9 +351,13 @@ internal sealed class IobCobComputeStage(
             }
         }
 
-        for (var t = roundedStart; t <= roundedEnd; t += intervalMs)
+        var segments = timeline.Segments;
+        var segment = 0;
+        for (var t = startTime; t <= endTime; t += intervalMs)
         {
-            var therapy = timeline.SnapshotAt(t);
+            while (segment < segments.Count - 1 && t >= segments[segment + 1].StartMills)
+                segment++;
+            var therapy = segments[segment].Snapshot;
             sb.Append(therapy.Dia)
                 .Append(':')
                 .Append(therapy.PeakMinutes)
