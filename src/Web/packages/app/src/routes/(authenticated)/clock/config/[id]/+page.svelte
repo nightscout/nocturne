@@ -20,6 +20,7 @@
     getStarter as getStarterClockFace,
     update as updateClockFace,
   } from "$api/generated/clockFaces.generated.remote";
+  import { faceUnits } from "$lib/components/clock/element-value";
   import GlucoseChartCard from "$lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";
   import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
@@ -404,6 +405,7 @@
     heightClass="h-full"
     defaultFocusHours={element.hours || 3}
     showPredictions={element.chartConfig?.showPredictions ?? false}
+    glucoseUnits={faceUnits(config.settings)}
   />
 {/snippet}
 

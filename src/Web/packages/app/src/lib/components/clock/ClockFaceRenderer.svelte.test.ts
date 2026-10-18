@@ -1,8 +1,9 @@
 import { render } from "vitest-browser-svelte";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { ClockFaceConfig } from "$lib/api";
 import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
 import { TRACKER_SHOW_OPTIONS } from "$lib/clock-builder";
+import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
 import Harness from "./ClockFaceRendererHarness.test.svelte";
 
 const WHITE = "rgb(255, 255, 255)";
@@ -88,6 +89,27 @@ describe("ClockFaceRenderer", () => {
     };
 
     expect(face(reading, mmolFace).text).toContain("3.1 mmol/L");
+  });
+
+  it("draws a chart's axis ticks in the face's units, not the viewer's", async () => {
+    glucoseUnits.current = "mg/dl";
+    const chartFace: ClockFaceConfig = {
+      rows: [{ elements: [{ type: "chart", hours: 3, width: 400, height: 200 }] }],
+      settings: { glucoseUnits: "mmol" },
+    };
+    const { container } = render(Harness, {
+      config: chartFace,
+      glucose: reading,
+      showCharts: true,
+    });
+
+    await vi.waitFor(() => {
+      const ticks = [...container.querySelectorAll(".lc-axis-tick-label")].map(
+        (t) => t.textContent?.trim() ?? ""
+      );
+      expect(ticks.length).toBeGreaterThan(0);
+      expect(ticks.some((t) => /^\d+\.\d$/.test(t))).toBe(true);
+    });
   });
 
   it("paints a muted element in the theme's muted foreground", () => {

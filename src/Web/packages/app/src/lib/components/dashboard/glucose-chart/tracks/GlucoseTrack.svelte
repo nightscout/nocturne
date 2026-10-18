@@ -123,7 +123,7 @@
     placement="left"
     scale={glucoseAxisScale}
     ticks={ctx.printing ? printTicks : 5}
-    format={(v) => String(bg(v))}
+    format={(v) => String(bg(v, ctx.glucoseUnits))}
     tickLabelProps={{ class: "text-xs fill-muted-foreground" }}
   />
 {/if}

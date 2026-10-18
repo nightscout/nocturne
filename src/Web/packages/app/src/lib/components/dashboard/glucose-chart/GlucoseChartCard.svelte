@@ -55,6 +55,7 @@
   import PointInspectionPicker from "./dialogs/PointInspectionPicker.svelte";
   import BasalInjectionMarkers from "./markers/BasalInjectionMarkers.svelte";
   import BgCheckMarkers from "./markers/BgCheckMarkers.svelte";
+  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { afterNextPaint } from "$lib/utils/after-next-paint";
 
   interface Props {
@@ -74,6 +75,7 @@
      * task it delays the current reading's paint behind it.
      */
     deferDrawing?: boolean;
+    glucoseUnits?: GlucoseUnits;
   }
 
   let {
@@ -87,6 +89,7 @@
     heightClass,
     demoMode,
     deferDrawing = false,
+    glucoseUnits,
   }: Props = $props();
 
   const realtimeStore = getRealtimeStore();
@@ -139,6 +142,7 @@
       cobData: () => engine.cobData,
       basalData: () => engine.basalData,
     },
+    () => glucoseUnits,
   );
 
   // ===== LEGEND STATE =====
@@ -393,6 +397,7 @@
           {engine}
           {inspection}
           {legend}
+          {glucoseUnits}
           brushDomain={brushDomain}
           padding={chartPadding}
         >
@@ -450,6 +455,7 @@
     {/if}
 
     <ChartLegend
+      {glucoseUnits}
       glucoseData={engine.glucoseData}
       highThreshold={engine.highThreshold}
       lowThreshold={engine.lowThreshold}
@@ -544,6 +550,7 @@
 {#if inspection.timestamp && inspection.glucosePoint && inspection.context}
   {#if glucoseInspectionDialog.component}
     <glucoseInspectionDialog.component
+      {glucoseUnits}
       bind:open={glucoseInspectionDialog.open}
       timestamp={inspection.timestamp}
       glucoseValue={inspection.glucosePoint.sgv}
@@ -573,6 +580,7 @@
 
   {#if deliveryInspectionDialog.component}
     <deliveryInspectionDialog.component
+      {glucoseUnits}
       bind:open={deliveryInspectionDialog.open}
       timestamp={inspection.timestamp}
       basalRate={inspection.context.basalRate}
@@ -599,6 +607,7 @@
 
   {#if treatmentInspectionDialog.component}
     <treatmentInspectionDialog.component
+      {glucoseUnits}
       bind:open={treatmentInspectionDialog.open}
       timestamp={inspection.timestamp}
       bolusInsulin={inspection.context.nearbyBolus?.insulin}
