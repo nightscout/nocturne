@@ -810,6 +810,8 @@ public class StatisticsController : ControllerBase
     /// <see cref="AddScheduledBasalFallbackAsync"/> for the rest of the gate.
     /// GMI reliability is assessed per-period using context-appropriate recommended-day minimums
     /// (e.g., 1-day periods cannot require 14 days of data).
+    /// The cached value breaks the rule on <see cref="ITenantCache"/> for what a value may contain
+    /// (#2138).
     /// </remarks>
     [HttpGet("periods")]
     [RequireScope(Scope.GlucoseRead)]

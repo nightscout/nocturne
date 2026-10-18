@@ -380,9 +380,10 @@ Design notes:
   who see exactly the same rows: owners and unclamped members share `full`, each
   full-history share's category set is its own partition, and a history-clamped reader
   has none, so it neither reads nor writes. No cache reads the clamp or builds a tenant
-  key itself, and invalidation clears a key family across every partition. Everyone in
-  `full` shares one value whatever their scopes, so narrowing by caller scope happens
-  after the cache read. A read that fans out in a fresh DI scope (`TenantOverviewService`)
+  key itself, and invalidation clears a key family across every partition. What a value
+  in `full` may contain is stated on `ITenantCache`. The one exception is
+  `StatusService`'s `status:system` key, which varies by whether the caller is
+  authenticated rather than by the rows it can read. A read that fans out in a fresh DI scope (`TenantOverviewService`)
   carries the caller's clamp into that scope's `ICategoryReadContext` and reads through it.
 
 ## Testing

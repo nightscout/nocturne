@@ -88,6 +88,7 @@ using Nocturne.Infrastructure.Shared.Services;
 using JwtOptions = Nocturne.Core.Models.Configuration.JwtOptions;
 using OidcOptions = Nocturne.Core.Models.Configuration.OidcOptions;
 using OpenTelemetry.Metrics;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Extensions;
 
@@ -596,7 +597,8 @@ public static class ServiceRegistrationExtensions
     {
         // Demo mode
         services.AddSingleton<IDemoModeService, DemoModeService>();
-        services.AddScoped<Nocturne.API.Services.Caching.ITenantCache, Nocturne.API.Services.Caching.TenantCache>();
+
+        services.AddScoped<ITenantCache, TenantCache>();
 
         services.AddScoped<IV4ToLegacyProjectionService, V4ToLegacyProjectionService>();
 

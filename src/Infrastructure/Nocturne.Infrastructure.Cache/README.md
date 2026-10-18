@@ -28,10 +28,10 @@ the key end to end. The only wildcards are `*` and `?`.
 
 ## TTLs
 
-The keys below take their TTL from a `CacheConstants` member, passed explicitly by the
-caller. Keys assembled outside this project set their own: `StatusService` hardcodes 2 minutes for
-`status:system:*`, and the statistics, OAuth-revocation and rotation-successor keys pass a TTL
-computed at the call site.
+Every key is assembled by its caller, which passes the TTL. The recent and current entry and
+recent treatment reads take theirs from the `CacheConstants` members below; `StatusService`
+hardcodes 2 minutes for `status:system:*`, and the statistics, eHbA1c, OAuth-revocation and
+rotation-successor keys compute theirs at the call site.
 
 | Key                | TTL       | Constant                                     |
 |--------------------|-----------|----------------------------------------------|
