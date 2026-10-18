@@ -464,6 +464,50 @@ public class EntriesControllerTests
         );
     }
 
+    [Theory]
+    [InlineData("", null)]
+    [InlineData("?find={}", "{}")]
+    [InlineData("?find=%7B%7D", "{}")]
+    [InlineData("?find=", null)]
+    [InlineData("?token=x", null)]
+    [InlineData("?count=5&token=x", null)]
+    [InlineData("?find={}&token=x", "{}")]
+    [InlineData("?find[]=", null)]
+    [InlineData("?find[x]", null)]
+    [InlineData("?find%5Bx%5D", null)]
+    [InlineData("?xfind[a]=1", null)]
+    public async Task BulkDeleteEntries_WithAFindThatHasNoConditions_IsRefusedWithoutDeleting(
+        string queryString, string? boundFind)
+    {
+        _controller.ControllerContext.HttpContext.Request.QueryString = new QueryString(queryString);
+
+        var result = await _controller.BulkDeleteEntries(boundFind);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        _mockEntryService.Verify(
+            x => x.DeleteEntriesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
+    }
+
+    [Theory]
+    [InlineData("?find[type]=sgv", null, "find[type]=sgv")]
+    [InlineData("?find%5Btype%5D=sgv&token=x", null, "find%5Btype%5D=sgv&token=x")]
+    [InlineData("?find={\"date\":{\"$gte\":1704067200000}}", "{\"date\":{\"$gte\":1704067200000}}", "{\"date\":{\"$gte\":1704067200000}}")]
+    public async Task BulkDeleteEntries_WithAFind_DeletesWhatItMatches(
+        string queryString, string? boundFind, string expectedFind)
+    {
+        _controller.ControllerContext.HttpContext.Request.QueryString = new QueryString(queryString);
+        _mockEntryService
+            .Setup(x => x.DeleteEntriesAsync(expectedFind, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(4);
+
+        var result = await _controller.BulkDeleteEntries(boundFind);
+
+        var body = JsonSerializer.SerializeToElement(result.Should().BeOfType<OkObjectResult>().Subject.Value);
+        body.GetProperty("deletedCount").GetInt64().Should().Be(4);
+    }
+
     private static void AssertDeleteStatus(ActionResult result, long count)
     {
         var body = JsonSerializer.SerializeToElement(result.Should().BeOfType<OkObjectResult>().Subject.Value);

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;

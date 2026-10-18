@@ -12,7 +12,8 @@ public class EversenseConnectorInstaller()
             ConnectorName = "Eversense",
             ServerMapping = new Dictionary<string, string>
             {
-                ["US"] = EversenseConstants.Servers.UsData
+                ["US"] = EversenseConstants.Servers.UsData,
+                ["OUS"] = EversenseConstants.Servers.OusData
             },
             GetServerRegion = config => ((EversenseConnectorConfiguration)config).Server,
         });

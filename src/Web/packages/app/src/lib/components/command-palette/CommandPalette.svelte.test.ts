@@ -19,6 +19,10 @@ import { pinnedItemIds, recentItemIds } from "./command-palette-store.svelte";
 
 const item = (name: string) => page.getByRole("option", { name, exact: true });
 
+// A report option's name carries its description after the title.
+const report = (title: string) =>
+  page.getByRole("option", { name: new RegExp(`^${title}`) });
+
 describe("CommandPalette", () => {
   beforeEach(() => {
     goto.mockClear();
@@ -119,5 +123,20 @@ describe("CommandPalette", () => {
     await expect.element(item("Dashboard")).toBeVisible();
     await expect.element(item("Tenant Management")).not.toBeInTheDocument();
     await expect.element(item("Access Requests")).not.toBeInTheDocument();
+  });
+
+  it("lists a report under the registry's title to a viewer holding its scopes", async () => {
+    pageState.data = { effectivePermissions: ["glucose.read"] };
+    render(CommandPalette, { open: true });
+
+    await expect.element(report("Day-by-Day View")).toBeVisible();
+  });
+
+  it("withholds a report from a viewer without its scope", async () => {
+    pageState.data = { effectivePermissions: ["glucose.read"] };
+    render(CommandPalette, { open: true });
+
+    await expect.element(report("Day-by-Day View")).toBeVisible();
+    await expect.element(report("Battery")).not.toBeInTheDocument();
   });
 });

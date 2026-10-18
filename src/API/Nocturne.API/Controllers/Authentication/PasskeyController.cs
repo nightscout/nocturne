@@ -734,7 +734,7 @@ public class PasskeyController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RemoveCredential(Guid id)
     {
         var auth = HttpContext.GetAuthContext();
@@ -746,17 +746,7 @@ public class PasskeyController : ControllerBase
         // Symmetric factor-count rule is enforced atomically inside the service inside a
         // serializable transaction to prevent TOCTOU races between concurrent removals.
         var result = await _subjectService.TryRemovePasskeyCredentialAsync(auth.SubjectId.Value, id);
-        return result switch
-        {
-            FactorRemovalResult.Removed => NoContent(),
-            FactorRemovalResult.NotFound => Problem(detail: "Credential not found", statusCode: 404, title: "Not Found"),
-            FactorRemovalResult.LastPrimaryFactor => Conflict(new
-            {
-                error = "last_factor",
-                message = "Cannot remove your only remaining sign-in method",
-            }),
-            _ => throw new InvalidOperationException($"Unexpected FactorRemovalResult: {result}"),
-        };
+        return result == FactorRemovalResult.Removed ? NoContent() : this.FactorRemovalRefusal(result, "Credential");
     }
 
     /// <summary>

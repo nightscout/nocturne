@@ -26,17 +26,20 @@ public class ReadAccessAuditFilter : IAsyncResultFilter, IAsyncExceptionFilter
     private readonly ITenantAuditConfigCache _configCache;
     private readonly IAuditContext _auditContext;
     private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
+    private readonly IRequestPathRedactor _pathRedactor;
     private readonly ILogger<ReadAccessAuditFilter> _logger;
 
     public ReadAccessAuditFilter(
         ITenantAuditConfigCache configCache,
         IAuditContext auditContext,
         IDbContextFactory<NocturneDbContext> contextFactory,
+        IRequestPathRedactor pathRedactor,
         ILogger<ReadAccessAuditFilter> logger)
     {
         _configCache = configCache;
         _auditContext = auditContext;
         _contextFactory = contextFactory;
+        _pathRedactor = pathRedactor;
         _logger = logger;
     }
 
@@ -107,7 +110,7 @@ public class ReadAccessAuditFilter : IAsyncResultFilter, IAsyncExceptionFilter
                 CredentialFingerprint = httpContext.GetAuthContext()?.CredentialFingerprint,
                 IpAddress = _auditContext.IpAddress,
                 UserAgent = string.IsNullOrEmpty(userAgent) ? null : userAgent,
-                Endpoint = $"{method} {path}",
+                Endpoint = $"{method} {_pathRedactor.Redact(path)}",
                 EntityType = entityType,
                 RecordCount = recordCount,
                 QueryParametersJson = queryParams,

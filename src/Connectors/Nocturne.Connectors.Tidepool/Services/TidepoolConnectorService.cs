@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -91,11 +92,9 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                         config, cancellationToken);
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
-                result.Success = false;
-                result.Errors.Add($"Failed to sync Glucose: {ex.Message}");
-                _logger.LogError(ex, "Failed to sync Glucose for {Connector}", ConnectorSource);
+                RecordTypeSyncError(result, "Glucose", ex);
             }
         }
 
@@ -131,11 +130,9 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                     await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
                         mappedCarbs, PublishCarbIntakeDataAsync, config, cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
-                result.Success = false;
-                result.Errors.Add($"Failed to sync Treatments: {ex.Message}");
-                _logger.LogError(ex, "Failed to sync Treatments for {Connector}", ConnectorSource);
+                RecordTypeSyncError(result, "Treatments", ex);
             }
         }
 
@@ -207,14 +204,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
         var response = await GetWithHeadersAsync(url, headers);
 
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorContent = await response.Content.ReadAsStringAsync();
-            throw new HttpRequestException(
-                $"HTTP {(int)response.StatusCode} {response.StatusCode}: {errorContent}",
-                null,
-                response.StatusCode);
-        }
+        await response.EnsureSuccessWithBodyAsync();
 
         return await DeserializeResponseAsync<T>(response);
     }

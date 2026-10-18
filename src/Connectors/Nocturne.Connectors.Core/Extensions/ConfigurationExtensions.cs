@@ -145,7 +145,6 @@ public static class ConfigurationExtensions
         }
     }
 
-    /// <param name="configuration">The IConfiguration instance</param>
     extension(IConfiguration configuration)
     {
         /// <summary>
@@ -180,8 +179,6 @@ public static class ConfigurationExtensions
         ///     connector shares (<c>Connectors:Settings</c>), the connector's own section, then
         ///     environment variables.
         /// </summary>
-        /// <typeparam name="T">The configuration type</typeparam>
-        /// <param name="config">The configuration object to bind to</param>
         /// <param name="connectorName">The connector name (e.g., "Glooko", "Dexcom")</param>
         public void BindConnectorConfiguration<T>(T config, string connectorName)
             where T : BaseConnectorConfiguration

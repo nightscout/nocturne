@@ -10,6 +10,8 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Middleware;
 using Nocturne.API.Models.Compatibility;
 using Nocturne.API.Services.Compatibility;
+using Nocturne.API.Tests.TestDoubles;
+using Microsoft.Extensions.Hosting;
 
 namespace Nocturne.API.Tests.Middleware;
 
@@ -71,6 +73,7 @@ public class CompatibilityProxyMiddlewareTests
         services.AddSingleton(_forwardingServiceMock.Object);
         services.AddSingleton(_comparisonServiceMock.Object);
         services.AddSingleton(_persistenceServiceMock.Object);
+        services.AddSingleton<IRequestPathRedactor>(CredentialRouteRedactor.Create());
         // Register as their interfaces so scoped resolution works
         services.AddSingleton<IOptions<CompatibilityProxyConfiguration>>(config);
         services.AddScoped<IRequestForwardingService>(_ => _forwardingServiceMock.Object);
@@ -116,6 +119,44 @@ public class CompatibilityProxyMiddlewareTests
         _forwardingServiceMock.Verify(
             s => s.ForwardToNightscoutAsync(It.IsAny<ClonedRequest>(), It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    /// <summary>
+    /// The upstream still needs the real request, but the stored analysis is readable through the
+    /// compatibility API and must not carry a credential path segment.
+    /// </summary>
+    [Fact]
+    public async Task CredentialRoute_ForwardsTheRealRequest_AndStoresTheRedactedPath()
+    {
+        const string path = "/api/v2/authorization/request/noc_credentialthatmustnotbestored";
+        var cloned = new ClonedRequest { Method = "GET", Path = path };
+        _cloningServiceMock.Setup(s => s.CloneRequestAsync(It.IsAny<HttpRequest>())).ReturnsAsync(cloned);
+        var stored = new TaskCompletionSource<string>();
+        _persistenceServiceMock
+            .Setup(s => s.StoreAnalysisAsync(
+                It.IsAny<ResponseComparisonResult>(),
+                It.IsAny<CompatibilityProxyResponse>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<ResponseComparisonResult, CompatibilityProxyResponse, string, string, CancellationToken>(
+                (_, _, _, requestPath, _) => stored.TrySetResult(requestPath))
+            .ReturnsAsync(Guid.NewGuid());
+        var (middleware, context) = CreateMiddleware(proxyEnabled: true, path: path);
+
+        await middleware.InvokeAsync(context);
+
+        (await stored.Task.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(CredentialRouteRedactor.TokenExchangePath);
+        _forwardingServiceMock.Verify(
+            s => s.ForwardToNightscoutAsync(cloned, It.IsAny<CancellationToken>()),
+            Times.Once);
+        _comparisonServiceMock.Verify(
+            s => s.CompareResponsesAsync(
+                It.IsAny<TargetResponse?>(),
+                It.IsAny<TargetResponse?>(),
+                It.IsAny<string>(),
+                It.Is<string?>(p => p != null && p.Contains("noc_"))),
+            Times.Never);
     }
 
     [Fact]

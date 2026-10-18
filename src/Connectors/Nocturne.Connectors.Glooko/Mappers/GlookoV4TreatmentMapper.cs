@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -14,6 +15,9 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     private readonly GlookoTimeMapper _timeMapper = timeMapper ?? throw new ArgumentNullException(nameof(timeMapper));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
+    private IReadOnlyList<T> Records<T>(IEnumerable<T?>? records, string recordType) where T : class =>
+        ConnectorFaults.NonNullRecords(records, _logger, _connectorSource, recordType);
+
     /// <summary>
     /// Maps V2 batch data (NormalBoluses and Foods) to Bolus and CarbIntake records.
     /// </summary>
@@ -23,122 +27,115 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         var carbs = new List<CarbIntake>();
         var batches = new List<DecompositionBatch>();
 
-        try
+        if (batchData.NormalBoluses != null)
         {
-            if (batchData.NormalBoluses != null)
+            foreach (var bolus in Records(batchData.NormalBoluses, "V2 bolus"))
             {
-                foreach (var bolus in batchData.NormalBoluses)
+                try
                 {
-                    try
+                    var bolusDate = _timeMapper.GetRawGlookoDate(bolus.Timestamp, bolus.PumpTimestamp);
+                    var correctedDate = _timeMapper.GetCorrectedGlookoTime(bolusDate);
+                    var now = DateTime.UtcNow;
+
+                    var hasInsulin = bolus.InsulinDelivered > 0;
+                    var hasCarbs = bolus.CarbsInput > 0;
+
+                    Guid? correlationId = null;
+                    if (hasInsulin && hasCarbs)
                     {
-                        var bolusDate = _timeMapper.GetRawGlookoDate(bolus.Timestamp, bolus.PumpTimestamp);
-                        var correctedDate = _timeMapper.GetCorrectedGlookoTime(bolusDate);
-                        var now = DateTime.UtcNow;
-
-                        var hasInsulin = bolus.InsulinDelivered > 0;
-                        var hasCarbs = bolus.CarbsInput > 0;
-
-                        Guid? correlationId = null;
-                        if (hasInsulin && hasCarbs)
+                        var batch = new DecompositionBatch
                         {
-                            var batch = new DecompositionBatch
-                            {
-                                Id = Guid.CreateVersion7(),
-                                Source = "glooko",
-                                SourceRecordId = GenerateLegacyId("bolus", bolusDate, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}"),
-                                CreatedAt = now,
-                            };
-                            batches.Add(batch);
-                            correlationId = batch.Id;
-                        }
-
-                        if (hasInsulin)
-                        {
-                            var bolusLegacyId = GenerateLegacyId("bolus", bolusDate, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}");
-                            boluses.Add(new Bolus
-                            {
-                                Id = Guid.CreateVersion7(),
-                                Timestamp = correctedDate,
-                                LegacyId = bolusLegacyId,
-                                // Stable (raw-timestamp-derived) key so re-correction upserts in place.
-                                SyncIdentifier = bolusLegacyId,
-                                Device = _connectorSource,
-                                DataSource = _connectorSource,
-                                Insulin = bolus.InsulinDelivered,
-                                BolusType = V4BolusType.Normal,
-                                Automatic = false,
-                                CorrelationId = correlationId,
-                                CreatedAt = now,
-                                ModifiedAt = now
-                            });
-                        }
-
-                        if (hasCarbs)
-                        {
-                            var carbLegacyId = GenerateLegacyId("carbs", bolusDate, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}");
-                            carbs.Add(new CarbIntake
-                            {
-                                Id = Guid.CreateVersion7(),
-                                Timestamp = correctedDate,
-                                LegacyId = carbLegacyId,
-                                SyncIdentifier = carbLegacyId,
-                                Device = _connectorSource,
-                                DataSource = _connectorSource,
-                                Carbs = bolus.CarbsInput,
-                                CorrelationId = correlationId,
-                                CreatedAt = now,
-                                ModifiedAt = now
-                            });
-                        }
+                            Id = Guid.CreateVersion7(),
+                            Source = "glooko",
+                            SourceRecordId = GenerateLegacyId("bolus", bolusDate, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}"),
+                            CreatedAt = now,
+                        };
+                        batches.Add(batch);
+                        correlationId = batch.Id;
                     }
-                    catch (Exception ex)
+
+                    if (hasInsulin)
                     {
-                        _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V2 bolus record", _connectorSource);
-                    }
-                }
-            }
-
-            if (batchData.Foods != null)
-            {
-                foreach (var food in batchData.Foods)
-                {
-                    try
-                    {
-                        if (food.SoftDeleted == true) continue;
-
-                        var foodDate = _timeMapper.GetRawGlookoDate(food.Timestamp, food.PumpTimestamp);
-                        var correctedDate = _timeMapper.GetCorrectedGlookoTime(foodDate);
-                        var carbValue = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
-
-                        if (carbValue <= 0) continue;
-
-                        var legacyId = !string.IsNullOrEmpty(food.Guid)
-                            ? $"glooko_food_{food.Guid}"
-                            : GenerateLegacyId("food", foodDate, $"carbs:{carbValue}");
-
-                        var now = DateTime.UtcNow;
-                        carbs.Add(new CarbIntake
+                        var bolusLegacyId = GenerateLegacyId("bolus", bolusDate, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}");
+                        boluses.Add(new Bolus
                         {
                             Id = Guid.CreateVersion7(),
                             Timestamp = correctedDate,
-                            LegacyId = legacyId,
+                            LegacyId = bolusLegacyId,
+                            // Stable (raw-timestamp-derived) key so re-correction upserts in place.
+                            SyncIdentifier = bolusLegacyId,
                             Device = _connectorSource,
                             DataSource = _connectorSource,
-                            Carbs = carbValue,
+                            Insulin = bolus.InsulinDelivered,
+                            BolusType = V4BolusType.Normal,
+                            Automatic = false,
+                            CorrelationId = correlationId,
                             CreatedAt = now,
                             ModifiedAt = now
                         });
                     }
-                    catch (Exception ex)
+
+                    if (hasCarbs)
                     {
-                        _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V2 food record", _connectorSource);
+                        var carbLegacyId = GenerateLegacyId("carbs", bolusDate, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}");
+                        carbs.Add(new CarbIntake
+                        {
+                            Id = Guid.CreateVersion7(),
+                            Timestamp = correctedDate,
+                            LegacyId = carbLegacyId,
+                            SyncIdentifier = carbLegacyId,
+                            Device = _connectorSource,
+                            DataSource = _connectorSource,
+                            Carbs = bolus.CarbsInput,
+                            CorrelationId = correlationId,
+                            CreatedAt = now,
+                            ModifiedAt = now
+                        });
                     }
+                }
+                catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
+                {
+                    _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed V2 bolus at {Timestamp}", _connectorSource, bolus.Timestamp);
                 }
             }
         }
-        catch (Exception ex)
+
+        if (batchData.Foods != null)
         {
-            _logger.LogError(ex, "[{ConnectorSource}] Error transforming Glooko V2 batch treatments", _connectorSource);
+            foreach (var food in Records(batchData.Foods, "V2 food"))
+            {
+                try
+                {
+                    if (food.SoftDeleted == true) continue;
+
+                    var foodDate = _timeMapper.GetRawGlookoDate(food.Timestamp, food.PumpTimestamp);
+                    var correctedDate = _timeMapper.GetCorrectedGlookoTime(foodDate);
+                    var carbValue = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
+
+                    if (carbValue <= 0) continue;
+
+                    var legacyId = !string.IsNullOrEmpty(food.Guid)
+                        ? $"glooko_food_{food.Guid}"
+                        : GenerateLegacyId("food", foodDate, $"carbs:{carbValue}");
+
+                    var now = DateTime.UtcNow;
+                    carbs.Add(new CarbIntake
+                    {
+                        Id = Guid.CreateVersion7(),
+                        Timestamp = correctedDate,
+                        LegacyId = legacyId,
+                        Device = _connectorSource,
+                        DataSource = _connectorSource,
+                        Carbs = carbValue,
+                        CreatedAt = now,
+                        ModifiedAt = now
+                    });
+                }
+                catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
+                {
+                    _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed V2 food {Guid}", _connectorSource, food.Guid);
+                }
+            }
         }
 
         return (boluses, carbs, batches);
@@ -155,7 +152,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         var carbs = new List<CarbIntake>();
         if (batchData.Foods == null) return carbs;
 
-        foreach (var food in batchData.Foods)
+        foreach (var food in Records(batchData.Foods, "V2 food"))
         {
             try
             {
@@ -184,9 +181,9 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     ModifiedAt = now
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V2 food to CarbIntake", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed V2 food {Guid}", _connectorSource, food.Guid);
             }
         }
 
@@ -203,7 +200,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         var results = new List<ConnectorFoodEntryImport>();
         if (batchData.Foods == null) return results;
 
-        foreach (var food in batchData.Foods)
+        foreach (var food in Records(batchData.Foods, "V2 food"))
         {
             try
             {
@@ -242,9 +239,9 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     Food = BuildFoodImport(food, externalFoodId),
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V2 food record to connector entry", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed V2 food entry {Guid}", _connectorSource, food.Guid);
             }
         }
 
@@ -309,9 +306,9 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
         var series = graphData.Series;
 
-        var deliveredBoluses = (series.DeliveredBolus ?? []).Select(b => (bolus: b, automatic: false));
-        var automaticBoluses = (series.AutomaticBolus ?? []).Select(b => (bolus: b, automatic: true));
-        var injectionBoluses = (series.InjectionBolus ?? []).Select(b => (bolus: b, automatic: false));
+        var deliveredBoluses = Records(series.DeliveredBolus, "V3 delivered bolus").Select(b => (bolus: b, automatic: false));
+        var automaticBoluses = Records(series.AutomaticBolus, "V3 automatic bolus").Select(b => (bolus: b, automatic: true));
+        var injectionBoluses = Records(series.InjectionBolus, "V3 injection bolus").Select(b => (bolus: b, automatic: false));
 
         var allBolusSeries = deliveredBoluses.Concat(automaticBoluses).Concat(injectionBoluses);
 
@@ -383,7 +380,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     });
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
                 _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 bolus record at X={X}", _connectorSource, bolus.X);
             }
@@ -408,7 +405,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         if (graphData?.Series?.CarbAll == null)
             return carbs;
 
-        foreach (var point in graphData.Series.CarbAll)
+        foreach (var point in Records(graphData.Series.CarbAll, "V3 carbAll"))
         {
             try
             {
@@ -431,7 +428,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     ModifiedAt = now
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
                 _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 carbAll record at X={X}",
                     _connectorSource, point.X);
@@ -488,7 +485,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         if (points == null)
             return;
 
-        foreach (var change in points)
+        foreach (var change in Records(points, $"V3 {eventType}"))
         {
             try
             {
@@ -509,15 +506,13 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     ModifiedAt = now
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
                 _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 {EventType} at X={X}",
                     _connectorSource, eventType, change.X);
             }
         }
     }
-
-    // ── V3 Histories: Meals → CarbIntake + ConnectorFoodEntryImport ────
 
     /// <summary>
     /// Maps V3 history meals to CarbIntake records.
@@ -558,9 +553,9 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     ModifiedAt = now
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 history meal", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed V3 history meal {Guid}", _connectorSource, meal.Guid);
             }
         }
 
@@ -590,7 +585,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         var v2FoodByGuid = new Dictionary<string, GlookoFood>(StringComparer.OrdinalIgnoreCase);
         if (v2Foods != null)
         {
-            foreach (var f in v2Foods)
+            foreach (var f in Records(v2Foods, "V2 food"))
             {
                 if (!string.IsNullOrEmpty(f.Guid) && f.SoftDeleted != true)
                     v2FoodByGuid.TryAdd(f.Guid, f);
@@ -610,7 +605,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                 var mealLabel = meal.MealType ?? "Meal";
 
-                foreach (var food in meal.Foods)
+                foreach (var food in Records(meal.Foods, "V3 history food"))
                 {
                     try
                     {
@@ -650,16 +645,16 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                             Food = BuildMergedFoodImport(food, v2Match, externalFoodId),
                         });
                     }
-                    catch (Exception ex)
+                    catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
                     {
                         _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 history food item '{FoodName}'",
                             _connectorSource, food.Name);
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 history meal", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed V3 history meal {Guid}", _connectorSource, meal.Guid);
             }
         }
 
@@ -743,7 +738,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
         foreach (var entry in historiesData.Histories)
         {
-            if (entry.Type == "meals" && entry.Item != null && entry.SoftDeleted != true)
+            if (entry is { Type: "meals", Item: not null, SoftDeleted: not true })
                 yield return entry.Item;
         }
     }
@@ -765,7 +760,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         // Map gkInsulinBasal → BasalInjection
         if (graphData.Series.GkInsulinBasal != null)
         {
-            foreach (var point in graphData.Series.GkInsulinBasal)
+            foreach (var point in Records(graphData.Series.GkInsulinBasal, "V3 gkInsulinBasal"))
             {
                 try
                 {
@@ -791,7 +786,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                         ModifiedAt = now
                     });
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
                 {
                     _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 gkInsulinBasal at X={X}", _connectorSource, point.X);
                 }
@@ -801,7 +796,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         // Map gkInsulinBolus → Bolus (pen bolus injection)
         if (graphData.Series.GkInsulinBolus != null)
         {
-            foreach (var point in graphData.Series.GkInsulinBolus)
+            foreach (var point in Records(graphData.Series.GkInsulinBolus, "V3 gkInsulinBolus"))
             {
                 try
                 {
@@ -830,7 +825,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                         ModifiedAt = now
                     });
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
                 {
                     _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 gkInsulinBolus at X={X}", _connectorSource, point.X);
                 }
@@ -858,7 +853,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         var basalInjections = new List<BasalInjection>();
         var boluses = new List<Bolus>();
 
-        foreach (var basal in injectionBasals)
+        foreach (var basal in Records(injectionBasals, "SSV2 injection basal"))
         {
             try
             {
@@ -886,13 +881,13 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     ModifiedAt = now
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping SSV2 injection basal", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed SSV2 injection basal {Guid}", _connectorSource, basal.Guid);
             }
         }
 
-        foreach (var bolus in injectionBoluses)
+        foreach (var bolus in Records(injectionBoluses, "SSV2 injection bolus"))
         {
             try
             {
@@ -923,9 +918,9 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     ModifiedAt = now
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping SSV2 injection bolus", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed SSV2 injection bolus {Guid}", _connectorSource, bolus.Guid);
             }
         }
 
@@ -951,7 +946,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         var basalInjections = new List<BasalInjection>();
         var boluses = new List<Bolus>();
 
-        foreach (var evt in insulinEvents)
+        foreach (var evt in Records(insulinEvents, "SSV2 insulin event"))
         {
             try
             {
@@ -1007,9 +1002,9 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     });
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping SSV2 insulin event", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed SSV2 insulin event {Guid}", _connectorSource, evt.Guid);
             }
         }
 
@@ -1042,7 +1037,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     {
         var carbs = new List<CarbIntake>();
 
-        foreach (var evt in carbsEvents)
+        foreach (var evt in Records(carbsEvents, "SSV2 carbs event"))
         {
             try
             {
@@ -1072,9 +1067,9 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     ModifiedAt = now
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping SSV2 carbs event", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed SSV2 carbs event {Guid}", _connectorSource, evt.Guid);
             }
         }
 
@@ -1095,7 +1090,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     {
         var boluses = new List<Bolus>();
 
-        foreach (var eb in extendedBoluses)
+        foreach (var eb in Records(extendedBoluses, "SSV2 extended bolus"))
         {
             try
             {
@@ -1132,9 +1127,9 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     ModifiedAt = now
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping SSV2 extended bolus", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed SSV2 extended bolus {Guid}", _connectorSource, eb.Guid);
             }
         }
 

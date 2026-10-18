@@ -118,6 +118,7 @@ src/
 ├── Aspire/                      # .NET Aspire orchestration (AppHost, ServiceDefaults, SourceGenerators)
 ├── Connectors/                  # Data source integrations (Dexcom, Glooko, Libre, etc.)
 ├── Core/
+│   ├── Nocturne.Core.Clinical   # Clinical calculators (statistics, IOB/COB, sleep)
 │   ├── Nocturne.Core.Contracts  # Service interfaces
 │   ├── Nocturne.Core.Models     # Domain models
 │   └── Nocturne.Core.Constants  # Shared constants

@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Multitenancy;

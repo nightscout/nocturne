@@ -156,7 +156,7 @@ public class TimeQueryStorageGateTests
         service
             .Setup(s => s.ExecuteSliceQueryAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<Dictionary<string, object>?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 

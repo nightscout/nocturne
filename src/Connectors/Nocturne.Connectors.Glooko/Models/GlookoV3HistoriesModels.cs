@@ -28,14 +28,12 @@ public class GlookoV3HistoryEntry
     [JsonPropertyName("updatedBy")] public string? UpdatedBy { get; set; }
 
     /// <summary>
-    ///     The typed payload. Deserialized as a generic element; use helper methods
-    ///     or check <see cref="Type"/> to interpret the contents.
+    ///     Read as a meal whatever <see cref="Type"/> says; only entries whose type is <c>meals</c>
+    ///     are used (see <c>GlookoV4TreatmentMapper.ExtractMeals</c>).
     /// </summary>
     [JsonPropertyName("item")]
     public GlookoV3HistoryMeal? Item { get; set; }
 }
-
-// ── Meals ────────────────────────────────────────────────────────────
 
 /// <summary>
 ///     A meal entry containing one or more food items with per-food nutritional data.
@@ -101,118 +99,6 @@ public class GlookoV3HistoryFood
     [JsonPropertyName("source")] public string? Source { get; set; }
 
     [JsonPropertyName("imageUrl")] public string? ImageUrl { get; set; }
-
-    [JsonPropertyName("softDeleted")] public bool? SoftDeleted { get; set; }
-}
-
-// ── Medications ──────────────────────────────────────────────────────
-
-/// <summary>
-///     A medication entry (insulin or oral medication).
-/// </summary>
-public class GlookoV3HistoryMedication
-{
-    [JsonPropertyName("guid")] public string? Guid { get; set; }
-
-    [JsonPropertyName("timestamp")] public string? Timestamp { get; set; }
-
-    [JsonPropertyName("medicationName")] public string? MedicationName { get; set; }
-
-    [JsonPropertyName("medicationType")] public string? MedicationType { get; set; }
-
-    [JsonPropertyName("units")] public double? Units { get; set; }
-
-    [JsonPropertyName("insulinType")] public string? InsulinType { get; set; }
-
-    [JsonPropertyName("softDeleted")] public bool? SoftDeleted { get; set; }
-}
-
-// ── Exercises ────────────────────────────────────────────────────────
-
-/// <summary>
-///     An exercise/activity entry.
-/// </summary>
-public class GlookoV3HistoryExercise
-{
-    [JsonPropertyName("guid")] public string? Guid { get; set; }
-
-    [JsonPropertyName("timestamp")] public string? Timestamp { get; set; }
-
-    [JsonPropertyName("exerciseName")] public string? ExerciseName { get; set; }
-
-    [JsonPropertyName("duration")] public int? Duration { get; set; }
-
-    [JsonPropertyName("intensity")] public string? Intensity { get; set; }
-
-    [JsonPropertyName("softDeleted")] public bool? SoftDeleted { get; set; }
-}
-
-// ── Weights ──────────────────────────────────────────────────────────
-
-/// <summary>
-///     A weight measurement entry.
-/// </summary>
-public class GlookoV3HistoryWeight
-{
-    [JsonPropertyName("guid")] public string? Guid { get; set; }
-
-    [JsonPropertyName("timestamp")] public string? Timestamp { get; set; }
-
-    [JsonPropertyName("value")] public double? Value { get; set; }
-
-    [JsonPropertyName("unit")] public string? Unit { get; set; }
-
-    [JsonPropertyName("softDeleted")] public bool? SoftDeleted { get; set; }
-}
-
-// ── Readings ─────────────────────────────────────────────────────────
-
-/// <summary>
-///     A BG reading entry from the histories endpoint.
-/// </summary>
-public class GlookoV3HistoryReading
-{
-    [JsonPropertyName("guid")] public string? Guid { get; set; }
-
-    [JsonPropertyName("timestamp")] public string? Timestamp { get; set; }
-
-    [JsonPropertyName("value")] public double? Value { get; set; }
-
-    [JsonPropertyName("mealTag")] public string? MealTag { get; set; }
-
-    [JsonPropertyName("softDeleted")] public bool? SoftDeleted { get; set; }
-}
-
-// ── Notes ────────────────────────────────────────────────────────────
-
-/// <summary>
-///     A user note entry.
-/// </summary>
-public class GlookoV3HistoryNote
-{
-    [JsonPropertyName("guid")] public string? Guid { get; set; }
-
-    [JsonPropertyName("timestamp")] public string? Timestamp { get; set; }
-
-    [JsonPropertyName("body")] public string? Body { get; set; }
-
-    [JsonPropertyName("softDeleted")] public bool? SoftDeleted { get; set; }
-}
-
-// ── Pump Alerts ──────────────────────────────────────────────────────
-
-/// <summary>
-///     A pump alert entry.
-/// </summary>
-public class GlookoV3HistoryPumpAlert
-{
-    [JsonPropertyName("guid")] public string? Guid { get; set; }
-
-    [JsonPropertyName("timestamp")] public string? Timestamp { get; set; }
-
-    [JsonPropertyName("alertType")] public string? AlertType { get; set; }
-
-    [JsonPropertyName("message")] public string? Message { get; set; }
 
     [JsonPropertyName("softDeleted")] public bool? SoftDeleted { get; set; }
 }

@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
@@ -30,7 +31,7 @@ public class GlookoActivityMapper(string connectorSource, GlookoTimeMapper timeM
     {
         var results = new List<Activity>();
 
-        foreach (var ex in exercises)
+        foreach (var ex in ConnectorFaults.NonNullRecords(exercises, _logger, _connectorSource, "SSV2 exercise"))
         {
             try
             {
@@ -49,9 +50,9 @@ public class GlookoActivityMapper(string connectorSource, GlookoTimeMapper timeM
 
                 results.Add(BuildActivity(correctedTimestamp, legacyId, ex.Name, durationMinutes, intensity));
             }
-            catch (Exception e)
+            catch (Exception e) when (ConnectorFaults.IsMalformedRecord(e))
             {
-                _logger.LogWarning(e, "[{ConnectorSource}] Error mapping SSV2 exercise", _connectorSource);
+                _logger.LogWarning(e, "[{ConnectorSource}] Skipped malformed SSV2 exercise {Guid}", _connectorSource, ex.Guid);
             }
         }
 
@@ -70,7 +71,7 @@ public class GlookoActivityMapper(string connectorSource, GlookoTimeMapper timeM
     {
         var results = new List<Activity>();
 
-        foreach (var ev in exerciseEvents)
+        foreach (var ev in ConnectorFaults.NonNullRecords(exerciseEvents, _logger, _connectorSource, "SSV2 exercise event"))
         {
             try
             {
@@ -89,9 +90,9 @@ public class GlookoActivityMapper(string connectorSource, GlookoTimeMapper timeM
 
                 results.Add(BuildActivity(correctedTimestamp, legacyId, name: null, durationMinutes, ev.Intensity));
             }
-            catch (Exception e)
+            catch (Exception e) when (ConnectorFaults.IsMalformedRecord(e))
             {
-                _logger.LogWarning(e, "[{ConnectorSource}] Error mapping SSV2 exercise event", _connectorSource);
+                _logger.LogWarning(e, "[{ConnectorSource}] Skipped malformed SSV2 exercise event {Guid}", _connectorSource, ev.Guid);
             }
         }
 

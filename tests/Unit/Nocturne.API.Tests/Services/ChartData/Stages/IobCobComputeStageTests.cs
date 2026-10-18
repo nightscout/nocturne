@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
-using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;

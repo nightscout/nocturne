@@ -26788,3 +26788,29 @@ msgstr ""
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Failed to read migration status"
 msgstr ""
+
+#. 0: year
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "{0} daily chart"
+msgstr ""
+
+#. 0: year
+#: src/routes/(authenticated)/reports/year-overview/+page.svelte
+msgid "{0} monthly GRI chart"
+msgstr ""
+
+#: src/lib/components/reports/year-overview/VisibleChart.test-harness.svelte
+msgid "Original data"
+msgstr ""
+
+#: src/lib/components/reports/year-overview/VisibleChart.test-harness.svelte
+msgid "Updated data"
+msgstr ""
+
+#: src/lib/components/reports/year-overview/VisibleChart.test-harness.svelte
+msgid "Year chart"
+msgstr ""
+
+#: src/lib/components/reports/year-overview/VisibleChart.test-harness.svelte
+msgid "Update data"
+msgstr ""

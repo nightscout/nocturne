@@ -45,6 +45,39 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
+    public async Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit = 100, int offset = 0, bool descending = true, bool nativeOnly = false,
+        DateTime? afterTimestamp = null, Guid? afterId = null,
+        CancellationToken ct = default, Guid? patientDeviceId = null)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
+                descending, nativeOnly, afterTimestamp, afterId, patientDeviceId)
+            .Select(e => new SensorGlucose
+            {
+                Id = e.Id,
+                LegacyId = e.LegacyId,
+                Timestamp = e.Timestamp,
+                CreatedAt = e.SysCreatedAt,
+                ModifiedAt = e.SysUpdatedAt,
+                Device = e.Device,
+                App = e.App,
+                DataSource = e.DataSource,
+                UtcOffset = e.UtcOffset,
+                PatientDeviceId = e.PatientDeviceId,
+                Mgdl = e.Mgdl,
+                Direction = SensorGlucoseMapper.ParseDirection(e.Direction),
+                TrendRate = e.TrendRate,
+                Noise = e.Noise,
+                Filtered = e.Filtered,
+                Unfiltered = e.Unfiltered,
+                Delta = e.Delta,
+            })
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
     protected override Entry? ProjectToLegacyEntry(SensorGlucose model) => EntryProjection.FromSensorGlucose(model);
 
     /// <summary>

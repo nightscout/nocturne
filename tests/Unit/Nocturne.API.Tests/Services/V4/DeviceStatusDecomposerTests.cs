@@ -3049,4 +3049,200 @@ public class DeviceStatusDecomposerTests : IDisposable
     }
 
     #endregion
+
+    #region Prediction curves stored once
+
+    private static readonly JsonSerializerOptions CanonicalJson = new()
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    private static string Canonical(object? value) =>
+        value is null ? "null" : JsonSerializer.Serialize(value, value.GetType(), CanonicalJson);
+
+    private static OpenApsPredBGs Curves(double start) => new()
+    {
+        IOB = [start, start - 5, start - 10],
+        ZT = [start, start - 2],
+        COB = [start, start + 5, start + 10, start + 5],
+        UAM = [start, start + 10],
+    };
+
+    private async Task<(V4Models.ApsSnapshot Stored, DeviceStatus Projected)> DecomposeAndProject(DeviceStatus ds)
+    {
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        var stored = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+        return (stored, DeviceStatusProjectionService.ProjectFromSnapshots(stored, null, null, null, null));
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OpenApsSameCycle_StoresCurvesOnceAndProjectsThemBack()
+    {
+        var suggested = new OpenApsSuggested
+        {
+            Bg = 120, EventualBG = 95, Reason = "COB: 0, Dev: -3", Timestamp = "2023-11-14T12:00:00Z", PredBGs = Curves(120),
+        };
+        var enacted = new OpenApsEnacted
+        {
+            Bg = 120, EventualBG = 95, Reason = "COB: 0, Dev: -3", Timestamp = "2023-11-14T12:00:00Z", PredBGs = Curves(120),
+            Rate = 0.8, Duration = 30, Received = true,
+        };
+        var ds = new DeviceStatus
+        {
+            Id = "curves-same-cycle",
+            Mills = 1700000000000,
+            Device = "openaps://Samsung",
+            OpenAps = new OpenApsStatus { Suggested = suggested, Enacted = enacted },
+        };
+        var originalSuggested = Canonical(suggested);
+        var originalEnacted = Canonical(enacted);
+
+        var (stored, projected) = await DecomposeAndProject(ds);
+
+        stored.SuggestedJson.Should().NotContain("predBGs");
+        stored.EnactedJson.Should().NotContain("predBGs");
+        stored.PredictedIobJson.Should().Be("[120,115,110]");
+        Canonical(projected.OpenAps!.Suggested).Should().Be(originalSuggested);
+        Canonical(projected.OpenAps.Enacted).Should().Be(originalEnacted);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OpenApsResentEnacted_KeepsTheOlderCommandsOwnCurves()
+    {
+        // The re-sent enacted command is the previous cycle's, so its curves differ from the
+        // fresher suggestion the columns are taken from.
+        var suggested = new OpenApsSuggested { Bg = 118, Timestamp = "2023-11-14T12:05:00Z", PredBGs = Curves(118) };
+        var enacted = new OpenApsEnacted
+        {
+            Bg = 120, Timestamp = "2023-11-14T12:00:00Z", PredBGs = Curves(120), Rate = 0.8, Duration = 30, Received = true,
+        };
+        var ds = new DeviceStatus
+        {
+            Id = "curves-resent-enacted",
+            Mills = 1700000300000,
+            Device = "openaps://Samsung",
+            OpenAps = new OpenApsStatus { Suggested = suggested, Enacted = enacted },
+        };
+        var originalSuggested = Canonical(suggested);
+        var originalEnacted = Canonical(enacted);
+
+        var (stored, projected) = await DecomposeAndProject(ds);
+
+        stored.SuggestedJson.Should().NotContain("predBGs");
+        stored.EnactedJson.Should().Contain("predBGs");
+        Canonical(projected.OpenAps!.Suggested).Should().Be(originalSuggested);
+        Canonical(projected.OpenAps.Enacted).Should().Be(originalEnacted);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OpenApsCommandWithoutCurvesBesideOneWith_ReadsBackWithout()
+    {
+        // Trio uploads a suggestion without predBGs beside an enacted command that has them.
+        var suggested = new OpenApsSuggested { Bg = 91, Timestamp = "2023-11-14T12:00:00Z" };
+        var enacted = new OpenApsEnacted
+        {
+            Bg = 91, Timestamp = "2023-11-14T12:00:00Z", PredBGs = Curves(91), Rate = 0.6, Duration = 30, Received = true,
+        };
+        var ds = new DeviceStatus
+        {
+            Id = "curves-one-sided",
+            Mills = 1700000000000,
+            Device = "Trio",
+            OpenAps = new OpenApsStatus { Suggested = suggested, Enacted = enacted },
+        };
+        var originalSuggested = Canonical(suggested);
+        var originalEnacted = Canonical(enacted);
+
+        var (stored, projected) = await DecomposeAndProject(ds);
+
+        stored.SuggestedJson.Should().Contain("\"predBGs\":null");
+        stored.EnactedJson.Should().NotContain("predBGs");
+        Canonical(projected.OpenAps!.Suggested).Should().Be(originalSuggested);
+        Canonical(projected.OpenAps.Enacted).Should().Be(originalEnacted);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OpenApsCommandWithEmptyPredBGs_KeepsIt()
+    {
+        var suggested = new OpenApsSuggested { Bg = 118, Timestamp = "2023-11-14T12:05:00Z", PredBGs = new OpenApsPredBGs() };
+        var ds = new DeviceStatus
+        {
+            Id = "curves-empty",
+            Mills = 1700000300000,
+            Device = "openaps://Samsung",
+            OpenAps = new OpenApsStatus { Suggested = suggested },
+        };
+        var originalSuggested = Canonical(suggested);
+
+        var (stored, projected) = await DecomposeAndProject(ds);
+
+        stored.SuggestedJson.Should().Contain("predBGs");
+        Canonical(projected.OpenAps!.Suggested).Should().Be(originalSuggested);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OpenAps_StoresNoNullValuedKeys()
+    {
+        var ds = new DeviceStatus
+        {
+            Id = "no-null-keys",
+            Mills = 1700000000000,
+            Device = "openaps://Samsung",
+            OpenAps = new OpenApsStatus
+            {
+                Suggested = new OpenApsSuggested { Bg = 118, Timestamp = "2023-11-14T12:05:00Z" },
+            },
+        };
+
+        var (stored, _) = await DecomposeAndProject(ds);
+
+        stored.SuggestedJson.Should().NotContain("null");
+        stored.SuggestedJson.Should().NotContain("predBGs");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_Loop_StoresPredictionOnceAndProjectsItBack()
+    {
+        var loop = new LoopStatus
+        {
+            Iob = new LoopIob { Iob = 1.8, BasalIob = 0.5 },
+            Cob = new LoopCob { Cob = 25.0 },
+            RecommendedBolus = 0.7,
+            Predicted = new LoopPredicted { Values = [130, 125, 120, 115, 110], StartDate = "2023-11-14T12:00:00Z" },
+            Enacted = new LoopEnacted { Received = true, Rate = 2.0, Duration = 30, BolusVolume = 0.4 },
+        };
+        var ds = new DeviceStatus { Id = "loop-curves", Mills = 1700000000000, Device = "Loop/3.0", Loop = loop };
+        var originalLoop = Canonical(loop);
+
+        var (stored, projected) = await DecomposeAndProject(ds);
+
+        stored.SuggestedJson.Should().BeNull();
+        stored.EnactedJson.Should().BeNull();
+        stored.LoopJson.Should().NotContain("values");
+        stored.PredictedDefaultJson.Should().Be("[130,125,120,115,110]");
+        Canonical(projected.Loop).Should().Be(originalLoop);
+    }
+
+    [Fact]
+    public void ProjectFromSnapshots_RowStoredWithCurvesInItsBlobs_ProjectsThemUnchanged()
+    {
+        var suggested = new OpenApsSuggested { Bg = 118, Timestamp = "2023-11-14T12:05:00Z", PredBGs = Curves(118) };
+        var enacted = new OpenApsEnacted { Bg = 120, Timestamp = "2023-11-14T12:00:00Z", PredBGs = Curves(120) };
+        var aps = new V4Models.ApsSnapshot
+        {
+            Id = Guid.CreateVersion7(),
+            Timestamp = DateTime.UtcNow,
+            AidAlgorithm = V4Models.AidAlgorithm.OpenAps,
+            SuggestedJson = JsonSerializer.Serialize(suggested),
+            EnactedJson = JsonSerializer.Serialize(enacted),
+            PredictedIobJson = "[1,2,3]",
+        };
+
+        var projected = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, null);
+
+        Canonical(projected.OpenAps!.Suggested).Should().Be(Canonical(suggested));
+        Canonical(projected.OpenAps.Enacted).Should().Be(Canonical(enacted));
+    }
+
+    #endregion
 }

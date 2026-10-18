@@ -1,5 +1,3 @@
-using Nocturne.API.Controllers.V4;
-using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
