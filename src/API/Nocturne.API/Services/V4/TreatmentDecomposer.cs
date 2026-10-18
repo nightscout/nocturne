@@ -1558,6 +1558,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// </remarks>
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
+        await DeleteProfileSwitchSnapshotsAsync([legacyId], origin, ct);
+
         // These deletes bypass the repository chokepoint. Its device-event reaction is run below; the v4-native delete broadcast is deferred to the glucose-unification follow-up.
         var (deleted, deviceEventIds) = await _dbContext.ExecuteInTransactionAsync(async token =>
         {
@@ -1581,6 +1583,39 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             await ReactToDeletedDeviceEventsAsync(deviceEventIds, ct);
 
         return deleted;
+    }
+
+    /// <summary>
+    /// Deletes the profile rows a Profile Switch that carried <c>profileJson</c> decomposed into,
+    /// which sit under the treatment's id (<see cref="DecomposeProfileSwitchAsync"/>). The span is
+    /// looked up with its tombstone: a caller may have deleted it already. Runs ahead of the
+    /// deletes that follow it, because the profile repositories cannot join their transaction and
+    /// rows left behind by a span already gone could never be reached again.
+    /// </summary>
+    private async Task DeleteProfileSwitchSnapshotsAsync(
+        IReadOnlyCollection<string> legacyIds, WriteOrigin origin, CancellationToken ct)
+    {
+        var ids = legacyIds.ToArray();
+        var spans = _dbContext.StateSpans.IgnoreQueryFilters()
+            .Where(s => s.TenantId == _dbContext.TenantId && s.OriginalId != null && ids.Contains(s.OriginalId));
+        await DeleteSnapshotRowsAsync(await ProfileSwitchIdsAsync(spans, ct), origin, ct);
+    }
+
+    private static async Task<List<string>> ProfileSwitchIdsAsync(IQueryable<StateSpanEntity> spans, CancellationToken ct)
+    {
+        var category = StateSpanCategory.Profile.ToString();
+        return await spans.AsNoTracking()
+            .Where(s => s.Category == category && s.OriginalId != null)
+            .Select(s => s.OriginalId!)
+            .Distinct()
+            .ToListAsync(ct);
+    }
+
+    private async Task DeleteSnapshotRowsAsync(
+        IEnumerable<string> profileSwitchIds, WriteOrigin origin, CancellationToken ct)
+    {
+        foreach (var id in profileSwitchIds)
+            await _profileDecomposer.DeleteByLegacyIdAsync(id, origin, ct);
     }
 
     /// <inheritdoc />
@@ -1936,6 +1971,10 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             : null;
 
         var scope = $"timestamp={from:O}..{to:O}";
+
+        var profileSwitchIds = await ProfileSwitchIdsAsync(
+            LegacyTreatmentTables.ServedStateSpansInWindow(_dbContext, from, to), ct);
+        await DeleteSnapshotRowsAsync(profileSwitchIds, origin, ct);
 
         // The served state spans go with the records: a window read serves them, so a window
         // delete that left them would leave them served.

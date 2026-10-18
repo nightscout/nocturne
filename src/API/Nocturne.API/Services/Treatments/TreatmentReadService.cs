@@ -272,12 +272,11 @@ public class TreatmentReadService : ITreatmentStore
     private async Task<TreatmentDeletion?> DeleteStateSpanAsync(string id, CancellationToken ct)
     {
         if (await _projection.GetProjectedStateSpanTreatmentAsync(id, ct) is not { Id: { } spanId } served
-            || await _projection.GetStateSpanTreatmentIdAsync(id, ct) is not { } treatmentId
-            || !await _stateSpans.DeleteStateSpanAsync(spanId, ct))
+            || await _projection.GetStateSpanTreatmentIdAsync(id, ct) is not { } treatmentId)
             return null;
 
         await _pipeline.DeleteByLegacyIdAsync<Treatment>(treatmentId, WriteOrigin.Live, ct);
-        return new TreatmentDeletion(served);
+        return await _stateSpans.DeleteStateSpanAsync(spanId, ct) ? new TreatmentDeletion(served) : null;
     }
 
     /// <inheritdoc />
