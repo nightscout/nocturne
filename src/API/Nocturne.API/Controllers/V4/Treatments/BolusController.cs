@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -32,6 +33,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [Route("api/v4/insulin/boluses")]
 [RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
+[ClearsTenantCache(TenantCacheFamily.Treatments, TenantCacheFamily.Statistics)]
 public class BolusController(
     IBolusRepository repo,
     IPatientInsulinRepository insulinRepo,

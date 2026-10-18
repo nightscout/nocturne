@@ -16,7 +16,7 @@ namespace Nocturne.API.Services.Treatments;
 public class TreatmentCacheAdapter : ITreatmentCache
 {
     /// <summary>The <see cref="ITenantCache"/> key family every treatment read is cached under.</summary>
-    public const string CacheFamily = "treatments";
+    public const string CacheFamily = TenantCacheFamily.Treatments;
 
     private readonly ITenantCache _cache;
     private readonly ILogger<TreatmentCacheAdapter> _logger;

@@ -48,7 +48,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [Route("api/v4/nutrition")]
 [RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
-[ClearsTenantCache]
+[ClearsTenantCache(TenantCacheFamily.Treatments, TenantCacheFamily.Statistics)]
 public class NutritionController : ControllerBase, IWriteScopedController
 {
     /// <summary>

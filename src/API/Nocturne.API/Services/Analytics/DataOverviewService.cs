@@ -421,6 +421,35 @@ public class DataOverviewService : IDataOverviewService
     private const int EHbA1cMinimumReadings = 30;
 
     /// <summary>
+    /// The <see cref="ITenantCache"/> families holding every cached timeline a reading at any of
+    /// <paramref name="touchedUtc"/> feeds: the whole <see cref="TenantCacheFamily.EHbA1c"/> family
+    /// when none is given, otherwise one per year.
+    /// </summary>
+    /// <remarks>
+    /// Year <c>Y</c> reads local readings from <see cref="EHbA1cWindowDays"/> before 1 January of
+    /// <c>Y</c> up to the end of <c>Y</c>, so a reading feeds its own local year and the year
+    /// <see cref="EHbA1cWindowDays"/> later. A day either side absorbs the tenant's UTC offset and
+    /// a duplicate copy stamped moments apart, whose primary may change with the write.
+    /// </remarks>
+    public static IReadOnlyList<string> EHbA1cCacheFamilies(IReadOnlyCollection<DateTime> touchedUtc)
+    {
+        if (touchedUtc.Count == 0)
+            return [TenantCacheFamily.EHbA1c];
+
+        var years = new SortedSet<int>();
+        foreach (var timestamp in touchedUtc)
+        {
+            var last = timestamp.AddDays(EHbA1cWindowDays + 1).Year;
+            for (var year = timestamp.AddDays(-1).Year; year <= last; year++)
+                years.Add(year);
+        }
+
+        return [.. years.Select(EHbA1cCacheFamily)];
+    }
+
+    private static string EHbA1cCacheFamily(int year) => $"{TenantCacheFamily.EHbA1c}:{year}";
+
+    /// <summary>
     /// Per-day decay ratio for the recency weighting: the largest <c>r &lt; 1</c> such that the most
     /// recent 30 days already carry half of the full 90-day weight — a smooth, per-day generalisation
     /// of the textbook "50% last month / 25% / 25%" HbA1c teaching, without computing it in three
@@ -452,7 +481,7 @@ public class DataOverviewService : IDataOverviewService
         var sourceKey = dataSources is { Length: > 0 }
             ? string.Join(",", dataSources.OrderBy(s => s, StringComparer.OrdinalIgnoreCase))
             : "all";
-        var cacheKey = $"ehba1c:{year}:{sourceKey}";
+        var cacheKey = $"{EHbA1cCacheFamily(year)}:{sourceKey}";
 
         var cached = await _cache.GetAsync<EHbA1cTimelineResponse>(cacheKey, cancellationToken);
         if (cached != null)
@@ -525,8 +554,8 @@ public class DataOverviewService : IDataOverviewService
             return response;
 
         var isCurrentYear = year == localNow.Year;
-        // Completed years don't change (barring rare backfills), so cache them for a long time; the
-        // current year is still accumulating days, so refresh it more often.
+        // Completed years don't change barring backfills, which clear them (EHbA1cCacheFamilies);
+        // the current year is still accumulating days.
         var expiry = isCurrentYear ? DateTime.UtcNow.AddHours(1) : DateTime.UtcNow.AddDays(14);
         await _cache.SetAsync(cacheKey, response, expiry, cancellationToken);
 

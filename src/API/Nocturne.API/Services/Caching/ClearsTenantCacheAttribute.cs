@@ -1,31 +1,40 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Services.Analytics;
 
 namespace Nocturne.API.Services.Caching;
 
 /// <summary>
-/// Clears every <see cref="ITenantCache"/> key of the tenant after a write action succeeds.
+/// Clears the <see cref="TenantCacheFamily"/> families a controller's writes feed, after a write
+/// action succeeds.
 /// </summary>
 /// <remarks>
-/// For the V4 writers whose rows feed several cached families at once (the legacy entry and
-/// treatment projections, the statistics, the eHbA1c timeline), the whole tenant is cleared
-/// rather than an enumerated list of families that would drift as caches are added. The v1 write
-/// paths clear only the family they feed, through <c>WriteEffectOptions.CacheFamiliesToClear</c>
-/// and the cache adapters. A refused, failed or cancelled request clears nothing, so a caller who
-/// may not write cannot flush the cache.
+/// Each controller names every family whose cached value its records can change. The eHbA1c family
+/// is keyed by year and its completed years live for weeks, so it is cleared only for the years the
+/// write's <see cref="TenantCacheWriteFootprint"/> reaches, or whole when the footprint is empty. A
+/// refused, failed or cancelled request clears nothing, so a caller who may not write cannot flush
+/// the cache. The v1 write paths clear through <c>WriteEffectOptions.CacheFamiliesToClear</c> and
+/// the cache adapters instead.
 /// </remarks>
-[AttributeUsage(AttributeTargets.Class, Inherited = true)]
+[AttributeUsage(AttributeTargets.Class)]
 public sealed class ClearsTenantCacheAttribute : ActionFilterAttribute
 {
-    public ClearsTenantCacheAttribute() => Order = int.MaxValue;
+    public ClearsTenantCacheAttribute(params string[] families)
+    {
+        Families = families;
+        Order = int.MaxValue;
+    }
+
+    public IReadOnlyList<string> Families { get; }
 
     public override async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
+        var http = context.HttpContext;
+        var footprint = Families.Contains(TenantCacheFamily.EHbA1c) ? TenantCacheWriteFootprint.Open(http) : null;
+
         var executed = await next();
 
-        var http = context.HttpContext;
         if (HttpMethods.IsGet(http.Request.Method)
             || HttpMethods.IsHead(http.Request.Method)
             || HttpMethods.IsOptions(http.Request.Method))
@@ -33,11 +42,18 @@ public sealed class ClearsTenantCacheAttribute : ActionFilterAttribute
         if (executed.Canceled || executed.Exception is not null || !Succeeded(executed.Result))
             return;
 
-        var tenant = http.RequestServices.GetRequiredService<ITenantAccessor>();
-        if (tenant.IsResolved)
+        var cache = http.RequestServices.GetRequiredService<ITenantCache>();
+        foreach (var family in Families)
         {
-            await http.RequestServices.GetRequiredService<ITenantCache>()
-                .RemoveTenantAsync(tenant.TenantId, http.RequestAborted);
+            if (family == TenantCacheFamily.EHbA1c)
+            {
+                foreach (var year in DataOverviewService.EHbA1cCacheFamilies(footprint!.Timestamps))
+                    await cache.RemoveFamilyAsync(year, http.RequestAborted);
+            }
+            else
+            {
+                await cache.RemoveFamilyAsync(family, http.RequestAborted);
+            }
         }
     }
 

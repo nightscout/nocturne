@@ -17,7 +17,7 @@ namespace Nocturne.API.Services.Entries;
 public class EntryCacheAdapter : IEntryCache
 {
     /// <summary>The <see cref="ITenantCache"/> key family every entry read is cached under.</summary>
-    public const string CacheFamily = "entries";
+    public const string CacheFamily = TenantCacheFamily.Entries;
 
     private readonly ITenantCache _cache;
     private readonly ILogger<EntryCacheAdapter> _logger;

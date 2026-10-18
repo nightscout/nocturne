@@ -820,7 +820,7 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        const string cacheKey = "statistics:multi-period";
+        const string cacheKey = $"{TenantCacheFamily.Statistics}:multi-period";
 
         var cachedResult = await _cache.GetAsync<MultiPeriodStatistics>(cacheKey, cancellationToken);
         if (cachedResult != null)
