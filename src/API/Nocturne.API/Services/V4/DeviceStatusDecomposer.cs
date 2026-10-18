@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
@@ -36,6 +37,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
     public DeviceStatusDecomposer(
@@ -943,7 +945,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         var predBGs = command?.PredBGs;
         var apsSystem = DetectOpenApsVariant(ds);
 
-        return new V4Models.ApsSnapshot
+        var snapshot = new V4Models.ApsSnapshot
         {
             Timestamp = ResolveTimestamp(ds),
             UtcOffset = ds.UtcOffset,
@@ -968,8 +970,6 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             EnactedBolusVolume = ds.OpenAps.Enacted?.Smb is > 0
                 ? ds.OpenAps.Enacted.Smb
                 : ds.OpenAps.Enacted?.Units,
-            SuggestedJson = SerializeOrNull(ds.OpenAps.Suggested),
-            EnactedJson = SerializeOrNull(ds.OpenAps.Enacted),
             PredictedDefaultJson = apsSystem == V4Models.AidAlgorithm.Trio
                 ? null
                 : SerializeOrNull(predBGs?.IOB),
@@ -980,6 +980,9 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             PredictedStartTimestamp = ParseTimestampToDateTime(command?.Timestamp),
             AidVersion = ds.OpenAps?.Version,
         };
+        snapshot.SuggestedJson = ApsSnapshotCurves.SerializeCommand(ds.OpenAps.Suggested, snapshot, JsonOptions);
+        snapshot.EnactedJson = ApsSnapshotCurves.SerializeCommand(ds.OpenAps.Enacted, snapshot, JsonOptions);
+        return snapshot;
     }
 
     private static V4Models.ApsSnapshot MapToApsSnapshotFromLoop(
@@ -1005,11 +1008,9 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             EnactedRate = ds.Loop.Enacted?.Rate,
             EnactedDuration = ds.Loop.Enacted?.Duration,
             EnactedBolusVolume = ds.Loop.Enacted?.BolusVolume,
-            SuggestedJson = SerializeOrNull(ds.Loop.Recommended),
-            EnactedJson = SerializeOrNull(ds.Loop.Enacted),
             PredictedDefaultJson = SerializeOrNull(ds.Loop.Predicted?.Values),
             PredictedStartTimestamp = ParseTimestampToDateTime(ds.Loop.Predicted?.StartDate),
-            LoopJson = SerializeOrNull(ds.Loop),
+            LoopJson = ApsSnapshotCurves.SerializeLoop(ds.Loop, JsonOptions),
             AidVersion = null,
         };
     }

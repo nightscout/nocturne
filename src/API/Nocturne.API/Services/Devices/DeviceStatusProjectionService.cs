@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Web;
+using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -379,7 +380,8 @@ public class DeviceStatusProjectionService
     {
         if (!string.IsNullOrEmpty(aps.LoopJson))
         {
-            ds.Loop = JsonSerializer.Deserialize<LoopStatus>(aps.LoopJson, JsonOptions);
+            ds.Loop = ApsSnapshotCurves.RestoreLoop(
+                JsonSerializer.Deserialize<LoopStatus>(aps.LoopJson, JsonOptions), aps);
         }
         else
         {
@@ -402,8 +404,8 @@ public class DeviceStatusProjectionService
     {
         ds.OpenAps = new OpenApsStatus
         {
-            Suggested = DeserializeOrNull<OpenApsSuggested>(aps.SuggestedJson, logger),
-            Enacted = DeserializeOrNull<OpenApsEnacted>(aps.EnactedJson, logger),
+            Suggested = DeserializeOrNull<OpenApsSuggested>(ApsSnapshotCurves.RestoreCommand(aps.SuggestedJson, aps), logger),
+            Enacted = DeserializeOrNull<OpenApsEnacted>(ApsSnapshotCurves.RestoreCommand(aps.EnactedJson, aps), logger),
             Version = aps.AidVersion,
         };
 
