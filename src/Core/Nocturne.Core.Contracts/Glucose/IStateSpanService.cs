@@ -137,12 +137,16 @@ public interface IStateSpanService
     /// <param name="type">Optional activity type filter</param>
     /// <param name="count">Maximum number of activities to return</param>
     /// <param name="skip">Number of activities to skip for pagination</param>
+    /// <param name="from">Inclusive lower bound on the activity's start, or <c>null</c> for none</param>
+    /// <param name="to">Inclusive upper bound on the activity's start, or <c>null</c> for none</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Collection of activities</returns>
+    /// <returns>Collection of activities, newest first</returns>
     Task<IEnumerable<Activity>> GetActivitiesAsync(
         string? type = null,
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

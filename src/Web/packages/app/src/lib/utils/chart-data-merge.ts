@@ -1,4 +1,27 @@
+import type { CarbMarkerDto } from '$lib/api/generated/nocturne-api-client';
 import type { TransformedChartData } from '$lib/utils/chart-data-transform';
+
+// An empty id is a missing one: rows keyed by it would collide on "".
+const hasId = (id: unknown): id is string => id != null && id !== '';
+
+/**
+ * The key of a row in a keyed `{#each}`: its record id, or its time and position when
+ * it has none, since rows without an id are never deduped against each other.
+ */
+export function markerKey(id: string | null | undefined, time: Date, index: number): string {
+	return hasId(id) ? id : `${time.getTime()}-${index}`;
+}
+
+/**
+ * The identity of a carb marker, or undefined when it has no record id. An offset
+ * marker shares its meal's treatmentId, so its time tells it apart from the meal.
+ */
+export function carbMarkerKey(
+	marker: Pick<CarbMarkerDto, 'treatmentId' | 'isOffset'> & { time: Date }
+): string | undefined {
+	if (!hasId(marker.treatmentId)) return undefined;
+	return marker.isOffset ? `${marker.treatmentId}@${marker.time.getTime()}` : marker.treatmentId;
+}
 
 /**
  * Merge historical chart data into initial chart data.
@@ -10,12 +33,9 @@ export function mergeChartData(
 ): TransformedChartData {
 	if (!historical) return initial;
 
-	// An empty id is a missing one: markers keyed by it would collide on "".
-	const hasId = (id: unknown) => id != null && id !== '';
-
-	// Helper to merge arrays by time, avoiding duplicates. Markers that render keyed by
-	// id also drop a historical row whose id the initial window already holds, since a
-	// treatment moved across the boundary between the two fetches appears in both.
+	// Helper to merge arrays by time, avoiding duplicates. A row with an id is deduped by
+	// that id alone, since a treatment moved across the boundary between the two fetches
+	// appears in both; time dedup applies only to rows without one.
 	const timeValue = (value: unknown) => (value instanceof Date ? value.getTime() : value);
 	const mergeByTime = <T,>(
 		initialArr: T[],
@@ -29,15 +49,14 @@ export function mergeChartData(
 			idOf ? initialArr.map((item) => idOf(item)).filter(hasId) : []
 		);
 		const uniqueHistorical = historicalArr.filter((item) => {
-			const time = timeValue(timeOf(item));
-			if (initialTimes.has(time)) return false;
 			const id = idOf?.(item);
-			return !(hasId(id) && initialIds.has(id));
+			if (hasId(id)) return !initialIds.has(id);
+			return !initialTimes.has(timeValue(timeOf(item)));
 		});
 		return [...uniqueHistorical, ...initialArr];
 	};
 
-	// Helper to merge span arrays by id, falling back to startTime dedup.
+	// Helper to merge span arrays by id. Spans without an id are all kept.
 	// Spans that straddle the initial/historical boundary can appear in both
 	// datasets with the same id but different startTime, so time-based dedup
 	// alone would let duplicates through and cause Svelte each_key_duplicate.
@@ -46,19 +65,33 @@ export function mergeChartData(
 		historicalArr: T[]
 	): T[] => {
 		if (!initialArr || !historicalArr) return initialArr || historicalArr || [];
-		const seenIds = new Set(
-			initialArr.map((item) => item.id).filter((id: unknown) => id != null)
-		);
+		const seenIds = new Set(initialArr.map((item) => item.id).filter(hasId));
 		const uniqueHistorical = historicalArr.filter((item) => {
-			if (item.id != null) {
+			if (hasId(item.id)) {
 				if (seenIds.has(item.id)) return false;
 				seenIds.add(item.id);
 				return true;
 			}
-			// No id — fall back to startTime dedup
 			return true;
 		});
 		return [...uniqueHistorical, ...initialArr];
+	};
+
+	// An offset marker comes with its meal, so a meal present in the initial window
+	// makes the historical copy of its offsets stale.
+	const mergeCarbMarkers = (
+		initialArr: TransformedChartData['carbMarkers'],
+		historicalArr: TransformedChartData['carbMarkers']
+	) => {
+		const initialMeals = new Set(
+			initialArr.filter((m) => !m.isOffset).map((m) => m.treatmentId).filter(hasId)
+		);
+		return mergeByTime(
+			initialArr,
+			historicalArr.filter((m) => !(m.isOffset && hasId(m.treatmentId) && initialMeals.has(m.treatmentId))),
+			(p) => p.time,
+			carbMarkerKey
+		);
 	};
 
 	// Every field is listed explicitly rather than spreading `initial`. A spread
@@ -71,9 +104,9 @@ export function mergeChartData(
 		basalSeries: mergeByTime(initial.basalSeries, historical.basalSeries, (p) => p.timestamp),
 		glucoseData: mergeByTime(initial.glucoseData, historical.glucoseData, (p) => p.time),
 
-		// Markers drop a repeat by time, and by id where they render keyed by one
+		// Markers drop a repeat by id, or by time when they have no id
 		bolusMarkers: mergeByTime(initial.bolusMarkers, historical.bolusMarkers, (p) => p.time, (p) => p.treatmentId),
-		carbMarkers: mergeByTime(initial.carbMarkers, historical.carbMarkers, (p) => p.time, (p) => p.treatmentId),
+		carbMarkers: mergeCarbMarkers(initial.carbMarkers, historical.carbMarkers),
 		deviceEventMarkers: mergeByTime(
 			initial.deviceEventMarkers,
 			historical.deviceEventMarkers,
@@ -133,23 +166,49 @@ export function replaceWindow(
 	startTime: number
 ): TransformedChartData {
 	const ms = (value: unknown) => (value instanceof Date ? value.getTime() : Number(value));
-	const hasId = (id: unknown) => id != null && id !== '';
 	const swap = <T,>(
 		older: T[],
 		fresh: T[],
 		timeOf: (item: T) => unknown,
 		idOf?: (item: T) => unknown
 	): T[] => {
-		const freshIds = new Set(idOf ? fresh.map((item) => idOf(item)).filter(hasId) : []);
+		const keptFresh = fresh
+			.filter((item) => ms(timeOf(item)) >= startTime)
+			.sort((a, b) => ms(timeOf(a)) - ms(timeOf(b)));
+		const freshIds = new Set(idOf ? keptFresh.map((item) => idOf(item)).filter(hasId) : []);
 		return [
 			...older.filter((item) => {
 				if (ms(timeOf(item)) >= startTime) return false;
 				const id = idOf?.(item);
 				return !(hasId(id) && freshIds.has(id));
 			}),
-			...fresh
-				.filter((item) => ms(timeOf(item)) >= startTime)
-				.sort((a, b) => ms(timeOf(a)) - ms(timeOf(b))),
+			...keptFresh,
+		];
+	};
+	// An offset marker sits on its meal's side of the window, because the server sends it
+	// only with its meal, so it is kept or replaced along with that meal whatever its own time.
+	const swapCarbMarkers = (
+		older: TransformedChartData['carbMarkers'],
+		fresh: TransformedChartData['carbMarkers']
+	) => {
+		const anchorOf = (rows: typeof older) => {
+			const mealTimes = new Map(
+				rows.filter((m) => !m.isOffset && hasId(m.treatmentId)).map((m) => [m.treatmentId, ms(m.time)])
+			);
+			return (m: (typeof rows)[number]) =>
+				(m.isOffset ? mealTimes.get(m.treatmentId) : undefined) ?? ms(m.time);
+		};
+		const freshAnchor = anchorOf(fresh);
+		const keptFresh = fresh
+			.filter((m) => freshAnchor(m) >= startTime)
+			.sort((a, b) => ms(a.time) - ms(b.time));
+		const freshMeals = new Set(
+			keptFresh.filter((m) => !m.isOffset).map((m) => m.treatmentId).filter(hasId)
+		);
+		const olderAnchor = anchorOf(older);
+		return [
+			...older.filter((m) => olderAnchor(m) < startTime && !(hasId(m.treatmentId) && freshMeals.has(m.treatmentId))),
+			...keptFresh,
 		];
 	};
 	// A span that began before the window and is still running comes back in the
@@ -158,10 +217,10 @@ export function replaceWindow(
 		older: T[],
 		fresh: T[]
 	): T[] => {
-		const freshIds = new Set(fresh.map((s) => s.id).filter((id) => id != null));
+		const freshIds = new Set(fresh.map((s) => s.id).filter(hasId));
 		return [
 			...older.filter(
-				(s) => s.startTime.getTime() < startTime && !(s.id != null && freshIds.has(s.id))
+				(s) => s.startTime.getTime() < startTime && !(hasId(s.id) && freshIds.has(s.id))
 			),
 			...[...fresh].sort((a, b) => a.startTime.getTime() - b.startTime.getTime()),
 		];
@@ -186,7 +245,7 @@ export function replaceWindow(
 		basalSeries,
 		glucoseData,
 		bolusMarkers: swap(current.bolusMarkers, recent.bolusMarkers, (p) => p.time, (p) => p.treatmentId),
-		carbMarkers: swap(current.carbMarkers, recent.carbMarkers, (p) => p.time, (p) => p.treatmentId),
+		carbMarkers: swapCarbMarkers(current.carbMarkers, recent.carbMarkers),
 		deviceEventMarkers: swap(
 			current.deviceEventMarkers,
 			recent.deviceEventMarkers,

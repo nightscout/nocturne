@@ -139,9 +139,68 @@ public class DeviceEventRepositoryReactorTests : IDisposable
         (await repo.GetByIdAsync(model.Id)).Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task LiveDelete_FiresTheReactorWithTheDeletedEvent()
+    {
+        var model = NewEvent();
+        await _repo.CreateAsync(model, WriteOrigin.Backfill);
+
+        await _repo.DeleteAsync(model.Id, WriteOrigin.Live);
+
+        _reactor.Deleted.Should().ContainSingle().Which.Id.Should().Be(model.Id);
+    }
+
+    [Fact]
+    public async Task Withdrawal_FiresTheReactorWithTheWithdrawnEventOnly()
+    {
+        var withdrawn = NewEvent(DeviceEventType.SensorStart);
+        withdrawn.DataSource = "inference";
+        withdrawn.SyncIdentifier = "inferred";
+        var other = NewEvent(DeviceEventType.SensorStart);
+        other.DataSource = "xdrip";
+        other.SyncIdentifier = "inferred";
+        await _repo.CreateAsync(withdrawn, WriteOrigin.Backfill);
+        await _repo.CreateAsync(other, WriteOrigin.Backfill);
+
+        await _repo.WithdrawBySyncIdentifierAsync("inference", "inferred", WriteOrigin.Live);
+
+        _reactor.Deleted.Should().ContainSingle().Which.Id.Should().Be(withdrawn.Id);
+    }
+
+    [Fact]
+    public async Task BackfillDelete_DoesNotFireTheReactor()
+    {
+        var model = NewEvent();
+        await _repo.CreateAsync(model, WriteOrigin.Backfill);
+
+        await _repo.DeleteAsync(model.Id, WriteOrigin.Backfill);
+
+        _reactor.Deleted.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ReactorFailureOnDelete_DoesNotFailTheDelete()
+    {
+        var repo = new DeviceEventRepository(
+            new TestTenantDbContextFactory(_context),
+            new Mock<IDeduplicationService>().Object,
+            new Mock<IAuditContext>().Object,
+            NullLogger<DeviceEventRepository>.Instance,
+            broadcaster: null,
+            reactor: new ThrowingReactor());
+        var model = NewEvent();
+        await repo.CreateAsync(model, WriteOrigin.Backfill);
+
+        var act = async () => await repo.DeleteAsync(model.Id, WriteOrigin.Live);
+
+        await act.Should().NotThrowAsync();
+        (await repo.GetByIdAsync(model.Id)).Should().BeNull();
+    }
+
     private sealed class RecordingReactor : IDeviceEventReactor
     {
         public List<DeviceEvent> Created { get; } = [];
+        public List<DeviceEvent> Deleted { get; } = [];
         public int Invocations { get; private set; }
 
         public Task OnCreatedAsync(IReadOnlyList<DeviceEvent> created, CancellationToken ct = default)
@@ -150,11 +209,32 @@ public class DeviceEventRepositoryReactorTests : IDisposable
             Created.AddRange(created);
             return Task.CompletedTask;
         }
+
+        public Task OnDeletedAsync(IReadOnlyList<DeviceEvent> deleted, CancellationToken ct = default)
+        {
+            Deleted.AddRange(deleted);
+            return Task.CompletedTask;
+        }
+
+        public Task OnReplayedAsync(IReadOnlyList<DeviceEvent> events, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlySet<Guid>> GetFollowedAsync(IReadOnlyCollection<Guid> eventIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
     }
 
     private sealed class ThrowingReactor : IDeviceEventReactor
     {
         public Task OnCreatedAsync(IReadOnlyList<DeviceEvent> created, CancellationToken ct = default) =>
+            throw new InvalidOperationException("tracker repository unavailable");
+
+        public Task OnDeletedAsync(IReadOnlyList<DeviceEvent> deleted, CancellationToken ct = default) =>
+            throw new InvalidOperationException("tracker repository unavailable");
+
+        public Task OnReplayedAsync(IReadOnlyList<DeviceEvent> events, CancellationToken ct = default) =>
+            throw new InvalidOperationException("tracker repository unavailable");
+
+        public Task<IReadOnlySet<Guid>> GetFollowedAsync(IReadOnlyCollection<Guid> eventIds, CancellationToken ct = default) =>
             throw new InvalidOperationException("tracker repository unavailable");
     }
 }

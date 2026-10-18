@@ -951,7 +951,7 @@ public class StatisticsServiceClinicalAccuracyTests
             new CarbIntake { Carbs = 45 },
         };
 
-        var result = _sut.AnalyzeGlucoseDataExtended(entries, boluses, carbIntakes);
+        var result = _sut.AnalyzeGlucoseDataExtended(entries, boluses, carbIntakes, windowDays: 14);
 
         // Core analytics should be populated
         result.BasicStats.Count.Should().Be(288);
@@ -978,7 +978,7 @@ public class StatisticsServiceClinicalAccuracyTests
         var result = _sut.AnalyzeGlucoseDataExtended(
             Array.Empty<SensorGlucose>(),
             Array.Empty<Bolus>(),
-            Array.Empty<CarbIntake>()
+            Array.Empty<CarbIntake>(), windowDays: 14
         );
 
         result.BasicStats.Count.Should().Be(0);

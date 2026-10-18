@@ -63,7 +63,9 @@ public class DeviceStatusHistoryHeaderTests
         var result = await Controller(new HistoryRecord<ApsSnapshot>(aps, Deleted: true))
             .GetDeviceStatusHistory(0);
 
-        var body = JsonSerializer.SerializeToElement(result.Should().BeOfType<OkObjectResult>().Subject.Value);
+        var body = JsonSerializer.SerializeToElement(
+            result.Should().BeOfType<OkObjectResult>().Subject.Value,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
         var status = body.GetProperty("result").EnumerateArray().Should().ContainSingle().Subject;
         status.GetProperty("isValid").GetBoolean().Should().BeFalse();
         status.GetProperty("srvModified").GetInt64()

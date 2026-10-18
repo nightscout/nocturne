@@ -15,6 +15,8 @@ public class LabHbA1cResult
     /// <summary>Lab-reported HbA1c in DCCT/NGSP percent.</summary>
     public double ValuePercent { get; set; }
 
+    public A1cDisplayValue A1cDisplay => A1cDisplayValue.FromPercent(ValuePercent);
+
     /// <summary>Optional free-text note (e.g. lab name).</summary>
     public string? Note { get; set; }
 

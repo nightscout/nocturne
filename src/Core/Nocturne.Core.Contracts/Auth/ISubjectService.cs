@@ -122,13 +122,6 @@ public interface ISubjectService
     Task<bool> DeactivateSubjectAsync(Guid subjectId);
 
     /// <summary>
-    /// Get all subjects with optional filtering
-    /// </summary>
-    /// <param name="filter">Optional filter criteria</param>
-    /// <returns>List of subjects</returns>
-    Task<List<Subject>> GetSubjectsAsync(SubjectFilter? filter = null);
-
-    /// <summary>
     /// Get roles assigned to a subject
     /// </summary>
     /// <param name="subjectId">Subject identifier</param>
@@ -210,50 +203,4 @@ public class SubjectCreationResult
     /// Created subject
     /// </summary>
     public required Subject Subject { get; set; }
-}
-
-/// <summary>
-/// Filter criteria for querying subjects
-/// </summary>
-public class SubjectFilter
-{
-    /// <summary>
-    /// Filter by subject type
-    /// </summary>
-    public SubjectType? Type { get; set; }
-
-    /// <summary>
-    /// Filter by active status
-    /// </summary>
-    public bool? IsActive { get; set; }
-
-    /// <summary>
-    /// Filter by OIDC issuer
-    /// </summary>
-    public string? OidcIssuer { get; set; }
-
-    /// <summary>
-    /// Search by name (contains)
-    /// </summary>
-    public string? NameContains { get; set; }
-
-    /// <summary>
-    /// Search by email (contains)
-    /// </summary>
-    public string? EmailContains { get; set; }
-
-    /// <summary>
-    /// Filter by role
-    /// </summary>
-    public string? HasRole { get; set; }
-
-    /// <summary>
-    /// Maximum number of results
-    /// </summary>
-    public int Limit { get; set; } = 100;
-
-    /// <summary>
-    /// Number of results to skip
-    /// </summary>
-    public int Offset { get; set; } = 0;
 }

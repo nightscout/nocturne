@@ -50,22 +50,6 @@ public interface IRefreshTokenService
     Task<bool> RevokeRefreshTokenAsync(string refreshToken, string reason);
 
     /// <summary>
-    /// Revoke all refresh tokens for a subject (logout from all devices)
-    /// </summary>
-    /// <param name="subjectId">Subject identifier</param>
-    /// <param name="reason">Reason for revocation</param>
-    /// <returns>Number of tokens revoked</returns>
-    Task<int> RevokeAllRefreshTokensForSubjectAsync(Guid subjectId, string reason);
-
-    /// <summary>
-    /// Revoke all refresh tokens for an OIDC session
-    /// </summary>
-    /// <param name="oidcSessionId">OIDC session identifier</param>
-    /// <param name="reason">Reason for revocation</param>
-    /// <returns>Number of tokens revoked</returns>
-    Task<int> RevokeRefreshTokensByOidcSessionAsync(string oidcSessionId, string reason);
-
-    /// <summary>
     /// Get all active sessions for a subject (for session management UI).
     /// Tokens are grouped by OIDC session ID — one entry per login/device,
     /// since a rotation chain shares a single session ID.

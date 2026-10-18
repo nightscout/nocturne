@@ -246,7 +246,7 @@ describe("one wire identifier for entries and devicestatus", () => {
     expect(id).toMatch(OBJECT_ID);
 
     const del = await tenant.api.delete(`/api/v3/devicestatus/${id}`);
-    expect(del.status, del.text).toBe(204);
+    expect(del.status, del.text).toBe(200);
 
     expect((await tenant.api.get(`/api/v3/devicestatus/${id}`)).status).toBe(404);
     const after = await tenant.api.ok<Doc[]>("GET", "/api/v1/devicestatus.json?count=50");

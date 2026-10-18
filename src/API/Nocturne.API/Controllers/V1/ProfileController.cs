@@ -1,7 +1,9 @@
+using System.Text.Json;
 using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
@@ -196,33 +198,16 @@ public class ProfileController : ControllerBase
 
         try
         {
-            Profile[] profiles;
-
-            // Handle both single profile and array of profiles (Nightscout compatibility)
-            if (body.ValueKind == System.Text.Json.JsonValueKind.Array)
-            {
-                profiles = System.Text.Json.JsonSerializer.Deserialize<Profile[]>(
-                    body.GetRawText(),
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                ) ?? Array.Empty<Profile>();
-            }
-            else if (body.ValueKind == System.Text.Json.JsonValueKind.Object)
-            {
-                var profile = System.Text.Json.JsonSerializer.Deserialize<Profile>(
-                    body.GetRawText(),
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                );
-                profiles = profile != null ? new[] { profile } : Array.Empty<Profile>();
-            }
-            else
+            var profiles = NightscoutJsonBody.ReadObjects<Profile>(body);
+            if (profiles is null)
             {
                 _logger.LogDebug("Invalid profile data format");
                 return BadRequest("Invalid profile data format");
             }
 
-            _logger.LogDebug("Processing {Count} profiles", profiles.Length);
+            _logger.LogDebug("Processing {Count} profiles", profiles.Count);
 
-            if (profiles.Length == 0)
+            if (profiles.Count == 0)
             {
                 _logger.LogDebug("No profiles provided in request body");
                 return Ok(Array.Empty<Profile>());
@@ -236,6 +221,11 @@ public class ProfileController : ControllerBase
 
             _logger.LogDebug("Created {Count} profiles", result.Length);
             return Ok(result);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Invalid JSON in create profiles request");
+            return BadRequest("Invalid profile data format");
         }
         catch (Exception ex)
         {
@@ -376,11 +366,10 @@ public class ProfileController : ControllerBase
     /// Get the current active profile
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The current active profile as a single object (Nightscout format), or empty array if no profiles exist</returns>
+    /// <returns>The current active profile as a single object (Nightscout format), or the JSON literal <c>null</c> when no profile exists</returns>
     [HttpGet("current")]
     [NightscoutEndpoint("/api/v1/profile/current")]
     [ProducesResponseType(typeof(Profile), 200)]
-    [ProducesResponseType(typeof(Profile[]), 200)] // Empty array when no profile
     [ProducesResponseType(typeof(Profile[]), 304)] // Not Modified response
     [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult> GetCurrentProfile(
@@ -398,8 +387,8 @@ public class ProfileController : ControllerBase
 
             if (profile == null)
             {
-                _logger.LogDebug("No current profile found, returning empty array");
-                return Ok(Array.Empty<Profile>());
+                _logger.LogDebug("No current profile found, returning null");
+                return Content("null", "application/json");
             }
 
             // Set Last-Modified header for caching

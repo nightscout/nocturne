@@ -1,6 +1,7 @@
 import type { InAppNotificationDto } from "$lib/api/generated/nocturne-api-client";
 import { isOneOf, isRecord, nonEmptyString } from "$lib/utils/type-guards";
 import { isoNow } from "$lib/utils/now";
+import { toIsoString } from "$lib/utils/api-date";
 import type {
   AlarmEvent,
   AnnouncementEvent,
@@ -42,24 +43,32 @@ export function parseStorageEvent(data: unknown): StorageEvent {
   };
 }
 
+const NUMERIC_LEVELS: Readonly<Record<number, string>> = { 2: "urgent", 1: "warn", 0: "info" };
+
+const levelOf = (value: unknown): string | undefined =>
+  typeof value === "number" ? NUMERIC_LEVELS[value] : nonEmptyString(value);
+
+const timestampOf = (value: unknown): string | undefined =>
+  typeof value === "number" ? (toIsoString(new Date(value)) ?? undefined) : nonEmptyString(value);
+
 export function parseAnnouncement(data: unknown): AnnouncementEvent {
   const fields = fieldsOf(data);
   return {
     message: nonEmptyString(fields.message) ?? nonEmptyString(fields.text) ?? String(data),
     title: nonEmptyString(fields.title) ?? "Announcement",
-    level: nonEmptyString(fields.level) ?? "info",
-    timestamp: nonEmptyString(fields.timestamp) ?? isoNow(),
+    level: levelOf(fields.level) ?? "info",
+    timestamp: timestampOf(fields.timestamp) ?? isoNow(),
   };
 }
 
 export function parseAlarm(data: unknown): AlarmEvent {
   const fields = fieldsOf(data);
   return {
-    level: nonEmptyString(fields.level) ?? "warn",
+    level: levelOf(fields.level) ?? "warn",
     title: nonEmptyString(fields.title) ?? "Alarm",
     message: nonEmptyString(fields.message),
     plugin: nonEmptyString(fields.plugin) ?? nonEmptyString(fields.source),
-    timestamp: nonEmptyString(fields.timestamp) ?? isoNow(),
+    timestamp: timestampOf(fields.timestamp) ?? isoNow(),
     key: nonEmptyString(fields.key) ?? nonEmptyString(fields.id),
   };
 }
@@ -71,7 +80,7 @@ export function parseUrgentAlarm(data: unknown): AlarmEvent {
     title: nonEmptyString(fields.title),
     message: nonEmptyString(fields.message),
     plugin: nonEmptyString(fields.plugin),
-    timestamp: nonEmptyString(fields.timestamp),
+    timestamp: timestampOf(fields.timestamp),
     key: nonEmptyString(fields.key),
     level: "urgent",
   };
@@ -94,6 +103,7 @@ export function parseNotification(data: unknown): InAppNotificationDto | null {
 
 const TRACKER_ACTIONS = [
   "create",
+  "reopen",
   "delete",
   "complete",
   "ack",

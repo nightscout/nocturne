@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V1;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -34,7 +35,8 @@ public class ActivityControllerTests
         _controller = new ActivityController(
             _mockActivityService.Object,
             _mockActivityDecomposer.Object,
-            _mockLogger.Object
+            _mockLogger.Object,
+            TimeProvider.System
         );
 
         // Set up HttpContext for the controller
@@ -90,7 +92,7 @@ public class ActivityControllerTests
 
         _mockActivityService
             .Setup(x =>
-                x.GetActivitiesAsync(It.IsAny<string?>(), 10, 0, It.IsAny<CancellationToken>())
+                x.GetActivitiesAsync(It.IsAny<string?>(), LegacyReadLimits.MaxMergedCount, 0, It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(expectedActivities);
 
@@ -110,7 +112,7 @@ public class ActivityControllerTests
         // Arrange
         _mockActivityService
             .Setup(x =>
-                x.GetActivitiesAsync(It.IsAny<string?>(), 10, 0, It.IsAny<CancellationToken>())
+                x.GetActivitiesAsync(It.IsAny<string?>(), LegacyReadLimits.MaxMergedCount, 0, It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new List<Activity>());
 
@@ -231,7 +233,7 @@ public class ActivityControllerTests
         });
         GrantScopes(Scope.HeartRateRead);
         _mockActivityService
-            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), 10, 0, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), LegacyReadLimits.MaxMergedCount, 0, It.IsAny<CancellationToken>()))
             .ReturnsAsync(merged);
 
         var result = await _controller.GetActivities(cancellationToken: CancellationToken.None);
@@ -259,7 +261,7 @@ public class ActivityControllerTests
         });
         GrantScopes(Scope.TreatmentsRead);
         _mockActivityService
-            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), 10, 0, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), LegacyReadLimits.MaxMergedCount, 0, It.IsAny<CancellationToken>()))
             .ReturnsAsync(merged);
 
         var result = await _controller.GetActivities(cancellationToken: CancellationToken.None);

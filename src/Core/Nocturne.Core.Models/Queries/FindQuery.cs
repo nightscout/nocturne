@@ -191,6 +191,18 @@ public sealed class FindQuery
         return EvaluateGroup(_root, document);
     }
 
+    /// <summary>
+    /// Like <see cref="Matches{T}(T)"/> but without the conditions already captured as
+    /// <see cref="FromMills"/>/<see cref="ToMills"/>, for callers whose source applied those bounds
+    /// to a time the document's own timestamp fields do not carry.
+    /// </summary>
+    public bool MatchesResidual<T>(T document)
+    {
+        return EvaluateGroup(
+            _root, JsonSerializer.SerializeToElement(document, WireOptions),
+            skipCapturedBounds: true, andReachable: true);
+    }
+
     #region Condition tree
 
     private sealed record Group(bool IsAnd, List<object> Children, bool IsLogical = false);
@@ -507,10 +519,7 @@ public sealed class FindQuery
             switch (child)
             {
                 case Condition cond:
-                    var isCapturedTimeBound = andReachable
-                        && TimeFields.Contains(cond.Path)
-                        && cond.Op is "$eq" or "$gt" or "$gte" or "$lt" or "$lte"
-                        && TryConvertToMills(cond, out _);
+                    var isCapturedTimeBound = IsCapturedTimeBound(cond, andReachable);
                     var isExceptedEquality = exceptField != null
                         && cond.Op == "$eq"
                         && andReachable
@@ -525,6 +534,12 @@ public sealed class FindQuery
         }
         return count;
     }
+
+    private static bool IsCapturedTimeBound(Condition cond, bool andReachable) =>
+        andReachable
+        && TimeFields.Contains(cond.Path)
+        && cond.Op is "$eq" or "$gt" or "$gte" or "$lt" or "$lte"
+        && TryConvertToMills(cond, out _);
 
     private static bool TryConvertToMills(Condition cond, out long mills)
     {
@@ -553,20 +568,24 @@ public sealed class FindQuery
 
     #region Evaluation
 
-    private static bool EvaluateGroup(Group group, JsonElement document)
+    private static bool EvaluateGroup(
+        Group group, JsonElement document, bool skipCapturedBounds = false, bool andReachable = true)
     {
         if (group.Children.Count == 0)
             return true;
 
         return group.IsAnd
-            ? group.Children.All(child => EvaluateChild(child, document))
-            : group.Children.Any(child => EvaluateChild(child, document));
+            ? group.Children.All(child => EvaluateChild(child, document, skipCapturedBounds, andReachable))
+            : group.Children.Any(child => EvaluateChild(child, document, skipCapturedBounds, andReachable));
     }
 
-    private static bool EvaluateChild(object child, JsonElement document) => child switch
+    private static bool EvaluateChild(
+        object child, JsonElement document, bool skipCapturedBounds, bool andReachable) => child switch
     {
-        Condition cond => EvaluateCondition(cond, document),
-        Group nested => EvaluateGroup(nested, document),
+        Condition cond => (skipCapturedBounds && IsCapturedTimeBound(cond, andReachable))
+            || EvaluateCondition(cond, document),
+        Group nested => EvaluateGroup(
+            nested, document, skipCapturedBounds, andReachable && nested.IsAnd),
         _ => true,
     };
 

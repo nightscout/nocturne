@@ -28,7 +28,7 @@ public class HeartRateController(IHeartRateService heartRateService)
     protected override string RecordTypeName => "Heart rate";
 
     protected override Task<IEnumerable<HeartRate>> ReadPageAsync(int count, int skip, CancellationToken ct) =>
-        heartRateService.GetHeartRatesAsync(count, skip, ct);
+        heartRateService.GetHeartRatesAsync(count, skip, cancellationToken: ct);
 
     protected override Task<IEnumerable<HeartRate>> ReadRangeAsync(
         DateTime from, DateTime to, int count, int skip, CancellationToken ct) =>
