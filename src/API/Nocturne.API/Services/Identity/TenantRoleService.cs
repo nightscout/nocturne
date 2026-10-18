@@ -19,9 +19,7 @@ namespace Nocturne.API.Services.Identity;
 /// alone is not an authorization decision.
 /// </remarks>
 /// <seealso cref="ITenantRoleService"/>
-public partial class TenantRoleService(
-    INocturneDbContextFactory contexts,
-    INocturneDbContextFactory contextFactory) : ITenantRoleService
+public partial class TenantRoleService(INocturneDbContextFactory contexts) : ITenantRoleService
 {
     public async Task<List<TenantRoleDto>> GetRolesAsync(Guid tenantId, CancellationToken ct = default)
     {
@@ -188,7 +186,7 @@ public partial class TenantRoleService(
     /// <param name="ct">The cancellation token.</param>
     public async Task SeedRolesForTenantAsync(Guid tenantId, CancellationToken ct = default)
     {
-        await using var seedContext = await contextFactory.CreateForTenantAsync(tenantId, ct);
+        await using var seedContext = await contexts.CreateForTenantAsync(tenantId, ct);
 
         var existingSlugs = await seedContext.TenantRoles
             .Where(r => r.TenantId == tenantId)

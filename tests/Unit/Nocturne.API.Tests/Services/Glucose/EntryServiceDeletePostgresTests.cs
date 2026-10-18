@@ -116,7 +116,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
             .ReturnsAsync((GlucoseProcessing?)null);
 
         var decomposer = new EntryDecomposer(
-            Context(tenant).AsFactory(), sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
+            sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
             Mock.Of<IPatientDeviceStamper>(), audit, NullLogger<EntryDecomposer>.Instance);
         var store = new EntryReadService(
             sensorGlucose, meterGlucose, calibration, TestDoubles.CanonicalGlucosePassThrough.Create(),

@@ -56,7 +56,6 @@ public class BatchResendMatchesSingleTests : IDisposable
     public async Task Entry_BatchResend_UpdatesSensorMeterAndCalibrationRows()
     {
         var decomposer = new EntryDecomposer(
-            _context.AsFactory(),
             new SensorGlucoseRepository(_factory, _dedup, _audit, NullLogger<SensorGlucoseRepository>.Instance),
             new MeterGlucoseRepository(_factory, _audit, NullLogger<MeterGlucoseRepository>.Instance),
             new CalibrationRepository(_factory, _audit, NullLogger<CalibrationRepository>.Instance),

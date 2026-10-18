@@ -58,7 +58,6 @@ public class EntryDecomposerBatchTests : IDisposable
 
     private EntryDecomposer CreateDecomposer(IAuditContext auditContext) =>
         new(
-            _context.AsFactory(),
             _sgRepoMock.Object,
             _mgRepoMock.Object,
             _calRepoMock.Object,

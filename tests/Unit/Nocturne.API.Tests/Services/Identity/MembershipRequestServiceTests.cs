@@ -51,10 +51,7 @@ public class MembershipRequestServiceTests : IDisposable
         _service = new MembershipRequestService(
             _dbContext.AsFactory(),
             _tenantService.Object,
-            new TenantRoleService(
-                _dbContext.AsFactory(),
-                // Only SeedRolesForTenantAsync takes a context of its own, and nothing here seeds.
-                Mock.Of<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory()),
+            new TenantRoleService(_dbContext.AsFactory()),
             _notificationService.Object,
             NullLogger<MembershipRequestService>.Instance);
 

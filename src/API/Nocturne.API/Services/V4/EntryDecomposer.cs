@@ -10,7 +10,6 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.V4;
 
@@ -26,7 +25,6 @@ namespace Nocturne.API.Services.V4;
 /// <seealso cref="IDecomposer{T}"/>
 public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Entry>
 {
-    private readonly INocturneDbContextFactory _contexts;
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IMeterGlucoseRepository _meterGlucoseRepository;
     private readonly ICalibrationRepository _calibrationRepository;
@@ -35,7 +33,6 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     private readonly IAuditContext _auditContext;
 
     public EntryDecomposer(
-        INocturneDbContextFactory contexts,
         ISensorGlucoseRepository sensorGlucoseRepository,
         IMeterGlucoseRepository meterGlucoseRepository,
         ICalibrationRepository calibrationRepository,
@@ -45,7 +42,6 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         ILogger<EntryDecomposer> logger)
         : base(logger)
     {
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _sensorGlucoseRepository = sensorGlucoseRepository;
         _meterGlucoseRepository = meterGlucoseRepository;
         _calibrationRepository = calibrationRepository;

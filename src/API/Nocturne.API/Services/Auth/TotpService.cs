@@ -278,12 +278,7 @@ public class TotpService : ITotpService
         if (existingId is null)
             throw new InvalidOperationException("Credential not found.");
 
-        // Reuse the tracked instance when there is one; attaching a second instance with the same
-        // key throws.
-        var tracked = db.ChangeTracker.Entries<TotpCredentialEntity>()
-            .FirstOrDefault(e => e.Entity.Id == existingId.Value)?.Entity;
-
-        db.TotpCredentials.Remove(tracked ?? new TotpCredentialEntity { Id = existingId.Value });
+        db.TotpCredentials.Remove(new TotpCredentialEntity { Id = existingId.Value });
         await db.SaveChangesAsync();
 
         _logger.LogInformation(
