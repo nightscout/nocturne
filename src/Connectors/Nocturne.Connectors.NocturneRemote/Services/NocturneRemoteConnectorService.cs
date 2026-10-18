@@ -217,11 +217,9 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                     _ => Task.CompletedTask
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
-                result.Success = false;
-                result.Errors.Add($"Failed to sync {type}: {ex.Message}");
-                _logger.LogError(ex, "Failed to sync {DataType} for {Connector}", type, ConnectorSource);
+                RecordTypeSyncError(result, type.ToString(), ex);
             }
         }
 

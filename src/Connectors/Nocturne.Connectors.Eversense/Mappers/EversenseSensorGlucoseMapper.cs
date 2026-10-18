@@ -3,6 +3,7 @@ using Nocturne.Connectors.Eversense.Models;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Eversense.Mappers;
 
@@ -57,9 +58,9 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
                 ModifiedAt = now
             };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
         {
-            _logger.LogWarning(ex, "Error converting Eversense patient datum");
+            _logger.LogWarning(ex, "Skipped malformed Eversense reading at {Timestamp}", patient.CgTime);
             return null;
         }
     }

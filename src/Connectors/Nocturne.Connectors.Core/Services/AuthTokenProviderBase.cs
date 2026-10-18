@@ -355,7 +355,8 @@ public abstract class AuthTokenProviderBase<TConfig>(
 
                     return RetryStep<T>.Complete(default);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException
+                                           || !cancellationToken.IsCancellationRequested)
                 {
                     _logger.LogError(
                         ex,

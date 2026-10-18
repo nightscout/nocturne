@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -94,11 +95,9 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
                 sensorGlucose.ToList(), PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            _logger.LogError(ex, "Error during Dexcom sync");
-            result.Success = false;
-            result.Errors.Add($"Sync error: {ex.Message}");
+            RecordSyncError(result, ex);
         }
 
         return result;
@@ -123,14 +122,7 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
         var result = await ExecuteWithRetryAsync(
             async () => await FetchRawDataCoreAsync(config, sessionId, since),
             _retryDelayStrategy,
-            async () =>
-            {
-                _tokenProvider.InvalidateToken();
-                var newToken = await _tokenProvider.GetValidTokenAsync(config);
-                if (string.IsNullOrEmpty(newToken)) return false;
-                sessionId = newToken;
-                return true;
-            },
+            ReauthenticateWith(_tokenProvider, config, t => sessionId = t),
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchDexcomData"
         );
@@ -172,15 +164,7 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
             new StringContent("{}", Encoding.UTF8, "application/json")
         );
 
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorContent = await response.Content.ReadAsStringAsync();
-            throw new HttpRequestException(
-                $"HTTP {(int)response.StatusCode} {response.StatusCode}: {errorContent}",
-                null,
-                response.StatusCode
-            );
-        }
+        await response.EnsureSuccessWithBodyAsync();
 
         var dexcomEntries = await DeserializeResponseAsync<DexcomEntry[]>(response);
         return dexcomEntries ?? [];

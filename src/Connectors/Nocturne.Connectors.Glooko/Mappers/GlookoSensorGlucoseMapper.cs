@@ -4,6 +4,7 @@ using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
@@ -257,9 +258,9 @@ public class GlookoSensorGlucoseMapper
                 ModifiedAt = now
             };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
         {
-            _logger.LogError(ex, "Error parsing Glooko CGM reading");
+            _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed CGM reading {Guid}", _connectorSource, reading.Guid);
             return null;
         }
     }
@@ -295,9 +296,9 @@ public class GlookoSensorGlucoseMapper
                 ModifiedAt = now
             };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
         {
-            _logger.LogError(ex, "Error parsing Glooko meter reading");
+            _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed meter reading {Guid}", _connectorSource, reading.Guid);
             return null;
         }
     }

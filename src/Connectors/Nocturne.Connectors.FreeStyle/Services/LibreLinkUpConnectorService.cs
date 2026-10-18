@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -184,11 +185,9 @@ public class LibreConnectorService(
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
                 sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            _logger.LogError(ex, "Error during LibreLinkUp sync");
-            result.Success = false;
-            result.Errors.Add($"Sync error: {ex.Message}");
+            RecordSyncError(result, ex);
         }
 
         return result;
@@ -231,7 +230,7 @@ public class LibreConnectorService(
                 );
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex))
         {
             _logger.LogError(ex, "Error loading LibreLinkUp connections");
         }
@@ -241,15 +240,7 @@ public class LibreConnectorService(
     {
         var response = await GetWithHeadersAsync(url, RequestHeaders);
 
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorContent = await response.Content.ReadAsStringAsync();
-            throw new HttpRequestException(
-                $"HTTP {(int)response.StatusCode} {response.StatusCode}: {errorContent}",
-                null,
-                response.StatusCode
-            );
-        }
+        await response.EnsureSuccessWithBodyAsync();
 
         var graphResponse = await DeserializeResponseAsync<LibreGraphResponse>(response);
 

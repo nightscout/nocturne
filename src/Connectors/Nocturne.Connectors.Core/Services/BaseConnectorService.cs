@@ -241,35 +241,23 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return null;
         }
 
-        try
-        {
-            var timestamp = await _publisher.Glucose.GetLatestEntryTimestampAsync(ConnectorSource);
-            if (timestamp.HasValue)
-                _logger.LogInformation(
-                    "Latest entry timestamp from API for {ConnectorSource}: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
-                    ConnectorSource,
-                    timestamp.Value
-                );
-            else
-                _logger.LogDebug(
-                    "No existing entries found for {ConnectorSource}",
-                    ConnectorSource
-                );
-            return timestamp;
-        }
-        catch (Exception ex)
-        {
-            // Do not swallow: a null watermark means "no prior data", which triggers an
-            // initial backfill — unbounded for connectors with a null InitialSyncFloor.
-            // A transient read failure must fail this cycle (retried next interval), not
-            // be amplified into a full-history recrawl and republish.
-            _logger.LogError(
-                ex,
-                "Failed to fetch latest entry timestamp for {ConnectorSource}",
+        // A failed read propagates rather than reading as null: a null watermark means "no prior
+        // data", which triggers an initial backfill, unbounded for connectors with a null
+        // InitialSyncFloor. A transient read failure must fail this cycle (retried next interval),
+        // not be amplified into a full-history recrawl and republish.
+        var timestamp = await _publisher.Glucose.GetLatestEntryTimestampAsync(ConnectorSource);
+        if (timestamp.HasValue)
+            _logger.LogInformation(
+                "Latest entry timestamp from API for {ConnectorSource}: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
+                ConnectorSource,
+                timestamp.Value
+            );
+        else
+            _logger.LogDebug(
+                "No existing entries found for {ConnectorSource}",
                 ConnectorSource
             );
-            throw;
-        }
+        return timestamp;
     }
 
     /// <summary>
@@ -286,33 +274,20 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return null;
         }
 
-        try
-        {
-            var timestamp = await _publisher.Treatments.GetLatestTreatmentTimestampAsync(ConnectorSource);
-            if (timestamp.HasValue)
-                _logger.LogInformation(
-                    "Latest treatment timestamp from API for {ConnectorSource}: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
-                    ConnectorSource,
-                    timestamp.Value
-                );
-            else
-                _logger.LogDebug(
-                    "No existing treatments found for {ConnectorSource}",
-                    ConnectorSource
-                );
-            return timestamp;
-        }
-        catch (Exception ex)
-        {
-            // See FetchLatestEntryTimestampAsync: a swallowed failure reads as "no prior
-            // data" and triggers an unbounded initial backfill for null-floor connectors.
-            _logger.LogError(
-                ex,
-                "Failed to fetch latest treatment timestamp for {ConnectorSource}",
+        // A failed read propagates for the reason given in FetchLatestEntryTimestampAsync.
+        var timestamp = await _publisher.Treatments.GetLatestTreatmentTimestampAsync(ConnectorSource);
+        if (timestamp.HasValue)
+            _logger.LogInformation(
+                "Latest treatment timestamp from API for {ConnectorSource}: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
+                ConnectorSource,
+                timestamp.Value
+            );
+        else
+            _logger.LogDebug(
+                "No existing treatments found for {ConnectorSource}",
                 ConnectorSource
             );
-            throw;
-        }
+        return timestamp;
     }
 
     /// <summary>
@@ -428,7 +403,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     protected async Task<DateTime?> CalculateTreatmentSinceTimestampAsync(TConfig config, SyncDataType type)
     {
         var latest = await FetchLatestWatermarkAsync(
-            () => _publisher!.Treatments.GetLatestTreatmentTimestampAsync(type, ConnectorSource), type.ToString());
+            () => _publisher!.Treatments.GetLatestTreatmentTimestampAsync(type, ConnectorSource));
 
         return CalculateSinceFromTimestamp(latest, type.ToString());
     }
@@ -441,34 +416,21 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     protected async Task<DateTime?> CalculateStateSpanSinceTimestampAsync(TConfig config)
     {
         var latest = await FetchLatestWatermarkAsync(
-            () => _publisher!.Metadata.GetLatestStateSpanTimestampAsync(ConnectorSource), "state spans");
+            () => _publisher!.Metadata.GetLatestStateSpanTimestampAsync(ConnectorSource));
 
         return CalculateSinceFromTimestamp(latest, "state spans");
     }
 
     /// <summary>
-    ///     Reads one resume watermark, re-throwing a failed read for the reason given in
+    ///     Reads one resume watermark. A failed read propagates for the reason given in
     ///     <see cref="FetchLatestEntryTimestampAsync"/>.
     /// </summary>
-    private async Task<DateTime?> FetchLatestWatermarkAsync(Func<Task<DateTime?>> read, string dataType)
+    private async Task<DateTime?> FetchLatestWatermarkAsync(Func<Task<DateTime?>> read)
     {
         if (_publisher is not { IsAvailable: true })
             return null;
 
-        try
-        {
-            return await read();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to fetch latest {DataType} timestamp for {ConnectorSource}",
-                dataType,
-                ConnectorSource
-            );
-            throw;
-        }
+        return await read();
     }
 
     /// <summary>
@@ -979,6 +941,29 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
     /// <inheritdoc cref="FetchFailedMessage"/>
     protected const string PublishFailedMessage = "Sync failed while publishing data";
+
+    /// <summary>
+    ///     Records an exception that stopped one record type, so the run's other types still sync
+    ///     and the run reports failure.
+    /// </summary>
+    protected void RecordTypeSyncError(SyncResult result, string dataType, Exception ex)
+    {
+        result.Success = false;
+        result.Errors.Add($"Failed to sync {dataType}: {ex.Message}");
+        _logger.LogError(ex, "Failed to sync {DataType} for {Connector}", dataType, ConnectorSource);
+    }
+
+    /// <summary>
+    ///     Records an exception that stopped the run part-way. Caught rather than left to the
+    ///     caller, which would also log and report it, because a thrown run loses the counts of the
+    ///     types it had already published and the tenant's sync card would show them as unchecked.
+    /// </summary>
+    protected void RecordSyncError(SyncResult result, Exception ex)
+    {
+        _logger.LogError(ex, "[{ConnectorSource}] Sync failed", ConnectorSource);
+        result.Success = false;
+        result.Errors.Add($"Sync error: {ex.Message}");
+    }
 
     private static void RecordFailure(SyncResult result, string error, string message)
     {
@@ -1649,6 +1634,24 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             cancellationToken
         );
     }
+
+    /// <summary>
+    ///     The <c>reAuthenticateOnUnauthorized</c> answer to <see cref="ExecuteWithRetryAsync{T}"/> for a
+    ///     connector holding a cached token: drop the token the source refused, sign in again, and
+    ///     hand the retry the new one through <paramref name="useToken"/>.
+    /// </summary>
+    protected static Func<Task<bool>> ReauthenticateWith(
+        AuthTokenProviderBase<TConfig> tokenProvider,
+        TConfig config,
+        Action<string> useToken,
+        CancellationToken cancellationToken = default) => async () =>
+    {
+        tokenProvider.InvalidateToken();
+        var token = await tokenProvider.GetValidTokenAsync(config, cancellationToken);
+        if (string.IsNullOrEmpty(token)) return false;
+        useToken(token);
+        return true;
+    };
 
     /// <summary>
     ///     Sends an HTTP request with optional custom headers.

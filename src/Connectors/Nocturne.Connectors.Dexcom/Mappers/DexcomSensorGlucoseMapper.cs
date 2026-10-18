@@ -3,6 +3,7 @@ using Nocturne.Connectors.Dexcom.Models;
 using Nocturne.Connectors.Dexcom.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Dexcom.Mappers;
 
@@ -50,9 +51,9 @@ public class DexcomSensorGlucoseMapper(ILogger logger)
                 ModifiedAt = now
             };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
         {
-            _logger.LogWarning(ex, "Error converting Dexcom entry: {@Entry}", dexcomEntry);
+            _logger.LogWarning(ex, "Skipped malformed Dexcom entry at {Timestamp}", dexcomEntry.Wt);
             return null;
         }
     }

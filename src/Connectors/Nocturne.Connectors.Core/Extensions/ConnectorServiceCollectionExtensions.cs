@@ -248,9 +248,9 @@ public static class ConnectorServiceCollectionExtensions
                         Assembly.LoadFrom(dll);
                     }
                 }
-                catch
+                catch (Exception ex) when (ex is BadImageFormatException or FileLoadException or FileNotFoundException)
                 {
-                    // Skip assemblies that can't be loaded
+                    // Not a loadable managed assembly; nothing in it can register a connector.
                 }
             }
 

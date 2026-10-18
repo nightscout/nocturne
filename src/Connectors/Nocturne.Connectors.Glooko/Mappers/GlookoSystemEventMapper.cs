@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
@@ -117,9 +118,9 @@ public class GlookoSystemEventMapper
                     }
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping SSV2 alarm", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed SSV2 alarm {Guid}", _connectorSource, alarm.Guid);
             }
         }
 

@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
@@ -37,7 +38,7 @@ public class GlookoProfileMapper
                     if (profile != null)
                         profiles.Add(profile);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
                 {
                     _logger.LogWarning(
                         ex,

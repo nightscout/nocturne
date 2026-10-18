@@ -228,16 +228,14 @@ public class MyLifeConnectorService(
                     profileStateSpans, PublishStateSpanDataAsync, config, cancellationToken, "from pump settings");
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             // A token MyLife has already rejected would otherwise stay cached until its nominal
             // 24-hour expiry, failing every sync in between.
             if (ex is HttpRequestException { StatusCode: HttpStatusCode.Unauthorized })
                 tokenProvider.InvalidateToken();
 
-            _logger.LogError(ex, "Error during sync");
-            result.Success = false;
-            result.Errors.Add($"Sync error: {ex.Message}");
+            RecordSyncError(result, ex);
         }
 
         return result;

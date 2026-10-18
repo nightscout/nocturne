@@ -158,11 +158,9 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
                 [sg], PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            _logger.LogError(ex, "[{ConnectorSource}] Error during Eversense sync", ConnectorSource);
-            result.Success = false;
-            result.Errors.Add($"Sync error: {ex.Message}");
+            RecordSyncError(result, ex);
         }
 
         return result;
@@ -205,14 +203,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                 return patients ?? [];
             },
             _retryDelayStrategy,
-            reAuthenticateOnUnauthorized: async () =>
-            {
-                _tokenProvider.InvalidateToken();
-                var newToken = await _tokenProvider.GetValidTokenAsync(config);
-                if (string.IsNullOrEmpty(newToken)) return false;
-                token = newToken;
-                return true;
-            },
+            reAuthenticateOnUnauthorized: ReauthenticateWith(_tokenProvider, config, t => token = t),
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchEversensePatientList"
         );

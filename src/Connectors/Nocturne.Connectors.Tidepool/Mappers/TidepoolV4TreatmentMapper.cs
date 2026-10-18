@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Tidepool.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Tidepool.Mappers;
 
@@ -27,9 +28,9 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
                     if (mapped != null)
                         mappedBoluses.Add((bolus, mapped));
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
                 {
-                    _logger.LogWarning(ex, "Error mapping Tidepool bolus: {Id}", bolus.Id);
+                    _logger.LogWarning(ex, "Skipped malformed Tidepool bolus {Id}", bolus.Id);
                 }
             }
         }
@@ -97,9 +98,9 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
                         });
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
                 {
-                    _logger.LogWarning(ex, "Error mapping Tidepool food: {Id}", food.Id);
+                    _logger.LogWarning(ex, "Skipped malformed Tidepool food {Id}", food.Id);
                 }
             }
         }
