@@ -340,6 +340,11 @@ public class MemberInviteController : ControllerBase
         if (!roleGrant.Ok)
             return RoleGrantProblem(roleGrant);
 
+        var keepsOwner = await _dbContext.TenantRoles.AnyAsync(
+            r => r.TenantId == tenantId && request.RoleIds.Contains(r.Id) && r.Slug == RoleSeeds.Owner, ct);
+        if (!keepsOwner && await _dbContext.TenantMembers.IsLastOwnerAsync(tenantId, member.Id, ct))
+            return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
+
         var rolesAfter = await _tenantRoleService.GetRolePermissionsAsync(tenantId, request.RoleIds, ct);
         if (await WouldExemptAClampedMemberAsync(member, rolesAfter.Concat(member.DirectPermissions ?? []), ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);

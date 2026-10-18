@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -24,4 +25,18 @@ public static class TenantOwnerFilter
                 && m.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
             .OrderBy(m => m.SysCreatedAt)
             .ThenBy(m => m.Id);
+
+    public const string LastOwnerRefusal = "Cannot remove the last owner of a tenant";
+
+    /// <summary>
+    /// Whether the member holds the owner role and no other active owner would remain if it stopped.
+    /// </summary>
+    public static async Task<bool> IsLastOwnerAsync(
+        this IQueryable<TenantMemberEntity> members,
+        Guid tenantId,
+        Guid memberId,
+        CancellationToken ct = default) =>
+        await members.AnyAsync(
+            m => m.Id == memberId && m.TenantId == tenantId && m.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner), ct)
+        && !await members.OwnersOf(tenantId).AnyAsync(m => m.Id != memberId, ct);
 }
