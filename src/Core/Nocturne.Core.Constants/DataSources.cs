@@ -183,6 +183,11 @@ public static class DataSources
     /// </summary>
     public const string WebSocket = "websocket";
 
+    /// <summary>
+    /// Sensor session starts Nocturne inferred from the warm-up gap in a CGM's readings.
+    /// </summary>
+    public const string SensorSessionInference = "sensor-session-inference";
+
     // ============================================================================
     // AID/Loop System Sources
     // ============================================================================

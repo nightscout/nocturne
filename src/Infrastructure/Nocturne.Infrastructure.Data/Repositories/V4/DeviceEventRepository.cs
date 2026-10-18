@@ -34,8 +34,8 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
     /// <param name="broadcaster">Optional realtime broadcaster for native V4 record shapes.</param>
-    /// <param name="reactor">Optional domain reaction to live creates — the tracker trigger. Null when
-    /// the repository is constructed without DI, in which case creates simply run no reaction.</param>
+    /// <param name="reactor">Optional domain reaction to live creates and deletes — the tracker trigger.
+    /// Null when the repository is constructed without DI, in which case writes simply run no reaction.</param>
     public DeviceEventRepository(
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
@@ -69,6 +69,60 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
         {
             Logger.LogError(ex, "Device event reaction failed for {Count} created event(s)", created.Count);
         }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Failures are swallowed for the reason <see cref="OnLiveCreatedAsync"/> gives.</remarks>
+    protected override async Task OnLiveDeletedAsync(IReadOnlyList<DeviceEvent> deleted, CancellationToken ct)
+    {
+        if (_reactor is null)
+            return;
+
+        try
+        {
+            await _reactor.OnDeletedAsync(deleted, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogError(ex, "Device event reaction failed for {Count} deleted event(s)", deleted.Count);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<int> WithdrawBySyncIdentifierAsync(
+        string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await AuditedSoftDeleteAndBroadcastAsync(
+            ctx,
+            ctx.DeviceEvents.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
+            $"sync_identifier={dataSource}/{syncIdentifier}", DuplicateDelete.PromoteSurvivor, origin, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceEvent>> GetAllCopiesAsync(
+        DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, CancellationToken ct = default)
+    {
+        var typeNames = eventTypes.Select(t => t.ToString()).ToList();
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.DeviceEvents.AsNoTracking()
+            .Where(e => e.Timestamp >= from && e.Timestamp < to && typeNames.Contains(e.EventType))
+            .OrderBy(e => e.Timestamp)
+            .ToListAsync(ct);
+        return entities.Select(DeviceEventMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceEvent>> GetUserDeletedAsync(
+        DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, CancellationToken ct = default)
+    {
+        var typeNames = eventTypes.Select(t => t.ToString()).ToList();
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.UserTombstones<DeviceEventEntity>()
+            .Where(e => e.Timestamp >= from && e.Timestamp < to && typeNames.Contains(e.EventType))
+            .OrderBy(e => e.Timestamp)
+            .ToListAsync(ct);
+        return entities.Select(DeviceEventMapper.ToDomainModel).ToList();
     }
 
     /// <inheritdoc />

@@ -52,8 +52,8 @@ public enum PredictionSource
     DeviceStatus,
 
     /// <summary>
-    /// Run the oref algorithm server-side via the external WASM module.
-    /// Requires oref.wasm from nightscout/nocturne-heuristics-wasm.
+    /// Run the oref algorithm server-side through the native bindings in <c>Nocturne.Core.Oref</c>;
+    /// the name predates them and stays because it is configuration.
     /// Only useful for MDI or non-opensource AID systems.
     /// </summary>
     OrefWasm,

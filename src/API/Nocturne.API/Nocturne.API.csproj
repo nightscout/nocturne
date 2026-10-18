@@ -51,16 +51,9 @@
     <PackageReference Include="ShiroTrie" />
     <PackageReference Include="SixLabors.ImageSharp" />
     <PackageReference Include="SocketIOClient" />
-    <PackageReference Include="Wasmtime" />
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="Yarp.ReverseProxy" />
     <PackageReference Include="MongoDB.Driver" />
-  </ItemGroup>
-  <ItemGroup>
-    <!-- oref.wasm is optional — only needed when Predictions:Source=OrefWasm.
-         Download from https://github.com/nightscout/nocturne-heuristics-wasm/releases
-         and place in the build output directory. -->
-    <Content Include="oref.wasm" Link="oref.wasm" CopyToOutputDirectory="PreserveNewest" Condition="Exists('oref.wasm')" />
   </ItemGroup>
   <ItemGroup>
     <!-- Source for the Scalar docs theme; see NocturneScalarTheme. -->

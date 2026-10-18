@@ -26,14 +26,6 @@ public interface ITenantMemberService
     Task<List<Guid>> GetTenantIdsForSubjectAsync(Guid subjectId, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the number of members in the specified tenant.
-    /// </summary>
-    /// <param name="tenantId">The tenant identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The member count.</returns>
-    Task<int> GetMemberCountAsync(Guid tenantId, CancellationToken ct = default);
-
-    /// <summary>
     /// Returns the names of the roles assigned to the specified subject within the given tenant.
     /// </summary>
     /// <param name="subjectId">The subject (user) identifier.</param>

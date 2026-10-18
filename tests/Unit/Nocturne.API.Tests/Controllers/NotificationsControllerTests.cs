@@ -33,24 +33,15 @@ public class NotificationsControllerTests
         _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
     }
 
-    [Fact]
-    public async Task AckNotification_WithValidRequest_ReturnsOkResult()
+    private static void AssertPlainText(IActionResult result, int status, string body)
     {
-        // Arrange
-        var request = new NotificationAckRequest
-        {
-            Level = 1,
-            Group = "default",
-            Time = 1800000, // 30 minutes
-        };
+        var content = Assert.IsType<ContentResult>(result);
+        Assert.Equal(status, content.StatusCode);
+        Assert.Equal(body, content.Content);
+        Assert.StartsWith("text/plain", content.ContentType);
+    }
 
-        var expectedResponse = new NotificationAckResponse
-        {
-            Success = true,
-            Message = "Acknowledged default - Level 1",
-            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-        };
-
+    private void SetupAck(bool success = true) =>
         _mockNotificationService
             .Setup(s =>
                 s.AckNotificationAsync(
@@ -58,80 +49,108 @@ public class NotificationsControllerTests
                     It.IsAny<CancellationToken>()
                 )
             )
-            .ReturnsAsync(expectedResponse);
+            .ReturnsAsync(
+                new NotificationAckResponse { Success = success, Message = "ack result" }
+            );
 
-        // Act
-        var result = await _controller.AckNotification(request, CancellationToken.None);
+    [Fact]
+    public async Task AckNotification_WithQueryParameters_AcksAndAnswersPlainOk()
+    {
+        SetupAck();
 
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<NotificationAckResponse>(okResult.Value);
-        Assert.True(response.Success);
-        Assert.Equal("Acknowledged default - Level 1", response.Message);
+        var result = await _controller.AckNotification(2, "alarms", "1800000", CancellationToken.None);
+
+        AssertPlainText(result, 200, "OK");
         _mockNotificationService.Verify(
             s =>
                 s.AckNotificationAsync(
-                    It.IsAny<NotificationAckRequest>(),
+                    It.Is<NotificationAckRequest>(r =>
+                        r.Level == 2
+                        && r.Group == "alarms"
+                        && r.Time == 1800000
+                        && r.SendClear == true
+                    ),
                     It.IsAny<CancellationToken>()
                 ),
             Times.Once
         );
     }
 
-    [Fact]
-    public async Task AckNotification_WithNullRequest_ReturnsBadRequest()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task AckNotification_WithoutGroup_AcksTheDefaultGroup(string? group)
     {
-        // Arrange
-        NotificationAckRequest? request = null;
+        SetupAck();
 
-        // Act
-        var result = await _controller.AckNotification(request!, CancellationToken.None);
+        await _controller.AckNotification(1, group, null, CancellationToken.None);
 
-        // Assert
-        var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var response = Assert.IsType<NotificationAckResponse>(badRequestResult.Value);
-        Assert.False(response.Success);
-        Assert.Equal("Request body is required", response.Message);
+        _mockNotificationService.Verify(
+            s =>
+                s.AckNotificationAsync(
+                    It.Is<NotificationAckRequest>(r => r.Group == "default"),
+                    It.IsAny<CancellationToken>()
+                ),
+            Times.Once
+        );
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("0", null)]
+    [InlineData("abc", null)]
+    [InlineData("NaN", null)]
+    [InlineData("1800000", 1800000)]
+    [InlineData("1800000.9", 1800000)]
+    [InlineData("-5000", -5000)]
+    [InlineData("99999999999", int.MaxValue)]
+    [InlineData("Infinity", int.MaxValue)]
+    [InlineData("-99999999999", int.MinValue)]
+    public async Task AckNotification_ReadsTimeAsNightscoutDoes(string? time, int? expected)
+    {
+        SetupAck();
+
+        var result = await _controller.AckNotification(1, "default", time, CancellationToken.None);
+
+        AssertPlainText(result, 200, "OK");
+        _mockNotificationService.Verify(
+            s =>
+                s.AckNotificationAsync(
+                    It.Is<NotificationAckRequest>(r => r.Time == expected),
+                    It.IsAny<CancellationToken>()
+                ),
+            Times.Once
+        );
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    [InlineData(-1)]
+    public async Task AckNotification_WithUnknownLevel_AnswersBadRequestWithoutAcking(int level)
+    {
+        var result = await _controller.AckNotification(level, "default", null, CancellationToken.None);
+
+        AssertPlainText(result, 400, "Level must be 1 (WARN) or 2 (URGENT)");
+        _mockNotificationService.Verify(
+            s =>
+                s.AckNotificationAsync(
+                    It.IsAny<NotificationAckRequest>(),
+                    It.IsAny<CancellationToken>()
+                ),
+            Times.Never
+        );
     }
 
     [Fact]
-    public async Task AckNotification_WithInvalidLevel_ReturnsBadRequest()
+    public async Task AckNotification_WhenAlreadySnoozed_StillAnswersOk()
     {
-        // Arrange
-        var request = new NotificationAckRequest
-        {
-            Level = 0, // Invalid level
-            Group = "default",
-        };
+        SetupAck(success: false);
 
-        // Act
-        var result = await _controller.AckNotification(request, CancellationToken.None);
+        var result = await _controller.AckNotification(1, "default", null, CancellationToken.None);
 
-        // Assert
-        var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var response = Assert.IsType<NotificationAckResponse>(badRequestResult.Value);
-        Assert.False(response.Success);
-        Assert.Equal("Level must be 1 (WARN) or 2 (URGENT)", response.Message);
-    }
-
-    [Fact]
-    public async Task AckNotification_WithLevel3_ReturnsBadRequest()
-    {
-        // Arrange
-        var request = new NotificationAckRequest
-        {
-            Level = 3, // Invalid level (too high)
-            Group = "default",
-        };
-
-        // Act
-        var result = await _controller.AckNotification(request, CancellationToken.None);
-
-        // Assert
-        var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var response = Assert.IsType<NotificationAckResponse>(badRequestResult.Value);
-        Assert.False(response.Success);
-        Assert.Equal("Level must be 1 (WARN) or 2 (URGENT)", response.Message);
+        AssertPlainText(result, 200, "OK");
     }
 
     [Fact]
@@ -319,63 +338,5 @@ public class NotificationsControllerTests
             s => s.ClearAllAdminNotificationsAsync(It.IsAny<CancellationToken>()),
             Times.Once
         );
-    }
-
-    [Fact]
-    public async Task AckNotification_ServiceThrowsException_ReturnsInternalServerError()
-    {
-        // Arrange
-        var request = new NotificationAckRequest { Level = 1, Group = "default" };
-
-        _mockNotificationService
-            .Setup(s =>
-                s.AckNotificationAsync(
-                    It.IsAny<NotificationAckRequest>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ThrowsAsync(new Exception("Database error"));
-
-        // Act
-        var result = await _controller.AckNotification(request, CancellationToken.None);
-
-        // Assert
-        var statusCodeResult = Assert.IsType<ObjectResult>(result.Result);
-        Assert.Equal(500, statusCodeResult.StatusCode);
-        var response = Assert.IsType<NotificationAckResponse>(statusCodeResult.Value);
-        Assert.False(response.Success);
-        Assert.Equal("Internal server error processing acknowledgment", response.Message);
-    }
-
-    [Fact]
-    public async Task AckNotification_ServiceReturnsFailure_ReturnsBadRequest()
-    {
-        // Arrange
-        var request = new NotificationAckRequest { Level = 1, Group = "default" };
-
-        var failureResponse = new NotificationAckResponse
-        {
-            Success = false,
-            Message = "Alarm already snoozed",
-            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-        };
-
-        _mockNotificationService
-            .Setup(s =>
-                s.AckNotificationAsync(
-                    It.IsAny<NotificationAckRequest>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(failureResponse);
-
-        // Act
-        var result = await _controller.AckNotification(request, CancellationToken.None);
-
-        // Assert
-        var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var response = Assert.IsType<NotificationAckResponse>(badRequestResult.Value);
-        Assert.False(response.Success);
-        Assert.Equal("Alarm already snoozed", response.Message);
     }
 }

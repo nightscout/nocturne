@@ -27,8 +27,8 @@ public class WriteEndpointScopeEnforcementTests
     /// </summary>
     private static readonly HashSet<string> ExemptControllers = new()
     {
-        // Alexa performs its own read-permission check and writes no tenant data; it is a
-        // read operation exposed over POST and must remain usable on public tenants.
+        // Alexa performs its own read-scope check and writes no tenant data; it is a
+        // read operation exposed over POST.
         "AlexaController",
     };
 

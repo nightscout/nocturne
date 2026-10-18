@@ -6132,10 +6132,8 @@ msgstr "Total:"
 msgid "Click to view"
 msgstr "Click to view"
 
-#. 0: reliability.daysOfData ?? 0; 1: reliability.recommendedMinimumDays ?? 14
-#: src/lib/components/reports/ReliabilityBadge.svelte
-msgid "Based on {0} days of data ({1} recommended)"
-msgstr "Based on {0} days of data ({1} recommended)"
+#~ msgid "Based on {0} days of data ({1} recommended)"
+#~ msgstr "Based on {0} days of data ({1} recommended)"
 
 #~ msgid "Period Averages"
 #~ msgstr "Period Averages"
@@ -14624,6 +14622,7 @@ msgid "Data is {0} old"
 msgstr "Data is {0} old"
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Inferred"
 msgstr "Inferred"
 
@@ -26776,3 +26775,16 @@ msgstr "Skip this step if you gave the installer a DuckDNS token. For a DuckDNS 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Once the script reports that Nocturne is answering, open <0/> in a browser. You are taken to the setup page to name your first site and create the owner account, with a passkey or a sign-in provider. A passkey is your phone's or computer's built-in unlock. If you choose one, register a second device as soon as you can, because there is no password to fall back on."
 msgstr "Once the script reports that Nocturne is answering, open <0/> in a browser. You are taken to the setup page to name your first site and create the owner account, with a passkey or a sign-in provider. A passkey is your phone's or computer's built-in unlock. If you choose one, register a second device as soon as you can, because there is no password to fall back on."
+
+#. 0: daysOfData; 1: daysOfData === 1 ? "day" \\: "days"; 2: reliability.recommendedMinimumDays ?? 14
+#: src/lib/components/reports/ReliabilityBadge.svelte
+msgid "Based on {0} {1} of data ({2} recommended)"
+msgstr "Based on {0} {1} of data ({2} recommended)"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Nocturne inferred this sensor start from the warm-up gap in your CGM's readings. Correct the time if it is off, or delete it if this was not a sensor change."
+msgstr "Nocturne inferred this sensor start from the warm-up gap in your CGM's readings. Correct the time if it is off, or delete it if this was not a sensor change."
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Failed to read migration status"
+msgstr "Failed to read migration status"

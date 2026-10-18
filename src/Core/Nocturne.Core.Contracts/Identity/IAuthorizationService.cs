@@ -38,12 +38,6 @@ public interface IAuthorizationService
     /// <returns>True if permission is granted</returns>
     Task<bool> CheckPermissionAsync(string subjectId, string permission);
 
-    /// <summary>
-    /// Record a permission usage for statistics
-    /// </summary>
-    /// <param name="permission">Permission that was used</param>
-    Task RecordPermissionUsageAsync(string permission);
-
     // Subject management methods
     /// <summary>
     /// Get all subjects
