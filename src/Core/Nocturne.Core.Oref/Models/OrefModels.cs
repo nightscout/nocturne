@@ -55,7 +55,6 @@ public class OrefProfile
     [JsonPropertyName("peak")]
     public int? Peak { get; set; }
 
-    /// <summary>Carb absorption rate</summary>
     [JsonPropertyName("carbAbsorptionRate")]
     public double? CarbAbsorptionRate { get; set; }
 
@@ -261,11 +260,9 @@ public class DetermineBasalResult
     [JsonPropertyName("predBgsCob")]
     public List<double>? PredBgsCob { get; set; }
 
-    /// <summary>Target BG used</summary>
     [JsonPropertyName("targetBg")]
     public double? TargetBg { get; set; }
 
-    /// <summary>Sensitivity ratio used</summary>
     [JsonPropertyName("sensitivityRatio")]
     public double? SensitivityRatio { get; set; }
 }
@@ -287,7 +284,6 @@ public class GlucoseReading
     [JsonPropertyName("dateString")]
     public string? DateString { get; set; }
 
-    /// <summary>Direction/trend</summary>
     [JsonPropertyName("direction")]
     public string? Direction { get; set; }
 }
@@ -297,7 +293,6 @@ public class GlucoseReading
 /// </summary>
 public class OrefTreatment
 {
-    /// <summary>Event type</summary>
     [JsonPropertyName("_type")]
     public string? EventType { get; set; }
 

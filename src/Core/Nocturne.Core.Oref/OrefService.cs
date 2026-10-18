@@ -174,9 +174,6 @@ public class OrefService
     }
 }
 
-/// <summary>
-/// Glucose prediction results.
-/// </summary>
 public class GlucosePredictions
 {
     /// <summary>Current blood glucose (mg/dL)</summary>
@@ -206,6 +203,5 @@ public class GlucosePredictions
     /// <summary>Zero-temp prediction (mg/dL)</summary>
     public List<double>? PredBgsZt { get; set; }
 
-    /// <summary>Sensitivity ratio used</summary>
     public double? SensitivityRatio { get; set; }
 }
