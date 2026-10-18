@@ -1061,6 +1061,84 @@ public class StatisticsControllerTests
     }
 
     [Fact]
+    public async Task GetBasalAnalysis_ForwardsTheRequestTokenToEveryFetch()
+    {
+        SetupHistoryPastTheOldLimits();
+        _basalRateResolverMock
+            .Setup(r => r.BuildResolverAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Func<long, double>)(_ => 1.0));
+        using var cts = new CancellationTokenSource();
+
+        var result = await CreateController(statisticsService: new StatisticsService())
+            .GetBasalAnalysis(DenseDay, DenseDay.AddDays(4), cts.Token);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        _repositoryTokens.Should().HaveCount(2).And.OnlyContain(t => t == cts.Token);
+        _basalRateResolverMock.Verify(
+            r => r.BuildResolverAsync(It.IsAny<long>(), It.IsAny<long>(), cts.Token), Times.Once);
+        _therapySettingsResolverMock.Verify(r => r.GetTimezoneAsync(null, cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetBasalAnalysis_WithNoTempBasals_ForwardsTheRequestTokenToTheScheduledFallback()
+    {
+        using var cts = new CancellationTokenSource();
+        SetupEmptyTreatments();
+        SetupScheduledFallbackFor(cts.Token);
+
+        await CreateController(statisticsService: new StatisticsService())
+            .GetBasalAnalysis(DenseDay, DenseDay.AddDays(1), cts.Token);
+
+        VerifyScheduledFallbackRanUnder(cts.Token);
+        _therapySettingsResolverMock.Verify(r => r.GetTimezoneAsync(null, cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetHourlyInsulinDelivery_ForwardsTheRequestTokenToEveryFetch()
+    {
+        SetupHistoryPastTheOldLimits();
+        using var cts = new CancellationTokenSource();
+
+        var result = await CreateController(statisticsService: new StatisticsService())
+            .GetHourlyInsulinDelivery(DenseDay, DenseDay.AddDays(4), cts.Token);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        _repositoryTokens.Should().HaveCount(4).And.OnlyContain(t => t == cts.Token);
+        _therapySettingsResolverMock.Verify(r => r.GetTimezoneAsync(null, cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetHourlyInsulinDelivery_WithNoRecords_ForwardsTheRequestTokenToTheScheduledFallback()
+    {
+        using var cts = new CancellationTokenSource();
+        SetupEmptyTreatments();
+        SetupScheduledFallbackFor(cts.Token);
+
+        await CreateController(statisticsService: new StatisticsService())
+            .GetHourlyInsulinDelivery(DenseDay, DenseDay.AddDays(1), cts.Token);
+
+        VerifyScheduledFallbackRanUnder(cts.Token);
+        _therapySettingsResolverMock.Verify(r => r.GetTimezoneAsync(null, cts.Token), Times.Once);
+    }
+
+    private void SetupScheduledFallbackFor(CancellationToken token)
+    {
+        _therapySettingsResolverMock
+            .Setup(r => r.HasDataAsync(token))
+            .ReturnsAsync(true);
+        _basalSegmentsMock
+            .Setup(s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), token))
+            .Returns(AsAsync([new BasalSegment(Mills(DenseDay), Mills(DenseDay.AddDays(1)), 1.0, 1.0, "Default")]));
+    }
+
+    private void VerifyScheduledFallbackRanUnder(CancellationToken token)
+    {
+        _therapySettingsResolverMock.Verify(r => r.HasDataAsync(token), Times.Once);
+        _basalSegmentsMock.Verify(
+            s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), token), Times.Once);
+    }
+
+    [Fact]
     public async Task GetMultiPeriodStatistics_WithOnlyProfileBasal_CountsTheProfileAsScheduledBasal()
     {
         var start = DateTime.UtcNow.AddDays(-1);
