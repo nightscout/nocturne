@@ -1,4 +1,3 @@
-using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;

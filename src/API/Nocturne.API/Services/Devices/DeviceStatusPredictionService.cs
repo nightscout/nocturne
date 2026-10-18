@@ -1,6 +1,4 @@
 using System.Text.Json;
-using Nocturne.API.Controllers.V4;
-using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.API.Services.Glucose;
