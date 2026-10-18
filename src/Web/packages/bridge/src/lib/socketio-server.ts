@@ -148,21 +148,20 @@ export function pickHandshakeHost(
   return single || undefined;
 }
 
-/** Resolve the tenant slug a host belongs to. A subdomain resolves to its slug;
- *  the apex domain resolves to the sole tenant when exactly one exists, mirroring
- *  the API's tenant resolution so a single tenant served on the root domain works
- *  without a subdomain. Returns null when the host is foreign or the apex can't be
- *  resolved to a single tenant. */
 /** Socket.IO query values are `string | string[]`; take the first. */
 function queryValue(value: string | string[] | undefined): string | undefined {
   const single = Array.isArray(value) ? value[0] : value;
   return single || undefined;
 }
 
+/** Resolve the tenant slug a host belongs to. A subdomain resolves to its slug;
+ *  the apex domain resolves to `apexTenantSlug`, the tenant the API serves there
+ *  (see `discoverApexTenant`). Returns null when the host is foreign or the apex
+ *  serves no tenant. */
 export function resolveTenantSlug(
   host: string | undefined,
   baseDomain: string,
-  tenantSlugs: string[],
+  apexTenantSlug: string | null,
 ): string | null {
   if (!host) return null;
 
@@ -174,8 +173,8 @@ export function resolveTenantSlug(
     return slug || null;
   }
 
-  if (hostname === baseDomainHost && tenantSlugs.length === 1) {
-    return tenantSlugs[0];
+  if (hostname === baseDomainHost) {
+    return apexTenantSlug;
   }
 
   return null;
@@ -187,7 +186,7 @@ class SocketIOServer {
   private clients: Map<string, ClientInfo> = new Map();
   private config: SocketIOConfig;
   private baseDomain: string;
-  private tenantSlugs: string[];
+  private apexTenantSlug: string | null;
   private signingSecret: string;
   private apiBaseUrl: string;
   /** Nightscout v3 namespaces for uploaders (AAPS, xDrip+, ...). null until
@@ -199,13 +198,13 @@ class SocketIOServer {
     httpServer: HttpServer,
     config: SocketIOConfig = {},
     baseDomain: string,
-    tenantSlugs: string[] = [],
+    apexTenantSlug: string | null = null,
     signingSecret: string = '',
     apiBaseUrl: string = '',
   ) {
     this.httpServer = httpServer;
     this.baseDomain = baseDomain;
-    this.tenantSlugs = tenantSlugs;
+    this.apexTenantSlug = apexTenantSlug;
     this.signingSecret = signingSecret;
     this.apiBaseUrl = apiBaseUrl;
     this.config = {
@@ -264,7 +263,7 @@ class SocketIOServer {
   async authorizeHandshake(socket: BridgeSocket, next: (err?: Error) => void): Promise<void> {
     try {
       const host = pickHandshakeHost(socket.handshake.headers);
-      const tenantSlug = resolveTenantSlug(host, this.baseDomain, this.tenantSlugs);
+      const tenantSlug = resolveTenantSlug(host, this.baseDomain, this.apexTenantSlug);
       if (!tenantSlug) {
         logger.warn(`Rejecting connection ${socket.id}: no resolvable tenant`);
         return next(new Error('tenant_unresolved'));
@@ -650,8 +649,8 @@ class SocketIOServer {
     };
   }
 
-  setTenantSlugs(slugs: string[]): void {
-    this.tenantSlugs = slugs;
+  setApexTenantSlug(slug: string | null): void {
+    this.apexTenantSlug = slug;
   }
 
   getIO(): BridgeServer | null {
@@ -669,7 +668,7 @@ class SocketIOServer {
    */
   resolveNamespaceTenant(socket: BridgeSocket): string | null {
     const host = pickHandshakeHost(socket.handshake.headers);
-    return resolveTenantSlug(host, this.baseDomain, this.tenantSlugs);
+    return resolveTenantSlug(host, this.baseDomain, this.apexTenantSlug);
   }
 
   /**

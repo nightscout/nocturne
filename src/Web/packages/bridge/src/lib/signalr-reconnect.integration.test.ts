@@ -68,7 +68,7 @@ it("recovers all real hubs after partial handshake failure and a prolonged outag
     downstream,
     {},
     "nocturne.test",
-    ["test"],
+    "test",
     "test-key",
     url,
   );

@@ -205,7 +205,7 @@
         ],
         apiVersions: {
           v1: true,
-          v2: false,
+          v2: true,
           v3: true
         }
       }

@@ -11,27 +11,23 @@ describe('resolveTenantSlug', () => {
   const base = 'nocturne.run';
 
   it('resolves a subdomain to its slug', () => {
-    expect(resolveTenantSlug('rhys.nocturne.run', base, [])).toBe('rhys');
+    expect(resolveTenantSlug('rhys.nocturne.run', base, null)).toBe('rhys');
   });
 
-  it('resolves the apex domain to the sole tenant', () => {
-    expect(resolveTenantSlug('nocturne.run', base, ['only'])).toBe('only');
+  it('resolves the apex domain to the tenant the API serves there', () => {
+    expect(resolveTenantSlug('nocturne.run', base, 'only')).toBe('only');
   });
 
-  it('returns null on the apex when more than one tenant exists', () => {
-    expect(resolveTenantSlug('nocturne.run', base, ['a', 'b'])).toBeNull();
-  });
-
-  it('returns null on the apex when no tenants are known yet', () => {
-    expect(resolveTenantSlug('nocturne.run', base, [])).toBeNull();
+  it('returns null on the apex when the API serves no tenant there', () => {
+    expect(resolveTenantSlug('nocturne.run', base, null)).toBeNull();
   });
 
   it('returns null for a foreign domain', () => {
-    expect(resolveTenantSlug('evil.com', base, ['only'])).toBeNull();
+    expect(resolveTenantSlug('evil.com', base, 'only')).toBeNull();
   });
 
   it('ignores a port on the host', () => {
-    expect(resolveTenantSlug('rhys.nocturne.run:443', base, [])).toBe('rhys');
+    expect(resolveTenantSlug('rhys.nocturne.run:443', base, null)).toBe('rhys');
   });
 });
 
@@ -59,8 +55,8 @@ describe('pickHandshakeHost', () => {
 
 type HandshakeHeaders = Record<string, string | string[] | undefined>;
 
-function makeServer(tenantSlugs: string[] = []): SocketIOServer {
-  return new SocketIOServer(createServer(), {}, 'nocturne.run', tenantSlugs, SECRET);
+function makeServer(apexTenantSlug: string | null = null): SocketIOServer {
+  return new SocketIOServer(createServer(), {}, 'nocturne.run', apexTenantSlug, SECRET);
 }
 
 function fakeSocket(headers: HandshakeHeaders, auth: { token?: string } = {}) {
@@ -198,7 +194,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
   });
 
   it('admits an apex connection for the sole tenant with an apex ticket', async () => {
-    const server = makeServer(['only']);
+    const server = makeServer('only');
     const next = vi.fn();
     const socket = fakeSocket(
       { host: 'nocturne.run' },
@@ -297,7 +293,7 @@ describe('SocketIOServer.handleAuthorize', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       apiBaseUrl,
     );
@@ -477,7 +473,7 @@ describe('SocketIOServer tracker broadcast fan-out', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       'http://api.internal',
     );
@@ -522,7 +518,7 @@ describe('SocketIOServer in-app notification fan-out', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       'http://api.internal',
     );
@@ -575,7 +571,7 @@ describe('SocketIOServer v3 /storage namespace', () => {
   });
 
   function makeStorageServer(apiBaseUrl = 'http://api.internal') {
-    return new SocketIOServer(createServer(), {}, 'nocturne.run', [], SECRET, apiBaseUrl);
+    return new SocketIOServer(createServer(), {}, 'nocturne.run', null, SECRET, apiBaseUrl);
   }
 
   /** A fake socket carrying a pending tenant slug (post-handshake state). */
@@ -776,7 +772,7 @@ describe('SocketIOServer v3 /storage broadcast fan-out', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       'http://api.internal',
     );
@@ -855,7 +851,7 @@ describe('SocketIOServer v3 /alarm namespace', () => {
   });
 
   function makeAlarmServer(apiBaseUrl = 'http://api.internal') {
-    return new SocketIOServer(createServer(), {}, 'nocturne.run', [], SECRET, apiBaseUrl);
+    return new SocketIOServer(createServer(), {}, 'nocturne.run', null, SECRET, apiBaseUrl);
   }
 
   function alarmSocket(pendingTenantSlug?: string) {
@@ -980,7 +976,7 @@ describe('SocketIOServer v3 /alarm broadcast fan-out', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       'http://api.internal',
     );
