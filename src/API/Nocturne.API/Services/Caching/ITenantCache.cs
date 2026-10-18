@@ -20,6 +20,7 @@ namespace Nocturne.API.Services.Caching;
 /// including <c>null</c> and value types, and is never invalidated, so it suits only TTLs short
 /// enough to absorb a write.
 /// </para>
+/// <para>How broadly each write path clears is set out on <see cref="ClearsTenantCacheAttribute"/>.</para>
 /// </remarks>
 public interface ITenantCache
 {

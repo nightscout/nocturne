@@ -17,6 +17,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
@@ -47,6 +48,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [Route("api/v4/nutrition")]
 [RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
+[ClearsTenantCache]
 public class NutritionController : ControllerBase, IWriteScopedController
 {
     /// <summary>
