@@ -58,7 +58,7 @@ public class StateSpanSupersessionClampTests : IAsyncLifetime
             TenantReaderData.Resolve(scope.ServiceProvider, _tenant);
             scope.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
             var repository = new StateSpanRepository(
-                scope.ServiceProvider.GetRequiredService<NocturneDbContext>(),
+                scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>(),
                 new Mock<IDeduplicationService>().Object,
                 new Mock<IAuditContext>().Object,
                 NullLogger<StateSpanRepository>.Instance);

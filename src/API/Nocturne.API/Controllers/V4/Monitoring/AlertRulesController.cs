@@ -208,7 +208,8 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> UpdateRule(
         Guid id, [FromBody] UpdateAlertRuleRequest request, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
+        await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
+        var db = unit.Context;
 
         var rule = await db.AlertRules
             .Include(r => r.Channels)
@@ -291,7 +292,7 @@ public class AlertRulesController : ControllerBase
         // A save without its clear would stand: a retried edit changes nothing, so it would not
         // clear the hold.
         if (conditionsChanged)
-            await _rearm.SaveAndClearAsync(db, id, ct);
+            await _rearm.SaveAndClearAsync(unit, id, ct);
         else
             await db.SaveChangesAsync(ct);
         if (wasEnabled && !request.IsEnabled)
@@ -367,7 +368,8 @@ public class AlertRulesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AlertRuleResponse>> ToggleRule(Guid id, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
+        await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
+        var db = unit.Context;
 
         var rule = await db.AlertRules
             .Include(r => r.Channels)
@@ -379,7 +381,7 @@ public class AlertRulesController : ControllerBase
         var wasEnabled = rule.IsEnabled;
         rule.IsEnabled = !rule.IsEnabled;
         rule.UpdatedAt = DateTime.UtcNow;
-        await _rearm.SaveAndClearAsync(db, id, ct);
+        await _rearm.SaveAndClearAsync(unit, id, ct);
         if (wasEnabled)
             await _retirement.CloseAsync([id], db.TenantId, CancellationToken.None);
 

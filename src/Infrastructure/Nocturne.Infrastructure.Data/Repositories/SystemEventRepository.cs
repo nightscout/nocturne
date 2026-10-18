@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -11,15 +12,14 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class SystemEventRepository : ISystemEventRepository
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
 
     /// <summary>
     /// Initializes a new instance of the SystemEventRepository class
     /// </summary>
-    /// <param name="context">The database context.</param>
-    public SystemEventRepository(NocturneDbContext context)
+    public SystemEventRepository(INocturneDbContextFactory contexts)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <summary>
@@ -44,7 +44,8 @@ public class SystemEventRepository : ISystemEventRepository
         int skip = 0,
         CancellationToken cancellationToken = default)
     {
-        var query = _context.SystemEvents.AsQueryable();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.SystemEvents.AsQueryable();
 
         if (eventType.HasValue)
             query = query.Where(e => e.EventType == eventType.Value.ToString());
@@ -80,13 +81,14 @@ public class SystemEventRepository : ISystemEventRepository
         string id,
         CancellationToken cancellationToken = default)
     {
-        var entity = await _context.SystemEvents.FirstOrDefaultAsync(
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.SystemEvents.FirstOrDefaultAsync(
             e => e.OriginalId == id,
             cancellationToken);
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
-            entity = await _context.SystemEvents.FirstOrDefaultAsync(
+            entity = await db.SystemEvents.FirstOrDefaultAsync(
                 e => e.Id == guidId,
                 cancellationToken);
         }
@@ -119,9 +121,7 @@ public class SystemEventRepository : ISystemEventRepository
     /// <summary>
     /// Upserts <paramref name="events"/> by <c>OriginalId</c> with one save, leaving the rows a save
     /// per event in input order would: a repeated <c>OriginalId</c> updates the row its first
-    /// occurrence inserted. Every row it loaded or added is detached afterwards so a long connector
-    /// sync does not pay change detection over every earlier batch; only those rows, since the scoped
-    /// context may also track entities the caller still holds.
+    /// occurrence inserted.
     /// </summary>
     private async Task<List<SystemEvent>> UpsertBatchAsync(
         IReadOnlyList<SystemEvent> events,
@@ -130,6 +130,8 @@ public class SystemEventRepository : ISystemEventRepository
         if (events.Count == 0)
             return [];
 
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+
         var originalIds = events
             .Select(e => e.OriginalId)
             .Where(id => !string.IsNullOrEmpty(id))
@@ -137,10 +139,9 @@ public class SystemEventRepository : ISystemEventRepository
             .ToList();
         var existingRows = originalIds.Count == 0
             ? []
-            : await _context.SystemEvents
+            : await db.SystemEvents
                 .Where(e => originalIds.Contains(e.OriginalId))
                 .ToListAsync(cancellationToken);
-        var loaded = new HashSet<SystemEventEntity>(existingRows, ReferenceEqualityComparer.Instance);
         var existingByOriginalId = existingRows
             .GroupBy(e => e.OriginalId!)
             .ToDictionary(g => g.Key, g => g.First());
@@ -156,8 +157,7 @@ public class SystemEventRepository : ISystemEventRepository
             else
             {
                 entity = SystemEventMapper.ToEntity(systemEvent);
-                _context.SystemEvents.Add(entity);
-                loaded.Add(entity);
+                db.SystemEvents.Add(entity);
                 if (hasOriginalId)
                     existingByOriginalId[systemEvent.OriginalId!] = entity;
             }
@@ -165,13 +165,9 @@ public class SystemEventRepository : ISystemEventRepository
             written.Add(entity);
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
 
-        var results = written.Select(SystemEventMapper.ToDomainModel).ToList();
-        foreach (var entity in loaded)
-            _context.Entry(entity).State = EntityState.Detached;
-
-        return results;
+        return written.Select(SystemEventMapper.ToDomainModel).ToList();
     }
 
     /// <summary>
@@ -184,13 +180,14 @@ public class SystemEventRepository : ISystemEventRepository
         string id,
         CancellationToken cancellationToken = default)
     {
-        var entity = await _context.SystemEvents.FirstOrDefaultAsync(
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.SystemEvents.FirstOrDefaultAsync(
             e => e.OriginalId == id,
             cancellationToken);
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
-            entity = await _context.SystemEvents.FirstOrDefaultAsync(
+            entity = await db.SystemEvents.FirstOrDefaultAsync(
                 e => e.Id == guidId,
                 cancellationToken);
         }
@@ -198,8 +195,8 @@ public class SystemEventRepository : ISystemEventRepository
         if (entity == null)
             return false;
 
-        _context.SystemEvents.Remove(entity);
-        var result = await _context.SaveChangesAsync(cancellationToken);
+        db.SystemEvents.Remove(entity);
+        var result = await db.SaveChangesAsync(cancellationToken);
         return result > 0;
     }
 
@@ -213,7 +210,8 @@ public class SystemEventRepository : ISystemEventRepository
         string source,
         CancellationToken cancellationToken = default)
     {
-        var deletedCount = await _context.SystemEvents
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var deletedCount = await db.SystemEvents
             .Where(e => e.Source == source)
             .ExecuteDeleteAsync(cancellationToken);
         return deletedCount;

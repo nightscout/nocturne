@@ -190,8 +190,8 @@ public interface ITrackerRepository
     /// </remarks>
     Task<T> ExecuteUnderDefinitionLockAsync<T>(
         Guid definitionId,
-        Func<CancellationToken, Task<T>> work,
-        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
+        Func<ITrackerRepository, CancellationToken, Task<T>> work,
+        Func<ITrackerRepository, T, CancellationToken, Task<bool>>? verifySucceeded = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

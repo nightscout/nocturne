@@ -66,7 +66,8 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     /// <inheritdoc />
     public async Task SyncDefinitionAsync(Guid definitionId, CancellationToken ct = default)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
+        await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
+        var db = unit.Context;
         var tenantId = db.TenantId;
 
         var definition = await db.TrackerDefinitions
@@ -222,7 +223,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         if (deleted.Count > 0)
             await _retirement.CloseAsync(deleted, tenantId, ct);
 
-        await _rearm.SaveAndClearAsync(db, [.. changed, .. disabled], ct);
+        await _rearm.SaveAndClearAsync(unit, [.. changed, .. disabled], ct);
         if (disabled.Count > 0)
             await _retirement.CloseAsync(disabled, tenantId, CancellationToken.None);
 
@@ -234,7 +235,8 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     /// <inheritdoc />
     public async Task DeleteRulesForDefinitionAsync(Guid definitionId, CancellationToken ct = default)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
+        await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
+        var db = unit.Context;
         var tag = ManagedByTag(definitionId);
 
         var rules = await db.AlertRules
@@ -248,7 +250,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         // AlertRuleRetirement's remarks: a delete closes before the save that removes the rule.
         if (deleted.Count > 0)
             await _retirement.CloseAsync(deleted, db.TenantId, ct);
-        await _rearm.SaveAndClearAsync(db, disabled, ct);
+        await _rearm.SaveAndClearAsync(unit, disabled, ct);
         if (disabled.Count > 0)
             await _retirement.CloseAsync(disabled, db.TenantId, CancellationToken.None);
 

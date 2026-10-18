@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -73,7 +74,7 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             .Returns((IEnumerable<StepCount> docs) => docs);
 
         var stateSpanRepository = new StateSpanRepository(
-            _context,
+            _context.AsFactory(),
             Mock.Of<IDeduplicationService>(),
             Mock.Of<IAuditContext>(),
             NullLogger<StateSpanRepository>.Instance);

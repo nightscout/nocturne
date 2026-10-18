@@ -38,7 +38,7 @@ public class SettingsUpsertTests : IDisposable
         _context = TestDbContextFactory.CreateInMemoryContext($"v3_settings_upsert_{Guid.NewGuid()}");
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
         _controller = new SettingsController(
-            new SettingsRepository(_context),
+            new SettingsRepository(_context.AsFactory()),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<SettingsController>.Instance)
         {

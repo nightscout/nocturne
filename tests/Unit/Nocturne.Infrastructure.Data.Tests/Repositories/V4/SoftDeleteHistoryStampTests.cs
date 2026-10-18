@@ -363,7 +363,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
         _context.ChangeTracker.Clear();
 
         var repository = new StateSpanRepository(
-            _context, Mock.Of<Core.Contracts.Infrastructure.IDeduplicationService>(),
+            _context.AsFactory(), Mock.Of<Core.Contracts.Infrastructure.IDeduplicationService>(),
             new SystemAuditContext(), NullLogger<StateSpanRepository>.Instance);
 
         var deleted = activity

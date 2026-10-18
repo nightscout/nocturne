@@ -170,7 +170,7 @@ public class DeduplicationJobTenantScopeTests : IDisposable
     {
         var context = _db.CreateContext();
         return new DeduplicationService(
-            context, scopeFactory, NullLogger<DeduplicationService>.Instance, tenantAccessor);
+            context.AsFactory(), scopeFactory, NullLogger<DeduplicationService>.Instance, tenantAccessor);
     }
 
     /// <summary>

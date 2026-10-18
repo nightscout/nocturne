@@ -154,34 +154,6 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Ensure the database is created and up to date
-    /// </summary>
-    /// <param name="serviceProvider">Service provider</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Task</returns>
-    public static async Task EnsureDatabaseCreatedAsync(
-        this IServiceProvider serviceProvider,
-        CancellationToken cancellationToken = default
-    )
-    {
-        using var scope = serviceProvider.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<NocturneDbContext>>();
-
-        try
-        {
-            logger.LogInformation("Ensuring PostgreSQL database is created and up to date");
-            await context.Database.EnsureCreatedAsync(cancellationToken);
-            logger.LogInformation("PostgreSQL database is ready");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to ensure PostgreSQL database is created");
-            throw;
-        }
-    }
-
-    /// <summary>
     /// Add discrepancy analysis repository services
     /// </summary>
     /// <param name="services">Service collection</param>

@@ -56,9 +56,9 @@ internal static class ExcursionTransitionWriter
             return (Unwritten(prior, decision), null);
 
         var written = await repository.ExecuteInTransactionAsync(
-            token => WriteAsync(
-                repository, logger, ruleId, prior, decision, decidedAgainst, now, autoResolved, token),
-            (attempt, token) => LandedAsync(repository, attempt, token),
+            (tx, token) => WriteAsync(
+                tx, logger, ruleId, prior, decision, decidedAgainst, now, autoResolved, token),
+            LandedAsync,
             ct);
         return (written.Transition, written.AutoResolve);
     }

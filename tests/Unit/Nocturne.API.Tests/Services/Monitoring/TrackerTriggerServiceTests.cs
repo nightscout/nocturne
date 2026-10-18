@@ -90,10 +90,10 @@ public class TrackerTriggerServiceTests
 
         _repository
             .Setup(r => r.ExecuteUnderDefinitionLockAsync(
-                It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<TrackerSuccessionResult>>>(),
-                It.IsAny<Func<TrackerSuccessionResult, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
-            .Returns((Guid _, Func<CancellationToken, Task<TrackerSuccessionResult>> work,
-                Func<TrackerSuccessionResult, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(ct));
+                It.IsAny<Guid>(), It.IsAny<Func<ITrackerRepository, CancellationToken, Task<TrackerSuccessionResult>>>(),
+                It.IsAny<Func<ITrackerRepository, TrackerSuccessionResult, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid _, Func<ITrackerRepository, CancellationToken, Task<TrackerSuccessionResult>> work,
+                Func<ITrackerRepository, TrackerSuccessionResult, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(_repository.Object, ct));
 
         _sut = new TrackerTriggerService(
             _repository.Object,
@@ -403,10 +403,10 @@ public class TrackerTriggerServiceTests
                 running.Where(r => ids.Contains(r.StartTreatmentId!)).ToList());
         _repository
             .Setup(r => r.ExecuteUnderDefinitionLockAsync(
-                It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<TrackerStartRevert?>>>(),
-                It.IsAny<Func<TrackerStartRevert?, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
-            .Returns((Guid _, Func<CancellationToken, Task<TrackerStartRevert?>> work,
-                Func<TrackerStartRevert?, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(ct));
+                It.IsAny<Guid>(), It.IsAny<Func<ITrackerRepository, CancellationToken, Task<TrackerStartRevert?>>>(),
+                It.IsAny<Func<ITrackerRepository, TrackerStartRevert?, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid _, Func<ITrackerRepository, CancellationToken, Task<TrackerStartRevert?>> work,
+                Func<ITrackerRepository, TrackerStartRevert?, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(_repository.Object, ct));
         _repository
             .Setup(r => r.RevertStartAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid definitionId, string startTreatmentId, CancellationToken _) =>

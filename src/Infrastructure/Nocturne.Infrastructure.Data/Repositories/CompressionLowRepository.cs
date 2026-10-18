@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -10,12 +11,12 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class CompressionLowRepository : ICompressionLowRepository
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
 
     /// <inheritdoc cref="ICompressionLowRepository" />
-    public CompressionLowRepository(NocturneDbContext context)
+    public CompressionLowRepository(INocturneDbContextFactory contexts)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <summary>
@@ -30,7 +31,8 @@ public class CompressionLowRepository : ICompressionLowRepository
         DateOnly? nightOf = null,
         CancellationToken cancellationToken = default)
     {
-        var query = _context.CompressionLowSuggestions.AsQueryable();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.CompressionLowSuggestions.AsQueryable();
 
         if (status.HasValue)
             query = query.Where(s => s.Status == status.Value.ToString());
@@ -56,7 +58,8 @@ public class CompressionLowRepository : ICompressionLowRepository
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var entity = await _context.CompressionLowSuggestions
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.CompressionLowSuggestions
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
 
         return entity != null ? CompressionLowMapper.ToDomainModel(entity) : null;
@@ -72,9 +75,10 @@ public class CompressionLowRepository : ICompressionLowRepository
         CompressionLowSuggestion suggestion,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var entity = CompressionLowMapper.ToEntity(suggestion);
-        _context.CompressionLowSuggestions.Add(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        db.CompressionLowSuggestions.Add(entity);
+        await db.SaveChangesAsync(cancellationToken);
         return CompressionLowMapper.ToDomainModel(entity);
     }
 
@@ -88,14 +92,15 @@ public class CompressionLowRepository : ICompressionLowRepository
         CompressionLowSuggestion suggestion,
         CancellationToken cancellationToken = default)
     {
-        var entity = await _context.CompressionLowSuggestions
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.CompressionLowSuggestions
             .FirstOrDefaultAsync(s => s.Id == suggestion.Id, cancellationToken);
 
         if (entity == null)
             return null;
 
         CompressionLowMapper.UpdateEntity(entity, suggestion);
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         return CompressionLowMapper.ToDomainModel(entity);
     }
 
@@ -109,7 +114,8 @@ public class CompressionLowRepository : ICompressionLowRepository
         DateOnly nightOf,
         CancellationToken cancellationToken = default)
     {
-        return await _context.CompressionLowSuggestions
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db.CompressionLowSuggestions
             .CountAsync(s => s.NightOf == nightOf && s.Status == "Pending", cancellationToken);
     }
 
@@ -124,7 +130,8 @@ public class CompressionLowRepository : ICompressionLowRepository
         DateOnly nightOf,
         CancellationToken cancellationToken = default)
     {
-        return await _context.CompressionLowSuggestions
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db.CompressionLowSuggestions
             .AnyAsync(s => s.NightOf == nightOf
                 && (s.Status == "Pending" || s.Status == "Accepted"),
                 cancellationToken);
@@ -140,14 +147,15 @@ public class CompressionLowRepository : ICompressionLowRepository
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var entity = await _context.CompressionLowSuggestions
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.CompressionLowSuggestions
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
 
         if (entity == null)
             return false;
 
-        _context.CompressionLowSuggestions.Remove(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        db.CompressionLowSuggestions.Remove(entity);
+        await db.SaveChangesAsync(cancellationToken);
         return true;
     }
 }

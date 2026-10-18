@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -12,21 +13,21 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class ConditionTimerRepository : IConditionTimerStore
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ConditionTimerRepository"/> class.
     /// </summary>
-    /// <param name="context">The database context.</param>
-    public ConditionTimerRepository(NocturneDbContext context)
+    public ConditionTimerRepository(INocturneDbContextFactory contexts)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <inheritdoc />
     public virtual async Task<DateTime?> GetFirstTrueAsync(Guid ruleId, string path, CancellationToken ct)
     {
-        var row = await _context.AlertConditionTimers
+        await using var db = await _contexts.CreateAsync(ct);
+        var row = await db.AlertConditionTimers
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.AlertRuleId == ruleId && t.ConditionPath == path, ct);
 
@@ -36,7 +37,8 @@ public class ConditionTimerRepository : IConditionTimerStore
     /// <inheritdoc />
     public virtual async Task<IReadOnlyDictionary<string, DateTime>> GetAllForRuleAsync(Guid ruleId, CancellationToken ct)
     {
-        var rows = await _context.AlertConditionTimers
+        await using var db = await _contexts.CreateAsync(ct);
+        var rows = await db.AlertConditionTimers
             .AsNoTracking()
             .Where(t => t.AlertRuleId == ruleId)
             .Select(t => new { t.ConditionPath, t.FirstTrueAt })
@@ -48,14 +50,15 @@ public class ConditionTimerRepository : IConditionTimerStore
     /// <inheritdoc />
     public virtual async Task SetFirstTrueAsync(Guid ruleId, string path, DateTime at, CancellationToken ct)
     {
-        var existing = await _context.AlertConditionTimers
+        await using var db = await _contexts.CreateAsync(ct);
+        var existing = await db.AlertConditionTimers
             .FirstOrDefaultAsync(t => t.AlertRuleId == ruleId && t.ConditionPath == path, ct);
 
         if (existing == null)
         {
-            _context.AlertConditionTimers.Add(new AlertConditionTimerEntity
+            db.AlertConditionTimers.Add(new AlertConditionTimerEntity
             {
-                TenantId = _context.TenantId,
+                TenantId = db.TenantId,
                 AlertRuleId = ruleId,
                 ConditionPath = path,
                 FirstTrueAt = at,
@@ -66,26 +69,28 @@ public class ConditionTimerRepository : IConditionTimerStore
             existing.FirstTrueAt = at;
         }
 
-        await _context.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />
     public virtual async Task ClearAsync(Guid ruleId, string path, CancellationToken ct)
     {
-        var existing = await _context.AlertConditionTimers
+        await using var db = await _contexts.CreateAsync(ct);
+        var existing = await db.AlertConditionTimers
             .FirstOrDefaultAsync(t => t.AlertRuleId == ruleId && t.ConditionPath == path, ct);
 
         if (existing != null)
         {
-            _context.AlertConditionTimers.Remove(existing);
-            await _context.SaveChangesAsync(ct);
+            db.AlertConditionTimers.Remove(existing);
+            await db.SaveChangesAsync(ct);
         }
     }
 
     /// <inheritdoc />
     public virtual async Task ClearAllForRuleAsync(Guid ruleId, CancellationToken ct)
     {
-        var rows = await _context.AlertConditionTimers
+        await using var db = await _contexts.CreateAsync(ct);
+        var rows = await db.AlertConditionTimers
             .Where(t => t.AlertRuleId == ruleId)
             .ToListAsync(ct);
 
@@ -94,8 +99,8 @@ public class ConditionTimerRepository : IConditionTimerStore
             return;
         }
 
-        _context.AlertConditionTimers.RemoveRange(rows);
-        await _context.SaveChangesAsync(ct);
+        db.AlertConditionTimers.RemoveRange(rows);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />
@@ -104,9 +109,10 @@ public class ConditionTimerRepository : IConditionTimerStore
         IReadOnlyCollection<string> retainedPaths,
         CancellationToken ct)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var retained = retainedPaths as ICollection<string> ?? retainedPaths.ToHashSet();
 
-        var rows = await _context.AlertConditionTimers
+        var rows = await db.AlertConditionTimers
             .Where(t => t.AlertRuleId == ruleId && !retained.Contains(t.ConditionPath))
             .ToListAsync(ct);
 
@@ -115,7 +121,7 @@ public class ConditionTimerRepository : IConditionTimerStore
             return;
         }
 
-        _context.AlertConditionTimers.RemoveRange(rows);
-        await _context.SaveChangesAsync(ct);
+        db.AlertConditionTimers.RemoveRange(rows);
+        await db.SaveChangesAsync(ct);
     }
 }

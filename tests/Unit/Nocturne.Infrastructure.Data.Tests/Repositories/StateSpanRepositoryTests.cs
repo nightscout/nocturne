@@ -57,7 +57,7 @@ public class StateSpanRepositoryTests : IDisposable
         _mockDedup = new Mock<IDeduplicationService>();
         _logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _repository = new StateSpanRepository(
-            _context, _mockDedup.Object, _auditContext, _logger.Object);
+            _context.AsFactory(), _mockDedup.Object, _auditContext, _logger.Object);
     }
 
     private sealed class StubAuditContext : IAuditContext

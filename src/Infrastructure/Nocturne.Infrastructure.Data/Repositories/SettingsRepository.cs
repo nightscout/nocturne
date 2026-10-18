@@ -4,6 +4,7 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -12,15 +13,14 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class SettingsRepository : ISettingsRepository
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
 
     /// <summary>
     /// Initializes a new instance of the SettingsRepository class
     /// </summary>
-    /// <param name="context">The database context</param>
-    public SettingsRepository(NocturneDbContext context)
+    public SettingsRepository(INocturneDbContextFactory contexts)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <summary>
@@ -32,7 +32,8 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entities = await _context.Settings.AsNoTracking().OrderBy(s => s.Key).ToListAsync(cancellationToken);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entities = await db.Settings.AsNoTracking().OrderBy(s => s.Key).ToListAsync(cancellationToken);
 
         return entities.Select(SettingsMapper.ToDomainModel);
     }
@@ -54,7 +55,8 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.Settings.AsNoTracking().AsQueryable();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.Settings.AsNoTracking().AsQueryable();
 
         // Apply find query filter if specified
         if (!string.IsNullOrEmpty(findQuery))
@@ -87,7 +89,8 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await FindByIdAsync(_context.Settings.AsNoTracking(), id, cancellationToken);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await FindByIdAsync(db.Settings.AsNoTracking(), id, cancellationToken);
 
         return entity != null ? SettingsMapper.ToDomainModel(entity) : null;
     }
@@ -103,7 +106,8 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await _context.Settings.AsNoTracking().FirstOrDefaultAsync(
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.Settings.AsNoTracking().FirstOrDefaultAsync(
             s => s.Key == key,
             cancellationToken
         );
@@ -122,6 +126,7 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var resultEntities = new List<SettingsEntity>();
 
         foreach (var setting in settings)
@@ -136,8 +141,8 @@ public class SettingsRepository : ISettingsRepository
             // addresses its row through OriginalId, not the derived key.
             var existingEntity = (string.IsNullOrEmpty(key)
                 ? null
-                : await _context.Settings.FirstOrDefaultAsync(s => s.Key == key, cancellationToken))
-                ?? await _context.Settings.FirstOrDefaultAsync(
+                : await db.Settings.FirstOrDefaultAsync(s => s.Key == key, cancellationToken))
+                ?? await db.Settings.FirstOrDefaultAsync(
                     s => s.Id == entityId || (originalId != null && s.OriginalId == originalId),
                     cancellationToken
                 );
@@ -151,12 +156,12 @@ public class SettingsRepository : ISettingsRepository
             }
             else
             {
-                _context.Settings.Add(entity);
+                db.Settings.Add(entity);
                 resultEntities.Add(entity);
             }
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
 
         return resultEntities.Select(SettingsMapper.ToDomainModel);
     }
@@ -176,24 +181,17 @@ public class SettingsRepository : ISettingsRepository
         settings.Id = null;
         settings.Key = id;
         settings.SrvCreated = settings.SrvModified;
-        var entity = SettingsMapper.ToEntity(settings);
-        _context.Settings.Add(entity);
 
         try
         {
-            await _context.SaveChangesAsync(cancellationToken);
+            await using var db = await _contexts.CreateAsync(cancellationToken);
+            db.Settings.Add(SettingsMapper.ToEntity(settings));
+            await db.SaveChangesAsync(cancellationToken);
             return true;
         }
         catch (DbUpdateException ex) when (ex.IsUniqueViolation())
         {
-            // A concurrent PUT inserted this key first; ours replaces what it stored. The failed
-            // save also left its audit row for the insert tracked, which must not be saved either.
-            _context.Entry(entity).State = EntityState.Detached;
-            foreach (var audit in _context.ChangeTracker.Entries<MutationAuditLogEntity>()
-                         .Where(e => e.State == EntityState.Added).ToList())
-            {
-                audit.State = EntityState.Detached;
-            }
+            // A concurrent PUT inserted this key first; ours replaces what it stored.
             if (await ReplaceAsync(id, settings, cancellationToken))
             {
                 return false;
@@ -205,7 +203,8 @@ public class SettingsRepository : ISettingsRepository
 
     private async Task<bool> ReplaceAsync(string id, Settings settings, CancellationToken cancellationToken)
     {
-        var entity = await FindByIdAsync(_context.Settings, id, cancellationToken);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await FindByIdAsync(db.Settings, id, cancellationToken);
         if (entity == null)
         {
             return false;
@@ -214,7 +213,7 @@ public class SettingsRepository : ISettingsRepository
         settings.Key = entity.Key;
         settings.SrvCreated = entity.SrvCreated?.ToUnixTimeMilliseconds() ?? settings.SrvModified;
         SettingsMapper.UpdateEntity(entity, settings);
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         return true;
     }
 
@@ -231,7 +230,8 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await FindByIdAsync(_context.Settings, id, cancellationToken);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await FindByIdAsync(db.Settings, id, cancellationToken);
 
         if (entity == null)
         {
@@ -239,7 +239,7 @@ public class SettingsRepository : ISettingsRepository
         }
 
         SettingsMapper.UpdateEntity(entity, settings);
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
 
         return SettingsMapper.ToDomainModel(entity);
     }
@@ -255,15 +255,16 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await FindByIdAsync(_context.Settings, id, cancellationToken);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await FindByIdAsync(db.Settings, id, cancellationToken);
 
         if (entity == null)
         {
             return false;
         }
 
-        _context.Settings.Remove(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        db.Settings.Remove(entity);
+        await db.SaveChangesAsync(cancellationToken);
 
         return true;
     }
@@ -299,7 +300,8 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.Settings.AsNoTracking().AsQueryable();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.Settings.AsNoTracking().AsQueryable();
 
         // Apply find query filter if specified
         if (!string.IsNullOrEmpty(findQuery))

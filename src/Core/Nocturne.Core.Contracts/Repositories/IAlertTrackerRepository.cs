@@ -95,8 +95,8 @@ public interface IAlertTrackerRepository
     /// <summary>
     /// Holds <paramref name="alertRuleId"/>'s transition lock until the transaction
     /// (<see cref="ExecuteInTransactionAsync{T}"/>) it is taken in ends, so that one process at a
-    /// time reads and writes the rule's tracker state. The default, for a store no other process
-    /// shares, takes nothing.
+    /// time reads and writes the rule's tracker state. Call it on the repository the transaction
+    /// hands its work. The default, for a store no other process shares, takes nothing.
     /// </summary>
     /// <param name="alertRuleId">The rule whose transition is about to be written.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -104,8 +104,9 @@ public interface IAlertTrackerRepository
 
     /// <summary>
     /// Runs <paramref name="work"/> in one database transaction, so the writes it makes through
-    /// this repository commit or roll back together. The default, for a store with no
-    /// transactions, runs it as is.
+    /// the repository it is handed commit or roll back together. That repository runs on the
+    /// transaction; calls on this one outside it each run on their own. The default, for a store
+    /// with no transactions, hands over this repository and runs the work as is.
     /// </summary>
     /// <remarks>
     /// <paramref name="work"/> can run more than once when the store retries a transient failure.
@@ -116,7 +117,7 @@ public interface IAlertTrackerRepository
     /// again. Without it, a commit that landed but reported failure runs the work twice.
     /// </remarks>
     Task<T> ExecuteInTransactionAsync<T>(
-        Func<CancellationToken, Task<T>> work,
-        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
-        CancellationToken ct = default) => work(ct);
+        Func<IAlertTrackerRepository, CancellationToken, Task<T>> work,
+        Func<IAlertTrackerRepository, T, CancellationToken, Task<bool>>? verifySucceeded = null,
+        CancellationToken ct = default) => work(this, ct);
 }

@@ -10,6 +10,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -18,7 +19,7 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class StateSpanRepository : IStateSpanRepository
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly IDeduplicationService _deduplicationService;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<StateSpanRepository> _logger;
@@ -61,18 +62,17 @@ public class StateSpanRepository : IStateSpanRepository
     /// <summary>
     /// Initializes a new instance of the StateSpanRepository class
     /// </summary>
-    /// <param name="context">The database context</param>
     /// <param name="deduplicationService">Service for deduplicating records</param>
     /// <param name="auditContext">The audit context for tracking mutations</param>
     /// <param name="logger">Logger instance</param>
     public StateSpanRepository(
-        NocturneDbContext context,
+        INocturneDbContextFactory contexts,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<StateSpanRepository> logger
     )
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _deduplicationService = deduplicationService;
         _auditContext = auditContext;
         _logger = logger;
@@ -105,7 +105,8 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = BuildFilteredQuery(category, state, from, to, source, active);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = BuildFilteredQuery(db, category, state, from, to, source, active);
 
         var ordered = descending
             ? query.OrderByDescending(s => s.StartTimestamp).ThenByDescending(s => s.Id)
@@ -128,7 +129,8 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entities = await BuildFilteredQuery(category, null, null, null, source, null)
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entities = await BuildFilteredQuery(db, category, null, null, null, source, null)
             .Where(s => s.StartTimestamp >= from)
             .OrderBy(s => s.StartTimestamp)
             .Take(count)
@@ -148,11 +150,13 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = BuildFilteredQuery(category, state, from, to, source, active);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = BuildFilteredQuery(db, category, state, from, to, source, active);
         return await query.CountAsync(cancellationToken);
     }
 
-    private IQueryable<StateSpanEntity> BuildFilteredQuery(
+    private static IQueryable<StateSpanEntity> BuildFilteredQuery(
+        NocturneDbContext db,
         StateSpanCategory? category,
         string? state,
         DateTime? from,
@@ -160,7 +164,7 @@ public class StateSpanRepository : IStateSpanRepository
         string? source,
         bool? active)
     {
-        var query = _context.StateSpans.AsNoTracking().AsQueryable();
+        var query = db.StateSpans.AsNoTracking().AsQueryable();
 
         if (category.HasValue)
             query = query.Where(s => s.Category == category.Value.ToString());
@@ -185,7 +189,7 @@ public class StateSpanRepository : IStateSpanRepository
                 query = query.Where(s => s.EndTimestamp != null);
         }
 
-        query = query.ExcludeNonPrimary(_context, RecordType.StateSpan);
+        query = query.ExcludeNonPrimary(db, RecordType.StateSpan);
 
         return query;
     }
@@ -201,14 +205,15 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await _context.StateSpans.AsNoTracking().FirstOrDefaultAsync(
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.StateSpans.AsNoTracking().FirstOrDefaultAsync(
             s => s.OriginalId == id,
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
-            entity = await _context.StateSpans.AsNoTracking().FirstOrDefaultAsync(
+            entity = await db.StateSpans.AsNoTracking().FirstOrDefaultAsync(
                 s => s.Id == guidId,
                 cancellationToken
             );
@@ -243,9 +248,7 @@ public class StateSpanRepository : IStateSpanRepository
     /// Upserts <paramref name="stateSpans"/> by <c>OriginalId</c> with one save, leaving the rows a
     /// save per span in input order would: each span sees every earlier one, so a repeated
     /// <c>OriginalId</c> updates the row its first occurrence inserted, and an open span arriving behind
-    /// a later one it conflicts with ends at that one's start. Every row it loaded or added is detached
-    /// afterwards so a long connector sync does not pay change detection over every earlier batch; only
-    /// those rows, since the scoped context may also track entities the caller still holds.
+    /// a later one it conflicts with ends at that one's start.
     /// </summary>
     /// <param name="stateSpans">The spans to write.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -259,12 +262,13 @@ public class StateSpanRepository : IStateSpanRepository
         if (stateSpans.Count == 0)
             return [];
 
-        var governingRows = await LoadGoverningSpansAsync(stateSpans, cancellationToken);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var governingRows = await LoadGoverningSpansAsync(db, stateSpans, cancellationToken);
         var governingByOriginalId = governingRows
             .GroupBy(s => s.OriginalId!)
             .ToDictionary(g => g.Key, g => g.GoverningRow()!);
         var loaded = new HashSet<StateSpanEntity>(governingRows, ReferenceEqualityComparer.Instance);
-        loaded.UnionWith(await LoadSupersedableSpansAsync(stateSpans, cancellationToken));
+        loaded.UnionWith(await LoadSupersedableSpansAsync(db, stateSpans, cancellationToken));
 
         var written = new List<StateSpanEntity>(stateSpans.Count);
         var inserted = new List<StateSpanEntity>();
@@ -282,9 +286,9 @@ public class StateSpanRepository : IStateSpanRepository
             }
 
             var entity = StateSpanMapper.ToEntity(stateSpan);
-            _context.StateSpans.Add(entity);
+            db.StateSpans.Add(entity);
             SupersedeOpenSpans(entity, stateSpan.Metadata, loaded);
-            await EndAtSuccessorAsync(entity, stateSpan.Metadata, loaded, cancellationToken);
+            await EndAtSuccessorAsync(db, entity, stateSpan.Metadata, loaded, cancellationToken);
             loaded.Add(entity);
             inserted.Add(entity);
             written.Add(entity);
@@ -292,7 +296,7 @@ public class StateSpanRepository : IStateSpanRepository
                 governingByOriginalId[stateSpan.OriginalId!] = entity;
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
 
         if (inserted.Count > 0)
         {
@@ -315,11 +319,7 @@ public class StateSpanRepository : IStateSpanRepository
             }
         }
 
-        var results = written.Select(StateSpanMapper.ToDomainModel).ToList();
-        foreach (var entity in loaded)
-            _context.Entry(entity).State = EntityState.Detached;
-
-        return results;
+        return written.Select(StateSpanMapper.ToDomainModel).ToList();
     }
 
     /// <summary>
@@ -329,7 +329,8 @@ public class StateSpanRepository : IStateSpanRepository
     /// while the rule stays shared.
     /// </summary>
     /// <seealso cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>
-    private async Task<List<StateSpanEntity>> LoadGoverningSpansAsync(
+    private static async Task<List<StateSpanEntity>> LoadGoverningSpansAsync(
+        NocturneDbContext db,
         IReadOnlyList<StateSpan> stateSpans,
         CancellationToken cancellationToken)
     {
@@ -341,8 +342,8 @@ public class StateSpanRepository : IStateSpanRepository
         if (originalIds.Count == 0)
             return [];
 
-        return await _context.StateSpans.IgnoreQueryFilters()
-            .Where(s => s.TenantId == _context.TenantId && originalIds.Contains(s.OriginalId))
+        return await db.StateSpans.IgnoreQueryFilters()
+            .Where(s => s.TenantId == db.TenantId && originalIds.Contains(s.OriginalId))
             .WhereBlocksRecreation()
             .OrderByDescending(s => s.DeletedAt)
             .ToListAsync(cancellationToken);
@@ -353,7 +354,8 @@ public class StateSpanRepository : IStateSpanRepository
     /// <see cref="SupersedeOpenSpans"/>. Spans the batch reopens by update are not here; they are
     /// among the governing rows.
     /// </summary>
-    private async Task<List<StateSpanEntity>> LoadSupersedableSpansAsync(
+    private static async Task<List<StateSpanEntity>> LoadSupersedableSpansAsync(
+        NocturneDbContext db,
         IReadOnlyList<StateSpan> stateSpans,
         CancellationToken cancellationToken)
     {
@@ -366,7 +368,7 @@ public class StateSpanRepository : IStateSpanRepository
             return [];
 
         var latestStart = stateSpans.Max(s => s.StartTimestamp);
-        return await _context.StateSpans
+        return await db.StateSpans
             .Where(s => categories.Contains(s.Category)
                 && s.EndTimestamp == null
                 && s.StartTimestamp <= latestStart)
@@ -426,8 +428,8 @@ public class StateSpanRepository : IStateSpanRepository
     /// Rows this batch loaded or added, whose changes the store does not hold until the save. Stored
     /// rows a stored successor closed join it, so the save writes them and the batch detaches them.
     /// </param>
-    private async Task EndAtSuccessorAsync(
-        StateSpanEntity entity, IDictionary<string, object>? metadata,
+    private static async Task EndAtSuccessorAsync(
+        NocturneDbContext db, StateSpanEntity entity, IDictionary<string, object>? metadata,
         HashSet<StateSpanEntity> batch, CancellationToken cancellationToken)
     {
         if (entity.EndTimestamp != null || !ExclusiveCategories.Contains(entity.Category))
@@ -445,7 +447,7 @@ public class StateSpanRepository : IStateSpanRepository
         var successor = batch.Where(Follows).MinBy(s => s.StartTimestamp);
 
         var batchIds = batch.Select(s => s.Id).ToList();
-        var stored = _context.StateSpans.AsNoTracking()
+        var stored = db.StateSpans.AsNoTracking()
             .Where(s => s.Category == entity.Category
                 && s.StartTimestamp > entity.StartTimestamp
                 && !batchIds.Contains(s.Id));
@@ -468,8 +470,8 @@ public class StateSpanRepository : IStateSpanRepository
         entity.EndTimestamp = successor.StartTimestamp;
         entity.SupersededById = successor.Id;
 
-        if (_context.Entry(successor).State != EntityState.Added)
-            batch.UnionWith(await _context.StateSpans
+        if (db.Entry(successor).State != EntityState.Added)
+            batch.UnionWith(await db.StateSpans
                 .Where(s => s.SupersededById == successor.Id
                     && s.EndTimestamp == successor.StartTimestamp
                     && s.StartTimestamp < entity.StartTimestamp)
@@ -516,14 +518,15 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await _context.StateSpans.FirstOrDefaultAsync(
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.StateSpans.FirstOrDefaultAsync(
             s => s.OriginalId == id,
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
-            entity = await _context.StateSpans.FirstOrDefaultAsync(
+            entity = await db.StateSpans.FirstOrDefaultAsync(
                 s => s.Id == guidId,
                 cancellationToken
             );
@@ -533,7 +536,7 @@ public class StateSpanRepository : IStateSpanRepository
             return null;
 
         StateSpanMapper.UpdateEntity(entity, stateSpan);
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         return StateSpanMapper.ToDomainModel(entity);
     }
 
@@ -548,33 +551,34 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await _context.StateSpans.FirstOrDefaultAsync(
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.StateSpans.FirstOrDefaultAsync(
             s => s.OriginalId == id,
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
-            entity = await _context.StateSpans.FirstOrDefaultAsync(
+            entity = await db.StateSpans.FirstOrDefaultAsync(
                 s => s.Id == guidId,
                 cancellationToken
             );
         }
 
-        return entity == null ? [] : await SoftDeleteWithCopiesAsync(entity, cancellationToken);
+        return entity == null ? [] : await SoftDeleteWithCopiesAsync(db, entity, cancellationToken);
     }
 
-    private async Task<IReadOnlyList<StateSpan>> SoftDeleteWithCopiesAsync(
-        StateSpanEntity entity, CancellationToken cancellationToken)
+    private static async Task<IReadOnlyList<StateSpan>> SoftDeleteWithCopiesAsync(
+        NocturneDbContext db, StateSpanEntity entity, CancellationToken cancellationToken)
     {
-        return await _context.ExecuteInTransactionAsync<IReadOnlyList<StateSpan>>(async token =>
+        return await db.ExecuteInTransactionAsync<IReadOnlyList<StateSpan>>(async token =>
         {
             var (saved, copies) = await DuplicateGroupPrimaries.SoftDeleteAsync(
-                _context, entity, RecordType.StateSpan, token);
+                db, entity, RecordType.StateSpan, token);
             if (saved == 0)
                 return [];
 
-            await _context.ClearSupersededByAsync([entity.Id, .. copies.Select(c => c.Id)], token);
+            await db.ClearSupersededByAsync([entity.Id, .. copies.Select(c => c.Id)], token);
             return [StateSpanMapper.ToDomainModel(entity), .. copies.Select(StateSpanMapper.ToDomainModel)];
         }, ct: cancellationToken);
     }
@@ -584,9 +588,10 @@ public class StateSpanRepository : IStateSpanRepository
         IReadOnlyCollection<string> ids,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var rowIds = ids.Select(id => Guid.TryParse(id, out var rowId) ? rowId : (Guid?)null).ToList();
-        var deleted = await _context.StateSpans.IgnoreQueryFilters().AsNoTracking()
-            .Where(s => s.TenantId == _context.TenantId
+        var deleted = await db.StateSpans.IgnoreQueryFilters().AsNoTracking()
+            .Where(s => s.TenantId == db.TenantId
                         && s.DeletedAt != null
                         && ((s.OriginalId != null && ids.Contains(s.OriginalId)) || rowIds.Contains(s.Id)))
             .Select(s => new { s.Id, s.OriginalId, s.Category, s.DeletedAt })
@@ -606,15 +611,21 @@ public class StateSpanRepository : IStateSpanRepository
 
     /// <inheritdoc />
     public async Task<StateSpan> RestoreAsync(
-        Guid id, WriteOrigin origin, CancellationToken cancellationToken = default) =>
-        StateSpanMapper.ToDomainModel(
-            await _context.RestoreDeletedAsync<StateSpanEntity>(id, nameof(StateSpan), cancellationToken));
+        Guid id, WriteOrigin origin, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return StateSpanMapper.ToDomainModel(
+            await db.RestoreDeletedAsync<StateSpanEntity>(id, nameof(StateSpan), cancellationToken));
+    }
 
     /// <inheritdoc />
     public async Task<BulkRestoreResult<StateSpan>> BulkRestoreAsync(
-        IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken cancellationToken = default) =>
-        (await _context.RestoreDeletedAsync<StateSpanEntity>(ids, nameof(StateSpan), cancellationToken))
+        IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return (await db.RestoreDeletedAsync<StateSpanEntity>(ids, nameof(StateSpan), cancellationToken))
             .Map(StateSpanMapper.ToDomainModel);
+    }
 
     /// <summary>
     /// Delete all state spans with the specified data source
@@ -627,8 +638,9 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var deletedCount = await _context.AuditedSoftDeleteAsync(
-            _context.StateSpans.Where(s => s.Source == source), _auditContext,
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var deletedCount = await db.AuditedSoftDeleteAsync(
+            db.StateSpans.Where(s => s.Source == source), _auditContext,
             $"data_source={source}", cancellationToken);
         return deletedCount;
     }
@@ -636,11 +648,12 @@ public class StateSpanRepository : IStateSpanRepository
     /// <inheritdoc />
     public async Task<PumpModeState?> GetCurrentPumpModeAsync(CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var pumpModeCategory = nameof(StateSpanCategory.PumpMode);
 
-        var latest = await _context.StateSpans.AsNoTracking()
+        var latest = await db.StateSpans.AsNoTracking()
             .Where(s => s.Category == pumpModeCategory && s.EndTimestamp == null)
-            .ExcludeNonPrimary(_context, RecordType.StateSpan)
+            .ExcludeNonPrimary(db, RecordType.StateSpan)
             .OrderByDescending(s => s.StartTimestamp)
             .ThenByDescending(s => s.Id)
             .Select(s => s.State)
@@ -662,7 +675,8 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entities = await BuildFilteredQuery(category, null, from, to, null, null)
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entities = await BuildFilteredQuery(db, category, null, from, to, null, null)
             .OrderByDescending(s => s.StartTimestamp)
             .ThenByDescending(s => s.Id)
             .ToListAsync(cancellationToken);
@@ -677,14 +691,15 @@ public class StateSpanRepository : IStateSpanRepository
         DateTime at,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var categoryString = category.ToString();
-        var entity = await _context.StateSpans
+        var entity = await db.StateSpans
             .AsNoTracking()
             .Where(s => s.Category == categoryString
                         && (state == null || s.State == state)
                         && s.StartTimestamp <= at
                         && (s.EndTimestamp == null || s.EndTimestamp > at))
-            .ExcludeNonPrimary(_context, RecordType.StateSpan)
+            .ExcludeNonPrimary(db, RecordType.StateSpan)
             .OrderByDescending(s => s.StartTimestamp)
             .FirstOrDefaultAsync(cancellationToken);
         return entity is null ? null : StateSpanMapper.ToDomainModel(entity);
@@ -706,11 +721,12 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var categoryStrings = categories.Select(c => c.ToString()).ToList();
 
-        var query = _context.StateSpans.AsNoTracking()
+        var query = db.StateSpans.AsNoTracking()
             .Where(s => categoryStrings.Contains(s.Category))
-            .ExcludeNonPrimary(_context, RecordType.StateSpan);
+            .ExcludeNonPrimary(db, RecordType.StateSpan);
 
         if (to.HasValue)
             query = query.Where(s => s.StartTimestamp <= to.Value);
@@ -813,7 +829,8 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.StateSpans.AsNoTracking().Where(s => ActivityCategories.Contains(s.Category));
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.StateSpans.AsNoTracking().Where(s => ActivityCategories.Contains(s.Category));
 
         if (from is { } fromValue)
             query = query.Where(s => s.StartTimestamp >= fromValue);
@@ -826,7 +843,7 @@ public class StateSpanRepository : IStateSpanRepository
         else if (!string.IsNullOrEmpty(type))
             query = query.Where(s => s.State == type && s.Category != nameof(StateSpanCategory.Motion));
 
-        query = query.ExcludeNonPrimary(_context, RecordType.StateSpan);
+        query = query.ExcludeNonPrimary(db, RecordType.StateSpan);
 
         var entities = await query
             .OrderByDescending(s => s.StartTimestamp)
@@ -841,21 +858,27 @@ public class StateSpanRepository : IStateSpanRepository
     public async Task<DateTime?> GetLatestActivityTimestampAsync(
         string source,
         CancellationToken cancellationToken = default
-    ) =>
-        await _context.StateSpans
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db.StateSpans
             .AsNoTracking()
             .Where(s => ActivityCategories.Contains(s.Category) && s.Source == source)
             .MaxAsync(s => (DateTime?)s.StartTimestamp, cancellationToken);
+    }
 
     /// <inheritdoc />
     public async Task<DateTime?> GetLatestNonActivityTimestampAsync(
         string source,
         CancellationToken cancellationToken = default
-    ) =>
-        await _context.StateSpans
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db.StateSpans
             .AsNoTracking()
             .Where(s => !ActivityCategories.Contains(s.Category) && s.Source == source)
             .MaxAsync(s => (DateTime?)s.StartTimestamp, cancellationToken);
+    }
 
     /// <summary>
     /// Get a state span by ID that represents an Activity record
@@ -868,14 +891,15 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await _context.StateSpans.AsNoTracking().FirstOrDefaultAsync(
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.StateSpans.AsNoTracking().FirstOrDefaultAsync(
             s => s.OriginalId == id && ActivityCategories.Contains(s.Category),
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
-            entity = await _context.StateSpans.AsNoTracking().FirstOrDefaultAsync(
+            entity = await db.StateSpans.AsNoTracking().FirstOrDefaultAsync(
                 s => s.Id == guidId && ActivityCategories.Contains(s.Category),
                 cancellationToken
             );
@@ -908,14 +932,15 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await _context.StateSpans.FirstOrDefaultAsync(
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.StateSpans.FirstOrDefaultAsync(
             s => s.OriginalId == id && ActivityCategories.Contains(s.Category),
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
-            entity = await _context.StateSpans.FirstOrDefaultAsync(
+            entity = await db.StateSpans.FirstOrDefaultAsync(
                 s => s.Id == guidId && ActivityCategories.Contains(s.Category),
                 cancellationToken
             );
@@ -925,7 +950,7 @@ public class StateSpanRepository : IStateSpanRepository
             return null;
 
         StateSpanMapper.UpdateEntity(entity, stateSpan);
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         return StateSpanMapper.ToDomainModel(entity);
     }
 
@@ -940,20 +965,21 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await _context.StateSpans.FirstOrDefaultAsync(
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.StateSpans.FirstOrDefaultAsync(
             s => s.OriginalId == id && ActivityCategories.Contains(s.Category),
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
-            entity = await _context.StateSpans.FirstOrDefaultAsync(
+            entity = await db.StateSpans.FirstOrDefaultAsync(
                 s => s.Id == guidId && ActivityCategories.Contains(s.Category),
                 cancellationToken
             );
         }
 
-        return entity == null ? [] : await SoftDeleteWithCopiesAsync(entity, cancellationToken);
+        return entity == null ? [] : await SoftDeleteWithCopiesAsync(db, entity, cancellationToken);
     }
 
     #endregion

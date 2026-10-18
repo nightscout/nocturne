@@ -6,6 +6,7 @@ using Nocturne.Core.Models.Queries;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -14,17 +15,16 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class FoodRepository : IFoodRepository
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<FoodRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the FoodRepository class
     /// </summary>
-    /// <param name="context">The database context</param>
     /// <param name="logger">The logger</param>
-    public FoodRepository(NocturneDbContext context, ILogger<FoodRepository> logger)
+    public FoodRepository(INocturneDbContextFactory contexts, ILogger<FoodRepository> logger)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger;
     }
 
@@ -35,7 +35,8 @@ public class FoodRepository : IFoodRepository
     /// <returns>A collection of all food entries.</returns>
     public async Task<IEnumerable<Food>> GetFoodAsync(CancellationToken cancellationToken = default)
     {
-        var entities = await _context.Foods.AsNoTracking().OrderBy(f => f.Name).ToListAsync(cancellationToken);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entities = await db.Foods.AsNoTracking().OrderBy(f => f.Name).ToListAsync(cancellationToken);
 
         return entities.Select(FoodMapper.ToDomainModel);
     }
@@ -51,8 +52,9 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         // Try to find by original ID first (MongoDB ObjectId)
-        var entity = await _context.Foods.AsNoTracking().FirstOrDefaultAsync(
+        var entity = await db.Foods.AsNoTracking().FirstOrDefaultAsync(
             f => f.OriginalId == id,
             cancellationToken
         );
@@ -60,7 +62,7 @@ public class FoodRepository : IFoodRepository
         // If not found by original ID, try by GUID
         if (entity == null && Guid.TryParse(id, out var guid))
         {
-            entity = await _context.Foods.AsNoTracking().FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
+            entity = await db.Foods.AsNoTracking().FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
         }
 
         return entity != null ? FoodMapper.ToDomainModel(entity) : null;
@@ -77,7 +79,8 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entities = await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entities = await db
             .Foods.AsNoTracking()
             .Where(f => f.Type == type)
             .OrderBy(f => f.Name)
@@ -103,7 +106,8 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.Foods.AsNoTracking().AsQueryable();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.Foods.AsNoTracking().AsQueryable();
 
         // Apply find query filter if specified
         if (!string.IsNullOrEmpty(findQuery))
@@ -144,7 +148,8 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.Foods.AsNoTracking().AsQueryable();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.Foods.AsNoTracking().AsQueryable();
 
         // Apply type filter if specified
         if (!string.IsNullOrEmpty(type))
@@ -184,8 +189,9 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var entities = await HistoryPage.GetAsync(
-            _context.Foods.IncludingDeleted().AsNoTracking(),
+            db.Foods.IncludingDeleted().AsNoTracking(),
             f => f.SysUpdatedAt,
             f => f.Id,
             cursorMills,
@@ -220,6 +226,7 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var resultEntities = new List<FoodEntity>();
 
         foreach (var food in foods)
@@ -230,7 +237,7 @@ public class FoodRepository : IFoodRepository
             var originalId = entity.OriginalId;
             // A deleted food keeps its row and key, so re-creating it restores that row, as a
             // Nightscout v3 create replaces the deleted document it matches.
-            var existingEntity = await _context.Foods.IncludingDeleted().FirstOrDefaultAsync(
+            var existingEntity = await db.Foods.IncludingDeleted().FirstOrDefaultAsync(
                 f => f.Id == entityId || (originalId != null && f.OriginalId == originalId),
                 cancellationToken
             );
@@ -245,12 +252,12 @@ public class FoodRepository : IFoodRepository
             }
             else
             {
-                _context.Foods.Add(entity);
+                db.Foods.Add(entity);
                 resultEntities.Add(entity);
             }
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
 
         return resultEntities.Select(FoodMapper.ToDomainModel);
     }
@@ -268,8 +275,9 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         // Try to find by original ID first (MongoDB ObjectId)
-        var entity = await _context.Foods.FirstOrDefaultAsync(
+        var entity = await db.Foods.FirstOrDefaultAsync(
             f => f.OriginalId == id,
             cancellationToken
         );
@@ -277,7 +285,7 @@ public class FoodRepository : IFoodRepository
         // If not found by original ID, try by GUID
         if (entity == null && Guid.TryParse(id, out var guid))
         {
-            entity = await _context.Foods.FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
+            entity = await db.Foods.FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
         }
 
         if (entity == null)
@@ -286,7 +294,7 @@ public class FoodRepository : IFoodRepository
         }
 
         FoodMapper.UpdateEntity(entity, food);
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
 
         return FoodMapper.ToDomainModel(entity);
     }
@@ -302,8 +310,9 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         // Try to find by original ID first (MongoDB ObjectId)
-        var entity = await _context.Foods.FirstOrDefaultAsync(
+        var entity = await db.Foods.FirstOrDefaultAsync(
             f => f.OriginalId == id,
             cancellationToken
         );
@@ -311,7 +320,7 @@ public class FoodRepository : IFoodRepository
         // If not found by original ID, try by GUID
         if (entity == null && Guid.TryParse(id, out var guid))
         {
-            entity = await _context.Foods.FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
+            entity = await db.Foods.FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
         }
 
         if (entity == null)
@@ -319,7 +328,7 @@ public class FoodRepository : IFoodRepository
             return false;
         }
 
-        await SoftDeleteAsync([entity], cancellationToken);
+        await SoftDeleteAsync(db, [entity], cancellationToken);
 
         return true;
     }
@@ -335,7 +344,8 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.Foods.AsQueryable();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.Foods.AsQueryable();
 
         // Apply find query filter
         if (!string.IsNullOrEmpty(findQuery))
@@ -353,7 +363,7 @@ public class FoodRepository : IFoodRepository
 
         if (count > 0)
         {
-            await SoftDeleteAsync(entities, cancellationToken);
+            await SoftDeleteAsync(db, entities, cancellationToken);
         }
 
         return count;
@@ -365,19 +375,19 @@ public class FoodRepository : IFoodRepository
     /// food entries lose the link, favorites go. <c>MutationAuditInterceptor</c> attributes the
     /// delete, which decides whether a connector re-import may restore the food.
     /// </summary>
-    private Task SoftDeleteAsync(List<FoodEntity> entities, CancellationToken cancellationToken)
+    private static Task SoftDeleteAsync(NocturneDbContext db, List<FoodEntity> entities, CancellationToken cancellationToken)
     {
         var ids = entities.Select(f => f.Id).ToList();
 
-        return _context.ExecuteInTransactionAsync(async ct =>
+        return db.ExecuteInTransactionAsync(async ct =>
         {
-            await _context.TreatmentFoods
+            await db.TreatmentFoods
                 .Where(tf => tf.FoodId != null && ids.Contains(tf.FoodId.Value))
                 .ExecuteUpdateAsync(s => s.SetProperty(tf => tf.FoodId, (Guid?)null), ct);
-            await _context.ConnectorFoodEntries
+            await db.ConnectorFoodEntries
                 .Where(e => e.FoodId != null && ids.Contains(e.FoodId.Value))
                 .ExecuteUpdateAsync(s => s.SetProperty(e => e.FoodId, (Guid?)null), ct);
-            await _context.UserFoodFavorites
+            await db.UserFoodFavorites
                 .Where(f => ids.Contains(f.FoodId))
                 .ExecuteDeleteAsync(ct);
 
@@ -385,7 +395,7 @@ public class FoodRepository : IFoodRepository
             foreach (var entity in entities)
                 entity.DeletedAt = deletedAt;
 
-            return await _context.SaveChangesAsync(ct);
+            return await db.SaveChangesAsync(ct);
         }, ct: cancellationToken);
     }
 
@@ -400,7 +410,8 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.Foods.AsNoTracking().AsQueryable();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.Foods.AsNoTracking().AsQueryable();
 
         // Apply find query filter if specified
         if (!string.IsNullOrEmpty(findQuery))
@@ -429,7 +440,8 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.Foods.AsNoTracking().AsQueryable();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.Foods.AsNoTracking().AsQueryable();
 
         // Apply type filter if specified
         if (!string.IsNullOrEmpty(type))

@@ -39,10 +39,10 @@ public class StateSpanDedupSupersessionTests : IDisposable
         var dedupContext = _db.CreateContext();
         dedupContext.TenantId = TestTenantId;
         _dedup = new DeduplicationService(
-            dedupContext, new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+            dedupContext.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
 
         _repository = new StateSpanRepository(
-            _context, _dedup, new Mock<IAuditContext>().Object, NullLogger<StateSpanRepository>.Instance);
+            _context.AsFactory(), _dedup, new Mock<IAuditContext>().Object, NullLogger<StateSpanRepository>.Instance);
     }
 
     public void Dispose()
@@ -254,7 +254,7 @@ public class StateSpanDedupSupersessionTests : IDisposable
         await _context.SaveChangesAsync();
         _context.ChangeTracker.Clear();
 
-        (await _dedup.MisplacedStateSpanPrimaries(DateTime.UtcNow - DeduplicationService.StateSpanRepairHorizon)
+        (await DeduplicationService.MisplacedStateSpanPrimaries(_context, DateTime.UtcNow - DeduplicationService.StateSpanRepairHorizon)
                 .ToListAsync())
             .Should().BeEmpty("the group's only live member is {0}, its primary", closed.Id);
     }
