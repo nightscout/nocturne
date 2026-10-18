@@ -1,5 +1,5 @@
-using Nocturne.Connectors.Core.Utilities;
 using System.Data.Common;
+using Nocturne.Connectors.Core.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -32,6 +32,7 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
     private readonly NocturneDbContext _dbContext;
     private readonly Nocturne.Infrastructure.Data.Services.CategoryReadContext _categoryReadContext = new();
     private readonly AuthorizationService _authorizationService;
+    private readonly List<NocturneDbContext> _extraContexts = [];
 
     private readonly Guid _testTenantId = Guid.CreateVersion7();
     private readonly Guid _subjectId = Guid.CreateVersion7();
@@ -73,6 +74,7 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
 
     public void Dispose()
     {
+        _extraContexts.ForEach(c => c.Dispose());
         _dbContext.Dispose();
         _db.Dispose();
     }
@@ -329,30 +331,27 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
     [Fact]
     public async Task A_grant_lookup_that_fails_throws_rather_than_reading_as_an_invalid_token()
     {
+        var service = ServiceOver(new FailingQueryInterceptor());
+
+        var exchange = () => service.GenerateJwtFromAccessTokenAsync("noc_uploadertoken123");
+
+        await exchange.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage(FailingQueryInterceptor.Message);
+    }
+
+    [Fact]
+    public async Task A_last_used_stamp_that_fails_still_mints_the_jwt()
+    {
         const string token = "noc_uploadertoken123";
         SeedGrant(token);
         SetupActiveSubject();
         SetupMintedJwt();
+        var service = ServiceOver(new FailingUpdateInterceptor());
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>(_db.Options)
-            .AddInterceptors(new FailingQueryInterceptor())
-            .Options;
-        using var failingContext = new NocturneDbContext(options) { TenantId = _testTenantId };
-        var service = new AuthorizationService(
-            new Mock<IConfiguration>().Object,
-            Mock.Of<ILogger<AuthorizationService>>(),
-            _mockSubjectService.Object,
-            new Mock<IRoleService>().Object,
-            new Mock<IDirectGrantService>().Object,
-            _mockJwtService.Object,
-            failingContext,
-            _categoryReadContext
-        );
+        var result = await service.GenerateJwtFromAccessTokenAsync(token);
 
-        var exchange = () => service.GenerateJwtFromAccessTokenAsync(token);
-
-        await exchange.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage(FailingQueryInterceptor.Message);
+        result.Should().NotBeNull();
+        result!.Token.Should().Be("minted.jwt.token");
     }
 
     [Fact]
@@ -368,6 +367,36 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
 
         await exchange.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("subject store unavailable");
+    }
+
+    private AuthorizationService ServiceOver(DbCommandInterceptor interceptor)
+    {
+        var options = new DbContextOptionsBuilder<NocturneDbContext>(_db.Options)
+            .AddInterceptors(interceptor)
+            .Options;
+        var context = new NocturneDbContext(options) { TenantId = _testTenantId };
+        _extraContexts.Add(context);
+
+        return new AuthorizationService(
+            new Mock<IConfiguration>().Object,
+            Mock.Of<ILogger<AuthorizationService>>(),
+            _mockSubjectService.Object,
+            new Mock<IRoleService>().Object,
+            new Mock<IDirectGrantService>().Object,
+            _mockJwtService.Object,
+            context,
+            _categoryReadContext
+        );
+    }
+
+    private sealed class FailingUpdateInterceptor : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("database unavailable");
     }
 
     private sealed class FailingQueryInterceptor : DbCommandInterceptor
