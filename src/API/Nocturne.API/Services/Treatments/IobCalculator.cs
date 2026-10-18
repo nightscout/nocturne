@@ -181,7 +181,24 @@ public class IobCalculator(
     public IobResult FromBoluses(List<Bolus> boluses, long? time = null)
     {
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        return FromBolusesCore(boluses, currentTime, bolus => CalcBolus(bolus, currentTime));
+
+        // Every bolus reads DIA and sensitivity at currentTime, so each is resolved once for the
+        // batch rather than per bolus: a resolver call is several database round-trips, and an
+        // automated-bolus history holds dozens of boluses inside one DIA window. Lazy, so a batch
+        // whose boluses all carry their own insulin context never asks for the profile DIA.
+        var profileDia = new Lazy<double>(
+            () => therapySettings.GetDIAAsync(currentTime, null).GetAwaiter().GetResult());
+        var sens = new Lazy<double>(
+            () => sensitivity.GetSensitivityAsync(currentTime, null).GetAwaiter().GetResult());
+
+        return FromBolusesCore(boluses, currentTime, bolus => bolus.Insulin <= 0
+            ? new IobContribution { IobContrib = 0, ActivityContrib = 0 }
+            : CalcBolusCore(
+                bolus,
+                bolus.InsulinContext?.Dia ?? profileDia.Value,
+                bolus.InsulinContext?.Peak ?? PEAK_MINUTES,
+                sens.Value,
+                currentTime));
     }
 
     /// <inheritdoc />
@@ -306,7 +323,19 @@ public class IobCalculator(
     public IobResult FromTempBasals(List<TempBasal> tempBasals, long? time = null)
     {
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        return FromTempBasalsCore(tempBasals, currentTime, tb => CalcTempBasal(tb, currentTime));
+
+        // DIA is read at currentTime for every temp basal; resolved once, as in FromBoluses.
+        var profileDia = new Lazy<double>(
+            () => therapySettings.GetDIAAsync(currentTime, null).GetAwaiter().GetResult());
+
+        return FromTempBasalsCore(tempBasals, currentTime, tb => tb.EndMills.HasValue
+            ? CalcTempBasalCore(
+                tb,
+                tb.InsulinContext?.Dia ?? profileDia.Value,
+                tb.ScheduledRate
+                    ?? basalRate.GetBasalRateAsync(tb.StartMills, null).GetAwaiter().GetResult(),
+                currentTime)
+            : new IobContribution { IobContrib = 0, ActivityContrib = 0 });
     }
 
     /// <inheritdoc />

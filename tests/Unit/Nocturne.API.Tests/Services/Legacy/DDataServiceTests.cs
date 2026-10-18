@@ -24,6 +24,7 @@ public class DDataServiceTests
     private readonly Mock<IEntryStore> _mockEntryStore;
     private readonly Mock<ITreatmentService> _mockTreatmentService;
     private readonly Mock<IProfileProjectionService> _mockProfileProjectionService;
+    private readonly Mock<IApsSnapshotRepository> _mockApsRepo;
     private readonly Mock<IFoodRepository> _mockFoodRepository;
     private readonly Mock<IActivityService> _mockActivityService;
     private readonly Mock<ILogger<DDataService>> _mockLogger;
@@ -39,8 +40,8 @@ public class DDataServiceTests
         _mockLogger = new Mock<ILogger<DDataService>>();
 
         // Build a DeviceStatusProjectionService backed by empty mocked repositories
-        var mockApsRepo = new Mock<IApsSnapshotRepository>();
-        mockApsRepo.Setup(x => x.GetAsync(
+        _mockApsRepo = new Mock<IApsSnapshotRepository>();
+        _mockApsRepo.Setup(x => x.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
                 It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(),
                 It.IsAny<bool>(), It.IsAny<CancellationToken>()))
@@ -56,7 +57,7 @@ public class DDataServiceTests
         var mockExtrasRepo = new Mock<IDeviceStatusExtrasRepository>();
 
         var projectionService = new DeviceStatusProjectionService(
-            mockApsRepo.Object,
+            _mockApsRepo.Object,
             mockPumpRepo.Object,
             mockUploaderRepo.Object,
             mockStateSpanRepo.Object,
@@ -128,6 +129,19 @@ public class DDataServiceTests
         Assert.NotNull(result.Activity);
         Assert.NotNull(result.DbStats);
         Assert.True(result.LastUpdated > 0);
+    }
+
+    [Fact]
+    public async Task GetDDataAsync_DeviceStatusIsReadFromTheDayEndingAtTheTimestamp()
+    {
+        var at = new DateTimeOffset(2026, 3, 10, 12, 0, 0, TimeSpan.Zero);
+
+        await _ddataService.GetDDataAsync(at.ToUnixTimeMilliseconds(), CancellationToken.None);
+
+        _mockApsRepo.Verify(x => x.GetAsync(
+            at.UtcDateTime.AddDays(-1), at.UtcDateTime, It.IsAny<string?>(),
+            It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(),
+            It.IsAny<bool>(), It.IsAny<CancellationToken>()));
     }
 
     [Fact]

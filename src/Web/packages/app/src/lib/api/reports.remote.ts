@@ -4,7 +4,7 @@
  */
 import { z } from "zod";
 import { getRequestEvent, query } from "$app/server";
-import { DiabetesPopulation, ClusterConfidence } from "$lib/api";
+import { ClusterConfidence } from "$lib/api";
 import { fetchAllGlucose } from "./glucose-pagination";
 import { DateRangeSchema, resolveReportRange } from "./report-range";
 import { readable } from "$lib/server/patient-timezone";
@@ -42,6 +42,24 @@ export const getEntries = query(DateRangeSchema.optional(), async (input) => {
   };
 });
 
+const PAGE_SIZE = 1000;
+const MAX_RECORDS = 50000;
+
+/** Every record a paged endpoint holds, stopping at {@link MAX_RECORDS}. */
+async function fetchAllPages<T>(
+  label: string,
+  fetchPage: (limit: number, offset: number) => Promise<{ data?: T[] }>
+): Promise<T[]> {
+  const all: T[] = [];
+  for (let offset = 0; offset < MAX_RECORDS; offset += PAGE_SIZE) {
+    const page = (await fetchPage(PAGE_SIZE, offset)).data ?? [];
+    all.push(...page);
+    if (page.length < PAGE_SIZE) return all;
+  }
+  console.warn(`${label} fetch reached safety limit of ${MAX_RECORDS} records`);
+  return all;
+}
+
 /** Get boluses and carb intakes for a date range with pagination support */
 export const getBolusesAndCarbs = query(
   DateRangeSchema.optional(),
@@ -50,98 +68,23 @@ export const getBolusesAndCarbs = query(
     const { apiClient } = locals;
     const { startDate, endDate } = await resolveReportRange(input);
 
-    const pageSize = 1000;
-
-    // Fetch all boluses by paginating through results
-    let allBoluses: Awaited<ReturnType<typeof apiClient.bolus.getAll>>["data"] =
-      [];
-    let offset = 0;
-    let hasMore = true;
-
-    while (hasMore) {
-      const batch = await apiClient.bolus.getAll(
-        startDate,
-        endDate,
-        pageSize,
-        offset
-      );
-      allBoluses = allBoluses!.concat(batch.data ?? []);
-
-      if ((batch.data?.length ?? 0) < pageSize) {
-        hasMore = false;
-      } else {
-        offset += pageSize;
-      }
-
-      // Safety limit to prevent infinite loops
-      if (offset >= 50000) {
-        console.warn("Bolus fetch reached safety limit of 50,000 records");
-        hasMore = false;
-      }
-    }
-
-    // Fetch all carb intakes by paginating through results
-    let allCarbIntakes: Awaited<
-      ReturnType<typeof apiClient.nutrition.getCarbIntakes>
-    >["data"] = [];
-    offset = 0;
-    hasMore = true;
-
-    while (hasMore) {
-      const batch = await apiClient.nutrition.getCarbIntakes(
-        startDate,
-        endDate,
-        pageSize,
-        offset
-      );
-      allCarbIntakes = allCarbIntakes!.concat(batch.data ?? []);
-
-      if ((batch.data?.length ?? 0) < pageSize) {
-        hasMore = false;
-      } else {
-        offset += pageSize;
-      }
-
-      if (offset >= 50000) {
-        console.warn("CarbIntake fetch reached safety limit of 50,000 records");
-        hasMore = false;
-      }
-    }
+    const [boluses, carbIntakes] = await Promise.all([
+      fetchAllPages("Bolus", (limit, offset) =>
+        apiClient.bolus.getAll(startDate, endDate, limit, offset)
+      ),
+      fetchAllPages("CarbIntake", (limit, offset) =>
+        apiClient.nutrition.getCarbIntakes(startDate, endDate, limit, offset)
+      ),
+    ]);
 
     return {
-      boluses: allBoluses!,
-      carbIntakes: allCarbIntakes!,
+      boluses,
+      carbIntakes,
       dateRange: {
         from: startDate,
         to: endDate,
       },
     };
-  }
-);
-
-/** Get glucose analysis for entries, boluses, and carb intakes */
-export const getAnalysis = query(
-  z.object({
-    entries: z.array(z.any()),
-    boluses: z.array(z.any()),
-    carbIntakes: z.array(z.any()),
-    population: z.enum(DiabetesPopulation).optional(),
-  }),
-  async ({
-    entries,
-    boluses,
-    carbIntakes,
-    population = DiabetesPopulation.Type1Adult,
-  }) => {
-    const { locals } = getRequestEvent();
-    const { apiClient } = locals;
-
-    return apiClient.statistics.analyzeGlucoseDataExtended({
-      entries,
-      boluses,
-      carbIntakes,
-      population,
-    });
   }
 );
 

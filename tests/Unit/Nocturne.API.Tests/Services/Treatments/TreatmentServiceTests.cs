@@ -50,6 +50,47 @@ public class TreatmentServiceTests
         result.Should().ContainSingle();
     }
 
+    [Theory]
+    [InlineData(null, 100)]
+    [InlineData("{\"eventType\":\"Meal Bolus\"}", 1000)]
+    [InlineData("find[eventType]=Meal%20Bolus", 1000)]
+    public async Task GetTreatmentsAsync_WithoutCount_DefaultsToOneHundredOrOneThousandWithAFind(
+        string? find, int expectedCount)
+    {
+        TreatmentQuery? observed = null;
+        _mockCache.Setup(x => x.GetOrComputeAsync(It.IsAny<TreatmentQuery>(), It.IsAny<Func<Task<IReadOnlyList<Treatment>>>>(), It.IsAny<CancellationToken>()))
+            .Returns<TreatmentQuery, Func<Task<IReadOnlyList<Treatment>>>, CancellationToken>(async (q, c, ct) =>
+            {
+                observed = q;
+                return await c();
+            });
+        _mockStore.Setup(x => x.QueryAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Treatment>().AsReadOnly());
+
+        await _treatmentService.GetTreatmentsAsync(find: find);
+
+        observed.Should().NotBeNull();
+        observed!.Count.Should().Be(expectedCount);
+    }
+
+    [Fact]
+    public async Task GetTreatmentsAsync_WithExplicitCount_KeepsIt()
+    {
+        TreatmentQuery? observed = null;
+        _mockCache.Setup(x => x.GetOrComputeAsync(It.IsAny<TreatmentQuery>(), It.IsAny<Func<Task<IReadOnlyList<Treatment>>>>(), It.IsAny<CancellationToken>()))
+            .Returns<TreatmentQuery, Func<Task<IReadOnlyList<Treatment>>>, CancellationToken>(async (q, c, ct) =>
+            {
+                observed = q;
+                return await c();
+            });
+        _mockStore.Setup(x => x.QueryAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Treatment>().AsReadOnly());
+
+        await _treatmentService.GetTreatmentsAsync(find: "{\"eventType\":\"Meal Bolus\"}", count: 7);
+
+        observed!.Count.Should().Be(7);
+    }
+
     [Fact]
     public async Task GetTreatmentsByRangeAsync_DelegatesToStoreWithBounds()
     {
@@ -111,6 +152,18 @@ public class TreatmentServiceTests
     }
 
     [Fact]
+    public async Task UpdateTreatmentAsync_WhenTheStoreFails_InvalidatesTheCacheAndPropagates()
+    {
+        _mockStore.Setup(x => x.UpdateAsync("id", It.IsAny<Treatment>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("store down"));
+
+        var update = () => _treatmentService.UpdateTreatmentAsync("id", new Treatment(), CancellationToken.None);
+
+        await update.Should().ThrowAsync<InvalidOperationException>();
+        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnUpdatedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task DeleteTreatmentAsync_ShouldInvalidateCacheAndPublishEvent()
     {
         var existing = new Treatment { Id = "id" };
@@ -152,21 +205,74 @@ public class TreatmentServiceTests
     [Fact]
     public async Task PatchTreatmentAsync_WhenExists_AppliesPatchAndDecomposes()
     {
-        var existing = new Treatment { Id = "t1", Mills = 1000, EventType = "Note", Notes = "old" };
+        // GetForUpdateAsync re-keys the record to its upsert key (a synthetic legacy id here); the
+        // served form reads back under the id every read serves.
+        var existing = new Treatment { Id = "syn-abc", Mills = 1000, EventType = "Note", Notes = "old" };
+        var served = new Treatment { Id = "01a1203c38ea7808a510f88b", Mills = 1000, EventType = "Note", Notes = "updated" };
         _mockStore.Setup(x => x.GetForUpdateAsync("t1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        _mockStore.Setup(x => x.GetByIdAsync("syn-abc", It.IsAny<CancellationToken>())).ReturnsAsync(served);
+        Treatment? decomposed = null;
+        _mockDecomposer.Setup(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<Treatment, WriteOrigin, CancellationToken>((t, _, _) => decomposed = t)
+            .ReturnsAsync(new DecompositionResult());
+
+        var patchJson = JsonSerializer.Deserialize<JsonElement>("{\"notes\":\"updated\"}");
+        var result = await _treatmentService.PatchTreatmentAsync("t1", patchJson, CancellationToken.None);
+
+        decomposed.Should().NotBeNull();
+        decomposed!.Id.Should().Be("syn-abc", "the decomposer upserts on the stored key");
+        decomposed.Notes.Should().Be("updated");
+        result.Should().BeSameAs(served, "the response carries the id reads serve, not the upsert key");
+        _mockDecomposer.Verify(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnUpdatedAsync(served, It.IsAny<CancellationToken>()), Times.Once);
+        _mockStore.Verify(x => x.GetForUpdateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PatchTreatmentAsync_WhenReadBackMisses_ReturnsTheMergedRecord()
+    {
+        var existing = new Treatment { Id = "syn-abc", Mills = 1000, EventType = "Note", Notes = "old" };
+        _mockStore.Setup(x => x.GetForUpdateAsync("t1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        _mockStore.Setup(x => x.GetByIdAsync("syn-abc", It.IsAny<CancellationToken>())).ReturnsAsync((Treatment?)null);
         _mockDecomposer.Setup(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult());
 
         var patchJson = JsonSerializer.Deserialize<JsonElement>("{\"notes\":\"updated\"}");
         var result = await _treatmentService.PatchTreatmentAsync("t1", patchJson, CancellationToken.None);
 
-        result.Should().NotBeNull();
+        result.Should().BeSameAs(existing);
         result!.Notes.Should().Be("updated");
-        _mockDecomposer.Verify(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
-        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _mockEvents.Verify(x => x.OnUpdatedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Once);
-        _mockStore.Verify(x => x.GetForUpdateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
-        _mockStore.Verify(x => x.GetByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mockEvents.Verify(x => x.OnUpdatedAsync(existing, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("{\"automatic\":false}", V4Models.TempBasalOrigin.Manual)]
+    [InlineData("{\"reason\":\"suspend\"}", V4Models.TempBasalOrigin.Suspended)]
+    public async Task PatchTreatmentAsync_TempBasalOriginFollowsPatchedField(
+        string patch, V4Models.TempBasalOrigin expected)
+    {
+        var stored = Nocturne.Infrastructure.Data.Mappers.TempBasalToTreatmentMapper.ToTreatment(new V4Models.TempBasal
+        {
+            Id = Guid.CreateVersion7(),
+            StartTimestamp = new DateTime(2026, 9, 20, 12, 0, 0, DateTimeKind.Utc),
+            EndTimestamp = new DateTime(2026, 9, 20, 12, 30, 0, DateTimeKind.Utc),
+            Rate = 0.4,
+            Origin = V4Models.TempBasalOrigin.Algorithm,
+            App = "loop://Test Phone",
+        });
+        _mockStore.Setup(x => x.GetForUpdateAsync("tb1", It.IsAny<CancellationToken>())).ReturnsAsync(stored);
+        Treatment? decomposed = null;
+        _mockDecomposer.Setup(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<Treatment, WriteOrigin, CancellationToken>((t, _, _) => decomposed = t)
+            .ReturnsAsync(new DecompositionResult());
+
+        await _treatmentService.PatchTreatmentAsync(
+            "tb1", JsonSerializer.Deserialize<JsonElement>(patch), CancellationToken.None);
+
+        decomposed.Should().NotBeNull();
+        Nocturne.API.Services.V4.TreatmentDecomposer.MapToTempBasal(decomposed!, correlationId: null)
+            .Origin.Should().Be(expected);
     }
 
     [Fact]

@@ -342,13 +342,15 @@ Every other kind is not wall-clock. Two cases are deliberate:
 - **`time_of_day`, `day_of_week`** are calendar gates over reading-driven leaves; the next
   reading bounds how late a gate opening is noticed.
 
-A rule is wall-clock when its root kind, or any node of its condition tree, is a
-wall-clock kind. Every host must evaluate enabled wall-clock rules periodically as well as
-per reading, through the normal driver sequence (§7). Otherwise such a rule stays unfired
-for as long as no reading arrives. The backend does this from `AlertSweepService` every
-30 s; Prelude needs an equivalent periodic evaluation. The crate's
-`wall_clock::references_wall_clock` and the backend's `WallClockConditions` hold the
-classification; the enum manifest's `WallClockConditionTypes` keeps them equal.
+A rule is wall-clock when its root kind, any node of its condition tree, or, while
+auto-resolve is enabled, any node of its auto-resolve tree is a wall-clock kind. Every
+host must evaluate enabled wall-clock rules periodically as well as per reading, through
+the normal driver sequence (§7). Otherwise such a rule stays unfired for as long as no
+reading arrives. The backend does this from `AlertSweepService` every 30 s; Prelude needs
+an equivalent periodic evaluation. The crate's `wall_clock::references_wall_clock` reads
+a rule's kinds as §5.2 does. The backend's `WallClockConditions` holds the same set of
+wall-clock kinds, which the enum manifest's `WallClockConditionTypes` keeps equal, but its
+rule walk does not yet cover the auto-resolve tree (#2139).
 
 A periodic evaluation uses the context the per-reading path builds for the newest
 reading, with only `now` advanced. Its `LastReadingAt` / `LatestTimestamp` are that
@@ -367,6 +369,54 @@ and 0, and the alerts redesign migrated both into `sustained` wrappers, which ar
 cadence-independent. So no stored rule is affected. A host that does carry `confirmation_readings > 1` for a wall-clock rule would
 confirm it N× faster at a shorter periodic cadence. It should express that confirmation as
 `sustained` instead.
+
+### 5.2 Context facts
+
+A **context fact** is a group of `SensorContext` fields (§4) that a host fills from one
+source. The crate's `facts::reads(kind)` gives the facts a kind's own evaluator reads, and
+`facts::rule_reads(rule)` the facts of every kind of a stored rule; `references_any(rule,
+facts)` is whether that set meets `facts`.
+
+A rule's kinds are its root kind, the kinds of its body and, while auto-resolve is enabled,
+the kinds of its auto-resolve tree. The root `condition_type` is a kind's wire name
+ignoring ASCII case, and anything else gives the rule no kinds. The root kind counts
+whatever its body. The body's kinds count only when it can be evaluated (§1.4), nested
+kinds resolving as node dispatch resolves them (§1.2). The auto-resolve tree's kinds count
+whenever auto-resolve is enabled and the tree is present, not `null` and evaluable, even
+when the body is not and evaluation would skip the rule. `references_wall_clock` (§5.1)
+reads a rule's kinds the same way.
+
+| Fact | `SensorContext` fields | Kinds that read it |
+|---|---|---|
+| `glucose` | `LatestValue`, `LatestTimestamp`, `LastReadingAt`, `TrendRate`, `TrendBucket`, `GlucoseBucket` | `threshold`, `rate_of_change`, `signal_loss`, `staleness`, `trend`, `glucose_bucket` |
+| `predictions` | `Predictions` | `predicted` |
+| `insulin` | `IobUnits`, `LastBolusAt`, `ActiveTempBasal` | `iob`, `temp_basal`, `time_since_last_bolus` |
+| `carbs` | `CobGrams`, `LastCarbAt` | `cob`, `time_since_last_carb` |
+| `pump` | `ReservoirUnits`, `ReservoirIsLowerBound`, `PumpBatteryPercent`, `HasEverPumpSnapshot` | `reservoir`, `pump_battery`, `pump_suspended` |
+| `aps` | `LastApsCycleAt`, `LastApsEnactedAt`, `HasEverApsCycled`, `SensitivityRatio`, `HasEverApsSensitivity` | `loop_stale`, `loop_enaction_stale`, `sensitivity_ratio` |
+| `uploader` | `UploaderBatteryPercent`, `HasEverUploaderSnapshot` | `uploader_battery` |
+| `state_spans` | `ActiveOverride`, `ActivePumpSuspension`, `ActivePumpState`, `ActiveStateSpans` | `override_active`, `pump_suspended`, `pump_state`, `state_span_active` |
+| `device_ages` | `LastSiteChangeAt`, `LastSensorStartAt` | `site_age`, `sensor_age` |
+| `trackers` | `ActiveTrackers` | `tracker_age` |
+| `sleep` | `SleepSessionActive` | `sleep_session_active` |
+| `active_alerts` | `ActiveAlerts` | `alert_state` |
+| `do_not_disturb` | `ActiveDoNotDisturb` | `do_not_disturb` |
+| `time_zone` | `TenantTimeZoneId` | `time_of_day`, `day_of_week` |
+
+The containers `composite`, `not` and `sustained` read no fact; a `sustained` timer is
+evaluation state, not context. `pump_suspended` reads two facts: its guard is the pump
+snapshot and its anchor the suspension span. No field carries a therapy profile or
+schedule as such; the target range reaches the context only through `GlucoseBucket`.
+`now` is not a fact: it is an argument to evaluation.
+
+A host uses facts to evaluate rules on writes other than glucose: a write evaluates the
+enabled rules that read a fact it moved. This only adds evaluations. A glucose reading
+still evaluates every enabled rule, and the periodic evaluation of §5.1 every wall-clock
+rule, because some facts move with time and no write (insulin and carbs on board decay,
+spans and windows end, the target range and calendar gates follow the clock), and §5.1's
+bound on a calendar gate holds only if every reading evaluates such a rule. Which writes
+move which facts, derived ones included, is the host's record-to-fact map, not the
+crate's.
 
 ---
 

@@ -4,7 +4,7 @@ namespace Nocturne.Core.Contracts.V4;
 
 /// <summary>
 /// Unified orchestration layer for decomposing legacy records into v4 models.
-/// Dispatches to the appropriate <see cref="IDecomposer{T}"/> and absorbs errors internally.
+/// Dispatches to the appropriate <see cref="IDecomposer{T}"/>; decomposition errors are absorbed, delete errors propagate.
 /// </summary>
 /// <seealso cref="IDecomposer{T}"/>
 /// <seealso cref="DecompositionResult"/>
@@ -40,5 +40,9 @@ public interface IDecompositionPipeline
     /// <param name="legacyId">The legacy record identifier.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The total number of v4 records deleted.</returns>
+    /// <remarks>
+    /// Failures propagate: a rolled-back delete must reach the caller as an error (legacy
+    /// Nightscout answers a failed delete with a 500), not as "nothing matched".
+    /// </remarks>
     Task<int> DeleteByLegacyIdAsync<T>(string legacyId, WriteOrigin origin, CancellationToken ct = default) where T : class;
 }

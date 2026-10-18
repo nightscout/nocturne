@@ -42,6 +42,13 @@ const FALLBACK_CHART_THRESHOLDS = {
   targetHigh: null,
 };
 
+describe("FALLBACK_GLUCOSE_Y_MAX", () => {
+  it("is the server's axis ceiling cap, so nothing clips without thresholds", () => {
+    // ChartThresholdsBuilder.GlucoseYMaxCap
+    expect(FALLBACK_GLUCOSE_Y_MAX).toBe(400);
+  });
+});
+
 describe("resolveChartThresholds", () => {
   it("prefers the supplied values", () => {
     expect(
@@ -79,10 +86,17 @@ describe("resolveChartThresholds", () => {
     ).toEqual(FALLBACK_CHART_THRESHOLDS);
   });
 
-  it("keeps a supplied 0 axis ceiling and targets", () => {
+  it("treats a supplied 0 axis ceiling as absent", () => {
+    // A caller without glucose.read gets an empty thresholds DTO, ceiling 0.
+    expect(resolveChartThresholds({ glucoseYMax: 0 }).glucoseYMax).toBe(
+      FALLBACK_GLUCOSE_Y_MAX
+    );
+  });
+
+  it("keeps supplied 0 targets", () => {
     expect(
-      resolveChartThresholds({ glucoseYMax: 0, targetLow: 0, targetHigh: 0 })
-    ).toMatchObject({ glucoseYMax: 0, targetLow: 0, targetHigh: 0 });
+      resolveChartThresholds({ targetLow: 0, targetHigh: 0 })
+    ).toMatchObject({ targetLow: 0, targetHigh: 0 });
   });
 
   it("falls back entirely for null or undefined", () => {

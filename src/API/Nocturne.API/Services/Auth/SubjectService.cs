@@ -333,54 +333,6 @@ public class SubjectService : ISubjectService
     }
 
     /// <inheritdoc />
-    public async Task<List<Subject>> GetSubjectsAsync(SubjectFilter? filter = null)
-    {
-        var query = _dbContext
-            .Subjects.AsNoTracking()
-            .Include(s => s.SubjectRoles)
-            .ThenInclude(sr => sr.Role)
-            .AsQueryable();
-
-        if (filter != null)
-        {
-            if (filter.IsActive.HasValue)
-            {
-                query = query.Where(s => s.IsActive == filter.IsActive.Value);
-            }
-
-            if (!string.IsNullOrEmpty(filter.OidcIssuer))
-            {
-                query = query.Where(s => s.OidcIdentities.Any(i => i.Issuer == filter.OidcIssuer));
-            }
-
-            if (!string.IsNullOrEmpty(filter.NameContains))
-            {
-                query = query.Where(s => s.Name.Contains(filter.NameContains));
-            }
-
-            if (!string.IsNullOrEmpty(filter.EmailContains))
-            {
-                query = query.Where(s => s.Email != null && s.Email.Contains(filter.EmailContains));
-            }
-
-            if (!string.IsNullOrEmpty(filter.HasRole))
-            {
-                query = query.Where(s => s.SubjectRoles.Any(sr => sr.Role!.Name == filter.HasRole));
-            }
-        }
-
-        query = query.OrderBy(s => s.Name);
-
-        if (filter != null)
-        {
-            query = query.Skip(filter.Offset).Take(filter.Limit);
-        }
-
-        var entities = await query.ToListAsync();
-        return entities.Select(MapToModel).ToList();
-    }
-
-    /// <inheritdoc />
     public async Task<List<string>> GetSubjectRolesAsync(Guid subjectId)
     {
         return await _dbContext

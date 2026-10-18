@@ -16,6 +16,7 @@
     remove as removeBolus,
   } from "$api/generated/bolus.generated.remote";
   import { toast } from "svelte-sonner";
+  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { useToastSubmission } from "$lib/forms";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Plus from "@lucide/svelte/icons/plus";
@@ -37,6 +38,8 @@
   let isSaving = $state(false);
   let deletingBolusId = $state<string | null>(null);
   const deletion = useToastSubmission("Failed to delete bolus");
+
+  const realtimeStore = tryGetRealtimeStore();
 
   interface BolusEditForm {
     insulin: number | null;
@@ -142,6 +145,7 @@
     if (!bolusId) return;
     await deletion.run(async () => {
       await removeBolus(bolusId);
+      realtimeStore?.noteTreatmentWrite();
       toast.success("Bolus deleted");
       onSave();
       deletingBolusId = null;
@@ -162,6 +166,7 @@
     {...activeForm.enhance(async ({ submit }) => {
       await submit();
       if (activeForm.result) {
+        realtimeStore?.noteTreatmentWrite();
         toast.success(editingBolus ? "Bolus updated" : "Bolus added");
         onSave();
         returnToList();
@@ -306,6 +311,7 @@
                   <Button
                     variant="ghost"
                     size="icon-sm"
+                    aria-label="Edit bolus"
                     onclick={() => startEdit(bolus)}
                   >
                     <Pencil class="h-4 w-4" />
@@ -313,6 +319,7 @@
                   <Button
                     variant="ghost"
                     size="icon-sm"
+                    aria-label="Delete bolus"
                     onclick={() => (deletingBolusId = bolus.id ?? null)}
                   >
                     <Trash2 class="h-4 w-4" />

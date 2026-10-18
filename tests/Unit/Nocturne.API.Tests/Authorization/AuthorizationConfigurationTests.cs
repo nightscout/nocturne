@@ -82,11 +82,9 @@ public class AuthorizationConfigurationTests
     [Theory]
     [InlineData("Nocturne.API.Controllers.V4.Platform.StatusController")]
     [InlineData("Nocturne.API.Controllers.V1.StatusController")]
-    [InlineData("Nocturne.API.Controllers.V3.StatusController")]
     [InlineData("Nocturne.API.Controllers.MetadataController")]
     [InlineData("Nocturne.API.Controllers.V1.VersionsController")]
     [InlineData("Nocturne.API.Controllers.V3.VersionController")]
-    [InlineData("Nocturne.API.Controllers.V3.LastModifiedController")]
     [InlineData("Nocturne.API.Controllers.V1.AuthenticationController")]
     public void PublicController_AllowsAnonymous(string typeName)
     {

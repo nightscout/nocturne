@@ -218,7 +218,7 @@ public class ClientIdRekeyTests : IDisposable
             _context, bolus, Mock.Of<ITempBasalRepository>(), carbs, bgChecks, notes, deviceEvents, calculations,
             Mock.Of<IStateSpanService>(), Mock.Of<ITreatmentFoodService>(), Mock.Of<IDeviceService>(),
             Mock.Of<IPatientDeviceStamper>(), Mock.Of<IProfileDecomposer>(), Mock.Of<IActiveProfileResolver>(),
-            Mock.Of<IPatientInsulinRepository>(), audit, dedup, NullLogger<TreatmentDecomposer>.Instance);
+            Mock.Of<IPatientInsulinRepository>(), audit, NullLogger<TreatmentDecomposer>.Instance);
         var store = new TreatmentReadService(
             Mock.Of<IV4ToLegacyProjectionService>(), decomposer, Mock.Of<IDecompositionPipeline>(),
             Mock.Of<ITempBasalRepository>(), bolus, carbs, bgChecks, notes, deviceEvents, calculations,

@@ -1,3 +1,4 @@
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
 
@@ -129,9 +130,10 @@ public interface ILegacyKeyedRepository<TRecord>
     /// <summary>
     /// Records whose server write stamp (<see cref="IV4Record.ModifiedAt"/>, reported as
     /// <c>srvModified</c>) falls after <paramref name="cursorMills"/>, oldest first, as one history
-    /// page that ends on a millisecond boundary and so may exceed <paramref name="limit"/>.
+    /// page that ends on a millisecond boundary and so may exceed <paramref name="limit"/>. Deleted
+    /// records are included, stamped with their delete (<see cref="HistoryRecord{T}"/>).
     /// </summary>
-    Task<IReadOnlyList<TRecord>> GetModifiedSinceAsync(long cursorMills, int limit, CancellationToken ct = default);
+    Task<IReadOnlyList<HistoryRecord<TRecord>>> GetModifiedSinceAsync(long cursorMills, int limit, CancellationToken ct = default);
 
     /// <summary>
     /// The stored, non-empty correlation id of each live row carrying one of

@@ -76,8 +76,9 @@
       {#if bgChartData.length > 1 && thresholds}
         {@const target = resolveTargetRange(thresholds)}
         <!-- The dots' range colour is lost in black and white; these limits carry it instead. -->
-        {#each [target.low, target.high] as limit (limit)}
+        {#each [target.low, target.high] as limit, index (index)}
           <line
+            data-testid="actogram-target-limit"
             x1={0}
             x2={context.width}
             y1={context.yScale(limit)}
@@ -103,6 +104,7 @@
              registration re-runs the chart's mark deriveds, so N points cost
              O(N^2). Data mode renders all points from a single mark. -->
         <Circle
+          data-testid="actogram-glucose-reading"
           data={bgChartData}
           key={(d) => d.time}
           cx={(d) => d.time}

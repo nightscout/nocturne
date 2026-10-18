@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Services.Devices;
@@ -10,7 +11,6 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.Serializers;
 
 namespace Nocturne.API.Controllers.V3;
 
@@ -302,7 +302,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             return CreatedAtAction(
                 nameof(GetDeviceStatusById),
                 new { id = projectedResults.First().Id },
-                new { status = 200, result = projectedResults.Select(MapToV3Dto) }
+                new V3Envelope<object> { Result = projectedResults.Select(MapToV3Dto).ToList() }
             );
         }
         catch (ArgumentException ex)
@@ -345,10 +345,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         DeviceStatus? deviceStatus;
         try
         {
-            deviceStatus = JsonSerializer.Deserialize<DeviceStatus>(
-                request.GetRawText(),
-                UploaderIdJsonModifier.CaseInsensitiveReadOptions
-            );
+            deviceStatus = NightscoutJsonBody.ReadObject<DeviceStatus>(request);
         }
         catch (JsonException)
         {
@@ -410,12 +407,12 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// </summary>
     /// <param name="id">Device status ID to delete</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>No content on success</returns>
+    /// <returns><c>{"status": 200}</c> on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus/{id}")]
-    [ProducesResponseType(204)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -453,7 +450,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
         _logger.LogDebug("Successfully deleted device status with ID {Id}", id);
 
-        return NoContent();
+        return CreateV3DeleteResponse();
     }
 
     /// <summary>
@@ -528,107 +525,31 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         out ActionResult? validationError
     )
     {
-        var deviceStatusRecords = new List<DeviceStatus>();
         validationError = null;
+
+        var elements = jsonElement.ValueKind switch
+        {
+            JsonValueKind.Array => jsonElement.EnumerateArray().ToList(),
+            JsonValueKind.Object => [jsonElement],
+            _ => [],
+        };
+
+        // Nightscout V3 Strict Validation: the 'app' field is required in the JSON payload
+        if (elements.Any(element => element.ValueKind != JsonValueKind.Object || !element.TryGetProperty("app", out _)))
+        {
+            validationError = CreateV3ErrorResponse(400, "Bad or missing app field");
+            return Enumerable.Empty<DeviceStatus>();
+        }
 
         try
         {
-            if (jsonElement.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var element in jsonElement.EnumerateArray())
-                {
-                    // Nightscout V3 Strict Validation: 'app' field is required in the JSON payload
-                    if (!element.TryGetProperty("app", out _))
-                    {
-                        validationError = CreateV3ErrorResponse(400, "Bad or missing app field");
-                        return Enumerable.Empty<DeviceStatus>();
-                    }
-
-                    var deviceStatus = JsonSerializer.Deserialize<DeviceStatus>(
-                        element.GetRawText(),
-                        UploaderIdJsonModifier.CaseInsensitiveReadOptions
-                    );
-                    if (deviceStatus != null)
-                    {
-                        deviceStatusRecords.Add(deviceStatus);
-                    }
-                }
-            }
-            else if (jsonElement.ValueKind == JsonValueKind.Object)
-            {
-                // Nightscout V3 Strict Validation: 'app' field is required
-                if (!jsonElement.TryGetProperty("app", out _))
-                {
-                    validationError = CreateV3ErrorResponse(400, "Bad or missing app field");
-                    return Enumerable.Empty<DeviceStatus>();
-                }
-
-                var deviceStatus = JsonSerializer.Deserialize<DeviceStatus>(
-                    jsonElement.GetRawText(),
-                    UploaderIdJsonModifier.CaseInsensitiveReadOptions
-                );
-                if (deviceStatus != null)
-                {
-                    deviceStatusRecords.Add(deviceStatus);
-                }
-            }
+            return NightscoutJsonBody.ReadObjects<DeviceStatus>(jsonElement) ?? [];
         }
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Failed to parse device status data from JsonElement");
             throw new ArgumentException("Invalid device status data format", ex);
         }
-
-        return deviceStatusRecords;
-    }
-
-    /// <summary>
-    /// Convert V3 filter criteria (field$op=value format) to MongoDB-style JSON query
-    /// </summary>
-    /// <param name="filterCriteria">List of parsed filter criteria</param>
-    /// <returns>MongoDB-style JSON query string, or null if no criteria</returns>
-    private string? ConvertFilterCriteriaToFindQuery(List<V3FilterCriteria>? filterCriteria)
-    {
-        if (filterCriteria == null || filterCriteria.Count == 0)
-            return null;
-
-        var conditions = new Dictionary<string, object>();
-
-        foreach (var criteria in filterCriteria)
-        {
-            var mongoOp = criteria.Operator switch
-            {
-                "eq" => null, // Direct equality doesn't need operator
-                "ne" => "$ne",
-                "gt" => "$gt",
-                "gte" => "$gte",
-                "lt" => "$lt",
-                "lte" => "$lte",
-                "in" => "$in",
-                "nin" => "$nin",
-                "re" => "$regex",
-                _ => null,
-            };
-
-            if (mongoOp == null && criteria.Operator == "eq")
-            {
-                // Direct equality: { "field": "value" }
-                conditions[criteria.Field] = criteria.Value ?? "";
-            }
-            else if (mongoOp != null)
-            {
-                // Operator form: { "field": { "$op": "value" } }
-                conditions[criteria.Field] = new Dictionary<string, object?>
-                {
-                    [mongoOp] = criteria.Value,
-                };
-            }
-        }
-
-        if (conditions.Count == 0)
-            return null;
-
-        return JsonSerializer.Serialize(conditions);
     }
 
     internal static object MapToV3Dto(DeviceStatus status)
@@ -655,6 +576,8 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             dto["uploader"] = status.Uploader;
         if (status.Loop != null)
             dto["loop"] = status.Loop;
+        if (status.IsValid != null)
+            dto["isValid"] = status.IsValid;
 
         return dto;
     }

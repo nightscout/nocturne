@@ -21,7 +21,7 @@ public interface ITherapySettingsRepository : IProfileScopedRepository<TherapySe
 {
     /// <summary>Retrieve a page of <see cref="TherapySettings"/> records filtered by time range, device, and source.</summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end of the time window, or <c>null</c> for no upper bound.</param>
+    /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
     /// <param name="device">Optional device identifier filter.</param>
     /// <param name="source">Optional data source filter.</param>
     /// <param name="limit">Maximum number of records to return (default 100).</param>
@@ -49,6 +49,14 @@ public interface ITherapySettingsRepository : IProfileScopedRepository<TherapySe
     /// </summary>
     /// <param name="ct">Cancellation token.</param>
     Task<TherapySettings?> GetNewestDocumentRowAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// The live rows whose legacy id starts with <paramref name="prefix"/>, newest first: for
+    /// <c>"{profileId}:"</c>, the stores of one profile document still standing.
+    /// </summary>
+    /// <param name="prefix">Legacy id prefix to match.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IEnumerable<TherapySettings>> GetByLegacyIdPrefixAsync(string prefix, CancellationToken ct = default);
 
     /// <summary>
     /// The ids of the stored profile documents (see <see cref="TherapySettings.DocumentIdOf"/>), newest

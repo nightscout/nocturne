@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Extensions;
+using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Models.Authorization;
@@ -163,5 +165,46 @@ public class MyPermissionsControllerTests
     {
         // A public share has no subject; the demo gate defers to the endpoint for it.
         Answer(ControllerWithScopes(Scope.GlucoseRead)).RefusedAsDemoSubject.Should().BeFalse();
+    }
+
+    private static HttpContext SessionContext(PermissionTrie? trie, params string[] grantedScopes)
+    {
+        var httpContext = new DefaultHttpContext
+        {
+            RequestServices = new ServiceCollection()
+                .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
+                .BuildServiceProvider(),
+        };
+        httpContext.Items["GrantedScopes"] =
+            (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
+        if (trie is not null) httpContext.SetPermissionTrie(trie);
+        return httpContext;
+    }
+
+    private static PermissionTrie Trie(params string[] permissions)
+    {
+        var trie = new PermissionTrie();
+        trie.Add(permissions);
+        return trie;
+    }
+
+    [Fact]
+    public async Task TryBuildAsync_AnswersAsTheEndpointDoes_ForACallerTheFallbackAdmits()
+    {
+        var grant = await MyPermissionsController.TryBuildAsync(
+            SessionContext(Trie(Scope.GlucoseRead), Scope.GlucoseRead));
+
+        grant.Should().NotBeNull();
+        grant!.Scopes.Should().BeEquivalentTo(new[] { Scope.GlucoseRead });
+        grant.LimitTo24Hours.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task TryBuildAsync_IsNull_WhereTheFallbackWouldRefuseTheEndpoint()
+    {
+        // The session carries the grant in place of a separate permissions call, so it must be
+        // absent exactly where that call would have been refused, not an empty grant.
+        (await MyPermissionsController.TryBuildAsync(SessionContext(null))).Should().BeNull();
+        (await MyPermissionsController.TryBuildAsync(SessionContext(Trie()))).Should().BeNull();
     }
 }

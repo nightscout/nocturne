@@ -20,8 +20,8 @@
 #   tmux attach -t nocturne
 #
 # Optional environment:
-#   DESEC_TOKEN             deSEC API token; the apex and wildcard A records are then written
-#                           for you (prompted for, hidden, when unset and running interactively)
+#   DUCKDNS_TOKEN           DuckDNS account token, for a BASE_DOMAIN under duckdns.org; the record
+#                           is then set for you (prompted for, hidden, when unset and running interactively)
 #   FOLDING=1               run Folding@home 02:00-04:00 UTC nightly so the server never counts as idle
 #   FOLDING_TEAM            Folding@home team number (default 0)
 #   BUDGET_EMAIL            where the spend alert goes (default: the Oracle account's email)
@@ -535,56 +535,43 @@ PUBLIC_IP=$(oci network public-ip get --public-ip-id "$PUBLIC_IP_ID" --query 'da
 
 # ── DNS ──────────────────────────────────────────────────────────────────────
 
-desec() { curl -fsS -H "Authorization: Token $DESEC_TOKEN" -H "Content-Type: application/json" "$@"; }
 resolves_to_ip() { getent ahostsv4 "$1" 2>/dev/null | awk '{print $1}' | grep -qx "$PUBLIC_IP"; }
 
-# curl fails the same way whatever went wrong, so read the status separately.
-# "deSEC rejected this token" and "this account does not hold that domain" have
-# different answers, and the first must not be reported as the second.
-desec_get() {
-  local out code
-  out=$(curl -sS -H "Authorization: Token $DESEC_TOKEN" -w '\n%{http_code}' "$1" 2>/dev/null) || return 2
-  code="${out##*$'\n'}"
-  DESEC_BODY="${out%$'\n'*}"
-  case "$code" in
-    2*)      return 0 ;;
-    401|403) return 3 ;;
-    *)       return 1 ;;
-  esac
+# DuckDNS answers every name below yourname.duckdns.org with yourname's address,
+# so one record covers the apex and the wildcard, and BASE_DOMAIN may sit at any
+# depth under it.
+DUCKDNS_NAME=
+if [[ "$BASE_DOMAIN" == *.duckdns.org ]]; then
+  DUCKDNS_NAME="${BASE_DOMAIN%.duckdns.org}"
+  DUCKDNS_NAME="${DUCKDNS_NAME##*.}"
+fi
+
+# Returns 0 on OK, 1 on KO, 2 when DuckDNS could not be reached.
+duckdns_update() {
+  local out
+  out=$(curl -sS --max-time 30 -G "https://www.duckdns.org/update" \
+    --data-urlencode "domains=$DUCKDNS_NAME" --data-urlencode "token=$DUCKDNS_TOKEN" "$@" 2>/dev/null) || return 2
+  [[ "$out" == OK* ]]
 }
 
-# Points the apex and the wildcard at the instance, or says why it could not and
-# leaves the caller to print the records for the user to create by hand.
-desec_records() {
-  local zone="$BASE_DOMAIN" status subname ttl
-  # BASE_DOMAIN may sit below the zone deSEC hosts (nocturne.example.com in example.com).
-  while :; do
-    desec_get "https://desec.io/api/v1/domains/$zone/" && break
-    status=$?
-    if (( status == 3 )); then
-      warn "deSEC did not accept that token. Under Token management at desec.io, create a token and copy the long secret it shows once — not the token's name, and not its id."
-      return 1
-    fi
-    if (( status == 2 )); then
-      warn "could not reach desec.io to look up $zone."
-      return 1
-    fi
-    zone="${zone#*.}"
-    if [[ "$zone" != *.* ]]; then
-      warn "this deSEC account holds no domain that contains $BASE_DOMAIN. Add it at desec.io first — for a free name, a dynDNS domain under dedyn.io."
-      return 1
-    fi
-  done
-  subname="${BASE_DOMAIN%"$zone"}"
-  subname="${subname%.}"
-  # A body without minimum_ttl would otherwise reach jq --argjson as an empty
-  # string and fail the write, which reads as a permissions problem.
-  ttl=$(jq -r '.minimum_ttl // empty' <<<"$DESEC_BODY" 2>/dev/null) || ttl=
-  [[ "$ttl" =~ ^[0-9]+$ ]] || ttl=3600
-  desec -X PUT "https://desec.io/api/v1/domains/$zone/rrsets/" -d "$(jq -cn --arg ip "$PUBLIC_IP" --arg s "$subname" --arg w "*${subname:+.$subname}" --argjson ttl "$ttl" \
-    '[{subname:$s,type:"A",ttl:$ttl,records:[$ip]},{subname:$w,type:"A",ttl:$ttl,records:[$ip]}]')" >/dev/null \
-    || { warn "could not write the DNS records at deSEC. The token needs write access to $zone."; return 1; }
-  info "$BASE_DOMAIN and *.$BASE_DOMAIN point at $PUBLIC_IP"
+# Points the name at the instance, or says why it could not and leaves the caller
+# to print the records for the user to create by hand.
+duckdns_records() {
+  local status
+  if [[ ! "$DUCKDNS_TOKEN" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+    warn "that is not a DuckDNS token. It is the value labelled token at the top of duckdns.org once you are signed in, shaped like 01234567-89ab-cdef-0123-456789abcdef."
+    return 1
+  fi
+  # A name that once pointed at a home connection may still carry an IPv6
+  # address, which certificate validation would follow instead of this server.
+  duckdns_update --data-urlencode "clear=true"
+  status=$?
+  (( status == 0 )) && { duckdns_update --data-urlencode "ip=$PUBLIC_IP"; status=$?; }
+  case "$status" in
+    0) info "$BASE_DOMAIN and *.$BASE_DOMAIN point at $PUBLIC_IP" ;;
+    2) warn "could not reach duckdns.org." ; return 1 ;;
+    *) warn "DuckDNS refused the update. Check the token is the one shown on duckdns.org, and that $DUCKDNS_NAME is listed under your domains there."; return 1 ;;
+  esac
 }
 
 DNS_DONE=
@@ -596,35 +583,40 @@ fi
 # A token that turns out to be wrong is worth another go rather than an abort: it
 # is the one thing here the user can fix in a few seconds, and by now the network
 # and the address exist and a re-run would have to find them all again.
-while [[ -z "$DNS_DONE" ]]; do
-  if [[ -z "${DESEC_TOKEN:-}" ]]; then
+while [[ -z "$DNS_DONE" && -n "$DUCKDNS_NAME" ]]; do
+  if [[ -z "${DUCKDNS_TOKEN:-}" ]]; then
     [[ -t 0 ]] || break
     printf '\n'
-    info "If $BASE_DOMAIN is managed at deSEC (desec.io, including free dedyn.io names), paste an"
-    info "API token and the DNS records are created for you. Otherwise press Enter to add them yourself."
+    info "Paste your DuckDNS token (shown at the top of duckdns.org once signed in) and the DNS"
+    info "record for $DUCKDNS_NAME.duckdns.org is set for you. Otherwise press Enter to set it yourself."
     # Nothing echoes as it is typed. In Cloud Shell's browser terminal a paste
     # that did not land looks exactly like one that did, so say what was read:
     # without that the next thing on screen is an unexplained failure.
-    read -rsp "    deSEC token: " DESEC_TOKEN
+    read -rsp "    DuckDNS token: " DUCKDNS_TOKEN
     printf '\n'
-    DESEC_TOKEN="${DESEC_TOKEN//[[:space:]]/}"
-    [[ -n "$DESEC_TOKEN" ]] || break
-    info "read a ${#DESEC_TOKEN}-character token"
+    DUCKDNS_TOKEN="${DUCKDNS_TOKEN//[[:space:]]/}"
+    [[ -n "$DUCKDNS_TOKEN" ]] || break
+    info "read a ${#DUCKDNS_TOKEN}-character token"
   fi
-  log "DNS records at deSEC"
-  if desec_records; then
+  log "DNS record at DuckDNS"
+  if duckdns_records; then
     DNS_DONE=1
   else
-    DESEC_TOKEN=
+    DUCKDNS_TOKEN=
     [[ -t 0 ]] || break
   fi
 done
 
 if [[ -z "$DNS_DONE" ]]; then
   printf '\n'
-  info "Create these two DNS records at your domain provider now:"
-  printf '\n      %-28s A   %s\n      %-28s A   %s\n\n' "$BASE_DOMAIN" "$PUBLIC_IP" "*.$BASE_DOMAIN" "$PUBLIC_IP"
-  info "Nocturne waits until both resolve before requesting certificates. Do not proxy them through Cloudflare."
+  if [[ -n "$DUCKDNS_NAME" ]]; then
+    info "At duckdns.org, set the current ip of $DUCKDNS_NAME to $PUBLIC_IP now."
+  else
+    info "Create these two DNS records at your domain provider now:"
+    printf '\n      %-28s A   %s\n      %-28s A   %s\n\n' "$BASE_DOMAIN" "$PUBLIC_IP" "*.$BASE_DOMAIN" "$PUBLIC_IP"
+    info "Do not proxy them through Cloudflare."
+  fi
+  info "Nocturne waits until $BASE_DOMAIN and *.$BASE_DOMAIN resolve before requesting certificates."
 fi
 
 # ── SSH key ──────────────────────────────────────────────────────────────────

@@ -21,11 +21,12 @@
 
   const realtimeStore = tryGetRealtimeStore();
 
-  // Engine for the sidebar chart — no predictions, no inspection
+  // Engine for the sidebar chart — no predictions, no inspection, no request of its own
   const sidebarEngine = createChartDataEngine({
     enablePredictions: false,
     focusHours: 3,
     dataWindow: "display",
+    glucoseSource: "realtime",
   });
 
   // Glucose-only layout — no space reserved for basal/IOB/swim lanes

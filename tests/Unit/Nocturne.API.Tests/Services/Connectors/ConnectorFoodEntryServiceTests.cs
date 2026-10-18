@@ -61,6 +61,61 @@ public class ConnectorFoodEntryServiceTests
         };
 
     [Fact]
+    public async Task ImportAsync_FoodTheUserDeleted_StaysDeleted_AndTheEntryIsNotLinkedToIt()
+    {
+        var food = await ImportThenDeleteFoodAsync(byUser: true);
+
+        food.DeletedAt.Should().NotBeNull();
+        await using var assertContext = NewContext();
+        (await assertContext.Foods.IgnoreQueryFilters().CountAsync()).Should().Be(1);
+        (await assertContext.ConnectorFoodEntries.SingleAsync()).FoodId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ImportAsync_FoodASystemSweepDeleted_IsRestoredOnItsOwnRow()
+    {
+        var food = await ImportThenDeleteFoodAsync(byUser: false);
+
+        food.DeletedAt.Should().BeNull();
+        food.Name.Should().Be("Oats");
+        await using var assertContext = NewContext();
+        (await assertContext.ConnectorFoodEntries.SingleAsync()).FoodId.Should().Be(food.Id);
+    }
+
+    /// <summary>
+    /// Imports an entry with its food, soft-deletes the food as the user or a sweep would (the
+    /// entry losing its link, as the food delete does), imports the same entry again, and returns
+    /// the food row.
+    /// </summary>
+    private async Task<FoodEntity> ImportThenDeleteFoodAsync(bool byUser)
+    {
+        var withFood = Import();
+        withFood.Food = new ConnectorFoodImport { ExternalId = "food-1", Name = "Oats", Carbs = 30 };
+
+        await using (var context = NewContext())
+        {
+            await NewService(context).ImportAsync(UserId, [withFood]);
+        }
+
+        await using (var context = NewContext())
+        {
+            var stored = await context.Foods.SingleAsync();
+            stored.DeletedAt = DateTime.UtcNow;
+            context.Entry(stored).Property("DeletedByUser").CurrentValue = byUser;
+            (await context.ConnectorFoodEntries.SingleAsync()).FoodId = null;
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = NewContext())
+        {
+            await NewService(context).ImportAsync(UserId, [withFood]);
+        }
+
+        await using var readContext = NewContext();
+        return await readContext.Foods.IgnoreQueryFilters().SingleAsync();
+    }
+
+    [Fact]
     public async Task ImportAsync_DoesNotReplaceANamedMealWithAnUnnamedGuess()
     {
         var breakfast = new DateTimeOffset(2026, 7, 20, 8, 0, 0, TimeSpan.Zero);

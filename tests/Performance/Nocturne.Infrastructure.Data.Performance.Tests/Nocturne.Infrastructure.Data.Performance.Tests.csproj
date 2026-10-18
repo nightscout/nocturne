@@ -20,5 +20,6 @@
         <ProjectReference Include="../../../src/Core/Nocturne.Core.Models/Nocturne.Core.Models.csproj"/>
         <ProjectReference Include="../../../src/Core/Nocturne.Core.Contracts/Nocturne.Core.Contracts.csproj"/>
         <ProjectReference Include="../../Shared/Nocturne.Tests.Shared/Nocturne.Tests.Shared.csproj"/>
+        <ProjectReference Include="../Nocturne.Performance.Tests.Shared/Nocturne.Performance.Tests.Shared.csproj"/>
     </ItemGroup>
 </Project>

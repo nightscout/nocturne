@@ -92,9 +92,9 @@
     lastUpdated === null ? "" : readingAgeLabel(lastUpdated, currentTime.getTime())
   );
 
-  // The fallback readout is not a configured element, so it follows the viewer's
-  // own time-format preference rather than any format stored on the face.
-  const clockTime = $derived(formatClockTime(currentTime, "auto"));
+  const clockTime = $derived(
+    formatClockTime(currentTime, clockConfig?.settings?.timeFormat)
+  );
 
   // Show time based on configuration
   const showTime = $derived(clockConfig?.settings?.alwaysShowTime || isStale);

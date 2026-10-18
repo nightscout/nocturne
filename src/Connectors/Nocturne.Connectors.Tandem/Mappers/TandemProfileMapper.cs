@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Tandem.Models;
 using Nocturne.Core.Models;
@@ -43,6 +45,14 @@ public sealed class TandemProfileMapper(ILogger logger)
             Store = store,
         };
     }
+
+    /// <summary>
+    /// Identifies what <paramref name="profile"/> says, leaving out the time <see cref="Map"/>
+    /// stamps it with, so two syncs of unchanged pump settings yield the same value.
+    /// </summary>
+    public static string Fingerprint(Profile profile) =>
+        Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(
+            new { profile.DefaultProfile, profile.Units, profile.Store })));
 
     private static ProfileData BuildProfileData(TandemPumpProfile profile, TandemPumpCgmSettings? cgm)
     {

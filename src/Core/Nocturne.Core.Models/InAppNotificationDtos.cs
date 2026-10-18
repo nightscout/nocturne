@@ -146,27 +146,6 @@ public class GlucoseCondition
 }
 
 /// <summary>
-/// Real-time notification event for SignalR broadcasting
-/// </summary>
-public class NotificationEvent
-{
-    /// <summary>
-    /// Type of event: "created", "archived", or "updated"
-    /// </summary>
-    public string EventType { get; set; } = string.Empty;
-
-    /// <summary>
-    /// The notification data (for created/updated events)
-    /// </summary>
-    public InAppNotificationDto? Notification { get; set; }
-
-    /// <summary>
-    /// Why the notification was archived (for archived events)
-    /// </summary>
-    public NotificationArchiveReason? ArchiveReason { get; set; }
-}
-
-/// <summary>
 /// Request to create a notification programmatically (for third-party integrations).
 /// If a <see cref="NotificationTemplate"/> is registered for the given <see cref="Type"/>,
 /// its defaults are merged with the values provided here.

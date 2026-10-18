@@ -56,6 +56,8 @@ public static class DataSources
     /// </summary>
     public const string CareLinkConnector = "carelink-connector";
 
+    public const string GoogleHealthConnector = "google-health-connector";
+
     /// <summary>
     /// Data fetched from Glooko API via the Glooko connector.
     /// </summary>
@@ -180,6 +182,11 @@ public static class DataSources
     /// Data received via WebSocket real-time push.
     /// </summary>
     public const string WebSocket = "websocket";
+
+    /// <summary>
+    /// Sensor session starts Nocturne inferred from the warm-up gap in a CGM's readings.
+    /// </summary>
+    public const string SensorSessionInference = "sensor-session-inference";
 
     // ============================================================================
     // AID/Loop System Sources

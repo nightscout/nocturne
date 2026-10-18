@@ -21,13 +21,6 @@ public interface IRoleService
     Task<Role?> GetRoleByIdAsync(Guid roleId);
 
     /// <summary>
-    /// Get a role by name
-    /// </summary>
-    /// <param name="name">Role name</param>
-    /// <returns>Role if found, null otherwise</returns>
-    Task<Role?> GetRoleByNameAsync(string name);
-
-    /// <summary>
     /// Create a new role
     /// </summary>
     /// <param name="role">Role to create</param>
@@ -49,13 +42,6 @@ public interface IRoleService
     /// <param name="roleId">Role identifier</param>
     /// <returns>True if deleted, false if not found or is system role</returns>
     Task<bool> DeleteRoleAsync(Guid roleId);
-
-    /// <summary>
-    /// Get all subjects assigned to a role
-    /// </summary>
-    /// <param name="roleId">Role identifier</param>
-    /// <returns>List of subjects with this role</returns>
-    Task<List<Subject>> GetSubjectsInRoleAsync(Guid roleId);
 
     /// <summary>
     /// Initialize default system roles if they don't exist

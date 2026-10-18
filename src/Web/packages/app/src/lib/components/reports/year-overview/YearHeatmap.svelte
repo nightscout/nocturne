@@ -3,6 +3,7 @@
   import { Chart, Calendar, Layer, Tooltip } from "layerchart";
   import { scaleThreshold } from "d3-scale";
   import { timeMonth, timeWeek, timeMonths } from "d3-time";
+  import { Button } from "$lib/components/ui/button";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
@@ -23,6 +24,8 @@
     year,
     yearIndex,
     loadingYears,
+    failed = false,
+    onRetry,
     yearData,
     transformYearData,
     getCellFill,
@@ -39,6 +42,8 @@
     year: number;
     yearIndex: number;
     loadingYears: Set<number>;
+    failed?: boolean;
+    onRetry?: () => void;
     yearData: Map<number, DailySummaryDay[]>;
     transformYearData: (days: DailySummaryDay[]) => YearCalendarDatum[];
     getCellFill: (data: YearCalendarDatum | undefined) => string;
@@ -105,6 +110,10 @@
   <!-- Year Label -->
   <div class="mb-3 flex items-center gap-3">
     <h2 class="text-xl font-bold tabular-nums">{year}</h2>
+    {#if failed}
+      <span class="text-sm text-destructive">Some year data could not be loaded.</span>
+      <Button variant="outline" size="sm" onclick={onRetry} disabled={loadingYears.has(year)}>Retry {year}</Button>
+    {/if}
     {#if isYearLoading}
       <Loader2 class="h-4 w-4 animate-spin text-muted-foreground" />
     {/if}
@@ -369,7 +378,7 @@
       class="flex h-[120px] items-center justify-center rounded-lg border border-dashed border-border bg-card/50"
     >
       <p class="text-sm text-muted-foreground">
-        No data for {year}
+        {days ? `No data for ${year}` : `Scroll to load ${year} data`}
       </p>
     </div>
   {/if}

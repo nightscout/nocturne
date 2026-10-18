@@ -1,0 +1,96 @@
+diff --git a/dist/cjs/HttpConnection.js b/dist/cjs/HttpConnection.js
+index 21a8659d43dd18843c5cedb50878ec49763083a6..9347e0b557202c83e126fe0a059025b0ca19adba 100644
+--- a/dist/cjs/HttpConnection.js
++++ b/dist/cjs/HttpConnection.js
+@@ -414,10 +414,8 @@ class HttpConnection {
+             this._logger.log(ILogger_1.LogLevel.Debug, `Call to HttpConnection.stopConnection(${error}) was ignored because the connection is already in the disconnected state.`);
+             return;
+         }
+-        if (this._connectionState === "Connecting" /* ConnectionState.Connecting */) {
+-            this._logger.log(ILogger_1.LogLevel.Warning, `Call to HttpConnection.stopConnection(${error}) was ignored because the connection is still in the connecting state.`);
+-            throw new Error(`HttpConnection.stopConnection(${error}) was called while the connection is still in the connecting state.`);
+-        }
++        // A WebSocket can close after open but before start resumes. Complete cleanup;
++        // start() observes Disconnected and rejects instead of throwing from onclose.
+         if (this._connectionState === "Disconnecting" /* ConnectionState.Disconnecting */) {
+             // A call to stop() induced this call to stopConnection and needs to be completed.
+             // Any stop() awaiters will be scheduled to continue after the onclose callback fires.
+diff --git a/dist/cjs/HubConnection.js b/dist/cjs/HubConnection.js
+index 4756d7a5a69a19d7672eb1aae5551b5fedfc5d03..5defb9d41ae99b4a5de92eff82ee0cfecc949881 100644
+--- a/dist/cjs/HubConnection.js
++++ b/dist/cjs/HubConnection.js
+@@ -132,6 +132,10 @@ class HubConnection {
+             this._handshakeResolver = resolve;
+             this._handshakeRejecter = reject;
+         });
++        // An early handshake error can reject before connection.start() settles.
++        // Observe it even when transport startup fails before we await the handshake.
++        handshakePromise.catch(() => {});
++
+         await this.connection.start(this._protocol.transferFormat);
+         try {
+             let version = this._protocol.version;
+diff --git a/dist/esm/HttpConnection.js b/dist/esm/HttpConnection.js
+index 23bb0e97810ab3c208ccafc8346ac4ebdb6920fa..d5ba5f6b2670f9b9ea588e8518e6cdeb17ba6278 100644
+--- a/dist/esm/HttpConnection.js
++++ b/dist/esm/HttpConnection.js
+@@ -411,10 +411,8 @@ export class HttpConnection {
+             this._logger.log(LogLevel.Debug, `Call to HttpConnection.stopConnection(${error}) was ignored because the connection is already in the disconnected state.`);
+             return;
+         }
+-        if (this._connectionState === "Connecting" /* ConnectionState.Connecting */) {
+-            this._logger.log(LogLevel.Warning, `Call to HttpConnection.stopConnection(${error}) was ignored because the connection is still in the connecting state.`);
+-            throw new Error(`HttpConnection.stopConnection(${error}) was called while the connection is still in the connecting state.`);
+-        }
++        // A WebSocket can close after open but before start resumes. Complete cleanup;
++        // start() observes Disconnected and rejects instead of throwing from onclose.
+         if (this._connectionState === "Disconnecting" /* ConnectionState.Disconnecting */) {
+             // A call to stop() induced this call to stopConnection and needs to be completed.
+             // Any stop() awaiters will be scheduled to continue after the onclose callback fires.
+diff --git a/dist/esm/HubConnection.js b/dist/esm/HubConnection.js
+index 6082e63a99982a7990f3271cd5cfe578a80d8d73..c666696da810973417b58bce790600339d59478c 100644
+--- a/dist/esm/HubConnection.js
++++ b/dist/esm/HubConnection.js
+@@ -129,6 +129,10 @@ export class HubConnection {
+             this._handshakeResolver = resolve;
+             this._handshakeRejecter = reject;
+         });
++        // An early handshake error can reject before connection.start() settles.
++        // Observe it even when transport startup fails before we await the handshake.
++        handshakePromise.catch(() => {});
++
+         await this.connection.start(this._protocol.transferFormat);
+         try {
+             let version = this._protocol.version;
+diff --git a/src/HttpConnection.ts b/src/HttpConnection.ts
+index 35a51fde6e3cd3bb3becc2dc81299d2fcc38b661..24f65cb8a4eb7e87fcf1380910062104a5468727 100644
+--- a/src/HttpConnection.ts
++++ b/src/HttpConnection.ts
+@@ -516,10 +516,8 @@ export class HttpConnection implements IConnection {
+             return;
+         }
+ 
+-        if (this._connectionState === ConnectionState.Connecting) {
+-            this._logger.log(LogLevel.Warning, `Call to HttpConnection.stopConnection(${error}) was ignored because the connection is still in the connecting state.`);
+-            throw new Error(`HttpConnection.stopConnection(${error}) was called while the connection is still in the connecting state.`);
+-        }
++        // A WebSocket can close after open but before start resumes. Complete cleanup;
++        // start() observes Disconnected and rejects instead of throwing from onclose.
+ 
+         if (this._connectionState === ConnectionState.Disconnecting) {
+             // A call to stop() induced this call to stopConnection and needs to be completed.
+diff --git a/src/HubConnection.ts b/src/HubConnection.ts
+index e94f175d4715fffb37eff830190a74494c648c80..83b5ffb8937aa9429bc9e7e08f4d405628b2237c 100644
+--- a/src/HubConnection.ts
++++ b/src/HubConnection.ts
+@@ -225,6 +225,10 @@ export class HubConnection {
+             this._handshakeRejecter = reject;
+         });
+ 
++        // An early handshake error can reject before connection.start() settles.
++        // Observe it even when transport startup fails before we await the handshake.
++        handshakePromise.catch(() => {});
++
+         await this.connection.start(this._protocol.transferFormat);
+ 
+         try {

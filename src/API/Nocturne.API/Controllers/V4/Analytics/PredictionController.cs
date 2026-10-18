@@ -13,7 +13,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <summary>
 /// Controller for glucose forecast predictions.
 /// Supports multiple prediction sources: <c>DeviceStatus</c> (AAPS/Trio/Loop loop data)
-/// or <c>OrefWasm</c> (server-side oref0 WASM calculation).
+/// or <c>OrefWasm</c> (server-side oref calculation).
 /// </summary>
 /// <remarks>
 /// The active prediction source is determined at startup from <c>Predictions:Source</c>

@@ -67,28 +67,35 @@ export function formatGlucoseRange(
 /**
  * Format a glucose value using the global unit preference
  * @param mgdl - Glucose value in mg/dL
+ * @param units - A surface that carries its own units (a clock face) passes them here
  * @returns Formatted glucose string in user's preferred units
  */
-export function bg(mgdl: number) {
-  return formatGlucoseValue(mgdl, glucoseUnits.current);
+export function bg(mgdl: number, units: GlucoseUnits = glucoseUnits.current) {
+  return formatGlucoseValue(mgdl, units);
 }
 
 /**
  * Format a glucose delta using the global unit preference
  * @param deltaMgdl - Delta value in mg/dL
  * @param includeSign - Whether to include +/- sign (default: true)
+ * @param units - As for {@link bg}
  * @returns Formatted delta string in user's preferred units
  */
-export function bgDelta(deltaMgdl: number, includeSign: boolean = true): string {
-  return formatGlucoseDelta(deltaMgdl, glucoseUnits.current, includeSign);
+export function bgDelta(
+  deltaMgdl: number,
+  includeSign: boolean = true,
+  units: GlucoseUnits = glucoseUnits.current
+): string {
+  return formatGlucoseDelta(deltaMgdl, units, includeSign);
 }
 
 /**
  * Get the current unit label from global preference
+ * @param units - As for {@link bg}
  * @returns "mg/dL" or "mmol/L" based on user preference
  */
-export function bgLabel(): string {
-  return getUnitLabel(glucoseUnits.current);
+export function bgLabel(units: GlucoseUnits = glucoseUnits.current): string {
+  return getUnitLabel(units);
 }
 
 /**
@@ -159,12 +166,9 @@ export function formatLocale(): string {
   return regionFormat.current || preferredLanguage.current;
 }
 
-/**
- * Whether times render in 12-hour form. `override` pins the answer for a surface
- * that carries its own format (a clock face element), ignoring the preference.
- */
-export function prefersHour12(override?: boolean): boolean {
-  return override ?? timeFormat.current !== "24";
+/** Whether times render in 12-hour form under the viewer's time-format preference. */
+export function prefersHour12(): boolean {
+  return timeFormat.current !== "24";
 }
 
 /**

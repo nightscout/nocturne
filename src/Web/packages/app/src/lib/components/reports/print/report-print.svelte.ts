@@ -3,17 +3,28 @@ import { PRINT_LAYOUT_CLASS } from "$lib/components/charts/print/print-mode.svel
 
 /**
  * Print-document metadata the reports layout cannot derive itself. A title is
- * needed for a route the report registry does not list. A period is needed by
- * a report with its own period controls (comparison, year overview, day in review).
+ * needed for a route the report registry does not list. A period is needed by a
+ * report with its own period controls (comparison, year overview, day in
+ * review).
  */
 export interface ReportPrintMeta {
   title?: string;
-  /** Inclusive YYYY-MM-DD bounds, or free text for periods that are not one range. */
+  /**
+   * Inclusive YYYY-MM-DD bounds, or free text for periods that are not one
+   * range.
+   */
   period?: { from: string; to: string } | { label: string };
 }
 
 export class ReportPrintContext {
+  printing = $state(false);
   #read = $state<(() => ReportPrintMeta) | null>(null);
+  #prepare: (() => Promise<void>) | null = null;
+  #preparationVersion = 0;
+
+  get preparationVersion(): number {
+    return this.#preparationVersion;
+  }
 
   get meta(): ReportPrintMeta {
     return this.#read?.() ?? {};
@@ -25,6 +36,21 @@ export class ReportPrintContext {
       if (this.#read === read) this.#read = null;
     };
   }
+
+  providePreparation(prepare: () => Promise<void>): () => void {
+    this.#preparationVersion++;
+    this.#prepare = prepare;
+    return () => {
+      if (this.#prepare === prepare) {
+        this.#prepare = null;
+        this.#preparationVersion++;
+      }
+    };
+  }
+
+  async prepare(): Promise<void> {
+    await this.#prepare?.();
+  }
 }
 
 const KEY = Symbol("report-print");
@@ -33,11 +59,21 @@ export function createReportPrintContext(): ReportPrintContext {
   return setContext(KEY, new ReportPrintContext());
 }
 
+export function getReportPrintContext(): ReportPrintContext | undefined {
+  return getContext<ReportPrintContext | undefined>(KEY);
+}
+
 /** Declare this report's print title and/or period. Call during component init. */
 export function setReportPrintMeta(read: () => ReportPrintMeta): void {
   const ctx = getContext<ReportPrintContext | undefined>(KEY);
   if (!ctx) return;
   $effect.pre(() => ctx.provide(read));
+}
+
+export function setReportPrintPreparation(prepare: () => Promise<void>): void {
+  const ctx = getContext<ReportPrintContext | undefined>(KEY);
+  if (!ctx) return;
+  $effect.pre(() => ctx.providePreparation(prepare));
 }
 
 /**
@@ -49,22 +85,30 @@ const PAPER_CONTENT_MM = 186;
 
 function settle(): Promise<void> {
   return new Promise((resolve) =>
-    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 250)))
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => setTimeout(resolve, 250))
+    )
   );
 }
 
 /**
  * Print the report laid out at paper width. Charts size themselves from a
  * ResizeObserver, which never runs for the print layout itself. Printed
- * straight from a wide screen, every chart would clip at its screen width.
- * So the page narrows first and waits for the charts to re-measure.
+ * straight from a wide screen, every chart would clip at its screen width. So
+ * the page narrows first and waits for the charts to re-measure.
  */
-export async function printReport(): Promise<void> {
+export async function printReport(
+  prepare?: () => Promise<void>,
+  isCurrent?: () => boolean
+): Promise<void> {
+  await prepare?.();
   const root = document.documentElement;
   root.style.setProperty("--report-print-width", `${PAPER_CONTENT_MM}mm`);
   root.classList.add(PRINT_LAYOUT_CLASS);
   try {
     await settle();
+    if (isCurrent && !isCurrent())
+      throw new Error("Report changed before printing");
     window.print();
   } finally {
     // print() blocks until the dialog closes, and afterprint never fires where
@@ -76,16 +120,22 @@ export async function printReport(): Promise<void> {
 
 /**
  * The browser's own Print command reaches `beforeprint` with no time to
- * re-measure, so any chart wider than the paper is scaled down to it instead.
- * A scaled chart keeps every point, where an unscaled one loses its right edge.
+ * re-measure, so any chart wider than the paper is scaled down to it instead. A
+ * scaled chart keeps every point, where an unscaled one loses its right edge.
  * Returns the listener teardown.
  */
-export function installPrintFitFallback(container: () => HTMLElement | null): () => void {
+export function installPrintFitFallback(
+  container: () => HTMLElement | null
+): () => void {
   const restore: (() => void)[] = [];
 
   const fit = () => {
     const root = container();
-    if (!root || document.documentElement.classList.contains(PRINT_LAYOUT_CLASS)) return;
+    if (
+      !root ||
+      document.documentElement.classList.contains(PRINT_LAYOUT_CLASS)
+    )
+      return;
     const limit = millimetresToPx(PAPER_CONTENT_MM);
     for (const svg of root.querySelectorAll<SVGSVGElement>("svg")) {
       const { width, height } = svg.getBoundingClientRect();

@@ -155,6 +155,40 @@ public abstract class DecomposerBase
     protected static IDisposable SystemAttributedBatchWrites(IAuditContext auditContext)
         => SystemAuditScope.Push(auditContext);
 
+    protected static bool TryGetString(Dictionary<string, object> props, string key, out string value)
+    {
+        value = default!;
+        if (!props.TryGetValue(key, out var obj))
+            return false;
+
+        if (obj is string s) { value = s; return true; }
+        if (obj is System.Text.Json.JsonElement el && el.ValueKind == System.Text.Json.JsonValueKind.String)
+        { value = el.GetString()!; return true; }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Parses an enum from one defined member name, ignoring case. <see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/>
+    /// also accepts numeric strings, comma lists that OR members together and padding, none of which
+    /// an upload's string field can be trusted to mean.
+    /// </summary>
+    protected static bool TryParseDefinedName<TEnum>(string? value, out TEnum result)
+        where TEnum : struct, Enum
+    {
+        foreach (var name in Enum.GetNames<TEnum>())
+        {
+            if (string.Equals(name, value, StringComparison.OrdinalIgnoreCase))
+            {
+                result = Enum.Parse<TEnum>(name);
+                return true;
+            }
+        }
+
+        result = default;
+        return false;
+    }
+
     /// <summary>
     /// The batch twin of <see cref="UpsertByLegacyIdAsync"/>: a record whose legacy id is stored
     /// updates that row and lands in <see cref="DecompositionResult.UpdatedRecords"/>, so a resend
