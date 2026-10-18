@@ -31,7 +31,7 @@ public class GlookoActivityMapper(string connectorSource, GlookoTimeMapper timeM
     {
         var results = new List<Activity>();
 
-        foreach (var ex in exercises)
+        foreach (var ex in ConnectorFaults.NonNullRecords(exercises, _logger, _connectorSource, "SSV2 exercise"))
         {
             try
             {
@@ -71,7 +71,7 @@ public class GlookoActivityMapper(string connectorSource, GlookoTimeMapper timeM
     {
         var results = new List<Activity>();
 
-        foreach (var ev in exerciseEvents)
+        foreach (var ev in ConnectorFaults.NonNullRecords(exerciseEvents, _logger, _connectorSource, "SSV2 exercise event"))
         {
             try
             {

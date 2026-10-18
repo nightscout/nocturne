@@ -26,7 +26,7 @@ public class GlookoBodyWeightMapper(string connectorSource, GlookoTimeMapper tim
     {
         var results = new List<BodyWeight>();
 
-        foreach (var w in weights)
+        foreach (var w in ConnectorFaults.NonNullRecords(weights, _logger, _connectorSource, "SSV2 weight"))
         {
             try
             {
@@ -55,7 +55,7 @@ public class GlookoBodyWeightMapper(string connectorSource, GlookoTimeMapper tim
     {
         var results = new List<BodyWeight>();
 
-        foreach (var w in weights)
+        foreach (var w in ConnectorFaults.NonNullRecords(weights, _logger, _connectorSource, "SSV2 Validic weight"))
         {
             try
             {

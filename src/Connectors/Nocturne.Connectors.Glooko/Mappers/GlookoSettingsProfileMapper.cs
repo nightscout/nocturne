@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
 
@@ -83,7 +84,7 @@ public class GlookoSettingsProfileMapper
 
         // Basal programs
         if (settings.BasalSettings != null)
-            foreach (var basal in settings.BasalSettings)
+            foreach (var basal in ConnectorFaults.NonNullRecords(settings.BasalSettings, _logger, _connectorSource, "SSV2 basal setting"))
             {
                 if (basal.Segments is not { Length: > 0 })
                     continue;
@@ -97,7 +98,7 @@ public class GlookoSettingsProfileMapper
 
         // Bolus programs (ISF, ICR, target BG)
         if (settings.BolusSettings != null)
-            foreach (var bolus in settings.BolusSettings)
+            foreach (var bolus in ConnectorFaults.NonNullRecords(settings.BolusSettings, _logger, _connectorSource, "SSV2 bolus setting"))
             {
                 var name = ResolveName(bolus.ProfileName, bolus.ProfileId);
 

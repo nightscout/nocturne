@@ -753,7 +753,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     if (meal.SoftDeleted == true || string.IsNullOrEmpty(meal.Guid) || meal.Foods == null) continue;
                     foreach (var food in meal.Foods)
                     {
-                        if (food.SoftDeleted != true && !string.IsNullOrEmpty(food.Guid))
+                        if (food is { SoftDeleted: not true, Guid.Length: > 0 })
                             foodGuidToMealGuid.TryAdd(food.Guid, meal.Guid!);
                     }
                 }

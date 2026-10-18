@@ -15,6 +15,9 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     private readonly GlookoTimeMapper _timeMapper = timeMapper ?? throw new ArgumentNullException(nameof(timeMapper));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
+    private IReadOnlyList<T> Records<T>(IEnumerable<T?>? records, string recordType) where T : class =>
+        ConnectorFaults.NonNullRecords(records, _logger, _connectorSource, recordType);
+
     /// <summary>
     /// Maps V2 batch data (NormalBoluses and Foods) to Bolus and CarbIntake records.
     /// </summary>
@@ -26,7 +29,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
         if (batchData.NormalBoluses != null)
         {
-            foreach (var bolus in batchData.NormalBoluses)
+            foreach (var bolus in Records(batchData.NormalBoluses, "V2 bolus"))
             {
                 try
                 {
@@ -99,7 +102,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
         if (batchData.Foods != null)
         {
-            foreach (var food in batchData.Foods)
+            foreach (var food in Records(batchData.Foods, "V2 food"))
             {
                 try
                 {
@@ -149,7 +152,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         var carbs = new List<CarbIntake>();
         if (batchData.Foods == null) return carbs;
 
-        foreach (var food in batchData.Foods)
+        foreach (var food in Records(batchData.Foods, "V2 food"))
         {
             try
             {
@@ -197,7 +200,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         var results = new List<ConnectorFoodEntryImport>();
         if (batchData.Foods == null) return results;
 
-        foreach (var food in batchData.Foods)
+        foreach (var food in Records(batchData.Foods, "V2 food"))
         {
             try
             {
@@ -303,9 +306,9 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
         var series = graphData.Series;
 
-        var deliveredBoluses = (series.DeliveredBolus ?? []).Select(b => (bolus: b, automatic: false));
-        var automaticBoluses = (series.AutomaticBolus ?? []).Select(b => (bolus: b, automatic: true));
-        var injectionBoluses = (series.InjectionBolus ?? []).Select(b => (bolus: b, automatic: false));
+        var deliveredBoluses = Records(series.DeliveredBolus, "V3 delivered bolus").Select(b => (bolus: b, automatic: false));
+        var automaticBoluses = Records(series.AutomaticBolus, "V3 automatic bolus").Select(b => (bolus: b, automatic: true));
+        var injectionBoluses = Records(series.InjectionBolus, "V3 injection bolus").Select(b => (bolus: b, automatic: false));
 
         var allBolusSeries = deliveredBoluses.Concat(automaticBoluses).Concat(injectionBoluses);
 
@@ -402,7 +405,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         if (graphData?.Series?.CarbAll == null)
             return carbs;
 
-        foreach (var point in graphData.Series.CarbAll)
+        foreach (var point in Records(graphData.Series.CarbAll, "V3 carbAll"))
         {
             try
             {
@@ -482,7 +485,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         if (points == null)
             return;
 
-        foreach (var change in points)
+        foreach (var change in Records(points, $"V3 {eventType}"))
         {
             try
             {
@@ -582,7 +585,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         var v2FoodByGuid = new Dictionary<string, GlookoFood>(StringComparer.OrdinalIgnoreCase);
         if (v2Foods != null)
         {
-            foreach (var f in v2Foods)
+            foreach (var f in Records(v2Foods, "V2 food"))
             {
                 if (!string.IsNullOrEmpty(f.Guid) && f.SoftDeleted != true)
                     v2FoodByGuid.TryAdd(f.Guid, f);
@@ -602,7 +605,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                 var mealLabel = meal.MealType ?? "Meal";
 
-                foreach (var food in meal.Foods)
+                foreach (var food in Records(meal.Foods, "V3 history food"))
                 {
                     try
                     {
@@ -735,7 +738,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
         foreach (var entry in historiesData.Histories)
         {
-            if (entry.Type == "meals" && entry.Item != null && entry.SoftDeleted != true)
+            if (entry is { Type: "meals", Item: not null, SoftDeleted: not true })
                 yield return entry.Item;
         }
     }
@@ -757,7 +760,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         // Map gkInsulinBasal → BasalInjection
         if (graphData.Series.GkInsulinBasal != null)
         {
-            foreach (var point in graphData.Series.GkInsulinBasal)
+            foreach (var point in Records(graphData.Series.GkInsulinBasal, "V3 gkInsulinBasal"))
             {
                 try
                 {
@@ -793,7 +796,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         // Map gkInsulinBolus → Bolus (pen bolus injection)
         if (graphData.Series.GkInsulinBolus != null)
         {
-            foreach (var point in graphData.Series.GkInsulinBolus)
+            foreach (var point in Records(graphData.Series.GkInsulinBolus, "V3 gkInsulinBolus"))
             {
                 try
                 {
@@ -850,7 +853,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         var basalInjections = new List<BasalInjection>();
         var boluses = new List<Bolus>();
 
-        foreach (var basal in injectionBasals)
+        foreach (var basal in Records(injectionBasals, "SSV2 injection basal"))
         {
             try
             {
@@ -884,7 +887,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
             }
         }
 
-        foreach (var bolus in injectionBoluses)
+        foreach (var bolus in Records(injectionBoluses, "SSV2 injection bolus"))
         {
             try
             {
@@ -943,7 +946,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         var basalInjections = new List<BasalInjection>();
         var boluses = new List<Bolus>();
 
-        foreach (var evt in insulinEvents)
+        foreach (var evt in Records(insulinEvents, "SSV2 insulin event"))
         {
             try
             {
@@ -1034,7 +1037,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     {
         var carbs = new List<CarbIntake>();
 
-        foreach (var evt in carbsEvents)
+        foreach (var evt in Records(carbsEvents, "SSV2 carbs event"))
         {
             try
             {
@@ -1087,7 +1090,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     {
         var boluses = new List<Bolus>();
 
-        foreach (var eb in extendedBoluses)
+        foreach (var eb in Records(extendedBoluses, "SSV2 extended bolus"))
         {
             try
             {

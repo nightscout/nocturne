@@ -22,7 +22,7 @@ public class GlookoNoteMapper(string connectorSource, GlookoTimeMapper timeMappe
     {
         var results = new List<Note>();
 
-        foreach (var note in notes)
+        foreach (var note in ConnectorFaults.NonNullRecords(notes, _logger, _connectorSource, "SSV2 note"))
         {
             try
             {

@@ -25,7 +25,7 @@ public class GlookoStepCountMapper(string connectorSource, GlookoTimeMapper time
     {
         var results = new List<StepCount>();
 
-        foreach (var r in routines)
+        foreach (var r in ConnectorFaults.NonNullRecords(routines, _logger, _connectorSource, "SSV2 routine"))
         {
             try
             {

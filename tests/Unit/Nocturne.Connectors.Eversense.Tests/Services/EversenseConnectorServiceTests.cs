@@ -171,6 +171,49 @@ public class EversenseConnectorServiceTests
             It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>
+    /// A null in the patient list is one malformed record. It is dropped before the list is read, so
+    /// the patient beside it still syncs rather than the run failing on every cycle.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_NullEntryInThePatientList_SyncsThePatientBesideIt()
+    {
+        var patients = new List<EversensePatientDatum?>
+        {
+            null,
+            new()
+            {
+                UserName = "patient@example.com",
+                CurrentGlucose = 120,
+                GlucoseTrend = 3,
+                CgTime = DateTimeOffset.UtcNow.AddMinutes(-2).ToString("O"),
+                Units = 0,
+                IsTransmitterConnected = true
+            }
+        };
+
+        var publisherMock = new Mock<IConnectorPublisher>();
+        publisherMock.Setup(p => p.IsAvailable).Returns(true);
+        publisherMock.Setup(p => p.Glucose.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var fixture = new ServiceFixture(
+            httpResponses: new Dictionary<string, HttpResponseMessage>
+            {
+                [EversenseConstants.Endpoints.GetFollowingPatientList] = CreateJsonResponse(patients)
+            },
+            publisher: publisherMock.Object);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue(string.Join("; ", result.Errors));
+        result.ItemsSynced.Should().ContainKey(SyncDataType.Glucose).WhoseValue.Should().Be(1);
+    }
+
     [Fact]
     public async Task SyncDataAsync_TransmitterDisconnected_SkipsPublishAndReportsSuccess()
     {

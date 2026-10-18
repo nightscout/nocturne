@@ -15,7 +15,7 @@ public class TidepoolSensorGlucoseMapper(ILogger logger, string connectorSource)
     {
         if (bgValues == null || bgValues.Length == 0) return [];
 
-        return bgValues
+        return ConnectorFaults.NonNullRecords(bgValues, _logger, _connectorSource, "Tidepool BG value")
             .Where(bg => bg.Value > 0 && bg.Time.HasValue)
             .Select(ConvertBgValue)
             .Where(sg => sg != null)

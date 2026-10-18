@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Eversense.Configurations;
 using Nocturne.Connectors.Eversense.Mappers;
 using Nocturne.Connectors.Eversense.Models;
@@ -200,7 +201,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                 }
 
                 var patients = await DeserializeResponseAsync<List<EversensePatientDatum>>(response, cancellationToken);
-                return patients ?? [];
+                return ConnectorFaults.NonNullRecords(patients, _logger, ConnectorSource, "Eversense patient").ToList();
             },
             _retryDelayStrategy,
             reAuthenticateOnUnauthorized: ReauthenticateWith(_tokenProvider, config, t => token = t),

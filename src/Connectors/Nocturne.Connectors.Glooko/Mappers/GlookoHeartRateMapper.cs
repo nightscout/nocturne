@@ -23,7 +23,7 @@ public class GlookoHeartRateMapper(string connectorSource, GlookoTimeMapper time
     {
         var results = new List<HeartRate>();
 
-        foreach (var m in measurements)
+        foreach (var m in ConnectorFaults.NonNullRecords(measurements, _logger, _connectorSource, "SSV2 biometric measurement"))
         {
             try
             {

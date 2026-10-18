@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace Nocturne.Connectors.Core.Utilities;
 
@@ -34,4 +35,39 @@ public static class ConnectorFaults
         ex is HttpRequestException or TimeoutException or IOException or InvalidDataException
         || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested)
         || IsMalformedRecord(ex);
+
+    /// <summary>
+    ///     The elements of a vendor array a mapper can map. A <c>null</c> element is a malformed record
+    ///     too, but dereferencing it raises <see cref="NullReferenceException"/>, which
+    ///     <see cref="IsMalformedRecord"/> leaves to fail the run because the same exception also marks a
+    ///     connector defect. Mappers drop null elements here, before the loop, instead.
+    /// </summary>
+    /// <returns>The non-null elements in order; empty when <paramref name="records"/> is <c>null</c>.</returns>
+    public static IReadOnlyList<T> NonNullRecords<T>(
+        IEnumerable<T?>? records,
+        ILogger logger,
+        string connectorSource,
+        string recordType)
+        where T : class
+    {
+        if (records == null)
+            return [];
+
+        var kept = new List<T>();
+        var dropped = 0;
+        foreach (var record in records)
+        {
+            if (record == null)
+                dropped++;
+            else
+                kept.Add(record);
+        }
+
+        if (dropped > 0)
+            logger.LogInformation(
+                "[{ConnectorSource}] Dropped {Count} null {RecordType} records",
+                connectorSource, dropped, recordType);
+
+        return kept;
+    }
 }

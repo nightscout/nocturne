@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
 
@@ -32,7 +33,7 @@ public class GlookoStateSpanMapper
 
         // SuspendBasal -> PumpMode StateSpan only (BasalDelivery now handled by GlookoTempBasalMapper)
         if (series.SuspendBasal != null)
-            foreach (var suspend in series.SuspendBasal)
+            foreach (var suspend in ConnectorFaults.NonNullRecords(series.SuspendBasal, _logger, _connectorSource, "V3 suspendBasal"))
             {
                 var startTimestamp = _timeMapper.GetCorrectedGlookoTime(suspend.X);
                 var durationSeconds = suspend.Duration ?? 0;
@@ -61,7 +62,7 @@ public class GlookoStateSpanMapper
 
         // LgsPlgs -> PumpMode StateSpan only (BasalDelivery now handled by GlookoTempBasalMapper)
         if (series.LgsPlgs != null)
-            foreach (var lgsEvent in series.LgsPlgs)
+            foreach (var lgsEvent in ConnectorFaults.NonNullRecords(series.LgsPlgs, _logger, _connectorSource, "V3 lgsPlgs"))
             {
                 var startTimestamp = _timeMapper.GetCorrectedGlookoTime(lgsEvent.X);
                 var durationSeconds = lgsEvent.Duration ?? 0;
@@ -100,7 +101,7 @@ public class GlookoStateSpanMapper
         // ProfileChange -> Profile StateSpan (unchanged)
         if (series.ProfileChange != null)
         {
-            var profileChanges = series.ProfileChange.OrderBy(p => p.X).ToList();
+            var profileChanges = ConnectorFaults.NonNullRecords(series.ProfileChange, _logger, _connectorSource, "V3 profileChange").OrderBy(p => p.X).ToList();
             for (var i = 0; i < profileChanges.Count; i++)
             {
                 var change = profileChanges[i];
@@ -192,7 +193,7 @@ public class GlookoStateSpanMapper
         if (dataPoints == null)
             return;
 
-        foreach (var point in dataPoints)
+        foreach (var point in ConnectorFaults.NonNullRecords(dataPoints, _logger, _connectorSource, $"V3 {glookoType}"))
         {
             if (point.Interpolated)
                 continue;
@@ -233,7 +234,7 @@ public class GlookoStateSpanMapper
         if (dataPoints == null)
             return;
 
-        foreach (var point in dataPoints)
+        foreach (var point in ConnectorFaults.NonNullRecords(dataPoints, _logger, _connectorSource, $"V3 {glookoType}"))
         {
             if (point.Interpolated)
                 continue;
@@ -277,7 +278,7 @@ public class GlookoStateSpanMapper
 
         // SuspendBasals -> PumpMode StateSpan only (BasalDelivery now handled by GlookoTempBasalMapper)
         if (batchData.SuspendBasals != null)
-            foreach (var suspend in batchData.SuspendBasals)
+            foreach (var suspend in ConnectorFaults.NonNullRecords(batchData.SuspendBasals, _logger, _connectorSource, "V2 suspend basal"))
             {
                 if (string.IsNullOrWhiteSpace(suspend.Timestamp))
                 {

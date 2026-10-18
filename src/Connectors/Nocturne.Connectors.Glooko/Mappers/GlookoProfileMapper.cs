@@ -17,6 +17,9 @@ public class GlookoProfileMapper
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    private IReadOnlyList<T> Records<T>(IEnumerable<T?>? records, string recordType) where T : class =>
+        ConnectorFaults.NonNullRecords(records, _logger, _connectorSource, recordType);
+
     /// <summary>
     ///     Transforms Glooko device settings into Nocturne Profile objects.
     ///     Each historical settings snapshot becomes a separate Profile.
@@ -32,6 +35,14 @@ public class GlookoProfileMapper
         {
             foreach (var (timestamp, settings) in settingsSnapshots)
             {
+                if (settings == null)
+                {
+                    _logger.LogInformation(
+                        "[{ConnectorSource}] Dropped null profile settings for device {DeviceGuid} at {Timestamp}",
+                        _connectorSource, deviceGuid, timestamp);
+                    continue;
+                }
+
                 try
                 {
                     var profile = MapSettingsToProfile(settings, timestamp);
@@ -77,7 +88,7 @@ public class GlookoProfileMapper
         {
             var ordered = settingsSnapshots
                 .Select(kv => (Key: kv.Key, Parsed: TryParseTimestamp(kv.Key), Settings: kv.Value))
-                .Where(x => x.Parsed.HasValue)
+                .Where(x => x.Parsed.HasValue && x.Settings != null)
                 .OrderBy(x => x.Parsed!.Value)
                 .ToList();
 
@@ -155,26 +166,26 @@ public class GlookoProfileMapper
 
         // Map basal profiles
         if (settings.PumpProfilesBasal != null)
-            foreach (var basalProfile in settings.PumpProfilesBasal)
+            foreach (var basalProfile in Records(settings.PumpProfilesBasal, "basal profile"))
             {
                 if (basalProfile.Segments?.Data == null || basalProfile.Segments.Data.Length == 0)
                     continue;
 
                 var profileName = basalProfile.Segments.ProfileName ?? "Default";
                 var profileData = GetOrCreateProfileData(store, profileName, settings);
-                profileData.Basal = MapSegmentsToTimeValues(basalProfile.Segments.Data);
+                profileData.Basal = MapSegmentsToTimeValues(Records(basalProfile.Segments.Data, "basal segment"));
             }
 
         // Map bolus profiles (ISF, ICR, target BG)
         if (settings.ProfilesBolus != null)
-            foreach (var bolusProfile in settings.ProfilesBolus)
+            foreach (var bolusProfile in Records(settings.ProfilesBolus, "bolus profile"))
             {
                 // ISF
                 if (bolusProfile.IsfSegments?.Data is { Length: > 0 })
                 {
                     var profileName = bolusProfile.IsfSegments.ProfileName ?? "Default";
                     var profileData = GetOrCreateProfileData(store, profileName, settings);
-                    profileData.Sens = MapSegmentsToTimeValues(bolusProfile.IsfSegments.Data);
+                    profileData.Sens = MapSegmentsToTimeValues(Records(bolusProfile.IsfSegments.Data, "ISF segment"));
                 }
 
                 // ICR
@@ -182,7 +193,7 @@ public class GlookoProfileMapper
                 {
                     var profileName = bolusProfile.InsulinToCarbRatioSegments.ProfileName ?? "Default";
                     var profileData = GetOrCreateProfileData(store, profileName, settings);
-                    profileData.CarbRatio = MapSegmentsToTimeValues(bolusProfile.InsulinToCarbRatioSegments.Data);
+                    profileData.CarbRatio = MapSegmentsToTimeValues(Records(bolusProfile.InsulinToCarbRatioSegments.Data, "carb ratio segment"));
                 }
 
                 // Target BG
@@ -190,7 +201,7 @@ public class GlookoProfileMapper
                 {
                     var profileName = bolusProfile.TargetBgSegments.ProfileName ?? "Default";
                     var profileData = GetOrCreateProfileData(store, profileName, settings);
-                    MapTargetBgSegments(profileData, bolusProfile.TargetBgSegments.Data);
+                    MapTargetBgSegments(profileData, Records(bolusProfile.TargetBgSegments.Data, "target BG segment"));
                 }
             }
 
@@ -236,14 +247,14 @@ public class GlookoProfileMapper
         return profileData;
     }
 
-    private static List<TimeValue> MapSegmentsToTimeValues(GlookoV3SegmentData[] segments)
+    private static List<TimeValue> MapSegmentsToTimeValues(IReadOnlyList<GlookoV3SegmentData> segments)
     {
         var timeValues = new List<TimeValue>();
 
         foreach (var segment in segments)
         {
             // Filter out zero-duration segments (sometimes Glooko returns duplicates)
-            if (segment.Duration <= 0 && segments.Length > 1)
+            if (segment.Duration <= 0 && segments.Count > 1)
                 continue;
 
             var tv = HoursToTimeValue(segment.SegmentStart, segment.Value);
@@ -253,7 +264,7 @@ public class GlookoProfileMapper
         return timeValues;
     }
 
-    private static void MapTargetBgSegments(ProfileData profileData, GlookoV3TargetBgSegmentData[] segments)
+    private static void MapTargetBgSegments(ProfileData profileData, IReadOnlyList<GlookoV3TargetBgSegmentData> segments)
     {
         var targetLow = new List<TimeValue>();
         var targetHigh = new List<TimeValue>();

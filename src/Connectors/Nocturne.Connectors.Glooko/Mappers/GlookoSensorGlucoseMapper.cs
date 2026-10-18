@@ -27,12 +27,15 @@ public class GlookoSensorGlucoseMapper
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    private IReadOnlyList<T> Records<T>(IEnumerable<T?>? records, string recordType) where T : class =>
+        ConnectorFaults.NonNullRecords(records, _logger, _connectorSource, recordType);
+
     public IEnumerable<SensorGlucose> TransformBatchDataToSensorGlucose(GlookoBatchData batchData)
     {
         var results = new List<SensorGlucose>();
         if (batchData?.Readings == null) return results;
 
-        foreach (var reading in batchData.Readings)
+        foreach (var reading in Records(batchData.Readings, "V2 CGM reading"))
         {
             var sg = ParseSensorGlucose(reading);
             if (sg != null) results.Add(sg);
@@ -51,7 +54,7 @@ public class GlookoSensorGlucoseMapper
         var results = new List<SensorGlucose>();
         if (egvs == null) return results;
 
-        foreach (var egv in egvs)
+        foreach (var egv in Records(egvs, "SSV2 egv"))
         {
             if (egv.Calculated || egv.SoftDeleted || egv.GlucoseValue <= 0) continue;
 
@@ -96,9 +99,9 @@ public class GlookoSensorGlucoseMapper
         if (graphData?.Series == null) return results;
 
         var series = graphData.Series;
-        var allCgm = (series.CgmHigh ?? [])
-            .Concat(series.CgmNormal ?? [])
-            .Concat(series.CgmLow ?? [])
+        var allCgm = Records(series.CgmHigh, "V3 cgmHigh")
+            .Concat(Records(series.CgmNormal, "V3 cgmNormal"))
+            .Concat(Records(series.CgmLow, "V3 cgmLow"))
             .OrderBy(p => p.X);
 
         foreach (var reading in allCgm.Where(r => !r.Calculated))
@@ -142,9 +145,9 @@ public class GlookoSensorGlucoseMapper
         if (graphData?.Series == null) return results;
 
         var series = graphData.Series;
-        var allBg = (series.BgHigh ?? [])
-            .Concat(series.BgNormal ?? [])
-            .Concat(series.BgLow ?? [])
+        var allBg = Records(series.BgHigh, "V3 bgHigh")
+            .Concat(Records(series.BgNormal, "V3 bgNormal"))
+            .Concat(Records(series.BgLow, "V3 bgLow"))
             .OrderBy(p => p.X);
 
         foreach (var reading in allBg)
@@ -189,7 +192,7 @@ public class GlookoSensorGlucoseMapper
         var results = new List<BGCheck>();
         if (batchData?.MeterReadings == null) return results;
 
-        foreach (var reading in batchData.MeterReadings)
+        foreach (var reading in Records(batchData.MeterReadings, "V2 meter reading"))
         {
             var bgCheck = ParseBGCheck(reading);
             if (bgCheck != null) results.Add(bgCheck);

@@ -16,7 +16,7 @@ public class DexcomSensorGlucoseMapper(ILogger logger)
         if (batchData == null || batchData.Length == 0) return [];
 
         var now = DateTime.UtcNow;
-        return batchData
+        return ConnectorFaults.NonNullRecords(batchData, _logger, DataSources.DexcomConnector, "Dexcom entry")
             .Where(entry => entry.Value > 0)
             .Select(entry => ConvertEntry(entry, now))
             .Where(sg => sg != null)

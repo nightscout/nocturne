@@ -20,7 +20,7 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
 
         if (boluses != null)
         {
-            foreach (var bolus in boluses.Where(b => b.Time.HasValue))
+            foreach (var bolus in ConnectorFaults.NonNullRecords(boluses, _logger, _connectorSource, "Tidepool bolus").Where(b => b.Time.HasValue))
             {
                 try
                 {
@@ -46,7 +46,7 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
         // Process foods: correlate with bolus at same timestamp if present
         if (foods != null)
         {
-            foreach (var food in foods.Where(f => f.Time.HasValue))
+            foreach (var food in ConnectorFaults.NonNullRecords(foods, _logger, _connectorSource, "Tidepool food").Where(f => f.Time.HasValue))
             {
                 try
                 {

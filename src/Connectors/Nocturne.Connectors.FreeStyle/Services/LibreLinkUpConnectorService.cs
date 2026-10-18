@@ -209,20 +209,22 @@ public class LibreConnectorService(
 
             var connectionsResponse = await DeserializeResponseAsync<LibreConnectionsResponse>(response);
 
-            if (connectionsResponse?.Data == null || connectionsResponse.Data.Length == 0)
+            var connections = ConnectorFaults.NonNullRecords(
+                connectionsResponse?.Data, _logger, ConnectorSource, "LibreLinkUp connection");
+            if (connections.Count == 0)
             {
                 _logger.LogWarning("No LibreLinkUp connections found");
                 return;
             }
 
             if (!string.IsNullOrEmpty(config.PatientId))
-                _selectedConnection = connectionsResponse.Data.FirstOrDefault(c =>
+                _selectedConnection = connections.FirstOrDefault(c =>
                     c.PatientId == config.PatientId
                 );
 
             if (_selectedConnection == null)
             {
-                _selectedConnection = connectionsResponse.Data.First();
+                _selectedConnection = connections[0];
                 _logger.LogInformation(
                     "Selected LibreLinkUp connection: {PatientName} ({PatientId})",
                     _selectedConnection.FirstName + " " + _selectedConnection.LastName,
@@ -250,7 +252,8 @@ public class LibreConnectorService(
             return [];
         }
 
-        var measurements = graphResponse.Data.GraphData.ToList();
+        var measurements = ConnectorFaults.NonNullRecords(
+            graphResponse.Data.GraphData, _logger, ConnectorSource, "LibreLinkUp measurement").ToList();
         var latestMeasurement = graphResponse.Data.Connection.GlucoseMeasurement;
 
         var latestTimestamp = latestMeasurement.FactoryTimestamp;
