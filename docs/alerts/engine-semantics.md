@@ -368,6 +368,48 @@ cadence-independent. So no stored rule is affected. A host that does carry `conf
 confirm it N× faster at a shorter periodic cadence. It should express that confirmation as
 `sustained` instead.
 
+### 5.2 Context facts
+
+A **context fact** is a group of `SensorContext` fields (§4) that a host fills from one
+kind of record, so one write moves the whole group. A rule needs evaluating after a write
+only if its root kind, or any node of its condition tree, reads a fact that write touched.
+The crate's `facts::reads(kind)` gives the facts a kind's own evaluator reads, and
+`facts::references_any(type, params, facts)` walks a stored rule exactly as
+`references_wall_clock` does (§5.1), so an unknown root kind or a body that cannot be
+evaluated reads nothing. A host maps each record type it writes to the facts that record
+feeds, and on a live write evaluates only the enabled rules that reference one of them.
+
+| Fact | `SensorContext` fields | Kinds that read it |
+|---|---|---|
+| `Glucose` | `LatestValue`, `LatestTimestamp`, `LastReadingAt`, `TrendRate`, `TrendBucket`, `GlucoseBucket` | `threshold`, `rate_of_change`, `signal_loss`, `staleness`, `trend`, `glucose_bucket` |
+| `Predictions` | `Predictions` | `predicted` |
+| `Insulin` | `IobUnits`, `LastBolusAt`, `ActiveTempBasal` | `iob`, `temp_basal`, `time_since_last_bolus` |
+| `Carbs` | `CobGrams`, `LastCarbAt` | `cob`, `time_since_last_carb` |
+| `Pump` | `ReservoirUnits`, `ReservoirIsLowerBound`, `PumpBatteryPercent`, `HasEverPumpSnapshot` | `reservoir`, `pump_battery`, `pump_suspended` |
+| `Aps` | `LastApsCycleAt`, `LastApsEnactedAt`, `HasEverApsCycled`, `SensitivityRatio`, `HasEverApsSensitivity` | `loop_stale`, `loop_enaction_stale`, `sensitivity_ratio` |
+| `Uploader` | `UploaderBatteryPercent`, `HasEverUploaderSnapshot` | `uploader_battery` |
+| `StateSpans` | `ActiveOverride`, `ActivePumpSuspension`, `ActivePumpState`, `ActiveStateSpans` | `override_active`, `pump_suspended`, `pump_state`, `state_span_active` |
+| `DeviceAges` | `LastSiteChangeAt`, `LastSensorStartAt` | `site_age`, `sensor_age` |
+| `Trackers` | `ActiveTrackers` | `tracker_age` |
+| `Sleep` | `SleepSessionActive` | `sleep_session_active` |
+| `ActiveAlerts` | `ActiveAlerts` | `alert_state` |
+| `DoNotDisturb` | `ActiveDoNotDisturb` | `do_not_disturb` |
+| `TimeZone` | `TenantTimeZoneId` | `time_of_day`, `day_of_week` |
+
+The containers `composite`, `not` and `sustained` read no fact; a `sustained` timer is
+evaluation state, not context. `pump_suspended` is the one kind that reads two facts: its
+guard is the pump snapshot and its anchor the suspension span.
+
+A fact is named by what the condition reads, not by every record that feeds it. Several
+are derived: `IobUnits` from boluses and temp basals, `CobGrams` from carbs and insulin,
+`Predictions` from glucose and treatments, `GlucoseBucket` from the newest reading and the
+target range. A target-range write therefore touches `Glucose`.
+
+`now` is not a fact. No write moves it, and the wall-clock kinds it drives are evaluated on
+a timer (§5.1). Every wall-clock kind still reads the fact that holds its anchor, so a
+write that moves the anchor (a site change, a resumed reading) re-evaluates it at once
+instead of at the next sweep.
+
 ---
 
 ## 6. Excursion state machine (`ExcursionTracker`)

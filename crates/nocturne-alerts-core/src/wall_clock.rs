@@ -5,9 +5,8 @@
 
 use serde_json::Value;
 
-use crate::enums::WireEnum;
-use crate::leaf_identity::collect_leaves;
-use crate::model::{ConditionKind, Node, parse_payload};
+use crate::leaf_identity::rule_references;
+use crate::model::ConditionKind;
 
 /// Whether `kind` measures elapsed time against an anchor a reading does not
 /// move. Containers are not: a `sustained` over a reading-driven child only
@@ -60,27 +59,13 @@ pub fn is_wall_clock(kind: ConditionKind) -> bool {
 /// as node dispatch resolves them (engine-semantics.md §1.2).
 #[must_use]
 pub fn references_wall_clock(condition_type: &str, condition_params: &Value) -> bool {
-    let Some(kind) = ConditionKind::from_name(condition_type) else {
-        return false;
-    };
-    if is_wall_clock(kind) {
-        return true;
-    }
-    let Ok(payload) = parse_payload(kind, condition_params) else {
-        return false;
-    };
-    let root = Node::from_rule(kind, Some(payload));
-    collect_leaves(&root).into_iter().flatten().any(|leaf| {
-        leaf.type_str
-            .as_deref()
-            .and_then(ConditionKind::resolve)
-            .is_some_and(is_wall_clock)
-    })
+    rule_references(condition_type, condition_params, is_wall_clock)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::enums::WireEnum;
     use serde_json::json;
 
     fn manifest_names(key: &str) -> Vec<String> {
