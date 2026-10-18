@@ -9,8 +9,8 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Services.ClientDevices;
 
 /// <summary>
-/// Persists client device registrations via <see cref="NocturneDbContext"/>. Tenant is supplied by
-/// the data context (carrier); the subject is passed in from the authenticated request.
+/// Persists client device registrations. The tenant is the scope's reader's; the subject is passed in
+/// from the authenticated request.
 /// </summary>
 /// <seealso cref="IClientDeviceService"/>
 public class ClientDeviceService : IClientDeviceService

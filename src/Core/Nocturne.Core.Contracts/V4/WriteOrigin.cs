@@ -5,9 +5,9 @@ namespace Nocturne.Core.Contracts.V4;
 /// is a genuinely-new live event worth broadcasting or a bulk/historical import that must stay silent.
 /// </summary>
 /// <remarks>
-/// Required (no default) on every mutating repository method and on the decomposers. Ambient/AsyncLocal
-/// scoping was rejected: pooled DbContext carriers in this codebase have leaked prior-lessee state, so
-/// the origin is threaded explicitly as a parameter instead.
+/// Required (no default) on every mutating repository method and on the decomposers. It is threaded
+/// explicitly rather than held in ambient (AsyncLocal) state, which can leak from one unit of work into
+/// the next.
 /// </remarks>
 public enum WriteOrigin
 {

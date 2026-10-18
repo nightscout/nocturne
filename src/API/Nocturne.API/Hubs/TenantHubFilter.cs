@@ -16,12 +16,12 @@ namespace Nocturne.API.Hubs;
 /// resolved from it inside a method body.
 ///
 /// It covers the hub's constructor dependencies too, although <c>DefaultHubDispatcher</c> activates
-/// the hub from the invocation scope before the filter pipeline runs: a <c>NocturneDbContext</c> reads
-/// its scope's accessor live rather than at construction, so one injected into the hub reaches the
-/// tenant set here by the time the method body queries it. A service that copies the tenant out of
-/// the accessor in its constructor would still see none. Hub method bodies that resolve services
-/// from the handshake request's scope (<c>Context.GetHttpContext().RequestServices</c>) read the
-/// tenant <see cref="Multitenancy.TenantResolutionMiddleware"/> set on that scope's accessor.
+/// the hub from the invocation scope before the filter pipeline runs: a context from
+/// <c>INocturneDbContextFactory</c> reads its scope's accessor live rather than at construction, so
+/// one opened from a factory injected into the hub reaches the tenant set here. A service that copies
+/// the tenant out of the accessor in its constructor would still see none. Hub method bodies that
+/// resolve services from the handshake request's scope (<c>Context.GetHttpContext().RequestServices</c>)
+/// read the tenant <see cref="Multitenancy.TenantResolutionMiddleware"/> set on that scope's accessor.
 ///
 /// <c>TenantHubFilterTests</c> pins that the invocation scope carries the connection's tenant.
 /// </remarks>

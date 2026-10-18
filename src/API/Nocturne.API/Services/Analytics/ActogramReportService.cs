@@ -12,10 +12,8 @@ namespace Nocturne.API.Services.Analytics;
 /// <inheritdoc cref="IActogramReportService"/>
 /// <remarks>
 /// Issues the required queries (glucose, sleep state spans, step counts,
-/// heart rates) sequentially: every dependency resolves through the same
-/// per-request scoped <c>NocturneDbContext</c>, and EF Core's
-/// <c>ConcurrencyDetector</c> rejects parallel operations on a single
-/// context with <c>InvalidOperationException</c>. Threshold resolution
+/// heart rates) sequentially, so one request holds one pooled connection at a
+/// time. Threshold resolution
 /// mirrors <c>ProfileLoadStage</c>: the clinical low/high band is fixed, and the
 /// active profile's personal target is carried separately in
 /// <see cref="ChartThresholdsDto.TargetLow"/>/<see cref="ChartThresholdsDto.TargetHigh"/>

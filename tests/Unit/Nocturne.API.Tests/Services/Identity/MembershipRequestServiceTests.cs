@@ -32,7 +32,7 @@ public class MembershipRequestServiceTests : IDisposable
     {
         _db = TestDbContextFactory.CreateSqlite();
 
-        // The request's scoped context: the service always works for the request's own tenant.
+        // The service always works for the request's own tenant.
         _dbContext = _db.CreateContext(_tenantId);
 
         _tenantService = new Mock<ITenantService>();

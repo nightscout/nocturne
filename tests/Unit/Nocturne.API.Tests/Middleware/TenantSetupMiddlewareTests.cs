@@ -27,9 +27,7 @@ public class TenantSetupMiddlewareTests : IDisposable
     private readonly Mock<ITenantAccessor> _tenantAccessor;
 
     /// <summary>
-    /// Hands the middleware contexts over the test's own SQLite connection. The middleware takes a
-    /// factory rather than the request-scoped context so its reads are never flagged as a public
-    /// share, which the restrictive share policy on tenant_members would deny.
+    /// Hands the middleware contexts over the test's own SQLite connection.
     /// </summary>
     private sealed class SharedSqliteFactory(DbContextOptions<NocturneDbContext> options)
         : IDbContextFactory<NocturneDbContext>

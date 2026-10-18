@@ -155,7 +155,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
     {
         var (tenant, rule, excursionId) = await SeedAsync(active: true);
         await using var db = Context(tenant);
-        // The evaluating context already holds the rule row, as a scoped context can.
+        // The evaluating context already holds the rule row, as a caller-owned unit can.
         await db.AlertRules.SingleAsync(r => r.Id == rule.Id);
 
         var transition = await Tracker(new EditBeforeLockRepository(db, EditOnAnotherReplica(tenant, rule.Id)))
