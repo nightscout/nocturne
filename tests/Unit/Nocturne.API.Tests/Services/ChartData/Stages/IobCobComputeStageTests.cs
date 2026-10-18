@@ -546,6 +546,52 @@ public class IobCobComputeStageTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_BasalScheduleEditBetweenTicks_InvalidatesCachedSeries()
+    {
+        // TestMills is 22:13:20 UTC and the temp basal starts at 22:11:20. The edit adds a 2 U/h
+        // block from 22:10 to 22:13, which changes the rate at the temp basal's start but not at
+        // the only tick.
+        var basal = new List<ScheduleEntry> { new() { TimeAsSeconds = 0, Value = 1.0 } };
+        _mockTherapyTimelineResolver
+            .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
+                new TherapyTimeline([new TherapySegment(from, to, new TherapySnapshot(
+                    3.0, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour,
+                    null, null, 0, null, null, basal.ToList()))]));
+        _mockIobCalculator
+            .Setup(s => s.FromTempBasals(It.IsAny<List<TempBasal>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
+            .Returns((List<TempBasal> tempBasals, TherapySnapshot snapshot, long _) =>
+                new IobResult { BasalIob = snapshot.BasalRateAt(tempBasals[0].StartMills) });
+        var context = new ChartDataContext
+        {
+            StartTime = TestMills,
+            EndTime = TestMills,
+            IntervalMinutes = 5,
+            DefaultBasalRate = 1.0,
+            BolusList = [],
+            CarbIntakeList = [],
+            TempBasalList = [new TempBasal
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(TestMills - 2 * 60 * 1000).UtcDateTime,
+                Rate = 0.5,
+                Origin = TempBasalOrigin.Algorithm,
+            }],
+        };
+
+        var first = await _stage.ExecuteAsync(context, CancellationToken.None);
+        basal =
+        [
+            new() { TimeAsSeconds = 0, Value = 1.0 },
+            new() { TimeAsSeconds = 22 * 3600 + 10 * 60, Value = 2.0 },
+            new() { TimeAsSeconds = 22 * 3600 + 13 * 60, Value = 1.0 },
+        ];
+        var second = await _stage.ExecuteAsync(context, CancellationToken.None);
+
+        first.IobSeries.Should().ContainSingle().Which.Value.Should().Be(1.0);
+        second.IobSeries.Should().ContainSingle().Which.Value.Should().Be(2.0);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_BasalSeriesGetsOnlyDisplayTempBasals_WhileIobSeesPreWindowTempBasal()
     {
         var startTime = TestMills;

@@ -33,8 +33,8 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// <para>
 /// Results are cached in the local tier of <see cref="ITenantCache"/> for one minute. The cache
 /// key is a 64-bit SHA-256 prefix of every input the series depends on (treatments, temp basals,
-/// APS snapshots and the therapy values at each tick) combined with the rounded time boundaries
-/// and interval.
+/// APS snapshots and the contents of every therapy segment) combined with the rounded time
+/// boundaries and interval.
 /// </para>
 /// <para>
 /// Basal series construction is delegated to <see cref="IBasalSeriesBuilder"/>, which uses
@@ -291,9 +291,13 @@ internal sealed class IobCobComputeStage(
 
     /// <summary>
     /// Generate a cache key for IOB/COB calculations from a SHA-256 fingerprint of every input the
-    /// series depends on and the rounded time range. The therapy values are sampled at the same
-    /// ticks the calculation uses, without moving the timeline's cursor.
+    /// series depends on and the rounded time range.
     /// </summary>
+    /// <remarks>
+    /// The therapy part covers each segment's whole snapshot and the boundaries between segments,
+    /// not the values at the ticks: the calculation also reads the snapshot between ticks, e.g. DIA
+    /// at the window end and the scheduled basal rate at a temp basal's start.
+    /// </remarks>
     private static string GenerateIobCobCacheKey(
         List<Bolus> boluses,
         List<CarbIntake> carbIntakes,
@@ -352,24 +356,11 @@ internal sealed class IobCobComputeStage(
         }
 
         var segments = timeline.Segments;
-        var segment = 0;
-        for (var t = startTime; t <= endTime; t += intervalMs)
+        for (var i = 0; i < segments.Count; i++)
         {
-            while (segment < segments.Count - 1 && t >= segments[segment + 1].StartMills)
-                segment++;
-            var therapy = segments[segment].Snapshot;
-            sb.Append(therapy.Dia)
-                .Append(':')
-                .Append(therapy.PeakMinutes)
-                .Append(':')
-                .Append(therapy.CarbsPerHour)
-                .Append(':')
-                .Append(therapy.SensitivityAt(t))
-                .Append(':')
-                .Append(therapy.CarbRatioAt(t))
-                .Append(':')
-                .Append(therapy.BasalRateAt(t))
-                .Append('|');
+            if (i > 0)
+                sb.Append('@').Append(segments[i].StartMills).Append(':');
+            segments[i].Snapshot.AppendFingerprint(sb);
         }
 
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString())))[
