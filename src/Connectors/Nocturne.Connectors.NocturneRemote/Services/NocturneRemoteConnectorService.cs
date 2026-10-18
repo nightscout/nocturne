@@ -226,8 +226,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         return result;
     }
 
-    #region V4 Data Type Sync Methods
-
     private async Task SyncSensorGlucoseAsync(
         DateTime? from, DateTime? to, NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
@@ -305,10 +303,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             ImportHelper.PrepareForImport(records), PublishDeviceEventDataAsync, config, ct);
     }
 
-    #endregion
-
-    #region Legacy Model Sync Methods
-
     private async Task SyncStateSpansAsync(
         DateTime? from, DateTime? to, NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
@@ -367,10 +361,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         await PublishRecordTypeAsync(result, SyncDataType.Food, activeTypes,
             foods.ToList(), PublishFoodDataAsync, config, ct);
     }
-
-    #endregion
-
-    #region Fetch Helpers
 
     /// <summary>
     ///     One payload from the remote instance, fetched under the tenant's retry budget, raising
@@ -471,10 +461,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
         return body.Length <= maxQuotedBody ? body : body[..maxQuotedBody] + "...";
     }
-
-    #endregion
-
-    #region Pagination Helpers
 
     /// <summary>
     ///     Fetches every page of a V4 paginated endpoint. <typeparamref name="T"/> spans both the V4
@@ -586,10 +572,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             .Min();
     }
 
-    #endregion
-
-    #region URL Builders
-
     private static string BuildPaginatedUrl(
         string endpoint, DateTime? from, DateTime? to, int limit, int offset)
     {
@@ -618,8 +600,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
         return url;
     }
-
-    #endregion
 
     private void ResolveConfiguration(NocturneRemoteConnectorConfiguration config)
     {

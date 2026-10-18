@@ -2,9 +2,6 @@ using System.Net;
 
 namespace Nocturne.Connectors.Core.Extensions;
 
-/// <summary>
-///     Extension methods for HttpResponseMessage to standardize error handling across connectors.
-/// </summary>
 public static class HttpResponseExtensions
 {
     /// <summary>
@@ -19,7 +16,6 @@ public static class HttpResponseExtensions
             or HttpStatusCode.GatewayTimeout
             or HttpStatusCode.RequestTimeout;
 
-    /// <param name="response">The HTTP response to check</param>
     extension(HttpResponseMessage response)
     {
         /// <inheritdoc cref="IsRetryableStatusCode"/>

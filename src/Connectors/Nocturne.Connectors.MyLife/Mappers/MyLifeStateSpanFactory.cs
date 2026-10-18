@@ -13,9 +13,7 @@ internal static class MyLifeStateSpanFactory
     /// <summary>
     ///     Creates a TempBasal record from a MyLife event
     /// </summary>
-    /// <param name="ev">The MyLife event</param>
-    /// <param name="rate">The basal rate in U/h</param>
-    /// <param name="origin">The origin of the basal delivery</param>
+    /// <param name="rate">U/h.</param>
     /// <returns>A configured TempBasal record</returns>
     internal static TempBasal CreateTempBasal(
         MyLifeEvent ev,

@@ -28,14 +28,12 @@ public class GlookoV3HistoryEntry
     [JsonPropertyName("updatedBy")] public string? UpdatedBy { get; set; }
 
     /// <summary>
-    ///     The typed payload. Deserialized as a generic element; use helper methods
-    ///     or check <see cref="Type"/> to interpret the contents.
+    ///     Read as a meal whatever <see cref="Type"/> says; only entries whose type is <c>meals</c>
+    ///     are used (see <c>GlookoV4TreatmentMapper.ExtractMeals</c>).
     /// </summary>
     [JsonPropertyName("item")]
     public GlookoV3HistoryMeal? Item { get; set; }
 }
-
-// ── Meals ────────────────────────────────────────────────────────────
 
 /// <summary>
 ///     A meal entry containing one or more food items with per-food nutritional data.

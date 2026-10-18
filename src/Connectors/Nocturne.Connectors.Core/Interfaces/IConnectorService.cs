@@ -9,24 +9,12 @@ namespace Nocturne.Connectors.Core.Interfaces;
 public interface IConnectorService<in TConfig> : IDisposable
     where TConfig : IConnectorConfiguration
 {
-    /// <summary>
-    ///     Get the name of this connector service
-    /// </summary>
     string ServiceName { get; }
 
-    /// <summary>
-    ///     Gets the list of data types supported by this connector
-    /// </summary>
     List<SyncDataType> SupportedDataTypes { get; }
 
-    /// <summary>
-    ///     Authenticate with the data source
-    /// </summary>
     Task<bool> AuthenticateAsync();
 
-    /// <summary>
-    ///     Perform a granular sync operation
-    /// </summary>
     Task<SyncResult> SyncDataAsync(SyncRequest request, TConfig config, CancellationToken cancellationToken, ISyncProgressReporter? progressReporter = null);
 
     /// <summary>

@@ -153,8 +153,6 @@ public class LibreLinkAuthTokenProvider(
         }
     }
 
-    #region Response Models
-
     private class LibreLoginResponse
     {
         public int? Status { get; set; }
@@ -170,6 +168,4 @@ public class LibreLinkAuthTokenProvider(
     {
         public string? Token { get; set; }
     }
-
-    #endregion
 }
