@@ -244,7 +244,7 @@ public class MemoryCacheService : ICacheService, IDisposable
         var escaped = Regex.Escape(pattern);
         // Replace escaped wildcards with regex equivalents
         escaped = escaped.Replace("\\*", ".*").Replace("\\?", ".");
-        return new Regex($"^{escaped}$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        return new Regex($"^{escaped}$", RegexOptions.IgnoreCase);
     }
 
     public void Dispose()
