@@ -485,9 +485,9 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     /// that this decomposer tracks. Returns null for absent or out-of-scope states (e.g. Suspended,
     /// which is owned by <see cref="DecomposePumpSuspensionAsync"/>).
     /// </summary>
-    private static PumpModeState? ParsePumpMode(string? value)
+    internal static PumpModeState? ParsePumpMode(string? value)
     {
-        if (Enum.TryParse<PumpModeState>(value, out var mode)
+        if (TryParseDefinedName<PumpModeState>(value, out var mode)
             && mode is PumpModeState.Automatic or PumpModeState.Manual)
             return mode;
         return null;

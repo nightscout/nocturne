@@ -100,18 +100,6 @@ public class PermissionTrie
 }
 
 /// <summary>
-/// Authorization request for generating JWT from access token
-/// </summary>
-public class AuthorizationRequest
-{
-    /// <summary>
-    /// Access token to exchange for JWT
-    /// </summary>
-    [Required]
-    public string AccessToken { get; set; } = string.Empty;
-}
-
-/// <summary>
 /// Authorization response containing JWT token
 /// </summary>
 public class AuthorizationResponse

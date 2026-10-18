@@ -312,11 +312,6 @@ public static class ServiceRegistrationExtensions
                 break;
             case PredictionSource.OrefWasm:
                 services.AddScoped<IPredictionService, PredictionService>();
-                services.AddOrefService(options =>
-                {
-                    options.WasmPath = "oref.wasm";
-                    options.Enabled = true;
-                });
                 break;
             case PredictionSource.None:
             default:
@@ -721,6 +716,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITrackerAlertRuleSyncService, TrackerAlertRuleSyncService>();
         services.AddHostedService<TrackerAlertRuleBackfillService>();
         services.AddScoped<IDeviceAgeService, DeviceAgeService>();
+        services.AddScoped<ISensorSessionInferenceService, SensorSessionInferenceService>();
+        services.AddSingleton<ISensorSessionInferenceRunner, SensorSessionInferenceRunner>();
+        services.AddHostedService<SensorSessionInferenceBackgroundService>();
 
         // Device resolution
         services.AddScoped<IDeviceService, DeviceService>();

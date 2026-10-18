@@ -3,13 +3,13 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Formatters;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Health;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models;
 using Xunit;
@@ -32,13 +32,13 @@ public class HealthRecordResponseContractTests
     private readonly Mock<IBodyWeightService> _bodyWeights = new();
 
     private HeartRateController HeartRate() =>
-        new(_heartRates.Object) { ProblemDetailsFactory = new PassThroughProblemDetailsFactory() };
+        new(_heartRates.Object) { ProblemDetailsFactory = new EchoingProblemDetailsFactory() };
 
     private StepCountController StepCount() =>
-        new(_stepCounts.Object) { ProblemDetailsFactory = new PassThroughProblemDetailsFactory() };
+        new(_stepCounts.Object) { ProblemDetailsFactory = new EchoingProblemDetailsFactory() };
 
     private BodyWeightController BodyWeight() =>
-        new(_bodyWeights.Object) { ProblemDetailsFactory = new PassThroughProblemDetailsFactory() };
+        new(_bodyWeights.Object) { ProblemDetailsFactory = new EchoingProblemDetailsFactory() };
 
     // ── A count nobody supplied ─────────────────────────────────────
 
@@ -295,18 +295,4 @@ public class HealthRecordResponseContractTests
 
     private static string? Message(OkObjectResult ok) =>
         ok.Value?.GetType().GetProperty("message")?.GetValue(ok.Value) as string;
-
-    /// <summary>Stands in for the MVC-registered factory, which needs a request scope.</summary>
-    private sealed class PassThroughProblemDetailsFactory : ProblemDetailsFactory
-    {
-        public override ProblemDetails CreateProblemDetails(
-            HttpContext httpContext, int? statusCode = null, string? title = null,
-            string? type = null, string? detail = null, string? instance = null) =>
-            new() { Status = statusCode, Title = title, Type = type, Detail = detail, Instance = instance };
-
-        public override ValidationProblemDetails CreateValidationProblemDetails(
-            HttpContext httpContext, ModelStateDictionary modelStateDictionary, int? statusCode = null,
-            string? title = null, string? type = null, string? detail = null, string? instance = null) =>
-            new(modelStateDictionary) { Status = statusCode, Title = title, Type = type, Detail = detail, Instance = instance };
-    }
 }

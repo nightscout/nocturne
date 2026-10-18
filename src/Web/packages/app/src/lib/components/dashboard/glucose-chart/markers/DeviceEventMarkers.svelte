@@ -30,6 +30,7 @@
         eventType={marker.eventType}
         color={marker.color}
         treatmentId={marker.treatmentId ?? undefined}
+        isInferred={marker.isInferred ?? false}
         {onMarkerClick}
       />
     {/each}

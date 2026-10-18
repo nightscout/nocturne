@@ -100,3 +100,10 @@ Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithSort_R
 Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_ReturnsSameShape | v3 /version lacks the {status, result} envelope
 Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_WithData_ReturnsSameShape | v3 /version lacks the {status, result} envelope
 Nocturne.API.Tests.Integration.V4.BasalInjectionIntegrationTests.POST_with_same_SyncIdentifier_after_soft_delete_creates_new_row | a soft-deleted basal injection still holds its sync identifier (409 on re-POST)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_IntentRequest_MetricNow_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_MissingVersion_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_InvalidRequest_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_IntentRequest_NSStatus_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_LaunchRequest_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_UnknownIntent_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_SessionEndedRequest_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)

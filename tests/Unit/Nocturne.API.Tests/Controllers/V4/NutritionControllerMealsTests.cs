@@ -9,6 +9,7 @@ using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
@@ -73,11 +74,12 @@ public class NutritionControllerMealsTests : IDisposable
         _db.Dispose();
     }
 
-    private NutritionController CreateController()
+    private NutritionController CreateController(
+        CarbIntakeRepository? carbIntakeRepo = null, BolusRepository? bolusRepo = null)
     {
         var controller = new NutritionController(
-            _carbIntakeRepo,
-            _bolusRepo,
+            carbIntakeRepo ?? _carbIntakeRepo,
+            bolusRepo ?? _bolusRepo,
             _foodServiceMock.Object,
             _demoModeMock.Object,
             _dbContext);
@@ -232,6 +234,120 @@ public class NutritionControllerMealsTests : IDisposable
         (await _dbContext.CarbIntakes.CountAsync()).Should().Be(1);
         // Overall status should be 201 because the carb half was new.
         ExtractStatus(result).Should().Be(StatusCodes.Status201Created);
+    }
+
+    /// <remarks>
+    /// Unrelated rows land inside each upsert, after the meal's own write and before the controller
+    /// decides the status.
+    /// </remarks>
+    [Fact]
+    public async Task CreateMeal_ResentWhileOtherRecordsLand_Returns200()
+    {
+        var request = new CreateMealRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Insulin = 5.5,
+            Carbs = 45.0,
+            DataSource = "aaps",
+            SyncIdentifier = "meal-sync-1",
+        };
+        ExtractStatus(await CreateController().CreateMeal(request, default))
+            .Should().Be(StatusCodes.Status201Created);
+
+        var bolusRepo = CreateBolusRepo(new InterleavingBroadcaster<Bolus>(
+            onUpdated: () => SeedLiveBolus("loop", "other-bolus", insulin: 1.0)));
+        var carbIntakeRepo = CreateCarbIntakeRepo(new InterleavingBroadcaster<CarbIntake>(
+            onUpdated: () => SeedLiveCarbIntake("loop", "other-carb", carbs: 10.0)));
+
+        var resent = await CreateController(carbIntakeRepo, bolusRepo).CreateMeal(request, default);
+
+        ExtractStatus(resent).Should().Be(StatusCodes.Status200OK);
+        await using var verify = _db.CreateContext(TestTenantId);
+        (await verify.Boluses.CountAsync()).Should().Be(2, "the unrelated bolus did land during the re-send");
+        (await verify.CarbIntakes.CountAsync()).Should().Be(2, "the unrelated carb intake did land during the re-send");
+    }
+
+    [Fact]
+    public async Task CreateMeal_NewWhileOtherRecordsAreRemoved_Returns201()
+    {
+        var otherBolusId = SeedLiveBolus("loop", "other-bolus", insulin: 1.0);
+        var otherCarbId = SeedLiveCarbIntake("loop", "other-carb", carbs: 10.0);
+
+        var bolusRepo = CreateBolusRepo(new InterleavingBroadcaster<Bolus>(
+            onCreated: () => RemoveRow<BolusEntity>(otherBolusId)));
+        var carbIntakeRepo = CreateCarbIntakeRepo(new InterleavingBroadcaster<CarbIntake>(
+            onCreated: () => RemoveRow<CarbIntakeEntity>(otherCarbId)));
+
+        var result = await CreateController(carbIntakeRepo, bolusRepo).CreateMeal(new CreateMealRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Insulin = 5.5,
+            Carbs = 45.0,
+            DataSource = "aaps",
+            SyncIdentifier = "meal-sync-1",
+        }, default);
+
+        ExtractStatus(result).Should().Be(StatusCodes.Status201Created);
+        await using var verify = _db.CreateContext(TestTenantId);
+        (await verify.Boluses.CountAsync()).Should().Be(1, "the unrelated bolus was removed during the create");
+        (await verify.CarbIntakes.CountAsync()).Should().Be(1, "the unrelated carb intake was removed during the create");
+    }
+
+    private BolusRepository CreateBolusRepo(IV4RecordBroadcaster<Bolus> broadcaster) =>
+        new(
+            new TestTenantDbContextFactory(_dbContext),
+            new Mock<IDeduplicationService>().Object,
+            new Mock<IAuditContext>().Object,
+            NullLogger<BolusRepository>.Instance,
+            broadcaster);
+
+    private CarbIntakeRepository CreateCarbIntakeRepo(IV4RecordBroadcaster<CarbIntake> broadcaster) =>
+        new(
+            new TestTenantDbContextFactory(_dbContext),
+            new Mock<IDeduplicationService>().Object,
+            new Mock<IAuditContext>().Object,
+            NullLogger<CarbIntakeRepository>.Instance,
+            broadcaster);
+
+    private Guid SeedLiveCarbIntake(string dataSource, string syncIdentifier, double carbs)
+    {
+        var entity = new CarbIntakeEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            Timestamp = DateTime.UtcNow,
+            DataSource = dataSource,
+            SyncIdentifier = syncIdentifier,
+            Carbs = carbs,
+        };
+        using var ctx = _db.CreateContext(TestTenantId);
+        ctx.CarbIntakes.Add(entity);
+        ctx.SaveChanges();
+        return entity.Id;
+    }
+
+    private void RemoveRow<TEntity>(Guid id) where TEntity : class
+    {
+        using var ctx = _db.CreateContext(TestTenantId);
+        ctx.Remove(ctx.Set<TEntity>().Find(id)!);
+        ctx.SaveChanges();
+    }
+
+    /// <summary>Runs a write from another caller inside the repository's single upsert.</summary>
+    private sealed class InterleavingBroadcaster<TModel>(Action? onCreated = null, Action? onUpdated = null)
+        : IV4RecordBroadcaster<TModel> where TModel : class
+    {
+        public Task BroadcastCreatedAsync(IReadOnlyList<TModel> items, CancellationToken ct = default)
+        {
+            onCreated?.Invoke();
+            return Task.CompletedTask;
+        }
+
+        public Task BroadcastUpdatedAsync(IReadOnlyList<TModel> items, CancellationToken ct = default)
+        {
+            onUpdated?.Invoke();
+            return Task.CompletedTask;
+        }
     }
 
     /// <remarks>

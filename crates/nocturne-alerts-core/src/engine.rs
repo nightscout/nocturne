@@ -50,11 +50,15 @@ impl Rule {
     /// The auto-resolve tree when it is present, not `null` and evaluable.
     /// Whether auto-resolve is enabled is for the caller to check.
     pub(crate) fn parse_auto_resolve(&self) -> Option<Node> {
-        self.auto_resolve_params
-            .as_ref()
-            .filter(|v| !v.is_null())
-            .and_then(|v| Node::parse(v).ok())
+        parse_auto_resolve(self.auto_resolve_params.as_ref())
     }
+}
+
+/// An auto-resolve tree when it is present, not `null` and evaluable.
+pub(crate) fn parse_auto_resolve(params: Option<&Value>) -> Option<Node> {
+    params
+        .filter(|v| !v.is_null())
+        .and_then(|v| Node::parse(v).ok())
 }
 
 /// A rule in the golden corpus `ScenarioRule` shape, which the FFI envelopes

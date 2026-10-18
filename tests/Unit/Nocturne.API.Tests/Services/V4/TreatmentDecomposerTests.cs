@@ -1024,6 +1024,30 @@ public class TreatmentDecomposerTests : IDisposable
         TreatmentDecomposer.ParseGlucoseType(input).Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData("1")]
+    [InlineData("Normal, Square")]
+    public void ParseBolusType_NumericOrCommaList_ReturnsNull(string input)
+    {
+        TreatmentDecomposer.ParseBolusType(input).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("Finger, Sensor")]
+    public void ParseGlucoseType_NumericOrCommaList_ReturnsNull(string input)
+    {
+        TreatmentDecomposer.ParseGlucoseType(input).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("MgDl, Mmol")]
+    public void ParseGlucoseUnit_NumericOrCommaList_ReturnsNull(string input)
+    {
+        TreatmentDecomposer.ParseGlucoseUnit(input).Should().BeNull();
+    }
+
     [Fact]
     public void ParseGlucoseType_Null_ReturnsNull()
     {
@@ -1071,8 +1095,6 @@ public class TreatmentDecomposerTests : IDisposable
     [InlineData(true, "loop://Test Phone", "suspend", V4Models.TempBasalOrigin.Suspended)]
     [InlineData(false, "loop://Test Phone", "suspend", V4Models.TempBasalOrigin.Suspended)]
     [InlineData(true, "openaps://AndroidAPS", null, V4Models.TempBasalOrigin.Algorithm)]
-    [InlineData(null, "openaps://AndroidAPS", null, V4Models.TempBasalOrigin.Manual)]
-    [InlineData(null, "Trio", null, V4Models.TempBasalOrigin.Manual)]
     [InlineData(null, null, null, V4Models.TempBasalOrigin.Manual)]
     public void MapToTempBasal_OriginFollowsReasonThenAutomaticFlag(
         bool? automatic, string? enteredBy, string? reason, V4Models.TempBasalOrigin expected)
@@ -1097,8 +1119,8 @@ public class TreatmentDecomposerTests : IDisposable
     [InlineData(null, true, "Manual", null, V4Models.TempBasalOrigin.Algorithm)]
     [InlineData(null, false, "Algorithm", "loop://Test Phone", V4Models.TempBasalOrigin.Manual)]
     [InlineData(null, null, "Scheduled", "loop://Test Phone", V4Models.TempBasalOrigin.Scheduled)]
+    [InlineData(null, null, "sCHEDULED", null, V4Models.TempBasalOrigin.Scheduled)]
     [InlineData(null, null, null, "loop://Test Phone", V4Models.TempBasalOrigin.Algorithm)]
-    [InlineData(null, null, null, "Trio", V4Models.TempBasalOrigin.Manual)]
     public void MapToTempBasal_EachOriginRuleBeatsTheRulesBelowIt(
         string? reason, bool? automatic, string? basalOrigin, string? enteredBy, V4Models.TempBasalOrigin expected)
     {
@@ -1107,12 +1129,29 @@ public class TreatmentDecomposerTests : IDisposable
         TreatmentDecomposer.MapToTempBasal(treatment, correlationId: null).Origin.Should().Be(expected);
     }
 
+    // Documents the current fallback: algorithm uploads that omit the automatic flag read as Manual
+    // because there is no Unknown origin to record them under.
+    [Theory]
+    [InlineData("openaps://AndroidAPS")]
+    [InlineData("Trio")]
+    public void MapToTempBasal_AlgorithmUploadWithoutAutomaticFlag_CurrentlyFallsBackToManual(string enteredBy)
+    {
+        var treatment = TempBasalForOrigin(reason: null, automatic: null, basalOrigin: null, enteredBy);
+
+        TreatmentDecomposer.MapToTempBasal(treatment, correlationId: null).Origin
+            .Should().Be(V4Models.TempBasalOrigin.Manual);
+    }
+
     [Theory]
     [InlineData("SUSPEND", null, "loop://Test Phone", V4Models.TempBasalOrigin.Suspended)]
     [InlineData("", null, "loop://Test Phone", V4Models.TempBasalOrigin.Algorithm)]
     [InlineData("Low glucose", null, null, V4Models.TempBasalOrigin.Manual)]
     [InlineData(null, "scheduled", null, V4Models.TempBasalOrigin.Scheduled)]
     [InlineData(null, "99", "loop://Test Phone", V4Models.TempBasalOrigin.Algorithm)]
+    [InlineData(null, "1", "loop://Test Phone", V4Models.TempBasalOrigin.Algorithm)]
+    [InlineData(null, "Algorithm, Manual", "loop://Test Phone", V4Models.TempBasalOrigin.Algorithm)]
+    [InlineData(null, "Scheduled, Suspended", "loop://Test Phone", V4Models.TempBasalOrigin.Algorithm)]
+    [InlineData(null, " Scheduled", "loop://Test Phone", V4Models.TempBasalOrigin.Algorithm)]
     [InlineData(null, "unknown", "loop://Test Phone", V4Models.TempBasalOrigin.Algorithm)]
     [InlineData(null, "", null, V4Models.TempBasalOrigin.Manual)]
     [InlineData(null, 2, null, V4Models.TempBasalOrigin.Manual)]

@@ -45,6 +45,7 @@ public class LibreConnectorService(
         tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
 
     private string _accountIdHash = string.Empty;
+    private LibreSensor? _currentSensor;
     private string? _bearerToken;
     private LibreUserConnection? _selectedConnection;
 
@@ -158,7 +159,8 @@ public class LibreConnectorService(
         var result = new SyncResult { Success = true };
 
         var activeTypes = ResolveActiveTypes(request, config);
-        if (!activeTypes.Contains(SyncDataType.Glucose))
+        // The sensor arrives with the glucose graph, so a run wanting only device events still fetches it.
+        if (!activeTypes.Contains(SyncDataType.Glucose) && !activeTypes.Contains(SyncDataType.DeviceEvents))
         {
             return result;
         }
@@ -180,11 +182,16 @@ public class LibreConnectorService(
             if (sensorGlucose == null)
             {
                 RecordFetchFailure(result, SyncDataType.Glucose, activeTypes);
+                RecordFetchFailure(result, SyncDataType.DeviceEvents, activeTypes);
                 return result;
             }
 
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
                 sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken);
+
+            List<DeviceEvent> sensorStarts = LibreSensorSessionMapper.ToSensorStart(_currentSensor) is { } start ? [start] : [];
+            await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
+                sensorStarts, PublishDeviceEventDataAsync, config, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
@@ -249,6 +256,7 @@ public class LibreConnectorService(
         await response.EnsureSuccessWithBodyAsync();
 
         var graphResponse = await DeserializeResponseAsync<LibreGraphResponse>(response);
+        _currentSensor = graphResponse?.Data?.Connection?.Sensor;
 
         if (graphResponse?.Data?.GraphData == null || graphResponse.Data.GraphData.Length == 0)
         {
@@ -316,5 +324,6 @@ public class LibreConnectorService(
     private class LibreConnection
     {
         public required LibreGlucoseMeasurement GlucoseMeasurement { get; set; }
+        public LibreSensor? Sensor { get; set; }
     }
 }

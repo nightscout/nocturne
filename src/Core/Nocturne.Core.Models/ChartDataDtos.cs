@@ -210,6 +210,9 @@ public class DeviceEventMarkerDto
     public string? Notes { get; set; }
     public string? TreatmentId { get; set; }
     public ChartColor Color { get; set; }
+
+    /// <inheritdoc cref="V4.DeviceEvent.IsInferred"/>
+    public bool IsInferred { get; set; }
 }
 
 /// <summary>

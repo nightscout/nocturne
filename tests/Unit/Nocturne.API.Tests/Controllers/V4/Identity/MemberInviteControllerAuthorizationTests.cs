@@ -165,6 +165,51 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
             "the tenant comes from the request, not from the caller");
     }
 
+    [Theory]
+    [InlineData(Scope.FullAccess)]
+    [InlineData(Scope.MembersManage)]
+    public async Task RemoveMember_ofTheCallersOwnSubject_isRefusedAndRemovesNothing(string scope)
+    {
+        var controller = BuildController(scope);
+
+        var result = await controller.RemoveMember(_callerSubjectId, CancellationToken.None);
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        problem.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Contain("your own membership");
+        _tenantService.Verify(
+            s => s.RemoveMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    /// <summary>
+    /// The cloud billing service removes members with a service credential that carries no
+    /// subject, so a missing subject is not the caller's own membership.
+    /// </summary>
+    [Fact]
+    public async Task RemoveMember_withoutACallerSubject_stillRemoves()
+    {
+        var subjectId = Guid.CreateVersion7();
+        _tenantService
+            .Setup(s => s.RemoveMemberAsync(_tenantId, subjectId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MemberRemovalResult(true));
+        var controller = BuildController(Scope.MembersManage);
+        controller.HttpContext.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true,
+            SubjectId = null,
+            TenantId = _tenantId,
+        };
+
+        var result = await controller.RemoveMember(subjectId, CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        _tenantService.Verify(
+            s => s.RemoveMemberAsync(_tenantId, subjectId, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
     /// <summary>
     /// A tenant that removes its last owner locks itself out of a live site, so the refusal has to
     /// reach the member list rather than arrive as a bare status phrase.
