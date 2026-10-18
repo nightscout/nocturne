@@ -220,7 +220,8 @@ public class LoopService : ILoopService, IDisposable
         var push = new ApplePush(ApplePushType.Alert)
             .AddAlert(alert)
             .AddToken(loopSettings.DeviceToken!)
-            .AddContentAvailable();
+            .AddContentAvailable()
+            .AddCustomProperty("interruption-level", "time-sensitive", addToApsDict: true);
 
         if (string.Equals(_configuration.PushServerEnvironment, "development", StringComparison.OrdinalIgnoreCase))
         {

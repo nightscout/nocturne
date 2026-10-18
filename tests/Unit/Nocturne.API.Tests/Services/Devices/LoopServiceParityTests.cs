@@ -593,5 +593,27 @@ public class LoopServiceParityTests
         service.Dispose();
     }
 
+    [Fact]
+    public async Task SendNotificationAsync_MarksPushTimeSensitiveAndContentAvailable()
+    {
+        var (service, factory) = CreateLoopService();
+
+        var result = await service.SendNotificationAsync(
+            new LoopNotificationData { EventType = "Temporary Override Cancel" },
+            CreateValidLoopSettings(),
+            "127.0.0.1",
+            CancellationToken.None
+        );
+
+        Assert.True(result.Success, result.Message);
+        var push = factory.LastPush;
+        Assert.NotNull(push);
+        Assert.Equal("time-sensitive", push.GetApsProperty("interruption-level"));
+        Assert.Equal("1", push.GetApsProperty("content-available"));
+        Assert.Contains("Cancel Temporary Override", push.GetApsProperty("alert"));
+
+        service.Dispose();
+    }
+
     #endregion
 }
