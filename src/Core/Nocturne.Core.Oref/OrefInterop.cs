@@ -225,15 +225,9 @@ public static partial class OrefInterop
         }
     }
 
-    /// <summary>
-    /// Calculate glucose status from readings.
-    /// </summary>
     [LibraryImport(LibraryName, EntryPoint = "oref_calculate_glucose_status", StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr CalculateGlucoseStatusNative(string glucoseJson);
 
-    /// <summary>
-    /// Calculate glucose status from readings.
-    /// </summary>
     /// <param name="glucoseJson">JSON string containing array of GlucoseReading objects (most recent first)</param>
     /// <returns>JSON string containing GlucoseStatus with delta, short_avgdelta, long_avgdelta.</returns>
     public static string CalculateGlucoseStatus(string glucoseJson)

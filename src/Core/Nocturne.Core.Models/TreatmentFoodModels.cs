@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a food attribution entry linked to a carb intake record.
+/// Food attribution entry linked to a carb intake record.
 /// </summary>
 /// <seealso cref="Food"/>
 /// <seealso cref="TreatmentFoodBreakdown"/>

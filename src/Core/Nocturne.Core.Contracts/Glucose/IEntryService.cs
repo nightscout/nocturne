@@ -44,9 +44,6 @@ public interface IEntryService
         CancellationToken cancellationToken
     );
 
-    /// <summary>
-    /// Get a specific entry by ID
-    /// </summary>
     /// <returns>Entry if found, null otherwise</returns>
     Task<Entry?> GetEntryByIdAsync(string id, CancellationToken cancellationToken = default);
 

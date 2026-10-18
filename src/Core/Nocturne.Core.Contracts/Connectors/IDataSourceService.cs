@@ -32,9 +32,6 @@ public interface IDataSourceService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get capabilities for a specific connector.
-    /// </summary>
     /// <param name="connectorId">The connector ID (e.g., "dexcom", "glooko")</param>
     /// <returns>Connector capabilities if found</returns>
     ConnectorCapabilities? GetConnectorCapabilities(string connectorId);
@@ -45,9 +42,6 @@ public interface IDataSourceService
     /// <returns>List of uploader apps with setup instructions</returns>
     List<UploaderApp> GetUploaderApps();
 
-    /// <summary>
-    /// Get the complete services overview
-    /// </summary>
     /// <param name="baseUrl">Base URL for API endpoint info</param>
     /// <returns>Complete services overview</returns>
     Task<ServicesOverview> GetServicesOverviewAsync(

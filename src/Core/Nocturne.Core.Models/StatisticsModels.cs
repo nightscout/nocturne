@@ -4,9 +4,6 @@ using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models;
 
-/// <summary>
-/// Basic glucose statistics
-/// </summary>
 public class BasicGlucoseStats
 {
     /// <summary>
@@ -83,9 +80,6 @@ public class GlucosePercentiles
     public double P95 { get; set; }
 }
 
-/// <summary>
-/// Glycemic variability metrics
-/// </summary>
 public class GlycemicVariability
 {
     /// <summary>
@@ -159,9 +153,6 @@ public class GlycemicVariability
     public double TimeInFluctuation { get; set; }
 }
 
-/// <summary>
-/// Glycemic thresholds for analysis
-/// </summary>
 public class GlycemicThresholds
 {
     /// <summary>
@@ -440,9 +431,6 @@ public class TimeInRangeEpisodes
     public int BelowRange { get; set; }
 }
 
-/// <summary>
-/// Glucose distribution data point
-/// </summary>
 public class DistributionDataPoint
 {
     /// <summary>
@@ -461,9 +449,6 @@ public class DistributionDataPoint
     public double Percent { get; set; }
 }
 
-/// <summary>
-/// Distribution bin configuration
-/// </summary>
 public class DistributionBin
 {
     public string Range { get; set; } = string.Empty;
@@ -608,9 +593,6 @@ public class DayData
     public TimeInRangeMetrics TimeInRanges { get; set; } = new();
 }
 
-/// <summary>
-/// Extended analysis configuration
-/// </summary>
 public class ExtendedAnalysisConfig
 {
     public GlycemicThresholds Thresholds { get; set; } = new();
@@ -628,9 +610,6 @@ public class ExtendedAnalysisConfig
     public string Units { get; set; } = "mg/dl";
 }
 
-/// <summary>
-/// Data quality metrics
-/// </summary>
 public class DataQuality
 {
     /// <summary>
@@ -695,9 +674,6 @@ public class DataGap
     public double Duration { get; set; }
 }
 
-/// <summary>
-/// Comprehensive glucose analytics result
-/// </summary>
 public class GlucoseAnalytics
 {
     /// <summary>
@@ -798,9 +774,6 @@ public class PeriodStatistics
 
     public TreatmentSummary? TreatmentSummary { get; set; }
 
-    /// <summary>
-    /// Comprehensive insulin delivery statistics for this period
-    /// </summary>
     public InsulinDeliveryStatistics? InsulinDelivery { get; set; }
 
     /// <summary>
@@ -815,9 +788,6 @@ public class PeriodStatistics
     /// </summary>
     public StatisticReliability? Reliability { get; set; }
 
-    /// <summary>
-    /// Number of glucose entries in this period
-    /// </summary>
     public int EntryCount { get; set; }
 
     public int TreatmentCount { get; set; }
@@ -1288,9 +1258,6 @@ public class StatisticReliability
     public int ReadingCount { get; set; }
 }
 
-/// <summary>
-/// Target achievement status
-/// </summary>
 public enum TargetStatus
 {
     Met,
@@ -1298,7 +1265,6 @@ public enum TargetStatus
     /// <summary>Close to target (within 10%)</summary>
     Close,
 
-    /// <summary>Target not met</summary>
     NotMet,
 
     /// <summary>
@@ -1307,9 +1273,6 @@ public enum TargetStatus
     NotAssessed,
 }
 
-/// <summary>
-/// Individual target assessment
-/// </summary>
 public class TargetAssessment
 {
     public string MetricName { get; set; } = string.Empty;
@@ -1343,9 +1306,6 @@ public class LocalizedInsight
     public Dictionary<string, double> Context { get; set; } = new();
 }
 
-/// <summary>
-/// Comprehensive clinical target assessment
-/// </summary>
 public class ClinicalTargetAssessment
 {
     public DiabetesPopulation Population { get; set; }
@@ -1391,9 +1351,6 @@ public class ClinicalTargetAssessment
     public List<LocalizedInsight> Strengths { get; set; } = new();
 }
 
-/// <summary>
-/// Data sufficiency assessment for reporting
-/// </summary>
 public class DataSufficiencyAssessment
 {
     /// <summary>Whether there is sufficient data for a valid report</summary>
@@ -1431,9 +1388,6 @@ public class DataSufficiencyAssessment
     public string Recommendation { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// Extended glucose analytics with all new metrics
-/// </summary>
 public class ExtendedGlucoseAnalytics : GlucoseAnalytics
 {
     /// <summary>Glucose Management Indicator (modern replacement for eA1c)</summary>
@@ -1520,7 +1474,7 @@ public sealed class ContributingDevice
 
 /// <summary>
 /// Data point for site change impact analysis
-/// Represents averaged glucose at a specific time offset from site change
+/// Averaged glucose at a specific time offset from site change
 /// </summary>
 public class SiteChangeImpactDataPoint
 {
@@ -1552,9 +1506,6 @@ public class SiteChangeImpactDataPoint
     public double Percentile90 { get; set; }
 }
 
-/// <summary>
-/// Summary statistics for site change impact
-/// </summary>
 public class SiteChangeImpactSummary
 {
     /// <summary>Average glucose before site change (mg/dL)</summary>
@@ -1765,9 +1716,6 @@ public class DailyBasalBolusRatioData
     public double BolusPercent { get; set; }
 }
 
-/// <summary>
-/// Response model for daily basal/bolus ratio statistics
-/// </summary>
 public class DailyBasalBolusRatioResponse
 {
     public List<DailyBasalBolusRatioData> DailyData { get; set; } = new();
@@ -1835,14 +1783,8 @@ public class HourlyBasalPercentileData
     public int Count { get; set; }
 }
 
-/// <summary>
-/// Temp basal information statistics
-/// </summary>
 public class TempBasalInfo
 {
-    /// <summary>
-    /// Total number of temp basals in the period
-    /// </summary>
     public int Total { get; set; }
 
     /// <summary>
@@ -1894,9 +1836,6 @@ public class BasalStats
     public double TotalDelivered { get; set; }
 }
 
-/// <summary>
-/// Comprehensive basal analysis response
-/// </summary>
 public class BasalAnalysisResponse
 {
     /// <summary>
@@ -1993,9 +1932,6 @@ public class HourlyInsulinDeliveryResponse
     public string EndDate { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// Complete site change impact analysis result
-/// </summary>
 public class SiteChangeImpactAnalysis
 {
     public int SiteChangeCount { get; set; }

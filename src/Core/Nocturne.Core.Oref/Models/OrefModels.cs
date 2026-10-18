@@ -145,9 +145,6 @@ public class CurrentTemp
     public string Temp { get; set; } = "absolute";
 }
 
-/// <summary>
-/// Autosens sensitivity data.
-/// </summary>
 public class AutosensData
 {
     /// <summary>Sensitivity ratio (1.0 = normal, &lt;1.0 = more sensitive, &gt;1.0 = more resistant)</summary>
@@ -341,9 +338,6 @@ public class OrefTreatment
     public double? Percent { get; set; }
 }
 
-/// <summary>
-/// COB calculation result.
-/// </summary>
 public class CobResult
 {
     /// <summary>Carbs on board (g)</summary>

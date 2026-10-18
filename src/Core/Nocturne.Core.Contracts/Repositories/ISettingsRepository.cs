@@ -8,9 +8,6 @@ namespace Nocturne.Core.Contracts.Repositories;
 /// <seealso cref="Settings"/>
 public interface ISettingsRepository
 {
-    /// <summary>
-    /// Get all settings entries
-    /// </summary>
     /// <returns>Collection of all settings entries</returns>
     Task<IEnumerable<Settings>> GetSettingsAsync(CancellationToken cancellationToken = default);
 
@@ -29,15 +26,9 @@ public interface ISettingsRepository
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get a settings entry by its ID
-    /// </summary>
     /// <returns>The settings entry if found, null otherwise</returns>
     Task<Settings?> GetSettingsByIdAsync(string id, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get a settings entry by its key
-    /// </summary>
     /// <returns>The settings entry if found, null otherwise</returns>
     Task<Settings?> GetSettingsByKeyAsync(
         string key,
@@ -54,9 +45,6 @@ public interface ISettingsRepository
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Update a settings entry by ID
-    /// </summary>
     /// <param name="settings">The updated settings data</param>
     /// <returns>The updated settings entry, or null if not found</returns>
     Task<Settings?> UpdateSettingsAsync(
@@ -65,9 +53,6 @@ public interface ISettingsRepository
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Delete a settings entry by ID
-    /// </summary>
     /// <returns>True if deleted, false if not found</returns>
     Task<bool> DeleteSettingsAsync(string id, CancellationToken cancellationToken = default);
 

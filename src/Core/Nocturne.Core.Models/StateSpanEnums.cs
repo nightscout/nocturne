@@ -15,14 +15,8 @@ public enum StateSpanCategory
     /// </summary>
     PumpMode,
 
-    /// <summary>
-    /// Pump connectivity status
-    /// </summary>
     PumpConnectivity,
 
-    /// <summary>
-    /// Active override configuration
-    /// </summary>
     Override,
 
     /// <summary>
@@ -56,9 +50,6 @@ public enum StateSpanCategory
     TemporaryTarget
 }
 
-/// <summary>
-/// Pump operational mode states
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<PumpModeState>))]
 public enum PumpModeState
 {
@@ -92,9 +83,6 @@ public enum PumpModeState
     /// </summary>
     Sleep,
 
-    /// <summary>
-    /// Exercise/activity mode
-    /// </summary>
     Exercise,
 
     /// <summary>
@@ -107,9 +95,6 @@ public enum PumpModeState
     /// </summary>
     Suspended,
 
-    /// <summary>
-    /// Pump powered off
-    /// </summary>
     Off
 }
 
@@ -131,9 +116,6 @@ public enum PumpConnectivityState
     /// </summary>
     Removed,
 
-    /// <summary>
-    /// Bluetooth disabled
-    /// </summary>
     BluetoothOff
 }
 

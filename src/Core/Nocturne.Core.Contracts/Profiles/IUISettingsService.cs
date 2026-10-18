@@ -15,9 +15,6 @@ public interface IUISettingsService
     /// <returns>The UI settings configuration, or null if it could not be read</returns>
     Task<UISettingsConfiguration?> GetSettingsAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Saves the complete UI settings configuration.
-    /// </summary>
     /// <returns>The saved settings</returns>
     Task<UISettingsConfiguration> SaveSettingsAsync(
         UISettingsConfiguration settings,

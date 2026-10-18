@@ -34,15 +34,12 @@ public static class Scope
     public const string TreatmentsReadWrite = "treatments.readwrite";
     /// <summary>Read-only access to device status records.</summary>
     public const string DevicesRead = "devices.read";
-    /// <summary>Read and write access to device status records.</summary>
     public const string DevicesReadWrite = "devices.readwrite";
     /// <summary>Read-only access to heart rate data.</summary>
     public const string HeartRateRead = "heartrate.read";
-    /// <summary>Read and write access to heart rate data.</summary>
     public const string HeartRateReadWrite = "heartrate.readwrite";
     /// <summary>Read-only access to step count data.</summary>
     public const string StepCountRead = "stepcount.read";
-    /// <summary>Read and write access to step count data.</summary>
     public const string StepCountReadWrite = "stepcount.readwrite";
     /// <summary>Read-only access to sleep sessions.</summary>
     public const string SleepRead = "sleep.read";
@@ -50,7 +47,6 @@ public static class Scope
     public const string SleepReadWrite = "sleep.readwrite";
     /// <summary>Read-only access to food records.</summary>
     public const string FoodRead = "food.read";
-    /// <summary>Read and write access to food records.</summary>
     public const string FoodReadWrite = "food.readwrite";
     /// <summary>Read-only access to generated reports.</summary>
     public const string ReportsRead = "reports.read";
@@ -59,11 +55,9 @@ public static class Scope
 
     /// <summary>Read-only access to therapy settings (profiles).</summary>
     public const string TherapyRead = "therapy.read";
-    /// <summary>Read and write access to therapy settings.</summary>
     public const string TherapyReadWrite = "therapy.readwrite";
     /// <summary>Read-only access to alert settings and history.</summary>
     public const string AlertsRead = "alerts.read";
-    /// <summary>Read and write access to alert settings.</summary>
     public const string AlertsReadWrite = "alerts.readwrite";
 
     // Account

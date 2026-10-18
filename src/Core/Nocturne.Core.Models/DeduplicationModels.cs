@@ -118,9 +118,6 @@ public record DeduplicationBatchResult(int Processed, int GroupsCreated, int Rec
 /// </summary>
 public record ReconcileResult(int GroupsMerged, bool CaughtUp);
 
-/// <summary>
-/// Progress information for deduplication job
-/// </summary>
 public record DeduplicationProgress
 {
     [JsonPropertyName("totalRecords")]
@@ -149,9 +146,6 @@ public record DeduplicationProgress
         TotalRecords > 0 ? (double)ProcessedRecords / TotalRecords * 100 : 0;
 }
 
-/// <summary>
-/// Result of a deduplication job
-/// </summary>
 public record DeduplicationResult
 {
     [JsonPropertyName("totalRecordsProcessed")]
@@ -215,9 +209,6 @@ public record DeduplicationResult
     public string? ErrorMessage { get; init; }
 }
 
-/// <summary>
-/// Status of a running deduplication job
-/// </summary>
 public record DeduplicationJobStatus
 {
     [JsonPropertyName("jobId")]
@@ -253,19 +244,10 @@ public enum DeduplicationJobState
     /// </summary>
     Pending,
 
-    /// <summary>
-    /// Job is currently running
-    /// </summary>
     Running,
 
-    /// <summary>
-    /// Job completed successfully
-    /// </summary>
     Completed,
 
-    /// <summary>
-    /// Job failed with an error
-    /// </summary>
     Failed,
 
     Cancelled

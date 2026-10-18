@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models.Battery;
 
 /// <summary>
-/// Represents a single battery reading from a device.
+/// Single battery reading from a device.
 /// Extracted from device status records during processing.
 /// </summary>
 /// <seealso cref="BatteryStatistics"/>

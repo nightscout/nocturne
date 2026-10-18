@@ -45,9 +45,6 @@ public interface IBatteryService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get charge cycle history for a device
-    /// </summary>
     /// <param name="device">Device identifier (null for all devices)</param>
     /// <param name="fromMills">Start time in milliseconds</param>
     /// <param name="toMills">End time in milliseconds</param>

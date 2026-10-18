@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents the main data structure used by Nightscout clients.
+/// Main data structure used by Nightscout clients.
 /// Contains all necessary data for glucose monitoring and treatment tracking.
 /// This class provides 1:1 backwards compatibility with the legacy JavaScript DData implementation.
 /// </summary>
@@ -55,9 +55,6 @@ public class DData
     [JsonPropertyName("activity")]
     public List<Activity> Activity { get; set; } = new();
 
-    /// <summary>
-    /// Database statistics
-    /// </summary>
     [JsonPropertyName("dbstats")]
     public DbStats DbStats { get; set; } = new();
 
@@ -129,9 +126,6 @@ public class DData
     public string? LastProfileFromSwitch { get; set; }
 }
 
-/// <summary>
-/// Represents database statistics
-/// </summary>
 public class DbStats
 {
     [JsonPropertyName("dataSize")]
@@ -186,9 +180,6 @@ public class DDataResponse
     [JsonPropertyName("treatments")]
     public List<Treatment> Treatments { get; set; } = new();
 
-    /// <summary>
-    /// Database statistics
-    /// </summary>
     [JsonPropertyName("dbstats")]
     public DbStats DbStats { get; set; } = new();
 }

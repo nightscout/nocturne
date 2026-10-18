@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a detected compression low suggestion pending user review.
+/// Detected compression low suggestion pending user review.
 /// A compression low is an artefactual CGM glucose drop caused by physical compression of the sensor site
 /// (typically during sleep). Accepted suggestions create a <see cref="StateSpan"/> data exclusion record.
 /// </summary>

@@ -152,9 +152,6 @@ public interface ISensorGlucoseRepository
     /// </summary>
     Task<IReadOnlyList<DiscoveredSource>> GetDiscoveredSourcesAsync(DateTime since, CancellationToken ct = default);
 
-    /// <summary>
-    /// Delete all records within the given time range.
-    /// </summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Inclusive end, or <c>null</c> for no upper bound.</param>
     /// <returns>Number of records deleted.</returns>

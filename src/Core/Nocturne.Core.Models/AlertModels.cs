@@ -252,11 +252,8 @@ public enum TrendBucket
     [JsonStringEnumMemberName("unknown")] Unknown,
     /// <summary>Glucose rising rapidly.</summary>
     [JsonStringEnumMemberName("rising_fast")] RisingFast,
-    /// <summary>Glucose rising.</summary>
     [JsonStringEnumMemberName("rising")] Rising,
-    /// <summary>Glucose flat.</summary>
     [JsonStringEnumMemberName("flat")] Flat,
-    /// <summary>Glucose falling.</summary>
     [JsonStringEnumMemberName("falling")] Falling,
     /// <summary>Glucose falling rapidly.</summary>
     [JsonStringEnumMemberName("falling_fast")] FallingFast,
@@ -438,7 +435,6 @@ public enum AlertComparisonOperator
     [JsonStringEnumMemberName("<")] Lt,
     /// <summary>Less than or equal.</summary>
     [JsonStringEnumMemberName("<=")] Lte,
-    /// <summary>Equal.</summary>
     [JsonStringEnumMemberName("==")] Eq,
 }
 
@@ -614,7 +610,6 @@ public class AlertRule
     /// <summary>Optional description of what this rule monitors.</summary>
     public string? Description { get; set; }
 
-    /// <summary>The type of condition this rule evaluates.</summary>
     /// <seealso cref="Alerts.AlertConditionType"/>
     public AlertConditionType ConditionType { get; set; } = AlertConditionType.Threshold;
 
@@ -686,7 +681,6 @@ public class AlertExcursion
 /// <seealso cref="AlertExcursion"/>
 public record AlertPayload
 {
-    /// <summary>The condition type that triggered this alert.</summary>
     public required AlertConditionType AlertType { get; init; }
 
     /// <summary>Human-readable name of the <see cref="AlertRule"/> that fired.</summary>

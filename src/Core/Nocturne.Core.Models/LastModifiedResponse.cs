@@ -25,9 +25,6 @@ public class LastModifiedResponse
 
     public DateTime? Activity { get; set; }
 
-    /// <summary>
-    /// Server time when the response was generated
-    /// </summary>
     public DateTime ServerTime { get; set; }
 
     /// <summary>

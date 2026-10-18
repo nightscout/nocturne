@@ -42,9 +42,6 @@ public class TriggerDetectionRequest
     public string? EndDate { get; set; }
 }
 
-/// <summary>
-/// Result of detection for a single night
-/// </summary>
 /// <seealso cref="DetectionResult"/>
 public class NightDetectionResult
 {

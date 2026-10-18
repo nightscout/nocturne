@@ -34,15 +34,9 @@ public interface IDDataService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Processes treatments and creates filtered treatment lists
-    /// </summary>
     /// <returns>A DData structure with processed treatments</returns>
     DData ProcessTreatments(List<Treatment> treatments, bool preserveOriginalTreatments = false);
 
-    /// <summary>
-    /// Gets recent device status entries for the specified time
-    /// </summary>
     /// <param name="deviceStatuses">All device status entries</param>
     /// <param name="time">The time to filter by (Unix milliseconds)</param>
     /// <returns>Recent device status entries</returns>

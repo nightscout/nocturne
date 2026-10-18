@@ -21,7 +21,7 @@ public enum ConnectorFoodEntryStatus
 }
 
 /// <summary>
-/// Represents a connector-imported food entry for matching and attribution.
+/// Connector-imported food entry for matching and attribution.
 /// </summary>
 /// <seealso cref="ConnectorFoodEntryStatus"/>
 /// <seealso cref="Food"/>

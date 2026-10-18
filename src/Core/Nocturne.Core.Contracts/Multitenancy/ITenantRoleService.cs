@@ -8,7 +8,6 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 /// <seealso cref="IMemberInviteService"/>
 public interface ITenantRoleService
 {
-    /// <summary>Returns all roles defined for the specified tenant.</summary>
     Task<List<TenantRoleDto>> GetRolesAsync(Guid tenantId, CancellationToken ct = default);
 
     /// <summary>

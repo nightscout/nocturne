@@ -12,9 +12,6 @@ public interface IStatusService
     /// <returns>V3 status response with extended system information and permissions</returns>
     Task<V3StatusResponse> GetV3SystemStatusAsync();
 
-    /// <summary>
-    /// Get last modified timestamps for all collections
-    /// </summary>
     /// <returns>Last modified timestamps for each collection</returns>
     Task<LastModifiedResponse> GetLastModifiedAsync();
 }

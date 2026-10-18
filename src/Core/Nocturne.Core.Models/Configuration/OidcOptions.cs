@@ -1,8 +1,5 @@
 namespace Nocturne.Core.Models.Configuration;
 
-/// <summary>
-/// Configuration options for OIDC authentication
-/// </summary>
 public class OidcOptions
 {
     public const string SectionName = "Oidc";
@@ -23,9 +20,6 @@ public class OidcOptions
     public List<OidcProviderConfig> Providers { get; set; } = [];
 }
 
-/// <summary>
-/// Session configuration options
-/// </summary>
 public class SessionOptions
 {
     /// <summary>
@@ -45,9 +39,6 @@ public class SessionOptions
     public bool RotateRefreshTokens { get; set; } = true;
 }
 
-/// <summary>
-/// Cookie configuration settings
-/// </summary>
 public class CookieSettings
 {
     /// <summary>
@@ -140,9 +131,6 @@ public class StateOptions
     public TimeSpan Lifetime { get; set; } = TimeSpan.FromMinutes(15);
 }
 
-/// <summary>
-/// SameSite cookie mode
-/// </summary>
 public enum SameSiteMode
 {
     /// <summary>

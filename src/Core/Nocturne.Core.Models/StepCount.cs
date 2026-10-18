@@ -4,7 +4,7 @@ using Nocturne.Core.Models.Attributes;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a step count (PebbleMovement) record, compatible with xDrip step count uploads.
+/// Step count (PebbleMovement) record, compatible with xDrip step count uploads.
 /// Step count data is time-series movement data typically sourced from wearable devices via xDrip.
 /// </summary>
 /// <seealso cref="HeartRate"/>

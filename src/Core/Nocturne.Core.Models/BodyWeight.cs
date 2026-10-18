@@ -3,9 +3,6 @@ using Nocturne.Core.Models.Attributes;
 
 namespace Nocturne.Core.Models;
 
-/// <summary>
-/// Represents a body weight measurement record.
-/// </summary>
 /// <seealso cref="ProcessableDocumentBase"/>
 public class BodyWeight : ProcessableDocumentBase
 {

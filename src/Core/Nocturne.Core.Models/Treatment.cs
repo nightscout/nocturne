@@ -7,7 +7,7 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a Nightscout treatment entry with 1:1 legacy JavaScript compatibility.
+/// Nightscout treatment entry with 1:1 legacy JavaScript compatibility.
 /// Compatible with both the API and Connect projects.
 /// </summary>
 /// <remarks>

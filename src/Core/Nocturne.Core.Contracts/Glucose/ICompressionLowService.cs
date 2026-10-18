@@ -9,9 +9,6 @@ namespace Nocturne.Core.Contracts.Glucose;
 /// <seealso cref="IStateSpanService"/>
 public interface ICompressionLowService
 {
-    /// <summary>
-    /// Get suggestions with optional filtering.
-    /// </summary>
     /// <param name="status">Filter by <see cref="CompressionLowStatus"/>, or null to return all statuses.</param>
     /// <param name="nightOf">Filter to a specific night, or null to return all nights.</param>
     /// <returns>Matching compression-low suggestions.</returns>

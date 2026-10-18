@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models.Widget;
 
 /// <summary>
-/// Represents the current status of a tracker for widget display.
+/// Current status of a tracker for widget display.
 /// Includes identification, timing, and urgency information.
 /// </summary>
 public class V4TrackerStatus

@@ -24,15 +24,9 @@ public interface IDocumentProcessingService
     /// </summary>
     void ProcessTimestamp(IProcessableDocument document);
 
-    /// <summary>
-    /// Process a single entry document
-    /// </summary>
     /// <returns>Processed entry</returns>
     Entry ProcessEntry(Entry entry);
 
-    /// <summary>
-    /// Process a single treatment document
-    /// </summary>
     /// <returns>Processed treatment</returns>
     Treatment ProcessTreatment(Treatment treatment);
 }

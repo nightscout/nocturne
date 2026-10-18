@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a time-ranged system state (pump mode, connectivity, override, profile).
+/// Time-ranged system state (pump mode, connectivity, override, profile).
 /// </summary>
 /// <remarks>
 /// <para><see cref="StartMills"/> and <see cref="EndMills"/> are computed properties that convert

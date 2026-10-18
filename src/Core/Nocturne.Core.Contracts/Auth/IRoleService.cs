@@ -15,9 +15,6 @@ public interface IRoleService
     /// <exception cref="InvalidOperationException">Thrown when a role with the same name already exists.</exception>
     Task<Role> CreateRoleAsync(Role role);
 
-    /// <summary>
-    /// Update an existing role
-    /// </summary>
     /// <returns>Updated role or null if not found</returns>
     /// <exception cref="InvalidOperationException">Thrown when a role with the same name already exists, or when attempting to rename a system role.</exception>
     Task<Role?> UpdateRoleAsync(Role role);

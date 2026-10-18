@@ -22,17 +22,11 @@ public interface IUserFoodFavoriteRepository
         Guid foodId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Add a favorite entry for a user.
-    /// </summary>
     Task<UserFoodFavorite?> AddFavoriteAsync(
         string userId,
         Guid foodId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Remove a favorite entry for a user.
-    /// </summary>
     Task<bool> RemoveFavoriteAsync(
         string userId,
         Guid foodId,

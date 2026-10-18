@@ -10,9 +10,6 @@ namespace Nocturne.Core.Contracts.Repositories;
 /// <seealso cref="SystemEventCategory"/>
 public interface ISystemEventRepository
 {
-    /// <summary>
-    /// Get system events with optional filtering.
-    /// </summary>
     Task<IEnumerable<SystemEvent>> GetSystemEventsAsync(
         SystemEventType? eventType = null,
         SystemEventCategory? category = null,
@@ -23,9 +20,6 @@ public interface ISystemEventRepository
         int skip = 0,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get a specific system event by ID.
-    /// </summary>
     Task<SystemEvent?> GetSystemEventByIdAsync(
         string id,
         CancellationToken cancellationToken = default);

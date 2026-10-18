@@ -28,7 +28,7 @@ public enum ExcursionTransitionType
 }
 
 /// <summary>
-/// Represents the result of an excursion evaluation, pairing the
+/// Result of an excursion evaluation, pairing the
 /// <see cref="ExcursionTransitionType"/> with the excursion identifier when applicable.
 /// </summary>
 /// <param name="Type">The transition that occurred.</param>

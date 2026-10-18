@@ -6,7 +6,7 @@ using Nocturne.Core.Models.Serializers;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents an entry for glucose readings, similar to the legacy sgv collection.
+/// Entry for glucose readings, similar to the legacy sgv collection.
 /// </summary>
 /// <remarks>
 /// Follows the mills-first timestamp pattern: <see cref="Mills"/> is the source of truth.
@@ -178,9 +178,6 @@ public class Entry : ProcessableDocumentBase
     [JsonPropertyName("trendRate")]
     public double? TrendRate { get; set; }
 
-    /// <summary>
-    /// Whether this entry is a calibration reading
-    /// </summary>
     [JsonPropertyName("isCalibration")]
     public bool IsCalibration { get; set; }
 
@@ -210,9 +207,6 @@ public class Entry : ProcessableDocumentBase
     [JsonPropertyName("delta")]
     public double? Delta { get; set; }
 
-    /// <summary>
-    /// Scaled glucose value
-    /// </summary>
     [JsonPropertyName("scaled")]
     public object? Scaled { get; set; }
 

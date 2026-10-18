@@ -33,8 +33,5 @@ public interface ILoopService
     /// <returns>True if configuration is valid, false otherwise</returns>
     bool IsConfigurationValid();
 
-    /// <summary>
-    /// Gets the current Loop configuration status for debugging
-    /// </summary>
     object GetConfigurationStatus();
 }

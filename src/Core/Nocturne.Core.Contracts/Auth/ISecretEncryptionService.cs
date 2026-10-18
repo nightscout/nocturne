@@ -10,9 +10,6 @@ public interface ISecretEncryptionService
     /// <exception cref="InvalidOperationException">Thrown when encryption is not configured (api-secret not set).</exception>
     string Encrypt(string plaintext);
 
-    /// <summary>
-    /// Decrypts an encrypted secret value.
-    /// </summary>
     /// <param name="ciphertext">Base64-encoded ciphertext from Encrypt()</param>
     /// <returns>The original plaintext secret</returns>
     /// <exception cref="InvalidOperationException">Thrown when encryption is not configured (api-secret not set).</exception>

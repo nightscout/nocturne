@@ -18,18 +18,12 @@ public interface IDeduplicationService
         IReadOnlyList<DeduplicationInput> records,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get all records linked to a canonical group
-    /// </summary>
     /// <param name="canonicalId">The canonical group ID</param>
     /// <returns>All linked records in the group</returns>
     Task<IEnumerable<LinkedRecord>> GetLinkedRecordsAsync(
         Guid canonicalId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get the linked record information for a specific record
-    /// </summary>
     /// <returns>The linked record info, or null if not linked</returns>
     Task<LinkedRecord?> GetLinkedRecordAsync(
         RecordType recordType,
@@ -60,17 +54,11 @@ public interface IDeduplicationService
     /// <returns>The job ID for tracking progress</returns>
     Task<Guid> StartDeduplicationJobAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get the status of a running deduplication job
-    /// </summary>
     /// <returns>The job status, or null if not found</returns>
     Task<DeduplicationJobStatus?> GetJobStatusAsync(
         Guid jobId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Cancel a running deduplication job
-    /// </summary>
     /// <returns>True if the job was cancelled, false if not found or already completed</returns>
     Task<bool> CancelJobAsync(Guid jobId, CancellationToken cancellationToken = default);
 

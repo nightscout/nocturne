@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents the type of treatment event.
+/// Type of treatment event.
 /// 1:1 compatibility with Nightscout event types.
 /// <para>
 /// The <see cref="EnumMemberAttribute"/> values on each member define the exact string representation
@@ -38,9 +38,6 @@ public enum TreatmentEventType
     [EnumMember(Value = "Correction Bolus")]
     CorrectionBolus,
 
-    /// <summary>
-    /// Carbohydrate correction
-    /// </summary>
     [EnumMember(Value = "Carb Correction")]
     CarbCorrection,
 
@@ -59,15 +56,9 @@ public enum TreatmentEventType
     [EnumMember(Value = "Question")]
     Question,
 
-    /// <summary>
-    /// Pump site change
-    /// </summary>
     [EnumMember(Value = "Site Change")]
     SiteChange,
 
-    /// <summary>
-    /// CGM sensor start
-    /// </summary>
     [EnumMember(Value = "Sensor Start")]
     SensorStart,
 
@@ -77,18 +68,12 @@ public enum TreatmentEventType
     [EnumMember(Value = "Sensor Change")]
     SensorChange,
 
-    /// <summary>
-    /// CGM sensor stop
-    /// </summary>
     [EnumMember(Value = "Sensor Stop")]
     SensorStop,
 
     [EnumMember(Value = "Pump Battery Change")]
     PumpBatteryChange,
 
-    /// <summary>
-    /// Insulin cartridge change
-    /// </summary>
     [EnumMember(Value = "Insulin Change")]
     InsulinChange,
 

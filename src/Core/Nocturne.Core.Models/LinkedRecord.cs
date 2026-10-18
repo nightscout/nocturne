@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a link between a record and its canonical group for deduplication.
+/// Link between a record and its canonical group for deduplication.
 /// </summary>
 /// <remarks>
 /// The <see cref="RecordType"/> property determines which table the <see cref="RecordId"/> references:

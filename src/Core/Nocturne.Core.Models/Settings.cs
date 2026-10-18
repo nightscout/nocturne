@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a Nightscout settings record.
+/// Nightscout settings record.
 /// Settings are configuration key-value pairs for the Nightscout instance,
 /// stored in the <c>settings</c> collection. Each record holds a single key/value pair.
 /// </summary>
@@ -74,9 +74,6 @@ public class Settings : ProcessableDocumentBase
     [Sanitizable]
     public string? EnteredBy { get; set; }
 
-    /// <summary>
-    /// Version or revision number for this setting
-    /// </summary>
     [JsonPropertyName("version")]
     public int? Version { get; set; }
 
@@ -86,9 +83,6 @@ public class Settings : ProcessableDocumentBase
     [JsonPropertyName("isActive")]
     public bool IsActive { get; set; } = true;
 
-    /// <summary>
-    /// Optional notes or description for this setting
-    /// </summary>
     [JsonPropertyName("notes")]
     [Sanitizable]
     public string? Notes { get; set; }

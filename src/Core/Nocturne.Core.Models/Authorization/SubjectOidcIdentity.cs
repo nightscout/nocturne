@@ -37,7 +37,6 @@ public class SubjectOidcIdentity
     /// <summary>When this identity was first linked to the subject.</summary>
     public DateTime LinkedAt { get; set; }
 
-    /// <summary>When this identity was last used for authentication.</summary>
     public DateTime? LastUsedAt { get; set; }
 }
 

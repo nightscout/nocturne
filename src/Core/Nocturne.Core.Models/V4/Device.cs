@@ -1,7 +1,7 @@
 namespace Nocturne.Core.Models.V4;
 
 /// <summary>
-/// Represents a physical device identified by category, type, and serial number,
+/// Physical device identified by category, type, and serial number,
 /// auto-discovered from uploaded data.
 /// </summary>
 /// <remarks>

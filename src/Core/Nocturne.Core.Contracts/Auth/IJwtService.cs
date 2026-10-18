@@ -65,20 +65,11 @@ public interface IJwtService
     /// <returns>Hex-encoded SHA256 hash</returns>
     string HashRefreshToken(string refreshToken);
 
-    /// <summary>
-    /// Get the configured access token lifetime
-    /// </summary>
     TimeSpan GetAccessTokenLifetime();
 
-    /// <summary>
-    /// Get the configured refresh token lifetime
-    /// </summary>
     TimeSpan GetRefreshTokenLifetime();
 }
 
-/// <summary>
-/// Subject information for JWT generation
-/// </summary>
 public class SubjectInfo
 {
     /// <summary>
@@ -88,9 +79,6 @@ public class SubjectInfo
 
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Email address (optional)
-    /// </summary>
     public string? Email { get; set; }
 
 }
@@ -114,15 +102,9 @@ public class JwtValidationResult
     /// </summary>
     public JwtValidationError? ErrorCode { get; set; }
 
-    /// <summary>
-    /// Create a successful result
-    /// </summary>
     public static JwtValidationResult Success(JwtClaims claims) =>
         new() { IsValid = true, Claims = claims };
 
-    /// <summary>
-    /// Create a failed result
-    /// </summary>
     public static JwtValidationResult Failure(string error, JwtValidationError errorCode) =>
         new()
         {
@@ -132,9 +114,6 @@ public class JwtValidationResult
         };
 }
 
-/// <summary>
-/// Extracted JWT claims
-/// </summary>
 public class JwtClaims
 {
     public Guid SubjectId { get; set; }
@@ -193,34 +172,16 @@ public class JwtClaims
     public DateTimeOffset ExpiresAt { get; set; }
 }
 
-/// <summary>
-/// JWT validation error codes
-/// </summary>
 public enum JwtValidationError
 {
-    /// <summary>
-    /// Token format is invalid
-    /// </summary>
     InvalidFormat,
 
-    /// <summary>
-    /// Token signature is invalid
-    /// </summary>
     InvalidSignature,
 
-    /// <summary>
-    /// Token has expired
-    /// </summary>
     Expired,
 
-    /// <summary>
-    /// Token issuer is invalid
-    /// </summary>
     InvalidIssuer,
 
-    /// <summary>
-    /// Token audience is invalid
-    /// </summary>
     InvalidAudience,
 
     /// <summary>
@@ -228,9 +189,6 @@ public enum JwtValidationError
     /// </summary>
     NotYetValid,
 
-    /// <summary>
-    /// Required claims are missing
-    /// </summary>
     MissingClaims,
 
     Unknown,

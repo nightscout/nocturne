@@ -22,7 +22,6 @@ public interface IPatientInsulinRepository
 
     Task<PatientInsulin> CreateAsync(PatientInsulin model, WriteOrigin origin, CancellationToken ct = default);
 
-    /// <summary>Updates an existing patient insulin record.</summary>
     Task<PatientInsulin> UpdateAsync(Guid id, PatientInsulin model, WriteOrigin origin, CancellationToken ct = default);
 
     Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);

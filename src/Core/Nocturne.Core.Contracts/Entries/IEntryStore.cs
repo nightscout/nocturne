@@ -27,9 +27,6 @@ public interface IEntryStore
     /// <returns>The current <see cref="Entry"/>, or <c>null</c> if no entries exist.</returns>
     Task<Entry?> GetCurrentAsync(CancellationToken ct = default);
 
-    /// <summary>
-    /// Returns a single entry by its identifier.
-    /// </summary>
     /// <param name="id">The entry identifier (GUID or legacy MongoDB ObjectId).</param>
     /// <returns>The <see cref="Entry"/> if found, or <c>null</c>.</returns>
     Task<Entry?> GetByIdAsync(string id, CancellationToken ct = default);

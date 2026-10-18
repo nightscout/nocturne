@@ -2,9 +2,6 @@ using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Infrastructure;
 
-/// <summary>
-/// Service for tracking async processing status
-/// </summary>
 public interface IProcessingStatusService
 {
     /// <param name="correlationId">The correlation ID to look up</param>
@@ -27,9 +24,6 @@ public interface IProcessingStatusService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Marks processing as failed with error messages
-    /// </summary>
     /// <param name="errors">Error messages</param>
     Task MarkFailedAsync(
         string correlationId,
@@ -37,9 +31,6 @@ public interface IProcessingStatusService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Initializes processing status for a new correlation ID
-    /// </summary>
     /// <param name="totalCount">Total number of items to process</param>
     Task InitializeAsync(
         string correlationId,

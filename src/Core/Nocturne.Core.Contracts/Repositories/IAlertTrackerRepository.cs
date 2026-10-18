@@ -13,9 +13,6 @@ namespace Nocturne.Core.Contracts.Repositories;
 /// <seealso cref="Nocturne.Core.Contracts.Alerts.IExcursionTracker"/>
 public interface IAlertTrackerRepository
 {
-    /// <summary>
-    /// Get the tracker state for a specific alert rule.
-    /// </summary>
     /// <param name="alertRuleId">The unique identifier of the <see cref="AlertRule"/>.</param>
     /// <returns>The <see cref="AlertTrackerState"/> for the rule, or <c>null</c> if no state has been recorded yet.</returns>
     Task<AlertTrackerState?> GetTrackerStateAsync(
@@ -30,9 +27,6 @@ public interface IAlertTrackerRepository
         AlertTrackerState state,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Get the alert rule configuration.
-    /// </summary>
     /// <param name="alertRuleId">The unique identifier of the <see cref="AlertRule"/>.</param>
     /// <returns>The <see cref="AlertRule"/>, or <c>null</c> if not found.</returns>
     Task<AlertRule?> GetRuleAsync(

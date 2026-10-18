@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models.Widget;
 
 /// <summary>
-/// Represents predicted glucose values for widget display.
+/// Predicted glucose values for widget display.
 /// Contains a series of predicted values at regular intervals.
 /// </summary>
 public class V4Predictions

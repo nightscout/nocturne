@@ -5,7 +5,7 @@ using Nocturne.Core.Models.Attributes;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a Nightscout profile record for the API.
+/// Nightscout profile record for the API.
 /// Compatible with the legacy Nightscout profiles collection.
 /// A profile record contains a named store of basal rates, carb ratios, insulin sensitivities,
 /// and target ranges. Multiple named profiles can be stored in a single record via <see cref="Store"/>.
@@ -127,7 +127,7 @@ public class Profile
 }
 
 /// <summary>
-/// Represents the data for a specific named profile within a profile record
+/// Data for a specific named profile within a profile record
 /// </summary>
 public class ProfileData
 {
@@ -247,7 +247,7 @@ public class ProfileData
 }
 
 /// <summary>
-/// Represents a time-based value used in profiles (e.g., basal rates, carb ratios)
+/// Time-based value used in profiles (e.g., basal rates, carb ratios)
 /// </summary>
 public class TimeValue
 {

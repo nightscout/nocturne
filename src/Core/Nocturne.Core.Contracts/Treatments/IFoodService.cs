@@ -21,9 +21,6 @@ public interface IFoodService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get a specific food record by ID
-    /// </summary>
     /// <returns>Food record if found, null otherwise</returns>
     Task<Food?> GetFoodByIdAsync(string id, CancellationToken cancellationToken = default);
 
@@ -53,9 +50,6 @@ public interface IFoodService
     /// <returns>True if deleted successfully, false otherwise</returns>
     Task<bool> DeleteFoodAsync(string id, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Delete multiple food records with optional filtering
-    /// </summary>
     /// <param name="find">Optional MongoDB query filter</param>
     /// <returns>Number of records deleted</returns>
     Task<long> DeleteMultipleFoodAsync(

@@ -11,21 +11,12 @@ namespace Nocturne.Core.Contracts.Repositories;
 /// <seealso cref="IUserFoodFavoriteRepository"/>
 public interface IFoodRepository
 {
-    /// <summary>
-    /// Get all food entries
-    /// </summary>
     /// <returns>Collection of all food entries</returns>
     Task<IEnumerable<Food>> GetFoodAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get a food entry by its ID
-    /// </summary>
     /// <returns>The food entry if found, null otherwise</returns>
     Task<Food?> GetFoodByIdAsync(string id, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get food entries by type
-    /// </summary>
     /// <param name="type">The food type to filter by</param>
     /// <returns>Collection of food entries of the specified type</returns>
     Task<IEnumerable<Food>> GetFoodByTypeAsync(
@@ -87,9 +78,6 @@ public interface IFoodRepository
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Update a food entry by ID
-    /// </summary>
     /// <param name="food">The updated food data</param>
     /// <returns>The updated food entry, or null if not found</returns>
     Task<Food?> UpdateFoodAsync(
@@ -98,9 +86,6 @@ public interface IFoodRepository
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Delete a food entry by ID
-    /// </summary>
     /// <returns>True if deleted, false if not found</returns>
     Task<bool> DeleteFoodAsync(string id, CancellationToken cancellationToken = default);
 

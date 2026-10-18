@@ -20,9 +20,6 @@ namespace Nocturne.Core.Contracts.Glucose;
 /// <seealso cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository"/>
 public interface IStateSpanService
 {
-    /// <summary>
-    /// Get state spans with optional filtering
-    /// </summary>
     /// <param name="category">Optional category filter</param>
     /// <param name="state">Optional state filter</param>
     /// <param name="from">Optional start time in milliseconds since Unix epoch</param>
@@ -76,9 +73,6 @@ public interface IStateSpanService
         bool? active = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get a specific state span by ID
-    /// </summary>
     /// <returns>State span if found, null otherwise</returns>
     Task<StateSpan?> GetStateSpanByIdAsync(
         string id,
@@ -98,9 +92,6 @@ public interface IStateSpanService
         string id,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Update an existing state span
-    /// </summary>
     /// <param name="stateSpan">Updated state span data</param>
     /// <returns>Updated state span if successful, null otherwise</returns>
     Task<StateSpan?> UpdateStateSpanAsync(
@@ -159,17 +150,11 @@ public interface IStateSpanService
         string source,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get a specific activity by ID
-    /// </summary>
     /// <returns>Activity if found, null otherwise</returns>
     Task<Activity?> GetActivityByIdAsync(
         string id,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Create activities and store as StateSpans
-    /// </summary>
     Task<IEnumerable<Activity>> CreateActivitiesAsync(
         IEnumerable<Activity> activities,
         CancellationToken cancellationToken = default);

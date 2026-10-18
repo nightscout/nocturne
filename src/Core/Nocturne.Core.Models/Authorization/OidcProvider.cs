@@ -1,8 +1,5 @@
 namespace Nocturne.Core.Models.Authorization;
 
-/// <summary>
-/// Domain model for OIDC Provider configuration.
-/// </summary>
 /// <seealso cref="SubjectOidcIdentity"/>
 /// <seealso cref="OidcDiscoveryDocument"/>
 public class OidcProvider

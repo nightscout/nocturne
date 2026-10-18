@@ -8,9 +8,6 @@ public interface IConnectorFoodEntryRepository
     /// <returns>The matching food entry, or null if not found.</returns>
     Task<ConnectorFoodEntry?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>
-    /// Get pending food entries within a time range.
-    /// </summary>
     /// <param name="from">Start of the time range (inclusive).</param>
     /// <param name="to">End of the time range (inclusive).</param>
     /// <returns>Food entries with pending status within the given range.</returns>
@@ -19,9 +16,6 @@ public interface IConnectorFoodEntryRepository
         DateTimeOffset to,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Get food entries by IDs.
-    /// </summary>
     /// <param name="ids">The IDs to look up.</param>
     /// <returns>Food entries matching the given IDs.</returns>
     Task<IReadOnlyList<ConnectorFoodEntry>> GetByIdsAsync(

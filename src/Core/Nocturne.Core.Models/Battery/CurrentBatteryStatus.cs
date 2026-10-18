@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models.Battery;
 
 /// <summary>
-/// Represents the current battery status for all tracked devices.
+/// Current battery status for all tracked devices.
 /// Provides an aggregated view with the worst-case level across all devices.
 /// </summary>
 /// <seealso cref="DeviceBatteryStatus"/>
@@ -17,9 +17,6 @@ public class CurrentBatteryStatus
     [JsonPropertyName("level")]
     public int? Level { get; set; }
 
-    /// <summary>
-    /// Display string for the overall battery status
-    /// </summary>
     [JsonPropertyName("display")]
     public string Display { get; set; } = "?%";
 
@@ -39,9 +36,6 @@ public class CurrentBatteryStatus
     public Dictionary<string, DeviceBatteryStatus> Devices { get; set; } = new();
 }
 
-/// <summary>
-/// Represents the current battery status for a single device.
-/// </summary>
 /// <seealso cref="CurrentBatteryStatus"/>
 /// <seealso cref="BatteryReading"/>
 public class DeviceBatteryStatus

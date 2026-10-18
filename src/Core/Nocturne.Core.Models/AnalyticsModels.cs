@@ -176,9 +176,6 @@ public class AnalyticsCollectionConfig
 
     public bool CollectPerformanceMetrics { get; set; } = true;
 
-    /// <summary>
-    /// Whether to collect error and health metrics
-    /// </summary>
     public bool CollectHealthMetrics { get; set; } = true;
 
     public bool CollectFeatureUsage { get; set; } = true;

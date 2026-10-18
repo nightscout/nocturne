@@ -75,9 +75,6 @@ public class ProcessingStatus
     public object? Results { get; set; }
 }
 
-/// <summary>
-/// Response model for processing status queries
-/// </summary>
 public class ProcessingStatusResponse : ProcessingStatus
 {
     // Inherits all properties from ProcessingStatus

@@ -4,7 +4,7 @@ using Nocturne.Core.Models.Attributes;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a Nightscout activity record for the API.
+/// Nightscout activity record for the API.
 /// Compatible with the legacy Nightscout activity collection.
 /// </summary>
 /// <seealso cref="ProcessableDocumentBase"/>

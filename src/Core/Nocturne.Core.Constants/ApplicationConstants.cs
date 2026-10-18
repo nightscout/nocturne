@@ -28,9 +28,6 @@ public static class ApplicationConstants
     /// </remarks>
     public static class Proxy
     {
-        /// <summary>
-        /// Configuration section name in appsettings for proxy settings.
-        /// </summary>
         public const string SectionName = "Proxy";
 
         /// <summary>
@@ -140,9 +137,6 @@ public static class ApplicationConstants
         /// </summary>
         public const string LogDirectory = "./logs";
 
-        /// <summary>
-        /// Directory for configuration files.
-        /// </summary>
         public const string ConfigDirectory = "./config";
 
         /// <summary>

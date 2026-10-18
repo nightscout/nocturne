@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a point-in-time system event (alarm, warning, info) from a pump or CGM.
+/// Point-in-time system event (alarm, warning, info) from a pump or CGM.
 /// System events are stored in the <c>system_events</c> table and are displayed on the chart timeline.
 /// </summary>
 /// <seealso cref="SystemEventType"/>

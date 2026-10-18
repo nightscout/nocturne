@@ -65,9 +65,6 @@ public class PumpVisualizationData
     public string PillClass { get; set; } = "current";
 }
 
-/// <summary>
-/// Info item for pump visualization tooltip
-/// </summary>
 public class PumpInfoItem
 {
     public string Label { get; set; } = string.Empty;

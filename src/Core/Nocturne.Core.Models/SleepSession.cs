@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a sleep session recorded by a wearable or health platform.
+/// Sleep session recorded by a wearable or health platform.
 /// </summary>
 /// <remarks>
 /// <para><see cref="StartMills"/> and <see cref="EndMills"/> are computed properties that convert
@@ -110,9 +110,6 @@ public class SleepSession
     [JsonPropertyName("efficiency")]
     public float? Efficiency { get; set; }
 
-    /// <summary>
-    /// Number of restless periods during the session.
-    /// </summary>
     [JsonPropertyName("restlessPeriods")]
     public int? RestlessPeriods { get; set; }
 
@@ -158,9 +155,6 @@ public class SleepSession
     [JsonPropertyName("source")]
     public SleepSource Source { get; set; }
 
-    /// <summary>
-    /// Name of the device that recorded the session.
-    /// </summary>
     [JsonPropertyName("sourceDevice")]
     public string? SourceDevice { get; set; }
 

@@ -20,7 +20,6 @@ public interface IPatientDeviceRepository
     /// <summary>Returns devices that were active during the specified date range.</summary>
     Task<IEnumerable<PatientDevice>> GetByDateRangeAsync(DateTime from, DateTime to, CancellationToken ct = default);
 
-    /// <summary>Returns all patient devices linked to the specified device.</summary>
     Task<IReadOnlyList<PatientDevice>> GetByDeviceIdAsync(Guid deviceId, CancellationToken ct = default);
 
     /// <summary>Returns a device by its ID, or null if not found.</summary>
@@ -28,7 +27,6 @@ public interface IPatientDeviceRepository
 
     Task<PatientDevice> CreateAsync(PatientDevice model, WriteOrigin origin, CancellationToken ct = default);
 
-    /// <summary>Updates an existing patient device record.</summary>
     Task<PatientDevice> UpdateAsync(Guid id, PatientDevice model, WriteOrigin origin, CancellationToken ct = default);
 
     Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);

@@ -27,9 +27,6 @@ public interface INotificationV2Service
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Gets the current notification status and configuration
-    /// </summary>
     /// <returns>Current notification system status</returns>
     Task<object> GetNotificationStatusAsync(CancellationToken cancellationToken = default);
 }

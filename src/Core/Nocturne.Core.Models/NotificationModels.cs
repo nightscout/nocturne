@@ -12,9 +12,6 @@ public class NotificationV2Response
     [JsonPropertyName("success")]
     public bool Success { get; set; }
 
-    /// <summary>
-    /// Message describing the result of the notification operation
-    /// </summary>
     [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
 
@@ -57,9 +54,6 @@ public class NotificationBase
     /// </summary>
     public int Count { get; set; }
 
-    /// <summary>
-    /// Timestamp when the notification was last recorded
-    /// </summary>
     public long LastRecorded { get; set; }
 
     /// <summary>
@@ -67,9 +61,6 @@ public class NotificationBase
     /// </summary>
     public bool Persistent { get; set; }
 
-    /// <summary>
-    /// Whether this is a clear alarm notification
-    /// </summary>
     public bool Clear { get; set; }
 }
 
@@ -103,9 +94,6 @@ public class NotificationAckRequest
 /// </summary>
 public class NotificationAckResponse
 {
-    /// <summary>
-    /// Success status of the acknowledgment operation
-    /// </summary>
     [JsonPropertyName("success")]
     public bool Success { get; set; }
 
@@ -238,9 +226,6 @@ public class PushoverNotificationRequest
     /// </summary>
     public string? Device { get; set; }
 
-    /// <summary>
-    /// URL to include in notification (optional)
-    /// </summary>
     public string? Url { get; set; }
 
     public string? UrlTitle { get; set; }

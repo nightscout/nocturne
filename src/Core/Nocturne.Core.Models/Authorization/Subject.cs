@@ -79,8 +79,5 @@ public enum SubjectType
     /// </summary>
     Service,
 
-    /// <summary>
-    /// Admin user
-    /// </summary>
     Admin
 }

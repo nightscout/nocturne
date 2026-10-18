@@ -21,9 +21,6 @@ public class OrefService
     /// </summary>
     public static bool IsAvailable() => OrefInterop.IsAvailable();
 
-    /// <summary>
-    /// Get the oref library version.
-    /// </summary>
     public static string GetVersion() => OrefInterop.GetVersion();
 
     /// <summary>
@@ -31,9 +28,6 @@ public class OrefService
     /// </summary>
     public static string HealthCheck() => OrefInterop.HealthCheck();
 
-    /// <summary>
-    /// Calculate glucose status from recent readings.
-    /// </summary>
     /// <param name="readings">Recent glucose readings (most recent first)</param>
     /// <returns>Glucose status with delta calculations.</returns>
     public static GlucoseStatus? CalculateGlucoseStatus(IEnumerable<GlucoseReading> readings)

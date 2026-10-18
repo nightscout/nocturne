@@ -46,9 +46,6 @@ public class EventTypeConfiguration
     public bool Sensor { get; set; }
 }
 
-/// <summary>
-/// Static helper for event type configurations
-/// </summary>
 /// <seealso cref="EventTypeConfiguration"/>
 /// <seealso cref="TreatmentEventType"/>
 public static class EventTypeConfigurations

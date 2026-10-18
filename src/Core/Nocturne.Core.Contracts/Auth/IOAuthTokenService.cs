@@ -76,9 +76,6 @@ public interface IOAuthTokenService
     );
 }
 
-/// <summary>
-/// Result of a token exchange operation.
-/// </summary>
 public class OAuthTokenResult
 {
     /// <summary>Whether the token exchange succeeded.</summary>
@@ -102,7 +99,6 @@ public class OAuthTokenResult
     /// <summary>Human-readable error description, present on failure.</summary>
     public string? ErrorDescription { get; set; }
 
-    /// <summary>Create a successful token result.</summary>
     public static OAuthTokenResult Ok(
         string accessToken,
         string refreshToken,

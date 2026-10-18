@@ -64,9 +64,6 @@ public interface IAnalyticsService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get current system information for analytics reporting
-    /// </summary>
     /// <returns>Anonymous system information</returns>
     SystemInfo GetSystemInfo();
 
@@ -86,15 +83,9 @@ public interface IAnalyticsService
     /// <returns>True if analytics collection is enabled</returns>
     bool IsAnalyticsEnabled();
 
-    /// <summary>
-    /// Get the current analytics configuration
-    /// </summary>
     /// <returns>Analytics collection configuration</returns>
     AnalyticsCollectionConfig GetAnalyticsConfig();
 
-    /// <summary>
-    /// Update analytics collection configuration
-    /// </summary>
     /// <param name="config">New configuration</param>
     Task UpdateAnalyticsConfigAsync(AnalyticsCollectionConfig config);
 
@@ -104,8 +95,5 @@ public interface IAnalyticsService
     /// <returns>Current analytics data pending transmission</returns>
     Task<AnalyticsBatch?> GetPendingAnalyticsDataAsync();
 
-    /// <summary>
-    /// Clear all stored analytics data
-    /// </summary>
     Task ClearAnalyticsDataAsync();
 }

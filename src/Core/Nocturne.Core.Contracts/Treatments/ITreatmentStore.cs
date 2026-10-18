@@ -27,9 +27,6 @@ public interface ITreatmentStore
     /// <param name="id">The identifier as received from the client.</param>
     Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default);
 
-    /// <summary>
-    /// Returns a single treatment by its identifier.
-    /// </summary>
     /// <param name="id">The treatment identifier (GUID or legacy MongoDB ObjectId).</param>
     /// <returns>The <see cref="Treatment"/> if found, or <c>null</c>.</returns>
     Task<Treatment?> GetByIdAsync(string id, CancellationToken ct = default);
@@ -91,7 +88,6 @@ public interface ITreatmentStore
     Task<long> CountAsync(string? find = null, CancellationToken ct = default);
 }
 
-/// <summary>A treatment deleted by id.</summary>
 /// <param name="Served">
 /// The treatment as reads served it before the delete, or <c>null</c> for a record reads do not
 /// serve.

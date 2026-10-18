@@ -76,9 +76,6 @@ public interface IOAuthGrantService
     /// the request's tenant by the caller. Used to scope the lookup.</param>
     Task<bool> IsGrantRevokedAsync(Guid grantId, Guid tenantId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Update last-used tracking on a grant.
-    /// </summary>
     Task UpdateLastUsedAsync(
         Guid grantId,
         string? ipAddress,

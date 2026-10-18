@@ -66,9 +66,6 @@ public interface IStateSpanRepository
         bool? active = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Returns a single state span by its identifier.
-    /// </summary>
     /// <returns>The <see cref="StateSpan"/> if found, or <c>null</c>.</returns>
     Task<StateSpan?> GetStateSpanByIdAsync(
         string id,
@@ -91,9 +88,6 @@ public interface IStateSpanRepository
         IEnumerable<StateSpan> stateSpans,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Updates an existing state span by ID.
-    /// </summary>
     /// <param name="stateSpan">The updated <see cref="StateSpan"/> data.</param>
     /// <returns>The updated <see cref="StateSpan"/>, or <c>null</c> if not found.</returns>
     Task<StateSpan?> UpdateStateSpanAsync(
@@ -209,17 +203,11 @@ public interface IStateSpanRepository
         string source,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Returns a single activity state span by its identifier.
-    /// </summary>
     /// <returns>The activity <see cref="StateSpan"/> if found, or <c>null</c>.</returns>
     Task<StateSpan?> GetActivityStateSpanByIdAsync(
         string id,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Creates multiple activities as state spans.
-    /// </summary>
     /// <returns>
     /// The created or updated <see cref="StateSpan"/> records. A span whose original id the user
     /// deleted is not written and not returned.

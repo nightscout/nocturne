@@ -171,9 +171,6 @@ public class LoopOverridePreset
     public double? InsulinNeedsScaleFactor { get; set; }
 }
 
-/// <summary>
-/// Loop target glucose range
-/// </summary>
 public class LoopTargetRange
 {
     [JsonPropertyName("minValue")]

@@ -25,7 +25,6 @@ public enum DeviceEventType
     /// <summary>Insulin cartridge changed</summary>
     InsulinChange,
 
-    /// <summary>Pump battery changed</summary>
     PumpBatteryChange,
 
     /// <summary>Omnipod pod changed</summary>
@@ -52,7 +51,6 @@ public enum DeviceEventType
     /// <summary>Pump insulin delivery resumed</summary>
     PumpResume,
 
-    /// <summary>Pump priming event</summary>
     Priming,
 
     /// <summary>Pump tubing primed</summary>
@@ -64,10 +62,8 @@ public enum DeviceEventType
     /// <summary>Pump reservoir rewind</summary>
     Rewind,
 
-    /// <summary>Pump date changed</summary>
     DateChanged,
 
-    /// <summary>Pump time changed</summary>
     TimeChanged,
 
     /// <summary>Maximum bolus limit changed</summary>

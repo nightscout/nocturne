@@ -4,7 +4,7 @@ using Nocturne.Core.Models.Serializers;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a Nightscout food record for the API.
+/// Nightscout food record for the API.
 /// Compatible with the legacy Nightscout food collection.
 /// Records with <c>type="quickpick"</c> are composite shortcuts containing multiple <see cref="QuickPickFood"/> items.
 /// </summary>
@@ -132,7 +132,7 @@ public class Food
 }
 
 /// <summary>
-/// Represents a food item within a quickpick
+/// Food item within a quickpick
 /// </summary>
 [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
 public class QuickPickFood

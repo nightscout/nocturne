@@ -22,9 +22,6 @@ public interface ITreatmentService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get treatments with count and pagination
-    /// </summary>
     /// <param name="count">Maximum number of treatments to return</param>
     /// <param name="skip">Number of treatments to skip for pagination</param>
     Task<IEnumerable<Treatment>> GetTreatmentsAsync(
@@ -33,9 +30,6 @@ public interface ITreatmentService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get a specific treatment by ID
-    /// </summary>
     /// <returns>Treatment if found, null otherwise</returns>
     Task<Treatment?> GetTreatmentByIdAsync(
         string id,

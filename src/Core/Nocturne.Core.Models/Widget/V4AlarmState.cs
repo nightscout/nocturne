@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models.Widget;
 
 /// <summary>
-/// Represents the current alarm state for widget display.
+/// Current alarm state for widget display.
 /// Contains information about active alarms and their silencing status.
 /// </summary>
 public class V4AlarmState

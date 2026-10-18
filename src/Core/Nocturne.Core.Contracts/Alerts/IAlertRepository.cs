@@ -30,9 +30,6 @@ public interface IAlertRepository
     /// </summary>
     Task<AlertInstanceSnapshot> CreateInstanceAsync(CreateAlertInstanceRequest request, CancellationToken ct);
 
-    /// <summary>
-    /// Returns all alert instances associated with a specific excursion.
-    /// </summary>
     /// <param name="tenantId">The tenant that owns the excursion, used to scope the query.</param>
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <returns>A read-only list of alert instances for the excursion.</returns>

@@ -25,9 +25,6 @@ public enum SystemEventType
     /// </summary>
     Warning,
 
-    /// <summary>
-    /// Informational event
-    /// </summary>
     Info
 }
 

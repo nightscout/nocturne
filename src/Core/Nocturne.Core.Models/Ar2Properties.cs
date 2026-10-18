@@ -48,9 +48,6 @@ public class Ar2Forecast
     public double AvgLoss { get; set; }
 }
 
-/// <summary>
-/// Individual forecast point
-/// </summary>
 public class ForecastPoint
 {
     /// <summary>

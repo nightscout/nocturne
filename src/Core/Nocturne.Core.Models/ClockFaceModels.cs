@@ -30,15 +30,9 @@ public class ClockFace
 
     public DateTime CreatedAt { get; set; }
 
-    /// <summary>
-    /// When this clock face was last updated
-    /// </summary>
     public DateTime? UpdatedAt { get; set; }
 }
 
-/// <summary>
-/// Configuration for a clock face layout
-/// </summary>
 public class ClockFaceConfig
 {
     /// <summary>
@@ -96,9 +90,6 @@ public class ClockFaceConfig
     }
 }
 
-/// <summary>
-/// A row of elements in the clock face
-/// </summary>
 public class ClockRow
 {
     [JsonPropertyName("elements")]
@@ -182,22 +173,13 @@ public class ClockElement
     [JsonPropertyName("text")]
     public string? Text { get; set; }
 
-    /// <summary>
-    /// Styling configuration for the element
-    /// </summary>
     [JsonPropertyName("style")]
     public ClockElementStyle? Style { get; set; }
 
-    /// <summary>
-    /// Chart configuration (for chart element)
-    /// </summary>
     [JsonPropertyName("chartConfig")]
     public ClockChartConfig? ChartConfig { get; set; }
 }
 
-/// <summary>
-/// Styling configuration for clock elements
-/// </summary>
 public class ClockElementStyle
 {
     /// <summary>
@@ -232,9 +214,6 @@ public class ClockElementStyle
     public Dictionary<string, string>? Custom { get; set; }
 }
 
-/// <summary>
-/// Configuration for an embedded chart element
-/// </summary>
 public class ClockChartConfig
 {
     [JsonPropertyName("showIob")]
@@ -350,9 +329,6 @@ public class ClockSettings
         ?? UserDisplayPreferences.Check("settings.timeFormat", TimeFormat ?? "null", UserDisplayPreferences.AllowedTimeFormats);
 }
 
-/// <summary>
-/// DTO for creating a new clock face
-/// </summary>
 public class CreateClockFaceRequest
 {
     /// <summary>
@@ -367,9 +343,6 @@ public class CreateClockFaceRequest
     public ClockFaceConfig? Config { get; set; }
 }
 
-/// <summary>
-/// DTO for updating a clock face
-/// </summary>
 public class UpdateClockFaceRequest
 {
     /// <summary>
@@ -377,9 +350,6 @@ public class UpdateClockFaceRequest
     /// </summary>
     public string? Name { get; set; }
 
-    /// <summary>
-    /// Clock face configuration (optional)
-    /// </summary>
     public ClockFaceConfig? Config { get; set; }
 }
 

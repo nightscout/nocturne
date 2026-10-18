@@ -49,9 +49,6 @@ public interface ISleepSessionRepository
         SleepSource? source = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Returns a single sleep session by its identifier.
-    /// </summary>
     /// <returns>The <see cref="SleepSession"/> if found, or <c>null</c>.</returns>
     Task<SleepSession?> GetSessionByIdAsync(
         Guid id,
@@ -69,9 +66,6 @@ public interface ISleepSessionRepository
         SleepSession session,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Updates an existing sleep session by ID.
-    /// </summary>
     /// <param name="session">The updated <see cref="SleepSession"/> data.</param>
     /// <returns>The updated <see cref="SleepSession"/>, or <c>null</c> if not found.</returns>
     /// <exception cref="V4.Repositories.RecreationBlockedException">

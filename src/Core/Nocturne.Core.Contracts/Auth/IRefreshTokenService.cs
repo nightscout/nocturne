@@ -37,9 +37,6 @@ public interface IRefreshTokenService
         string? ipAddress = null,
         string? userAgent = null);
 
-    /// <summary>
-    /// Revoke a specific refresh token
-    /// </summary>
     /// <param name="refreshToken">Plain refresh token string</param>
     /// <param name="reason">Reason for revocation</param>
     /// <returns>True if revoked, false if not found</returns>
@@ -78,9 +75,6 @@ public interface IRefreshTokenService
     /// <returns>Number of tokens revoked</returns>
     Task<int> RevokeOtherSessionsForSubjectAsync(Guid subjectId, string currentSessionId, string reason);
 
-    /// <summary>
-    /// Update last used timestamp for a refresh token
-    /// </summary>
     /// <param name="refreshToken">Plain refresh token string</param>
     Task UpdateLastUsedAsync(string refreshToken);
 

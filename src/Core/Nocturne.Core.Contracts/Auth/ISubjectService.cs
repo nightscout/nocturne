@@ -14,9 +14,6 @@ public interface ISubjectService
     /// <returns>Subject if found, null otherwise</returns>
     Task<Subject?> GetSubjectByIdAsync(Guid subjectId);
 
-    /// <summary>
-    /// Find or create a subject from OIDC claims
-    /// </summary>
     /// <param name="oidcSubjectId">OIDC subject identifier (sub claim)</param>
     /// <param name="issuer">OIDC issuer URL</param>
     /// <param name="email">Email from OIDC claims</param>
@@ -92,9 +89,6 @@ public interface ISubjectService
     /// <returns>True if deactivated, false if not found</returns>
     Task<bool> DeactivateSubjectAsync(Guid subjectId);
 
-    /// <summary>
-    /// Get roles assigned to a subject
-    /// </summary>
     /// <returns>List of role names</returns>
     Task<List<string>> GetSubjectRolesAsync(Guid subjectId);
 
@@ -117,9 +111,6 @@ public interface ISubjectService
     /// <returns>True if subject has the permission</returns>
     Task<bool> HasPermissionAsync(Guid subjectId, string permission);
 
-    /// <summary>
-    /// Update last login timestamp for a subject
-    /// </summary>
     Task UpdateLastLoginAsync(Guid subjectId);
 
     /// <summary>
@@ -133,9 +124,6 @@ public interface ISubjectService
 /// </summary>
 public enum FactorRemovalResult
 {
-    /// <summary>
-    /// The factor was successfully removed.
-    /// </summary>
     Removed,
 
     /// <summary>
@@ -149,9 +137,6 @@ public enum FactorRemovalResult
     LastPrimaryFactor,
 }
 
-/// <summary>
-/// Result of creating a subject
-/// </summary>
 public class SubjectCreationResult
 {
     public required Subject Subject { get; set; }

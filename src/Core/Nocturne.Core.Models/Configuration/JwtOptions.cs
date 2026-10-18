@@ -1,8 +1,5 @@
 namespace Nocturne.Core.Models.Configuration;
 
-/// <summary>
-/// JWT authentication configuration options.
-/// </summary>
 public class JwtOptions
 {
     public const string SectionName = "Jwt";

@@ -69,9 +69,6 @@ public interface IOidcAuthService
         Guid? currentTenantId = null
     );
 
-    /// <summary>
-    /// Refresh the session using a refresh token
-    /// </summary>
     /// <param name="ipAddress">Client IP address</param>
     /// <returns>New session tokens or null if refresh failed</returns>
     Task<OidcTokenResponse?> RefreshSessionAsync(
@@ -88,9 +85,6 @@ public interface IOidcAuthService
     /// <returns>Logout result with optional provider logout URL</returns>
     Task<OidcLogoutResult> LogoutAsync(string refreshToken, Guid? providerId = null);
 
-    /// <summary>
-    /// Get user information from the current session
-    /// </summary>
     /// <returns>User info or null if not found</returns>
     Task<OidcUserInfo?> GetUserInfoAsync(Guid subjectId);
 
@@ -236,9 +230,6 @@ public class OidcCallbackResult
     /// </summary>
     public Guid? ProviderId { get; set; }
 
-    /// <summary>
-    /// Create a successful result
-    /// </summary>
     public static OidcCallbackResult Succeeded(
         OidcTokenResponse tokens,
         OidcUserInfo userInfo,
@@ -367,18 +358,12 @@ public class OidcLogoutResult
     /// </summary>
     public string? Error { get; set; }
 
-    /// <summary>
-    /// Create a successful result
-    /// </summary>
     public static OidcLogoutResult Succeeded(string? providerLogoutUrl = null) =>
         new() { Success = true, ProviderLogoutUrl = providerLogoutUrl };
 
     public static OidcLogoutResult Failed(string error) => new() { Success = false, Error = error };
 }
 
-/// <summary>
-/// Result of the setup OIDC callback flow.
-/// </summary>
 public class OidcSetupCallbackResult
 {
     public bool Success { get; set; }

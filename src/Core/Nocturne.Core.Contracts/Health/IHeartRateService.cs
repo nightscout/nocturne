@@ -22,9 +22,6 @@ public interface IHeartRateService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get heart rate records within a date range
-    /// </summary>
     /// <param name="from">Start of date range (inclusive)</param>
     /// <param name="to">End of date range (exclusive)</param>
     /// <param name="count">Maximum number of records to return; <see langword="null"/> for every record in the range</param>
@@ -65,9 +62,6 @@ public interface IHeartRateService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get a specific heart rate record by ID
-    /// </summary>
     /// <returns>Heart rate record if found, null otherwise</returns>
     Task<HeartRate?> GetHeartRateByIdAsync(string id, CancellationToken cancellationToken = default);
 

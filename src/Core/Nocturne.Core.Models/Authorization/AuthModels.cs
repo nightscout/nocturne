@@ -24,17 +24,11 @@ public class AuthResult
     /// </summary>
     public bool ShouldSkip { get; set; }
 
-    /// <summary>
-    /// Create a successful auth result.
-    /// </summary>
     /// <param name="context">The authentication context for the authenticated request.</param>
     /// <returns>An <see cref="AuthResult"/> with <see cref="Succeeded"/> set to <c>true</c>.</returns>
     public static AuthResult Success(AuthContext context) =>
         new() { Succeeded = true, AuthContext = context };
 
-    /// <summary>
-    /// Create a failed auth result.
-    /// </summary>
     /// <param name="error">Human-readable error message describing the failure.</param>
     /// <returns>An <see cref="AuthResult"/> with <see cref="Succeeded"/> set to <c>false</c>.</returns>
     public static AuthResult Failure(string error) =>
@@ -207,9 +201,6 @@ public class AuthContext
         Roles.Contains(role, StringComparer.OrdinalIgnoreCase);
 }
 
-/// <summary>
-/// Types of authentication
-/// </summary>
 public enum AuthType
 {
     /// <summary>

@@ -68,15 +68,12 @@ public enum ClinicalAssessmentLevel
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum GlucoseManagementIndicatorLevel
 {
-    /// <summary>Non-diabetic range</summary>
     [JsonPropertyName("nonDiabetic")]
     NonDiabetic,
 
-    /// <summary>Prediabetes range</summary>
     [JsonPropertyName("prediabetes")]
     Prediabetes,
 
-    /// <summary>Well-controlled diabetes</summary>
     [JsonPropertyName("wellControlled")]
     WellControlled,
 

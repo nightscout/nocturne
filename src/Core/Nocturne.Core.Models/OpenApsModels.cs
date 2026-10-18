@@ -284,9 +284,6 @@ public class OpenApsMmTune
     public DateTime? Moment { get; set; }
 }
 
-/// <summary>
-/// OpenAPS forecast point for visualization
-/// </summary>
 public class OpenApsForecastPoint
 {
     /// <summary>
@@ -307,9 +304,6 @@ public class OpenApsForecastPoint
     public string Type { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// OpenAPS event information for visualization
-/// </summary>
 public class OpenApsEvent
 {
     public DateTime Time { get; set; }

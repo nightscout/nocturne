@@ -117,9 +117,6 @@ public class SensorAgeInfo
     public string Min { get; set; } = "Sensor Start";
 }
 
-/// <summary>
-/// Notification information for device age alerts
-/// </summary>
 public class DeviceAgeNotification
 {
     [JsonPropertyName("title")]

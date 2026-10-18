@@ -4,7 +4,7 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.Core.Models.Widget;
 
 /// <summary>
-/// Represents a glucose reading optimized for widget display.
+/// Glucose reading optimized for widget display.
 /// Contains essential glucose data including value, direction, and trend information.
 /// </summary>
 public class V4GlucoseReading

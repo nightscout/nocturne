@@ -30,9 +30,6 @@ public interface IOidcProviderService
     /// <param name="provider">Provider configuration</param>
     Task<OidcProvider> CreateProviderAsync(OidcProvider provider);
 
-    /// <summary>
-    /// Update an existing OIDC provider
-    /// </summary>
     /// <param name="provider">Provider configuration</param>
     /// <returns>Updated provider or null if not found</returns>
     Task<OidcProvider?> UpdateProviderAsync(OidcProvider provider);
@@ -53,9 +50,6 @@ public interface IOidcProviderService
     /// <returns>Discovery document if successful, null otherwise</returns>
     Task<OidcDiscoveryDocument?> GetDiscoveryDocumentAsync(Guid providerId, bool forceRefresh = false);
 
-    /// <summary>
-    /// Test connectivity to an OIDC provider
-    /// </summary>
     Task<OidcProviderTestResult> TestProviderAsync(Guid providerId);
 }
 

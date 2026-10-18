@@ -29,9 +29,6 @@ public interface IClockFaceService
     /// <param name="request">Create request with name and config</param>
     Task<ClockFace> CreateAsync(string userId, CreateClockFaceRequest request, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Update an existing clock face
-    /// </summary>
     /// <param name="userId">User ID (must be owner)</param>
     /// <returns>Updated clock face if successful, null if not found or not owner</returns>
     Task<ClockFace?> UpdateAsync(Guid id, string userId, UpdateClockFaceRequest request, CancellationToken cancellationToken = default);

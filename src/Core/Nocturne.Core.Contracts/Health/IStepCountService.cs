@@ -22,9 +22,6 @@ public interface IStepCountService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get step count records within a date range
-    /// </summary>
     /// <param name="from">Start of date range (inclusive)</param>
     /// <param name="to">End of date range (exclusive)</param>
     /// <param name="count">Maximum number of records to return; <see langword="null"/> for every record in the range</param>
@@ -48,9 +45,6 @@ public interface IStepCountService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get a specific step count record by ID
-    /// </summary>
     /// <returns>Step count record if found, null otherwise</returns>
     Task<StepCount?> GetStepCountByIdAsync(string id, CancellationToken cancellationToken = default);
 

@@ -21,9 +21,6 @@ public class AlarmProfileConfiguration
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Description of what this alarm is for
-    /// </summary>
     [JsonPropertyName("description")]
     public string? Description { get; set; }
 
@@ -147,9 +144,6 @@ public enum AlarmTriggerType
     Custom,
 }
 
-/// <summary>
-/// Priority levels for alarms
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum AlarmPriority
 {
@@ -167,9 +161,6 @@ public enum AlarmPriority
 
 public class AlarmAudioSettings
 {
-    /// <summary>
-    /// Whether sound is enabled for this alarm
-    /// </summary>
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
@@ -239,9 +230,6 @@ public class AlarmVibrationSettings
 /// </summary>
 public class AlarmVisualSettings
 {
-    /// <summary>
-    /// Whether to flash the screen when alarm triggers
-    /// </summary>
     [JsonPropertyName("screenFlash")]
     public bool ScreenFlash { get; set; }
 
@@ -350,9 +338,6 @@ public class AlarmScheduleSettings
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; }
 
-    /// <summary>
-    /// Time ranges when this alarm is active
-    /// </summary>
     [JsonPropertyName("activeRanges")]
     public List<TimeRange> ActiveRanges { get; set; } = new();
 
@@ -367,9 +352,6 @@ public class AlarmScheduleSettings
     public string? Timezone { get; set; }
 }
 
-/// <summary>
-/// A time range for scheduling
-/// </summary>
 public class TimeRange
 {
     /// <summary>
@@ -433,9 +415,6 @@ public class UserAlarmConfiguration
     public NotificationChannelsConfig Channels { get; set; } = new();
 }
 
-/// <summary>
-/// Reference to a custom uploaded sound
-/// </summary>
 public class CustomSoundReference
 {
     [JsonPropertyName("id")]
@@ -492,12 +471,8 @@ public class EmergencyContactConfig
     public bool Enabled { get; set; } = true;
 }
 
-/// <summary>
-/// Notification channels configuration
-/// </summary>
 public class NotificationChannelsConfig
 {
-    /// <summary>Web push notification channel configuration.</summary>
     [JsonPropertyName("push")]
     public ChannelConfig Push { get; set; } = new() { Enabled = true };
 
@@ -512,9 +487,6 @@ public class NotificationChannelsConfig
     public PushoverChannelConfig? Pushover { get; set; }
 }
 
-/// <summary>
-/// Base channel configuration
-/// </summary>
 public class ChannelConfig
 {
     [JsonPropertyName("enabled")]
@@ -527,9 +499,6 @@ public class ChannelConfig
     public AlarmPriority MinPriority { get; set; } = AlarmPriority.Normal;
 }
 
-/// <summary>
-/// Pushover-specific channel configuration
-/// </summary>
 public class PushoverChannelConfig : ChannelConfig
 {
     /// <summary>Pushover user key for delivering notifications.</summary>

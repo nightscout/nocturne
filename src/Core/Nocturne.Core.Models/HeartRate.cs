@@ -4,7 +4,7 @@ using Nocturne.Core.Models.Attributes;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a heart rate reading, compatible with xDrip heart rate uploads.
+/// Heart rate reading, compatible with xDrip heart rate uploads.
 /// Heart rate data is time-series sensor data similar to glucose entries,
 /// typically sourced from wearable devices via xDrip.
 /// </summary>

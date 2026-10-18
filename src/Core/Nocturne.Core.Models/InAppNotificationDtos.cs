@@ -69,13 +69,10 @@ public class InAppNotificationDto
 }
 
 /// <summary>
-/// Represents an action button available on a notification
+/// Action button available on a notification
 /// </summary>
 public class NotificationActionDto
 {
-    /// <summary>
-    /// Unique identifier for the action within the notification
-    /// </summary>
     public string ActionId { get; set; } = string.Empty;
 
     /// <summary>
@@ -83,9 +80,6 @@ public class NotificationActionDto
     /// </summary>
     public string Label { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Optional icon identifier for the action button
-    /// </summary>
     public string? Icon { get; set; }
 
     /// <summary>

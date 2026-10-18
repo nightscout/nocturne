@@ -48,9 +48,6 @@ public class UISettingsConfiguration
     public DataQualitySettings DataQuality { get; set; } = new();
 }
 
-/// <summary>
-/// Settings for connected devices
-/// </summary>
 public class DeviceSettings
 {
     [JsonPropertyName("connectedDevices")]
@@ -70,7 +67,7 @@ public class DeviceSettings
 }
 
 /// <summary>
-/// Represents a device connected to the user's diabetes management system.
+/// Device connected to the user's diabetes management system.
 /// </summary>
 public class ConnectedDevice
 {
@@ -129,9 +126,6 @@ public class AlgorithmSettings
     public SafetyLimits SafetyLimits { get; set; } = new();
 }
 
-/// <summary>
-/// Settings for glucose prediction algorithms.
-/// </summary>
 public class PredictionSettings
 {
     [JsonPropertyName("enabled")]
@@ -159,9 +153,6 @@ public class AutosensSettings
     public double Max { get; set; } = 1.2;
 }
 
-/// <summary>
-/// Carbohydrate absorption model settings.
-/// </summary>
 public class CarbAbsorptionSettings
 {
     [JsonPropertyName("defaultMinutes")]
@@ -602,7 +593,7 @@ public class ServicesSettings
 }
 
 /// <summary>
-/// Represents a service currently connected to the user's Nocturne instance.
+/// Service currently connected to the user's Nocturne instance.
 /// </summary>
 public class ConnectedService
 {
@@ -635,7 +626,7 @@ public class ConnectedService
 }
 
 /// <summary>
-/// Represents a service that can be connected to Nocturne but is not yet configured.
+/// Service that can be connected to Nocturne but is not yet configured.
 /// </summary>
 public class AvailableService
 {

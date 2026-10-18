@@ -66,9 +66,6 @@ public class V3StatusResponse
     public ExtendedStatusInfo Extended { get; set; } = new();
 }
 
-/// <summary>
-/// Storage backend information
-/// </summary>
 public class StorageInfo
 {
     /// <summary>
@@ -108,9 +105,6 @@ public class ExtendedStatusInfo
     public Dictionary<string, bool> ApiVersions { get; set; } = new();
 }
 
-/// <summary>
-/// Authorization information for the current session
-/// </summary>
 public class AuthorizationInfo
 {
     public bool IsAuthorized { get; set; }

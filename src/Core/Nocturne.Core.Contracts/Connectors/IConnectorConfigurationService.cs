@@ -36,9 +36,6 @@ public class ConnectorConfigurationResponse
     /// </summary>
     public string? ModifiedBy { get; set; }
 
-    /// <summary>
-    /// When the connector last attempted to sync.
-    /// </summary>
     public DateTime? LastSyncAttempt { get; set; }
 
     /// <summary>
@@ -53,9 +50,6 @@ public class ConnectorConfigurationResponse
 
     public DateTime? LastErrorAt { get; set; }
 
-    /// <summary>
-    /// Current health status.
-    /// </summary>
     public bool IsHealthy { get; set; } = true;
 }
 
@@ -63,14 +57,8 @@ public class ConnectorStatusInfo
 {
     public string ConnectorName { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Whether the connector is enabled in configuration.
-    /// </summary>
     public bool IsEnabled { get; set; }
 
-    /// <summary>
-    /// Whether a configuration exists in the database.
-    /// </summary>
     public bool HasDatabaseConfig { get; set; }
 
     public bool HasSecrets { get; set; }
@@ -85,9 +73,8 @@ public class ConnectorStatusInfo
 public interface IConnectorConfigurationService
 {
     /// <summary>
-    /// Gets the configuration for a specific connector.
-    /// Returns runtime configuration from the database.
-    /// Secrets are never included - use GetSecretsAsync for internal connector use.
+    /// The runtime configuration stored in the database, never including secrets; connectors read
+    /// those through <see cref="GetSecretsAsync"/>.
     /// </summary>
     /// <param name="connectorName">The connector name (e.g., "Dexcom")</param>
     /// <returns>Configuration response or null if not found</returns>
@@ -111,22 +98,16 @@ public interface IConnectorConfigurationService
     /// <exception cref="InvalidOperationException">Thrown when secret encryption is not configured.</exception>
     Task SaveSecretsAsync(string connectorName, Dictionary<string, string> secrets, string? modifiedBy = null, CancellationToken ct = default);
 
-    /// <summary>
-    /// Gets decrypted secrets for a connector (for internal use by connectors only).
-    /// </summary>
+    /// <summary>Decrypted secrets, for connectors' internal use only.</summary>
     /// <returns>Dictionary of secret property names to plaintext values</returns>
     Task<Dictionary<string, string>> GetSecretsAsync(string connectorName, CancellationToken ct = default);
 
     /// <summary>
-    /// Gets the JSON Schema for a connector's configuration.
-    /// Schema is generated from the connector's configuration class attributes.
+    /// JSON Schema generated from the attributes on the connector's configuration class.
     /// </summary>
     /// <returns>JSON Schema document</returns>
     Task<JsonDocument> GetSchemaAsync(string connectorName, CancellationToken ct = default);
 
-    /// <summary>
-    /// Gets status information for all registered connectors.
-    /// </summary>
     Task<IReadOnlyList<ConnectorStatusInfo>> GetAllConnectorStatusAsync(CancellationToken ct = default);
 
     /// <summary>
@@ -136,15 +117,12 @@ public interface IConnectorConfigurationService
     /// <param name="modifiedBy">Who is making the change</param>
     Task SetActiveAsync(string connectorName, bool isActive, string? modifiedBy = null, CancellationToken ct = default);
 
-    /// <summary>
-    /// Deletes all configuration and secrets for a connector.
-    /// </summary>
     /// <returns>True if configuration was deleted, false if it didn't exist</returns>
     Task<bool> DeleteConfigurationAsync(string connectorName, CancellationToken ct = default);
 
     /// <summary>
-    /// Gets the effective configuration from a running connector.
-    /// This returns the actual runtime values including those resolved from environment variables.
+    /// The values a running connector actually uses, including those resolved from environment
+    /// variables.
     /// </summary>
     /// <returns>Dictionary of property names to effective values, or null if connector is not reachable</returns>
     Task<Dictionary<string, object?>?> GetEffectiveConfigurationAsync(string connectorName, CancellationToken ct = default);
@@ -171,9 +149,6 @@ public interface IConnectorConfigurationService
     );
 }
 
-/// <summary>
-/// Request model for setting connector active state.
-/// </summary>
 public class SetActiveRequest
 {
     /// <summary>

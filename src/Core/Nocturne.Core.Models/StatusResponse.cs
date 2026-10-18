@@ -85,9 +85,6 @@ public class StatusResponse
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Build { get; set; }
 
-    /// <summary>
-    /// Whether this tenant is a demo instance.
-    /// </summary>
     [JsonPropertyName("isDemo")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? IsDemo { get; set; }

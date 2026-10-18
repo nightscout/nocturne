@@ -40,9 +40,6 @@ public interface IAuthorizationService
 
     Task<Subject> CreateSubjectAsync(Subject subject);
 
-    /// <summary>
-    /// Update an existing subject
-    /// </summary>
     /// <returns>Updated subject or null if not found</returns>
     Task<Subject?> UpdateSubjectAsync(Subject subject);
 
@@ -57,9 +54,6 @@ public interface IAuthorizationService
 
     Task<Role> CreateRoleAsync(Role role);
 
-    /// <summary>
-    /// Update an existing role
-    /// </summary>
     /// <returns>Updated role or null if not found</returns>
     Task<Role?> UpdateRoleAsync(Role role);
 

@@ -30,7 +30,7 @@ public enum SourceHandle
 }
 
 /// <summary>
-/// Represents information about a data source that's been pushing data to Nocturne.
+/// Information about a data source that's been pushing data to Nocturne.
 /// This is derived from analyzing the `device` field on entries and devicestatus records.
 /// </summary>
 public class DataSourceInfo
@@ -142,7 +142,7 @@ public class DataSourceInfo
 }
 
 /// <summary>
-/// Represents an available connector that can be configured to pull data into Nocturne
+/// Available connector that can be configured to pull data into Nocturne
 /// </summary>
 public class AvailableConnector
 {
@@ -185,9 +185,6 @@ public class AvailableConnector
     [JsonPropertyName("isConfigured")]
     public bool IsConfigured { get; set; }
 
-    /// <summary>
-    /// Configuration fields required for this connector
-    /// </summary>
     [JsonPropertyName("configFields")]
     public List<ConnectorConfigField>? ConfigFields { get; set; }
 
@@ -205,9 +202,6 @@ public class AvailableConnector
     public string? DataSourceId { get; set; }
 }
 
-/// <summary>
-/// Describes a configuration field for a connector
-/// </summary>
 public class ConnectorConfigField
 {
     [JsonPropertyName("id")]
@@ -256,9 +250,6 @@ public enum UploaderPlatform
     [JsonStringEnumMemberName("web")] Web,
 }
 
-/// <summary>
-/// Category of uploader app
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<UploaderCategory>))]
 public enum UploaderCategory
 {
@@ -268,7 +259,7 @@ public enum UploaderCategory
 }
 
 /// <summary>
-/// Represents an uploader application that can push data to Nocturne.
+/// Uploader application that can push data to Nocturne.
 /// Display strings (name, description, setup instructions) live on the frontend,
 /// keyed by <see cref="Id"/>.
 /// </summary>
@@ -296,9 +287,6 @@ public class UploaderApp
     public string? Url { get; set; }
 }
 
-/// <summary>
-/// Complete services overview response
-/// </summary>
 public class ServicesOverview
 {
     /// <summary>
@@ -368,9 +356,6 @@ public class ConnectorDataSummary
     public long Total => RecordCounts.Values.Sum();
 }
 
-/// <summary>
-/// Result of a data source deletion operation
-/// </summary>
 public class DataSourceDeleteResult
 {
     [JsonPropertyName("success")]

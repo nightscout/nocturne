@@ -2,9 +2,6 @@ using System.Text.Json.Serialization;
 
 namespace Nocturne.Core.Models;
 
-/// <summary>
-/// Data transfer object for discrepancy analysis results
-/// </summary>
 /// <seealso cref="DiscrepancyDetailDto"/>
 /// <seealso cref="DiscrepancySeverity"/>
 /// <seealso cref="DiscrepancyType"/>
@@ -76,7 +73,6 @@ public class DiscrepancyAnalysisDto
     /// <summary>Whether the Nightscout instance failed to return a response</summary>
     public bool NightscoutMissing { get; set; }
 
-    /// <summary>Whether Nocturne failed to return a response</summary>
     public bool NocturneMissing { get; set; }
 
     /// <summary>Error message if the comparison itself failed</summary>
@@ -142,7 +138,6 @@ public class CompatibilityStatus
     /// <summary>Overall compatibility score as a percentage (0-100), where 100 is full compatibility</summary>
     public double OverallScore { get; set; }
 
-    /// <summary>Total number of requests that have been compared</summary>
     public int TotalRequests { get; set; }
 
     /// <summary>Health status string (e.g., "healthy", "degraded", "critical")</summary>
@@ -169,19 +164,10 @@ public enum ResponseMatchType
     /// </summary>
     Perfect,
 
-    /// <summary>
-    /// Minor differences found
-    /// </summary>
     MinorDifferences,
 
-    /// <summary>
-    /// Major differences found
-    /// </summary>
     MajorDifferences,
 
-    /// <summary>
-    /// Critical differences found
-    /// </summary>
     CriticalDifferences,
 
     /// <summary>
@@ -191,9 +177,6 @@ public enum ResponseMatchType
 
     NocturneMissing,
 
-    /// <summary>
-    /// Both responses are missing
-    /// </summary>
     BothMissing,
 
     /// <summary>
@@ -212,19 +195,10 @@ public enum DiscrepancyType
     /// </summary>
     StatusCode,
 
-    /// <summary>
-    /// Response header differs
-    /// </summary>
     Header,
 
-    /// <summary>
-    /// Content type differs
-    /// </summary>
     ContentType,
 
-    /// <summary>
-    /// Response body differs
-    /// </summary>
     Body,
 
     /// <summary>
@@ -232,24 +206,12 @@ public enum DiscrepancyType
     /// </summary>
     JsonStructure,
 
-    /// <summary>
-    /// String value differs
-    /// </summary>
     StringValue,
 
-    /// <summary>
-    /// Numeric value differs
-    /// </summary>
     NumericValue,
 
-    /// <summary>
-    /// Timestamp differs
-    /// </summary>
     Timestamp,
 
-    /// <summary>
-    /// Array length differs
-    /// </summary>
     ArrayLength,
 
     /// <summary>
@@ -258,9 +220,6 @@ public enum DiscrepancyType
     Performance,
 }
 
-/// <summary>
-/// Severity level of a discrepancy
-/// </summary>
 public enum DiscrepancySeverity
 {
     /// <summary>

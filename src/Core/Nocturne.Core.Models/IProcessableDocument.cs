@@ -41,8 +41,5 @@ public interface IProcessableDocument
     /// <returns>Dictionary of field names and their text content to sanitize</returns>
     Dictionary<string, string?> GetSanitizableFields();
 
-    /// <summary>
-    /// Sets a sanitized text field value
-    /// </summary>
     void SetSanitizedField(string fieldName, string? sanitizedValue);
 }

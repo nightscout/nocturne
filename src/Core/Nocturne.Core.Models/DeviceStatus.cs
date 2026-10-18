@@ -5,7 +5,7 @@ using Nocturne.Core.Models.Serializers;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents device status information from various devices (pumps, CGMs, AID systems).
+/// A device status upload from pumps, CGMs and AID systems.
 /// </summary>
 /// <remarks>
 /// Device status records are submitted by diabetes management apps (Loop, OpenAPS/AAPS, xDrip+)
@@ -353,7 +353,7 @@ public class OpenApsStatus
 }
 
 /// <summary>
-/// Represents an OpenAPS/AAPS suggested action with prediction data
+/// OpenAPS/AAPS suggested action, with its prediction curves.
 /// </summary>
 public class OpenApsSuggested
 {
@@ -435,7 +435,7 @@ public class OpenApsSuggested
 }
 
 /// <summary>
-/// Represents an OpenAPS/AAPS enacted action (extends suggested with delivery confirmation)
+/// OpenAPS/AAPS enacted action: a suggestion plus confirmation that the pump delivered it.
 /// </summary>
 public class OpenApsEnacted : OpenApsSuggested
 {
@@ -453,7 +453,7 @@ public class OpenApsEnacted : OpenApsSuggested
 }
 
 /// <summary>
-/// Represents an OpenAPS requested temp basal / SMB
+/// OpenAPS requested temp basal or SMB.
 /// </summary>
 public class OpenApsRequested
 {
@@ -488,9 +488,6 @@ public class OpenApsPredBGs
     public List<double?>? UAM { get; set; }
 }
 
-/// <summary>
-/// Represents OpenAPS IOB data from device status
-/// </summary>
 public class OpenApsIobData
 {
     [JsonPropertyName("iob")]
@@ -609,9 +606,6 @@ public class LoopStatus
     [JsonPropertyName("currentCorrectionRange")]
     public CorrectionRange? CurrentCorrectionRange { get; set; }
 
-    /// <summary>
-    /// Forecast error (prediction error info)
-    /// </summary>
     [JsonPropertyName("forecastError")]
     public object? ForecastError { get; set; }
 }
@@ -639,9 +633,6 @@ public class RileyLinkStatus
 
 public class LoopAutomaticDoseRecommendation
 {
-    /// <summary>
-    /// Recommended bolus
-    /// </summary>
     [JsonPropertyName("bolus")]
     public double? Bolus { get; set; }
 
@@ -655,9 +646,6 @@ public class LoopAutomaticDoseRecommendation
     public string? Notice { get; set; }
 }
 
-/// <summary>
-/// Represents Loop COB (Carbs on Board) information
-/// </summary>
 public class LoopCob
 {
     [JsonPropertyName("timestamp")]
@@ -667,9 +655,6 @@ public class LoopCob
     public double? Cob { get; set; }
 }
 
-/// <summary>
-/// Represents Loop predicted glucose values
-/// </summary>
 public class LoopPredicted
 {
     [JsonPropertyName("values")]
@@ -695,7 +680,7 @@ public class LoopIob
 }
 
 /// <summary>
-/// Represents Loop enacted action details (temp basals and automatic boluses)
+/// Temp basals and automatic boluses Loop has enacted.
 /// </summary>
 public class LoopEnacted
 {
@@ -730,9 +715,6 @@ public class LoopEnacted
     public bool? Received { get; set; }
 }
 
-/// <summary>
-/// Represents Loop recommended temporary basal rate
-/// </summary>
 public class LoopRecommendedTempBasal
 {
     /// <summary>
@@ -811,9 +793,6 @@ public class CorrectionRange
     public double? MinValue { get; set; }
 }
 
-/// <summary>
-/// Represents CGM device status information
-/// </summary>
 public class CgmStatus
 {
     /// <summary>
@@ -872,9 +851,6 @@ public class CgmStatus
     public int? TransmitterBattery { get; set; }
 }
 
-/// <summary>
-/// Represents blood glucose meter status information
-/// </summary>
 public class MeterStatus
 {
     /// <summary>
@@ -902,9 +878,6 @@ public class MeterStatus
     public double? MemoryUsage { get; set; }
 }
 
-/// <summary>
-/// Represents smart insulin pen status information
-/// </summary>
 public class InsulinPenStatus
 {
     /// <summary>

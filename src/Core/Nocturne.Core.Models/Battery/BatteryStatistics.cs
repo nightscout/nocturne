@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models.Battery;
 
 /// <summary>
-/// Represents battery statistics for a device over a time period.
+/// Battery statistics for a device over a time period.
 /// Aggregates <see cref="BatteryReading"/>s and <see cref="ChargeCycle"/>s into summary metrics.
 /// </summary>
 /// <seealso cref="BatteryReading"/>

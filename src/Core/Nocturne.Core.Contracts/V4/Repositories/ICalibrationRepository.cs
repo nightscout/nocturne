@@ -61,9 +61,6 @@ public interface ICalibrationRepository : ILegacyKeyedRepository<Calibration>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default);
 
-    /// <summary>
-    /// Delete all records within the given time range.
-    /// </summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Inclusive end, or <c>null</c> for no upper bound.</param>
     /// <returns>Number of records deleted.</returns>
