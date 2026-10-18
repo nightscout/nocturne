@@ -139,7 +139,9 @@ public class AuthenticationMiddleware
                 && PlatformAdminCredentials.Carries(authContext.AuthType))
             {
                 using var scope = _scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<Nocturne.Infrastructure.Data.NocturneDbContext>();
+                await using var db = await scope.ServiceProvider
+                    .GetRequiredService<Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory>()
+                    .CreateAsync(context.RequestAborted);
                 var isPlatformAdmin = await db.Subjects
                     .Where(s => s.Id == authContext.SubjectId.Value)
                     .OrderBy(s => s.Id)

@@ -456,11 +456,6 @@ public class AlertSweepServiceWallClockTests
             services.AddSingleton(Mock.Of<IAlertAcknowledgementService>());
             services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
             services.AddScoped<IAuditContext, AuditContext>();
-            services.AddScoped(_ => new NocturneDbContext(
-                new DbContextOptionsBuilder<NocturneDbContext>()
-                    .UseSqlite("DataSource=:memory:")
-                    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-                    .Options));
             services.AddSingleton<ConditionVersionLog>();
             services.AddSingleton<ILogger<AlertOrchestrator>>(OrchestratorLogger);
             services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();

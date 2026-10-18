@@ -97,7 +97,7 @@ public sealed class AuthenticationMiddlewarePrincipalTests
         var services = new ServiceCollection();
         services.AddScoped<ICategoryReadContext, CategoryReadContext>();
         services.AddSingleton(memberService.Object);
-        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName));
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
         var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };
@@ -168,7 +168,7 @@ public sealed class AuthenticationMiddlewarePrincipalTests
         var services = new ServiceCollection();
         services.AddScoped<ICategoryReadContext, CategoryReadContext>();
         services.AddSingleton(memberService.Object);
-        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName));
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
         var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };

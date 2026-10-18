@@ -89,20 +89,6 @@ public class NocturneDbContextFactoryTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task ScopedContext_ReadsTheScopeLive()
-    {
-        await using var scope = _provider.CreateAsyncScope();
-        var context = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-
-        Resolve(scope, ScopeTenant);
-        scope.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
-
-        context.TenantId.Should().Be(ScopeTenant);
-        context.HistoryClamped.Should().BeTrue();
-        context.IsShareContext.Should().BeFalse();
-    }
-
-    [Fact]
     public async Task CreateForTenantAsync_ReplacesOnlyTheTenant()
     {
         await using var scope = _provider.CreateAsyncScope();
@@ -167,7 +153,7 @@ public class NocturneDbContextFactoryTests : IAsyncDisposable
     {
         await using var scope = _provider.CreateAsyncScope();
         Resolve(scope, ScopeTenant);
-        var context = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var context = await Factory(scope).CreateAsync();
         var pinned = Guid.NewGuid();
 
         await context.PinTenantAsync(pinned);

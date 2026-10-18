@@ -117,6 +117,10 @@ public static class ServiceCollectionExtensions
             }
         );
 
+        // AddDbContextFactory also registers the context itself as scoped. Every context comes from
+        // INocturneDbContextFactory instead, so that registration goes.
+        services.RemoveAll<NocturneDbContext>();
+
         // Register the context factory, repositories, and shared services.
         AddDataServices(services);
 
@@ -138,8 +142,6 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton(sp => new RootServiceProvider(sp));
         services.TryAddTransient<NocturneDbContextFactory>();
         services.TryAddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
-
-        services.AddScoped(sp => sp.GetRequiredService<NocturneDbContextFactory>().Create());
 
         // Register deduplication service (required by repositories)
         services.AddScoped<IDeduplicationService, DeduplicationService>();

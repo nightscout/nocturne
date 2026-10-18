@@ -9,9 +9,9 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Services.Demo.Services;
 using Xunit;
@@ -44,8 +44,8 @@ public sealed class DemoCoverageIntegrationTests(
             scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(tenant);
             http.HttpContext = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
             http.HttpContext.RequestServices.GetRequiredService<ITenantAccessor>().SetTenant(tenant);
-            var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-            dbContext.TenantId = Fixture.TenantId;
+            await using var dbContext = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+                .CreateForTenantAsync(Fixture.TenantId);
             var uiSettings = await scope.ServiceProvider.GetRequiredService<IUISettingsService>().GetSettingsAsync()
                 ?? new UISettingsConfiguration();
             // The seeder lays its compression artifacts at server-local wall-clock times.

@@ -15,9 +15,9 @@ using Nocturne.Tests.Shared.Infrastructure;
 namespace Nocturne.API.Tests.Multitenancy;
 
 /// <summary>
-/// The request scope <see cref="TenantResolutionMiddleware"/> runs in: a SQLite-backed context
-/// factory, a scoped context that reads the scope's accessors live, and the accessors downstream
-/// services read.
+/// The request scope <see cref="TenantResolutionMiddleware"/> runs in: a SQLite-backed
+/// <see cref="INocturneDbContextFactory"/> whose contexts read the scope's accessors live, and the
+/// accessors downstream services read.
 /// </summary>
 /// <remarks>
 /// Request scopes outlive the call that made them so a test can read what the middleware left on
@@ -32,12 +32,14 @@ public abstract class TenantResolutionMiddlewareTestBase : IDisposable
         _db = TestDbContextFactory.CreateSqlite();
 
         var services = new ServiceCollection();
-        _db.AddToServices(services);
+        services.AddSingleton<IDbContextFactory<NocturneDbContext>>(new UnpinnedContexts(_db.Options));
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddScoped<ICategoryReadContext, CategoryReadContext>();
-        services.AddScoped(sp => new NocturneDbContext(_db.Options).ReadingFrom(
-            sp.GetRequiredService<ITenantAccessor>(), sp.GetRequiredService<ICategoryReadContext>()));
-        services.AddTransient(sp => sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory());
+        services.AddScoped(sp => new TenantReadContext(
+            sp.GetRequiredService<ITenantAccessor>(), sp.GetRequiredService<ICategoryReadContext>(), null));
+        services.AddSingleton(sp => new RootServiceProvider(sp));
+        services.AddTransient<NocturneDbContextFactory>();
+        services.AddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
         services.AddSingleton<ShareTokenCacheService>();
         services.AddMemoryCache();
         services.AddLogging();
@@ -128,4 +130,11 @@ public abstract class TenantResolutionMiddlewareTestBase : IDisposable
 
     protected static T Resolve<T>(HttpContext context) where T : notnull =>
         context.RequestServices.GetRequiredService<T>();
+
+    /// <summary>Contexts that carry no tenant pin, so the scope's accessor decides their tenant.</summary>
+    private sealed class UnpinnedContexts(DbContextOptions<NocturneDbContext> options)
+        : IDbContextFactory<NocturneDbContext>
+    {
+        public NocturneDbContext CreateDbContext() => new(options);
+    }
 }

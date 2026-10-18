@@ -43,7 +43,7 @@ public class DataHubHistoryClampTests
         public HttpContext? HttpContext { get; set; }
     }
 
-    /// <summary>What the read context and the scoped DbContext said at the moment entries were read.</summary>
+    /// <summary>What the read context and a context of the handshake scope said at the moment entries were read.</summary>
     private sealed class ReadObservation
     {
         public bool? CategoryReadContextClamped { get; set; }
@@ -73,8 +73,8 @@ public class DataHubHistoryClampTests
             NullLogger<DeviceStatusProjectionService>.Instance));
         var requestServices = services.BuildServiceProvider().CreateScope().ServiceProvider;
 
-        // The handshake request pinned its scoped DbContext before any credential was known.
-        var db = requestServices.GetRequiredService<NocturneDbContext>();
+        // A context the handshake request created before any credential was known.
+        var db = requestServices.GetRequiredService<INocturneDbContextFactory>().CreateAsync().AsTask().GetAwaiter().GetResult();
         var readContext = requestServices.GetRequiredService<ICategoryReadContext>();
 
         entryService
@@ -248,7 +248,7 @@ public class DataHubHistoryClampTests
 
         httpContext.RequestServices.GetRequiredService<ICategoryReadContext>()
             .IsHistoryClamped.Should().BeTrue();
-        httpContext.RequestServices.GetRequiredService<NocturneDbContext>()
+        httpContext.RequestServices.GetRequiredService<TenantReadContext>()
             .HistoryClamped.Should().BeTrue();
     }
 
