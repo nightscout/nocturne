@@ -9,8 +9,8 @@ public class GoogleHealthInventoryTests
 {
     private static GoogleHealthInventory.Context Context(
         string[]? selected = null, bool previewRequired = false, string? errorCode = null,
-        string[]? errorTypes = null, bool cycleTracking = true) => new(
-        [GoogleHealthClient.ActivityScope, GoogleHealthClient.MetricsScope],
+        string[]? errorTypes = null, bool cycleTracking = true, string[]? scopes = null) => new(
+        scopes ?? [GoogleHealthClient.ActivityScope, GoogleHealthClient.MetricsScope],
         selected ?? [],
         previewRequired,
         errorCode,
@@ -43,8 +43,9 @@ public class GoogleHealthInventoryTests
         bool granted, int count, bool selected, string? statusError, GoogleHealthTypeState state, GoogleHealthFound found)
     {
         var categories = GoogleHealthInventory.Categories(
-            [new GoogleHealthInventoryItem("steps", granted, count, null)],
-            Context(selected ? ["steps"] : [], errorCode: statusError));
+            [new GoogleHealthInventoryItem("steps", count, null)],
+            Context(selected ? ["steps"] : [], errorCode: statusError,
+                scopes: granted ? null : [GoogleHealthClient.MetricsScope]));
 
         Assert.Equal(state, Type(categories, "steps").State);
         Assert.Equal(found, Type(categories, "steps").Found);
@@ -54,7 +55,7 @@ public class GoogleHealthInventoryTests
     public void A_failed_scan_is_reported_and_not_selectable()
     {
         var categories = GoogleHealthInventory.Categories(
-            [new GoogleHealthInventoryItem("steps", true, 0, "google_unavailable")], Context());
+            [new GoogleHealthInventoryItem("steps", 0, "google_unavailable")], Context());
 
         var steps = Type(categories, "steps");
         Assert.Equal(GoogleHealthTypeState.ReadFailed, steps.State);
@@ -67,10 +68,22 @@ public class GoogleHealthInventoryTests
     public void An_error_naming_other_types_leaves_this_one_importing()
     {
         var categories = GoogleHealthInventory.Categories(
-            [new GoogleHealthInventoryItem("steps", true, 1, null)],
+            [new GoogleHealthInventoryItem("steps", 1, null)],
             Context(["steps"], errorCode: "partial_consent", errorTypes: ["sleep"]));
 
         Assert.Equal(GoogleHealthTypeState.Importing, Type(categories, "steps").State);
+    }
+
+    [Fact]
+    public void A_scan_from_a_wider_grant_does_not_make_a_type_selectable_after_the_grant_narrows()
+    {
+        var categories = GoogleHealthInventory.Categories(
+            [new GoogleHealthInventoryItem("steps", 5, null)],
+            Context(["steps"], scopes: [GoogleHealthClient.MetricsScope]));
+
+        var steps = Type(categories, "steps");
+        Assert.Equal(GoogleHealthTypeState.PermissionNotGranted, steps.State);
+        Assert.False(steps.Selectable);
     }
 
     [Fact]

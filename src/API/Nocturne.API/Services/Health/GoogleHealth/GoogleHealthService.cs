@@ -87,19 +87,19 @@ public sealed class GoogleHealthService(
     {
         try
         {
-            var configuration = await StoredConfigurationOrNullAsync(ct);
-            if (configuration is null)
+            var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
+            if (stored is null)
                 return await WithProgressAsync(new GoogleHealthStatus());
 
+            var configuration = await configurationLoader.LoadForTenantAsync(ct);
             var settings = Options(configuration);
-            var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
             var clientChanged = sessions.IssuedToAnotherClient(configuration);
             var session = clientChanged ? null : await sessions.CurrentAsync(configuration);
             var selected = settings.DataTypes
                 .Where(type => GoogleHealthClient.SupportedTypes.Contains(type, StringComparer.Ordinal))
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
-            var storedError = GoogleHealthErrorCode.Decode(stored?.LastErrorMessage);
+            var storedError = GoogleHealthErrorCode.Decode(stored.LastErrorMessage);
             var runtime = await RuntimeStateAsync(ct);
             var backfillProgress = BackfillProgress(runtime);
             var missingScopes = selected
@@ -127,8 +127,8 @@ public sealed class GoogleHealthService(
                     await IncludeCycleTrackingAsync(ct))),
                 HistoryDays = settings.HistoryDays,
                 ImportFrom = settings.ImportFrom,
-                LastAttempt = AsOffset(stored?.LastSyncAttempt),
-                LastSync = AsOffset(stored?.LastSuccessfulSync),
+                LastAttempt = AsOffset(stored.LastSyncAttempt),
+                LastSync = AsOffset(stored.LastSuccessfulSync),
                 BackfillSyncedThrough = backfillProgress.SyncedThrough,
                 BackfillComplete = backfillProgress.Complete,
                 ErrorCode = errorCode,
@@ -188,7 +188,7 @@ public sealed class GoogleHealthService(
         await using var gate = await coordinator.AcquireAsync(TenantId, ct);
         var configuration = await StoredConfigurationAsync(ct);
         if (sessions.IssuedToAnotherClient(configuration))
-            await sessions.ClearAsync(removeAccount: false, subject, ct);
+            await sessions.ClearAsync(removeAccount: false, subject, ct, revoke: true);
         else if (!string.IsNullOrWhiteSpace(configuration.RefreshToken))
             throw new GoogleHealthException("disconnect_first");
         var verifier = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(48));
@@ -249,6 +249,7 @@ public sealed class GoogleHealthService(
             }
 
             await sessions.SaveAsync(token, account, subject, ct);
+            await ForgetInventoryAsync(ct);
             await connectorConfigurations.UpdateHealthStateAsync(
                 ConnectorName,
                 lastErrorMessage: string.Empty,
@@ -289,6 +290,7 @@ public sealed class GoogleHealthService(
         var refreshToken = (await configurationLoader.LoadForTenantAsync(CancellationToken.None)).RefreshToken;
         await ClearFlowAsync(CancellationToken.None);
         await sessions.ClearAsync(removeAccount: false, subject, CancellationToken.None);
+        await ForgetInventoryAsync(CancellationToken.None);
         var revokeFailed = false;
         if (!string.IsNullOrWhiteSpace(refreshToken))
         {
@@ -374,7 +376,7 @@ public sealed class GoogleHealthService(
         }
         catch (GoogleHealthException ex) when (ex.RequiresReconnect)
         {
-            await sessions.ClearAsync(removeAccount: false, subject, ct);
+            await sessions.ClearAsync(removeAccount: false, subject, ct, revoke: ex.Message == "client_changed");
             await connectorConfigurations.UpdateHealthStateAsync(ConnectorName,
                 lastErrorMessage: GoogleHealthErrorCode.Encode(ex.Message, ex.DataType is null ? null : [ex.DataType]),
                 lastErrorAt: DateTime.UtcNow, isHealthy: false, ct: ct);
@@ -388,14 +390,14 @@ public sealed class GoogleHealthService(
         await Task.WhenAll(GoogleHealthClient.SupportedTypes.Select(async type =>
         {
             if (!grantedScopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal))
-                return new GoogleHealthInventoryItem(type, false, 0, null);
+                return new GoogleHealthInventoryItem(type, 0, null);
             try
             {
-                return new GoogleHealthInventoryItem(type, true, await google.CountAsync(accessToken, type, from, to, ct), null);
+                return new GoogleHealthInventoryItem(type, await google.CountAsync(accessToken, type, from, to, ct), null);
             }
             catch (GoogleHealthException ex) when (ex.Message != "access_token_rejected")
             {
-                return new GoogleHealthInventoryItem(type, true, 0, ex.Message);
+                return new GoogleHealthInventoryItem(type, 0, ex.Message);
             }
         }));
 
@@ -466,6 +468,13 @@ public sealed class GoogleHealthService(
     private Task SaveRuntimeStateAsync(Dictionary<string, JsonElement> state, CancellationToken ct) =>
         cursorStore.SetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource,
             new(null, JsonSerializer.Serialize(state, Json)), ct);
+
+    /// <summary>A scan belongs to the session that ran it; a new or ended session has none.</summary>
+    private async Task ForgetInventoryAsync(CancellationToken ct)
+    {
+        var state = await RuntimeStateAsync(ct);
+        if (state.Remove(InventoryKey)) await SaveRuntimeStateAsync(state, ct);
+    }
 
     private static GoogleHealthInventoryItem[]? Inventory(IReadOnlyDictionary<string, JsonElement> state)
     {

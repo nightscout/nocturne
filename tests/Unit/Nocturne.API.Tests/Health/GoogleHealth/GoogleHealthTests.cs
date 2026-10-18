@@ -1062,6 +1062,22 @@ public class GoogleHealthTests
         Assert.Equal(code, Assert.IsType<ProblemDetails>(response.Value).Detail);
     }
 
+    [Fact]
+    public async Task A_rate_limited_request_tells_the_caller_when_to_retry()
+    {
+        var controller = new GoogleHealthController(
+            new ThrowingGoogleHealthService(new GoogleHealthException("rate_limited", TimeSpan.FromSeconds(29.2))),
+            Microsoft.Extensions.Options.Options.Create(new BaseDomainOptions()))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext() }
+        };
+
+        var result = await controller.SyncGoogleHealth(default);
+
+        Assert.Equal(429, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        Assert.Equal("30", controller.Response.Headers.RetryAfter.ToString());
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -1237,6 +1253,29 @@ public class GoogleHealthTests
 
         Assert.False(store.Secrets.ContainsKey("clientSecret"));
         Assert.False(store.Configuration.TryGetProperty("callbackUrl", out _));
+    }
+
+    [Fact]
+    public async Task A_scan_does_not_outlive_its_session()
+    {
+        var store = new TestConnectorStore();
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}} {{GoogleHealthClient.ActivityScope}}"}"""),
+            "/v1/userinfo" => Json("{\"sub\":\"account\"}"),
+            "/revoke" => Json("{}"),
+            _ => Json("{\"dataPoints\":[{}]}")
+        });
+        var service = Service(store, handler, Guid.NewGuid());
+        await ConnectAsync(service);
+        await service.PreviewAsync(Guid.NewGuid(), default);
+        Assert.Contains("inventory", (await store.Cursors.GetAsync("GoogleHealth", "health", default))!.LastGuid);
+
+        await service.DisconnectAsync(Guid.NewGuid(), default);
+
+        Assert.DoesNotContain("inventory", (await store.Cursors.GetAsync("GoogleHealth", "health", default))?.LastGuid ?? "");
+        Assert.All(SupportedTypes(await service.StatusAsync(default)),
+            type => Assert.Equal(GoogleHealthTypeState.NotScanned, type.State));
     }
 
     private static async Task ConnectAsync(GoogleHealthService service)

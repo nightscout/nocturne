@@ -3,6 +3,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import {
   GoogleHealthCategoryKind,
+  GoogleHealthConnectionState,
   GoogleHealthFound,
   GoogleHealthSyncPhase,
   GoogleHealthTypeState,
@@ -38,6 +39,7 @@ function status(
 ): GoogleHealthStatus {
   return {
     available: true,
+    connectionState: GoogleHealthConnectionState.Disconnected,
     configured: false,
     connected: false,
     historyDays: 7,
@@ -62,7 +64,16 @@ function status(
 const connected = (
   overrides: Partial<GoogleHealthStatus> = {},
   types?: GoogleHealthDataTypeStatus[]
-) => status({ configured: true, connected: true, ...overrides }, types);
+) =>
+  status(
+    {
+      configured: true,
+      connected: true,
+      connectionState: GoogleHealthConnectionState.Active,
+      ...overrides,
+    },
+    types
+  );
 
 const refreshInventory = () =>
   page.getByRole("button", { name: "Refresh inventory", exact: true }).click();
@@ -318,7 +329,9 @@ describe("Google Health connector page", () => {
   });
 
   it("explains that the operator has not enabled Google Health", async () => {
-    googleHealthMocks.status.mockResolvedValue(status({ available: false }));
+    googleHealthMocks.status.mockResolvedValue(
+      status({ available: false, connectionState: GoogleHealthConnectionState.Unavailable })
+    );
     render(GoogleHealthPage);
     await expect
       .element(
@@ -336,7 +349,11 @@ describe("Google Health connector page", () => {
 
   it("pauses imports for a connected tenant once the operator turns Google Health off", async () => {
     googleHealthMocks.status.mockResolvedValue(
-      connected({ available: false, selectedTypes: ["steps"] })
+      connected({
+        available: false,
+        connectionState: GoogleHealthConnectionState.Unavailable,
+        selectedTypes: ["steps"],
+      })
     );
     render(GoogleHealthPage);
     await expect
@@ -456,7 +473,13 @@ describe("Google Health connector page", () => {
       .mockResolvedValueOnce(
         connected({ selectedTypes: ["heart-rate"], importFrom: "2026-08-29T00:00:00Z" })
       )
-      .mockResolvedValue(connected({ selectedTypes: [], importFrom: "2020-01-01T00:00:00Z" }));
+      .mockResolvedValue(
+        connected({
+          selectedTypes: [],
+          importFrom: "2020-01-01T00:00:00Z",
+          connectionState: GoogleHealthConnectionState.NothingSelected,
+        })
+      );
     render(GoogleHealthPage);
     await page.getByRole("checkbox", { name: "Import Heart rate" }).click();
     await page.getByLabelText("Import data from").fill("2020-01-01");
@@ -480,7 +503,12 @@ describe("Google Health connector page", () => {
   });
 
   it("asks for review before importing", async () => {
-    googleHealthMocks.status.mockResolvedValue(connected({ previewRequired: true }));
+    googleHealthMocks.status.mockResolvedValue(
+      connected({
+        previewRequired: true,
+        connectionState: GoogleHealthConnectionState.ReviewRequired,
+      })
+    );
     render(GoogleHealthPage);
     await expect
       .element(page.getByText("Review the available data below", { exact: false }))
@@ -511,6 +539,21 @@ describe("Google Health connector page", () => {
     await expect
       .element(page.getByRole("link", { name: "Open connector reset" }))
       .toHaveAttribute("href", "/settings/admin/connector-cursors");
+  });
+
+  it("follows the server's connection state when an error is also reported", async () => {
+    googleHealthMocks.status.mockResolvedValue(
+      connected({
+        previewRequired: true,
+        errorCode: "rate_limited",
+        connectionState: GoogleHealthConnectionState.NeedsAttention,
+      })
+    );
+    render(GoogleHealthPage);
+    await expect.element(page.getByText("Connected", { exact: true })).toBeVisible();
+    await expect
+      .element(page.getByText("Automatic sync runs approximately every 15 minutes", { exact: false }))
+      .toBeVisible();
   });
 
   it("explains a session the server's new Google client cannot use", async () => {

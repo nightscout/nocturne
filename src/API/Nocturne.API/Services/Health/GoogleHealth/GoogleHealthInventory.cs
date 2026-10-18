@@ -55,15 +55,17 @@ public static class GoogleHealthInventory
             return status;
         }
 
-        var granted = scanned?.Granted ??
-            context.GrantedScopes.Contains(GoogleHealthClient.ScopeFor(capability.DataType), StringComparer.Ordinal);
+        // The grant can change after a scan (a reconnect granting less), so it comes from the
+        // live session; the scan contributes only what it counted.
+        var granted = context.GrantedScopes.Contains(
+            GoogleHealthClient.ScopeFor(capability.DataType), StringComparer.Ordinal);
         status.Selectable = granted && scanned?.ErrorCode is null;
         var found = status.Count > 0;
         (status.State, status.Found) = scanned switch
         {
             { ErrorCode: not null } => (GoogleHealthTypeState.ReadFailed, GoogleHealthFound.ScanFailed),
             null => (GoogleHealthTypeState.NotScanned, GoogleHealthFound.NotScanned),
-            { Granted: false } => (GoogleHealthTypeState.PermissionNotGranted, GoogleHealthFound.NoPermission),
+            _ when !granted => (GoogleHealthTypeState.PermissionNotGranted, GoogleHealthFound.NoPermission),
             _ => (Imported(capability.DataType, found, context), found ? GoogleHealthFound.Found : GoogleHealthFound.None)
         };
         return status;

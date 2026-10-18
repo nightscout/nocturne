@@ -133,17 +133,36 @@ public sealed class GoogleHealthSessionStore(
     /// Also forget which Google account was connected, which is what lets a different account
     /// connect afterwards.
     /// </param>
-    public async Task ClearAsync(bool removeAccount, Guid? subject, CancellationToken ct)
+    /// <param name="revoke">
+    /// Also ask Google, best effort, to revoke the stored refresh token. Revocation needs no client
+    /// credentials, so it works for a token no longer usable by this instance's client.
+    /// </param>
+    public async Task ClearAsync(bool removeAccount, Guid? subject, CancellationToken ct, bool revoke = false)
     {
         oauth.InvalidateToken();
         await SetEnabledAsync(false, subject?.ToString(), ct);
         var secrets = await configurations.GetSecretsAsync(ConnectorName, ct);
+        if (revoke && secrets.GetValueOrDefault(RefreshTokenKey) is { Length: > 0 } refreshToken)
+            await TryRevokeAsync(refreshToken);
         secrets.Remove(RefreshTokenKey);
         secrets.Remove(GrantedScopesKey);
         secrets.Remove(SessionClientIdKey);
         secrets.Remove(LegacyClientSecretKey);
         if (removeAccount) secrets.Remove(AccountKey);
         await configurations.SaveSecretsAsync(ConnectorName, secrets, subject?.ToString(), ct);
+    }
+
+    private async Task TryRevokeAsync(string refreshToken)
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await oauth.RevokeAsync(refreshToken, timeout.Token);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or
+                                       GoogleHealthException or Polly.ExecutionRejectedException)
+        {
+        }
     }
 
     public async Task<string?> AccountKeyAsync(CancellationToken ct) =>

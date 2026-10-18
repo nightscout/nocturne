@@ -57,7 +57,8 @@ public class GoogleHealthSessionStoreTests
 
     private bool? savedEnabled;
 
-    private GoogleHealthSessionStore Store(out Mock<IConnectorConfigurationService> configurations)
+    private GoogleHealthSessionStore Store(
+        out Mock<IConnectorConfigurationService> configurations, HttpMessageHandler? handler = null)
     {
         configurations = new Mock<IConnectorConfigurationService>();
         configurations.Setup(service => service.GetSecretsAsync("GoogleHealth", It.IsAny<CancellationToken>()))
@@ -81,13 +82,37 @@ public class GoogleHealthSessionStoreTests
         tenant.SetupGet(accessor => accessor.IsResolved).Returns(true);
         tenant.SetupGet(accessor => accessor.TenantId).Returns(Guid.NewGuid());
         var oauth = new GoogleHealthAuthTokenProvider(
-            new HttpClient(new ThrowingHandler()),
+            new HttpClient(handler ?? new ThrowingHandler()),
             new ConnectorTokenCache(),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
             tenant.Object,
             TestPlatform.Options(),
             NullLogger<GoogleHealthAuthTokenProvider>.Instance);
         return new GoogleHealthSessionStore(configurations.Object, oauth, TestPlatform.Options());
+    }
+
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.OK)]
+    [InlineData(System.Net.HttpStatusCode.ServiceUnavailable)]
+    public async Task Clearing_a_former_clients_session_revokes_its_token_best_effort(System.Net.HttpStatusCode response)
+    {
+        var revoked = new List<string>();
+        var store = Store(out _, new RecordingHandler(request =>
+        {
+            revoked.Add(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            return new HttpResponseMessage(response) { Content = new StringContent("{}") };
+        }));
+
+        await store.ClearAsync(removeAccount: false, Guid.NewGuid(), default, revoke: true);
+
+        revoked.Should().ContainSingle().Which.Should().Contain("token=refresh");
+        secrets.Should().NotContainKey("refreshToken");
+    }
+
+    private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
+            Task.FromResult(respond(request));
     }
 
     private sealed class ThrowingHandler : HttpMessageHandler

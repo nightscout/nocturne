@@ -5,7 +5,7 @@
   import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Unplug from "@lucide/svelte/icons/unplug";
-  import type { GoogleHealthStatus } from "$lib/api";
+  import { GoogleHealthConnectionState, type GoogleHealthStatus } from "$lib/api";
   import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
@@ -53,7 +53,11 @@
   const disconnecting = $derived(
     localDisconnecting || !!status?.isDisconnecting
   );
-  const paused = $derived(!!status?.connected && !status.available);
+  const connection = $derived(
+    status?.connectionState ?? GoogleHealthConnectionState.Disconnected
+  );
+  const unavailable = $derived(connection === GoogleHealthConnectionState.Unavailable);
+  const paused = $derived(unavailable && !!status?.connected);
   let inventoryGeneration = 0;
   let purgeDialogOpen = $state(false);
 
@@ -221,12 +225,14 @@
         </p>
       </div>
     </div>
-    <Badge variant={status?.connected && status.available ? "default" : "outline"}>
-      {status && !status.available
-        ? "Unavailable"
-        : status?.connected
-          ? "Connected"
-          : "Not connected"}
+    <Badge variant={status?.connected && !unavailable ? "default" : "outline"}>
+      {!status
+        ? ""
+        : unavailable
+          ? "Unavailable"
+          : status.connected
+            ? "Connected"
+            : "Not connected"}
     </Badge>
   </header>
   {#if message}
@@ -277,7 +283,7 @@
     <CardContent class="space-y-4">
       {#if !status}
         <p>Loading connection status…</p>
-      {:else if !status.connected && !status.available}
+      {:else if unavailable && !status.connected}
         <p>Your Nocturne operator hasn't enabled Google Health on this server.</p>
         <a
           class="inline-block text-sm underline"
@@ -299,9 +305,9 @@
         <p>
           {paused
             ? "Google Health is connected, but imports are paused because your Nocturne operator has turned Google Health off."
-            : status.previewRequired
+            : connection === GoogleHealthConnectionState.ReviewRequired
               ? "Google Health is connected. Review the available data below, then save your selection to start importing."
-              : !status.selectedTypes?.length
+              : connection === GoogleHealthConnectionState.NothingSelected
                 ? "Google Health is connected. Imports are paused because no data types are selected."
                 : "Google Health is connected. Automatic sync runs approximately every 15 minutes."}
         </p>

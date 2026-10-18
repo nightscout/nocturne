@@ -372,7 +372,8 @@ public sealed class GoogleHealthConnectorService(
                 stage: ex is JsonException ? "response_parse" : "network");
             LogFailure(ex, error, tenantId);
             if (error.RequiresReconnect)
-                await sessions.ClearAsync(removeAccount: false, subject: null, cancellationToken);
+                await sessions.ClearAsync(removeAccount: false, subject: null, cancellationToken,
+                    revoke: error.Message == "client_changed");
             return Fail(result, GoogleHealthErrorCode.Encode(
                 error.Message,
                 error.DataType is null ? null : [error.DataType]));

@@ -199,7 +199,7 @@ public class GoogleHealthCapability
 }
 
 /// <summary>One data type's result from the last inventory scan.</summary>
-public record GoogleHealthInventoryItem(string DataType, bool Granted, int Count, string? ErrorCode);
+public record GoogleHealthInventoryItem(string DataType, int Count, string? ErrorCode);
 
 public class GoogleHealthAuthorize { public string Url { get; set; } = ""; }
 public class GoogleHealthCallback
