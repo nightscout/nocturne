@@ -130,9 +130,8 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
         Func<SleepSessionRepository, Task<TSecond>> second,
         IAuditContext? firstAudit = null)
     {
-        TestNocturneDbContextFactory contexts;
-        await using (var seed = Fixture.CreateDbContext(Fixture.TenantId))
-            contexts = new TestNocturneDbContextFactory(seed);
+        await using var seed = Fixture.CreateDbContext(Fixture.TenantId);
+        var contexts = new TestNocturneDbContextFactory(seed);
         var held = await contexts.CreateAsync();
         held.AttributedTo(firstAudit);
         var racer = await contexts.CreateAsync();
@@ -222,6 +221,11 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
         SleepScore = score,
     };
 
+    /// <summary>
+    /// Hands the repository one of the race's contexts on every call. Those come from a
+    /// <see cref="TestNocturneDbContextFactory"/>, whose contexts ignore disposal, so the repository's
+    /// <c>await using</c> leaves the held transaction and the racer's connection open.
+    /// </summary>
     private sealed class Pinned(NocturneDbContext context) : SingleReaderDbContextFactory
     {
         public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(context);
