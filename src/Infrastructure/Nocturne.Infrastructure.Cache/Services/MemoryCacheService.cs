@@ -11,12 +11,24 @@ namespace Nocturne.Infrastructure.Cache.Services;
 /// <summary>
 /// In-memory cache service implementation for single-user deployments
 /// </summary>
+/// <remarks>
+/// <para>
+/// Pattern removal can only reach keys it tracks, so each tracked key holds the token of the entry
+/// that tracked it, and an eviction untracks the key only while the token is still its own. An
+/// overwrite evicts the replaced entry on a background thread, which may run after the new entry
+/// is tracked.
+/// </para>
+/// <para>
+/// Keys are tracked in buckets by their first <c>:</c>-separated segment, so a pattern whose first
+/// segment is literal, such as a tenant id, scans only that bucket.
+/// </para>
+/// </remarks>
 public class MemoryCacheService : ICacheService, IDisposable
 {
     private readonly IMemoryCache _memoryCache;
     private readonly CacheConfiguration _config;
     private readonly ILogger<MemoryCacheService> _logger;
-    private readonly ConcurrentDictionary<string, byte> _trackedKeys;
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, object>> _trackedKeys;
     private readonly string _keyPrefix;
 
     public MemoryCacheService(
@@ -28,7 +40,8 @@ public class MemoryCacheService : ICacheService, IDisposable
         _memoryCache = memoryCache;
         _config = config.Value;
         _logger = logger;
-        _trackedKeys = new ConcurrentDictionary<string, byte>();
+        _trackedKeys = new ConcurrentDictionary<string, ConcurrentDictionary<string, object>>(
+            StringComparer.OrdinalIgnoreCase);
         _keyPrefix = $"{_config.KeyPrefix}:";
     }
 
@@ -69,21 +82,7 @@ public class MemoryCacheService : ICacheService, IDisposable
             var fullKey = GetFullKey(key);
             var ttl = expiration ?? TimeSpan.FromSeconds(_config.DefaultExpirationSeconds);
 
-            var options = new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = ttl };
-
-            // Add eviction callback to remove from tracking
-            options.RegisterPostEvictionCallback(
-                (key, value, reason, state) =>
-                {
-                    if (key is string keyStr)
-                    {
-                        _trackedKeys.TryRemove(keyStr, out _);
-                    }
-                }
-            );
-
-            _memoryCache.Set(fullKey, value, options);
-            _trackedKeys.TryAdd(fullKey, 0);
+            SetTracked(key, fullKey, value, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = ttl });
 
             _logger.LogDebug("Cached value for key: {Key} with TTL: {TTL}", key, ttl);
         }
@@ -108,21 +107,7 @@ public class MemoryCacheService : ICacheService, IDisposable
         {
             var fullKey = GetFullKey(key);
 
-            var options = new MemoryCacheEntryOptions { AbsoluteExpiration = expiresAt };
-
-            // Add eviction callback to remove from tracking
-            options.RegisterPostEvictionCallback(
-                (key, value, reason, state) =>
-                {
-                    if (key is string keyStr)
-                    {
-                        _trackedKeys.TryRemove(keyStr, out _);
-                    }
-                }
-            );
-
-            _memoryCache.Set(fullKey, value, options);
-            _trackedKeys.TryAdd(fullKey, 0);
+            SetTracked(key, fullKey, value, new MemoryCacheEntryOptions { AbsoluteExpiration = expiresAt });
 
             _logger.LogDebug("Cached value for key: {Key} expires at: {ExpiresAt}", key, expiresAt);
         }
@@ -141,7 +126,8 @@ public class MemoryCacheService : ICacheService, IDisposable
         {
             var fullKey = GetFullKey(key);
             _memoryCache.Remove(fullKey);
-            _trackedKeys.TryRemove(fullKey, out _);
+            if (_trackedKeys.TryGetValue(Bucket(key), out var bucket))
+                bucket.TryRemove(fullKey, out _);
             _logger.LogDebug("Removed cache entry for key: {Key}", key);
         }
         catch (Exception ex)
@@ -159,27 +145,30 @@ public class MemoryCacheService : ICacheService, IDisposable
         {
             var fullPattern = GetFullKey(pattern);
             var regex = CreateRegexFromPattern(fullPattern);
-            var keysToRemove = new List<string>();
+            var bucketName = Bucket(pattern);
+            IEnumerable<ConcurrentDictionary<string, object>> buckets;
+            if (bucketName.IndexOfAny(['*', '?']) >= 0)
+                buckets = _trackedKeys.Values;
+            else
+                buckets = _trackedKeys.TryGetValue(bucketName, out var only) ? [only] : [];
+            var removed = 0;
 
-            // Find all keys that match the pattern
-            foreach (var kvp in _trackedKeys)
+            foreach (var bucket in buckets)
             {
-                if (regex.IsMatch(kvp.Key))
+                foreach (var tracked in bucket)
                 {
-                    keysToRemove.Add(kvp.Key);
-                }
-            }
+                    if (!regex.IsMatch(tracked.Key))
+                        continue;
 
-            // Remove matching keys
-            foreach (var key in keysToRemove)
-            {
-                _memoryCache.Remove(key);
-                _trackedKeys.TryRemove(key, out _);
+                    _memoryCache.Remove(tracked.Key);
+                    bucket.TryRemove(tracked.Key, out _);
+                    removed++;
+                }
             }
 
             _logger.LogDebug(
                 "Removed {Count} cache entries matching pattern: {Pattern}",
-                keysToRemove.Count,
+                removed,
                 pattern
             );
         }
@@ -234,6 +223,28 @@ public class MemoryCacheService : ICacheService, IDisposable
     }
 
     private string GetFullKey(string key) => $"{_keyPrefix}{key}";
+
+    private static string Bucket(string key)
+    {
+        var separator = key.IndexOf(':');
+        return separator < 0 ? key : key[..separator];
+    }
+
+    private void SetTracked<T>(string key, string fullKey, T value, MemoryCacheEntryOptions options)
+    {
+        var bucket = _trackedKeys.GetOrAdd(Bucket(key), _ => new ConcurrentDictionary<string, object>());
+        var token = new object();
+        options.RegisterPostEvictionCallback(
+            static (evictedKey, _, _, state) =>
+            {
+                var (bucket, token) = ((ConcurrentDictionary<string, object>, object))state!;
+                bucket.TryRemove(KeyValuePair.Create((string)evictedKey, token));
+            },
+            (bucket, token));
+
+        _memoryCache.Set(fullKey, value, options);
+        bucket[fullKey] = token;
+    }
 
     /// <summary>
     /// Creates a regex pattern from a cache key pattern with wildcards

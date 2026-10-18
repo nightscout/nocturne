@@ -24,7 +24,9 @@ callers assemble their own keys against `ICacheService`: `status:system:{tenantI
 
 `MemoryCacheService.RemoveByPatternAsync` prepends the `nocturne:` prefix itself before anchoring
 the regex, so a caller's pattern must be written without that prefix, and must match the rest of
-the key end to end. The only wildcards are `*` and `?`.
+the key end to end. The only wildcards are `*` and `?`. Keys are tracked by their first
+`:`-separated segment, so a pattern whose first segment has no wildcard, such as a tenant id,
+scans only the keys sharing it.
 
 ## TTLs
 
@@ -49,6 +51,6 @@ rotation-successor keys compute theirs at the call site.
 dotnet test --filter "Category=Cache"
 ```
 
-`tests/Unit/Nocturne.Infrastructure.Cache.Tests` covers hit rate over a seeded access pattern and
-concurrent read-modify-write. Retrieval latency is deliberately not asserted: a wall-clock budget
+`tests/Unit/Nocturne.Infrastructure.Cache.Tests` covers hit rate over a seeded access pattern,
+concurrent read-modify-write, and pattern removal of a key whose replaced entry is evicted late. Retrieval latency is deliberately not asserted: a wall-clock budget
 on a shared runner measures the runner.
