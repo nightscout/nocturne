@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -31,7 +32,7 @@ public class HeartRateServiceDedupTests
             .Returns((IEnumerable<HeartRate> docs) => docs);
 
         var service = new HeartRateService(
-            context,
+            context.AsFactory(),
             processing.Object,
             Mock.Of<ISignalRBroadcastService>(),
             NullLogger<HeartRateService>.Instance);

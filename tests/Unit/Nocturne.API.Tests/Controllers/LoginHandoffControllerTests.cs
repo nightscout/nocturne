@@ -52,13 +52,13 @@ public class LoginHandoffControllerTests : IDisposable
         var loginCodeService = new LoginCodeService(
             new Mock<IJwtService>().Object,
             new AuthAuditService(
-                _auditContext,
+                _auditContext.AsFactory(),
                 new HttpContextAccessor { HttpContext = _httpContext },
                 new AuditContext(),
                 new Mock<ILogger<AuthAuditService>>().Object));
 
         _controller = new LoginHandoffController(
-            _tenantContext,
+            _tenantContext.AsFactory(),
             loginCodeService,
             _sessionService.Object,
             Options.Create(new OidcOptions { Cookie = new CookieSettings { Secure = true } }),

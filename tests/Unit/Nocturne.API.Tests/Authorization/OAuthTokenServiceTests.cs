@@ -117,7 +117,7 @@ public class OAuthTokenServiceTests : IDisposable
         NocturneDbContext dbContext, IOAuthGrantService? grantService = null)
     {
         return new OAuthTokenService(
-            dbContext,
+            dbContext.AsFactory(),
             _mockJwtService.Object,
             _mockSubjectService.Object,
             grantService ?? _mockGrantService.Object,
@@ -340,7 +340,6 @@ public class OAuthTokenServiceTests : IDisposable
         var guestSessionCache = new GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(
             new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
         var grantService = new OAuthGrantService(
-            db,
             _db.ContextFactory.AsNocturneFactory(),
             Mock.Of<IOAuthClientService>(),
             guestSessionCache,
@@ -645,12 +644,12 @@ public class OAuthTokenServiceTests : IDisposable
         Assert.NotNull(result.Scope);
 
         // Verify old token was revoked
-        var oldTokenEntity = await db.OAuthRefreshTokens.FirstAsync(t => t.TokenHash == oldTokenHash);
+        var oldTokenEntity = await db.OAuthRefreshTokens.AsNoTracking().FirstAsync(t => t.TokenHash == oldTokenHash);
         Assert.NotNull(oldTokenEntity.RevokedAt);
         Assert.NotNull(oldTokenEntity.ReplacedById);
 
         // Verify new token was created
-        var newTokenEntity = await db.OAuthRefreshTokens.FirstAsync(t => t.TokenHash == TestNewRefreshTokenHash);
+        var newTokenEntity = await db.OAuthRefreshTokens.AsNoTracking().FirstAsync(t => t.TokenHash == TestNewRefreshTokenHash);
         Assert.Null(newTokenEntity.RevokedAt);
         Assert.Equal(grantId, newTokenEntity.GrantId);
 
@@ -828,7 +827,7 @@ public class OAuthTokenServiceTests : IDisposable
 
         await service.RevokeTokenAsync(refreshToken, "access_token");
 
-        var stored = await db.OAuthRefreshTokens.FirstAsync(t => t.TokenHash == refreshTokenHash);
+        var stored = await db.OAuthRefreshTokens.AsNoTracking().FirstAsync(t => t.TokenHash == refreshTokenHash);
         Assert.NotNull(stored.RevokedAt);
     }
 

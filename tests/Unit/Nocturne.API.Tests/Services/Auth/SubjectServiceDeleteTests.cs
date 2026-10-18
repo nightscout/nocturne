@@ -124,12 +124,12 @@ public class SubjectServiceDeleteTests : IDisposable
 
         await using var dbContext = _db.CreateContext();
         var audit = new AuthAuditService(
-            dbContext,
+            dbContext.AsFactory(),
             new HttpContextAccessor { HttpContext = httpContext },
             new AuditContext(),
             NullLogger<AuthAuditService>.Instance);
         var service = new SubjectService(
-            dbContext, audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance);
+            dbContext.AsFactory(), audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance);
 
         (await service.DeleteSubjectAsync(_deletedId)).Should().BeTrue();
     }

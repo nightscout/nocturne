@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Services;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -724,9 +725,9 @@ public class V4ToLegacyProjectionServiceTests
         using var abandoned = TestDbContextFactory.CreateInMemoryContext();
         var abandonedSet = abandoned.Set<BolusEntity>();
         await abandoned.DisposeAsync();
-        _dbContext.Boluses = abandonedSet;
+        var service = CreateService(new TestNocturneDbContextFactory(_dbContext) { Prepare = c => c.Boluses = abandonedSet });
 
-        var read = () => _service.GetProjectedTreatmentsModifiedSinceAsync(CursorMills, 100);
+        var read = () => service.GetProjectedTreatmentsModifiedSinceAsync(CursorMills, 100);
 
         await read.Should().ThrowAsync<ObjectDisposedException>();
     }
@@ -828,9 +829,9 @@ public class V4ToLegacyProjectionServiceTests
         using var abandoned = TestDbContextFactory.CreateInMemoryContext();
         var abandonedSet = abandoned.Set<StateSpanEntity>();
         await abandoned.DisposeAsync();
-        _dbContext.StateSpans = abandonedSet;
+        var service = CreateService(new TestNocturneDbContextFactory(_dbContext) { Prepare = c => c.StateSpans = abandonedSet });
 
-        var lookup = () => _service.GetProjectedStateSpanTreatmentAsync(Guid.NewGuid().ToString());
+        var lookup = () => service.GetProjectedStateSpanTreatmentAsync(Guid.NewGuid().ToString());
 
         await lookup.Should().ThrowAsync<ObjectDisposedException>();
     }
@@ -1102,6 +1103,9 @@ public class V4ToLegacyProjectionServiceTests
     }
 
     private V4ToLegacyProjectionService CreateService(NocturneDbContext dbContext) =>
+        CreateService(dbContext.AsFactory());
+
+    private V4ToLegacyProjectionService CreateService(INocturneDbContextFactory contexts) =>
         new(
             _bolusRepo.Object,
             _carbIntakeRepo.Object,
@@ -1111,7 +1115,7 @@ public class V4ToLegacyProjectionServiceTests
             _tempBasalRepo.Object,
             _bolusCalcRepo.Object,
             _treatmentFoodService.Object,
-            dbContext,
+            contexts,
             NullLogger<V4ToLegacyProjectionService>.Instance
         );
 }

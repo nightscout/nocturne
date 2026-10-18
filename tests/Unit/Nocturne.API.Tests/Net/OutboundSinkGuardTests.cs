@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Services;
 using System.Net;
 using System.Text;
 using FluentAssertions;
@@ -109,7 +110,7 @@ public class OutboundSinkGuardTests
     {
         var factory = new RecordingClientFactory();
         var controller = new OidcProviderAdminController(
-            Mock.Of<IOidcProviderService>(), dbContext: null!, factory);
+            Mock.Of<IOidcProviderService>(), contexts: Mock.Of<INocturneDbContextFactory>(), factory);
 
         await controller.TestUnsaved(new TestProviderRequest("https://someones-idp.example"));
 

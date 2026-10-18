@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Services;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -24,7 +25,7 @@ public class OidcProviderServiceOAuth2Tests
     {
         var options = Options.Create(new OidcOptions { Providers = [.. providers] });
         return new OidcProviderService(
-            dbContext: null!, // config-managed reads never touch the database
+            contexts: Mock.Of<INocturneDbContextFactory>(), // config-managed reads never touch the database
             new Mock<IHttpClientFactory>().Object,
             NullLogger<OidcProviderService>.Instance,
             new EphemeralDataProtectionProvider(),

@@ -33,6 +33,7 @@ using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Extensions;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
@@ -627,7 +628,7 @@ if (!app.Environment.IsDevelopment() && DevOnlyEndpoints.IsOptedIn(app.Configura
 if (app.Environment.IsDevelopment() && !isNSwagGeneration)
 {
     using var devSeedScope = app.Services.CreateScope();
-    var devSeedDb = devSeedScope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+    await using var devSeedDb = await devSeedScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
     var devSeedLogger = devSeedScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     await DevIdentityFixtureSeeder.SeedAsync(
         devSeedDb, app.Configuration, devSeedLogger, CancellationToken.None);

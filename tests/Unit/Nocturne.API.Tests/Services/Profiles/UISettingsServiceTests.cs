@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -608,6 +609,6 @@ public class UISettingsServiceTests
 
     private static UISettingsService NewService(NocturneDbContext context)
     {
-        return new UISettingsService(context, NullLogger<UISettingsService>.Instance);
+        return new UISettingsService(context.AsFactory(), NullLogger<UISettingsService>.Instance);
     }
 }

@@ -66,7 +66,7 @@ public class DemoDataPurgeParityTests : IDisposable
         new(Mock.Of<ITenantService>(), null!, (new ContextFactory(_db.Options)).AsNocturneFactory());
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
-        context,
+        context.AsFactory(),
         _sensorGlucose.Object,
         _meterGlucose.Object,
         _calibrations.Object,

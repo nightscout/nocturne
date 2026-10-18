@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -39,7 +40,7 @@ public class ConnectorFoodEntryServiceTests
     private NocturneDbContext NewContext() => new(_options) { TenantId = _tenantId };
 
     private ConnectorFoodEntryService NewService(NocturneDbContext context) =>
-        new(context,
+        new(context.AsFactory(),
             _mealMatchingMock.Object,
             Mock.Of<ILogger<ConnectorFoodEntryService>>());
 

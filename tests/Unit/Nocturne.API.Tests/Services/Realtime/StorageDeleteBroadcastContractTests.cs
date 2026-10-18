@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
@@ -544,7 +545,7 @@ public class StorageDeleteBroadcastContractTests
 
         var capture = new BroadcastCapture();
         var deleted = await new HeartRateService(
-            context,
+            context.AsFactory(),
             Mock.Of<IDocumentProcessingService>(),
             capture.Broadcast,
             NullLogger<HeartRateService>.Instance

@@ -7,6 +7,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -21,7 +22,7 @@ namespace Nocturne.API.Services.Auth;
 /// <seealso cref="RoleService"/>
 public class SubjectService : ISubjectService
 {
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly IAuthAuditService _auditService;
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly ILogger<SubjectService> _logger;
@@ -29,18 +30,17 @@ public class SubjectService : ISubjectService
     /// <summary>
     /// Initializes a new instance of <see cref="SubjectService"/>.
     /// </summary>
-    /// <param name="dbContext">The EF Core database context for subject and role entity access.</param>
     /// <param name="auditService">Service for recording audit events on authentication actions.</param>
     /// <param name="recoveryCodeService">Service for counting the subject's unused recovery codes.</param>
     /// <param name="logger">The logger instance.</param>
     public SubjectService(
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         IAuthAuditService auditService,
         IRecoveryCodeService recoveryCodeService,
         ILogger<SubjectService> logger
     )
     {
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _auditService = auditService;
         _recoveryCodeService = recoveryCodeService;
         _logger = logger;
@@ -49,7 +49,8 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<Subject?> GetSubjectByIdAsync(Guid subjectId)
     {
-        var entity = await _dbContext
+        await using var db = await _contexts.CreateAsync();
+        var entity = await db
             .Subjects.AsNoTracking()
             .Include(s => s.SubjectRoles)
             .ThenInclude(sr => sr.Role)
@@ -68,8 +69,9 @@ public class SubjectService : ISubjectService
         IEnumerable<string>? defaultRoles = null
     )
     {
+        await using var db = await _contexts.CreateAsync();
         // Try to find existing subject via the join table
-        var identity = await _dbContext.SubjectOidcIdentities
+        var identity = await db.SubjectOidcIdentities
             .Include(x => x.Subject)
             .ThenInclude(s => s!.SubjectRoles)
             .ThenInclude(sr => sr.Role)
@@ -93,7 +95,7 @@ public class SubjectService : ISubjectService
             // Always bump LastUsedAt on the identity row and the subject's UpdatedAt.
             identity.LastUsedAt = DateTime.UtcNow;
             entity.UpdatedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync();
+            await db.SaveChangesAsync();
 
             _logger.LogDebug(
                 "Found existing subject {SubjectId} for OIDC identity {OidcSubjectId}",
@@ -112,7 +114,7 @@ public class SubjectService : ISubjectService
             IsActive = true,
         };
 
-        _dbContext.Subjects.Add(newEntity);
+        db.Subjects.Add(newEntity);
 
         // Create the OIDC identity link
         var identityEntity = new SubjectOidcIdentityEntity
@@ -125,9 +127,9 @@ public class SubjectService : ISubjectService
             Email = email,
             LinkedAt = DateTime.UtcNow,
         };
-        _dbContext.SubjectOidcIdentities.Add(identityEntity);
+        db.SubjectOidcIdentities.Add(identityEntity);
 
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         // Assign default roles if specified
         if (defaultRoles != null)
@@ -138,10 +140,10 @@ public class SubjectService : ISubjectService
                 .Where(rn => !string.IsNullOrWhiteSpace(rn))
                 .Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                var role = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
+                var role = await db.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
                 if (role != null && assignedRoleIds.Add(role.Id))
                 {
-                    _dbContext.SubjectRoles.Add(
+                    db.SubjectRoles.Add(
                         new SubjectRoleEntity
                         {
                             SubjectId = newEntity.Id,
@@ -151,11 +153,11 @@ public class SubjectService : ISubjectService
                     );
                 }
             }
-            await _dbContext.SaveChangesAsync();
+            await db.SaveChangesAsync();
         }
 
         // Reload with roles
-        newEntity = await _dbContext
+        newEntity = await db
             .Subjects.Include(s => s.SubjectRoles)
             .ThenInclude(sr => sr.Role)
             .FirstAsync(s => s.Id == newEntity.Id);
@@ -171,6 +173,7 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<SubjectCreationResult> CreateSubjectAsync(Subject subject)
     {
+        await using var db = await _contexts.CreateAsync();
         var entity = new SubjectEntity
         {
             Id = subject.Id == Guid.Empty ? Guid.CreateVersion7() : subject.Id,
@@ -180,8 +183,8 @@ public class SubjectService : ISubjectService
             IsActive = subject.IsActive,
         };
 
-        _dbContext.Subjects.Add(entity);
-        await _dbContext.SaveChangesAsync();
+        db.Subjects.Add(entity);
+        await db.SaveChangesAsync();
 
         // Assign roles
         var assignedRoleIds = new HashSet<Guid>();
@@ -190,10 +193,10 @@ public class SubjectService : ISubjectService
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var roleEntity = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
+            var roleEntity = await db.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
             if (roleEntity != null && assignedRoleIds.Add(roleEntity.Id))
             {
-                _dbContext.SubjectRoles.Add(
+                db.SubjectRoles.Add(
                     new SubjectRoleEntity
                     {
                         SubjectId = entity.Id,
@@ -203,10 +206,10 @@ public class SubjectService : ISubjectService
                 );
             }
         }
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         // Reload with roles
-        entity = await _dbContext
+        entity = await db
             .Subjects.Include(s => s.SubjectRoles)
             .ThenInclude(sr => sr.Role)
             .FirstAsync(s => s.Id == entity.Id);
@@ -225,7 +228,8 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<Subject?> UpdateSubjectAsync(Subject subject)
     {
-        var entity = await _dbContext
+        await using var db = await _contexts.CreateAsync();
+        var entity = await db
             .Subjects.Include(s => s.SubjectRoles)
             .FirstOrDefaultAsync(s => s.Id == subject.Id);
 
@@ -240,10 +244,10 @@ public class SubjectService : ISubjectService
         entity.IsActive = subject.IsActive;
         entity.UpdatedAt = DateTime.UtcNow;
 
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         // Reload with roles
-        entity = await _dbContext
+        entity = await db
             .Subjects.Include(s => s.SubjectRoles)
             .ThenInclude(sr => sr.Role)
             .FirstAsync(s => s.Id == entity.Id);
@@ -259,7 +263,8 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<bool> DeleteSubjectAsync(Guid subjectId)
     {
-        var entity = await _dbContext.Subjects.FindAsync(subjectId);
+        await using var db = await _contexts.CreateAsync();
+        var entity = await db.Subjects.FindAsync(subjectId);
         if (entity == null)
         {
             return false;
@@ -271,14 +276,14 @@ public class SubjectService : ISubjectService
             return false;
         }
 
-        await _dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            await using var tx = await _dbContext.Database.BeginTransactionAsync();
+            await using var tx = await db.Database.BeginTransactionAsync();
 
-            await ScrubAuthAuditPersonalDataAsync(subjectId);
+            await ScrubAuthAuditPersonalDataAsync(db, subjectId);
 
-            _dbContext.Subjects.Remove(entity);
-            await _dbContext.SaveChangesAsync();
+            db.Subjects.Remove(entity);
+            await db.SaveChangesAsync();
 
             await tx.CommitAsync();
         });
@@ -295,15 +300,15 @@ public class SubjectService : ISubjectService
     /// make it a pseudonymous record (see <see cref="AuthAuditLogEntity"/>). The client address and
     /// user agent are the actor's, so another subject's on a row about this one are kept.
     /// </summary>
-    private async Task ScrubAuthAuditPersonalDataAsync(Guid subjectId)
+    private async Task ScrubAuthAuditPersonalDataAsync(NocturneDbContext db, Guid subjectId)
     {
-        await _dbContext.AuthAuditLog
+        await db.AuthAuditLog
             .Where(a => a.ActorSubjectId == subjectId)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(a => a.IpAddress, (string?)null)
                 .SetProperty(a => a.UserAgent, (string?)null));
 
-        await _dbContext.AuthAuditLog
+        await db.AuthAuditLog
             .Where(a => a.SubjectId == subjectId || a.ActorSubjectId == subjectId)
             .ExecuteUpdateAsync(s => s.SetProperty(a => a.DetailsJson, (string?)null));
     }
@@ -311,7 +316,8 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<bool> ActivateSubjectAsync(Guid subjectId)
     {
-        var result = await _dbContext
+        await using var db = await _contexts.CreateAsync();
+        var result = await db
             .Subjects.Where(s => s.Id == subjectId)
             .ExecuteUpdateAsync(s =>
                 s.SetProperty(e => e.IsActive, true).SetProperty(e => e.UpdatedAt, DateTime.UtcNow)
@@ -323,7 +329,8 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<bool> DeactivateSubjectAsync(Guid subjectId)
     {
-        var result = await _dbContext
+        await using var db = await _contexts.CreateAsync();
+        var result = await db
             .Subjects.Where(s => s.Id == subjectId)
             .ExecuteUpdateAsync(s =>
                 s.SetProperty(e => e.IsActive, false).SetProperty(e => e.UpdatedAt, DateTime.UtcNow)
@@ -335,7 +342,8 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<List<string>> GetSubjectRolesAsync(Guid subjectId)
     {
-        return await _dbContext
+        await using var db = await _contexts.CreateAsync();
+        return await db
             .SubjectRoles.AsNoTracking()
             .Where(sr => sr.SubjectId == subjectId)
             .Select(sr => sr.Role!.Name)
@@ -345,7 +353,8 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<List<string>> GetSubjectPermissionsAsync(Guid subjectId)
     {
-        var roles = await _dbContext
+        await using var db = await _contexts.CreateAsync();
+        var roles = await db
             .SubjectRoles.AsNoTracking()
             .Where(sr => sr.SubjectId == subjectId)
             .Include(sr => sr.Role)
@@ -374,7 +383,8 @@ public class SubjectService : ISubjectService
         Guid? assignedBy = null
     )
     {
-        var role = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
+        await using var db = await _contexts.CreateAsync();
+        var role = await db.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
         if (role == null)
         {
             _logger.LogWarning(
@@ -385,7 +395,7 @@ public class SubjectService : ISubjectService
             return false;
         }
 
-        var existingAssignment = await _dbContext.SubjectRoles.AnyAsync(sr =>
+        var existingAssignment = await db.SubjectRoles.AnyAsync(sr =>
             sr.SubjectId == subjectId && sr.RoleId == role.Id
         );
 
@@ -394,7 +404,7 @@ public class SubjectService : ISubjectService
             return false; // Already assigned
         }
 
-        _dbContext.SubjectRoles.Add(
+        db.SubjectRoles.Add(
             new SubjectRoleEntity
             {
                 SubjectId = subjectId,
@@ -404,7 +414,7 @@ public class SubjectService : ISubjectService
             }
         );
 
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         _logger.LogInformation(
             "Assigned role {RoleName} to subject {SubjectId}",
@@ -422,13 +432,14 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<bool> RemoveRoleAsync(Guid subjectId, string roleName)
     {
-        var role = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
+        await using var db = await _contexts.CreateAsync();
+        var role = await db.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
         if (role == null)
         {
             return false;
         }
 
-        var result = await _dbContext
+        var result = await db
             .SubjectRoles.Where(sr => sr.SubjectId == subjectId && sr.RoleId == role.Id)
             .ExecuteDeleteAsync();
 
@@ -483,10 +494,11 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<Subject?> InitializePublicSubjectAsync()
     {
+        await using var db = await _contexts.CreateAsync();
         const string publicSubjectName = "Public";
 
         // Check if "Public" subject already exists
-        var existing = await _dbContext
+        var existing = await db
             .Subjects.Include(s => s.SubjectRoles)
             .ThenInclude(sr => sr.Role)
             .FirstOrDefaultAsync(s => s.Name == publicSubjectName && s.IsSystemSubject);
@@ -508,14 +520,14 @@ public class SubjectService : ISubjectService
             IsSystemSubject = true,
         };
 
-        _dbContext.Subjects.Add(entity);
-        await _dbContext.SaveChangesAsync();
+        db.Subjects.Add(entity);
+        await db.SaveChangesAsync();
 
         // Assign the "public" role
         await AssignRoleAsync(entity.Id, "public");
 
         // Reload with roles
-        entity = await _dbContext
+        entity = await db
             .Subjects.Include(s => s.SubjectRoles)
             .ThenInclude(sr => sr.Role)
             .FirstAsync(s => s.Id == entity.Id);
@@ -528,7 +540,8 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task UpdateLastLoginAsync(Guid subjectId)
     {
-        await _dbContext
+        await using var db = await _contexts.CreateAsync();
+        await db
             .Subjects.Where(s => s.Id == subjectId)
             .ExecuteUpdateAsync(s =>
                 s.SetProperty(e => e.LastLoginAt, DateTime.UtcNow)
@@ -539,7 +552,8 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<IReadOnlyList<SubjectOidcIdentity>> GetLinkedOidcIdentitiesAsync(Guid subjectId)
     {
-        var entities = await _dbContext.SubjectOidcIdentities
+        await using var db = await _contexts.CreateAsync();
+        var entities = await db.SubjectOidcIdentities
             .Include(x => x.Provider)
             .Where(x => x.SubjectId == subjectId)
             .OrderBy(x => x.LinkedAt)
@@ -565,7 +579,8 @@ public class SubjectService : ISubjectService
     public async Task<(OidcLinkOutcome Outcome, Guid? IdentityId)> AttachOidcIdentityAsync(
         Guid subjectId, Guid providerId, string oidcSubjectId, string issuer, string? email)
     {
-        var existing = await _dbContext.SubjectOidcIdentities
+        await using var db = await _contexts.CreateAsync();
+        var existing = await db.SubjectOidcIdentities
             .FirstOrDefaultAsync(x => x.OidcSubjectId == oidcSubjectId && x.Issuer == issuer);
 
         if (existing != null)
@@ -575,7 +590,7 @@ public class SubjectService : ISubjectService
                 existing.LastUsedAt = DateTime.UtcNow;
                 if (!string.IsNullOrEmpty(email) && existing.Email != email)
                     existing.Email = email;
-                await _dbContext.SaveChangesAsync();
+                await db.SaveChangesAsync();
                 return (OidcLinkOutcome.AlreadyLinkedToSelf, existing.Id);
             }
             return (OidcLinkOutcome.AlreadyLinkedToOther, null);
@@ -591,15 +606,16 @@ public class SubjectService : ISubjectService
             Email = email,
             LinkedAt = DateTime.UtcNow,
         };
-        _dbContext.SubjectOidcIdentities.Add(row);
-        await _dbContext.SaveChangesAsync();
+        db.SubjectOidcIdentities.Add(row);
+        await db.SaveChangesAsync();
         return (OidcLinkOutcome.Created, row.Id);
     }
 
     /// <inheritdoc />
     public async Task<SubjectOidcIdentity?> GetMostRecentlyUsedIdentityAsync(Guid subjectId)
     {
-        var e = await _dbContext.SubjectOidcIdentities
+        await using var db = await _contexts.CreateAsync();
+        var e = await db.SubjectOidcIdentities
             .Include(x => x.Provider)
             .Where(x => x.SubjectId == subjectId)
             .OrderByDescending(x => x.LastUsedAt ?? x.LinkedAt)
@@ -626,29 +642,33 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public Task<FactorRemovalResult> TryRemoveOidcIdentityAsync(Guid subjectId, Guid identityId) =>
         TryRemoveFactorAsync(
-            _dbContext.SubjectOidcIdentities.Where(x => x.Id == identityId && x.SubjectId == subjectId),
-            async () => await _dbContext.PasskeyCredentials.CountAsync(p => p.SubjectId == subjectId)
-                + await _dbContext.WorkingOidcIdentities()
+            db => db.SubjectOidcIdentities.Where(x => x.Id == identityId && x.SubjectId == subjectId),
+            async db => await db.PasskeyCredentials.CountAsync(p => p.SubjectId == subjectId)
+                + await db.WorkingOidcIdentities()
                     .CountAsync(i => i.SubjectId == subjectId && i.Id != identityId));
 
     /// <inheritdoc />
     public Task<FactorRemovalResult> TryRemovePasskeyCredentialAsync(Guid subjectId, Guid credentialId) =>
         TryRemoveFactorAsync(
-            _dbContext.PasskeyCredentials.Where(x => x.Id == credentialId && x.SubjectId == subjectId),
-            async () => await _dbContext.PasskeyCredentials
+            db => db.PasskeyCredentials.Where(x => x.Id == credentialId && x.SubjectId == subjectId),
+            async db => await db.PasskeyCredentials
                     .CountAsync(p => p.SubjectId == subjectId && p.Id != credentialId)
-                + await _dbContext.WorkingOidcIdentities().CountAsync(i => i.SubjectId == subjectId));
+                + await db.WorkingOidcIdentities().CountAsync(i => i.SubjectId == subjectId));
 
-    private Task<FactorRemovalResult> TryRemoveFactorAsync<TFactor>(
-        IQueryable<TFactor> factor, Func<Task<int>> countOtherFactors) where TFactor : class =>
-        _dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+    private async Task<FactorRemovalResult> TryRemoveFactorAsync<TFactor>(
+        Func<NocturneDbContext, IQueryable<TFactor>> factorOf, Func<NocturneDbContext, Task<int>> countOtherFactors)
+        where TFactor : class
+    {
+        await using var db = await _contexts.CreateAsync();
+        var factor = factorOf(db);
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            await using var tx = await _dbContext.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
 
             if (!await factor.AnyAsync())
                 return FactorRemovalResult.NotFound;
 
-            if (await countOtherFactors() < 1)
+            if (await countOtherFactors(db) < 1)
                 return FactorRemovalResult.LastPrimaryFactor;
 
             // Untracked, so a retried attempt never inherits a Deleted entry from the failed one.
@@ -656,12 +676,14 @@ public class SubjectService : ISubjectService
             await tx.CommitAsync();
             return FactorRemovalResult.Removed;
         });
+    }
 
     /// <inheritdoc />
     public async Task<int> CountPrimaryAuthFactorsAsync(Guid subjectId)
     {
-        var passkeys = await _dbContext.PasskeyCredentials.CountAsync(p => p.SubjectId == subjectId);
-        var oidc = await _dbContext.WorkingOidcIdentities()
+        await using var db = await _contexts.CreateAsync();
+        var passkeys = await db.PasskeyCredentials.CountAsync(p => p.SubjectId == subjectId);
+        var oidc = await db.WorkingOidcIdentities()
             .CountAsync(i => i.SubjectId == subjectId);
         return passkeys + oidc;
     }
@@ -680,11 +702,12 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task UpdateOidcIdentityLastUsedAsync(Guid identityId)
     {
-        var row = await _dbContext.SubjectOidcIdentities.FindAsync(identityId);
+        await using var db = await _contexts.CreateAsync();
+        var row = await db.SubjectOidcIdentities.FindAsync(identityId);
         if (row != null)
         {
             row.LastUsedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync();
+            await db.SaveChangesAsync();
         }
     }
 

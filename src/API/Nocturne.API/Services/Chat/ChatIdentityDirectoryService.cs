@@ -34,11 +34,6 @@ namespace Nocturne.API.Services.Chat;
 /// tenant per platform user puts every survivor in a different tenant from the revoked link, and
 /// nothing requires the same subject across a chat account's links either.
 /// </para>
-/// <para>
-/// Each method opens its own <see cref="Microsoft.EntityFrameworkCore.DbContext"/> from the
-/// factory to stay compatible with the transactional retry pattern and avoid concurrency issues
-/// with shared contexts.
-/// </para>
 /// </remarks>
 /// <seealso cref="ChatIdentityService"/>
 /// <seealso cref="ChatIdentityPendingLinkService"/>

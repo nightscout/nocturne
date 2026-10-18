@@ -72,7 +72,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
     private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
     private DataSourceService CreateService(NocturneDbContext context, ITreatmentDecomposer? decomposer = null) => new(
-        context,
+        context.AsFactory(),
         _sensorGlucose.Object,
         _meterGlucose.Object,
         _calibrations.Object,
@@ -82,7 +82,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         NullLogger<DataSourceService>.Instance);
 
     private TreatmentDecomposer CreateDecomposer(NocturneDbContext context, IProfileDecomposer profiles) => new(
-        context,
+        context.AsFactory(),
         Mock.Of<IBolusRepository>(), Mock.Of<ITempBasalRepository>(), Mock.Of<ICarbIntakeRepository>(),
         Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
         Mock.Of<IBolusCalculationRepository>(), Mock.Of<IStateSpanService>(), Mock.Of<ITreatmentFoodService>(),

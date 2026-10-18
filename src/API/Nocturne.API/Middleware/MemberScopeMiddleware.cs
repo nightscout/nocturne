@@ -125,7 +125,9 @@ public class MemberScopeMiddleware
             return;
         }
 
-        var dbContext = context.RequestServices.GetRequiredService<NocturneDbContext>();
+        await using var dbContext = await context.RequestServices
+            .GetRequiredService<INocturneDbContextFactory>()
+            .CreateAsync(context.RequestAborted);
 
         var membership = await dbContext.TenantMembers
             .AsNoTracking()

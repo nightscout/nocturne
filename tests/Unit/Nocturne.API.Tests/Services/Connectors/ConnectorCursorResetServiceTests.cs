@@ -77,7 +77,7 @@ public class ConnectorCursorResetServiceTests
         var tenantAccessor = ScopeOn(_targetTenantId);
 
         var service = new ConnectorCursorResetService(
-            db, new TestNocturneDbContextFactory(db), syncService.Object, tenantAccessor.Object,
+            new TestNocturneDbContextFactory(db), syncService.Object, tenantAccessor.Object,
             Mock.Of<ILogger<ConnectorCursorResetService>>());
 
         var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -105,7 +105,7 @@ public class ConnectorCursorResetServiceTests
         var db = CreateDb();
         var syncService = new Mock<IConnectorSyncService>();
         var service = new ConnectorCursorResetService(
-            db, new TestNocturneDbContextFactory(db), syncService.Object, ScopeOn(Guid.CreateVersion7()).Object,
+            new TestNocturneDbContextFactory(db), syncService.Object, ScopeOn(Guid.CreateVersion7()).Object,
             Mock.Of<ILogger<ConnectorCursorResetService>>());
 
         var act = () => service.ResetTenantCursorsAsync(
@@ -132,7 +132,7 @@ public class ConnectorCursorResetServiceTests
         var db = CreateDb();
         var syncService = new Mock<IConnectorSyncService>();
         var service = new ConnectorCursorResetService(
-            db, new TestNocturneDbContextFactory(db), syncService.Object, Mock.Of<ITenantAccessor>(),
+            new TestNocturneDbContextFactory(db), syncService.Object, Mock.Of<ITenantAccessor>(),
             Mock.Of<ILogger<ConnectorCursorResetService>>());
 
         var result = await service.ResetTenantCursorsAsync(
@@ -157,7 +157,7 @@ public class ConnectorCursorResetServiceTests
             .ThrowsAsync(new InvalidOperationException("nope"));
 
         var service = new ConnectorCursorResetService(
-            db, new TestNocturneDbContextFactory(db), syncService.Object, ScopeOn(_targetTenantId).Object,
+            new TestNocturneDbContextFactory(db), syncService.Object, ScopeOn(_targetTenantId).Object,
             Mock.Of<ILogger<ConnectorCursorResetService>>());
 
         var progress = new RecordingProgress();

@@ -67,8 +67,8 @@ public class DDataService : IDDataService
         var ddata = new DData { LastUpdated = timestamp };
 
         // Load data from various collections based on timestamp.
-        // Fetched sequentially — the underlying service shares a scoped DbContext
-        // which is not thread-safe for concurrent access.
+        // Fetched sequentially: each read opens its own context, so running them concurrently
+        // would hold a pooled connection per read for one request.
         await LoadSgvsAsync(ddata, timestamp, cancellationToken);
         await LoadTreatmentsAsync(ddata, timestamp, cancellationToken);
         await LoadMbgsAsync(ddata, timestamp, cancellationToken);

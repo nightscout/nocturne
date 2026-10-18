@@ -6,6 +6,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services;
 
@@ -17,7 +18,7 @@ namespace Nocturne.API.Services;
 /// the AddTranslationDrafts migration).
 /// </summary>
 public class TranslationDraftService(
-    NocturneDbContext dbContext,
+    INocturneDbContextFactory contexts,
     IHttpContextAccessor httpContextAccessor,
     ITranslationContributionService contributionService) : ITranslationDraftService
 {
@@ -33,18 +34,23 @@ public class TranslationDraftService(
     public async Task<IReadOnlyList<TranslationDraft>> GetDraftsAsync(
         string locale, CancellationToken ct = default)
     {
-        var entities = await LoadForLocaleAsync(locale, ct);
+        await using var db = await contexts.CreateAsync(ct);
+        var entities = await LoadForLocaleAsync(db, locale, ct);
         return entities.Select(TranslationDraftMapper.ToDomainModel).ToList();
     }
 
-    public Task<IReadOnlyList<TranslationDraft>> UpsertDraftsAsync(
-        string locale, IReadOnlyList<TranslationEntryDto> entries, CancellationToken ct = default) =>
-        UpsertDraftsAsync(locale, entries, isRetry: false, ct);
+    public async Task<IReadOnlyList<TranslationDraft>> UpsertDraftsAsync(
+        string locale, IReadOnlyList<TranslationEntryDto> entries, CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateAsync(ct);
+        return await UpsertDraftsAsync(db, locale, entries, isRetry: false, ct);
+    }
 
     private async Task<IReadOnlyList<TranslationDraft>> UpsertDraftsAsync(
+        NocturneDbContext db,
         string locale, IReadOnlyList<TranslationEntryDto> entries, bool isRetry, CancellationToken ct)
     {
-        var existing = await LoadMatchingAsync(locale, entries, ct);
+        var existing = await LoadMatchingAsync(db, locale, entries, ct);
         var byKey = existing.ToDictionary(d => (d.Context, d.MsgId));
         var now = DateTime.UtcNow;
         var added = 0;
@@ -57,7 +63,7 @@ public class TranslationDraftService(
             {
                 if (byKey.TryGetValue(key, out var toDelete))
                 {
-                    dbContext.TranslationDrafts.Remove(toDelete);
+                    db.TranslationDrafts.Remove(toDelete);
                     byKey.Remove(key);
                 }
                 continue;
@@ -81,18 +87,18 @@ public class TranslationDraftService(
                     CreatedAt = now,
                     UpdatedAt = now,
                 };
-                dbContext.TranslationDrafts.Add(created);
+                db.TranslationDrafts.Add(created);
                 byKey[key] = created;
                 added++;
             }
         }
 
         if (added > 0)
-            await EnforceLimitsAsync(locale, added, ct);
+            await EnforceLimitsAsync(db, locale, added, ct);
 
         try
         {
-            await dbContext.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
         }
         catch (DbUpdateException ex) when (!isRetry && ex.IsUniqueViolation())
         {
@@ -101,8 +107,8 @@ public class TranslationDraftService(
             // the same entries again; the second pass sees the winner's row and
             // updates it. Any further rejection is not a lost race and is left
             // to surface.
-            dbContext.ChangeTracker.Clear();
-            return await UpsertDraftsAsync(locale, entries, isRetry: true, ct);
+            db.ChangeTracker.Clear();
+            return await UpsertDraftsAsync(db, locale, entries, isRetry: true, ct);
         }
 
         return byKey.Values
@@ -113,19 +119,21 @@ public class TranslationDraftService(
 
     public async Task<int> ClearDraftsAsync(string locale, CancellationToken ct = default)
     {
+        await using var db = await contexts.CreateAsync(ct);
         var subjectId = SubjectId;
-        var drafts = await dbContext.TranslationDrafts
+        var drafts = await db.TranslationDrafts
             .Where(d => d.SubjectId == subjectId && d.Locale == locale)
             .ToListAsync(ct);
-        dbContext.TranslationDrafts.RemoveRange(drafts);
-        await dbContext.SaveChangesAsync(ct);
+        db.TranslationDrafts.RemoveRange(drafts);
+        await db.SaveChangesAsync(ct);
         return drafts.Count;
     }
 
     public async Task<TranslationDraftSubmitResult> SubmitDraftsAsync(
         string locale, ContributionContributorDto contributor, string? note, CancellationToken ct = default)
     {
-        var drafts = await LoadForLocaleAsync(locale, ct);
+        await using var db = await contexts.CreateAsync(ct);
+        var drafts = await LoadForLocaleAsync(db, locale, ct);
 
         if (drafts.Count == 0)
             throw new ContributionRejectedException("There are no drafts to submit for this locale.");
@@ -156,7 +164,7 @@ public class TranslationDraftService(
         // identity resolution answers the reload below from the instances
         // loaded before the PR flow started — the reload would report the
         // stale UpdatedAt and delete a draft a concurrent autosave had edited.
-        dbContext.ChangeTracker.Clear();
+        db.ChangeTracker.Clear();
 
         // Applied drafts are done; unmatched ones (message no longer in the
         // catalog) and drafts edited mid-submit are kept.
@@ -164,7 +172,7 @@ public class TranslationDraftService(
             .Select(u => (u.Context, u.MsgId))
             .ToHashSet();
         var subjectId = SubjectId;
-        var current = await dbContext.TranslationDrafts
+        var current = await db.TranslationDrafts
             .Where(d => d.SubjectId == subjectId && d.Locale == locale)
             .ToListAsync(ct);
         var toDelete = current
@@ -172,8 +180,8 @@ public class TranslationDraftService(
                 && snapshot.TryGetValue(d.Id, out var seenAt)
                 && d.UpdatedAt == seenAt)
             .ToList();
-        dbContext.TranslationDrafts.RemoveRange(toDelete);
-        await dbContext.SaveChangesAsync(ct);
+        db.TranslationDrafts.RemoveRange(toDelete);
+        await db.SaveChangesAsync(ct);
 
         return new TranslationDraftSubmitResult
         {
@@ -187,17 +195,17 @@ public class TranslationDraftService(
     /// either cap. Rows the batch deletes are not discounted — the caps are a
     /// ceiling on accumulation, not an exact accounting.
     /// </summary>
-    private async Task EnforceLimitsAsync(string locale, int added, CancellationToken ct)
+    private async Task EnforceLimitsAsync(NocturneDbContext db, string locale, int added, CancellationToken ct)
     {
         var subjectId = SubjectId;
-        var inLocale = await dbContext.TranslationDrafts
+        var inLocale = await db.TranslationDrafts
             .Where(d => d.SubjectId == subjectId && d.Locale == locale)
             .CountAsync(ct);
         if (inLocale + added > MaxDraftsPerSubjectPerLocale)
             throw new TranslationDraftLimitExceededException(
                 $"At most {MaxDraftsPerSubjectPerLocale} drafts per locale.");
 
-        var inOtherLocales = await dbContext.TranslationDrafts
+        var inOtherLocales = await db.TranslationDrafts
             .Where(d => d.SubjectId == subjectId && d.Locale != locale)
             .CountAsync(ct);
         if (inOtherLocales + inLocale + added > MaxDraftsPerSubject)
@@ -213,6 +221,7 @@ public class TranslationDraftService(
     /// md5(msgid), not on the pair.
     /// </summary>
     private async Task<List<TranslationDraftEntity>> LoadMatchingAsync(
+        NocturneDbContext db,
         string locale, IReadOnlyList<TranslationEntryDto> entries, CancellationToken ct)
     {
         var msgIds = entries.Select(e => e.MsgId).Distinct().ToList();
@@ -221,7 +230,7 @@ public class TranslationDraftService(
 
         var wanted = entries.Select(e => (e.Context ?? "", e.MsgId)).ToHashSet();
         var subjectId = SubjectId;
-        var rows = await dbContext.TranslationDrafts
+        var rows = await db.TranslationDrafts
             .Where(d => d.SubjectId == subjectId && d.Locale == locale && msgIds.Contains(d.MsgId))
             .OrderBy(d => d.UpdatedAt)
             .ToListAsync(ct);
@@ -229,10 +238,10 @@ public class TranslationDraftService(
         return [.. rows.Where(d => wanted.Contains((d.Context, d.MsgId)))];
     }
 
-    private async Task<List<TranslationDraftEntity>> LoadForLocaleAsync(string locale, CancellationToken ct)
+    private async Task<List<TranslationDraftEntity>> LoadForLocaleAsync(NocturneDbContext db, string locale, CancellationToken ct)
     {
         var subjectId = SubjectId;
-        return await dbContext.TranslationDrafts
+        return await db.TranslationDrafts
             .Where(d => d.SubjectId == subjectId && d.Locale == locale)
             .OrderBy(d => d.UpdatedAt)
             .ToListAsync(ct);

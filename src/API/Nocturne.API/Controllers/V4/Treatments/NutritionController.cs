@@ -17,6 +17,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
@@ -62,20 +63,20 @@ public class NutritionController : ControllerBase, IWriteScopedController
     private readonly IBolusRepository _bolusRepo;
     private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IDemoModeService _demoModeService;
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
 
     public NutritionController(
         ICarbIntakeRepository carbIntakeRepo,
         IBolusRepository bolusRepo,
         ITreatmentFoodService treatmentFoodService,
         IDemoModeService demoModeService,
-        NocturneDbContext context)
+        INocturneDbContextFactory contexts)
     {
         _carbIntakeRepo = carbIntakeRepo;
         _bolusRepo = bolusRepo;
         _treatmentFoodService = treatmentFoodService;
         _demoModeService = demoModeService;
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     #region Carb Intakes
@@ -303,14 +304,15 @@ public class NutritionController : ControllerBase, IWriteScopedController
         [FromBody] CarbIntakeFoodRequest request,
         CancellationToken ct = default)
     {
-        var carbIntake = await _context.Set<CarbIntakeEntity>()
+        await using var db = await _contexts.CreateAsync(ct);
+        var carbIntake = await db.Set<CarbIntakeEntity>()
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == id, ct);
 
         if (carbIntake == null)
             return NotFound();
 
-        var entry = await BuildFoodEntryAsync(request, id, null, ct);
+        var entry = await BuildFoodEntryAsync(db, request, id, null, ct);
         if (entry == null)
             return BadRequest();
 
@@ -334,13 +336,14 @@ public class NutritionController : ControllerBase, IWriteScopedController
         [FromBody] CarbIntakeFoodRequest request,
         CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var breakdown = await _treatmentFoodService.GetByCarbIntakeIdAsync(id, ct);
         var existing = breakdown?.Foods.FirstOrDefault(f => f.Id == foodEntryId);
 
         if (existing == null)
             return NotFound();
 
-        var entry = await BuildFoodEntryAsync(request, id, existing, ct);
+        var entry = await BuildFoodEntryAsync(db, request, id, existing, ct);
         if (entry == null)
             return BadRequest();
 
@@ -401,6 +404,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
         [FromBody] CreateMealRequest request,
         CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         if (request.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
@@ -452,7 +456,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
         Guid? existingBolusCorrelationId = null;
         if (!string.IsNullOrEmpty(bolusModel.DataSource) && !string.IsNullOrEmpty(bolusModel.SyncIdentifier))
         {
-            var existingEntity = await _context.Boluses
+            var existingEntity = await db.Boluses
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
                     e => e.DataSource == bolusModel.DataSource
@@ -518,10 +522,11 @@ public class NutritionController : ControllerBase, IWriteScopedController
         [FromQuery] bool? attributed = null,
         CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var fromTimestamp = from ?? DateTime.UtcNow.Date;
         var toTimestamp = to ?? DateTime.UtcNow.Date.AddDays(1);
 
-        var query = _context.Set<CarbIntakeEntity>()
+        var query = db.Set<CarbIntakeEntity>()
             .AsNoTracking()
             .Where(c => c.Timestamp >= fromTimestamp && c.Timestamp <= toTimestamp && c.Carbs > 0);
 
@@ -550,7 +555,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
             .ToList();
 
         var correlatedBolusEntities = correlationIds.Count > 0
-            ? await _context.Set<BolusEntity>()
+            ? await db.Set<BolusEntity>()
                 .AsNoTracking()
                 .Where(b => b.CorrelationId.HasValue && correlationIds.Contains(b.CorrelationId!.Value))
                 .ToListAsync(ct)
@@ -638,6 +643,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
     #region Private Helpers
 
     private async Task<TreatmentFood?> BuildFoodEntryAsync(
+        NocturneDbContext db,
         CarbIntakeFoodRequest request,
         Guid carbIntakeId,
         TreatmentFood? existing,
@@ -670,8 +676,8 @@ public class NutritionController : ControllerBase, IWriteScopedController
         if (!string.IsNullOrWhiteSpace(request.FoodId))
         {
             foodEntity = Guid.TryParse(request.FoodId, out var foodGuid)
-                ? await _context.Foods.AsNoTracking().FirstOrDefaultAsync(f => f.Id == foodGuid, ct)
-                : await _context.Foods.AsNoTracking().FirstOrDefaultAsync(f => f.OriginalId == request.FoodId, ct);
+                ? await db.Foods.AsNoTracking().FirstOrDefaultAsync(f => f.Id == foodGuid, ct)
+                : await db.Foods.AsNoTracking().FirstOrDefaultAsync(f => f.OriginalId == request.FoodId, ct);
 
             if (foodEntity == null)
                 return null;
@@ -679,7 +685,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
         }
         else if (foodId.HasValue)
         {
-            foodEntity = await _context.Foods.AsNoTracking()
+            foodEntity = await db.Foods.AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == foodId.Value, ct);
         }
 

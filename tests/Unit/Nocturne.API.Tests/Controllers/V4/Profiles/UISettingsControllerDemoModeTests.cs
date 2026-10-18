@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
@@ -123,7 +124,7 @@ public class UISettingsControllerDemoModeTests
     {
         var demoService = new StubDemoService(HttpStatusCode.OK, ProxiedSettings);
         var controller = NewController(
-            new UISettingsService(NewDatabase(), NullLogger<UISettingsService>.Instance),
+            new UISettingsService(NewDatabase().AsFactory(), NullLogger<UISettingsService>.Instance),
             DemoMode(enabled: false, serviceUrl: "http://demo-service"),
             demoService.Factory
         );
@@ -154,7 +155,7 @@ public class UISettingsControllerDemoModeTests
     )
     {
         var controller = NewController(
-            new UISettingsService(NewDatabase(), NullLogger<UISettingsService>.Instance),
+            new UISettingsService(NewDatabase().AsFactory(), NullLogger<UISettingsService>.Instance),
             DemoMode(enabled: true, serviceUrl: serviceUrl),
             demoService.Factory
         );

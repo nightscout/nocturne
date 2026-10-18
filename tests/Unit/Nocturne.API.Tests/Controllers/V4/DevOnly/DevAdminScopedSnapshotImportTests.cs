@@ -225,7 +225,7 @@ public class DevAdminScopedSnapshotImportTests : IDisposable
 
     private static DevAdminController NewController(NocturneDbContext context) =>
         new(
-            context,
+            context.AsFactory(),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ITenantService>(),
             new MemoryCache(new MemoryCacheOptions()),

@@ -56,7 +56,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     public async Task Entry_BatchResend_UpdatesSensorMeterAndCalibrationRows()
     {
         var decomposer = new EntryDecomposer(
-            _context,
+            _context.AsFactory(),
             new SensorGlucoseRepository(_factory, _dedup, _audit, NullLogger<SensorGlucoseRepository>.Instance),
             new MeterGlucoseRepository(_factory, _audit, NullLogger<MeterGlucoseRepository>.Instance),
             new CalibrationRepository(_factory, _audit, NullLogger<CalibrationRepository>.Instance),
@@ -90,7 +90,7 @@ public class BatchResendMatchesSingleTests : IDisposable
             .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         var decomposer = new TreatmentDecomposer(
-            _context,
+            _context.AsFactory(),
             new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
             new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
             new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),
@@ -249,7 +249,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     public async Task Activity_BatchResend_UpdatesTheHeartRateRow()
     {
         var decomposer = new ActivityDecomposer(
-            _context, Mock.Of<IStateSpanRepository>(), NullLogger<ActivityDecomposer>.Instance);
+            _context.AsFactory(), Mock.Of<IStateSpanRepository>(), NullLogger<ActivityDecomposer>.Instance);
 
         Activity HeartRate(int bpm) => new()
         {

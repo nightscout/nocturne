@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -22,15 +23,15 @@ public class MyFitnessPalMatchingSettingsService : IMyFitnessPalMatchingSettings
         WriteIndented = false,
     };
 
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<MyFitnessPalMatchingSettingsService> _logger;
 
     public MyFitnessPalMatchingSettingsService(
-        NocturneDbContext context,
+        INocturneDbContextFactory contexts,
         ILogger<MyFitnessPalMatchingSettingsService> logger
     )
     {
-        _context = context ?? throw new ArgumentNullException(nameof(context));
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -38,9 +39,10 @@ public class MyFitnessPalMatchingSettingsService : IMyFitnessPalMatchingSettings
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         try
         {
-            var entity = await _context.Settings.FirstOrDefaultAsync(
+            var entity = await db.Settings.FirstOrDefaultAsync(
                 s => s.Key == SettingsKey && s.IsActive,
                 cancellationToken
             );
@@ -72,12 +74,13 @@ public class MyFitnessPalMatchingSettingsService : IMyFitnessPalMatchingSettings
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         try
         {
             var jsonValue = JsonSerializer.Serialize(settings, JsonOptions);
             var now = DateTimeOffset.UtcNow;
 
-            var entity = await _context.Settings.FirstOrDefaultAsync(
+            var entity = await db.Settings.FirstOrDefaultAsync(
                 s => s.Key == SettingsKey,
                 cancellationToken
             );
@@ -96,7 +99,7 @@ public class MyFitnessPalMatchingSettingsService : IMyFitnessPalMatchingSettings
                     Notes = "MyFitnessPal matching settings",
                     App = "nocturne-api",
                 };
-                _context.Settings.Add(entity);
+                db.Settings.Add(entity);
             }
             else
             {
@@ -105,7 +108,7 @@ public class MyFitnessPalMatchingSettingsService : IMyFitnessPalMatchingSettings
                 entity.Mills = now.ToUnixTimeMilliseconds();
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
             return settings;
         }
         catch (Exception ex)

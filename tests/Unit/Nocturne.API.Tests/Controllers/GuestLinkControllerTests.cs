@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
@@ -39,7 +40,7 @@ public class GuestLinkControllerTests : IDisposable
         _dbContext.SaveChanges();
 
         var service = new GuestLinkService(
-            _dbContext,
+            _dbContext.AsFactory(),
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())),
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             NullLogger<GuestLinkService>.Instance);

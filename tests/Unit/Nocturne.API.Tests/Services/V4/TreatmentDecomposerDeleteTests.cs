@@ -75,7 +75,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         IAuditContext auditContext,
         IProfileDecomposer? profileDecomposer = null,
         Microsoft.Extensions.Logging.ILogger<TreatmentDecomposer>? logger = null) => new(
-        context,
+        context.AsFactory(),
         Mock.Of<IBolusRepository>(),
         Mock.Of<ITempBasalRepository>(),
         Mock.Of<ICarbIntakeRepository>(),

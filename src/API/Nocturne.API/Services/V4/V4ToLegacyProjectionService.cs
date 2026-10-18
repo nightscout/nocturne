@@ -9,6 +9,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.V4;
 
@@ -34,7 +35,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 {
     private readonly LegacyTreatmentRepositories _repositories;
     private readonly ITreatmentFoodService _treatmentFoodService;
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<V4ToLegacyProjectionService> _logger;
 
     public V4ToLegacyProjectionService(
@@ -46,7 +47,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         ITempBasalRepository tempBasalRepository,
         IBolusCalculationRepository bolusCalculationRepository,
         ITreatmentFoodService treatmentFoodService,
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         ILogger<V4ToLegacyProjectionService> logger
     )
     {
@@ -60,7 +61,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             bolusCalculationRepository
         );
         _treatmentFoodService = treatmentFoodService;
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger;
     }
 
@@ -79,11 +80,12 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         CancellationToken ct = default
     )
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var range = new LegacyTreatmentRange(
             MillsToDateTime(fromMills), MillsToDateTime(toMills), limit, nativeOnly);
 
-        var rows = await FetchAsync(table => table.InRangeAsync(_repositories, _dbContext, range, ct));
-        var treatments = await AssembleAsync(rows, ct);
+        var rows = await FetchAsync(table => table.InRangeAsync(_repositories, db, range, ct));
+        var treatments = await AssembleAsync(db, rows, ct);
 
         return treatments.OrderByDescending(t => t.Mills).Take(limit);
     }
@@ -95,11 +97,12 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     public async Task<IEnumerable<Treatment>> GetProjectedTreatmentsModifiedSinceAsync(
         long lastModifiedMills, int limit, CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var perTable = new List<(ILegacyTreatmentTable Table, int Order, IReadOnlyList<FetchedRecord> Rows)>();
         foreach (var table in LegacyTreatmentTables.All)
         {
             var rows = await FetchSafe(
-                table, t => t.ModifiedSinceAsync(_dbContext, lastModifiedMills, limit, _logger, ct));
+                table, t => t.ModifiedSinceAsync(db, lastModifiedMills, limit, _logger, ct));
             perTable.Add((table, LegacyTreatmentTables.OrderOf(table), rows));
         }
 
@@ -122,9 +125,9 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         if (page.Count > 0)
             page = ExtendToMillisecondAsync(page, ordered);
 
-        page = await WithLiveMealPartnersAsync(page, ct);
+        page = await WithLiveMealPartnersAsync(db, page, ct);
 
-        var treatments = await AssembleAsync(page, ct);
+        var treatments = await AssembleAsync(db, page, ct);
 
         return treatments.OrderBy(t => t.SrvModified ?? t.Mills);
     }
@@ -167,6 +170,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     /// deleted). Stamped at or below the page's newest row, the added rows leave its cursor where it was.
     /// </summary>
     private async Task<List<FetchedRecord>> WithLiveMealPartnersAsync(
+        NocturneDbContext db,
         List<FetchedRecord> page, CancellationToken ct)
     {
         var deletes = new Dictionary<Guid, DateTime>();
@@ -185,7 +189,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         var partners = new List<FetchedRecord>();
         foreach (var table in LegacyTreatmentTables.MealTables)
         {
-            var live = await FetchSafe(table, t => t.LiveByCorrelationAsync(_dbContext, deletes.Keys, ct));
+            var live = await FetchSafe(table, t => t.LiveByCorrelationAsync(db, deletes.Keys, ct));
             partners.AddRange(live
                 .Where(row => seen.Add(RecordId(row)))
                 .Select(row => row with { Modified = deletes[((IV4Record)row.Record).CorrelationId!.Value] }));
@@ -201,21 +205,27 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     /// An id resolves when it is the span's primary key, the 24-hex ObjectId served for that key, or
     /// the treatment id the span was written under, verbatim or as the ObjectId it is served as.
     /// </remarks>
-    public async Task<Treatment?> GetProjectedStateSpanTreatmentAsync(string id, CancellationToken ct = default) =>
-        await FindStateSpanAsync(id, ct) is { } row
-            ? (await AssembleAsync([row], ct)).Single()
+    public async Task<Treatment?> GetProjectedStateSpanTreatmentAsync(string id, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        return await FindStateSpanAsync(db, id, ct) is { } row
+            ? (await AssembleAsync(db, [row], ct)).Single()
             : null;
+    }
 
     /// <inheritdoc />
     /// <remarks>Resolves an id as <see cref="GetProjectedStateSpanTreatmentAsync"/> does.</remarks>
-    public async Task<string?> GetStateSpanTreatmentIdAsync(string id, CancellationToken ct = default) =>
-        await FindStateSpanAsync(id, ct) is { } row ? ((StateSpanEntity)row.Record).OriginalId : null;
+    public async Task<string?> GetStateSpanTreatmentIdAsync(string id, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        return await FindStateSpanAsync(db, id, ct) is { } row ? ((StateSpanEntity)row.Record).OriginalId : null;
+    }
 
-    private async Task<FetchedRecord?> FindStateSpanAsync(string id, CancellationToken ct)
+    private async Task<FetchedRecord?> FindStateSpanAsync(NocturneDbContext db, string id, CancellationToken ct)
     {
         foreach (var table in LegacyTreatmentTables.StateSpanTables)
         {
-            var span = await MatchingId(table.Rows(_dbContext), id)
+            var span = await MatchingId(table.Rows(db), id)
                 .OrderBy(s => s.OriginalId == id ? 0 : 1)
                 .ThenBy(s => s.Id)
                 .FirstOrDefaultAsync(ct);
@@ -231,9 +241,10 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     /// <remarks>Resolves an id as <see cref="GetProjectedStateSpanTreatmentAsync"/> does.</remarks>
     public async Task<bool> IsStateSpanDeletedByUserAsync(string id, CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         foreach (var table in LegacyTreatmentTables.StateSpanTables)
         {
-            if (await MatchingId(table.UserTombstones(_dbContext), id).AnyAsync(ct))
+            if (await MatchingId(table.UserTombstones(db), id).AnyAsync(ct))
                 return true;
         }
 
@@ -244,15 +255,16 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     public async Task<long> CountProjectedStateSpanTreatmentsAsync(
         long? fromMills, long? toMills, CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var (from, to) = (MillsToDateTime(fromMills), MillsToDateTime(toMills));
         long count = 0;
         foreach (var table in LegacyTreatmentTables.StateSpanTables)
         {
             count += await FetchSafe(
-                table, _ => table.InWindow(_dbContext, from, to).LongCountAsync(ct), 0L);
+                table, _ => table.InWindow(db, from, to).LongCountAsync(ct), 0L);
         }
 
-        var notes = _dbContext.Notes.AsNoTracking().ExcludeNonPrimary(_dbContext, RecordType.Note);
+        var notes = db.Notes.AsNoTracking().ExcludeNonPrimary(db, RecordType.Note);
         if (from is { } lower)
             notes = notes.Where(n => n.Timestamp >= lower);
         if (to is { } upper)
@@ -260,7 +272,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 
         foreach (var table in LegacyTreatmentTables.StateSpanTables)
         {
-            var keys = table.Rows(_dbContext).Select(s => s.OriginalId);
+            var keys = table.Rows(db).Select(s => s.OriginalId);
             count -= await FetchSafe(
                 table, _ => notes.Where(n => n.LegacyId != null && keys.Contains(n.LegacyId)).LongCountAsync(ct), 0L);
         }
@@ -291,7 +303,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 
     /// <summary>
     /// Reads every record type through <paramref name="fetch"/>. Types are read sequentially: they
-    /// share a scoped DbContext, which is not thread-safe, so they cannot be run concurrently via
+    /// share the caller's context, which is not thread-safe, so they cannot be run concurrently via
     /// <see cref="Task.WhenAll(Task[])"/>. A type whose read fails contributes nothing rather than
     /// failing the whole page.
     /// </summary>
@@ -311,6 +323,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     /// <see cref="LegacyTreatmentTables.NotesKey"/> was kept on the span as part of the span.
     /// </summary>
     private async Task<List<Treatment>> AssembleAsync(
+        NocturneDbContext db,
         IReadOnlyList<FetchedRecord> rows, CancellationToken ct
     )
     {
@@ -328,7 +341,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             {
                 onSpans.UnionWith(await FetchSafe(
                     table,
-                    _ => table.Rows(_dbContext)
+                    _ => table.Rows(db)
                         .Where(s => noteKeys.Contains(s.OriginalId!))
                         .Select(s => s.OriginalId!)
                         .ToListAsync(ct),
@@ -348,7 +361,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         Dictionary<string, string>? spanNotes = null;
         if (spanKeys.Count > 0)
         {
-            spanNotes = (await _dbContext.Notes.AsNoTracking()
+            spanNotes = (await db.Notes.AsNoTracking()
                     .Where(n => n.LegacyId != null && spanKeys.Contains(n.LegacyId))
                     .OrderBy(n => n.Id)
                     .Select(n => new { Key = n.LegacyId!, n.Text })

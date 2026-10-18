@@ -4,6 +4,7 @@ using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -25,7 +26,7 @@ namespace Nocturne.API.Services.Auth;
 /// <seealso cref="IAuthAuditService"/>
 public class AuthAuditService : IAuthAuditService
 {
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<AuthAuditService> _logger;
@@ -34,12 +35,12 @@ public class AuthAuditService : IAuthAuditService
     /// Creates a new instance of AuthAuditService.
     /// </summary>
     public AuthAuditService(
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         IHttpContextAccessor httpContextAccessor,
         IAuditContext auditContext,
         ILogger<AuthAuditService> logger)
     {
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _httpContextAccessor = httpContextAccessor;
         _auditContext = auditContext;
         _logger = logger;
@@ -53,14 +54,15 @@ public class AuthAuditService : IAuthAuditService
         AuthAuditActor? actor = null,
         Guid? tenantId = null)
     {
+        await using var db = await _contexts.CreateAsync();
         actor ??= AuthAuditActor.FromCallerOtherThan(
             _httpContextAccessor.HttpContext?.GetAuthContext(), subjectId);
-        tenantId ??= _dbContext.TenantIdOrNull;
+        tenantId ??= db.TenantIdOrNull;
 
         EntityEntry<AuthAuditLogEntity>? entry = null;
         try
         {
-            entry = _dbContext.AuthAuditLog.Add(new AuthAuditLogEntity
+            entry = db.AuthAuditLog.Add(new AuthAuditLogEntity
             {
                 Id = Guid.CreateVersion7(),
                 EventType = eventType,
@@ -77,7 +79,7 @@ public class AuthAuditService : IAuthAuditService
                 RefreshTokenId = refreshTokenId,
                 TraceId = _auditContext.TraceId,
             });
-            await _dbContext.SaveChangesAsync();
+            await db.SaveChangesAsync();
         }
         catch (Exception ex)
         {

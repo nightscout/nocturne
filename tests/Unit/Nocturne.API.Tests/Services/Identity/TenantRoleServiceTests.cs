@@ -50,7 +50,7 @@ public class TenantRoleServiceTests : IDisposable
             DisplayName = "Test Tenant",
         });
         _context.SaveChanges();
-        _service = new TenantRoleService(_context, factory.AsNocturneFactory());
+        _service = new TenantRoleService(_context.AsFactory(), factory.AsNocturneFactory());
     }
 
     [Fact]

@@ -75,7 +75,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         });
         await db.SaveChangesAsync();
         await UseTenantAsync(db, tenantId);
-        var service = new HeartRateService(db, Mock.Of<IDocumentProcessingService>(),
+        var service = new HeartRateService(db.AsFactory(), Mock.Of<IDocumentProcessingService>(),
             Mock.Of<ISignalRBroadcastService>(), NullLogger<HeartRateService>.Instance);
 
         var averages = (await service.GetHeartRateMinuteAveragesByDateRangeAsync(start, end)).ToArray();
@@ -106,7 +106,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
                 DataSource = GoogleHealthReadingWriter.Source
             });
         await db.SaveChangesAsync();
-        var service = new HeartRateService(db, Mock.Of<IDocumentProcessingService>(),
+        var service = new HeartRateService(db.AsFactory(), Mock.Of<IDocumentProcessingService>(),
             Mock.Of<ISignalRBroadcastService>(), NullLogger<HeartRateService>.Instance);
 
         var averages = (await service.GetHeartRateMinuteAveragesByDateRangeAsync(
@@ -330,7 +330,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
             using var scope = firstProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
             db.TenantId = tenantId;
-            var cursors = new ConnectorSyncCursorStore(db, NullLogger<ConnectorSyncCursorStore>.Instance);
+            var cursors = new ConnectorSyncCursorStore(db.AsFactory(), NullLogger<ConnectorSyncCursorStore>.Instance);
             await cursors.SetAsync("GoogleHealth", "health", new(null, "{\"backfillComplete\":true}"));
             Assert.Equal(3, (await second.ProgressAsync(tenantId, default))!.PagesRead);
             await first.CompleteScheduledAsync(tenantId);
@@ -475,7 +475,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         using var scope = provider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         db.TenantId = tenantId;
-        var cursors = new ConnectorSyncCursorStore(db, NullLogger<ConnectorSyncCursorStore>.Instance);
+        var cursors = new ConnectorSyncCursorStore(db.AsFactory(), NullLogger<ConnectorSyncCursorStore>.Instance);
         await cursors.SetAsync("GoogleHealth", "health", new(null, "restored"));
         Assert.Equal("restored", (await cursors.GetAsync("GoogleHealth", "health"))!.LastGuid);
 
@@ -538,7 +538,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
 
     private static GoogleHealthReadingWriter Writer(NocturneDbContext db) => new(
         Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(), Mock.Of<IBodyWeightService>(),
-        Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
+        Mock.Of<ISleepService>(), db.AsFactory(), NullLogger<GoogleHealthReadingWriter>.Instance);
 
 }
 

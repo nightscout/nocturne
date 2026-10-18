@@ -1,3 +1,5 @@
+using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Extensions;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -57,9 +59,10 @@ public class PlatformAccessCookieHandlerTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton(_jwt);
-        services.AddDbContext<NocturneDbContext>(o => o
+        services.AddDbContextFactory<NocturneDbContext>(o => o
             .UseSqlite(_db.Connection)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
+        services.AddDataServices();
         var provider = services.BuildServiceProvider();
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 

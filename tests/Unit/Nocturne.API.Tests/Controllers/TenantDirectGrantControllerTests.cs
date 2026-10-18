@@ -84,7 +84,7 @@ public class TenantDirectGrantControllerTests : IDisposable
         var httpContext = new DefaultHttpContext();
         var directGrantService = new DirectGrantService(
             new AuthAuditService(
-                _auditDbContext,
+                _auditDbContext.AsFactory(),
                 new HttpContextAccessor { HttpContext = httpContext },
                 new AuditContext(),
                 new Mock<ILogger<AuthAuditService>>().Object),

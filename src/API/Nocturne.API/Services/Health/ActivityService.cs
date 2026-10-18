@@ -202,8 +202,8 @@ public class ActivityService : IActivityService
         CancellationToken cancellationToken = default
     )
     {
-        // Sequential: the three services share one DbContext. Max over DateTime? skips the
-        // destinations this source has never written to, and is null when that is all of them.
+        // Max over DateTime? skips the destinations this source has never written to, and is null
+        // when that is all of them.
         var candidates = new[]
         {
             await _stateSpanService.GetLatestActivityTimestampAsync(source, cancellationToken),

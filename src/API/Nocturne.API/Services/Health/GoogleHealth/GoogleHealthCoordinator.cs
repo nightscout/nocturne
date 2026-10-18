@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Health;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Npgsql;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
@@ -43,7 +44,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
     {
         if (scopes is null) return disconnects.TryGetValue(tenantId, out var id) ? id : null;
         using var scope = TenantScope(tenantId);
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
         var json = await db.ConnectorConfigurations.AsNoTracking()
             .Where(row => row.TenantId == tenantId && row.ConnectorName == "googlehealth")
             .Select(row => row.SyncCursorsJson).SingleOrDefaultAsync(ct);
@@ -63,7 +64,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
         else
         {
             using var scope = TenantScope(tenantId);
-            var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
             var json = JsonSerializer.Serialize(request);
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE connector_configurations SET sync_cursors = jsonb_set(
@@ -84,7 +85,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
         else
         {
             using var scope = TenantScope(tenantId);
-            var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(CancellationToken.None);
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE connector_configurations SET sync_cursors = sync_cursors - {DisconnectKey}
                 WHERE tenant_id = {tenantId} AND connector_name = 'googlehealth'
@@ -150,7 +151,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
             if (scopes is not null)
             {
                 using var scope = scopes.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+                await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreatePlatformAsync(ct);
                 // A dedicated, unpooled session releases the lock even if cleanup cannot reach PostgreSQL.
                 connection = CreateDedicatedConnection(db);
                 await connection.OpenAsync(ct);
@@ -212,7 +213,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
     {
         if (scopes is null) return memoryProgress.GetValueOrDefault(tenantId);
         using var scope = TenantScope(tenantId);
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
         var json = await db.ConnectorConfigurations.AsNoTracking()
             .Where(row => row.TenantId == tenantId && row.ConnectorName == "googlehealth")
             .Select(row => row.SyncCursorsJson).SingleOrDefaultAsync(ct);
@@ -241,7 +242,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
             return;
         }
         using var scope = TenantScope(tenantId);
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
         if (progress is null)
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE connector_configurations SET sync_cursors = (CASE WHEN jsonb_typeof(sync_cursors) = 'object'
@@ -278,7 +279,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
         else
         {
             using var scope = TenantScope(tenantId);
-            var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
             await db.Database.ExecuteSqlInterpolatedAsync(
                 $"SELECT pg_notify({RequestChannel}, {tenantId.ToString()})", ct);
         }
@@ -324,7 +325,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
                     while (requests.Reader.TryRead(out var tenant))
                     {
                         using var scope = TenantScope(tenant);
-                        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+                        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
                         if (await db.Tenants.AnyAsync(row => row.Id == tenant && row.IsActive, ct))
                             yield return tenant;
                     }
@@ -345,7 +346,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
     private async Task<NpgsqlConnection> OpenRequestListenerAsync(CancellationToken ct)
     {
         using var scope = scopes!.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreatePlatformAsync(ct);
         var connection = CreateDedicatedConnection(db);
         try
         {

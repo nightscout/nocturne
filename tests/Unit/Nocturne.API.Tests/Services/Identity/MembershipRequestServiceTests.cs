@@ -49,10 +49,10 @@ public class MembershipRequestServiceTests : IDisposable
             .ReturnsAsync(new InAppNotificationDto());
 
         _service = new MembershipRequestService(
-            _dbContext,
+            _dbContext.AsFactory(),
             _tenantService.Object,
             new TenantRoleService(
-                _dbContext,
+                _dbContext.AsFactory(),
                 // Only SeedRolesForTenantAsync takes a context of its own, and nothing here seeds.
                 Mock.Of<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory()),
             _notificationService.Object,

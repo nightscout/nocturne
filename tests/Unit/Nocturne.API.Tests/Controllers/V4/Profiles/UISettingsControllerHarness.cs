@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -32,7 +33,7 @@ internal static class UISettingsControllerHarness
     )
     {
         return NewController(
-            new UISettingsService(dbContext, NullLogger<UISettingsService>.Instance),
+            new UISettingsService(dbContext.AsFactory(), NullLogger<UISettingsService>.Instance),
             demoMode
         );
     }

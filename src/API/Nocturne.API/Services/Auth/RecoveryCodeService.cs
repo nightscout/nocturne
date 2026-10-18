@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -29,34 +30,34 @@ public class RecoveryCodeService : IRecoveryCodeService
     // empty slots derive against. Every row is parsed at the one iteration count for the same reason.
     private static readonly byte[] DummySalt = RandomNumberGenerator.GetBytes(SaltSize);
 
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly Func<string, byte[], byte[]> _derive;
 
     /// <summary>
     /// Initialises a new <see cref="RecoveryCodeService"/>.
     /// </summary>
-    /// <param name="dbContext">Database context for reading and writing recovery code records.</param>
-    public RecoveryCodeService(NocturneDbContext dbContext)
-        : this(dbContext, Derive)
+    public RecoveryCodeService(INocturneDbContextFactory contexts)
+        : this(contexts, Derive)
     {
     }
 
-    internal RecoveryCodeService(NocturneDbContext dbContext, Func<string, byte[], byte[]> derive)
+    internal RecoveryCodeService(INocturneDbContextFactory contexts, Func<string, byte[], byte[]> derive)
     {
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _derive = derive;
     }
 
     /// <inheritdoc />
     public async Task<List<string>> GenerateCodesAsync(Guid subjectId)
     {
-        var existing = await _dbContext.RecoveryCodes
+        await using var db = await _contexts.CreateAsync();
+        var existing = await db.RecoveryCodes
             .Where(r => r.SubjectId == subjectId)
             .ToListAsync();
 
         if (existing.Count > 0)
         {
-            _dbContext.RecoveryCodes.RemoveRange(existing);
+            db.RecoveryCodes.RemoveRange(existing);
         }
 
         var codes = new List<string>(CodeCount);
@@ -66,7 +67,7 @@ public class RecoveryCodeService : IRecoveryCodeService
             var code = GenerateCode();
             codes.Add(code);
 
-            _dbContext.RecoveryCodes.Add(new RecoveryCodeEntity
+            db.RecoveryCodes.Add(new RecoveryCodeEntity
             {
                 Id = Guid.CreateVersion7(),
                 SubjectId = subjectId,
@@ -75,7 +76,7 @@ public class RecoveryCodeService : IRecoveryCodeService
             });
         }
 
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         return codes;
     }
@@ -83,8 +84,9 @@ public class RecoveryCodeService : IRecoveryCodeService
     /// <inheritdoc />
     public async Task<bool> VerifyAndConsumeAsync(Guid? subjectId, string code)
     {
+        await using var db = await _contexts.CreateAsync();
         var owner = subjectId ?? Guid.Empty;
-        var live = await _dbContext.RecoveryCodes
+        var live = await db.RecoveryCodes
             .AsNoTracking()
             .Where(r => r.SubjectId == owner && r.UsedAt == null && r.InvalidatedAt == null)
             .OrderBy(r => r.Id)
@@ -110,7 +112,7 @@ public class RecoveryCodeService : IRecoveryCodeService
             return false;
         }
 
-        var consumed = await _dbContext.RecoveryCodes
+        var consumed = await db.RecoveryCodes
             .Where(r => r.Id == matchedId && r.UsedAt == null && r.InvalidatedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(r => r.UsedAt, DateTime.UtcNow));
 
@@ -120,21 +122,24 @@ public class RecoveryCodeService : IRecoveryCodeService
     /// <inheritdoc />
     public async Task<int> GetRemainingCountAsync(Guid subjectId)
     {
-        return await _dbContext.RecoveryCodes
+        await using var db = await _contexts.CreateAsync();
+        return await db.RecoveryCodes
             .CountAsync(r => r.SubjectId == subjectId && r.UsedAt == null && r.InvalidatedAt == null);
     }
 
     /// <inheritdoc />
     public async Task<bool> HasCodesAsync(Guid subjectId)
     {
-        return await _dbContext.RecoveryCodes
+        await using var db = await _contexts.CreateAsync();
+        return await db.RecoveryCodes
             .AnyAsync(r => r.SubjectId == subjectId && r.InvalidatedAt == null);
     }
 
     /// <inheritdoc />
     public async Task<bool> WereCodesResetAsync(Guid subjectId)
     {
-        var hasInvalidated = await _dbContext.RecoveryCodes
+        await using var db = await _contexts.CreateAsync();
+        var hasInvalidated = await db.RecoveryCodes
             .AnyAsync(r => r.SubjectId == subjectId && r.InvalidatedAt != null);
 
         if (!hasInvalidated)
@@ -142,7 +147,7 @@ public class RecoveryCodeService : IRecoveryCodeService
             return false;
         }
 
-        return !await _dbContext.RecoveryCodes
+        return !await db.RecoveryCodes
             .AnyAsync(r => r.SubjectId == subjectId && r.UsedAt == null && r.InvalidatedAt == null);
     }
 

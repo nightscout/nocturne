@@ -68,11 +68,8 @@ public sealed class ActogramReportService : IActogramReportService
         var fromDt = DateTimeOffset.FromUnixTimeMilliseconds(startTime).UtcDateTime;
         var toDt = DateTimeOffset.FromUnixTimeMilliseconds(endTime).UtcDateTime;
 
-        // Sequential awaits: every query below resolves through the same
-        // per-request scoped NocturneDbContext, and EF Core's ConcurrencyDetector
-        // rejects overlapping operations on a single context. Npgsql also
-        // serializes commands per connection, so Task.WhenAll buys no real
-        // throughput here even when it doesn't crash.
+        // Sequential awaits: each query opens its own context, so running them concurrently
+        // would hold a pooled connection per query for one request.
         var glucoseRecords = await _sensorGlucoseRepository.GetForAnalyticsAsync(
             from: fromDt,
             to: toDt,

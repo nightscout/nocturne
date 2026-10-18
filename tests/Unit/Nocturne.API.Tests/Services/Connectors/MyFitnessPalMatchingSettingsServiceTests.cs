@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -70,7 +71,7 @@ public class MyFitnessPalMatchingSettingsServiceTests
     private static IMyFitnessPalMatchingSettingsService NewService(NocturneDbContext context)
     {
         return new MyFitnessPalMatchingSettingsService(
-            context,
+            context.AsFactory(),
             NullLogger<MyFitnessPalMatchingSettingsService>.Instance
         );
     }

@@ -138,7 +138,7 @@ public class PublishSkippedDeletedTests : IDisposable
             .ReturnsAsync((GlucoseProcessing?)null);
 
         var decomposer = new EntryDecomposer(
-            _context, sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
+            _context.AsFactory(), sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
             Mock.Of<IPatientDeviceStamper>(), audit, NullLogger<EntryDecomposer>.Instance);
         var entryService = new EntryService(
             Mock.Of<IEntryStore>(), decomposer, Mock.Of<IEntryCache>(), Mock.Of<IDataEventSink<Entry>>(),

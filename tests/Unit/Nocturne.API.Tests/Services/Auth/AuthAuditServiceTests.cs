@@ -303,7 +303,7 @@ public class AuthAuditServiceTests : IDisposable
 
     private static AuthAuditService CreateService(NocturneDbContext dbContext) =>
         new(
-            dbContext,
+            dbContext.AsFactory(),
             new HttpContextAccessor { HttpContext = new DefaultHttpContext() },
             new AuditContext(),
             new Mock<ILogger<AuthAuditService>>().Object);
@@ -358,7 +358,7 @@ public class AuthAuditServiceTests : IDisposable
         await using var dbContext = _db.CreateContext(pinnedTenantId ?? Guid.Empty);
 
         var service = new AuthAuditService(
-            dbContext,
+            dbContext.AsFactory(),
             new HttpContextAccessor { HttpContext = httpContext },
             auditContext,
             new Mock<ILogger<AuthAuditService>>().Object);

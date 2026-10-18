@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -35,7 +36,7 @@ public class SupportDiagnosticsServiceTests
             .Returns(() => ValueTask.FromResult(NewContext()));
 
         var broken = NewContext();
-        var uiSettings = new UISettingsService(broken, NullLogger<UISettingsService>.Instance);
+        var uiSettings = new UISettingsService(broken.AsFactory(), NullLogger<UISettingsService>.Instance);
         await broken.DisposeAsync();
 
         var sut = new SupportDiagnosticsService(

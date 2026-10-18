@@ -94,7 +94,6 @@ public class PasskeyController : ControllerBase
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantService _tenantService;
     private readonly ITenantMemberService _tenantMemberService;
-    private readonly NocturneDbContext _dbContext;
     private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly OidcOptions _oidcOptions;
     private readonly ILogger<PasskeyController> _logger;
@@ -113,7 +112,6 @@ public class PasskeyController : ControllerBase
         ITenantAccessor tenantAccessor,
         ITenantService tenantService,
         ITenantMemberService tenantMemberService,
-        NocturneDbContext dbContext,
         INocturneDbContextFactory dbContextFactory,
         IOptions<OidcOptions> oidcOptions,
         ILogger<PasskeyController> logger)
@@ -128,7 +126,6 @@ public class PasskeyController : ControllerBase
         _tenantAccessor = tenantAccessor;
         _tenantService = tenantService;
         _tenantMemberService = tenantMemberService;
-        _dbContext = dbContext;
         _dbContextFactory = dbContextFactory;
         _oidcOptions = oidcOptions.Value;
         _logger = logger;
@@ -316,10 +313,11 @@ public class PasskeyController : ControllerBase
     public async Task<ActionResult<PasskeyOptionsResponse>> RecoveryModeOptions(
         [FromBody] PasskeyLoginOptionsRequest request)
     {
+        await using var db = await _dbContextFactory.CreateAsync();
         if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
             return refusal;
 
-        var subject = await ResolveRecoveryModeSubjectAsync(request.Username);
+        var subject = await ResolveRecoveryModeSubjectAsync(db, request.Username);
         if (subject == null)
         {
             return Problem(detail: RecoveryModeUnavailable, statusCode: 400, title: "Bad Request");
@@ -348,12 +346,13 @@ public class PasskeyController : ControllerBase
     public async Task<ActionResult<PasskeyRegisterCompleteResponse>> RecoveryModeComplete(
         [FromBody] RecoveryModeCompleteRequest request)
     {
+        await using var db = await _dbContextFactory.CreateAsync();
         if (string.IsNullOrEmpty(request.ChallengeToken))
         {
             return Problem(detail: "Challenge token not found or expired", statusCode: 400, title: "Bad Request");
         }
 
-        var subject = await ResolveRecoveryModeSubjectAsync(request.Username);
+        var subject = await ResolveRecoveryModeSubjectAsync(db, request.Username);
         if (subject == null)
         {
             return Problem(detail: RecoveryModeUnavailable, statusCode: 400, title: "Bad Request");
@@ -383,12 +382,12 @@ public class PasskeyController : ControllerBase
     /// mode and that subject has no primary auth factor, otherwise <see langword="null"/>.
     /// </summary>
     /// <remarks>
-    /// The subject lookup stays on the request-scoped context, deliberately, unlike the two
-    /// preconditions above it. A recovery ceremony enrols a credential, so on a share host — where
-    /// the scoped context is marked as a share and membership is denied — it must resolve nobody
+    /// The subject lookup reads as the request's reader (<see cref="INocturneDbContextFactory.CreateAsync"/>),
+    /// deliberately, unlike the two preconditions above it. A recovery ceremony enrols a credential, so
+    /// on a share host — where the reader is a share and membership is denied — it must resolve nobody
     /// and fail closed. Pinning it would make the ceremony reachable there.
     /// </remarks>
-    private async Task<SubjectEntity?> ResolveRecoveryModeSubjectAsync(string? username)
+    private async Task<SubjectEntity?> ResolveRecoveryModeSubjectAsync(NocturneDbContext db, string? username)
     {
         if (string.IsNullOrWhiteSpace(username))
         {
@@ -404,7 +403,7 @@ public class PasskeyController : ControllerBase
             return null;
         }
 
-        var subject = await _dbContext.TenantMembers
+        var subject = await db.TenantMembers
             .Where(tm => tm.TenantId == tenantId)
             .Select(tm => tm.Subject!)
             .FirstOrDefaultAsync(s =>
@@ -464,13 +463,13 @@ public class PasskeyController : ControllerBase
     /// Walking the candidates newest-first and taking the first with no membership is the same
     /// answer as the newest candidate satisfying all four conditions at once.
     /// </remarks>
-    private async Task<Guid?> FindEnrollingSubjectIdAsync(Expression<Func<SubjectEntity, bool>> match)
+    private async Task<Guid?> FindEnrollingSubjectIdAsync(NocturneDbContext db, Expression<Func<SubjectEntity, bool>> match)
     {
-        var candidateIds = await _dbContext.Subjects
+        var candidateIds = await db.Subjects
             .Where(match)
             .Where(s => !s.IsSystemSubject
-                && !_dbContext.PasskeyCredentials.Any(c => c.SubjectId == s.Id)
-                && !_dbContext.WorkingOidcIdentities().Any(o => o.SubjectId == s.Id))
+                && !db.PasskeyCredentials.Any(c => c.SubjectId == s.Id)
+                && !db.WorkingOidcIdentities().Any(o => o.SubjectId == s.Id))
             .OrderByDescending(s => s.Id)
             .Select(s => s.Id)
             .ToListAsync();
@@ -633,6 +632,7 @@ public class PasskeyController : ControllerBase
     public async Task<ActionResult<RecoveryVerifyResponse>> RecoveryVerify(
         [FromBody] RecoveryVerifyRequest request)
     {
+        await using var db = await _dbContextFactory.CreateAsync();
         if (string.IsNullOrEmpty(request.Username) || string.IsNullOrEmpty(request.Code))
         {
             return Problem(detail: "Username and recovery code are required", statusCode: 400, title: "Bad Request");
@@ -641,7 +641,7 @@ public class PasskeyController : ControllerBase
         var tenantId = _tenantAccessor.TenantId;
 
         // Look up subject by username within the current tenant
-        var subjectEntity = await _dbContext.TenantMembers
+        var subjectEntity = await db.TenantMembers
             .AsNoTracking()
             .Where(tm => tm.TenantId == tenantId)
             .Select(tm => tm.Subject)
@@ -813,13 +813,14 @@ public class PasskeyController : ControllerBase
     [ProducesResponseType(typeof(AuthStatusResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAuthStatus()
     {
+        await using var db = await _dbContextFactory.CreateAsync();
         var tenantId = _tenantAccessor.TenantId;
 
         var hasCredentials = await TenantHasCredentialsAsync(tenantId);
         var setupRequired = !hasCredentials;
         var recoveryMode = hasCredentials && await HasOrphanedSubjectAsync(tenantId);
 
-        var tenant = await _dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
 
         return Ok(new AuthStatusResponse
         {
@@ -870,15 +871,16 @@ public class PasskeyController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> CompleteOnboarding()
     {
+        await using var db = await _dbContextFactory.CreateAsync();
         var tenantId = _tenantAccessor.TenantId;
-        var tenant = await _dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
         if (tenant == null)
             return NotFound();
 
         if (tenant.OnboardingCompletedAt == null)
         {
             tenant.OnboardingCompletedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync();
+            await db.SaveChangesAsync();
         }
 
         return NoContent();
@@ -902,11 +904,12 @@ public class PasskeyController : ControllerBase
     public async Task<ActionResult<PasskeyOptionsResponse>> AccessRequestOptions(
         [FromBody] AccessRequestOptionsRequest request)
     {
+        await using var db = await _dbContextFactory.CreateAsync();
         if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
             return refusal;
 
         var tenantId = _tenantAccessor.TenantId;
-        var tenant = await _dbContext.Tenants
+        var tenant = await db.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantId);
 
         if (tenant == null || !tenant.AllowAccessRequests)
@@ -921,11 +924,11 @@ public class PasskeyController : ControllerBase
         // Cancelling the OS prompt leaves the subject this step created behind. Resume that one
         // rather than adding another under the same name: it holds no credential, so there is
         // nothing to take over, and the complete step resolves the requestor by display name.
-        var subjectId = await FindEnrollingSubjectIdAsync(AccessRequestEnrolmentMatch(displayName));
+        var subjectId = await FindEnrollingSubjectIdAsync(db, AccessRequestEnrolmentMatch(displayName));
 
         if (subjectId == null)
         {
-            var existingPending = await _dbContext.Subjects
+            var existingPending = await db.Subjects
                 .AnyAsync(s => s.ApprovalStatus == "Pending" && s.Name == displayName);
 
             if (existingPending)
@@ -947,16 +950,16 @@ public class PasskeyController : ControllerBase
                 AccessRequestMessage = request.Message?.Trim(),
             };
 
-            _dbContext.Subjects.Add(subject);
+            db.Subjects.Add(subject);
             subjectId = subject.Id;
         }
         else
         {
-            var subject = await _dbContext.Subjects.FirstAsync(s => s.Id == subjectId.Value);
+            var subject = await db.Subjects.FirstAsync(s => s.Id == subjectId.Value);
             subject.AccessRequestMessage = request.Message?.Trim();
         }
 
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
             subjectId.Value, username);
@@ -991,8 +994,9 @@ public class PasskeyController : ControllerBase
         [FromBody] AccessRequestCompleteRequest request,
         [FromServices] IInAppNotificationService notificationService)
     {
+        await using var db = await _dbContextFactory.CreateAsync();
         var tenantId = _tenantAccessor.TenantId;
-        var tenant = await _dbContext.Tenants
+        var tenant = await db.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantId);
 
         if (tenant == null || !tenant.AllowAccessRequests)
@@ -1001,7 +1005,7 @@ public class PasskeyController : ControllerBase
         var displayName = request.DisplayName?.Trim();
         var enrollingSubjectId = string.IsNullOrEmpty(displayName)
             ? null
-            : await FindEnrollingSubjectIdAsync(AccessRequestEnrolmentMatch(displayName));
+            : await FindEnrollingSubjectIdAsync(db, AccessRequestEnrolmentMatch(displayName));
 
         if (enrollingSubjectId == null)
             return Problem(detail: "Start the access request again", statusCode: 400, title: "Bad Request");
@@ -1012,7 +1016,7 @@ public class PasskeyController : ControllerBase
                 request.AttestationResponseJson, request.ChallengeToken, tenant.Id,
                 expectedSubjectId: enrollingSubjectId.Value);
 
-            var message = await _dbContext.Subjects
+            var message = await db.Subjects
                 .Where(s => s.Id == credResult.SubjectId)
                 .Select(s => s.AccessRequestMessage)
                 .FirstOrDefaultAsync();
@@ -1072,6 +1076,7 @@ public class PasskeyController : ControllerBase
         [FromBody] InviteOptionsRequest request,
         [FromServices] IMemberInviteService memberInviteService)
     {
+        await using var db = await _dbContextFactory.CreateAsync();
         if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
             return refusal;
 
@@ -1097,7 +1102,7 @@ public class PasskeyController : ControllerBase
         // rather than adding a second under the same username: the complete step resolves the
         // enrolling subject by username, and it holds no credential, so there is nothing to take
         // over.
-        var subjectId = await FindEnrollingSubjectIdAsync(InviteEnrolmentMatch(username));
+        var subjectId = await FindEnrollingSubjectIdAsync(db, InviteEnrolmentMatch(username));
 
         if (subjectId == null)
         {
@@ -1110,16 +1115,16 @@ public class PasskeyController : ControllerBase
                 IsSystemSubject = false,
             };
 
-            _dbContext.Subjects.Add(subject);
+            db.Subjects.Add(subject);
             subjectId = subject.Id;
         }
         else
         {
-            var subject = await _dbContext.Subjects.FirstAsync(s => s.Id == subjectId.Value);
+            var subject = await db.Subjects.FirstAsync(s => s.Id == subjectId.Value);
             subject.Name = displayName;
         }
 
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         _logger.LogInformation(
             "Invite: enrolling subject {SubjectId} ({Username}) for invite acceptance",
@@ -1156,6 +1161,7 @@ public class PasskeyController : ControllerBase
         [FromBody] InviteCompleteRequest request,
         [FromServices] IMemberInviteService memberInviteService)
     {
+        await using var db = await _dbContextFactory.CreateAsync();
         if (string.IsNullOrEmpty(request.ChallengeToken) || string.IsNullOrEmpty(request.Token)
             || string.IsNullOrWhiteSpace(request.Username))
         {
@@ -1165,7 +1171,7 @@ public class PasskeyController : ControllerBase
         var tenantId = _tenantAccessor.TenantId;
 
         var username = request.Username.Trim().ToLowerInvariant();
-        var enrollingSubjectId = await FindEnrollingSubjectIdAsync(InviteEnrolmentMatch(username));
+        var enrollingSubjectId = await FindEnrollingSubjectIdAsync(db, InviteEnrolmentMatch(username));
 
         if (enrollingSubjectId == null)
             return Problem(detail: "Start again from your invite link", statusCode: 400, title: "Bad Request");

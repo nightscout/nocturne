@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -44,7 +45,7 @@ public class GuestLinkServiceTests : IDisposable
         _sessionCache = new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()));
 
         _service = new GuestLinkService(
-            _dbContext,
+            _dbContext.AsFactory(),
             _sessionCache,
             new GrantRevocationService(_sessionCache),
             NullLogger<GuestLinkService>.Instance);

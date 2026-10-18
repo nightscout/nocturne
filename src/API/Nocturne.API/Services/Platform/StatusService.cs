@@ -40,7 +40,6 @@ public class StatusService : IStatusService
     private readonly IConfiguration _configuration;
     private readonly ICacheService _cacheService;
     private readonly IDemoModeService _demoModeService;
-    private readonly NocturneDbContext _dbContext;
     private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ITenantAccessor _tenantAccessor;
@@ -71,7 +70,6 @@ public class StatusService : IStatusService
         IConfiguration configuration,
         ICacheService cacheService,
         IDemoModeService demoModeService,
-        NocturneDbContext dbContext,
         INocturneDbContextFactory dbContextFactory,
         IHttpContextAccessor httpContextAccessor,
         ITenantAccessor tenantAccessor,
@@ -85,7 +83,6 @@ public class StatusService : IStatusService
         _configuration = configuration;
         _cacheService = cacheService;
         _demoModeService = demoModeService;
-        _dbContext = dbContext;
         _dbContextFactory = dbContextFactory;
         _httpContextAccessor = httpContextAccessor;
         _tenantAccessor = tenantAccessor;

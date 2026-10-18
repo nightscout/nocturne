@@ -134,12 +134,12 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             // The real service, not a mock: the tenant check and the ceiling are the properties
             // under test, and a mock would assert the mock.
             new TenantRoleService(
-                _dbContext,
+                _dbContext.AsFactory(),
                 // Only SeedRolesForTenantAsync takes a context of its own, and nothing here seeds.
                 Mock.Of<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory()),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
-            _dbContext)
+            _dbContext.AsFactory())
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

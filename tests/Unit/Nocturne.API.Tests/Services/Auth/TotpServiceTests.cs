@@ -641,7 +641,7 @@ public class TotpServiceTests : IDisposable
 
     private TotpService CreateService()
     {
-        return new TotpService(_dbContext, _dataProtectionProvider, NullLogger<TotpService>.Instance);
+        return new TotpService(_dbContext.AsFactory(), _dataProtectionProvider, NullLogger<TotpService>.Instance);
     }
 
     private SubjectEntity SeedSubject(string username, Guid? subjectId = null)

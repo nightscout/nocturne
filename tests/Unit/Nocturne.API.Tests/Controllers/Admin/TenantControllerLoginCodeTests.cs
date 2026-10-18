@@ -66,7 +66,7 @@ public class TenantControllerLoginCodeTests : IDisposable
         _loginCodeService = new LoginCodeService(
             jwtService.Object,
             new AuthAuditService(
-                _auditContext,
+                _auditContext.AsFactory(),
                 new HttpContextAccessor { HttpContext = httpContext },
                 new AuditContext(),
                 new Mock<ILogger<AuthAuditService>>().Object));

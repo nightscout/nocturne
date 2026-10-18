@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -73,7 +74,7 @@ public class MetadataPublisherTests
             _mockTenantOwnerResolver.Object,
             _mockTenantAccessor.Object,
             new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseInMemoryDatabase($"metadata-publisher-{Guid.NewGuid():N}").Options),
+                .UseInMemoryDatabase($"metadata-publisher-{Guid.NewGuid():N}").Options).AsFactory(),
             Mock.Of<IAuditContext>(),
             new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance

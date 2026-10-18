@@ -62,7 +62,7 @@ public sealed class TestNocturneDbContextFactory : INocturneDbContextFactory
         {
             ReadContext = _source.ReadContext, TenantId = Guid.Empty, SubjectId = subjectId,
         };
-        return ValueTask.FromResult<NocturneDbContext>(ctx);
+        return ValueTask.FromResult(Prepared(ctx));
     }
 
     /// <inheritdoc />
@@ -72,9 +72,37 @@ public sealed class TestNocturneDbContextFactory : INocturneDbContextFactory
     public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
         Create(tenantId);
 
+    /// <summary>
+    /// Runs on every context the factory hands out, e.g. to swap in a set that fails when read.
+    /// </summary>
+    public Action<NocturneDbContext>? Prepare { get; init; }
+
     private ValueTask<NocturneDbContext> Create(Guid tenantId) =>
-        ValueTask.FromResult<NocturneDbContext>(
-            new NonDisposingNocturneDbContext(_options) { ReadContext = _source.ReadContext, TenantId = tenantId });
+        ValueTask.FromResult(Prepared(new NonDisposingNocturneDbContext(_options)
+        {
+            ReadContext = _source.ReadContext, TenantId = tenantId,
+        }));
+
+    /// <summary>
+    /// A test that disposes the seed context to make the service's reads fail gets a disposed context,
+    /// which fails on first use as the service's own context would have.
+    /// </summary>
+    private NocturneDbContext Prepared(NocturneDbContext context)
+    {
+        if ((bool)DisposedField.GetValue(_source)!)
+        {
+            var disposed = new NocturneDbContext(_options) { TenantId = context.TenantId };
+            disposed.Dispose();
+            return disposed;
+        }
+
+        Prepare?.Invoke(context);
+        return context;
+    }
+
+    private static readonly FieldInfo DisposedField =
+        typeof(DbContext).GetField("_disposed", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingFieldException("DbContext", "_disposed");
 
     /// <summary>
     /// A <see cref="NocturneDbContext"/> subclass that overrides both the synchronous and

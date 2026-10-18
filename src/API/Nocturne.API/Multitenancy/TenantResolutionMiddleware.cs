@@ -94,7 +94,7 @@ public class TenantResolutionMiddleware
         "/api/v4/me/tenants/validate-slug",
         // Cross-tenant caregiver overview: aggregates across the subject's tenants,
         // so it must be reachable from the apex in multi-tenant deployments. The
-        // service pins each tenant itself and never uses the request-scoped context.
+        // service pins each tenant itself and never reads as the request's tenant.
         "/api/v4/me/tenants/overview",
         // The subject's tenant list, which drives the tenantless dashboard's navigation
         // and the tenant switcher. Keyed on SubjectId alone, like the overview above.

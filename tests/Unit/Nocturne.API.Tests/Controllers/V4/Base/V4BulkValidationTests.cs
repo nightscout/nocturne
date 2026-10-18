@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Services;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
@@ -524,7 +525,7 @@ public class V4BulkValidationTests
             Mock.Of<IBolusRepository>(),
             Mock.Of<ITreatmentFoodService>(),
             Mock.Of<IDemoModeService>(),
-            context: null!));
+            contexts: Mock.Of<INocturneDbContextFactory>()));
 
     private static TempBasalController TempBasals() =>
         WithContext(new TempBasalController(Mock.Of<ITempBasalRepository>(), Mock.Of<IPatientDeviceStamper>()));

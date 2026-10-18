@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -85,7 +86,7 @@ public class CompressionLowDetectionServiceTests
             .Options;
         var context = new NocturneDbContext(options) { TenantId = TenantId };
         var settingsService = new UISettingsService(
-            context,
+            context.AsFactory(),
             NullLogger<UISettingsService>.Instance
         );
         await context.DisposeAsync();
