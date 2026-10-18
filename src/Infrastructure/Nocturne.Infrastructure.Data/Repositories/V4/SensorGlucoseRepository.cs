@@ -465,7 +465,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// Deletes all sensor glucose records within the given time range.
     /// </summary>
     /// <param name="from">Inclusive start, or null for no lower bound.</param>
-    /// <param name="to">Exclusive end, or null for no upper bound.</param>
+    /// <param name="to">Inclusive end, or null for no upper bound.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
@@ -476,7 +476,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         if (from.HasValue)
             query = query.Where(e => e.Timestamp >= from.Value);
         if (to.HasValue)
-            query = query.Where(e => e.Timestamp < to.Value);
+            query = query.Where(e => e.Timestamp <= to.Value);
 
         return await ctx.AuditedSoftDeleteAsync(query, AuditContext, $"timestamp={from:O}..{to:O}", ct);
     }
