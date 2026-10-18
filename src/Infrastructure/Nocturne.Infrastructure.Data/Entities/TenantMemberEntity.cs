@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -120,4 +121,14 @@ public class TenantMemberEntity : ISystemTimestamped
             .Where(mr => mr.TenantRoleId != excludingRoleId)
             .SelectMany(mr => mr.TenantRole.Permissions)
             .Union(DirectPermissions ?? []);
+
+    /// <summary>
+    /// Whether the effective permissions, normalised as member permissions, satisfy
+    /// <paramref name="required"/> through <see cref="Scope.Satisfies(IEnumerable{string}, string)"/>.
+    /// Only role and direct permissions count: the member-personal device scopes that request
+    /// resolution adds for any member with a permission are not included. Requires
+    /// <see cref="MemberRoles"/> to be loaded with their roles.
+    /// </summary>
+    public bool Holds(string required) =>
+        Scope.Satisfies(Scope.NormalizeMemberPermissions(EffectivePermissions()), required);
 }

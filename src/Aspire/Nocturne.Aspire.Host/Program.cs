@@ -679,6 +679,11 @@ class Program
             "00:05:00"
         );
 
+        // The forwarder and the hosting request lines log every request path, and some API routes
+        // carry a credential as a path segment. Defaults only: an operator can still raise them.
+        gateway.WithEnvironment("Logging__LogLevel__Yarp", "Warning");
+        gateway.WithEnvironment("Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics", "Warning");
+
         // In dev mode, YARP is the TLS-terminating edge proxy — it must Set
         // the X-Forwarded-* headers from its own connection info. In publish
         // mode, YARP sits behind an external reverse proxy (Caddy, nginx,

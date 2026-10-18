@@ -169,6 +169,27 @@ public abstract class DecomposerBase
     }
 
     /// <summary>
+    /// Parses an enum from one defined member name, ignoring case. <see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/>
+    /// also accepts numeric strings, comma lists that OR members together and padding, none of which
+    /// an upload's string field can be trusted to mean.
+    /// </summary>
+    protected static bool TryParseDefinedName<TEnum>(string? value, out TEnum result)
+        where TEnum : struct, Enum
+    {
+        foreach (var name in Enum.GetNames<TEnum>())
+        {
+            if (string.Equals(name, value, StringComparison.OrdinalIgnoreCase))
+            {
+                result = Enum.Parse<TEnum>(name);
+                return true;
+            }
+        }
+
+        result = default;
+        return false;
+    }
+
+    /// <summary>
     /// The batch twin of <see cref="UpsertByLegacyIdAsync"/>: a record whose legacy id is stored
     /// updates that row and lands in <see cref="DecompositionResult.UpdatedRecords"/>, so a resend
     /// through the batch path writes what the same resend through the single path writes.

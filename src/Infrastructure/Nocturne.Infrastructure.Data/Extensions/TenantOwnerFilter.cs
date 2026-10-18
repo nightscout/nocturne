@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -14,14 +15,33 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// </remarks>
 public static class TenantOwnerFilter
 {
+    /// <summary>The tenant's memberships held by a person who can sign in: not a system subject, not deactivated.</summary>
+    public static IQueryable<TenantMemberEntity> PeopleOf(
+        this IQueryable<TenantMemberEntity> members, Guid tenantId) =>
+        members.Where(m => m.TenantId == tenantId
+            && !m.Subject!.IsSystemSubject
+            && m.Subject.IsActive);
+
     /// <summary>The tenant's owning memberships, longest-standing first.</summary>
     public static IQueryable<TenantMemberEntity> OwnersOf(
         this IQueryable<TenantMemberEntity> members, Guid tenantId) =>
         members
-            .Where(m => m.TenantId == tenantId
-                && !m.Subject!.IsSystemSubject
-                && m.Subject.IsActive
-                && m.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
+            .PeopleOf(tenantId)
+            .Where(m => m.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
             .OrderBy(m => m.SysCreatedAt)
             .ThenBy(m => m.Id);
+
+    public const string LastOwnerRefusal = "Cannot remove the last owner of a tenant";
+
+    /// <summary>
+    /// Whether the member holds the owner role and no other active owner would remain if it stopped.
+    /// </summary>
+    public static async Task<bool> IsLastOwnerAsync(
+        this IQueryable<TenantMemberEntity> members,
+        Guid tenantId,
+        Guid memberId,
+        CancellationToken ct = default) =>
+        await members.AnyAsync(
+            m => m.Id == memberId && m.TenantId == tenantId && m.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner), ct)
+        && !await members.OwnersOf(tenantId).AnyAsync(m => m.Id != memberId, ct);
 }

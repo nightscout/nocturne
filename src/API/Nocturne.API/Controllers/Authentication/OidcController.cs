@@ -446,8 +446,8 @@ public class OidcController : ControllerBase
     [RemoteCommand(Invalidates = ["GetLinkedIdentities", "Passkey_ListCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UnlinkIdentity(Guid identityId)
     {
         var auth = HttpContext.GetAuthContext();
@@ -457,29 +457,18 @@ public class OidcController : ControllerBase
         // Symmetric factor-count rule is enforced atomically inside the service inside a
         // serializable transaction to prevent TOCTOU races between concurrent removals.
         var result = await _subjectService.TryRemoveOidcIdentityAsync(auth.SubjectId.Value, identityId);
-        switch (result)
-        {
-            case FactorRemovalResult.NotFound:
-                return NotFound();
-            case FactorRemovalResult.LastPrimaryFactor:
-                return Conflict(new
-                {
-                    error = "last_factor",
-                    message = "Cannot remove your only remaining sign-in method",
-                });
-            case FactorRemovalResult.Removed:
-                await _auditService.LogAsync(AuthAuditEventType.OidcIdentityUnlinked, auth.SubjectId, success: true,
-                    ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
-                    detailsJson: JsonSerializer.Serialize(new { identityId }));
+        if (result != FactorRemovalResult.Removed)
+            return this.FactorRemovalRefusal(result, "OIDC identity");
 
-                _logger.LogInformation(
-                    "OIDC identity {IdentityId} unlinked from subject {SubjectId}",
-                    identityId, auth.SubjectId);
+        await _auditService.LogAsync(AuthAuditEventType.OidcIdentityUnlinked, auth.SubjectId, success: true,
+            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+            detailsJson: JsonSerializer.Serialize(new { identityId }));
 
-                return NoContent();
-            default:
-                throw new InvalidOperationException($"Unexpected FactorRemovalResult: {result}");
-        }
+        _logger.LogInformation(
+            "OIDC identity {IdentityId} unlinked from subject {SubjectId}",
+            identityId, auth.SubjectId);
+
+        return NoContent();
     }
 
     /// <summary>

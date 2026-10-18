@@ -4,10 +4,7 @@
 # its test pass. See tests/README.md.
 #
 # <FullyQualifiedName (no theory arguments)> | <bug>
-Nocturne.API.Tests.Integration.Auth.GuestLinkLifecycleIntegrationTests.GuestSession_CannotWriteV4TherapySettings | a guest session writing v4 therapy settings gets 500 instead of 401/403
 Nocturne.API.Tests.Integration.Auth.TokenRevocationIntegrationTests.Introspect_ValidToken_ReturnsActive | /api/oauth/introspect names its fields tokenType/clientId; RFC 7662 has token_type/client_id
-Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.GetDeviceStatusById_ShouldReturnMatchingEntry | devicestatus reads return nothing after a POST
-Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.GetDeviceStatus_ShouldReturnCreatedEntries | devicestatus reads return nothing after a POST
 Nocturne.API.Tests.Integration.EntriesIntegrationTests.DeleteEntry_ShouldRemoveEntry | GET /api/v1/entries/{id} answers [] and PUT/DELETE 404 for an entry just created
 Nocturne.API.Tests.Integration.EntriesIntegrationTests.GetEntries_WithSkip_ShouldOffsetResults | GET /api/v1/entries ignores skip, so pages overlap (Nightscout behaviour to confirm)
 Nocturne.API.Tests.Integration.EntriesIntegrationTests.GetEntryById_ShouldReturnSpecificEntry | GET /api/v1/entries/{id} answers [] and PUT/DELETE 404 for an entry just created
@@ -100,3 +97,10 @@ Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithSort_R
 Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_ReturnsSameShape | v3 /version lacks the {status, result} envelope
 Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_WithData_ReturnsSameShape | v3 /version lacks the {status, result} envelope
 Nocturne.API.Tests.Integration.V4.BasalInjectionIntegrationTests.POST_with_same_SyncIdentifier_after_soft_delete_creates_new_row | a soft-deleted basal injection still holds its sync identifier (409 on re-POST)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_IntentRequest_MetricNow_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_MissingVersion_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_InvalidRequest_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_IntentRequest_NSStatus_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_LaunchRequest_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_UnknownIntent_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)
+Nocturne.API.Tests.Integration.Parity.V1.AlexaParityTests.PostAlexa_SessionEndedRequest_ReturnsSameShape | parity Nightscout does not enable the alexa plugin (404), and Alexa wording differs from Nightscout's (#2184)

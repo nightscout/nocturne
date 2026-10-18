@@ -273,28 +273,34 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         var findQuery = Core.Models.Queries.FindQuery.Parse(find);
         var (fromMills, toMills) = (findQuery.FromMills, findQuery.ToMills);
 
-        // find is client-controlled; strip line breaks so it can't forge log entries
-        var findForLog = find?.ReplaceLineEndings(" ");
+        if (findQuery.IsEmpty)
+        {
+            Logger.LogWarning("BulkDelete refused: the find has no conditions");
+            return 0;
+        }
 
-        // A find[type]=x equality narrows the sweep to that record type; any other field filter
-        // cannot be honored by a by-time sweep, so refuse rather than wipe non-matching records.
+        // A find[type]=x equality narrows the sweep to that record type.
         var typeFilter = findQuery.GetEqualityValue("type");
+        if (typeFilter is not null and not ("sgv" or "mbg" or "cal"))
+        {
+            Logger.LogWarning("BulkDelete refused: the find names a record type the sweep does not cover");
+            return 0;
+        }
+
+        // Any other field filter cannot be honored by a by-time sweep, so refuse rather than wipe
+        // non-matching records.
         if (findQuery.HasFieldFiltersExcept("type"))
         {
-            Logger.LogWarning("BulkDelete refused: find query carries field filters the by-time sweep cannot honor. find={Find}", findForLog);
+            Logger.LogWarning("BulkDelete refused: the find carries field filters the by-time sweep cannot honor");
             return 0;
         }
 
         // NIGHTSCOUT-COMPAT: Legacy Nightscout allowed arbitrary MongoDB find queries for
-        // bulk delete. If the caller passed a non-empty find query but we couldn't extract
-        // any time bounds or a type filter, refuse to delete — otherwise we'd wipe all records.
-        // Null/empty find intentionally deletes everything (matches "delete all" semantics).
-        var hasFind = !string.IsNullOrEmpty(find) && find != "{}";
-        var hasTimeBounds = fromMills.HasValue || toMills.HasValue;
-
-        if (hasFind && !hasTimeBounds && typeFilter is null)
+        // bulk delete. If the caller passed a find but we couldn't extract any time bounds or
+        // a type filter, refuse to delete, otherwise we'd wipe all records.
+        if (!fromMills.HasValue && !toMills.HasValue && typeFilter is null)
         {
-            Logger.LogWarning("BulkDelete refused: find query has no parseable time range, would delete all records. find={Find}", findForLog);
+            Logger.LogWarning("BulkDelete refused: the find has no parseable time range or type");
             return 0;
         }
 
@@ -313,8 +319,8 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             ? await _calibrationRepository.DeleteByTimeRangeAsync(from, to, ct) : 0;
 
         var total = (long)sgDeleted + mgDeleted + calDeleted;
-        Logger.LogInformation("BulkDelete: removed {Total} v4 records (sg={Sg}, mg={Mg}, cal={Cal}) for find={Find}",
-            total, sgDeleted, mgDeleted, calDeleted, findForLog);
+        Logger.LogInformation("BulkDelete: removed {Total} v4 records (sg={Sg}, mg={Mg}, cal={Cal}) from={From} to={To} type={Type}",
+            total, sgDeleted, mgDeleted, calDeleted, from, to, typeFilter);
 
         return total;
     }

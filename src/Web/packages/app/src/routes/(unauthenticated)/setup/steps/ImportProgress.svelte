@@ -102,8 +102,7 @@
           const activeJob = history?.find(
             (j) =>
               j.state === MigrationJobState.Running ||
-              j.state === MigrationJobState.Pending ||
-              j.state === MigrationJobState.Validating
+              j.state === MigrationJobState.Pending
           );
           if (activeJob?.id) {
             resolvedJobId = activeJob.id;

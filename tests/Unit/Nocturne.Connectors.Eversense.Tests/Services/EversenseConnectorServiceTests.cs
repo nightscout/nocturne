@@ -171,8 +171,51 @@ public class EversenseConnectorServiceTests
             It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>
+    /// A null in the patient list is one malformed record. It is dropped before the list is read, so
+    /// the patient beside it still syncs rather than the run failing on every cycle.
+    /// </summary>
     [Fact]
-    public async Task SyncDataAsync_TransmitterDisconnected_SkipsPublishAndReportsSuccess()
+    public async Task SyncDataAsync_NullEntryInThePatientList_SyncsThePatientBesideIt()
+    {
+        var patients = new List<EversensePatientDatum?>
+        {
+            null,
+            new()
+            {
+                UserName = "patient@example.com",
+                CurrentGlucose = 120,
+                GlucoseTrend = 3,
+                CgTime = DateTimeOffset.UtcNow.AddMinutes(-2).ToString("O"),
+                Units = 0,
+                IsTransmitterConnected = true
+            }
+        };
+
+        var publisherMock = new Mock<IConnectorPublisher>();
+        publisherMock.Setup(p => p.IsAvailable).Returns(true);
+        publisherMock.Setup(p => p.Glucose.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var fixture = new ServiceFixture(
+            httpResponses: new Dictionary<string, HttpResponseMessage>
+            {
+                [EversenseConstants.Endpoints.GetFollowingPatientList] = CreateJsonResponse(patients)
+            },
+            publisher: publisherMock.Object);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue(string.Join("; ", result.Errors));
+        result.ItemsSynced.Should().ContainKey(SyncDataType.Glucose).WhoseValue.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_TransmitterDisconnected_StillPublishesLatestReading()
     {
         // Arrange
         var patients = new List<EversensePatientDatum>
@@ -188,8 +231,7 @@ public class EversenseConnectorServiceTests
             }
         };
 
-        var publisherMock = new Mock<IConnectorPublisher>();
-        publisherMock.Setup(p => p.IsAvailable).Returns(true);
+        var publisherMock = CreatePublisher();
 
         var fixture = new ServiceFixture(
             tokenToReturn: "valid-token",
@@ -204,14 +246,9 @@ public class EversenseConnectorServiceTests
         // Act
         var result = await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
 
-        // Assert
+        // Assert — the connection flag lags the reading, so a fresh CGTime is published anyway.
         result.Success.Should().BeTrue();
-        result.ItemsSynced.Should().NotContainKey(SyncDataType.Glucose);
-
-        publisherMock.Verify(p => p.Glucose.PublishSensorGlucoseAsync(
-            It.IsAny<IEnumerable<SensorGlucose>>(),
-            It.IsAny<string>(),
-            It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+        result.ItemsSynced.Should().ContainKey(SyncDataType.Glucose).WhoseValue.Should().Be(1);
     }
 
     [Fact]
@@ -329,9 +366,178 @@ public class EversenseConnectorServiceTests
             It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task SyncDataAsync_WithHistory_PublishesHistoryAndLatestReading()
+    {
+        // Arrange
+        var latestTime = new DateTime(2026, 10, 16, 10, 10, 0, DateTimeKind.Utc);
+        var patients = new List<EversensePatientDatum>
+        {
+            CreateFollowedPatient(userId: 42, glucose: 125, cgTime: latestTime.ToString("O"))
+        };
+        var history = new List<EversenseUserEvent>
+        {
+            new() { EventTypeId = 1, Value = 110, EventDate = "2026-10-16T10:00:00" },
+            new() { EventTypeId = 1, Value = 118, EventDate = "2026-10-16T10:05:00" },
+            new() { EventTypeId = 1, Value = 124, EventDate = "2026-10-16T10:10:00" },
+            new() { EventTypeId = 10, Value = 121, EventDate = "2026-10-16T10:06:00" },
+        };
+
+        List<SensorGlucose>? published = null;
+        var publisherMock = CreatePublisher(records => published = records.ToList());
+
+        var fixture = new ServiceFixture(
+            httpResponses: new Dictionary<string, HttpResponseMessage>
+            {
+                [EversenseConstants.Endpoints.GetFollowingPatientList] = CreateJsonResponse(patients),
+                [EversenseConstants.Endpoints.GetFollowingUserSensorGlucose] = CreateJsonResponse(history)
+            },
+            publisher: publisherMock.Object);
+
+        var request = new SyncRequest { DataTypes = [SyncDataType.Glucose] };
+
+        // Act
+        var result = await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+
+        // Assert — the history row at the latest reading's instant is replaced by the latest reading,
+        // which carries the trend; the calibration row is not glucose.
+        result.Success.Should().BeTrue();
+        published.Should().NotBeNull();
+        published!.Select(r => r.Mgdl).Should().Equal(110, 118, 125);
+        published.Last().Direction.Should().Be(GlucoseDirection.Flat);
+
+        fixture.RequestedUris.Should().Contain(u =>
+            u.AbsolutePath == EversenseConstants.Endpoints.GetFollowingUserSensorGlucose &&
+            u.Query.Contains("UserID=42") &&
+            u.Query.Contains("startDate=") &&
+            u.Query.Contains("endDate="));
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_HistoryUnavailable_StillPublishesLatestReading()
+    {
+        // Arrange
+        var patients = new List<EversensePatientDatum>
+        {
+            CreateFollowedPatient(userId: 42, glucose: 125, cgTime: DateTimeOffset.UtcNow.AddMinutes(-2).ToString("O"))
+        };
+
+        var publisherMock = CreatePublisher();
+
+        var fixture = new ServiceFixture(
+            httpResponses: new Dictionary<string, HttpResponseMessage>
+            {
+                [EversenseConstants.Endpoints.GetFollowingPatientList] = CreateJsonResponse(patients),
+                [EversenseConstants.Endpoints.GetFollowingUserSensorGlucose] =
+                    new HttpResponseMessage(HttpStatusCode.NotFound)
+            },
+            publisher: publisherMock.Object);
+
+        var request = new SyncRequest { DataTypes = [SyncDataType.Glucose] };
+
+        // Act
+        var result = await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+
+        // Assert
+        result.ItemsSynced.Should().ContainKey(SyncDataType.Glucose).WhoseValue.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_OusServer_ReadsFromOusDataHost()
+    {
+        // Arrange
+        var patients = new List<EversensePatientDatum>
+        {
+            CreateFollowedPatient(userId: 42, glucose: 125, cgTime: DateTimeOffset.UtcNow.AddMinutes(-2).ToString("O"))
+        };
+
+        var fixture = new ServiceFixture(
+            httpResponses: new Dictionary<string, HttpResponseMessage>
+            {
+                [EversenseConstants.Endpoints.GetFollowingPatientList] = CreateJsonResponse(patients),
+                [EversenseConstants.Endpoints.GetFollowingUserSensorGlucose] =
+                    CreateJsonResponse(new List<EversenseUserEvent>())
+            },
+            publisher: CreatePublisher().Object,
+            server: "OUS");
+
+        var request = new SyncRequest { DataTypes = [SyncDataType.Glucose] };
+
+        // Act
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+
+        // Assert
+        var ousHost = new Uri(EversenseConstants.Servers.OusData).Host;
+        fixture.RequestedUris.Should().NotBeEmpty().And.OnlyContain(u => u.Host == ousHost);
+    }
+
+    #endregion
+
+    #region History window Tests
+
+    [Fact]
+    public void HistoryWindows_WithoutResumePoint_CoversTheNowGraphWindow()
+    {
+        var now = new DateTime(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
+
+        var windows = EversenseConnectorService.HistoryWindows(from: null, to: null, now);
+
+        windows.Should().ContainSingle()
+            .Which.Should().Be((now - EversenseConnectorService.DefaultHistoryWindow, now.AddMinutes(5)));
+    }
+
+    [Fact]
+    public void HistoryWindows_LongCatchUp_SplitsIntoContiguousDays()
+    {
+        var now = new DateTime(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
+        var from = now.AddHours(-50);
+
+        var windows = EversenseConnectorService.HistoryWindows(from, to: null, now);
+
+        windows.Should().HaveCount(3);
+        windows[0].Start.Should().Be(from);
+        windows.Zip(windows.Skip(1)).Should().OnlyContain(pair => pair.First.End == pair.Second.Start);
+        windows[^1].End.Should().Be(now.AddMinutes(5));
+    }
+
+    [Fact]
+    public void HistoryWindows_ClampsToMaxHistoryDays()
+    {
+        var now = new DateTime(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
+
+        var windows = EversenseConnectorService.HistoryWindows(now.AddDays(-180), to: null, now);
+
+        windows[0].Start.Should().Be(now.AddDays(-EversenseConnectorConfiguration.MaxHistoryDays));
+    }
+
     #endregion
 
     #region Test Infrastructure
+
+    private static EversensePatientDatum CreateFollowedPatient(int userId, int glucose, string cgTime) => new()
+    {
+        UserId = userId,
+        UserName = "patient@example.com",
+        CurrentGlucose = glucose,
+        GlucoseTrend = 3,
+        CgTime = cgTime,
+        Units = 0,
+        IsTransmitterConnected = true
+    };
+
+    private static Mock<IConnectorPublisher> CreatePublisher(Action<IEnumerable<SensorGlucose>>? onPublish = null)
+    {
+        var publisherMock = new Mock<IConnectorPublisher>();
+        publisherMock.Setup(p => p.IsAvailable).Returns(true);
+        publisherMock.Setup(p => p.Glucose.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<SensorGlucose>, string, WriteOrigin, CancellationToken>(
+                (records, _, _, _) => onPublish?.Invoke(records))
+            .ReturnsAsync(true);
+        return publisherMock;
+    }
 
     private static HttpResponseMessage CreateJsonResponse<T>(T content, HttpStatusCode statusCode = HttpStatusCode.OK)
     {
@@ -389,6 +595,8 @@ public class EversenseConnectorServiceTests
     {
         private readonly Dictionary<string, HttpResponseMessage> _responses;
 
+        public List<Uri> RequestedUris { get; } = [];
+
         public MockHttpMessageHandler(Dictionary<string, HttpResponseMessage>? responses = null)
         {
             _responses = responses ?? new Dictionary<string, HttpResponseMessage>();
@@ -398,6 +606,8 @@ public class EversenseConnectorServiceTests
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            if (request.RequestUri != null)
+                RequestedUris.Add(request.RequestUri);
             var path = request.RequestUri?.PathAndQuery ?? string.Empty;
             foreach (var kvp in _responses)
             {
@@ -414,25 +624,30 @@ public class EversenseConnectorServiceTests
     /// </summary>
     private sealed class ServiceFixture
     {
+        private readonly MockHttpMessageHandler _handler;
+
         public EversenseConnectorService Service { get; }
         public EversenseConnectorConfiguration Config { get; }
+        public IReadOnlyList<Uri> RequestedUris => _handler.RequestedUris;
 
         public ServiceFixture(
             string? tokenToReturn = "valid-token",
             Dictionary<string, HttpResponseMessage>? httpResponses = null,
             IConnectorPublisher? publisher = null,
             ILogger<EversenseConnectorService>? serviceLogger = null,
-            string? patientUsername = null)
+            string? patientUsername = null,
+            string server = "US")
         {
             Config = new EversenseConnectorConfiguration
             {
                 Username = "test@example.com",
                 Password = "test-password",
                 PatientUsername = patientUsername,
+                Server = server,
             };
 
-            var handler = new MockHttpMessageHandler(httpResponses);
-            var httpClient = new HttpClient(handler)
+            _handler = new MockHttpMessageHandler(httpResponses);
+            var httpClient = new HttpClient(_handler)
             {
                 BaseAddress = new Uri("https://test.eversensedms.com")
             };

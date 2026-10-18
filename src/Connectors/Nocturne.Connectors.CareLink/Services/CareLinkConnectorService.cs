@@ -414,8 +414,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             if (seeded)
                 _logger.LogInformation("[{ConnectorSource}] Seeded timezone timeline origin: {Zone}", ConnectorSource, iana);
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Never fail a sync over timeline setup.
             _logger.LogWarning(ex, "[{ConnectorSource}] Failed to configure timezone timeline", ConnectorSource);

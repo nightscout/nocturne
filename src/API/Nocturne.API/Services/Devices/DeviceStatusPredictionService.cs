@@ -1,10 +1,8 @@
 using System.Text.Json;
-using Nocturne.API.Controllers.V4;
-using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.API.Services.Glucose;
-using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Clinical.Treatments;
 
 namespace Nocturne.API.Services.Devices;
 

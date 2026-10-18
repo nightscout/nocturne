@@ -5,7 +5,6 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Configuration;
-using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;

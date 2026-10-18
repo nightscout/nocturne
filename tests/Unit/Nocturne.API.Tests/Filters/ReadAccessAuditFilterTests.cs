@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Filters;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -30,7 +31,7 @@ public class ReadAccessAuditFilterTests
     private readonly ILogger<ReadAccessAuditFilter> _logger = NullLogger<ReadAccessAuditFilter>.Instance;
 
     private ReadAccessAuditFilter CreateFilter() =>
-        new(_configCache.Object, _auditContext.Object, _contextFactory.Object, _logger);
+        new(_configCache.Object, _auditContext.Object, _contextFactory.Object, CredentialRouteRedactor.Create(), _logger);
 
     private static (ResultExecutingContext executingContext, ResultExecutionDelegate next) CreateContexts(
         string path,
@@ -258,6 +259,43 @@ public class ReadAccessAuditFilterTests
 
         written.Should().NotBeNull();
         written!.CredentialFingerprint.Should().Be("0123456789abcdef");
+    }
+
+    /// <summary>
+    /// The audit trail is durable and readable through the audit API, so a credential carried as a
+    /// path segment must not reach it.
+    /// </summary>
+    [Fact]
+    public async Task OnResultExecutionAsync_CredentialRoute_StoresTheRedactedPath()
+    {
+        const string token = "noc_alertinvitetokenthatmustnotbestored";
+        _configCache
+            .Setup(c => c.GetConfigAsync(TestTenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantAuditConfig(ReadAuditEnabled: true, null, null));
+
+        var saveCompleted = new SemaphoreSlim(0, 1);
+        var mockDbContext = CreateMockDbContext();
+        ReadAccessLogEntity? written = null;
+        mockDbContext
+            .Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .Callback(() =>
+            {
+                written = mockDbContext.Object.ChangeTracker
+                    .Entries<ReadAccessLogEntity>().Single().Entity;
+                saveCompleted.Release();
+            })
+            .ReturnsAsync(1);
+        _contextFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockDbContext.Object);
+
+        var (ctx, next) = CreateContexts($"/api/v4/alert-invites/{token}", "GET",
+            tenantContext: TestTenantContext);
+
+        await CreateFilter().OnResultExecutionAsync(ctx, next);
+
+        (await saveCompleted.WaitAsync(TimeSpan.FromSeconds(5))).Should().BeTrue();
+        written!.Endpoint.Should().Be($"GET {CredentialRouteRedactor.AlertInvitePath}");
     }
 
     [Fact]

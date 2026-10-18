@@ -424,6 +424,108 @@ public class ActiveProfileResolverTests : IDisposable
         }
     }
 
+    public class LookupOrder : ActiveProfileResolverTests
+    {
+        private const long SwitchMills = NoonMills + 30_000;
+
+        private void SetupSpansStartedBy(params StateSpan[] spans)
+        {
+            _stateSpanService
+                .Setup(s => s.GetStateSpansAsync(
+                    StateSpanCategory.Profile,
+                    It.IsAny<string?>(),
+                    It.IsAny<DateTime?>(),
+                    It.IsAny<DateTime?>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<bool?>(),
+                    It.IsAny<int>(),
+                    It.IsAny<int>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync((StateSpanCategory? _, string? _, DateTime? _, DateTime? to, string? _, bool? _, int _, int _, bool _, CancellationToken _) =>
+                    spans.Where(s => s.StartTimestamp <= to).OrderByDescending(s => s.StartTimestamp).ToList());
+        }
+
+        private StateSpan[] SwitchAtHalfPast()
+        {
+            var old = MakeProfileSpan(NoonMills - 3_600_000, SwitchMills, "Old");
+            var current = MakeProfileSpan(SwitchMills, null, "New");
+            return [old, current];
+        }
+
+        [Fact]
+        public async Task SwitchMidMinute_EarlyThenLateLookup()
+        {
+            SetupSpansStartedBy(SwitchAtHalfPast());
+
+            var early = await _sut.GetActiveProfileNameAsync(NoonMills + 10_000);
+            var late = await _sut.GetActiveProfileNameAsync(NoonMills + 45_000);
+
+            early.Should().Be("Old");
+            late.Should().Be("New");
+        }
+
+        [Fact]
+        public async Task SwitchMidMinute_LateThenEarlyLookup()
+        {
+            SetupSpansStartedBy(SwitchAtHalfPast());
+
+            var late = await _sut.GetActiveProfileNameAsync(NoonMills + 45_000);
+            var early = await _sut.GetActiveProfileNameAsync(NoonMills + 10_000);
+
+            late.Should().Be("New");
+            early.Should().Be("Old");
+        }
+
+        [Fact]
+        public async Task NoProfileBeforeSwitch_EarlyLookupDoesNotHideTheSwitch()
+        {
+            SetupSpansStartedBy(MakeProfileSpan(SwitchMills, null, "New"));
+
+            var early = await _sut.GetActiveProfileNameAsync(NoonMills + 10_000);
+            var late = await _sut.GetActiveProfileNameAsync(NoonMills + 45_000);
+
+            early.Should().BeNull();
+            late.Should().Be("New");
+        }
+
+        [Fact]
+        public async Task NoProfileBeforeSwitch_LateLookupDoesNotLeakIntoEarly()
+        {
+            SetupSpansStartedBy(MakeProfileSpan(SwitchMills, null, "New"));
+
+            var late = await _sut.GetActiveProfileNameAsync(NoonMills + 45_000);
+            var early = await _sut.GetActiveProfileNameAsync(NoonMills + 10_000);
+
+            late.Should().Be("New");
+            early.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task LookupsWithinOneMinute_ShareOneQuery()
+        {
+            SetupSpansStartedBy(SwitchAtHalfPast());
+
+            await _sut.GetActiveProfileNameAsync(NoonMills + 10_000);
+            await _sut.GetActiveProfileNameAsync(NoonMills + 45_000);
+            await _sut.GetActiveProfileNameAsync(NoonMills + 59_999);
+
+            _stateSpanService.Verify(
+                s => s.GetStateSpansAsync(
+                    It.IsAny<StateSpanCategory?>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<DateTime?>(),
+                    It.IsAny<DateTime?>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<bool?>(),
+                    It.IsAny<int>(),
+                    It.IsAny<int>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+    }
+
     public class Caching : ActiveProfileResolverTests
     {
         [Fact]

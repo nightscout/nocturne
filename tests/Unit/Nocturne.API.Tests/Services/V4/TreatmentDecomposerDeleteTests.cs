@@ -68,7 +68,10 @@ public class TreatmentDecomposerDeleteTests : IDisposable
 
     private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
-    private TreatmentDecomposer CreateDecomposer(NocturneDbContext context, IAuditContext auditContext) => new(
+    private TreatmentDecomposer CreateDecomposer(
+        NocturneDbContext context,
+        IAuditContext auditContext,
+        Microsoft.Extensions.Logging.ILogger<TreatmentDecomposer>? logger = null) => new(
         context,
         Mock.Of<IBolusRepository>(),
         Mock.Of<ITempBasalRepository>(),
@@ -85,7 +88,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         Mock.Of<IActiveProfileResolver>(),
         Mock.Of<IPatientInsulinRepository>(),
         auditContext,
-        NullLogger<TreatmentDecomposer>.Instance);
+        logger ?? NullLogger<TreatmentDecomposer>.Instance);
 
     /// <summary>One record of every type the sweep covers, plus a bolus outside the window.</summary>
     /// <param name="legacyIdFor">
@@ -188,6 +191,63 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         (await assertCtx.GetBlockingLegacyIdsAsync<DeviceEventEntity>(["devevent-1"])).Held.Should().Contain("devevent-1");
         (await assertCtx.GetBlockingLegacyIdsAsync<BolusCalculationEntity>(["boluscalc-1"])).Held.Should().Contain("boluscalc-1");
         (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>(["tempbasal-1"])).Held.Should().Contain("tempbasal-1");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("{}")]
+    [InlineData("token=x")]
+    [InlineData("count=5&token=x")]
+    [InlineData("{\"created_at\":")]
+    public async Task BulkDelete_WithAFindThatHasNoConditions_DeletesNothing(string? find)
+    {
+        SeedOneOfEachType();
+
+        await using (var ctx = NewContext())
+            (await CreateDecomposer(ctx, _userAuditContext).BulkDeleteAsync(find, WriteOrigin.Live)).Should().Be(0);
+
+        await using var assertCtx = NewContext();
+        (await assertCtx.Boluses.IgnoreQueryFilters().Where(b => b.DeletedAt != null).CountAsync()).Should().Be(0);
+        (await assertCtx.Notes.IgnoreQueryFilters().Where(n => n.DeletedAt != null).CountAsync()).Should().Be(0);
+        (await assertCtx.CarbIntakes.IgnoreQueryFilters().Where(c => c.DeletedAt != null).CountAsync()).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("find[]=")]
+    [InlineData("{\"$and\":[]}")]
+    [InlineData("{\"created_at\":{}}")]
+    [InlineData("{}")]
+    public async Task BulkDelete_WhenTheFindHasNoConditions_RefusesAtTheEmptyGuard(string find)
+    {
+        var logger = new Mock<Microsoft.Extensions.Logging.ILogger<TreatmentDecomposer>>();
+
+        await using var ctx = NewContext();
+        (await CreateDecomposer(ctx, _userAuditContext, logger.Object).BulkDeleteAsync(find, WriteOrigin.Live)).Should().Be(0);
+
+        logger.Invocations
+            .Where(i => i.Method.Name == nameof(Microsoft.Extensions.Logging.ILogger.Log))
+            .Select(i => i.Arguments[2].ToString())
+            .Should().Contain(m => m!.Contains("has no conditions"));
+    }
+
+    [Fact]
+    public async Task BulkDelete_NeverLogsTheRawFind()
+    {
+        var logger = new Mock<Microsoft.Extensions.Logging.ILogger<TreatmentDecomposer>>();
+        SeedOneOfEachType();
+
+        foreach (var find in new[] { Find + "&token=secret-value", "token=secret-value", "find[eventType]=Note&token=secret-value" })
+        {
+            await using var ctx = NewContext();
+            await CreateDecomposer(ctx, _userAuditContext, logger.Object).BulkDeleteAsync(find, WriteOrigin.Live);
+        }
+
+        logger.Invocations
+            .Where(i => i.Method.Name == nameof(Microsoft.Extensions.Logging.ILogger.Log))
+            .Select(i => i.Arguments[2].ToString())
+            .Should().NotBeEmpty()
+            .And.NotContain(m => m!.Contains("secret-value"));
     }
 
     [Fact]

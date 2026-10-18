@@ -4,6 +4,7 @@ using Nocturne.Connectors.FreeStyle.Models;
 using Nocturne.Connectors.FreeStyle.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.FreeStyle.Mappers;
 
@@ -40,9 +41,9 @@ public class LibreSensorGlucoseMapper(ILogger? logger = null)
                 ModifiedAt = now
             };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
         {
-            logger?.LogWarning(ex, "Error converting LibreLinkUp measurement: {@Measurement}", measurement);
+            logger?.LogWarning(ex, "Skipped malformed LibreLinkUp measurement at {Timestamp}", measurement.FactoryTimestamp);
             return null;
         }
     }
