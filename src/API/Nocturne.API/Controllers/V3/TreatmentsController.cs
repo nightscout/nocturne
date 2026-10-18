@@ -540,44 +540,6 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
     #region Helper Methods
 
-    private new string? ConvertV3FilterToV1Find(JsonElement? filter)
-    {
-        if (!filter.HasValue)
-            return null;
-
-        try
-        {
-            // Convert V3 JSON filter to V1 query string format
-            var filterObj = filter.Value;
-            var queryParts = new List<string>();
-
-            foreach (var property in filterObj.EnumerateObject())
-            {
-                var value = property.Value;
-                if (value.ValueKind == JsonValueKind.Object)
-                {
-                    // Handle operators like $gte, $lte, etc.
-                    foreach (var op in value.EnumerateObject())
-                    {
-                        queryParts.Add($"find[{property.Name}][{op.Name}]={op.Value}");
-                    }
-                }
-                else
-                {
-                    // Simple equality
-                    queryParts.Add($"find[{property.Name}]={value}");
-                }
-            }
-
-            return queryParts.Count > 0 ? string.Join("&", queryParts) : null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to convert V3 filter to V1 find query");
-            return null;
-        }
-    }
-
     private async Task<long> GetTotalCountAsync(
         string? findQuery,
         CancellationToken cancellationToken
