@@ -1,13 +1,17 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { toast } from "svelte-sonner";
 import CopyInvitationMessageButton from "./CopyInvitationMessageButton.svelte";
+
+vi.mock("svelte-sonner", () => ({ toast: { error: vi.fn() } }));
 
 const INVITE_URL = "https://sam.nocturne.example/join?token=abc123";
 
 let clipboard: string[];
 
 beforeEach(() => {
+  vi.mocked(toast.error).mockClear();
   clipboard = [];
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
@@ -25,8 +29,6 @@ describe("CopyInvitationMessageButton", () => {
       props: {
         url: INVITE_URL,
         inviterName: "Alex Carer",
-        onCopied: () => {},
-        onCopyFailed: () => {},
       },
     });
 
@@ -46,8 +48,6 @@ describe("CopyInvitationMessageButton", () => {
       props: {
         url: INVITE_URL,
         inviterName: "",
-        onCopied: () => {},
-        onCopyFailed: () => {},
       },
     });
 
@@ -58,20 +58,18 @@ describe("CopyInvitationMessageButton", () => {
     expect(clipboard[0]).toMatch(/^You've been invited to Nocturne/);
   });
 
-  it("reports a successful copy so a stale error can clear", async () => {
-    const onCopied = vi.fn();
-    const onCopyFailed = vi.fn();
-    render(CopyInvitationMessageButton, {
-      props: { url: INVITE_URL, onCopied, onCopyFailed },
-    });
+  it("does not toast on a successful copy", async () => {
+    render(CopyInvitationMessageButton, { props: { url: INVITE_URL } });
 
     await page.getByRole("button", { name: "Copy invitation message" }).click();
 
-    await vi.waitFor(() => expect(onCopied).toHaveBeenCalledOnce());
-    expect(onCopyFailed).not.toHaveBeenCalled();
+    await expect
+      .element(page.getByRole("button", { name: "Message copied" }))
+      .toBeVisible();
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it("reports a clipboard refusal", async () => {
+  it("toasts a clipboard refusal and does not show the copied state", async () => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: {
@@ -80,15 +78,13 @@ describe("CopyInvitationMessageButton", () => {
         },
       },
     });
-    const onCopied = vi.fn();
-    const onCopyFailed = vi.fn();
-    render(CopyInvitationMessageButton, {
-      props: { url: INVITE_URL, onCopied, onCopyFailed },
-    });
+    render(CopyInvitationMessageButton, { props: { url: INVITE_URL } });
 
     await page.getByRole("button", { name: "Copy invitation message" }).click();
 
-    await vi.waitFor(() => expect(onCopyFailed).toHaveBeenCalledOnce());
-    expect(onCopied).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalledOnce());
+    await expect
+      .element(page.getByRole("button", { name: "Copy invitation message" }))
+      .toBeVisible();
   });
 });
