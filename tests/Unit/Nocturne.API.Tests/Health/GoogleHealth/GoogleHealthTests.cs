@@ -1,4 +1,3 @@
-using Nocturne.Tests.Shared.Infrastructure;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -28,6 +27,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 

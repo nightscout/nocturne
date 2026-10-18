@@ -6,7 +6,6 @@ using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -173,7 +172,9 @@ public class ConnectorCursorResetJobService : IConnectorCursorResetJobService
     private async Task<ConnectorResetJobEntity?> FindRecordAsync(Guid jobId, CancellationToken ct)
     {
         using var scope = _serviceProvider.CreateScope();
-        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
+        await using var db = await scope.ServiceProvider
+            .GetRequiredService<INocturneDbContextFactory>()
+            .CreateAsync(ct);
         return await db.ConnectorResetJobs.FindAsync([jobId], ct);
     }
 }
@@ -323,7 +324,9 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
         {
             var status = GetStatus();
             using var scope = _serviceProvider.CreateScope();
-            await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
+            await using var db = await scope.ServiceProvider
+                .GetRequiredService<INocturneDbContextFactory>()
+                .CreateAsync(ct);
 
             var record = await db.ConnectorResetJobs.FindAsync([_id], ct);
             if (record is null)

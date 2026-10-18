@@ -1,4 +1,3 @@
-using Nocturne.Infrastructure.Data.Services;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
@@ -28,6 +27,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Base;

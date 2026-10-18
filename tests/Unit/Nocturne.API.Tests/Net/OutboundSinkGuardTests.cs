@@ -1,4 +1,3 @@
-using Nocturne.Infrastructure.Data.Services;
 using System.Net;
 using System.Text;
 using FluentAssertions;
@@ -15,6 +14,7 @@ using Nocturne.API.Services.Migration;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Net;

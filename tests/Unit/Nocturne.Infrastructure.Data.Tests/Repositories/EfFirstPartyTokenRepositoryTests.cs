@@ -1,5 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Demo;
 using Nocturne.Infrastructure.Data;

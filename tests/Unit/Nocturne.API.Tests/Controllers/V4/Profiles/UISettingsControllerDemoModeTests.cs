@@ -1,4 +1,3 @@
-using Nocturne.Tests.Shared.Infrastructure;
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
@@ -8,6 +7,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Profiles;
 using Nocturne.API.Services.Profiles;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using static Nocturne.API.Tests.Controllers.V4.Profiles.UISettingsControllerHarness;
 

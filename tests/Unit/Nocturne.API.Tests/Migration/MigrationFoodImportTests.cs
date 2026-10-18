@@ -1,4 +1,3 @@
-using Nocturne.Infrastructure.Data.Services;
 using System.Net;
 using System.Text;
 using FluentAssertions;
@@ -7,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Migration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Migration;
