@@ -1,3 +1,4 @@
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Analytics;
