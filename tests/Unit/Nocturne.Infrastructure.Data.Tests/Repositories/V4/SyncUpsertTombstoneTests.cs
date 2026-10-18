@@ -439,15 +439,20 @@ public class SyncUpsertTombstoneTests : IDisposable
             tombstoneId, e => e.Insulin, deletedValue: 5.0, reuploaded: 9.0);
     }
 
+    /// <remarks>
+    /// The refusal names the tombstone, so a treatment create is answered under the id the deleted
+    /// record was served by rather than the client's.
+    /// </remarks>
     [Fact]
-    public async Task Create_WhenAUserDeletedTombstoneHoldsTheKey_IsRefused()
+    public async Task Create_WhenAUserDeletedTombstoneHoldsTheKey_IsRefusedNamingTheTombstone()
     {
         var tombstoneId = SeedTombstone(new BolusEntity { Insulin = 5.0 }, deletedByUser: true);
         var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
 
         var act = () => NewBolusRepository(broadcaster).CreateAsync(ReuploadedBolus(9.0), WriteOrigin.Live);
 
-        await act.Should().ThrowAsync<RecreationBlockedException>().WithMessage($"*{SyncIdentifier}*");
+        (await act.Should().ThrowAsync<RecreationBlockedException>().WithMessage($"*{SyncIdentifier}*"))
+            .Which.HeldBy.Should().Be(tombstoneId);
         broadcaster.Created.Should().BeEmpty();
         broadcaster.Updated.Should().BeEmpty();
         await AssertTombstoneStillHoldsTheKeyAsync<BolusEntity>(

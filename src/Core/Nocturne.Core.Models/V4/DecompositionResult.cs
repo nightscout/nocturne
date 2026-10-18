@@ -35,8 +35,19 @@ public class DecompositionResult
     public int SkippedDeleted { get; set; }
 
     /// <summary>
+    /// The stored rows that held the identity of the records counted in <see cref="SkippedDeleted"/>,
+    /// where the refusing path read them.
+    /// </summary>
+    public List<RefusedRecord> RefusedRecords { get; } = [];
+
+    /// <summary>
     /// Legacy records of a kind Nocturne does not store, such as an entry whose type is not a
     /// sensor reading, meter reading or calibration.
     /// </summary>
     public int SkippedUnsupported { get; set; }
 }
+
+/// <summary>A record not written because the stored row <paramref name="HeldBy"/> holds its identity.</summary>
+/// <param name="RecordType">The V4 record type that was refused.</param>
+/// <param name="HeldBy">The id of the stored row holding the identity.</param>
+public sealed record RefusedRecord(Type RecordType, Guid HeldBy);

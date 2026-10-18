@@ -175,8 +175,8 @@ public class TreatmentReadService : ITreatmentStore
     public async Task<BulkWrite<Treatment>> CreateAsync(
         IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
     {
-        var results = new List<Treatment>();
-        var withheld = new List<Treatment>();
+        var written = new List<Treatment>();
+        var settled = new List<Treatment>();
         var updated = new List<Treatment>();
         var skippedDeleted = 0;
 
@@ -187,27 +187,29 @@ public class TreatmentReadService : ITreatmentStore
                 var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
                 skippedDeleted += result.SkippedDeleted;
                 var updatedStored = UpdatedStoredRecord(treatment, result);
-                var created = await ToCreatedAsync(treatment, result, ct);
-                results.Add(created);
-                if (result.SkippedDeleted > 0 && result.CreatedRecords.Count == 0 && result.UpdatedRecords.Count == 0)
-                    withheld.Add(created);
-                else if (updatedStored)
-                    updated.Add(created);
+                var served = await ToServedAsync(treatment, result, ct);
+                settled.Add(served);
+                if (IsRefused(result) || result.SkippedUnsupported > 0)
+                    continue;
+                written.Add(served);
+                if (updatedStored)
+                    updated.Add(served);
             }
             catch (OperationCanceledException)
             {
-                // Every later call on a canceled token throws too, so catching it here would log
-                // each remaining treatment as a failure instead of ending the batch.
+                // A canceled request ends as canceled, not as a treatment that failed to write.
                 throw;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to decompose treatment {Id}", treatment.Id);
+                throw new TreatmentBatchFailedException(
+                    new BulkWrite<Treatment>(written, skippedDeleted) { Settled = settled, Updated = updated }, ex);
             }
         }
 
         _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
-        return new BulkWrite<Treatment>(results, skippedDeleted) { Withheld = withheld, Updated = updated };
+        return new BulkWrite<Treatment>(written, skippedDeleted) { Settled = settled, Updated = updated };
     }
 
     /// <inheritdoc />
@@ -329,63 +331,106 @@ public class TreatmentReadService : ITreatmentStore
     /// Whether decomposing <paramref name="treatment"/> updated a record already stored for it: one of
     /// its records, or the span it is stored as (an override, a temporary target, a profile switch),
     /// which carries the treatment's id as its original id. Another span the decomposition updated,
-    /// such as the suspension a pump resume closes, belongs to another treatment. Read before
-    /// <see cref="ToCreatedAsync"/> rewrites the treatment's id.
+    /// such as the suspension a pump resume closes, belongs to another treatment.
     /// </summary>
     private static bool UpdatedStoredRecord(Treatment treatment, DecompositionResult result) =>
         result.UpdatedRecords.Any(r => r is IV4Record
             || (r is StateSpan { OriginalId: { Length: > 0 } originalId } && originalId == treatment.Id));
 
     /// <summary>
-    /// The create response for a decomposed treatment. It carries the id every read serves for the
+    /// The create response for a decomposed treatment: a copy under the id every read serves for the
     /// treatment, so a client that keeps the response id (Loop's objectIdCache, AAPS's nightscoutId)
     /// can edit and delete by it later; the client's own id stays stored as the records' LegacyId.
     /// That legacy id rides along as <see cref="Treatment.LegacyId"/>, the key write-back sends the
-    /// treatment upstream under. A treatment that wrote none of the projected tables keeps the id it
-    /// was sent with.
+    /// treatment upstream under, and the record's uuid as <see cref="Treatment.RecordId"/>, whose
+    /// prefix earlier write-backs used. A treatment the user's deletion refused (<see cref="IsRefused"/>) is
+    /// named by the deleted record, as it was served before the delete. A treatment that wrote none
+    /// of the projected tables keeps the id it was sent with: for one stored as a span, the span's
+    /// original id, which <see cref="ToServedAsync"/> replaces with the id reads serve it under.
     /// </summary>
-    private async Task<Treatment> ToCreatedAsync(Treatment treatment, DecompositionResult result, CancellationToken ct)
+    internal static Treatment ToCreated(Treatment treatment, DecompositionResult result)
     {
-        var written = result.CreatedRecords.Concat(result.UpdatedRecords).ToList();
+        var written = result.CreatedRecords.Concat(result.UpdatedRecords).OfType<IV4Record>().ToList();
         if (written.OfType<Core.Models.V4.TempBasal>().FirstOrDefault() is { } tempBasal)
             return TempBasalToTreatmentMapper.ToTreatment(tempBasal);
 
-        if (written.OfType<StateSpan>().FirstOrDefault(IsServedStateSpan) is { OriginalId: { } spanKey } span)
+        var created = treatment.WithId(treatment.Id);
+        if (IsRefused(result))
         {
-            treatment.LegacyId = spanKey;
-            if (Guid.TryParse(span.Id, out var spanRecordId))
-                treatment.RecordId = spanRecordId;
-            if (await _projection.GetProjectedStateSpanTreatmentAsync(spanKey, ct) is { Id: { } spanId })
-                treatment.Id = spanId;
-            return treatment;
+            var refused = result.RefusedRecords
+                .Where(r => ServedRecordTypes.Contains(r.RecordType))
+                .MinBy(r => Array.IndexOf(ServedRecordTypes, r.RecordType));
+            if (refused is not null)
+                created.Id = refused.RecordType == typeof(Core.Models.V4.TempBasal) && MongoObjectId.IsObjectId(treatment.Id)
+                    ? treatment.Id
+                    : refused.HeldBy.ToString();
+            created.LegacyId = treatment.Id;
+            return created;
+        }
+
+        if (ServedSpanKey(result) is { } spanKey)
+        {
+            created.LegacyId = spanKey;
+            return created;
         }
 
         var served = ServedRecordTypes
-            .Select(type => written.OfType<IV4Record>().FirstOrDefault(type.IsInstanceOfType))
+            .Select(type => written.FirstOrDefault(type.IsInstanceOfType))
             .FirstOrDefault(record => record is not null);
         if (served is not null)
         {
-            treatment.LegacyId = served.LegacyId;
-            treatment.RecordId = served.Id;
-            treatment.Id = served.Id.ToString();
+            created.LegacyId = served.LegacyId;
+            created.RecordId = served.Id;
+            created.Id = served.Id.ToString();
         }
 
-        return treatment;
+        return created;
     }
 
     /// <summary>
-    /// Whether a state span the decomposer wrote is read back as the treatment, under the span's id.
+    /// Every record the treatment decomposes into was refused because the user deleted it, so nothing
+    /// was written or may be announced.
     /// </summary>
-    private static bool IsServedStateSpan(StateSpan span) =>
-        span is { OriginalId: not null, Category: StateSpanCategory.Override or StateSpanCategory.TemporaryTarget or StateSpanCategory.Profile };
+    internal static bool IsRefused(DecompositionResult result) =>
+        result.CreatedRecords.Count == 0 && result.UpdatedRecords.Count == 0 && result.SkippedDeleted > 0;
 
     /// <summary>
-    /// The record a decomposed treatment is read back under: a bolus heads a Meal Bolus, and a note
-    /// is only its own treatment when nothing else was written.
+    /// The original id of the state span the decomposer wrote that is read back as the treatment,
+    /// under the span's own id, or <c>null</c> when it wrote none.
+    /// </summary>
+    private static string? ServedSpanKey(DecompositionResult result) =>
+        result.CreatedRecords.Concat(result.UpdatedRecords).OfType<StateSpan>()
+            .FirstOrDefault(span => span is { OriginalId: not null, Category: StateSpanCategory.Override or StateSpanCategory.TemporaryTarget or StateSpanCategory.Profile })
+            ?.OriginalId;
+
+    /// <summary>
+    /// <see cref="ToCreated"/>, with a treatment stored as a served span named by the span's primary
+    /// key, which the written span does not carry (its domain id is its original id), so it is read
+    /// back as reads serve it.
+    /// </summary>
+    private async Task<Treatment> ToServedAsync(Treatment treatment, DecompositionResult result, CancellationToken ct)
+    {
+        var created = ToCreated(treatment, result);
+        if (!IsRefused(result)
+            && ServedSpanKey(result) is { } spanKey
+            && await _projection.GetProjectedStateSpanTreatmentAsync(spanKey, ct) is { Id: { } spanId } span)
+        {
+            created.Id = spanId;
+            created.RecordId = span.RecordId;
+        }
+
+        return created;
+    }
+
+    /// <summary>
+    /// The record a decomposed treatment is read back under: a temp basal (served as the temp basal
+    /// mapper names it), then a bolus, which heads a Meal Bolus; a note is only its own treatment when
+    /// nothing else was written.
     /// </summary>
     private static readonly Type[] ServedRecordTypes =
     [
-        typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(DeviceEvent), typeof(BolusCalculation), typeof(Note),
+        typeof(Core.Models.V4.TempBasal), typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(DeviceEvent),
+        typeof(BolusCalculation), typeof(Note),
     ];
 
     /// <summary>
@@ -408,7 +453,7 @@ public class TreatmentReadService : ITreatmentStore
     /// Resolves a client-sent treatment id to the stored record it names. Each key is tried against
     /// every table before the next, looser one, so an exact match always wins over a prefix or hash
     /// match. The records of one treatment share its legacy id, so the tables are tried in the order
-    /// <see cref="ToCreatedAsync"/> names a treatment by: a legacy id resolves to the record the create
+    /// <see cref="ToCreated"/> names a treatment by: a legacy id resolves to the record the create
     /// returned, not to the note a record treatment with notes also writes.
     /// </summary>
     private async Task<StoredRecord?> FindStoredRecordAsync(string id, CancellationToken ct)
