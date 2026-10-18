@@ -2206,7 +2206,7 @@ public class StatisticsService : IStatisticsService
     /// returned with <c>EffectiveEndMills == StartMills</c> and are discarded by the
     /// <c>insulin &lt;= 0</c> guards in callers.
     /// </remarks>
-    internal static IReadOnlyList<(TempBasal Tb, long EffectiveEndMills)> ClipOverlappingTempBasals(
+    public static IReadOnlyList<(TempBasal Tb, long EffectiveEndMills)> ClipOverlappingTempBasals(
         IEnumerable<TempBasal> tempBasals)
     {
         var result = new List<(TempBasal Tb, long EffectiveEndMills)>();

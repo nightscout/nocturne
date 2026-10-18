@@ -10,7 +10,7 @@ namespace Nocturne.Core.Clinical.Sleep;
 /// Pure static computation helpers for sleep report statistics.
 /// No dependencies — all inputs are passed as parameters.
 /// </summary>
-internal static class SleepReportCalculator
+public static class SleepReportCalculator
 {
     private static readonly TimeSpan GlucoseStalenessLimit = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan DawnWindowSize        = TimeSpan.FromHours(2);
@@ -25,7 +25,7 @@ internal static class SleepReportCalculator
 
     // ── Stage Breakdown ────────────────────────────────────────────────────
 
-    internal static SleepStageBreakdown ComputeStageBreakdown(SleepSession session)
+    public static SleepStageBreakdown ComputeStageBreakdown(SleepSession session)
     {
         int deep, rem, light, awake, unspecified;
 
@@ -85,7 +85,7 @@ internal static class SleepReportCalculator
     /// low is <c>&lt; Low</c>, very high is <c>&gt; VeryHigh</c>, high is
     /// <c>&gt; TargetTop</c>, and everything else is in range.
     /// </summary>
-    internal static SleepOvernightTir? ComputeOvernightTir(
+    public static SleepOvernightTir? ComputeOvernightTir(
         SleepSession session, IEnumerable<SensorGlucose> allGlucose, GlycemicThresholds thresholds)
     {
         var asleepAt = session.SleepLatencyMs.HasValue
@@ -124,7 +124,7 @@ internal static class SleepReportCalculator
 
     // ── Hypo Events ───────────────────────────────────────────────────────
 
-    internal static IReadOnlyList<SleepHypoEvent> ComputeHypoEvents(
+    public static IReadOnlyList<SleepHypoEvent> ComputeHypoEvents(
         SleepSession session,
         IEnumerable<SensorGlucose> allGlucose,
         IEnumerable<SleepStageInterval> stages,
@@ -167,7 +167,7 @@ internal static class SleepReportCalculator
 
     // ── Dawn Phenomenon ───────────────────────────────────────────────────
 
-    internal static SleepDawnPhenomenon? ComputeDawnPhenomenon(
+    public static SleepDawnPhenomenon? ComputeDawnPhenomenon(
         SleepSession session, IEnumerable<SensorGlucose> allGlucose)
     {
         var windowStart = session.EndTime - DawnWindowSize;
@@ -202,7 +202,7 @@ internal static class SleepReportCalculator
 
     // ── Wake Events ───────────────────────────────────────────────────────
 
-    internal static IReadOnlyList<SleepWakeEvent> ComputeWakeEvents(
+    public static IReadOnlyList<SleepWakeEvent> ComputeWakeEvents(
         SleepSession session,
         IEnumerable<SleepStageInterval> stages,
         IEnumerable<SensorGlucose> allGlucose)
@@ -244,7 +244,7 @@ internal static class SleepReportCalculator
 
     // ── Score Resolution ──────────────────────────────────────────────────
 
-    internal static (int? Score, SleepScoreSource? Source) ResolveScore(
+    public static (int? Score, SleepScoreSource? Source) ResolveScore(
         SleepSession session, int hypoCount, SleepStageBreakdown breakdown)
     {
         if (session.SleepScore.HasValue)
@@ -268,7 +268,7 @@ internal static class SleepReportCalculator
 
     // ── Night Summary ─────────────────────────────────────────────────────
 
-    internal static SleepNightSummary ComputeNightSummary(
+    public static SleepNightSummary ComputeNightSummary(
         SleepSession session, IEnumerable<SensorGlucose> sessionGlucose, GlycemicThresholds thresholds)
     {
         var glucose   = sessionGlucose.ToList();
@@ -321,7 +321,7 @@ internal static class SleepReportCalculator
     /// to the previous calendar day's night. Within a bucket the session with the
     /// most sleep wins, tie-broken by source priority.
     /// </summary>
-    internal static IReadOnlyList<SleepSession> DeduplicateToOnePerNight(
+    public static IReadOnlyList<SleepSession> DeduplicateToOnePerNight(
         IEnumerable<SleepSession> sessions)
     {
         return sessions
@@ -343,7 +343,7 @@ internal static class SleepReportCalculator
     /// session's timezone). The single-night by-date lookup matches on this so a
     /// deep-linked date resolves to the same night the trends views show.
     /// </summary>
-    internal static DateOnly NightDate(SleepSession session) => DateOnly.FromDateTime(NightKey(session));
+    public static DateOnly NightDate(SleepSession session) => DateOnly.FromDateTime(NightKey(session));
 
     private static DateTime NightKey(SleepSession session)
     {
@@ -363,7 +363,7 @@ internal static class SleepReportCalculator
 
     // ── Trends Summary ────────────────────────────────────────────────────
 
-    internal static SleepTrendsSummary ComputeTrendsSummary(
+    public static SleepTrendsSummary ComputeTrendsSummary(
         IReadOnlyList<SleepNightSummary> nights,
         int daysInRange,
         SleepStageReferenceRangeSet? referenceRanges = null)
@@ -459,7 +459,7 @@ internal static class SleepReportCalculator
     /// <summary>Monday on or before <paramref name="day"/>.</summary>
     private static DateTime WeekStartOf(DateTime day) => day.AddDays(-(((int)day.DayOfWeek + 6) % 7));
 
-    internal static IReadOnlyList<SleepWeekSummary> ComputeWeekSummaries(
+    public static IReadOnlyList<SleepWeekSummary> ComputeWeekSummaries(
         IReadOnlyList<SleepNightSummary> nights, DateTime from, DateTime to)
     {
         var rangeStart = from.Date;

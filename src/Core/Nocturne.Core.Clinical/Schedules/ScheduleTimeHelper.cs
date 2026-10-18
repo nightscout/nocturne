@@ -12,7 +12,7 @@ namespace Nocturne.Core.Clinical.Schedules;
 /// <see cref="Core.Models.V4.PatientRecord.Timezone"/> first, then the legacy per-profile
 /// <c>TherapySettings.Timezone</c>.
 /// </summary>
-internal static class ScheduleTimeHelper
+public static class ScheduleTimeHelper
 {
     /// <summary>
     /// Converts Unix milliseconds to seconds-from-midnight in the patient's local timezone.

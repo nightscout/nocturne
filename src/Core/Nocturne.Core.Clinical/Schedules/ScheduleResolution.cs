@@ -7,7 +7,7 @@ namespace Nocturne.Core.Clinical.Schedules;
 /// Finds the most recent entry at-or-before the query time, defaulting to the first entry
 /// when the query time precedes all entries.
 /// </summary>
-internal static class ScheduleResolution
+public static class ScheduleResolution
 {
     /// <summary>
     /// Finds the active value at a given time of day from a schedule of single-value entries.
