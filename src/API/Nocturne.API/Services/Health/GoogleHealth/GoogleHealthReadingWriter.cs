@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Connectors.GoogleHealth.Services;
@@ -18,6 +19,7 @@ public sealed class GoogleHealthReadingWriter(
     IBodyWeightService bodyWeights,
     ISleepService sleep,
     INocturneDbContextFactory contexts,
+    ITenantAccessor tenant,
     ILogger<GoogleHealthReadingWriter> logger) : IGoogleHealthReadingWriter
 {
     public const string Source = DataSources.GoogleHealthConnector;
@@ -25,7 +27,7 @@ public sealed class GoogleHealthReadingWriter(
     private const int MaxReconciliationIdentifiers = 100_000;
     private readonly Dictionary<Guid, ReconciliationRun> reconciliationRuns = [];
 
-    public async Task<Guid> BeginReconciliationAsync(
+    public Task<Guid> BeginReconciliationAsync(
         IReadOnlyCollection<string> activeTypes,
         DateTimeOffset from,
         DateTimeOffset to,
@@ -36,26 +38,20 @@ public sealed class GoogleHealthReadingWriter(
         if (activeTypes.Except(GoogleHealthClient.SupportedTypes).Any())
             throw new ArgumentException("Unsupported reconciliation data type.", nameof(activeTypes));
         var runId = Guid.CreateVersion7();
-        reconciliationRuns.Add(runId, new(await TenantIdAsync(ct), from.UtcDateTime, to.UtcDateTime,
+        reconciliationRuns.Add(runId, new(tenant.TenantId, from.UtcDateTime, to.UtcDateTime,
             activeTypes.Distinct(StringComparer.Ordinal).ToDictionary(type => type,
                 _ => new HashSet<string>(StringComparer.Ordinal), StringComparer.Ordinal)));
-        return runId;
+        return Task.FromResult(runId);
     }
 
-    private async Task<Guid> TenantIdAsync(CancellationToken ct)
-    {
-        await using var db = await contexts.CreateAsync(ct);
-        return db.TenantId;
-    }
-
-    public async Task StageReconciliationIdsAsync(
+    public Task StageReconciliationIdsAsync(
         Guid runId,
         string dataType,
         IReadOnlyCollection<string> identifiers,
         CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var run = GetRun(runId, await TenantIdAsync(ct));
+        var run = GetRun(runId, tenant.TenantId);
         if (!run.Identifiers.TryGetValue(dataType, out var staged))
             throw new ArgumentException("The data type is not part of this reconciliation run.", nameof(dataType));
         foreach (var identifier in identifiers.Where(identifier => !string.IsNullOrWhiteSpace(identifier)))
@@ -64,6 +60,8 @@ public sealed class GoogleHealthReadingWriter(
                 throw new GoogleHealthException("history_too_large", stage: "native_reconciliation_stage", dataType: dataType);
             staged.Add(identifier);
         }
+
+        return Task.CompletedTask;
     }
 
     public async Task CompleteReconciliationAsync(Guid runId, CancellationToken ct)
@@ -147,11 +145,12 @@ public sealed class GoogleHealthReadingWriter(
             await remove(batch);
     }
 
-    public async Task AbandonReconciliationAsync(Guid runId, CancellationToken ct)
+    public Task AbandonReconciliationAsync(Guid runId, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if (reconciliationRuns.TryGetValue(runId, out var run) && run.TenantId == await TenantIdAsync(ct))
+        if (reconciliationRuns.TryGetValue(runId, out var run) && run.TenantId == tenant.TenantId)
             reconciliationRuns.Remove(runId);
+        return Task.CompletedTask;
     }
 
     private ReconciliationRun GetRun(Guid runId, Guid tenantId) =>
