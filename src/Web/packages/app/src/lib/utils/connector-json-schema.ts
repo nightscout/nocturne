@@ -24,6 +24,11 @@ const JsonSchemaPropertySchema = z.looseObject({
   "x-hidden": optional(z.boolean()),
   /** Whether this property holds a secret (x-secret extension) */
   "x-secret": optional(z.boolean()),
+  /**
+   * Shown only while another property holds one of these values (x-visibleWhen extension).
+   * The backend also stops requiring the property outside that condition.
+   */
+  "x-visibleWhen": optional(z.object({ property: z.string(), values: z.array(z.string()) })),
 });
 
 export type JsonSchemaProperty = z.infer<typeof JsonSchemaPropertySchema>;

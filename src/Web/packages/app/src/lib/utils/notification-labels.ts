@@ -8,6 +8,9 @@ const LABEL_MAP: Record<string, string> = {
   compression_low_detected_subtitle:
     "Possible overnight compression lows are ready to review",
   review: "Review",
+  connector_reconnect_required: "A connector needs you to sign in again",
+  connector_reconnect_soon: "A connector's sign-in expires soon",
+  connector_open_settings: "Open connector settings",
   share_link_rotated: "Your sharing link has been replaced",
   share_link_rotated_subtitle:
     "The previous link no longer opens your data. Go to Public access in settings to create a new link, then send it to anyone who was using the old one.",

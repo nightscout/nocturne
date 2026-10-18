@@ -19,4 +19,11 @@ public class SyncResult
     /// </summary>
     public int ItemsSkipped { get; set; }
     public List<string> Errors { get; init; } = [];
+
+    /// <summary>
+    ///     What the tenant has to do for the connector, or null when nothing. Read by the host after
+    ///     every scheduled sync, which files or clears the tenant's notification accordingly; a
+    ///     connector that never sets it never notifies.
+    /// </summary>
+    public ConnectorAttention? Attention { get; set; }
 }

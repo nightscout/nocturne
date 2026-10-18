@@ -183,6 +183,7 @@ public class V4WriteScopeGatingTests
 
             ["DeduplicationController"] = NotDataCategory.TenantAdminAttribute,
             ["MigrationController"] = NotDataCategory.TenantAdminAttribute,
+            ["StateSpanMaintenanceController"] = NotDataCategory.TenantAdminAttribute,
 
             // CompatibilityController repeats [RequireAdmin] per action rather than carrying it on
             // the class.
@@ -211,6 +212,7 @@ public class V4WriteScopeGatingTests
             ["ConnectorFoodEntriesController"] = NotDataCategory.ConnectorFoodImport,
 
             ["ConfigurationController"] = NotDataCategory.TenantSettingsScope,
+            ["GlookoXtConnectController"] = NotDataCategory.TenantSettingsScope,
             ["MyFitnessPalSettingsController"] = NotDataCategory.TenantSettingsScope,
             ["WebhookSettingsController"] = NotDataCategory.TenantSettingsScope,
 

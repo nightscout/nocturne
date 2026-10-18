@@ -7,6 +7,7 @@
   import { BasalDeliveryOrigin } from "$lib/api";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
   import { formatElapsedDuration } from "$lib/utils/duration";
+  import { layoutTrack } from "./span-layout";
 
   interface BasalDeliveryChartData {
     id: string;
@@ -68,6 +69,8 @@
   const TRACK_HEIGHT = 40;
   const BASAL_TRACK_HEIGHT = 60;
   const LABEL_WIDTH = 90;
+  /** Icon (16px) plus its left offset (4px) plus a little air. */
+  const ICON_MIN_SPAN_WIDTH_PX = 24;
 
   // Calculate total chart height based on visible tracks
   const chartHeight = $derived.by(() => {
@@ -158,14 +161,13 @@
           </text>
 
           <!-- Span bars for this track -->
-          {#each track.spans as span (span.id)}
-            {@const xStartPx = context.xScale(span.startTime)}
-            {@const xEndPx = context.xScale(span.endTime)}
+          {#each layoutTrack(track.spans, context.xScale, dateRange) as { span, x: xStartPx, width: spanWidthPx } (span.id)}
+            {@const fitsIcon = spanWidthPx >= ICON_MIN_SPAN_WIDTH_PX}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <rect
               x={xStartPx}
               y={yPos + 2}
-              width={xEndPx - xStartPx}
+              width={spanWidthPx}
               height={TRACK_HEIGHT - 6}
               fill={span.color}
               class="opacity-70 cursor-pointer transition-opacity hover:opacity-100"
@@ -183,8 +185,11 @@
                 hoveredSpan = null;
               }}
             />
-            <!-- Icon/label at start of span -->
-            {#if track.key === "pumpMode"}
+            <!-- Icon/label at start of span. A span narrower than its icon gets none: the icon
+                 would sit over whatever span comes next and read as that span's state. -->
+            {#if !fitsIcon}
+              <!-- bar only -->
+            {:else if track.key === "pumpMode"}
               <g transform="translate({xStartPx}, {yPos + TRACK_HEIGHT / 2})">
                 <foreignObject x={4} y={-8} width={16} height={16}>
                   <div class="flex items-center justify-center w-full h-full">

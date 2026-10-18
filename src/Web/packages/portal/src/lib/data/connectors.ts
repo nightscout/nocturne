@@ -28,6 +28,7 @@ export const CONNECTORS: Connector[] = [
   { file: "twiist.png", name: "twiist", kind: "Pump", aliases: ["Sequel", "Tidepool Loop"] },
   { file: "mylife.png", name: "myLife", kind: "Pump", aliases: ["CamAPS", "YpsoPump"] },
   { file: "glooko.png", name: "Glooko", kind: "Cloud" },
+  { file: "glookoxt.png", name: "Glooko XT", kind: "Cloud", aliases: ["Diabnext", "XT"] },
   { file: "tidepool.jpg", name: "Tidepool", kind: "Cloud" },
   { file: "gluroo.png", name: "Gluroo", kind: "Cloud", aliases: ["Global Connect"] },
   { file: "nightscout.png", name: "Nightscout", kind: "Cloud", aliases: ["NS"] },

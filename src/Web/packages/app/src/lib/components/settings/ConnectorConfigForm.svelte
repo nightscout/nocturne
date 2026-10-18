@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import { Label } from "$lib/components/ui/label";
   import { Input } from "$lib/components/ui/input";
@@ -44,6 +45,12 @@
     hasSecrets?: boolean;
     /** Whether to show the .env variable name hints. False for non-platform-admin users. */
     showEnvVarHints?: boolean;
+    /**
+     * A connector-specific sign-in rendered inside the Credentials card, after the schema-driven
+     * fields, so a connector whose token comes from an interactive flow keeps its credentials in
+     * the same place as every other connector.
+     */
+    credentials?: Snippet;
     onSave: (config: Record<string, unknown>, secrets: Record<string, string>) => Promise<void>;
   }
 
@@ -54,6 +61,7 @@
     effectiveConfig = null,
     hasSecrets = false,
     showEnvVarHints = true,
+    credentials,
     onSave,
   }: Props = $props();
 
@@ -126,6 +134,9 @@
       // Skip hidden fields - connector derives these automatically
       if (propSchema["x-hidden"] === true) continue;
 
+      // Skip fields whose governing property currently rules them out
+      if (!isVisible(propSchema)) continue;
+
       // Skip 'enabled' field - it's controlled by the "Enable Connector" toggle
       if (propName.toLowerCase() === "enabled") continue;
 
@@ -167,7 +178,7 @@
         name,
         schema: schema.properties[name],
       }))
-      .filter((s) => s.schema && s.schema["x-hidden"] !== true);
+      .filter((s) => s.schema && s.schema["x-hidden"] !== true && isVisible(s.schema));
   });
 
   // Get non-secret fields in the Credentials category
@@ -178,10 +189,22 @@
         ([name, propSchema]) =>
           getPropertyMeta(name).category === "Credentials" &&
           !secretFieldSet.has(name) &&
-          propSchema["x-hidden"] !== true
+          propSchema["x-hidden"] !== true &&
+          isVisible(propSchema)
       )
       .map(([name, schema]) => ({ name, schema }));
   });
+
+  // A property conditioned on another (x-visibleWhen) is shown only while that property, as the
+  // form currently has it, holds one of the listed values. Compared without case, as the backend does.
+  function isVisible(propSchema: JsonSchemaProperty): boolean {
+    const condition = propSchema["x-visibleWhen"];
+    if (!condition) return true;
+    const master = getPropertyValue(condition.property);
+    if (master === undefined || master === null) return false;
+    const text = String(master).toLowerCase();
+    return condition.values.some((v) => v.toLowerCase() === text);
+  }
 
   function getPropertyValue(propName: string): unknown {
     // Priority: user configuration > effective config from connector > schema default
@@ -519,7 +542,7 @@
   {/if}
 
   <!-- Credentials Section -->
-  {#if secretFields.length > 0 || credentialFields.length > 0}
+  {#if secretFields.length > 0 || credentialFields.length > 0 || credentials}
     <Separator class="my-6" />
 
     <Card data-testid="connector-credentials">
@@ -543,7 +566,7 @@
       <CardContent class="space-y-4">
         {#each credentialFields as { name, schema: propSchema }, i (name)}
           {@render propertyField(name, propSchema)}
-          {#if i < credentialFields.length - 1 || secretFields.length > 0}
+          {#if i < credentialFields.length - 1 || secretFields.length > 0 || credentials}
             <Separator />
           {/if}
         {/each}
@@ -585,10 +608,13 @@
               </p>
             {/if}
           </div>
-          {#if i < secretFields.length - 1}
+          {#if i < secretFields.length - 1 || credentials}
             <Separator />
           {/if}
         {/each}
+        {#if credentials}
+          {@render credentials()}
+        {/if}
       </CardContent>
     </Card>
 

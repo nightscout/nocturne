@@ -14,9 +14,21 @@ public static class GlookoConstants
     public const string RegionUS = "US";
 
     /// <summary>
+    ///     Glooko XT, the former Diabnext service Glooko runs for French patients. Not a Glooko
+    ///     data centre but a separate product with its own accounts, sign-in (a code emailed to
+    ///     the patient) and transport (Socket.IO); everything under <c>Xt/</c> serves it.
+    /// </summary>
+    public const string RegionXT = "XT";
+
+    /// <summary>
     ///     All supported region codes (runtime list for validation).
     /// </summary>
-    public static readonly string[] AllowedRegions = [RegionCA, RegionEU, RegionUS];
+    public static readonly string[] AllowedRegions = [RegionCA, RegionEU, RegionUS, RegionXT];
+
+    /// <summary>The regions served by the Glooko web API; <see cref="RegionXT"/> is not one of them.</summary>
+    public static readonly string[] ClassicRegions = [RegionCA, RegionEU, RegionUS];
+
+    public static bool IsXt(string? server) => string.Equals(server?.Trim(), RegionXT, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     ///     Default region when none is configured.
