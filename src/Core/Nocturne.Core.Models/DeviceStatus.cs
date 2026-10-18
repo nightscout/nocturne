@@ -646,6 +646,7 @@ public class LoopAutomaticDoseRecommendation
     public string? Notice { get; set; }
 }
 
+/// <summary>Loop's carbs on board (COB).</summary>
 public class LoopCob
 {
     [JsonPropertyName("timestamp")]

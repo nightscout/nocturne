@@ -54,6 +54,7 @@ public class NotificationBase
     /// </summary>
     public int Count { get; set; }
 
+    /// <summary>When the notification was last recorded, in Unix milliseconds.</summary>
     public long LastRecorded { get; set; }
 
     /// <summary>
@@ -61,6 +62,7 @@ public class NotificationBase
     /// </summary>
     public bool Persistent { get; set; }
 
+    /// <summary>Marks an all-clear notification in the Nightscout payload.</summary>
     public bool Clear { get; set; }
 }
 
@@ -156,6 +158,7 @@ public class AdminNotification
     [JsonPropertyName("count")]
     public int Count { get; set; } = 1;
 
+    /// <summary>When the notification was last recorded, in Unix milliseconds.</summary>
     [JsonPropertyName("lastRecorded")]
     public long LastRecorded { get; set; }
 

@@ -473,6 +473,7 @@ public class EmergencyContactConfig
 
 public class NotificationChannelsConfig
 {
+    /// <summary>Web push notification channel.</summary>
     [JsonPropertyName("push")]
     public ChannelConfig Push { get; set; } = new() { Enabled = true };
 

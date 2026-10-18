@@ -57,6 +57,10 @@ public class ConnectorStatusInfo
 {
     public string ConnectorName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The <c>enabled</c> flag in the stored configuration (<c>ConfigurationJson</c>), not the active
+    /// state that <see cref="IConnectorConfigurationService.SetActiveAsync"/> writes.
+    /// </summary>
     public bool IsEnabled { get; set; }
 
     public bool HasDatabaseConfig { get; set; }

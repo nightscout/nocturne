@@ -56,6 +56,7 @@ public enum TreatmentEventType
     [EnumMember(Value = "Question")]
     Question,
 
+    /// <summary>Pump infusion site changed</summary>
     [EnumMember(Value = "Site Change")]
     SiteChange,
 
@@ -74,6 +75,7 @@ public enum TreatmentEventType
     [EnumMember(Value = "Pump Battery Change")]
     PumpBatteryChange,
 
+    /// <summary>Insulin cartridge changed</summary>
     [EnumMember(Value = "Insulin Change")]
     InsulinChange,
 
