@@ -12,6 +12,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Services.Demo.Services;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -46,10 +47,12 @@ public sealed class DemoCoverageIntegrationTests(
             dbContext.TenantId = Fixture.TenantId;
             var uiSettings = await scope.ServiceProvider.GetRequiredService<IUISettingsService>().GetSettingsAsync()
                 ?? new UISettingsConfiguration();
-            uiSettings.DataQuality.SleepSchedule.Timezone = "Australia/Sydney";
+            // The seeder lays its compression artifacts at server-local wall-clock times.
+            var demoTimezone = DemoTherapyProfile.LocalIanaTimezone();
+            uiSettings.DataQuality.SleepSchedule.Timezone = demoTimezone;
             await scope.ServiceProvider.GetRequiredService<IUISettingsService>().SaveSettingsAsync(uiSettings);
             var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow,
-                TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney")).DateTime);
+                TimeZoneInfo.FindSystemTimeZoneById(demoTimezone)).DateTime);
             var realNight = Enumerable.Range(0, 14).Select(offset => today.AddDays(-offset))
                 .First(date => date.DayOfWeek is DayOfWeek.Sunday or DayOfWeek.Tuesday or DayOfWeek.Thursday);
             var realSuggestion = new CompressionLowSuggestionEntity
