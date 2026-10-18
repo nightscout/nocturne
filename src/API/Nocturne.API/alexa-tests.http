@@ -4,7 +4,7 @@
 ###
 
 @baseUrl = https://localhost:7195
-@alexaEndpoint = {{baseUrl}}/api/alexa
+@alexaEndpoint = {{baseUrl}}/api/v1/alexa
 
 ### Test 1: Launch Request
 POST {{alexaEndpoint}}

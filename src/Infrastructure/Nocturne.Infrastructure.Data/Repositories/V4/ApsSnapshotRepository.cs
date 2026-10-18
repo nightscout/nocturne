@@ -57,13 +57,6 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
             .ToListAsync(ct);
     }
 
-    /// <inheritdoc />
-    public async Task<int> CountAsync(DateTime? from, DateTime? to, string? device, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await InWindow(ctx.ApsSnapshots.AsNoTracking(), from, to, device).CountAsync(ct);
-    }
-
     /// <summary>
     /// Gets APS snapshots by correlation IDs.
     /// </summary>
@@ -81,35 +74,6 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
             .AsNoTracking()
             .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
             .ToListAsync(ct);
-
-        return entities.Select(ApsSnapshotMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Gets APS snapshots modified since the given timestamp, ordered oldest-first.
-    /// </summary>
-    /// <param name="lastModifiedMills">Unix millisecond timestamp threshold.</param>
-    /// <param name="limit">Maximum number of records to return.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Matching APS snapshots ordered by modification time ascending.</returns>
-    /// <remarks>
-    /// Filters and orders on the server write clock (<c>sys_updated_at</c>), the clock the record
-    /// reports as <c>srvModified</c>, so a late upload is delivered even when its event timestamp
-    /// predates the cursor. The page boundary is <see cref="HistoryPage"/>'s.
-    /// </remarks>
-    public async Task<IEnumerable<ApsSnapshot>> GetModifiedSinceAsync(
-        long lastModifiedMills, int limit = 1000, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await HistoryPage.GetAsync(
-            ctx.ApsSnapshots.AsNoTracking(),
-            e => e.SysUpdatedAt,
-            e => e.Id,
-            lastModifiedMills,
-            limit,
-            Logger,
-            nameof(ApsSnapshot),
-            ct);
 
         return entities.Select(ApsSnapshotMapper.ToDomainModel);
     }

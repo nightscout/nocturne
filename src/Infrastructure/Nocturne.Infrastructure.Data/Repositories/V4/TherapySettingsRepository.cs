@@ -91,6 +91,20 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
             AuditContext, $"legacy_id_prefix={prefix}", ct);
     }
 
+    /// <inheritdoc />
+    public async Task<IEnumerable<TherapySettings>> GetByLegacyIdPrefixAsync(
+        string prefix, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx
+            .TherapySettings.AsNoTracking()
+            .Where(e => e.LegacyId != null && e.LegacyId.StartsWith(prefix))
+            .OrderByDescending(e => e.Timestamp)
+            .ThenByDescending(e => e.Id)
+            .ToListAsync(ct);
+        return entities.Select(TherapySettingsMapper.ToDomainModel);
+    }
+
     /// <summary>
     /// Gets therapy settings by correlation identifier.
     /// </summary>

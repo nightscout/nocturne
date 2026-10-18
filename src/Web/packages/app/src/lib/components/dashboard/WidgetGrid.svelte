@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { WidgetId } from "$lib/api/generated/nocturne-api-client";
-  import { knownTopWidgets, loadTopWidget } from "./widget-registry";
+  import { knownTopWidgets, loadTopWidget, topWidgetPlaceholder } from "./widget-registry";
   import WidgetCard from "./widgets/WidgetCard.svelte";
+  import WidgetPlaceholder from "./widgets/WidgetPlaceholder.svelte";
   import { Card } from "$lib/components/ui/card";
 
   interface Props {
@@ -20,9 +21,7 @@
   <div class="grid grid-cols-1 divide-y divide-border @md:grid-cols-3 @md:divide-x @md:divide-y-0">
     {#each displayWidgets as widgetId (widgetId)}
       {#await loadTopWidget(widgetId)}
-        <WidgetCard title="Loading">
-          <div class="bg-muted h-7 w-20 animate-pulse rounded"></div>
-        </WidgetCard>
+        <WidgetPlaceholder shape={topWidgetPlaceholder(widgetId)} />
       {:then WidgetComponent}
         <WidgetComponent />
       {:catch}

@@ -90,7 +90,21 @@ describe("propagateAuthCookies", () => {
 
     expect(setByName.IsAuthenticated?.value).toBe("true");
     // IsAuthenticated is frontend-visible, so must not be httpOnly
-    expect(setByName.IsAuthenticated?.opts.httpOnly).toBeUndefined();
+    expect(setByName.IsAuthenticated?.opts.httpOnly).toBe(false);
+  });
+
+  it("passes httpOnly: false explicitly when the Set-Cookie omits HttpOnly, since SvelteKit's cookies.set defaults it to true", () => {
+    const { cookies, calls } = createRecordingCookies();
+
+    propagateAuthCookies(
+      [`${AUTH_COOKIE_NAMES.isAuthenticated}=true; Path=/; Secure; SameSite=Lax; Max-Age=604800`],
+      cookies
+    );
+
+    // An HttpOnly marker hides the session from document.cookie, so the authenticated layout's
+    // client guard sends a freshly signed-in user straight back to /auth/login.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ op: "set", opts: { httpOnly: false } });
   });
 
   it("ignores Set-Cookie headers for cookies that are not auth-related", () => {
@@ -369,6 +383,7 @@ describe("propagateAuthCookies and the last-used sign-in hint", () => {
         value: "passkey",
         opts: {
           path: "/",
+          httpOnly: false,
           domain: ".nocturne.run",
           secure: true,
           sameSite: "lax",

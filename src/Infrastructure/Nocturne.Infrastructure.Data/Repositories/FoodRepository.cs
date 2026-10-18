@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -175,6 +176,7 @@ public class FoodRepository : IFoodRepository
     /// <remarks>
     /// Pages on <c>sys_updated_at</c> through <see cref="HistoryPage"/>, so an edited food is
     /// delivered again and a poll reads only the page, off <c>ix_foods_tenant_sys_updated_at</c>.
+    /// A deleted food is delivered with <c>isValid: false</c>.
     /// </remarks>
     public async Task<ModifiedSincePage<Food>> GetFoodModifiedSinceAsync(
         long cursorMills,
@@ -183,7 +185,7 @@ public class FoodRepository : IFoodRepository
     )
     {
         var entities = await HistoryPage.GetAsync(
-            _context.Foods.AsNoTracking(),
+            _context.Foods.IncludingDeleted().AsNoTracking(),
             f => f.SysUpdatedAt,
             f => f.Id,
             cursorMills,
@@ -194,9 +196,17 @@ public class FoodRepository : IFoodRepository
         );
 
         return new ModifiedSincePage<Food>(
-            entities.Select(FoodMapper.ToDomainModel).ToList(),
+            entities.Select(ToHistoryFood).ToList(),
             entities.Count > 0 ? HistoryPage.ToMilliseconds(entities[^1].SysUpdatedAt) : null
         );
+    }
+
+    private static Food ToHistoryFood(FoodEntity entity)
+    {
+        var food = FoodMapper.ToDomainModel(entity);
+        if (entity.DeletedAt is not null)
+            food.IsValid = false;
+        return food;
     }
 
     /// <summary>
@@ -218,7 +228,9 @@ public class FoodRepository : IFoodRepository
             // A legacy Mongo _id addresses its row through OriginalId, not the derived key.
             var entityId = entity.Id;
             var originalId = entity.OriginalId;
-            var existingEntity = await _context.Foods.FirstOrDefaultAsync(
+            // A deleted food keeps its row and key, so re-creating it restores that row, as a
+            // Nightscout v3 create replaces the deleted document it matches.
+            var existingEntity = await _context.Foods.IncludingDeleted().FirstOrDefaultAsync(
                 f => f.Id == entityId || (originalId != null && f.OriginalId == originalId),
                 cancellationToken
             );
@@ -228,6 +240,7 @@ public class FoodRepository : IFoodRepository
                 // Through the mapper rather than CurrentValues.SetValues: a row matched on its
                 // OriginalId has its own primary key, and copying the derived one onto it throws.
                 FoodMapper.UpdateEntity(existingEntity, food);
+                existingEntity.DeletedAt = null;
                 resultEntities.Add(existingEntity);
             }
             else
@@ -306,8 +319,7 @@ public class FoodRepository : IFoodRepository
             return false;
         }
 
-        _context.Foods.Remove(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        await SoftDeleteAsync([entity], cancellationToken);
 
         return true;
     }
@@ -341,11 +353,40 @@ public class FoodRepository : IFoodRepository
 
         if (count > 0)
         {
-            _context.Foods.RemoveRange(entities);
-            await _context.SaveChangesAsync(cancellationToken);
+            await SoftDeleteAsync(entities, cancellationToken);
         }
 
         return count;
+    }
+
+    /// <summary>
+    /// Soft-deletes <paramref name="entities"/>, and does to the rows referencing them what the
+    /// foreign keys do on a hard delete: meal attributions keep their portion as "Other", connector
+    /// food entries lose the link, favorites go. <c>MutationAuditInterceptor</c> attributes the
+    /// delete, which decides whether a connector re-import may restore the food.
+    /// </summary>
+    private Task SoftDeleteAsync(List<FoodEntity> entities, CancellationToken cancellationToken)
+    {
+        var ids = entities.Select(f => f.Id).ToList();
+
+        return _context.ExecuteInTransactionAsync(async ct =>
+        {
+            await _context.TreatmentFoods
+                .Where(tf => tf.FoodId != null && ids.Contains(tf.FoodId.Value))
+                .ExecuteUpdateAsync(s => s.SetProperty(tf => tf.FoodId, (Guid?)null), ct);
+            await _context.ConnectorFoodEntries
+                .Where(e => e.FoodId != null && ids.Contains(e.FoodId.Value))
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.FoodId, (Guid?)null), ct);
+            await _context.UserFoodFavorites
+                .Where(f => ids.Contains(f.FoodId))
+                .ExecuteDeleteAsync(ct);
+
+            var deletedAt = NocturneDbContext.UtcNowAtStoredPrecision();
+            foreach (var entity in entities)
+                entity.DeletedAt = deletedAt;
+
+            return await _context.SaveChangesAsync(ct);
+        }, ct: cancellationToken);
     }
 
     /// <summary>

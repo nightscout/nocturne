@@ -1336,5 +1336,35 @@ public class PasskeyControllerTests : IDisposable
         response.HasSingleSignInMethod.Should().Be(single);
     }
 
+    [Fact]
+    public async Task RemoveCredential_WhenLastPrimaryFactor_Returns409WithTheLastFactorCode()
+    {
+        Authenticate();
+        var credentialId = Guid.NewGuid();
+        _subjectService.Setup(s => s.TryRemovePasskeyCredentialAsync(_subjectId, credentialId))
+            .ReturnsAsync(FactorRemovalResult.LastPrimaryFactor);
+
+        var result = await _controller.RemoveCredential(credentialId);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        var problem = objectResult.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Detail.Should().NotBeNullOrWhiteSpace();
+        problem.Extensions.Should().ContainKey("error").WhoseValue.Should().Be("last_factor");
+    }
+
+    [Fact]
+    public async Task RemoveCredential_WhenNotFound_Returns404()
+    {
+        Authenticate();
+        var credentialId = Guid.NewGuid();
+        _subjectService.Setup(s => s.TryRemovePasskeyCredentialAsync(_subjectId, credentialId))
+            .ReturnsAsync(FactorRemovalResult.NotFound);
+
+        var result = await _controller.RemoveCredential(credentialId);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
     #endregion
 }

@@ -422,6 +422,27 @@ public class ChartDataServiceTests
             result[0].Color.Should().Be(ChartColor.InsulinBolus);
         }
 
+        [Theory]
+        [InlineData(Nocturne.Core.Constants.DataSources.SensorSessionInference, true)]
+        [InlineData(Nocturne.Core.Constants.DataSources.XDrip, false)]
+        [InlineData(null, false)]
+        public void DeviceEvent_CarriesWhetherItWasInferred(string? dataSource, bool inferred)
+        {
+            var deviceEvents = new List<DeviceEvent>
+            {
+                new()
+                {
+                    EventType = DeviceEventType.SensorStart,
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(TestMills).UtcDateTime,
+                    DataSource = dataSource,
+                },
+            };
+
+            var result = ChartDataService.BuildDeviceEventMarkers(deviceEvents);
+
+            result.Should().ContainSingle().Which.IsInferred.Should().Be(inferred);
+        }
+
         [Fact]
         public void DeviceEvent_SensorStart_Categorized()
         {

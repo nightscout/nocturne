@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
@@ -21,7 +22,7 @@ public class GlookoNoteMapper(string connectorSource, GlookoTimeMapper timeMappe
     {
         var results = new List<Note>();
 
-        foreach (var note in notes)
+        foreach (var note in ConnectorFaults.NonNullRecords(notes, _logger, _connectorSource, "SSV2 note"))
         {
             try
             {
@@ -48,9 +49,9 @@ public class GlookoNoteMapper(string connectorSource, GlookoTimeMapper timeMappe
                     ModifiedAt = now
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping SSV2 note", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed SSV2 note {Guid}", _connectorSource, note.Guid);
             }
         }
 

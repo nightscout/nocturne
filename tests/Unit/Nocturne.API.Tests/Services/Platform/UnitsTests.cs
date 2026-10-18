@@ -1,6 +1,6 @@
 using System.Globalization;
 using Nocturne.API.Services.Platform;
-using Nocturne.API.Services.Analytics;
+using Nocturne.Core.Clinical.Statistics;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Platform;

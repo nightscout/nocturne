@@ -22,7 +22,6 @@ public partial class CareLinkAuthFlowService : IDisposable
     private readonly HttpClient _httpClient;
     private readonly ILogger _logger;
 
-    /// <param name="logger">Logger for the flow.</param>
     /// <param name="handler">
     /// Overrides the default handler. Tests pass a fake; production leaves it null.
     /// </param>
@@ -56,7 +55,6 @@ public partial class CareLinkAuthFlowService : IDisposable
     public async Task<(AuthResult? Result, bool ShouldRetry)> LoginAsync(
         string username, string password, string server, CancellationToken ct)
     {
-        // 1-2. Discovery and Auth0 SSO config
         var ssoConfig = await FetchSsoConfigAsync(server, ct);
         if (ssoConfig == null)
             return (null, true);
@@ -64,11 +62,9 @@ public partial class CareLinkAuthFlowService : IDisposable
         var baseUrl = ssoConfig.GetBaseUrl();
         var tokenUrl = $"{baseUrl}{ssoConfig.SystemEndpoints.TokenEndpointPath}";
 
-        // 3. PKCE
         var (codeVerifier, codeChallenge) = GeneratePkce();
         var state = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
 
-        // 4. GET authorize endpoint — follow redirects to login form
         var authorizeUrl = BuildAuthorizeUrl(baseUrl, ssoConfig, codeChallenge, state);
         _logger.LogDebug("Requesting authorize URL: {Url}", authorizeUrl);
 
@@ -79,7 +75,6 @@ public partial class CareLinkAuthFlowService : IDisposable
             return (null, false);
         }
 
-        // 5. Extract form fields and action URL
         var (formAction, hiddenFields) = ExtractFormData(authorizeResult.Html);
         if (formAction == null)
         {
@@ -87,14 +82,12 @@ public partial class CareLinkAuthFlowService : IDisposable
             return (null, false);
         }
 
-        // Resolve relative form action
         if (!formAction.StartsWith("http", StringComparison.OrdinalIgnoreCase))
         {
             var pageUri = new Uri(authorizeResult.FinalUrl);
             formAction = new Uri(pageUri, formAction).ToString();
         }
 
-        // 6. POST credentials
         hiddenFields["username"] = username;
         hiddenFields["password"] = password;
         hiddenFields["action"] = "default";
@@ -121,7 +114,6 @@ public partial class CareLinkAuthFlowService : IDisposable
             throw new HttpRequestException(
                 "CareLink login failed: wrong username or password", null, HttpStatusCode.Unauthorized);
 
-        // 7. Follow redirects to capture auth code
         var authCode = await ExtractAuthCode(postResponse, postBody, ct);
         if (authCode == null)
         {
@@ -129,7 +121,6 @@ public partial class CareLinkAuthFlowService : IDisposable
             return (null, true);
         }
 
-        // 8. Exchange code for tokens
         _logger.LogInformation("Exchanging authorization code for tokens");
         using var tokenContent = new FormUrlEncodedContent(new Dictionary<string, string>
         {

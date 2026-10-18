@@ -34,6 +34,10 @@ ENV PUBLIC_WEBSOCKET_MAX_RECONNECT_DELAY=30000
 ENV PUBLIC_WEBSOCKET_PING_TIMEOUT=15000
 ENV PUBLIC_WEBSOCKET_PING_INTERVAL=20000
 
+# A vite build only reads the catalogues: a string they do not hold yet renders
+# empty. They are synced on main after each merge, so a commit can lag them.
+RUN pnpm run translations:sync
+
 # Build the app
 RUN pnpm --filter @nocturne/app run build
 

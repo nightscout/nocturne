@@ -67,6 +67,8 @@ public abstract class AuthTokenProviderBase<TConfig>(
     /// </summary>
     protected virtual int TokenLifetimeBufferMinutes => 5;
 
+    protected virtual bool RethrowTokenAcquisitionExceptions => false;
+
     /// <summary>
     ///     The connector name used as the cache key prefix, taken from the configuration type's own
     ///     registration so a provider cannot key its tokens under a name no other component knows.
@@ -156,6 +158,8 @@ public abstract class AuthTokenProviderBase<TConfig>(
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(ex, "Error acquiring token for {ProviderName}", GetType().Name);
+            if (RethrowTokenAcquisitionExceptions)
+                throw;
             return null;
         }
         finally
@@ -182,7 +186,6 @@ public abstract class AuthTokenProviderBase<TConfig>(
     ///     skip the provider and a cache write would overwrite the tenant's live session.
     /// </summary>
     /// <param name="config">The configuration carrying the credentials to verify.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Whether the provider issued a token for the credentials.</returns>
     public async Task<bool> VerifyCredentialsAsync(TConfig config, CancellationToken cancellationToken = default)
     {
@@ -226,8 +229,6 @@ public abstract class AuthTokenProviderBase<TConfig>(
     ///     Acquires a new authentication token from the external service.
     ///     This method is called when the cached token is expired or missing.
     /// </summary>
-    /// <param name="config">The per-tenant connector configuration</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>A tuple containing the token, its expiry time, and optional metadata</returns>
     protected abstract Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         TConfig config, CancellationToken cancellationToken);
@@ -351,7 +352,8 @@ public abstract class AuthTokenProviderBase<TConfig>(
 
                     return RetryStep<T>.Complete(default);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException
+                                           || !cancellationToken.IsCancellationRequested)
                 {
                     _logger.LogError(
                         ex,
@@ -381,7 +383,6 @@ public abstract class AuthTokenProviderBase<TConfig>(
     /// </summary>
     /// <param name="response">The failed HTTP response (caller must verify !IsSuccessStatusCode before calling)</param>
     /// <param name="operationName">A human-readable name for the operation, used in log messages</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if the error is retryable and the caller should retry; false otherwise</returns>
     protected async Task<bool> HandleErrorResponseAsync(
         HttpResponseMessage response,

@@ -605,7 +605,6 @@ public class DeviceStatusDecomposerTests : IDisposable
         // Assert - Enacted object exists but Received is false
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
         aps.Enacted.Should().BeFalse();
-        // Fields from Enacted are still used since it's the command source (Enacted ?? Suggested)
         aps.EnactedRate.Should().Be(1.0);
         aps.EnactedDuration.Should().Be(30);
     }
@@ -782,6 +781,191 @@ public class DeviceStatusDecomposerTests : IDisposable
 
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
         aps.PredictedStartMills.Should().BeNull();
+    }
+
+    #endregion
+
+    #region OpenAPS Freshest Command
+
+    private static DeviceStatus HeldTempBasalStatus(string? enactedTimestamp, string? suggestedTimestamp) => new()
+    {
+        Id = "held-temp-basal",
+        Mills = 1700000000000,
+        Device = "openaps://Trio",
+        OpenAps = new OpenApsStatus
+        {
+            Suggested = new OpenApsSuggested
+            {
+                Bg = 259.0, EventualBG = 210.0, TargetBG = 110.0, COB = 12.0,
+                InsulinReq = 1.2, SensitivityRatio = 1.3,
+                Timestamp = suggestedTimestamp,
+                PredBGs = new OpenApsPredBGs
+                {
+                    IOB = new List<double?> { 259, 255 },
+                    ZT = new List<double?> { 259, 250 },
+                    COB = new List<double?> { 259, 262 },
+                    UAM = new List<double?> { 259, 265 },
+                },
+            },
+            Enacted = new OpenApsEnacted
+            {
+                Received = true,
+                Rate = 2.4, Duration = 30, Smb = 0.4,
+                Bg = 227.0, EventualBG = 180.0, TargetBG = 100.0, COB = 20.0,
+                InsulinReq = 0.6, SensitivityRatio = 1.1,
+                Timestamp = enactedTimestamp,
+                PredBGs = new OpenApsPredBGs
+                {
+                    IOB = new List<double?> { 227, 220 },
+                    ZT = new List<double?> { 227, 215 },
+                    COB = new List<double?> { 227, 230 },
+                    UAM = new List<double?> { 227, 235 },
+                },
+            },
+        },
+    };
+
+    private static void ShouldCarrySuggested(V4Models.ApsSnapshot aps)
+    {
+        aps.CurrentBg.Should().Be(259.0);
+        aps.EventualBg.Should().Be(210.0);
+        aps.TargetBg.Should().Be(110.0);
+        aps.Cob.Should().Be(12.0);
+        aps.RecommendedBolus.Should().Be(1.2);
+        aps.SensitivityRatio.Should().Be(1.3);
+        aps.PredictedIobJson.Should().Be("[259,255]");
+        aps.PredictedZtJson.Should().Be("[259,250]");
+        aps.PredictedCobJson.Should().Be("[259,262]");
+        aps.PredictedUamJson.Should().Be("[259,265]");
+    }
+
+    private static void ShouldCarryEnacted(V4Models.ApsSnapshot aps)
+    {
+        aps.CurrentBg.Should().Be(227.0);
+        aps.EventualBg.Should().Be(180.0);
+        aps.TargetBg.Should().Be(100.0);
+        aps.Cob.Should().Be(20.0);
+        aps.RecommendedBolus.Should().Be(0.6);
+        aps.SensitivityRatio.Should().Be(1.1);
+        aps.PredictedIobJson.Should().Be("[227,220]");
+        aps.PredictedZtJson.Should().Be("[227,215]");
+        aps.PredictedCobJson.Should().Be("[227,230]");
+        aps.PredictedUamJson.Should().Be("[227,235]");
+    }
+
+    private static void ShouldKeepEnactedDelivery(V4Models.ApsSnapshot aps)
+    {
+        aps.Enacted.Should().BeTrue();
+        aps.EnactedRate.Should().Be(2.4);
+        aps.EnactedDuration.Should().Be(30);
+        aps.EnactedBolusVolume.Should().Be(0.4);
+    }
+
+    private async Task<V4Models.ApsSnapshot> DecomposeApsAsync(DeviceStatus ds)
+    {
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        return result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SuggestedNewerThanEnacted_TakesCommandFieldsFromSuggested()
+    {
+        var aps = await DecomposeApsAsync(HeldTempBasalStatus("2026-10-04T22:48:52Z", "2026-10-04T23:18:55Z"));
+
+        ShouldCarrySuggested(aps);
+        aps.PredictedStartTimestamp.Should().Be(new DateTime(2026, 10, 4, 23, 18, 55, DateTimeKind.Utc));
+        ShouldKeepEnactedDelivery(aps);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SuggestedNewerAcrossOffsets_ComparesInUtc()
+    {
+        var aps = await DecomposeApsAsync(HeldTempBasalStatus("2026-10-04T22:48:52Z", "2026-10-05T09:18:55+10:00"));
+
+        ShouldCarrySuggested(aps);
+        aps.PredictedStartTimestamp.Should().Be(new DateTime(2026, 10, 4, 23, 18, 55, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_EnactedNewerThanSuggested_TakesCommandFieldsFromEnacted()
+    {
+        var aps = await DecomposeApsAsync(HeldTempBasalStatus("2026-10-04T23:18:56Z", "2026-10-04T23:18:55Z"));
+
+        ShouldCarryEnacted(aps);
+        aps.PredictedStartTimestamp.Should().Be(new DateTime(2026, 10, 4, 23, 18, 56, DateTimeKind.Utc));
+        ShouldKeepEnactedDelivery(aps);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_EqualCommandTimestamps_PrefersEnacted()
+    {
+        var aps = await DecomposeApsAsync(HeldTempBasalStatus("2026-10-04T23:18:55Z", "2026-10-04T23:18:55Z"));
+
+        ShouldCarryEnacted(aps);
+        ShouldKeepEnactedDelivery(aps);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("not-a-timestamp")]
+    public async Task DecomposeAsync_OnlySuggestedTimestampParses_TakesSuggested(string? enactedTimestamp)
+    {
+        var aps = await DecomposeApsAsync(HeldTempBasalStatus(enactedTimestamp, "2026-10-04T23:18:55Z"));
+
+        ShouldCarrySuggested(aps);
+        ShouldKeepEnactedDelivery(aps);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("not-a-timestamp")]
+    public async Task DecomposeAsync_OnlyEnactedTimestampParses_TakesEnacted(string? suggestedTimestamp)
+    {
+        var aps = await DecomposeApsAsync(HeldTempBasalStatus("2026-10-04T22:48:52Z", suggestedTimestamp));
+
+        ShouldCarryEnacted(aps);
+        ShouldKeepEnactedDelivery(aps);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("not-a-timestamp", "also-not-a-timestamp")]
+    public async Task DecomposeAsync_NeitherCommandTimestampParses_PrefersEnacted(
+        string? enactedTimestamp, string? suggestedTimestamp)
+    {
+        var aps = await DecomposeApsAsync(HeldTempBasalStatus(enactedTimestamp, suggestedTimestamp));
+
+        ShouldCarryEnacted(aps);
+        aps.PredictedStartTimestamp.Should().BeNull();
+        ShouldKeepEnactedDelivery(aps);
+    }
+
+    [Theory]
+    [InlineData("2026-10-04T22:48:52Z", "2026-10-04T23:18:55Z", "2026-10-04T23:18:55Z")]
+    [InlineData("2026-10-04T23:18:56Z", "2026-10-04T23:18:55Z", "2026-10-04T23:18:56Z")]
+    [InlineData("not-a-timestamp", "2026-10-04T23:18:55Z", "2026-10-04T23:18:55Z")]
+    public void ResolveTimestamp_WithoutMillsOrIobTime_UsesFreshestCommand(
+        string enactedTimestamp, string suggestedTimestamp, string expected)
+    {
+        var ds = HeldTempBasalStatus(enactedTimestamp, suggestedTimestamp);
+        ds.Mills = 0;
+
+        DeviceStatusDecomposer.ResolveTimestamp(ds)
+            .Should().Be(DateTimeOffset.Parse(expected).UtcDateTime);
+    }
+
+    [Fact]
+    public void ResolveTimestamp_MillsAndIobTime_TakePrecedenceOverTheCommand()
+    {
+        var withMills = HeldTempBasalStatus("2026-10-04T22:48:52Z", "2026-10-04T23:18:55Z");
+        var withIobTime = HeldTempBasalStatus("2026-10-04T22:48:52Z", "2026-10-04T23:18:55Z");
+        withIobTime.Mills = 0;
+        withIobTime.OpenAps!.Iob = new OpenApsIobData { Time = "2026-10-04T23:19:00Z" };
+
+        DeviceStatusDecomposer.ResolveTimestamp(withMills)
+            .Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime);
+        DeviceStatusDecomposer.ResolveTimestamp(withIobTime)
+            .Should().Be(new DateTime(2026, 10, 4, 23, 19, 0, DateTimeKind.Utc));
     }
 
     #endregion
@@ -2310,6 +2494,34 @@ public class DeviceStatusDecomposerTests : IDisposable
     }
 
     [Fact]
+    public async Task DecomposeAsync_ClientIsValidAndServerStamps_AreNotStored()
+    {
+        var json = """
+        {
+            "_id": "aaps-stamps-1",
+            "mills": 1700000000000,
+            "device": "openaps://samsung",
+            "isValid": false,
+            "srvModified": 1,
+            "srvCreated": 1,
+            "configuration": { "sensitivityType": "oref1" },
+            "openaps": {
+                "iob": { "iob": 1.0 },
+                "suggested": { "bg": 120, "eventualBG": 100, "timestamp": "2023-11-14T12:00:00Z" }
+            }
+        }
+        """;
+        var ds = JsonSerializer.Deserialize<DeviceStatus>(json)!;
+
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        var extras = _context.DeviceStatusExtras.Single().ExtrasJson;
+        extras.Should().Contain("configuration");
+        extras.Should().NotContain("isValid").And.NotContain("srvModified").And.NotContain("srvCreated");
+        _context.ApsSnapshots.Single().DeletedAt.Should().BeNull();
+    }
+
+    [Fact]
     public async Task DecomposeAsync_WithRadioAdapter_StoresExtras()
     {
         // Arrange
@@ -2834,6 +3046,202 @@ public class DeviceStatusDecomposerTests : IDisposable
         spans.Where(s => s.Category == StateSpanCategory.PumpMode
                 && (s.State == PumpModeState.Automatic.ToString() || s.State == PumpModeState.Manual.ToString()))
             .Should().BeEmpty();
+    }
+
+    #endregion
+
+    #region Prediction curves stored once
+
+    private static readonly JsonSerializerOptions CanonicalJson = new()
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    private static string Canonical(object? value) =>
+        value is null ? "null" : JsonSerializer.Serialize(value, value.GetType(), CanonicalJson);
+
+    private static OpenApsPredBGs Curves(double start) => new()
+    {
+        IOB = [start, start - 5, start - 10],
+        ZT = [start, start - 2],
+        COB = [start, start + 5, start + 10, start + 5],
+        UAM = [start, start + 10],
+    };
+
+    private async Task<(V4Models.ApsSnapshot Stored, DeviceStatus Projected)> DecomposeAndProject(DeviceStatus ds)
+    {
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        var stored = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+        return (stored, DeviceStatusProjectionService.ProjectFromSnapshots(stored, null, null, null, null));
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OpenApsSameCycle_StoresCurvesOnceAndProjectsThemBack()
+    {
+        var suggested = new OpenApsSuggested
+        {
+            Bg = 120, EventualBG = 95, Reason = "COB: 0, Dev: -3", Timestamp = "2023-11-14T12:00:00Z", PredBGs = Curves(120),
+        };
+        var enacted = new OpenApsEnacted
+        {
+            Bg = 120, EventualBG = 95, Reason = "COB: 0, Dev: -3", Timestamp = "2023-11-14T12:00:00Z", PredBGs = Curves(120),
+            Rate = 0.8, Duration = 30, Received = true,
+        };
+        var ds = new DeviceStatus
+        {
+            Id = "curves-same-cycle",
+            Mills = 1700000000000,
+            Device = "openaps://Samsung",
+            OpenAps = new OpenApsStatus { Suggested = suggested, Enacted = enacted },
+        };
+        var originalSuggested = Canonical(suggested);
+        var originalEnacted = Canonical(enacted);
+
+        var (stored, projected) = await DecomposeAndProject(ds);
+
+        stored.SuggestedJson.Should().NotContain("predBGs");
+        stored.EnactedJson.Should().NotContain("predBGs");
+        stored.PredictedIobJson.Should().Be("[120,115,110]");
+        Canonical(projected.OpenAps!.Suggested).Should().Be(originalSuggested);
+        Canonical(projected.OpenAps.Enacted).Should().Be(originalEnacted);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OpenApsResentEnacted_KeepsTheOlderCommandsOwnCurves()
+    {
+        // The re-sent enacted command is the previous cycle's, so its curves differ from the
+        // fresher suggestion the columns are taken from.
+        var suggested = new OpenApsSuggested { Bg = 118, Timestamp = "2023-11-14T12:05:00Z", PredBGs = Curves(118) };
+        var enacted = new OpenApsEnacted
+        {
+            Bg = 120, Timestamp = "2023-11-14T12:00:00Z", PredBGs = Curves(120), Rate = 0.8, Duration = 30, Received = true,
+        };
+        var ds = new DeviceStatus
+        {
+            Id = "curves-resent-enacted",
+            Mills = 1700000300000,
+            Device = "openaps://Samsung",
+            OpenAps = new OpenApsStatus { Suggested = suggested, Enacted = enacted },
+        };
+        var originalSuggested = Canonical(suggested);
+        var originalEnacted = Canonical(enacted);
+
+        var (stored, projected) = await DecomposeAndProject(ds);
+
+        stored.SuggestedJson.Should().NotContain("predBGs");
+        stored.EnactedJson.Should().Contain("predBGs");
+        Canonical(projected.OpenAps!.Suggested).Should().Be(originalSuggested);
+        Canonical(projected.OpenAps.Enacted).Should().Be(originalEnacted);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OpenApsCommandWithoutCurvesBesideOneWith_ReadsBackWithout()
+    {
+        // Trio uploads a suggestion without predBGs beside an enacted command that has them.
+        var suggested = new OpenApsSuggested { Bg = 91, Timestamp = "2023-11-14T12:00:00Z" };
+        var enacted = new OpenApsEnacted
+        {
+            Bg = 91, Timestamp = "2023-11-14T12:00:00Z", PredBGs = Curves(91), Rate = 0.6, Duration = 30, Received = true,
+        };
+        var ds = new DeviceStatus
+        {
+            Id = "curves-one-sided",
+            Mills = 1700000000000,
+            Device = "Trio",
+            OpenAps = new OpenApsStatus { Suggested = suggested, Enacted = enacted },
+        };
+        var originalSuggested = Canonical(suggested);
+        var originalEnacted = Canonical(enacted);
+
+        var (stored, projected) = await DecomposeAndProject(ds);
+
+        stored.SuggestedJson.Should().Contain("\"predBGs\":null");
+        stored.EnactedJson.Should().NotContain("predBGs");
+        Canonical(projected.OpenAps!.Suggested).Should().Be(originalSuggested);
+        Canonical(projected.OpenAps.Enacted).Should().Be(originalEnacted);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OpenApsCommandWithEmptyPredBGs_KeepsIt()
+    {
+        var suggested = new OpenApsSuggested { Bg = 118, Timestamp = "2023-11-14T12:05:00Z", PredBGs = new OpenApsPredBGs() };
+        var ds = new DeviceStatus
+        {
+            Id = "curves-empty",
+            Mills = 1700000300000,
+            Device = "openaps://Samsung",
+            OpenAps = new OpenApsStatus { Suggested = suggested },
+        };
+        var originalSuggested = Canonical(suggested);
+
+        var (stored, projected) = await DecomposeAndProject(ds);
+
+        stored.SuggestedJson.Should().Contain("predBGs");
+        Canonical(projected.OpenAps!.Suggested).Should().Be(originalSuggested);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OpenAps_StoresNoNullValuedKeys()
+    {
+        var ds = new DeviceStatus
+        {
+            Id = "no-null-keys",
+            Mills = 1700000000000,
+            Device = "openaps://Samsung",
+            OpenAps = new OpenApsStatus
+            {
+                Suggested = new OpenApsSuggested { Bg = 118, Timestamp = "2023-11-14T12:05:00Z" },
+            },
+        };
+
+        var (stored, _) = await DecomposeAndProject(ds);
+
+        stored.SuggestedJson.Should().NotContain("null");
+        stored.SuggestedJson.Should().NotContain("predBGs");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_Loop_StoresPredictionOnceAndProjectsItBack()
+    {
+        var loop = new LoopStatus
+        {
+            Iob = new LoopIob { Iob = 1.8, BasalIob = 0.5 },
+            Cob = new LoopCob { Cob = 25.0 },
+            RecommendedBolus = 0.7,
+            Predicted = new LoopPredicted { Values = [130, 125, 120, 115, 110], StartDate = "2023-11-14T12:00:00Z" },
+            Enacted = new LoopEnacted { Received = true, Rate = 2.0, Duration = 30, BolusVolume = 0.4 },
+        };
+        var ds = new DeviceStatus { Id = "loop-curves", Mills = 1700000000000, Device = "Loop/3.0", Loop = loop };
+        var originalLoop = Canonical(loop);
+
+        var (stored, projected) = await DecomposeAndProject(ds);
+
+        stored.SuggestedJson.Should().BeNull();
+        stored.EnactedJson.Should().BeNull();
+        stored.LoopJson.Should().NotContain("values");
+        stored.PredictedDefaultJson.Should().Be("[130,125,120,115,110]");
+        Canonical(projected.Loop).Should().Be(originalLoop);
+    }
+
+    [Fact]
+    public void ProjectFromSnapshots_RowStoredWithCurvesInItsBlobs_ProjectsThemUnchanged()
+    {
+        var suggested = new OpenApsSuggested { Bg = 118, Timestamp = "2023-11-14T12:05:00Z", PredBGs = Curves(118) };
+        var enacted = new OpenApsEnacted { Bg = 120, Timestamp = "2023-11-14T12:00:00Z", PredBGs = Curves(120) };
+        var aps = new V4Models.ApsSnapshot
+        {
+            Id = Guid.CreateVersion7(),
+            Timestamp = DateTime.UtcNow,
+            AidAlgorithm = V4Models.AidAlgorithm.OpenAps,
+            SuggestedJson = JsonSerializer.Serialize(suggested),
+            EnactedJson = JsonSerializer.Serialize(enacted),
+            PredictedIobJson = "[1,2,3]",
+        };
+
+        var projected = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, null);
+
+        Canonical(projected.OpenAps!.Suggested).Should().Be(Canonical(suggested));
+        Canonical(projected.OpenAps.Enacted).Should().Be(Canonical(enacted));
     }
 
     #endregion

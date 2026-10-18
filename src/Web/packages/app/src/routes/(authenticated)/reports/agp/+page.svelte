@@ -1,5 +1,10 @@
 <script lang="ts">
   import {
+    a1cLabel,
+    a1cUnitLabel,
+    formatA1cValue,
+  } from "$lib/utils/a1c-formatting";
+  import {
     Card,
     CardContent,
     CardDescription,
@@ -137,7 +142,7 @@
       figures={[
         { label: "Time in range", value: tir.target?.toFixed(0) ?? "–", unit: "%", note: "Target: ≥70%" },
         { label: "Average", value: stats.mean ? String(bg(stats.mean)) : "–", unit: bgLabel() },
-        { label: "Est. A1C", value: variability.estimatedA1c?.toFixed(1) ?? "–", unit: "%", note: "From mean glucose" },
+        { label: a1cLabel(true), value: formatA1cValue(variability.estimatedA1cDisplay), unit: a1cUnitLabel(), note: "From mean glucose", },
         { label: "CV", value: variability.coefficientOfVariation?.toFixed(0) ?? "–", unit: "%", note: "Target: ≤33%" },
         { label: "Below range", value: ((tir.low ?? 0) + (tir.veryLow ?? 0)).toFixed(1), unit: "%", note: "Target: <4%" },
         { label: "Above range", value: ((tir.high ?? 0) + (tir.veryHigh ?? 0)).toFixed(1), unit: "%", note: "Target: <25%" },

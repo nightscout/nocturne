@@ -353,6 +353,82 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             .Should().Be(1);
     }
 
+    private async Task GiveOwnerRoleAsync(Guid memberId)
+    {
+        _dbContext.TenantMemberRoles.Add(new TenantMemberRoleEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantMemberId = memberId,
+            TenantRoleId = _ownerRoleId,
+        });
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+    }
+
+    [Fact]
+    public async Task SetMemberRoles_refusesTakingOwnerFromTheOnlyOwner()
+    {
+        await GiveOwnerRoleAsync(_targetMemberId);
+        var controller = BuildController(AdministratorScopes);
+
+        var result = await controller.SetMemberRoles(
+            _targetMemberId,
+            new SetMemberRolesRequest([_caretakerRoleId]),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, "Cannot remove the last owner of a tenant");
+
+        (await _dbContext.TenantMemberRoles.Where(mr => mr.TenantMemberId == _targetMemberId)
+            .Select(mr => mr.TenantRoleId).ToListAsync()).Should().BeEquivalentTo([_ownerRoleId]);
+    }
+
+    [Fact]
+    public async Task SetMemberRoles_allowsChangingTheOnlyOwnersRolesWhenOwnerIsKept()
+    {
+        await GiveOwnerRoleAsync(_targetMemberId);
+        var controller = BuildController(Scope.FullAccess);
+
+        var result = await controller.SetMemberRoles(
+            _targetMemberId,
+            new SetMemberRolesRequest([_ownerRoleId, _caretakerRoleId]),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        (await _dbContext.TenantMemberRoles.Where(mr => mr.TenantMemberId == _targetMemberId)
+            .Select(mr => mr.TenantRoleId).ToListAsync()).Should().BeEquivalentTo([_ownerRoleId, _caretakerRoleId]);
+    }
+
+    [Fact]
+    public async Task SetMemberRoles_allowsTakingOwnerFromAnOwnerWhenAnotherActiveOwnerRemains()
+    {
+        var secondSubjectId = Guid.CreateVersion7();
+        var secondMember = new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = secondSubjectId,
+        };
+        _dbContext.Subjects.Add(new SubjectEntity { Id = secondSubjectId, Name = "Second owner" });
+        _dbContext.TenantMembers.Add(secondMember);
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        await GiveOwnerRoleAsync(_targetMemberId);
+        await GiveOwnerRoleAsync(secondMember.Id);
+        var controller = BuildController(AdministratorScopes);
+
+        var result = await controller.SetMemberRoles(
+            _targetMemberId,
+            new SetMemberRolesRequest([_caretakerRoleId]),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        (await _dbContext.TenantMemberRoles.Where(mr => mr.TenantMemberId == _targetMemberId)
+            .Select(mr => mr.TenantRoleId).ToListAsync()).Should().BeEquivalentTo([_caretakerRoleId]);
+    }
+
     [Fact]
     public async Task SetMemberRoles_rejectsEditingTheCallersOwnMembership()
     {

@@ -45,7 +45,7 @@ public class ExperimentsControllerTests : IClassFixture<AuthenticationTestFactor
     {
         // A minted uploader token (e.g. a Loop key from the setup wizard) carries granular
         // scopes like glucose.readwrite — not the legacy full-access "*". The connection probe
-        // must accept it; gating on a broad RequireRead permission used to 403 these tokens.
+        // must accept it; a broad read permission gate would 403 these tokens.
         const string uploaderToken = "noc_granular-uploader-test-token";
         using (var ctx = _factory.Services
                    .GetRequiredService<IDbContextFactory<NocturneDbContext>>()

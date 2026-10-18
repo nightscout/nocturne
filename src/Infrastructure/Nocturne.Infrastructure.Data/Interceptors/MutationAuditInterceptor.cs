@@ -100,25 +100,14 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
             if (auditContext.IsSystemMutation())
                 continue;
 
-            var audit = new MutationAuditLogEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = context.TenantId,
-                EntityType = entry.Entity.GetType().Name.Replace("Entity", ""),
-                EntityId = GetEntityId(entry),
-                Action = action,
-                ChangesJson = changesJson,
-                SubjectId = auditContext?.SubjectId,
-                SubjectName = auditContext?.SubjectName,
-                AuthType = auditContext?.AuthType,
-                IpAddress = auditContext?.IpAddress,
-                TokenId = auditContext?.TokenId,
-                TraceId = auditContext?.TraceId,
-                Endpoint = auditContext?.Endpoint,
-                CreatedAt = now
-            };
-
-            auditEntries.Add(audit);
+            auditEntries.Add(MutationAuditLogEntity.Create(
+                context.TenantId,
+                auditContext,
+                entry.Entity.GetType().Name.Replace("Entity", ""),
+                GetEntityId(entry),
+                action,
+                changesJson,
+                now));
         }
 
         if (auditEntries.Count > 0)

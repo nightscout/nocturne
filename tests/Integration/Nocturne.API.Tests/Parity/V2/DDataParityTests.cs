@@ -10,7 +10,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V2;
 /// Parity tests for /api/v2/ddata endpoints.
 /// V2 DData API provides direct data access:
 /// - GET /api/v2/ddata - Current DData structure
-/// - GET /api/v2/ddata/at/{timestamp} - DData at specific time
+/// - GET /api/v2/ddata/at[/{timestamp}] - Full DData at a time, now when omitted
 /// - GET /api/v2/ddata/raw - Raw DData without filtering
 /// </summary>
 public class DDataParityTests : ParityTestBase

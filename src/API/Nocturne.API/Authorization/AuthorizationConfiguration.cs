@@ -30,6 +30,7 @@ public static class AuthorizationConfiguration
     public static IServiceCollection AddNocturneAuthorization(this IServiceCollection services)
     {
         services.AddTransient<IAuthorizationHandler, HasPermissionsHandler>();
+        services.AddSingleton<IAuthorizationMiddlewareResultHandler, NightscoutV3ChallengeResultHandler>();
 
         var hasPermissionsPolicy = new AuthorizationPolicyBuilder()
             .AddRequirements(new HasPermissionsRequirement())

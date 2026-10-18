@@ -1,8 +1,14 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Template;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V2;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
 using Xunit;
 
@@ -14,14 +20,63 @@ namespace Nocturne.API.Tests.Controllers.V2;
 public class DDataControllerTests
 {
     private readonly Mock<IDDataService> _mockDDataService;
+    private readonly Mock<IActivityDecomposer> _mockDecomposer;
     private readonly Mock<ILogger<DDataController>> _mockLogger;
     private readonly DDataController _controller;
 
     public DDataControllerTests()
     {
         _mockDDataService = new Mock<IDDataService>();
+        _mockDecomposer = new Mock<IActivityDecomposer>();
         _mockLogger = new Mock<ILogger<DDataController>>();
-        _controller = new DDataController(_mockDDataService.Object, _mockLogger.Object);
+        _controller = new DDataController(
+            _mockDDataService.Object,
+            _mockDecomposer.Object,
+            _mockLogger.Object
+        );
+        Grant();
+    }
+
+    private void Grant(params string[] scopes)
+    {
+        var context = new DefaultHttpContext();
+        context.Items[AuthContextKeys.GrantedScopes] = new HashSet<string>(scopes);
+        _controller.ControllerContext = new ControllerContext { HttpContext = context };
+    }
+
+    [Theory]
+    [InlineData("/at")]
+    [InlineData("/at/2022-01-01T00:00:00.000Z")]
+    public void GetDDataAt_RouteTemplate_MatchesWithAndWithoutTimestamp(string path)
+    {
+        var template = typeof(DDataController)
+            .GetMethod(nameof(DDataController.GetDDataAt))!
+            .GetCustomAttributes(typeof(HttpGetAttribute), false)
+            .Cast<HttpGetAttribute>()
+            .Single()
+            .Template!;
+        var matcher = new TemplateMatcher(TemplateParser.Parse(template), new RouteValueDictionary());
+
+        Assert.True(matcher.TryMatch(path, new RouteValueDictionary()));
+    }
+
+    [Fact]
+    public async Task GetDDataAt_ActivityOfCategoriesWithoutReadScope_IsDropped()
+    {
+        var heart = new Activity { Id = "heart" };
+        var steps = new Activity { Id = "steps" };
+        _mockDecomposer
+            .Setup(x => x.RequiredReadScope(It.IsAny<Activity>()))
+            .Returns((Activity a) => a.Id == "heart" ? Scope.HeartRateRead : Scope.StepCountRead);
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { Activity = [heart, steps] });
+        Grant(Scope.GlucoseRead, Scope.HeartRateRead);
+
+        var result = await _controller.GetDDataAt(cancellationToken: CancellationToken.None);
+
+        var response = Assert.IsType<DData>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(["heart"], response.Activity.Select(a => a.Id));
     }
 
     [Fact]
@@ -62,11 +117,11 @@ public class DDataControllerTests
     {
         // Arrange
         var timestamp = "1640995200000"; // Valid Unix timestamp
-        var expectedResponse = new DDataResponse();
+        var expectedResponse = new DData { LastUpdated = 1640995200000 };
 
         _mockDDataService
             .Setup(x =>
-                x.GetDDataWithRecentStatusesAsync(It.IsAny<long>(), It.IsAny<CancellationToken>())
+                x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(expectedResponse);
 
@@ -75,7 +130,8 @@ public class DDataControllerTests
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        Assert.IsType<DDataResponse>(okResult.Value);
+        var response = Assert.IsType<DData>(okResult.Value);
+        Assert.Equal(1640995200000, response.LastUpdated);
     }
 
     [Fact]
@@ -83,11 +139,11 @@ public class DDataControllerTests
     {
         // Arrange
         var timestamp = "2022-01-01T00:00:00.000Z"; // Valid ISO date
-        var expectedResponse = new DDataResponse();
+        var expectedResponse = new DData { LastUpdated = 1640995200000 };
 
         _mockDDataService
             .Setup(x =>
-                x.GetDDataWithRecentStatusesAsync(It.IsAny<long>(), It.IsAny<CancellationToken>())
+                x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(expectedResponse);
 
@@ -96,7 +152,47 @@ public class DDataControllerTests
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        Assert.IsType<DDataResponse>(okResult.Value);
+        var response = Assert.IsType<DData>(okResult.Value);
+        Assert.Equal(1640995200000, response.LastUpdated);
+    }
+
+    [Fact]
+    public async Task GetRawDData_ActivityOfCategoriesWithoutReadScope_IsDropped()
+    {
+        var heart = new Activity { Id = "heart" };
+        var steps = new Activity { Id = "steps" };
+        _mockDecomposer
+            .Setup(x => x.RequiredReadScope(It.IsAny<Activity>()))
+            .Returns((Activity a) => a.Id == "heart" ? Scope.HeartRateRead : Scope.StepCountRead);
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { Activity = [heart, steps] });
+        Grant(Scope.GlucoseRead, Scope.StepCountRead);
+
+        var result = await _controller.GetRawDData(cancellationToken: CancellationToken.None);
+
+        var response = Assert.IsType<DData>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(["steps"], response.Activity.Select(a => a.Id));
+    }
+
+    [Fact]
+    public async Task GetDDataAt_WithoutTimestamp_QueriesNow()
+    {
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData());
+        var before = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        var result = await _controller.GetDDataAt(cancellationToken: CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        _mockDDataService.Verify(x =>
+            x.GetDDataAsync(It.Is<long>(t => t >= before), It.IsAny<CancellationToken>())
+        );
+        _mockDDataService.Verify(
+            x => x.GetDDataWithRecentStatusesAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
     }
 
     [Fact]

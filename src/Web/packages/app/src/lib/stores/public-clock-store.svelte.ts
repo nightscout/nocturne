@@ -5,7 +5,7 @@
 // endpoint keyed by the clock UUID. It exposes the same surface a clock face renders
 // (ClockGlucoseSource) so ClockFaceRenderer works unchanged for logged-out viewers.
 
-import { getApiClient } from "$lib/api/client";
+import { clockFacesClient } from "$lib/api/browser-clients";
 import type { ClockGlucoseDto } from "$lib/api";
 import {
   clockGlucoseDelta,
@@ -57,7 +57,7 @@ export class PublicClockStore implements ClockGlucoseSource {
 
   private async poll(): Promise<void> {
     try {
-      const data = await getApiClient().clockFaces.getGlucose(this.clockId);
+      const data = await clockFacesClient().getGlucose(this.clockId);
       this.readings = data ?? [];
     } catch (err) {
       // A transient failure shouldn't blank the clock; keep the last good readings.

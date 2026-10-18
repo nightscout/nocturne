@@ -11,7 +11,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
-  import RequestMembershipDialog from "$lib/components/members/RequestMembershipDialog.svelte";
+  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
 
   interface Props {
     user: AuthUser | null;
@@ -33,7 +33,9 @@
   const { user, collapsed = false, class: className = "", isPlatformAdmin = false, isGuestSession = false, tenantless = false }: Props = $props();
 
   let isOpen = $state(false);
-  let showRequestDialog = $state(false);
+  const requestMembershipDialog = lazyComponent(
+    () => import("$lib/components/members/RequestMembershipDialog.svelte"),
+  );
 
   /** Get initials from user name */
   function getInitials(name: string): string {
@@ -131,7 +133,7 @@
         {/if}
       {:else}
         <DropdownMenu.Group>
-          <DropdownMenu.Item onSelect={() => (showRequestDialog = true)}>
+          <DropdownMenu.Item onSelect={() => (requestMembershipDialog.open = true)}>
             <UserPlus class="mr-2 h-4 w-4" />
             <span>Request Membership</span>
           </DropdownMenu.Item>
@@ -155,7 +157,9 @@
     </DropdownMenu.Content>
   </DropdownMenu.Root>
   {#if isGuestSession}
-    <RequestMembershipDialog bind:open={showRequestDialog} />
+    {#if requestMembershipDialog.component}
+      <requestMembershipDialog.component bind:open={requestMembershipDialog.open} />
+    {/if}
   {/if}
 {:else}
   <!-- Not logged in - show login button -->

@@ -59,8 +59,17 @@ public sealed class FindQuery
     /// <summary>Inclusive upper time bound in Unix milliseconds, if the query constrains one.</summary>
     public long? ToMills { get; }
 
-    /// <summary><c>true</c> when the query contains no conditions at all.</summary>
-    public bool IsEmpty => _root.Children.Count == 0;
+    /// <summary>
+    /// <c>true</c> when the query carries no condition a caller could honour: nothing at all, only
+    /// empty <c>$and</c>/<c>$or</c> groups or operand objects, or only <c>find[…]</c> keys the parser
+    /// could not interpret.
+    /// </summary>
+    public bool IsEmpty => !HasLeafCondition(_root);
+
+    private static bool HasLeafCondition(Group group) =>
+        group.Children.Any(child => child is Condition cond
+            ? cond.Op != UnsupportedOp
+            : child is Group nested && HasLeafCondition(nested));
 
     /// <summary>
     /// <c>true</c> when the query contains conditions beyond the extracted
@@ -189,6 +198,18 @@ public sealed class FindQuery
     public bool Matches(JsonElement document)
     {
         return EvaluateGroup(_root, document);
+    }
+
+    /// <summary>
+    /// Like <see cref="Matches{T}(T)"/> but without the conditions already captured as
+    /// <see cref="FromMills"/>/<see cref="ToMills"/>, for callers whose source applied those bounds
+    /// to a time the document's own timestamp fields do not carry.
+    /// </summary>
+    public bool MatchesResidual<T>(T document)
+    {
+        return EvaluateGroup(
+            _root, JsonSerializer.SerializeToElement(document, WireOptions),
+            skipCapturedBounds: true, andReachable: true);
     }
 
     #region Condition tree
@@ -507,10 +528,7 @@ public sealed class FindQuery
             switch (child)
             {
                 case Condition cond:
-                    var isCapturedTimeBound = andReachable
-                        && TimeFields.Contains(cond.Path)
-                        && cond.Op is "$eq" or "$gt" or "$gte" or "$lt" or "$lte"
-                        && TryConvertToMills(cond, out _);
+                    var isCapturedTimeBound = IsCapturedTimeBound(cond, andReachable);
                     var isExceptedEquality = exceptField != null
                         && cond.Op == "$eq"
                         && andReachable
@@ -525,6 +543,12 @@ public sealed class FindQuery
         }
         return count;
     }
+
+    private static bool IsCapturedTimeBound(Condition cond, bool andReachable) =>
+        andReachable
+        && TimeFields.Contains(cond.Path)
+        && cond.Op is "$eq" or "$gt" or "$gte" or "$lt" or "$lte"
+        && TryConvertToMills(cond, out _);
 
     private static bool TryConvertToMills(Condition cond, out long mills)
     {
@@ -553,20 +577,24 @@ public sealed class FindQuery
 
     #region Evaluation
 
-    private static bool EvaluateGroup(Group group, JsonElement document)
+    private static bool EvaluateGroup(
+        Group group, JsonElement document, bool skipCapturedBounds = false, bool andReachable = true)
     {
         if (group.Children.Count == 0)
             return true;
 
         return group.IsAnd
-            ? group.Children.All(child => EvaluateChild(child, document))
-            : group.Children.Any(child => EvaluateChild(child, document));
+            ? group.Children.All(child => EvaluateChild(child, document, skipCapturedBounds, andReachable))
+            : group.Children.Any(child => EvaluateChild(child, document, skipCapturedBounds, andReachable));
     }
 
-    private static bool EvaluateChild(object child, JsonElement document) => child switch
+    private static bool EvaluateChild(
+        object child, JsonElement document, bool skipCapturedBounds, bool andReachable) => child switch
     {
-        Condition cond => EvaluateCondition(cond, document),
-        Group nested => EvaluateGroup(nested, document),
+        Condition cond => (skipCapturedBounds && IsCapturedTimeBound(cond, andReachable))
+            || EvaluateCondition(cond, document),
+        Group nested => EvaluateGroup(
+            nested, document, skipCapturedBounds, andReachable && nested.IsAnd),
         _ => true,
     };
 

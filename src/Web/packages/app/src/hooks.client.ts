@@ -1,4 +1,25 @@
-import type { HandleClientError } from "@sveltejs/kit";
+import type { ClientInit, HandleClientError } from "@sveltejs/kit";
+
+const PRELOAD_RELOAD_KEY = "nocturne:preload-error-reload";
+const PRELOAD_RELOAD_WINDOW_MS = 10_000;
+
+/**
+ * A chunk that fails to load after a deploy usually belongs to the build this tab started on, so
+ * one reload fetches the current one. A second failure within the window is left to surface, so a
+ * chunk that is genuinely missing cannot reload the tab in a loop.
+ */
+export const init: ClientInit = () => {
+  window.addEventListener("vite:preloadError", () => {
+    try {
+      const last = Number(sessionStorage.getItem(PRELOAD_RELOAD_KEY));
+      if (Date.now() - last < PRELOAD_RELOAD_WINDOW_MS) return;
+      sessionStorage.setItem(PRELOAD_RELOAD_KEY, String(Date.now()));
+    } catch {
+      return;
+    }
+    window.location.reload();
+  });
+};
 
 export const handleError: HandleClientError = ({ error }) => {
   const errorId = crypto.randomUUID();

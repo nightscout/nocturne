@@ -286,15 +286,17 @@ public static class DatabaseInitializationExtensions
     }
 
     /// <summary>
-    /// Marks any background job record still Pending/Running as Interrupted. Migration and
+    /// Marks any background job record still in a live state as Interrupted. Migration and
     /// connector cursor reset jobs run on detached in-process tasks that die with the process,
     /// so a row left in a live state at startup can only be an orphan from a previous run.
+    /// Each job table is paired with the live state names its owning enum defines.
     /// Without this sweep, an operator polling such a job sees "Running" forever.
     /// Assumes a single API instance: a second replica (or an overlapping deploy) booting
     /// while another instance has a job genuinely running would mark that job Interrupted.
     /// </summary>
     public static async Task MarkInterruptedJobsAsync(
         string migratorConnectionString,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> liveStatesByTable,
         ILogger logger,
         CancellationToken cancellationToken = default)
     {
@@ -302,7 +304,7 @@ public static class DatabaseInitializationExtensions
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
         var total = 0;
-        foreach (var table in new[] { "migration_runs", "connector_reset_jobs" })
+        foreach (var (table, liveStates) in liveStatesByTable)
         {
             await using var command = connection.CreateCommand();
             command.CommandText =
@@ -311,8 +313,9 @@ public static class DatabaseInitializationExtensions
                  SET state = 'Interrupted',
                      completed_at = now(),
                      error_message = 'The API restarted while this job was running; re-run it to finish the work.'
-                 WHERE state IN ('Pending', 'Running')
+                 WHERE state = ANY(@liveStates)
                  """;
+            command.Parameters.AddWithValue("liveStates", liveStates.ToArray());
             total += await command.ExecuteNonQueryAsync(cancellationToken);
         }
 

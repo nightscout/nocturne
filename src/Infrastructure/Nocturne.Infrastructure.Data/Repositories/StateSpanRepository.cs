@@ -105,11 +105,29 @@ public class StateSpanRepository : IStateSpanRepository
         var query = BuildFilteredQuery(category, state, from, to, source, active);
 
         var ordered = descending
-            ? query.OrderByDescending(s => s.StartTimestamp)
-            : query.OrderBy(s => s.StartTimestamp);
+            ? query.OrderByDescending(s => s.StartTimestamp).ThenByDescending(s => s.Id)
+            : query.OrderBy(s => s.StartTimestamp).ThenBy(s => s.Id);
 
         var entities = await ordered
             .Skip(skip)
+            .Take(count)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(StateSpanMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
+        StateSpanCategory category,
+        string? source,
+        DateTime from,
+        int count,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var entities = await BuildFilteredQuery(category, null, null, null, source, null)
+            .Where(s => s.StartTimestamp >= from)
+            .OrderBy(s => s.StartTimestamp)
             .Take(count)
             .ToListAsync(cancellationToken);
 
@@ -521,8 +539,8 @@ public class StateSpanRepository : IStateSpanRepository
     /// </summary>
     /// <param name="id">The unique identifier of the span to delete.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>True if the span was deleted, otherwise false.</returns>
-    public async Task<bool> DeleteStateSpanAsync(
+    /// <returns>The spans deleted, the requested one first, with the other copies in its duplicate group.</returns>
+    public async Task<IReadOnlyList<StateSpan>> DeleteStateSpanAsync(
         string id,
         CancellationToken cancellationToken = default
     )
@@ -540,12 +558,17 @@ public class StateSpanRepository : IStateSpanRepository
             );
         }
 
-        if (entity == null)
-            return false;
+        return entity == null ? [] : await SoftDeleteWithCopiesAsync(entity, cancellationToken);
+    }
 
-        entity.DeletedAt = DateTime.UtcNow;
-        var result = await _context.SaveChangesAsync(cancellationToken);
-        return result > 0;
+    private async Task<IReadOnlyList<StateSpan>> SoftDeleteWithCopiesAsync(
+        StateSpanEntity entity, CancellationToken cancellationToken)
+    {
+        var (saved, copies) = await DuplicateGroupPrimaries.SoftDeleteAsync(
+            _context, entity, RecordType.StateSpan, cancellationToken);
+        return saved > 0
+            ? [StateSpanMapper.ToDomainModel(entity), .. copies.Select(StateSpanMapper.ToDomainModel)]
+            : [];
     }
 
     /// <summary>
@@ -744,10 +767,17 @@ public class StateSpanRepository : IStateSpanRepository
         string? type = null,
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default
     )
     {
         var query = _context.StateSpans.AsNoTracking().Where(s => ActivityCategories.Contains(s.Category));
+
+        if (from is { } fromValue)
+            query = query.Where(s => s.StartTimestamp >= fromValue);
+        if (to is { } toValue)
+            query = query.Where(s => s.StartTimestamp <= toValue);
 
         // Filter by type/state if provided
         if (!string.IsNullOrEmpty(type))
@@ -861,8 +891,8 @@ public class StateSpanRepository : IStateSpanRepository
     /// </summary>
     /// <param name="id">The unique identifier of the activity to delete.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>True if the activity was deleted, otherwise false.</returns>
-    public async Task<bool> DeleteActivityStateSpanAsync(
+    /// <returns>The spans deleted, the requested one first, with the other copies in its duplicate group.</returns>
+    public async Task<IReadOnlyList<StateSpan>> DeleteActivityStateSpanAsync(
         string id,
         CancellationToken cancellationToken = default
     )
@@ -880,12 +910,7 @@ public class StateSpanRepository : IStateSpanRepository
             );
         }
 
-        if (entity == null)
-            return false;
-
-        entity.DeletedAt = DateTime.UtcNow;
-        var result = await _context.SaveChangesAsync(cancellationToken);
-        return result > 0;
+        return entity == null ? [] : await SoftDeleteWithCopiesAsync(entity, cancellationToken);
     }
 
     #endregion

@@ -63,6 +63,7 @@ public class DataHubHistoryClampTests
         services.AddSingleton(entryService.Object);
         services.AddSingleton(treatmentService.Object);
         services.AddSingleton(new DeviceStatusProjectionService(
+            Mock.Of<IDeviceStatusGroupRepository>(),
             Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IPumpSnapshotRepository>(),
             Mock.Of<IUploaderSnapshotRepository>(),

@@ -15,6 +15,7 @@
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import TrackAxis from "./TrackAxis.svelte";
   import TrackLabel from "./TrackLabel.svelte";
+  import { markerKey } from "$lib/utils/chart-data-merge";
 
   interface Props {
     onPointClick?: (time: Date) => void;
@@ -119,7 +120,7 @@
   {#if !ctx.printing}
   <ChartClipPath>
     <!-- Temp basal span indicators (shown in basal track when basal is visible) -->
-    {#each tempBasalSpans as span (span.id)}
+    {#each tempBasalSpans as span, i (markerKey(span.id, span.startTime, i))}
       {@const spanLeft = chartCtx.xScale(span.displayStart)}
       {@const spanUpper = chartCtx.yScale(basalScale(maxBasalRate * 0.9))}
       {@const spanLower = chartCtx.yScale(basalScale(maxBasalRate * 0.7))}

@@ -48,8 +48,16 @@ public class TenantResolutionMiddleware
     /// Whether <paramref name="Path"/> admits everything beneath it. Needed by controllers whose
     /// routes carry an id segment; prefer an exact entry, which cannot admit a route added later.
     /// </param>
+    /// <param name="SoleTenantAtApex">
+    /// Whether the apex of a single-tenant install serves this path as that tenant, exactly as
+    /// <c>{slug}.{BaseDomain}</c> would. Set on paths scoped to the caller, which already run on
+    /// every tenant host; leave it off for cross-tenant and platform paths, and for any that
+    /// carries the resolved slug into an OIDC <c>state</c>, since
+    /// <see cref="Middleware.OidcCallbackRedirectMiddleware"/> would then bounce the callback to a
+    /// subdomain the install may not serve.
+    /// </param>
     public readonly record struct TenantlessPath(
-        string Path, string? Method = null, bool Prefix = false)
+        string Path, string? Method = null, bool Prefix = false, bool SoleTenantAtApex = false)
     {
         /// <summary>Admit every method on a path, which is the case for most of the list.</summary>
         public static implicit operator TenantlessPath(string path) => new(path);
@@ -80,7 +88,9 @@ public class TenantResolutionMiddleware
         // preventing first-time setup.
         "/health",
         "/alive",
-        "/api/v4/status",
+        // Answers for the tenant: tenantless only so a fresh apex reports setup_required instead
+        // of a 404, and served as the sole tenant so a configured install is not sent to /setup.
+        new TenantlessPath("/api/v4/status", SoleTenantAtApex: true),
         "/api/v4/me/tenants/validate-slug",
         // Cross-tenant caregiver overview: aggregates across the subject's tenants,
         // so it must be reachable from the apex in multi-tenant deployments. The
@@ -96,12 +106,12 @@ public class TenantResolutionMiddleware
         // returns before applying tenant-derived scopes, so this reports whatever the JWT
         // carries — empty for an ordinary subject, non-empty for one holding global roles.
         // Caller-scoped either way, so nothing about a tenant is exposed.
-        "/api/v4/me/permissions",
+        new TenantlessPath("/api/v4/me/permissions", SoleTenantAtApex: true),
         // Units, time format, region, colour theme, chart style, language — stored on the subject
         // (subjects.preferences / subjects.preferred_language) and read by SubjectId alone. Not
         // only presentation: the dashboard tiles render glucose in the units held here, so a 404
         // shows an mmol/L user their children's readings in mg/dL.
-        "/api/v4/user/preferences",
+        new TenantlessPath("/api/v4/user/preferences", SoleTenantAtApex: true),
         // A host that resolves no tenant still needs somewhere to send the visitor.
         SupportConfigPath,
         // Another instance's server relaying a support issue to the apex it was configured with
@@ -128,20 +138,20 @@ public class TenantResolutionMiddleware
         // are already redirected to their subdomain before reaching this point.
         "/api/auth/oidc/callback",
         // Session introspection, called on every page load — including on the tenantless
-        // dashboard host, which would otherwise 404 before rendering anything. The session
-        // it reports is subject-scoped; the only tenant-dependent field (member roles) is
-        // already skipped when no tenant is resolved.
-        "/api/auth/oidc/session",
+        // dashboard host, which would otherwise 404 before rendering anything. A member session
+        // is subject-scoped apart from its member roles, which need a tenant; a guest session
+        // belongs to one tenant outright, and GuestSessionHandler refuses it on a host with none.
+        new TenantlessPath("/api/auth/oidc/session", SoleTenantAtApex: true),
         // Sign-out from the tenantless dashboard. Revokes the refresh token and clears the
         // session cookies, neither of which is tenant-scoped.
-        "/api/auth/oidc/logout",
+        new TenantlessPath("/api/auth/oidc/logout", SoleTenantAtApex: true),
         // Session refresh, driven by the client's expiry timer on every host — including the
         // tenantless dashboard, where a 404 would flip the shell to a signed-out UI while the
         // server-side session is still valid. Subject-scoped like the two above: it validates
         // the refresh token, reads global subject roles, and mints an access token with no
         // tenant pin, so it can confer no tenant-scoped authority. POST only, matching the
         // only verb the endpoint serves.
-        new TenantlessPath("/api/auth/oidc/refresh", HttpMethods.Post),
+        new TenantlessPath("/api/auth/oidc/refresh", HttpMethods.Post, SoleTenantAtApex: true),
         // The subject's own sign-in factors and linked identities, as /settings/account manages
         // them. Each is keyed on the caller's SubjectId, and the tables behind them
         // (passkey_credentials, recovery_codes, totp_credentials, subject_oidc_identities,
@@ -152,21 +162,21 @@ public class TenantResolutionMiddleware
         // of the resolved tenant and the passkey login/* paths likewise, so authenticating on a
         // tenantless host remains identity-provider-only; these enrol and revoke factors for a
         // caller who is already authenticated.
-        new TenantlessPath("/api/auth/passkey/register/options", HttpMethods.Post),
-        new TenantlessPath("/api/auth/passkey/register/complete", HttpMethods.Post),
-        new TenantlessPath("/api/auth/passkey/recovery/status", HttpMethods.Get),
-        new TenantlessPath("/api/auth/passkey/recovery/regenerate", HttpMethods.Post),
-        new TenantlessPath("/api/auth/totp/setup", HttpMethods.Post),
-        new TenantlessPath("/api/auth/totp/verify-setup", HttpMethods.Post),
-        new TenantlessPath("/api/auth/totp", HttpMethods.Get),
+        new TenantlessPath("/api/auth/passkey/register/options", HttpMethods.Post, SoleTenantAtApex: true),
+        new TenantlessPath("/api/auth/passkey/register/complete", HttpMethods.Post, SoleTenantAtApex: true),
+        new TenantlessPath("/api/auth/passkey/recovery/status", HttpMethods.Get, SoleTenantAtApex: true),
+        new TenantlessPath("/api/auth/passkey/recovery/regenerate", HttpMethods.Post, SoleTenantAtApex: true),
+        new TenantlessPath("/api/auth/totp/setup", HttpMethods.Post, SoleTenantAtApex: true),
+        new TenantlessPath("/api/auth/totp/verify-setup", HttpMethods.Post, SoleTenantAtApex: true),
+        new TenantlessPath("/api/auth/totp", HttpMethods.Get, SoleTenantAtApex: true),
         // Revoking one authenticator, whose route carries its id. Narrowed to DELETE so the sibling
         // /login, which gates on membership of the resolved tenant, is not admitted under the POST
         // it is served on. Asked without a method this prefix answers for its own DELETE, so a
         // coverage sweep sees /login as reachable; routing has no DELETE there to reach.
-        new TenantlessPath("/api/auth/totp/", HttpMethods.Delete, Prefix: true),
+        new TenantlessPath("/api/auth/totp/", HttpMethods.Delete, Prefix: true, SoleTenantAtApex: true),
         // GET the list and DELETE one by id; nothing else is routed beneath either.
-        new TenantlessPath("/api/auth/passkey/credentials", Prefix: true),
-        new TenantlessPath("/api/auth/oidc/link/identities", Prefix: true),
+        new TenantlessPath("/api/auth/passkey/credentials", Prefix: true, SoleTenantAtApex: true),
+        new TenantlessPath("/api/auth/oidc/link/identities", Prefix: true, SoleTenantAtApex: true),
         // Linking an identity is a full-page navigation, so a 404 loses the page rather than
         // failing one control. It reads its tenant slug as a nullable off HttpContext.Items purely
         // to route the callback home, which on a tenantless host is where the caller already is —
@@ -237,6 +247,15 @@ public class TenantResolutionMiddleware
         TenantlessAllowedPaths.Any(p => p.Matches(path, method));
 
     /// <summary>
+    /// Whether the apex of a single-tenant install serves a tenantless request as that tenant.
+    /// See <see cref="TenantlessPath.SoleTenantAtApex"/>.
+    /// </summary>
+    /// <param name="path">The request path.</param>
+    /// <param name="method">The request method, or null to ask about any method.</param>
+    public static bool IsSoleTenantAtApex(string path, string? method = null) =>
+        TenantlessAllowedPaths.Any(p => p.SoleTenantAtApex && p.Matches(path, method));
+
+    /// <summary>
     /// Whether a request is served even though the resolved tenant is inactive.
     /// </summary>
     /// <param name="path">The request path.</param>
@@ -285,20 +304,15 @@ public class TenantResolutionMiddleware
         var path = context.Request.Path.Value ?? "";
         var isTenantlessAllowedPath = IsTenantlessAllowed(path, context.Request.Method);
 
-        // On the apex (no subdomain), GET /api/v4/status is tenant-scoped yet listed as
-        // tenantless-allowed (so a fresh apex doesn't 404). On a single-tenant install,
-        // resolve the sole tenant so status reflects it instead of reporting
-        // "setup_required" — which would bounce a fully configured single-tenant install
-        // to /setup. Falls through to the normal tenantless passthrough when zero or
-        // multiple tenants exist, so multi-tenant apex behavior is unchanged.
-        if (slug == null && path.Equals("/api/v4/status", StringComparison.OrdinalIgnoreCase))
+        // Falls through to the tenantless passthrough when zero or several tenants exist.
+        if (slug == null && IsSoleTenantAtApex(path, context.Request.Method))
         {
-            var soleStatusTenant = (await GetApexTenantsAsync(context.RequestServices)).SoleTenant;
-            if (soleStatusTenant != null)
+            var soleApexTenant = (await GetApexTenantsAsync(context.RequestServices)).SoleTenant;
+            if (soleApexTenant != null)
             {
-                tenantAccessor.SetTenant(soleStatusTenant);
-                context.SetTenantContext(soleStatusTenant);
-                PinTenantOnScopedDbContext(context, soleStatusTenant.TenantId);
+                tenantAccessor.SetTenant(soleApexTenant);
+                context.SetTenantContext(soleApexTenant);
+                PinTenantOnScopedDbContext(context, soleApexTenant.TenantId);
                 await _next(context);
                 return;
             }

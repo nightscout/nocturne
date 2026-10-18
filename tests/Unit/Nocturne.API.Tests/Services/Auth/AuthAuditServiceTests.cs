@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Middleware;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -351,7 +352,7 @@ public class AuthAuditServiceTests : IDisposable
         {
             httpContext.TraceIdentifier = requestTrace;
             await new AuditContextMiddleware(_ => Task.CompletedTask)
-                .InvokeAsync(httpContext, auditContext);
+                .InvokeAsync(httpContext, auditContext, CredentialRouteRedactor.Create());
         }
 
         await using var dbContext = _db.CreateContext(pinnedTenantId ?? Guid.Empty);

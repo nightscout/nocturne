@@ -19,6 +19,7 @@
     CompletionReason,
   } from "$api";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
+  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { create as createDeviceEventForm } from "$api/generated/deviceEvents.generated.remote";
 
   interface TrackerStartDialogProps {
@@ -28,6 +29,8 @@
     onClose: () => void;
     onStart?: () => void;
   }
+
+  const realtimeStore = tryGetRealtimeStore();
 
   let {
     open = $bindable(false),
@@ -213,6 +216,7 @@
   class="hidden"
   {...createDeviceEventForm.for("tracker-start").enhance(async ({ submit }) => {
     await submit();
+    if (createDeviceEventForm.for("tracker-start").result) realtimeStore?.noteTreatmentWrite();
   })}
 >
   <input type="hidden" name="n:mills" value={deviceEventMills} />

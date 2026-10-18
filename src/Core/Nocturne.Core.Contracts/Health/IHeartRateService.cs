@@ -8,15 +8,19 @@ namespace Nocturne.Core.Contracts.Health;
 public interface IHeartRateService
 {
     /// <summary>
-    /// Get heart rate records with optional pagination
+    /// Get heart rate records with optional pagination, newest first
     /// </summary>
     /// <param name="count">Maximum number of records to return</param>
     /// <param name="skip">Number of records to skip for pagination</param>
+    /// <param name="from">Inclusive lower bound on the timestamp, or <see langword="null"/> for none</param>
+    /// <param name="to">Inclusive upper bound on the timestamp, or <see langword="null"/> for none</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Collection of heart rate records</returns>
     Task<IEnumerable<HeartRate>> GetHeartRatesAsync(
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default
     );
 
@@ -34,6 +38,24 @@ public interface IHeartRateService
         DateTime to,
         int? count = null,
         int skip = 0,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Get one averaged reading per UTC minute within a date range.
+    /// </summary>
+    /// <remarks>
+    /// This is a presentation query for high-volume reports. It never changes or deletes the
+    /// raw heart-rate records; callers that need the original measurements should use
+    /// <see cref="GetHeartRatesByDateRangeAsync"/> instead.
+    /// </remarks>
+    /// <param name="from">Start of date range (inclusive)</param>
+    /// <param name="to">End of date range (exclusive)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Chronologically ordered minute averages</returns>
+    Task<IEnumerable<HeartRate>> GetHeartRateMinuteAveragesByDateRangeAsync(
+        DateTime from,
+        DateTime to,
         CancellationToken cancellationToken = default
     );
 

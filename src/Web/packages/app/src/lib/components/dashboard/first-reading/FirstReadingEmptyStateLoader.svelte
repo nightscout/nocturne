@@ -5,7 +5,7 @@
 
   interface Props {
     /**
-     * Whether the realtime store's initial load has settled. Until it has, the
+     * Whether the realtime store's starting glucose read has been applied. Until it has, the
      * decision is held in loading so the empty state can never flash ahead of
      * the recent-history fetch resolving.
      */

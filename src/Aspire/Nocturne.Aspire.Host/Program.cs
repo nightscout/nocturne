@@ -98,11 +98,15 @@ class Program
 
         if (!useRemoteDb)
         {
-            // AddParameter resolves "Parameters:postgres-username" from config
-            // (or env var Parameters__postgres-username) automatically.
+            // Read from config explicitly: the AddParameter overload taking a value uses it
+            // as-is and never consults "Parameters:postgres-username". POSTGRES_USER only
+            // applies when a data volume is first initialised, so a volume created under
+            // another bootstrap user would otherwise fail every health check once the
+            // persistent container is recreated with the default.
             var postgresUsername = builder.AddParameter(
                 ServiceNames.Parameters.PostgresUsername,
-                ServiceNames.Defaults.PostgresUsername,
+                builder.Configuration[$"Parameters:{ServiceNames.Parameters.PostgresUsername}"]
+                    ?? ServiceNames.Defaults.PostgresUsername,
                 secret: false
             ).WithPublishMetadata(
                 "PostgreSQL bootstrap username",
@@ -674,6 +678,11 @@ class Program
             "REVERSEPROXY__CLUSTERS__cluster_nocturne-web__HTTPREQUEST__ACTIVITYTIMEOUT",
             "00:05:00"
         );
+
+        // The forwarder and the hosting request lines log every request path, and some API routes
+        // carry a credential as a path segment. Defaults only: an operator can still raise them.
+        gateway.WithEnvironment("Logging__LogLevel__Yarp", "Warning");
+        gateway.WithEnvironment("Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics", "Warning");
 
         // In dev mode, YARP is the TLS-terminating edge proxy — it must Set
         // the X-Forwarded-* headers from its own connection info. In publish

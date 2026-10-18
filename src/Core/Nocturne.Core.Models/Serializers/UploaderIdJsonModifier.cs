@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 
 namespace Nocturne.Core.Models.Serializers;
@@ -17,13 +16,6 @@ namespace Nocturne.Core.Models.Serializers;
 /// </remarks>
 public static class UploaderIdJsonModifier
 {
-    /// <summary>Case-insensitive options for request bodies deserialized by hand.</summary>
-    public static JsonSerializerOptions CaseInsensitiveReadOptions { get; } = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { RemoveBaseIdProperty } },
-    };
-
     public static void RemoveBaseIdProperty(JsonTypeInfo typeInfo)
     {
         if (typeInfo.Kind != JsonTypeInfoKind.Object || !typeof(ProcessableDocumentBase).IsAssignableFrom(typeInfo.Type))

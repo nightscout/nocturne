@@ -18,6 +18,8 @@ using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.CoachMarks;
+using Nocturne.Core.Clinical.Statistics;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Content;
 using Nocturne.Core.Contracts.Translations;
 using Nocturne.API.Services.Timezones;
@@ -312,11 +314,6 @@ public static class ServiceRegistrationExtensions
                 break;
             case PredictionSource.OrefWasm:
                 services.AddScoped<IPredictionService, PredictionService>();
-                services.AddOrefService(options =>
-                {
-                    options.WasmPath = "oref.wasm";
-                    options.Enabled = true;
-                });
                 break;
             case PredictionSource.None:
             default:
@@ -721,6 +718,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITrackerAlertRuleSyncService, TrackerAlertRuleSyncService>();
         services.AddHostedService<TrackerAlertRuleBackfillService>();
         services.AddScoped<IDeviceAgeService, DeviceAgeService>();
+        services.AddScoped<ISensorSessionInferenceService, SensorSessionInferenceService>();
+        services.AddSingleton<ISensorSessionInferenceRunner, SensorSessionInferenceRunner>();
+        services.AddHostedService<SensorSessionInferenceBackgroundService>();
 
         // Device resolution
         services.AddScoped<IDeviceService, DeviceService>();
@@ -800,6 +800,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IPumpSnapshotRepository, PumpSnapshotRepository>();
         services.AddScoped<IUploaderSnapshotRepository, UploaderSnapshotRepository>();
         services.AddScoped<IDeviceStatusExtrasRepository, DeviceStatusExtrasRepository>();
+        services.AddScoped<IDeviceStatusGroupRepository, DeviceStatusGroupRepository>();
 
         // V4 Profile Repositories
         services.AddScoped<ITherapySettingsRepository, TherapySettingsRepository>();
@@ -897,6 +898,7 @@ public static class ServiceRegistrationExtensions
 
         // Loop/OpenAPS integration
         services.Configure<LoopConfiguration>(configuration.GetSection("Loop"));
+        services.AddSingleton<IConfigureOptions<LoopConfiguration>, LoopLegacyEnvironmentConfiguration>();
         services.AddScoped<ILoopService, LoopService>();
         services.AddScoped<IOpenApsService, OpenApsService>();
         services.AddScoped<IPumpAlertService, PumpAlertService>();

@@ -92,6 +92,14 @@ public static class HistoryPage
             .ToListAsync(ct);
     }
 
+    /// <summary>
+    /// <paramref name="source"/> with the soft-delete filter lifted and tenant isolation kept. A v3
+    /// history read pages it so, and a deleted row sorts in at its delete, since every soft delete
+    /// moves the row's stamp.
+    /// </summary>
+    public static IQueryable<T> IncludingDeleted<T>(this IQueryable<T> source) where T : class =>
+        source.IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey]);
+
     public static long ToMilliseconds(DateTime stamp) =>
         new DateTimeOffset(stamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
 

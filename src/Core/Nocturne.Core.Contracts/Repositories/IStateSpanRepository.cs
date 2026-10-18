@@ -37,6 +37,18 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns spans of <paramref name="category"/> starting at or after <paramref name="from"/>,
+    /// oldest first. Unlike <see cref="GetStateSpansAsync"/>, excludes open spans that started earlier.
+    /// </summary>
+    /// <param name="source">Matches every source when null.</param>
+    Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
+        StateSpanCategory category,
+        string? source,
+        DateTime from,
+        int count,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Counts state spans matching the specified filters.
     /// </summary>
     /// <param name="category">Optional <see cref="StateSpanCategory"/> filter.</param>
@@ -99,12 +111,12 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Deletes a state span by ID.
+    /// Deletes a state span by ID, with every other copy in its duplicate group.
     /// </summary>
     /// <param name="id">The state span identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns><c>true</c> if deleted; <c>false</c> if not found.</returns>
-    Task<bool> DeleteStateSpanAsync(
+    /// <returns>The spans deleted, the requested one first; empty if not found.</returns>
+    Task<IReadOnlyList<StateSpan>> DeleteStateSpanAsync(
         string id,
         CancellationToken cancellationToken = default);
 
@@ -183,12 +195,16 @@ public interface IStateSpanRepository
     /// <param name="type">Optional activity type filter.</param>
     /// <param name="count">Maximum number of records to return.</param>
     /// <param name="skip">Number of records to skip for pagination.</param>
+    /// <param name="from">Inclusive lower bound on the span's start, or <c>null</c> for none.</param>
+    /// <param name="to">Inclusive upper bound on the span's start, or <c>null</c> for none.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A collection of activity <see cref="StateSpan"/> records.</returns>
+    /// <returns>A collection of activity <see cref="StateSpan"/> records, newest start first.</returns>
     Task<IEnumerable<StateSpan>> GetActivityStateSpansAsync(
         string? type = null,
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -250,12 +266,12 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Deletes an activity state span by ID.
+    /// Deletes an activity state span by ID, with every other copy in its duplicate group.
     /// </summary>
     /// <param name="id">The state span identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns><c>true</c> if deleted; <c>false</c> if not found.</returns>
-    Task<bool> DeleteActivityStateSpanAsync(
+    /// <returns>The spans deleted, the requested one first; empty if not found.</returns>
+    Task<IReadOnlyList<StateSpan>> DeleteActivityStateSpanAsync(
         string id,
         CancellationToken cancellationToken = default);
 }

@@ -3,6 +3,7 @@
   import { getChartContext } from "layerchart";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import DeviceEventMarker from "./DeviceEventMarker.svelte";
+  import { markerKey } from "$lib/utils/chart-data-merge";
 
   interface Props {
     onMarkerClick?: (treatmentId: string) => void;
@@ -20,7 +21,7 @@
 
 {#if visible}
   <ChartClipPath>
-    {#each markers as marker, i (marker.treatmentId ?? `${marker.time.getTime()}-${i}`)}
+    {#each markers as marker, i (markerKey(marker.treatmentId, marker.time, i))}
       {@const xPos = chartCtx.xScale(marker.time)}
       {@const yPos = chartCtx.yScale(medianY)}
       <DeviceEventMarker
@@ -29,6 +30,7 @@
         eventType={marker.eventType}
         color={marker.color}
         treatmentId={marker.treatmentId ?? undefined}
+        isInferred={marker.isInferred ?? false}
         {onMarkerClick}
       />
     {/each}

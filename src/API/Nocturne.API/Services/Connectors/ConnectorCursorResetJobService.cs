@@ -239,7 +239,7 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
         _cts.Cancel();
         // Leave terminal states untouched; otherwise mark cancelled so the snapshot reflects intent
         // even before the background loop observes the token.
-        if (_state is ConnectorResetJobState.Pending or ConnectorResetJobState.Running)
+        if (_state.IsLive())
             _state = ConnectorResetJobState.Cancelled;
     }
 
@@ -279,7 +279,11 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
             }
             else
             {
-                _state = ConnectorResetJobState.Completed;
+                var failed = result.Connectors.Any(connector => !connector.Result.Success) ||
+                             _connectors.Values.Any(connector => connector.State == ConnectorResetConnectorState.Failed);
+                _state = failed ? ConnectorResetJobState.Failed : ConnectorResetJobState.Completed;
+                if (failed)
+                    _errorMessage = "connector_reset_failed";
             }
         }
         catch (OperationCanceledException)
@@ -448,14 +452,28 @@ public enum ConnectorResetJobState
     Pending,
     /// <summary>Actively re-pulling connectors.</summary>
     Running,
-    /// <summary>Every connector has been processed (individual connectors may still have failed).</summary>
+    /// <summary>Every connector has been processed successfully.</summary>
     Completed,
-    /// <summary>The job terminated due to an unrecoverable error before completing.</summary>
+    /// <summary>At least one connector failed, or an unrecoverable error prevented the job from completing.</summary>
     Failed,
     /// <summary>The job was cancelled before completing.</summary>
     Cancelled,
     /// <summary>The API restarted while the job was running; the work did not complete and must be re-run.</summary>
     Interrupted,
+}
+
+/// <summary>
+/// The one definition of which <see cref="ConnectorResetJobState"/> values mean a job is in flight.
+/// </summary>
+public static class ConnectorResetJobStates
+{
+    /// <summary>The live states, by name as persisted in the reset job record.</summary>
+    public static IReadOnlyList<string> LiveNames { get; } =
+        Enum.GetValues<ConnectorResetJobState>().Where(IsLive).Select(s => s.ToString()).ToArray();
+
+    /// <summary>Whether a job in this state is pending or running, so can still be cancelled or interrupted.</summary>
+    public static bool IsLive(this ConnectorResetJobState state) =>
+        state is ConnectorResetJobState.Pending or ConnectorResetJobState.Running;
 }
 
 /// <summary>State of a single connector within a reset job.</summary>

@@ -21,6 +21,7 @@ pub mod engine;
 pub mod enums;
 pub mod eval;
 pub mod excursion;
+pub mod facts;
 mod leaf_identity;
 pub mod model;
 pub mod paths;

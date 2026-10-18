@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -215,23 +214,15 @@ public class TreatmentReadService : ITreatmentStore
 
         TreatmentClientId.KeepStored(treatment, existing);
 
-        treatment.Id = await UpsertKeyAsync(stored, ct);
-        try
-        {
-            await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
-            return await GetByIdAsync(stored.Record.Id.ToString(), ct);
-        }
-        catch (OperationCanceledException)
-        {
-            // Canceled request is control flow, not an update failure: propagate.
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to update treatment {Id}", id);
-            return null;
-        }
+        var upsertKey = await UpsertKeyAsync(stored, ct);
+        treatment.Id = upsertKey;
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
+        return await GetByIdAsync(upsertKey, ct)
+            ?? throw ReadBackFailed(id);
     }
+
+    private static InvalidOperationException ReadBackFailed(string id) =>
+        new($"Treatment {id} did not read back after the update");
 
     /// <summary>
     /// Updates the state span a treatment was decomposed into, by re-decomposing the update under the
@@ -244,16 +235,9 @@ public class TreatmentReadService : ITreatmentStore
             return null;
 
         treatment.Id = upsertKey;
-        try
-        {
-            await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
-            return await _projection.GetProjectedStateSpanTreatmentAsync(spanId, ct);
-        }
-        catch (DbUpdateException ex)
-        {
-            _logger.LogError(ex, "Failed to update state span treatment {SpanId}", spanId);
-            return null;
-        }
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
+        return await _projection.GetProjectedStateSpanTreatmentAsync(spanId, ct)
+            ?? throw ReadBackFailed(id);
     }
 
     /// <inheritdoc />

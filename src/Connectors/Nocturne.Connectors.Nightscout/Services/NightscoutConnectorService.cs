@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -207,11 +208,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
                 RecordPublishOutcome(result, SyncDataType.Glucose, outcome.Count, outcome.Success);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
-                result.Success = false;
-                result.Errors.Add($"Failed to sync Glucose: {ex.Message}");
-                _logger.LogError(ex, "Failed to sync Glucose for {Connector}", ConnectorSource);
+                RecordTypeSyncError(result, "Glucose", ex);
             }
         }
 
@@ -254,11 +253,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 foreach (var treatmentType in treatmentTypes.Where(activeTypes.Contains))
                     RecordPublishOutcome(result, treatmentType, outcome.Count, outcome.Success);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
-                result.Success = false;
-                result.Errors.Add($"Failed to sync Treatments: {ex.Message}");
-                _logger.LogError(ex, "Failed to sync Treatments for {Connector}", ConnectorSource);
+                RecordTypeSyncError(result, "Treatments", ex);
             }
         }
 
@@ -270,11 +267,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
                     profiles.ToList(), PublishProfileDataAsync, config, cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
-                result.Success = false;
-                result.Errors.Add($"Failed to sync Profiles: {ex.Message}");
-                _logger.LogError(ex, "Failed to sync Profiles for {Connector}", ConnectorSource);
+                RecordTypeSyncError(result, "Profiles", ex);
             }
         }
 
@@ -305,11 +300,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
                 RecordPublishOutcome(result, SyncDataType.DeviceStatus, outcome.Count, outcome.Success);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
-                result.Success = false;
-                result.Errors.Add($"Failed to sync DeviceStatus: {ex.Message}");
-                _logger.LogError(ex, "Failed to sync DeviceStatus for {Connector}", ConnectorSource);
+                RecordTypeSyncError(result, "DeviceStatus", ex);
             }
         }
 
@@ -321,11 +314,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 await PublishRecordTypeAsync(result, SyncDataType.Food, activeTypes,
                     foods.ToList(), PublishFoodDataAsync, config, cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
-                result.Success = false;
-                result.Errors.Add($"Failed to sync Food: {ex.Message}");
-                _logger.LogError(ex, "Failed to sync Food for {Connector}", ConnectorSource);
+                RecordTypeSyncError(result, "Food", ex);
             }
         }
 
@@ -356,11 +347,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
                 RecordPublishOutcome(result, SyncDataType.Activity, outcome.Count, outcome.Success);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
-                result.Success = false;
-                result.Errors.Add($"Failed to sync Activity: {ex.Message}");
-                _logger.LogError(ex, "Failed to sync Activity for {Connector}", ConnectorSource);
+                RecordTypeSyncError(result, "Activity", ex);
             }
         }
 
@@ -995,14 +984,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         var absoluteUrl = _resolvedBaseUrl != null ? $"{_resolvedBaseUrl}{url}" : url;
         var response = await GetWithHeadersAsync(absoluteUrl, headers);
 
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorContent = await response.Content.ReadAsStringAsync();
-            throw new HttpRequestException(
-                $"HTTP {(int)response.StatusCode} {response.StatusCode}: {errorContent}",
-                null,
-                response.StatusCode);
-        }
+        await response.EnsureSuccessWithBodyAsync();
 
         return await DeserializeResponseAsync<T>(response);
     }

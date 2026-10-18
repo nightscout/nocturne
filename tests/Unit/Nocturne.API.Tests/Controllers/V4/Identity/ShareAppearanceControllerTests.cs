@@ -79,6 +79,8 @@ public sealed class ShareAppearanceControllerTests
         var everythingSet = new UserDisplayPreferences
         {
             GlucoseUnits = "mmol",
+            A1cName = "A1c",
+            A1cUnits = "mmol/mol",
             TimeFormat = "24",
             RegionFormat = "en-GB",
             ColorTheme = "trio",
@@ -92,7 +94,7 @@ public sealed class ShareAppearanceControllerTests
         var disclosed = everythingSet.ToPresentationOnly();
 
         SetPropertyNames(disclosed).Should().BeEquivalentTo(
-            "GlucoseUnits", "TimeFormat", "RegionFormat", "ColorTheme", "Prediction", "Chart", "YearOverviewColors");
+            "GlucoseUnits", "A1cName", "A1cUnits", "TimeFormat", "RegionFormat", "ColorTheme", "Prediction", "Chart", "YearOverviewColors");
 
         // Both are carried whole rather than field by field, so the projection cannot withhold a
         // field added inside them: everything these two types declare is disclosed. Pinning the

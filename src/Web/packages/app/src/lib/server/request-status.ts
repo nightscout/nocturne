@@ -6,6 +6,9 @@
  * they run on every page load, so without sharing one promise each page costs an extra
  * round-trip to the API for an answer that cannot change mid-request.
  *
+ * The status probe in hooks.server.ts (statusProbeHandle) normally sets it first, from its own
+ * call or from its per-host cache; the call here covers the routes that probe skips.
+ *
  * A failed call resolves to null rather than rejecting: every caller has a conservative default
  * and none of them should turn an unreachable status endpoint into a 500. For the apex that means
  * a failed call answers "no tenant", which is the safe direction — the dashboard renders for any

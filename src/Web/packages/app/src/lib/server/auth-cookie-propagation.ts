@@ -93,10 +93,12 @@ export function propagateAuthCookies(
       continue;
     }
 
+    // httpOnly is always passed: SvelteKit's cookies.set defaults an omitted one to true, which
+    // would hide the script-readable IsAuthenticated marker from the client auth guard.
     const opts: CookieSetOptions & { path: string } = {
       path: parsed.path ?? "/",
+      httpOnly: parsed.httpOnly,
     };
-    if (parsed.httpOnly !== undefined) opts.httpOnly = parsed.httpOnly;
     if (parsed.secure !== undefined) opts.secure = parsed.secure;
     if (parsed.sameSite !== undefined) opts.sameSite = parsed.sameSite;
     if (parsed.maxAge !== undefined) opts.maxAge = parsed.maxAge;
@@ -123,7 +125,7 @@ interface ParsedSetCookie {
   value: string;
   path?: string;
   domain?: string;
-  httpOnly?: boolean;
+  httpOnly: boolean;
   secure?: boolean;
   sameSite?: "lax" | "strict" | "none";
   maxAge?: number;
@@ -143,7 +145,7 @@ function parseSetCookieHeader(header: string): ParsedSetCookie | null {
   const value = first.slice(eqIdx + 1).trim();
   if (!name) return null;
 
-  const result: ParsedSetCookie = { name, value, isDeletion: false };
+  const result: ParsedSetCookie = { name, value, httpOnly: false, isDeletion: false };
 
   for (const part of parts) {
     if (!part) continue;

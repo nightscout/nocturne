@@ -65,6 +65,31 @@ public class DataOverviewController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("summary")]
+    [RemoteQuery]
+    [ResponseCache(Duration = 180, Location = ResponseCacheLocation.Client)]
+    [ProducesResponseType(typeof(YearSummaryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
+    public async Task<ActionResult<YearSummaryResponse>> GetYearSummary(
+        [FromQuery] int year,
+        [FromQuery] string[]? dataSources = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (year < 1970 || year > 2100)
+            return BadRequest();
+
+        var cleanSources = dataSources?.Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
+        if (cleanSources is { Length: 0 })
+            cleanSources = null;
+
+        var result = await _dataOverviewService.GetYearSummaryAsync(year, cleanSources, cancellationToken);
+        if (result.DailySummary is null || result.GriTimeline is null)
+            Response.Headers.CacheControl = "no-store";
+        return Ok(result);
+    }
+
     /// <summary>
     /// Get day-level aggregated counts and average glucose for a given year
     /// </summary>

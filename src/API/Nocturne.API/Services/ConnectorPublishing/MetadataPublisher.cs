@@ -150,10 +150,11 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
     {
         try
         {
-            return await _connectorFoodEntryService.ImportAsync(
-                await ResolveNotificationSubjectAsync(source, cancellationToken),
-                entries,
-                cancellationToken);
+            var subject = await ResolveNotificationSubjectAsync(source, cancellationToken);
+            using (PushSystemAudit())
+            {
+                return await _connectorFoodEntryService.ImportAsync(subject, entries, cancellationToken);
+            }
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -172,13 +173,12 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
     {
         try
         {
-            return await _connectorFoodEntryService.MarkMissingAsDeletedAsync(
-                await ResolveNotificationSubjectAsync(source, cancellationToken),
-                source,
-                from,
-                to,
-                presentExternalEntryIds,
-                cancellationToken);
+            var subject = await ResolveNotificationSubjectAsync(source, cancellationToken);
+            using (PushSystemAudit())
+            {
+                return await _connectorFoodEntryService.MarkMissingAsDeletedAsync(
+                    subject, source, from, to, presentExternalEntryIds, cancellationToken);
+            }
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)

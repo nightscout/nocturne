@@ -32,6 +32,10 @@ public class RetrospectiveControllerTests
     private static DeviceStatusProjectionService CreateProjectionService()
     {
         return new DeviceStatusProjectionService(
+            Mock.Of<IDeviceStatusGroupRepository>(r => r.GetAsync(
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>())
+                == Task.FromResult<IReadOnlyList<DeviceStatusGroup>>(Array.Empty<DeviceStatusGroup>())),
             new Mock<IApsSnapshotRepository>().Object,
             new Mock<IPumpSnapshotRepository>().Object,
             new Mock<IUploaderSnapshotRepository>().Object,

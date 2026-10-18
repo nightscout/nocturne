@@ -2,12 +2,12 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -85,7 +85,7 @@ internal sealed class IobCobComputeStage(
             context.ApsSnapshotList, cancellationToken
         );
 
-        var basalSeries = await basalSeriesBuilder.BuildAsync(tempBasalList, startTime, endTime, defaultBasalRate, timeline, cancellationToken);
+        var basalSeries = await basalSeriesBuilder.BuildAsync(context.DisplayTempBasals.ToList(), startTime, endTime, defaultBasalRate, timeline, cancellationToken);
 
         var maxBasalRate = Math.Max(
             defaultBasalRate * 2.5,

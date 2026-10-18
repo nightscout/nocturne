@@ -66,11 +66,7 @@ public class EversenseAuthTokenProvider(
     private async Task<(EversenseTokenResponse? Token, bool ShouldRetry)> RequestTokenAsync(
         EversenseConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        var authBaseUrl = config.Server.ToUpperInvariant() switch
-        {
-            "US" => EversenseConstants.Servers.UsAuth,
-            _ => throw new ArgumentOutOfRangeException(nameof(config.Server), config.Server, "Unsupported Eversense server region")
-        };
+        var authBaseUrl = EversenseConstants.AuthBaseUrl(config.Server);
 
         var formContent = new FormUrlEncodedContent(new Dictionary<string, string>
         {
@@ -89,7 +85,15 @@ public class EversenseAuthTokenProvider(
         var response = await _httpClient.SendAsync(request, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            return (null, await HandleOAuthErrorResponseAsync(response, "Eversense token request", cancellationToken));
+        {
+            var shouldRetry = await HandleOAuthErrorResponseAsync(response, "Eversense token request", cancellationToken);
+            if (ReadErrorCode(await response.Content.ReadAsStringAsync(cancellationToken)) != EversenseConstants.LockedOutErrorCode)
+                return (null, shouldRetry);
+
+            _logger.LogError("Eversense locked the account after repeated refused sign-ins");
+            RecordLoginAnswer(credentialsRefused: true);
+            return (null, false);
+        }
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         var tokenResponse = JsonSerializer.Deserialize<EversenseTokenResponse>(json);
@@ -101,5 +105,26 @@ public class EversenseAuthTokenProvider(
         }
 
         return (tokenResponse, false);
+    }
+
+    private static int? ReadErrorCode(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                   && document.RootElement.TryGetProperty("error_code", out var code)
+                   && code.TryGetInt32(out var value)
+                ? value
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
 }

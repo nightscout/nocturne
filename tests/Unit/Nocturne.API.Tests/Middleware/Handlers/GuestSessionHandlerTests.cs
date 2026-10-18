@@ -167,6 +167,19 @@ public class GuestSessionHandlerTests
     }
 
     [Fact]
+    public async Task NoResolvedTenant_KeepsTheCookie()
+    {
+        // The guest cookie is host-only, so on a single-tenant apex it also reaches that apex's
+        // cross-tenant paths. Clearing it there signed the guest out on their next page.
+        var grantId = await SeedActivatedGrantAsync(_tenantId);
+        var context = BuildContext(tenantId: null, ProtectCookie(grantId));
+
+        await _handler.AuthenticateAsync(context);
+
+        context.Response.Headers.SetCookie.ToString().Should().NotContain(CookieName);
+    }
+
+    [Fact]
     public async Task RevokedGrant_IsRejectedWithoutWaitingForCacheExpiry()
     {
         var grantId = await SeedActivatedGrantAsync(_tenantId);

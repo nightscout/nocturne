@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -27,6 +28,9 @@ namespace Nocturne.API.Services.Treatments;
 /// <seealso cref="CobCalculator"/>
 public class TreatmentService : ITreatmentService
 {
+    private const int DefaultCount = 100;
+    private const int DefaultFindCount = 1000;
+
     private readonly ITreatmentStore _store;
     private readonly ITreatmentDecomposer _decomposer;
     private readonly ITreatmentCache _cache;
@@ -87,7 +91,7 @@ public class TreatmentService : ITreatmentService
         var query = new TreatmentQuery
         {
             Find = find,
-            Count = count ?? 10,
+            Count = count ?? (string.IsNullOrEmpty(find) ? DefaultCount : DefaultFindCount),
             Skip = skip ?? 0
         };
 
@@ -176,7 +180,20 @@ public class TreatmentService : ITreatmentService
     public async Task<Treatment?> UpdateTreatmentAsync(
         string id, Treatment treatment, CancellationToken cancellationToken = default)
     {
-        var updated = await _store.UpdateAsync(id, treatment, cancellationToken);
+        Treatment? updated;
+        var completed = false;
+        try
+        {
+            updated = await _store.UpdateAsync(id, treatment, cancellationToken);
+            completed = true;
+        }
+        finally
+        {
+            // A failed update may have committed some of its records, and cached reads would keep serving the old treatment.
+            if (!completed)
+                await _cache.InvalidateAsync(CancellationToken.None);
+        }
+
         if (updated is null) return null;
 
         await _cache.InvalidateAsync(cancellationToken);
@@ -200,9 +217,21 @@ public class TreatmentService : ITreatmentService
         await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
 
         await _cache.InvalidateAsync(cancellationToken);
-        await _events.OnUpdatedAsync(existing, cancellationToken);
 
-        return existing;
+        // The merged record carries the upsert key, which the wire would coerce to a different
+        // identifier than the create returned; AAPS stores the identifier from every response and
+        // every pushed record, so the response and the event carry the record as reads serve it.
+        // The upsert key is a stored legacy id, so it resolves exactly, with no hash scan.
+        var served = await _store.GetByIdAsync(existing.Id ?? id, cancellationToken);
+        if (served is null)
+        {
+            _logger.LogWarning("Patched treatment {Id} did not read back under its upsert key", id);
+            served = existing;
+        }
+
+        await _events.OnUpdatedAsync(served, cancellationToken);
+
+        return served;
     }
 
     private static void ApplyJsonPatch(Treatment treatment, JsonElement patchData)

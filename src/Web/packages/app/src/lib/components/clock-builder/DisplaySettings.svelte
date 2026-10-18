@@ -4,6 +4,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Slider } from "$lib/components/ui/slider";
+  import * as Select from "$lib/components/ui/select";
   import { Separator } from "$lib/components/ui/separator";
   import * as Popover from "$lib/components/ui/popover";
   import Settings from "@lucide/svelte/icons/settings";
@@ -45,6 +46,39 @@
   <Popover.Content class="w-72" side="bottom" align="end">
     <div class="space-y-4">
       <h4 class="font-medium">Display Settings</h4>
+      <div class="flex items-center justify-between gap-2">
+        <Label>Glucose units</Label>
+        <Select.Root
+          type="single"
+          value={settings.glucoseUnits ?? "mg/dl"}
+          onValueChange={(v) => updateSetting("glucoseUnits", v)}
+        >
+          <Select.Trigger class="w-32">
+            {settings.glucoseUnits === "mmol" ? "mmol/L" : "mg/dL"}
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="mg/dl">mg/dL</Select.Item>
+            <Select.Item value="mmol">mmol/L</Select.Item>
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="flex items-center justify-between gap-2">
+        <Label>Time format</Label>
+        <Select.Root
+          type="single"
+          value={settings.timeFormat ?? "12"}
+          onValueChange={(v) => updateSetting("timeFormat", v)}
+        >
+          <Select.Trigger class="w-32">
+            {settings.timeFormat === "24" ? "24-hour" : "12-hour"}
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="12">12-hour</Select.Item>
+            <Select.Item value="24">24-hour</Select.Item>
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <Separator />
       <div class="flex items-center justify-between">
         <Label>BG-colored background</Label>
         <Checkbox

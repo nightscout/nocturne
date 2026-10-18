@@ -46,6 +46,7 @@ public class UploaderIdBindingTests
             .Callback<DeviceStatus, string?, WriteOrigin, CancellationToken>((ds, _, _, _) => decomposed.Add(ds))
             .ReturnsAsync(new DecompositionResult());
         var projection = new DeviceStatusProjectionService(
+            Mock.Of<IDeviceStatusGroupRepository>(),
             Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IPumpSnapshotRepository>(),
             Mock.Of<IUploaderSnapshotRepository>(),

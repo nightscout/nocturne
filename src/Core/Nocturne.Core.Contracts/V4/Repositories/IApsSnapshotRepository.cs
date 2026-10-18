@@ -17,7 +17,7 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// Retrieve a page of <see cref="ApsSnapshot"/> records filtered by time range, device, and source.
     /// </summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end of the time window, or <c>null</c> for no upper bound.</param>
+    /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
     /// <param name="device">Optional device identifier filter.</param>
     /// <param name="source">Optional data source filter.</param>
     /// <param name="limit">Maximum number of records to return (default 100).</param>
@@ -40,22 +40,10 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<ApsIobCobPoint>> GetIobCobPointsAsync(DateTime from, DateTime to, CancellationToken ct = default);
 
-    /// <summary>
-    /// Counts the snapshots <see cref="GetAsync"/> reads for the same window and device, with no
-    /// source filter.
-    /// </summary>
-    Task<int> CountAsync(DateTime? from, DateTime? to, string? device, CancellationToken ct = default);
-
     /// <summary>Retrieve <see cref="ApsSnapshot"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<ApsSnapshot>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
-
-    /// <summary>Retrieve <see cref="ApsSnapshot"/> records modified since the given timestamp, ordered oldest-first.</summary>
-    /// <param name="lastModifiedMills">Unix millisecond timestamp; records with <c>SysUpdatedAt</c> at or after this value are returned.</param>
-    /// <param name="limit">Maximum number of records to return (default 1000).</param>
-    /// <param name="ct">Cancellation token.</param>
-    Task<IEnumerable<ApsSnapshot>> GetModifiedSinceAsync(long lastModifiedMills, int limit = 1000, CancellationToken ct = default);
 
     /// <summary>
     /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> for the current tenant

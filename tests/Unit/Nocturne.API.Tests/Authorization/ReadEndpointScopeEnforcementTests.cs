@@ -27,9 +27,9 @@ public class ReadEndpointScopeEnforcementTests
     /// Controllers exempt from the per-action RequireScope rule, with justification.
     /// </summary>
     /// <remarks>
-    /// Deliberately minimal. Controllers carrying <c>[AllowAnonymous]</c> (V1/V3 <c>StatusController</c>,
-    /// <c>VersionsController</c>, <c>VersionController</c>, V1 <c>AuthenticationController</c>,
-    /// V3 <c>LastModifiedController</c>) and write-only controllers (<c>AlexaController</c>, a read
+    /// Deliberately minimal. Controllers carrying <c>[AllowAnonymous]</c> (V1 <c>StatusController</c>,
+    /// <c>VersionsController</c>, <c>VersionController</c>, V1 <c>AuthenticationController</c>)
+    /// and write-only controllers (<c>AlexaController</c>, a read
     /// exposed over POST that runs its own permission check) are skipped by the scan itself, so
     /// listing them here would only create a way for a later change to silently lose its gate.
     /// <see cref="ExemptControllers_AreStillNeeded"/> guards that.
@@ -73,9 +73,16 @@ public class ReadEndpointScopeEnforcementTests
             // Merges four categories into one number, so it cannot be filtered and requires every
             // category's read scope. Read from ActivityReadScopeGuard.AdmissionScopes in the action.
             ["CountController.CountActivity"] = "every activity category, checked in the action",
+
+            // Every caller with a credential may ask; the answer lists only the collections its
+            // scopes read, through LegacyStorageReadScopes in StatusService.
+            ["StatusController.GetStatus"] = CallerNarrowedAnswer,
+            ["LastModifiedController.GetLastModified"] = CallerNarrowedAnswer,
         };
 
     private const string PerRequestStorageScope = "storage-derived scope, checked in the action";
+
+    private const string CallerNarrowedAnswer = "answer narrowed to the caller's read scopes";
 
     [Fact]
     public void EveryV1V2AndV3ReadAction_RequiresAnOAuthScope()
@@ -205,11 +212,13 @@ public class ReadEndpointScopeEnforcementTests
             var parts = key.Split('.', 2);
 
             // Resolved by the type that declares the action: the same controller name exists in more
-            // than one version namespace (NotificationsController in V1 and V2).
+            // than one version namespace (NotificationsController in V1 and V2). An [AllowAnonymous]
+            // controller is skipped by the scan, so no exemption can name it (V1 StatusController).
             var matches = assembly.GetTypes()
                 .Where(t => t.Name == parts[0]
                     && t.Namespace is "Nocturne.API.Controllers.V1"
-                        or "Nocturne.API.Controllers.V2" or "Nocturne.API.Controllers.V3")
+                        or "Nocturne.API.Controllers.V2" or "Nocturne.API.Controllers.V3"
+                    && t.GetCustomAttribute<AllowAnonymousAttribute>() is null)
                 .Select(t => (Type: t, Method: t
                     .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
                     .FirstOrDefault(m => m.Name == parts[1])))
