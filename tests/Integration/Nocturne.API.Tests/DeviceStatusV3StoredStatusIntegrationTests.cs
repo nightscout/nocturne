@@ -170,7 +170,9 @@ public class DeviceStatusV3StoredStatusIntegrationTests : ApiIntegrationTestBase
         var identifier = MongoObjectId.FromGuid(pumpId);
         var delete = await client.DeleteAsync($"/api/v3/devicestatus/{identifier}");
 
-        delete.StatusCode.Should().Be(HttpStatusCode.NoContent, await delete.Content.ReadAsStringAsync());
+        delete.StatusCode.Should().Be(HttpStatusCode.OK, await delete.Content.ReadAsStringAsync());
+        delete.Content.Headers.ContentType!.MediaType.Should().Be("application/json");
+        (await delete.Content.ReadAsStringAsync()).Should().Be("{\"status\":200}");
         (await client.GetAsync($"/api/v3/devicestatus/{identifier}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ListV4Async(client, "pump", device)).Should().BeEmpty();
         (await ListV4Async(client, "uploader", device)).Should().BeEmpty();

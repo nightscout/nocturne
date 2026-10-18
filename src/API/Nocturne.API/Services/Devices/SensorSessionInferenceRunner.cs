@@ -1,0 +1,32 @@
+using Nocturne.API.Services.Audit;
+using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Multitenancy;
+
+namespace Nocturne.API.Services.Devices;
+
+/// <summary>
+/// Runs <see cref="ISensorSessionInferenceService"/> for a tenant in a DI scope of its own, with its
+/// writes attributed to the system (<see cref="SystemAuditScope.PushForScope"/>): a withdrawal
+/// recorded as the user's would dismiss its gap for good.
+/// </summary>
+public interface ISensorSessionInferenceRunner
+{
+    Task RunAsync(TenantContext tenant, Func<ISensorSessionInferenceService, CancellationToken, Task> work, CancellationToken ct);
+}
+
+/// <inheritdoc />
+public sealed class SensorSessionInferenceRunner(IServiceScopeFactory scopes) : ISensorSessionInferenceRunner
+{
+    private const string AuditEndpoint = "service:sensor-session-inference";
+
+    /// <inheritdoc />
+    public async Task RunAsync(
+        TenantContext tenant, Func<ISensorSessionInferenceService, CancellationToken, Task> work, CancellationToken ct)
+    {
+        using var scope = scopes.CreateScope();
+        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(tenant);
+        using var audit = SystemAuditScope.PushForScope(scope.ServiceProvider, AuditEndpoint);
+
+        await work(scope.ServiceProvider.GetRequiredService<ISensorSessionInferenceService>(), ct);
+    }
+}

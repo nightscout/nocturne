@@ -35,7 +35,7 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     /// Retrieve a page of <see cref="DeviceEvent"/> records filtered by time range, device, source, and origin.
     /// </summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end of the time window, or <c>null</c> for no upper bound.</param>
+    /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
     /// <param name="device">Optional device identifier filter.</param>
     /// <param name="source">Optional data source filter.</param>
     /// <param name="limit">Maximum number of records to return (default 100).</param>
@@ -70,6 +70,28 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
+    /// Delete only <paramref name="dataSource"/>'s own record under <paramref name="syncIdentifier"/>.
+    /// Unlike <see cref="DeleteBySyncIdentifierAsync"/>, which takes every copy deduplication linked
+    /// to it, a copy another source reported survives and becomes its group's primary.
+    /// </summary>
+    /// <returns>Number of records deleted.</returns>
+    Task<int> WithdrawBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
+    /// Every live event of <paramref name="eventTypes"/> in [<paramref name="from"/>, <paramref name="to"/>),
+    /// oldest first, including the copies deduplication hides behind another source's primary.
+    /// </summary>
+    Task<IReadOnlyList<DeviceEvent>> GetAllCopiesAsync(
+        DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, CancellationToken ct = default);
+
+    /// <summary>
+    /// The events of <paramref name="eventTypes"/> in [<paramref name="from"/>, <paramref name="to"/>)
+    /// that the user deleted, oldest first.
+    /// </summary>
+    Task<IReadOnlyList<DeviceEvent>> GetUserDeletedAsync(
+        DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, CancellationToken ct = default);
 
     /// <summary>
     /// Retrieve the timestamp of the most recently stored <see cref="DeviceEvent"/>, optionally scoped to a data source.

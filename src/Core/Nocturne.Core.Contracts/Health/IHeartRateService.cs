@@ -8,15 +8,19 @@ namespace Nocturne.Core.Contracts.Health;
 public interface IHeartRateService
 {
     /// <summary>
-    /// Get heart rate records with optional pagination
+    /// Get heart rate records with optional pagination, newest first
     /// </summary>
     /// <param name="count">Maximum number of records to return</param>
     /// <param name="skip">Number of records to skip for pagination</param>
+    /// <param name="from">Inclusive lower bound on the timestamp, or <see langword="null"/> for none</param>
+    /// <param name="to">Inclusive upper bound on the timestamp, or <see langword="null"/> for none</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Collection of heart rate records</returns>
     Task<IEnumerable<HeartRate>> GetHeartRatesAsync(
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default
     );
 

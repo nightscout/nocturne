@@ -142,7 +142,7 @@ public class LoopService : ILoopService, IDisposable
         {
             return (
                 false,
-                "Loop notification failed: Invalid configuration - LOOP_APNS_KEY not set."
+                "Loop notification failed: Invalid configuration - set Loop:ApnsKey (or LOOP_APNS_KEY)."
             );
         }
 
@@ -150,7 +150,7 @@ public class LoopService : ILoopService, IDisposable
         {
             return (
                 false,
-                "Loop notification failed: Invalid configuration - LOOP_APNS_KEY_ID not set."
+                "Loop notification failed: Invalid configuration - set Loop:ApnsKeyId (or LOOP_APNS_KEY_ID)."
             );
         }
 
@@ -161,7 +161,7 @@ public class LoopService : ILoopService, IDisposable
         {
             return (
                 false,
-                "Loop notification failed: Invalid configuration - LOOP_DEVELOPER_TEAM_ID not set."
+                "Loop notification failed: Invalid configuration - set Loop:DeveloperTeamId (or LOOP_DEVELOPER_TEAM_ID)."
             );
         }
 

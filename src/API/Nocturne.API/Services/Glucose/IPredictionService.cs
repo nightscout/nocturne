@@ -1,6 +1,5 @@
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Controllers.V4.Analytics;
-using Nocturne.API.Services.Devices;
 
 namespace Nocturne.API.Services.Glucose;
 
@@ -9,8 +8,8 @@ namespace Nocturne.API.Services.Glucose;
 /// The active prediction source is configured via <see cref="PredictionOptions"/>:
 /// <see cref="PredictionSource.DeviceStatus"/> reads AID-computed predictions from the latest
 /// device status upload, while <see cref="PredictionSource.OrefWasm"/> runs the oref algorithm
-/// server-side via <see cref="OrefWasmService"/>. <see cref="PredictionSource.None"/> causes
-/// the endpoint to return a 404.
+/// server-side through the native bindings in <c>Nocturne.Core.Oref</c>.
+/// <see cref="PredictionSource.None"/> causes the endpoint to return a 404.
 /// </summary>
 /// <seealso cref="PredictionService"/>
 public interface IPredictionService

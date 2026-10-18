@@ -60,6 +60,7 @@ export interface DeviceEventMarkerData {
   eventType?: DeviceEventType;
   color: string;
   treatmentId?: string;
+  isInferred?: boolean;
   [key: string]: unknown;
 }
 

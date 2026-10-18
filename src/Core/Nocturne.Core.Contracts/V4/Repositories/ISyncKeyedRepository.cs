@@ -23,4 +23,18 @@ public interface ISyncKeyedRepository<T> where T : class, IV4Record
     /// <param name="ct">Cancellation token.</param>
     Task<bool> IsRecreationBlockedAsync(
         string dataSource, string syncIdentifier, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="IV4Repository{T}.CreateAsync"/>, also reporting whether the write inserted a row or
+    /// updated in place the live row holding the same (DataSource, SyncIdentifier).
+    /// </summary>
+    /// <exception cref="RecreationBlockedException">The key is held by a row the user deleted.</exception>
+    Task<SyncUpsert<T>> UpsertAsync(T model, WriteOrigin origin, CancellationToken ct = default);
 }
+
+/// <summary>
+/// The outcome of <see cref="ISyncKeyedRepository{T}.UpsertAsync"/>: the persisted record and whether
+/// it was inserted rather than updated in place.
+/// </summary>
+/// <typeparam name="TRecord">The V4 record type.</typeparam>
+public sealed record SyncUpsert<TRecord>(TRecord Record, bool Created);

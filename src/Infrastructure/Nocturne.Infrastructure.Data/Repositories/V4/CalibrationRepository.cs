@@ -75,7 +75,7 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// Deletes all calibration records within the given time range.
     /// </summary>
     /// <param name="from">Inclusive start, or null for no lower bound.</param>
-    /// <param name="to">Exclusive end, or null for no upper bound.</param>
+    /// <param name="to">Inclusive end, or null for no upper bound.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default)

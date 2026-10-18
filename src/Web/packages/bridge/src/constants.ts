@@ -1,3 +1,9 @@
+/** `NotificationBase.Level` as the API sends it. */
+export const AlarmLevel = {
+  Warn: 1,
+  Urgent: 2,
+} as const;
+
 /**
  * Environment variable names for the WebSocket Bridge
  */

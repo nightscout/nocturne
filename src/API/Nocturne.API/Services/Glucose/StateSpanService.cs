@@ -136,6 +136,8 @@ public class StateSpanService : IStateSpanService
         string? type = null,
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -147,6 +149,8 @@ public class StateSpanService : IStateSpanService
             type: type,
             count: count,
             skip: skip,
+            from: from,
+            to: to,
             cancellationToken: cancellationToken);
 
         // Convert each StateSpan to an Activity using the mapper

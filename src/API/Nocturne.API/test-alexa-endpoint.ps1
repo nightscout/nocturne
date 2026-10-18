@@ -1,8 +1,8 @@
 # Test script to verify Alexa endpoint functionality
-# Run this after starting the API to test the /api/alexa endpoint
+# Run this after starting the API to test the /api/v1/alexa endpoint
 
 $baseUrl = "https://localhost:7195"
-$endpoint = "$baseUrl/api/alexa"
+$endpoint = "$baseUrl/api/v1/alexa"
 
 # Test 1: Launch Request
 $launchRequest = @{

@@ -1,40 +1,40 @@
-.nocturne-mermaid {
+.nocturne-mermaid-frame {
   position: relative;
-  display: block;
   margin: 1rem 0;
-  height: 480px;
+  padding: 2.5rem 1rem 1rem;
   border: 1px solid var(--scalar-border-color, rgba(127,127,127,0.3));
   border-radius: 6px;
   background: var(--scalar-background-1, transparent);
-  overflow: hidden;
+  --pele-bg: var(--scalar-background-1);
+  --pele-fg: var(--scalar-color-1);
+  --pele-muted: var(--scalar-color-3);
+  --pele-line: var(--scalar-color-2);
+  --pele-surface: var(--scalar-background-2);
+  --pele-surface-alt: var(--scalar-background-3);
+  --pele-border: var(--scalar-color-3);
+  --pele-accent: var(--scalar-color-accent);
+  --pele-critical: var(--scalar-color-red);
+  --pele-error: var(--scalar-color-red);
 }
-.nocturne-mermaid[data-state="pending"]::before {
-  content: "Loading diagram…";
-  position: absolute;
-  inset: 0;
+.nocturne-mermaid {
+  display: block;
+  min-height: 120px;
+}
+.nocturne-mermaid[data-state="pending"] {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.nocturne-mermaid[data-state="pending"]::before {
+  content: "Loading diagram…";
   color: var(--scalar-color-3, #888);
   font-size: 0.85em;
 }
-.nocturne-mermaid > svg {
-  display: block;
-  width: 100% !important;
-  height: 100% !important;
-  max-width: none;
-  cursor: grab;
-}
-.nocturne-mermaid > svg:active { cursor: grabbing; }
-.nocturne-mermaid-controls {
+.nocturne-mermaid-fullscreen {
   position: absolute;
   top: 8px;
   right: 8px;
-  display: flex;
-  gap: 4px;
   z-index: 1;
-}
-.nocturne-mermaid-controls button {
   padding: 4px 8px;
   font-size: 0.75em;
   background: var(--scalar-background-2, rgba(0,0,0,0.6));
@@ -44,10 +44,14 @@
   cursor: pointer;
   opacity: 0.7;
 }
-.nocturne-mermaid-controls button:hover { opacity: 1; }
-.nocturne-mermaid:fullscreen {
-  height: 100vh;
+.nocturne-mermaid-fullscreen:hover { opacity: 1; }
+.nocturne-mermaid-frame:fullscreen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0;
   border: none;
   border-radius: 0;
+  overflow: auto;
   background: var(--scalar-background-1, #111);
 }

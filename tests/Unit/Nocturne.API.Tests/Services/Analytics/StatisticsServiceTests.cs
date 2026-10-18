@@ -1378,33 +1378,105 @@ public class StatisticsServiceTests
     #region Reliability Assessment Tests
 
     [Theory]
-    [InlineData(14, 100, 14, true)] // Meets days + has readings
-    [InlineData(30, 500, 14, true)] // Exceeds recommended days
-    [InlineData(10, 100, 14, false)] // Below recommended days
-    [InlineData(14, 0, 14, false)] // No readings
-    [InlineData(0, 0, 14, false)] // No data at all
-    [InlineData(1, 288, 1, true)] // 1-day period, 1 day of data
-    [InlineData(7, 2016, 7, true)] // 7-day period, 7 days of data
+    [InlineData(14, 100, 14, 14, true)] // Meets days + has readings
+    [InlineData(30, 500, 30, 14, true)] // Exceeds recommended days
+    [InlineData(10, 100, 30, 14, false)] // Below recommended days
+    [InlineData(14, 0, 14, 14, false)] // No readings
+    [InlineData(0, 0, 14, 14, false)] // No data at all
+    [InlineData(1, 288, 1, 1, true)] // 1-day window, 1 day of data
+    [InlineData(2, 576, 3, 3, false)] // 3-day window, 2 days of data
+    [InlineData(7, 2016, 7, 7, true)] // 7-day window, 7 days of data
+    [InlineData(5, 1440, 5, 5, true)] // 5-day window, 5 days of data
+    [InlineData(10, 2880, 10, 10, true)] // 10-day window, 10 days of data
+    [InlineData(5, 1440, 7, 7, false)] // 7-day window, 5 days of data
+    [InlineData(13, 3744, 90, 14, false)] // 90-day window still wants 14 days
     public void AssessReliability_WithVariousInputs_ShouldReturnCorrectMeetsReliabilityCriteria(
         int daysOfData,
         int readingCount,
-        int recommendedMinimumDays,
+        int windowDays,
+        int expectedMinimumDays,
         bool expectedMeetsReliability
     )
     {
-        // Act
-        var result = _statisticsService.AssessReliability(
-            daysOfData,
-            readingCount,
-            recommendedMinimumDays
-        );
+        var result = _statisticsService.AssessReliability(daysOfData, readingCount, windowDays);
 
-        // Assert
-        result.Should().NotBeNull();
         result.MeetsReliabilityCriteria.Should().Be(expectedMeetsReliability);
         result.DaysOfData.Should().Be(daysOfData);
-        result.RecommendedMinimumDays.Should().Be(recommendedMinimumDays);
+        result.RecommendedMinimumDays.Should().Be(expectedMinimumDays);
         result.ReadingCount.Should().Be(readingCount);
+    }
+
+    private static readonly TimeZoneInfo UtcPlusTen =
+        TimeZoneInfo.CreateCustomTimeZone("UTC+10", TimeSpan.FromHours(10), "UTC+10", "UTC+10");
+
+    // A UTC+10 local day: 14:00 UTC the day before to 14:00 UTC.
+    private static readonly DateTime LocalDayStartUtc = new(2026, 3, 9, 14, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void AnalyzeGlucoseData_ALocalDayCrossingUtcMidnight_IsOneDayOfData()
+    {
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(LocalDayStartUtc, 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            windowDays: 1, timeZone: UtcPlusTen);
+
+        result.Reliability!.DaysOfData.Should().Be(1);
+        result.Reliability.RecommendedMinimumDays.Should().Be(1);
+        result.Reliability.MeetsReliabilityCriteria.Should().BeTrue();
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_WithoutAZone_CountsUtcDays()
+    {
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(LocalDayStartUtc, 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            windowDays: 1);
+
+        result.Reliability!.DaysOfData.Should().Be(2);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_AThirtyDayWindowWithOneDay_StillWantsFourteen()
+    {
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(LocalDayStartUtc, 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            windowDays: 30, timeZone: UtcPlusTen);
+
+        result.Reliability!.DaysOfData.Should().Be(1);
+        result.Reliability.RecommendedMinimumDays.Should().Be(14);
+        result.Reliability.MeetsReliabilityCriteria.Should().BeFalse();
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_ACallerWithNoWindow_IsJudgedAgainstTheClinicalMinimum()
+    {
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(LocalDayStartUtc, 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            StatisticsService.ClinicalMinimumDays, timeZone: UtcPlusTen);
+
+        result.Reliability!.RecommendedMinimumDays.Should().Be(14);
+        result.Reliability.MeetsReliabilityCriteria.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(2026, 4, 5, 25)] // Sydney clocks go back: a 25 hour day
+    [InlineData(2026, 10, 4, 23)] // Sydney clocks go forward: a 23 hour day
+    public void ADaylightSavingDay_IsOneDayWindowAndOneDayOfData(int year, int month, int day, int hours)
+    {
+        var sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        var localMidnight = new DateTime(year, month, day, 0, 0, 0, DateTimeKind.Unspecified);
+        var start = TimeZoneInfo.ConvertTimeToUtc(localMidnight, sydney);
+        var end = TimeZoneInfo.ConvertTimeToUtc(localMidnight.AddDays(1), sydney).AddMilliseconds(-1);
+
+        (end - start).TotalHours.Should().BeApproximately(hours, 0.01);
+        var windowDays = StatisticsService.WindowDays(start, end);
+        windowDays.Should().Be(1);
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(start, 5, hours * 12), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            windowDays, timeZone: sydney);
+
+        result.Reliability!.DaysOfData.Should().Be(1);
+        result.Reliability.MeetsReliabilityCriteria.Should().BeTrue();
     }
 
     #endregion
@@ -1439,6 +1511,17 @@ public class StatisticsServiceTests
 
     #region CGM Active Percent Tests
 
+    [Fact]
+    public void AnalyzeGlucoseDataExtended_MeasuresDataSufficiencyAgainstTheWholeWindow()
+    {
+        var tenCompleteDays = AtCadence(new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), 5, 10 * 288);
+
+        var result = _statisticsService.AnalyzeGlucoseDataExtended(tenCompleteDays, [], [], windowDays: 30);
+
+        result.DataSufficiency.TotalDays.Should().Be(30);
+        result.DataSufficiency.IsSufficient.Should().BeFalse();
+    }
+
     private static SensorGlucose[] AtCadence(
         DateTime start,
         double cadenceMinutes,
@@ -1455,6 +1538,41 @@ public class StatisticsServiceTests
             })
             .ToArray();
 
+    /// <summary>
+    /// One warm-up per sensor session, recorded or inferred, however many records the change left:
+    /// here xDrip logs a change and a start for one insertion and AAPS a copy, two days later
+    /// Nocturne infers the next one, and a site change is no sensor session at all.
+    /// </summary>
+    [Fact]
+    public void AnalyzeGlucoseData_CountsOneSensorWarmupPerSession()
+    {
+        var start = DateTime.UtcNow.AddDays(-3);
+        DeviceEvent Event(DeviceEventType type, DateTime at, string source) =>
+            new() { EventType = type, Timestamp = at, DataSource = source };
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(start, 5, 864), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14,
+            deviceEvents:
+            [
+                Event(DeviceEventType.SensorChange, start.AddHours(2), "xdrip"),
+                Event(DeviceEventType.SensorStart, start.AddHours(2).AddMinutes(3), "xdrip"),
+                Event(DeviceEventType.SensorStart, start.AddHours(2).AddMinutes(9), "aaps"),
+                Event(DeviceEventType.SensorStart, start.AddDays(2), "sensor-session-inference"),
+                Event(DeviceEventType.SiteChange, start.AddDays(1), "aaps"),
+            ]);
+
+        result.DataQuality.SensorWarmups.Should().Be(2);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_WithoutDeviceEvents_CountsNoSensorWarmups()
+    {
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(DateTime.UtcNow.AddDays(-1), 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14);
+
+        result.DataQuality.SensorWarmups.Should().Be(0);
+    }
+
     [Fact]
     public void AnalyzeGlucoseData_HalfCoverage_Returns50PercentCgmActive()
     {
@@ -1462,7 +1580,7 @@ public class StatisticsServiceTests
         var start = DateTime.UtcNow.AddDays(-1);
 
         var result = _statisticsService.AnalyzeGlucoseData(
-            AtCadence(start, 5, 144), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            AtCadence(start, 5, 144), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14,
             startDate: start, endDate: start.AddDays(1));
 
         result.DataQuality.CgmActivePercent.Should().BeApproximately(50.0, 1.0);
@@ -1474,7 +1592,7 @@ public class StatisticsServiceTests
         var start = DateTime.UtcNow.AddDays(-1);
 
         var result = _statisticsService.AnalyzeGlucoseData(
-            AtCadence(start, 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            AtCadence(start, 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14,
             startDate: start, endDate: start.AddDays(1));
 
         result.DataQuality.CgmActivePercent.Should().Be(100.0);
@@ -1498,7 +1616,7 @@ public class StatisticsServiceTests
         var result = _statisticsService.AnalyzeGlucoseData(
             AtCadence(start, cadenceMinutes, readingCount),
             Array.Empty<Bolus>(),
-            Array.Empty<CarbIntake>(),
+            Array.Empty<CarbIntake>(), windowDays: 14,
             startDate: start,
             endDate: start.AddHours(1));
 
@@ -1512,7 +1630,7 @@ public class StatisticsServiceTests
         var entries = AtCadence(start, 5, 7).Concat(AtCadence(start.AddMinutes(60), 5, 7));
 
         var result = _statisticsService.AnalyzeGlucoseData(
-            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>());
+            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14);
 
         result.DataQuality.GapAnalysis.Gaps.Should().HaveCount(1);
         result.DataQuality.GapAnalysis.LongestGap.Should().Be(30);
@@ -1536,7 +1654,7 @@ public class StatisticsServiceTests
             .Concat(AtCadence(start.AddMinutes(75 + holeMinutes), 15, 6));
 
         var result = _statisticsService.AnalyzeGlucoseData(
-            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>());
+            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14);
 
         result.DataQuality.GapAnalysis.Gaps.Should().HaveCount(expectedGaps);
         result.DataQuality.MissingReadings.Should().Be(expectedMissing);
@@ -1551,7 +1669,7 @@ public class StatisticsServiceTests
             .Concat(AtCadence(start.AddHours(12), 5, 144, Guid.NewGuid()));
 
         var result = _statisticsService.AnalyzeGlucoseData(
-            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14,
             startDate: start, endDate: start.AddDays(1));
 
         result.DataQuality.CgmActivePercent.Should().BeApproximately(100.0, 1.0);
@@ -1565,7 +1683,7 @@ public class StatisticsServiceTests
         var start = DateTime.UtcNow.AddHours(-12);
 
         var result = _statisticsService.AnalyzeGlucoseData(
-            AtCadence(start, 5, 144), Array.Empty<Bolus>(), Array.Empty<CarbIntake>());
+            AtCadence(start, 5, 144), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14);
 
         result.DataQuality.CgmActivePercent.Should().BeApproximately(100.0, 2.0);
     }
@@ -1869,7 +1987,7 @@ public class StatisticsServiceTests
         };
 
         // Act
-        var result = _statisticsService.AnalyzeGlucoseData(entries, boluses, carbIntakes);
+        var result = _statisticsService.AnalyzeGlucoseData(entries, boluses, carbIntakes, windowDays: 14);
 
         // Assert
         result.Should().NotBeNull();
@@ -1891,7 +2009,7 @@ public class StatisticsServiceTests
         var carbIntakes = Array.Empty<CarbIntake>();
 
         // Act
-        var result = _statisticsService.AnalyzeGlucoseData(entries, boluses, carbIntakes);
+        var result = _statisticsService.AnalyzeGlucoseData(entries, boluses, carbIntakes, windowDays: 14);
 
         // Assert
         result.Should().NotBeNull();

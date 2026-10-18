@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   isEntryDocument,
+  parseAlarm,
+  parseAnnouncement,
   parseDataUpdate,
   parseNotification,
   parseSyncProgress,
   parseTrackerUpdate,
+  parseUrgentAlarm,
 } from "./payloads";
 
 describe("isEntryDocument", () => {
@@ -180,5 +183,58 @@ describe("parseSyncProgress", () => {
     expect(parseSyncProgress(undefined)).toBeNull();
     expect(parseSyncProgress("dexcom")).toBeNull();
     expect(parseSyncProgress([complete])).toBeNull();
+  });
+});
+
+const MILLS = Date.UTC(2026, 7, 14, 3, 0, 0);
+const ISO = "2026-08-14T03:00:00.000Z";
+
+const bridgePayload = (level: number) => ({
+  level,
+  title: "Glucose",
+  message: "Check glucose",
+  group: "default",
+  plugin: "simplealarms",
+  timestamp: MILLS,
+});
+
+describe("parseAlarm", () => {
+  it("reads the API's numeric level", () => {
+    expect(parseAlarm(bridgePayload(2)).level).toBe("urgent");
+    expect(parseAlarm(bridgePayload(1)).level).toBe("warn");
+    expect(parseAlarm(bridgePayload(0)).level).toBe("info");
+  });
+
+  it("keeps a string level", () => {
+    expect(parseAlarm({ level: "urgent" }).level).toBe("urgent");
+  });
+
+  it("converts numeric mills and keeps an ISO string", () => {
+    expect(parseAlarm(bridgePayload(1)).timestamp).toBe(ISO);
+    expect(parseAlarm({ timestamp: ISO }).timestamp).toBe(ISO);
+  });
+});
+
+describe("parseUrgentAlarm", () => {
+  it("is urgent and keeps the timestamp", () => {
+    const alarm = parseUrgentAlarm(bridgePayload(2));
+    expect(alarm.level).toBe("urgent");
+    expect(alarm.timestamp).toBe(ISO);
+  });
+
+  it("drops a numeric timestamp that names no instant", () => {
+    expect(parseUrgentAlarm({ level: 2, timestamp: Number.NaN }).timestamp).toBeUndefined();
+  });
+});
+
+describe("parseAnnouncement", () => {
+  it("keeps the numeric level and mills timestamp", () => {
+    const announcement = parseAnnouncement(bridgePayload(1));
+    expect(announcement.level).toBe("warn");
+    expect(announcement.timestamp).toBe(ISO);
+  });
+
+  it("reads a numeric info level as info", () => {
+    expect(parseAnnouncement(bridgePayload(0)).level).toBe("info");
   });
 });

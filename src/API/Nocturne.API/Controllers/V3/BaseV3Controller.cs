@@ -451,7 +451,16 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <returns>Nightscout-compatible success response</returns>
     protected ActionResult CreateV3SuccessResponse(object result)
     {
-        return Ok(new { status = 200, result });
+        return Ok(new V3Envelope<object> { Result = result });
+    }
+
+    /// <summary>
+    /// Create the V3 success response for a delete: <c>{"status": 200}</c> with no result.
+    /// AAPS treats any other success status on DELETE as unknown and stops syncing the collection.
+    /// </summary>
+    protected ActionResult CreateV3DeleteResponse()
+    {
+        return Ok(new { status = 200 });
     }
 
     /// <summary>
@@ -593,26 +602,12 @@ public abstract class BaseV3Controller<T> : ControllerBase
     #region Protected Helper Methods
 
     /// <summary>
-    /// Convert V3 filter to V1 find query string
+    /// The V3 JSON filter as a find query. The find parser reads the JSON form directly, so the
+    /// operator and value structure passes through untouched.
     /// </summary>
     /// <param name="filter">V3 filter object</param>
-    /// <returns>V1 find query string</returns>
-    protected string? ConvertV3FilterToV1Find(JsonElement? filter)
-    {
-        if (filter == null || !filter.HasValue)
-            return null;
-
-        try
-        {
-            // Convert JSON filter to MongoDB query string
-            return filter.Value.GetRawText();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to convert V3 filter to V1 find query");
-            return null;
-        }
-    }
+    /// <returns>The filter's JSON text, or null when there is no filter</returns>
+    protected static string? ConvertV3FilterToV1Find(JsonElement? filter) => filter?.GetRawText();
 
     /// <summary>
     /// Extract sort direction from V3 sort parameter
@@ -641,22 +636,13 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <returns>Type value or null</returns>
     protected string? ExtractTypeFromFilter(JsonElement? filter)
     {
-        if (filter == null || !filter.HasValue)
-            return null;
-
-        try
+        if (
+            filter is { ValueKind: JsonValueKind.Object } value
+            && value.TryGetProperty("type", out var typeProperty)
+            && typeProperty.ValueKind == JsonValueKind.String
+        )
         {
-            if (
-                filter.Value.ValueKind == JsonValueKind.Object
-                && filter.Value.TryGetProperty("type", out var typeProperty)
-            )
-            {
-                return typeProperty.GetString();
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to extract type from V3 filter");
+            return typeProperty.GetString();
         }
 
         return null;
@@ -725,37 +711,6 @@ public abstract class BaseV3Controller<T> : ControllerBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to get last modified timestamp");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Parse create request from request body
-    /// </summary>
-    /// <typeparam name="TRequest">Type of the request object</typeparam>
-    /// <returns>Parsed request object or null</returns>
-    protected async Task<TRequest?> ParseCreateRequest<TRequest>()
-        where TRequest : class
-    {
-        try
-        {
-            if (Request.ContentLength == 0)
-                return null;
-
-            using var reader = new StreamReader(Request.Body);
-            var body = await reader.ReadToEndAsync();
-
-            if (string.IsNullOrEmpty(body))
-                return null;
-
-            return JsonSerializer.Deserialize<TRequest>(
-                body,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to parse create request");
             return null;
         }
     }

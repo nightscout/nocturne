@@ -105,6 +105,7 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
         var atLowerBound = Seed(from, dataSource: "dexcom");
         var inRange = Seed(new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc), dataSource: "dexcom");
         var atUpperBound = Seed(to, dataSource: "dexcom");
+        var afterTo = Seed(to.AddMilliseconds(1), dataSource: "dexcom");
 
         var deleted = await DeleteByTimeRangeAsync(from, to);
 
@@ -113,6 +114,7 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
         (await ReadDeleteStateAsync(atLowerBound)).DeletedAt.Should().NotBeNull("the lower bound is inclusive");
         (await ReadDeleteStateAsync(beforeFrom)).DeletedAt.Should().BeNull("rows before the window are out of scope");
         (await ReadDeleteStateAsync(atUpperBound)).DeletedAt.Should().NotBeNull("the upper bound is inclusive");
+        (await ReadDeleteStateAsync(afterTo)).DeletedAt.Should().BeNull("rows after the window are out of scope");
 
         var log = (await ReadAuditLogAsync()).Should().ContainSingle().Subject;
         log.Action.Should().Be("bulk_delete");
