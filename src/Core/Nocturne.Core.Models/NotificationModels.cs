@@ -54,7 +54,6 @@ public class NotificationBase
     /// </summary>
     public int Count { get; set; }
 
-    /// <summary>When the notification was last recorded, in Unix milliseconds.</summary>
     public long LastRecorded { get; set; }
 
     /// <summary>

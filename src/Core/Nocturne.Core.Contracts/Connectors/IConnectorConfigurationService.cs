@@ -58,8 +58,9 @@ public class ConnectorStatusInfo
     public string ConnectorName { get; set; } = string.Empty;
 
     /// <summary>
-    /// The <c>enabled</c> flag in the stored configuration (<c>ConfigurationJson</c>), not the active
-    /// state that <see cref="IConnectorConfigurationService.SetActiveAsync"/> writes.
+    /// The <c>enabled</c> flag in the stored <c>ConfigurationJson</c>, which
+    /// <see cref="IConnectorConfigurationService.SetActiveAsync"/> writes; true when the key is
+    /// absent, false when there is no stored configuration.
     /// </summary>
     public bool IsEnabled { get; set; }
 
