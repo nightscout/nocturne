@@ -13,7 +13,7 @@ namespace Nocturne.API.Middleware;
 /// <para>
 /// Pipeline order (position 1 of 6 custom middleware -- runs first, before routing):
 /// <b>JsonExtensionMiddleware</b>,
-/// <see cref="OidcCallbackRedirectMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
+/// <see cref="ApexCallbackRelayMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
 /// <see cref="TenantSetupMiddleware"/>, <see cref="AuthenticationMiddleware"/>,
 /// <see cref="MemberScopeMiddleware"/>.
 /// </para>

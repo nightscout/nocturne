@@ -378,8 +378,8 @@ app.UseRateLimiter();
 
 app.UseMiddleware<PublicDocsMiddleware>();
 
-// Redirect OIDC callbacks from apex to the originating tenant subdomain
-app.UseMiddleware<OidcCallbackRedirectMiddleware>();
+// Relay OAuth callbacks from the apex to the originating tenant subdomain
+app.UseMiddleware<ApexCallbackRelayMiddleware>();
 
 // Resolve tenant from subdomain (must run before authentication)
 app.UseMiddleware<TenantResolutionMiddleware>();

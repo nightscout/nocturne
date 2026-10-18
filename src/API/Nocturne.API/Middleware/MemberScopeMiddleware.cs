@@ -22,7 +22,7 @@ namespace Nocturne.API.Middleware;
 /// <para>
 /// Pipeline order (position 6 of 6 custom middleware):
 /// <see cref="JsonExtensionMiddleware"/>,
-/// <see cref="OidcCallbackRedirectMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
+/// <see cref="ApexCallbackRelayMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
 /// <see cref="TenantSetupMiddleware"/>, <see cref="AuthenticationMiddleware"/>,
 /// <b>MemberScopeMiddleware</b>.
 /// </para>

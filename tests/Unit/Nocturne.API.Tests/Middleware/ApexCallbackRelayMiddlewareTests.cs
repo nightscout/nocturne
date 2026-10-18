@@ -11,17 +11,17 @@ using Xunit;
 
 namespace Nocturne.API.Tests.Middleware;
 
-public class OidcCallbackRedirectMiddlewareTests
+public class ApexCallbackRelayMiddlewareTests
 {
     private readonly BaseDomainOptions _config = new() { BaseDomain = "nocturne.run" };
     private readonly Mock<IOidcAuthService> _oidcAuthService = new();
 
-    private OidcCallbackRedirectMiddleware CreateMiddleware(RequestDelegate? next = null)
+    private ApexCallbackRelayMiddleware CreateMiddleware(RequestDelegate? next = null)
     {
         next ??= _ => Task.CompletedTask;
-        return new OidcCallbackRedirectMiddleware(
+        return new ApexCallbackRelayMiddleware(
             next,
-            NullLogger<OidcCallbackRedirectMiddleware>.Instance,
+            NullLogger<ApexCallbackRelayMiddleware>.Instance,
             Options.Create(_config));
     }
 
@@ -151,9 +151,9 @@ public class OidcCallbackRedirectMiddlewareTests
     {
         var called = false;
         var config = new BaseDomainOptions { BaseDomain = "" };
-        var middleware = new OidcCallbackRedirectMiddleware(
+        var middleware = new ApexCallbackRelayMiddleware(
             _ => { called = true; return Task.CompletedTask; },
-            NullLogger<OidcCallbackRedirectMiddleware>.Instance,
+            NullLogger<ApexCallbackRelayMiddleware>.Instance,
             Options.Create(config));
         var context = NewContext();
         context.Request.Host = new HostString("nocturne.run");
@@ -247,5 +247,23 @@ public class OidcCallbackRedirectMiddlewareTests
         await middleware.InvokeAsync(context);
 
         called.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Redirect_keeps_the_port_the_browser_reached_the_apex_on()
+    {
+        _config.BaseDomain = "nocturne.localhost:1631";
+        var middleware = CreateMiddleware();
+        var state = StateFor("alice");
+        var context = NewContext();
+        context.Request.Scheme = "https";
+        context.Request.Host = new HostString("nocturne.localhost", 1612);
+        context.Request.Path = "/api/auth/oidc/callback";
+        context.Request.QueryString = QueryString.Create("state", state);
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.Headers.Location.ToString()
+            .Should().StartWith("https://alice.nocturne.localhost:1612/api/auth/oidc/callback?");
     }
 }

@@ -53,7 +53,7 @@ public class TenantResolutionMiddleware
     /// <c>{slug}.{BaseDomain}</c> would. Set on paths scoped to the caller, which already run on
     /// every tenant host; leave it off for cross-tenant and platform paths, and for any that
     /// carries the resolved slug into an OIDC <c>state</c>, since
-    /// <see cref="Middleware.OidcCallbackRedirectMiddleware"/> would then bounce the callback to a
+    /// <see cref="Middleware.ApexCallbackRelayMiddleware"/> would then bounce the callback to a
     /// subdomain the install may not serve.
     /// </param>
     public readonly record struct TenantlessPath(
@@ -132,7 +132,7 @@ public class TenantResolutionMiddleware
         // set; the providers themselves are not tenant-scoped. GET is the only verb served.
         new TenantlessPath("/api/auth/oidc/providers", HttpMethods.Get),
         // The OIDC callback is the registered redirect_uri (apex). For apex-initiated
-        // logins the state carries no TenantSlug, so OidcCallbackRedirectMiddleware
+        // logins the state carries no TenantSlug, so ApexCallbackRelayMiddleware
         // can't bounce it to a subdomain and it must process here. The session it
         // issues is subject-scoped (no tenant needed). Subdomain-originated callbacks
         // are already redirected to their subdomain before reaching this point.

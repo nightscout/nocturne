@@ -205,7 +205,7 @@ public class OidcController : ControllerBase
         // Clear state cookie (single use)
         ClearStateCookie();
 
-        // The callback runs on the tenant subdomain (OidcCallbackRedirectMiddleware has already
+        // The callback runs on the tenant subdomain (ApexCallbackRelayMiddleware has already
         // bounced apex callbacks to {slug}.{baseDomain}), so the resolved tenant is the one being
         // logged into. Pass it through so a session is only issued to a member of that tenant.
         var currentTenantId = (HttpContext.GetTenantContext())?.TenantId;
