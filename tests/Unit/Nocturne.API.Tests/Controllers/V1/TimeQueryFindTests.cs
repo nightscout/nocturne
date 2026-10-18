@@ -266,6 +266,11 @@ public class TimeQueryFindTests
             });
 
         var deviceStatuses = new DeviceStatusProjectionService(
+            Mock.Of<IDeviceStatusGroupRepository>(r => r.GetAsync(
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>())
+                == Task.FromResult<IReadOnlyList<Nocturne.Core.Models.V4.DeviceStatusGroup>>(
+                    Array.Empty<Nocturne.Core.Models.V4.DeviceStatusGroup>())),
             new Mock<IApsSnapshotRepository>().Object,
             new Mock<IPumpSnapshotRepository>().Object,
             new Mock<IUploaderSnapshotRepository>().Object,
