@@ -10,11 +10,7 @@ namespace Nocturne.Connectors.MyLife.Mappers;
 /// </summary>
 internal static class MyLifeStateSpanFactory
 {
-    /// <summary>
-    ///     Creates a TempBasal record from a MyLife event
-    /// </summary>
     /// <param name="rate">U/h.</param>
-    /// <returns>A configured TempBasal record</returns>
     internal static TempBasal CreateTempBasal(
         MyLifeEvent ev,
         double rate,

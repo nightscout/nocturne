@@ -511,8 +511,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         }
     }
 
-    // ── V3 Histories: Meals → CarbIntake + ConnectorFoodEntryImport ────
-
     /// <summary>
     /// Maps V3 history meals to CarbIntake records.
     /// Each meal becomes one CarbIntake using the meal-level totals.

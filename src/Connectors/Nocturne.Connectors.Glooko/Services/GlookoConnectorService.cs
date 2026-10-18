@@ -66,9 +66,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
     private const string SyncSucceededMessage = "Sync completed successfully";
 
-
-    // ── Authentication ──────────────────────────────────────────────────
-
     private async Task<bool> AuthenticateWithConfigAsync(GlookoSyncContext context)
     {
         var token = await _tokenProvider.GetValidTokenAsync(context.Config);
@@ -109,8 +106,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
         return code;
     }
-
-    // ── HTTP helpers ────────────────────────────────────────────────────
 
     /// <summary>
     ///     Sends a GET request to a Glooko API endpoint with standard headers.
@@ -217,8 +212,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             attempt => _logger.LogInformation("Applying retry backoff before retry {RetryNumber}", attempt + 2));
     }
 
-    // ── URL construction ────────────────────────────────────────────────
-
     private static string ConstructV2Url(
         GlookoSyncContext context, string endpoint, DateTime startDate, DateTime endDate)
     {
@@ -298,8 +291,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             return null;
         }
     }
-
-    // ── Sync orchestration ──────────────────────────────────────────────
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
@@ -606,8 +597,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         }
     }
 
-    // ── V2 fetch + map ──────────────────────────────────────────────────
-
     /// <summary>
     ///     Fetches from all V2 endpoints, maps each record type, and publishes inline.
     /// </summary>
@@ -672,8 +661,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
         return true;
     }
-
-    // ── V3 fetch + map ──────────────────────────────────────────────────
 
     /// <summary>
     ///     Fetches from V3 graph/data and histories endpoints, maps each record type, and publishes inline.
@@ -802,8 +789,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         return true;
     }
 
-    // ── Food attribution helper ────────────────────────────────────────
-
     /// <summary>
     ///     Publishes food catalog entries and attributes them to carb intakes via the meal matching service.
     /// </summary>
@@ -879,8 +864,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         _logger.LogInformation("[{ConnectorSource}] Attributed {Count}/{Total} food entries to carb intakes",
             ConnectorSource, attributedCount, pendingEntries.Count);
     }
-
-    // ── V2 batch data fetching ──────────────────────────────────────────
 
     /// <summary>
     ///     Fetches comprehensive batch data from all v2 Glooko endpoints.
@@ -989,8 +972,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         return batchData;
     }
 
-    // ── V3 data fetching ────────────────────────────────────────────────
-
     /// <summary>
     ///     Fetches only the V2 foods endpoint. Used by the V3 sync path to get
     ///     rich food metadata (externalId, brand) that V3 histories doesn't provide.
@@ -1023,8 +1004,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             return null;
         }
     }
-
-    // ── SSV2 granular sync ──────────────────────────────────────────────
 
     /// <summary>
     ///     Fetches every record of an SSV2 resource via cursor pagination, returning the raw records for the

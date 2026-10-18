@@ -198,8 +198,6 @@ public class GlookoSensorGlucoseMapper
         return results;
     }
 
-    // ── Parsing helpers ─────────────────────────────────────────────────
-
     /// <summary>
     /// Parses and timezone-corrects a Glooko V2 timestamp string.
     /// Returns null if the timestamp is missing or unparseable.
