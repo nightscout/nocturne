@@ -36,5 +36,18 @@ public interface IDeviceService
     /// each of which would otherwise widen its device's window again.
     /// </summary>
     /// <param name="ct">Cancellation token for the writes made on dispose.</param>
-    IAsyncDisposable DeferLastSeen(CancellationToken ct = default);
+    ILastSeenDeferral DeferLastSeen(CancellationToken ct = default);
+}
+
+/// <summary>
+/// The scope <see cref="IDeviceService.DeferLastSeen"/> opens. Disposing it writes the held widenings.
+/// </summary>
+public interface ILastSeenDeferral : IAsyncDisposable
+{
+    /// <summary>
+    /// Drops the held widenings without writing them and settles the scope, so a later dispose does
+    /// nothing. In a nested scope it settles only that scope: the outermost scope still writes every
+    /// held widening when it is disposed.
+    /// </summary>
+    void Discard();
 }

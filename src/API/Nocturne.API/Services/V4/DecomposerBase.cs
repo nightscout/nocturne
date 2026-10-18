@@ -155,6 +155,27 @@ public abstract class DecomposerBase
     protected static IDisposable SystemAttributedBatchWrites(IAuditContext auditContext)
         => SystemAuditScope.Push(auditContext);
 
+    /// <summary>
+    /// Runs <paramref name="body"/> with last-seen writes held, then writes each device's once. A
+    /// throwing <paramref name="body"/> discards them instead, so its exception is the one that
+    /// surfaces rather than a flush failure replacing it.
+    /// </summary>
+    protected static async Task DeferLastSeenAsync(IDeviceService deviceService, Func<Task> body, CancellationToken ct)
+    {
+        await using var deferral = deviceService.DeferLastSeen(ct);
+        var completed = false;
+        try
+        {
+            await body();
+            completed = true;
+        }
+        finally
+        {
+            if (!completed)
+                deferral?.Discard();
+        }
+    }
+
     protected static bool TryGetString(Dictionary<string, object> props, string key, out string value)
     {
         value = default!;

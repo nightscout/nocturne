@@ -1352,73 +1352,76 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         var pumpSuspendResumeTreatments = new List<(Treatment Treatment, DeviceEventType EventType)>();
         var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var treatment in treatments)
+        await DeferLastSeenAsync(_deviceService, async () =>
         {
-            NormalizeIdentity(treatment);
+            foreach (var treatment in treatments)
+            {
+                NormalizeIdentity(treatment);
 
-            var correlationId = Guid.CreateVersion7();
-            var c = ClassifyTreatment(treatment);
-            if (c.ProducesNothing)
-            {
-                result.SkippedUnsupported++;
-                unsupportedTypes.Add(treatment.EventType ?? "(none)");
-            }
-            else
-            {
-                result.CorrelationId ??= correlationId;
-            }
-
-            // Collect state span treatments for individual upsert
-            if (c.DelegateToStateSpan)
-            {
-                // TempBasal treatments can also be bulk-inserted
-                if (!c.IsProfileSwitch && !c.IsOverride && !c.IsTemporaryTarget)
+                var correlationId = Guid.CreateVersion7();
+                var c = ClassifyTreatment(treatment);
+                if (c.ProducesNothing)
                 {
-                    tempBasalList.Add(await BuildTempBasalAsync(treatment, correlationId, ct));
+                    result.SkippedUnsupported++;
+                    unsupportedTypes.Add(treatment.EventType ?? "(none)");
                 }
                 else
                 {
-                    stateSpanTreatments.Add((treatment, correlationId, c.IsProfileSwitch, c.IsOverride, c.IsTemporaryTarget));
+                    result.CorrelationId ??= correlationId;
                 }
-            }
 
-            if (c.ProduceBolus)
-                bolusList.Add(await BuildBolusAsync(treatment, correlationId, ct));
-
-            if (c.ProduceCarbIntake)
-            {
-                carbList.Add(MapToCarbIntake(treatment, correlationId));
-                // Keyed by the per-record correlation id, so the line describes whichever duplicate
-                // of a legacy id the bulk write kept.
-                foodLineTreatments[correlationId] = treatment;
-            }
-
-            if (c.ProduceBGCheck)
-                bgCheckList.Add(MapToBGCheck(treatment, correlationId));
-
-            if (c.ProduceNote)
-                noteList.Add(MapToNote(treatment, correlationId, c.IsAnnouncement));
-
-            if (c.ProduceBolusCalc)
-                bolusCalcList.Add(MapToBolusCalculation(treatment, correlationId));
-
-            if (c.ProduceDeviceEvent)
-            {
-                deviceEventList.Add(
-                    await BuildDeviceEventAsync(treatment, correlationId, c.ParsedDeviceEventType, ct));
-
-                if (c.ParsedDeviceEventType is DeviceEventType.PumpSuspend or DeviceEventType.PumpResume)
+                // Collect state span treatments for individual upsert
+                if (c.DelegateToStateSpan)
                 {
-                    pumpSuspendResumeTreatments.Add((treatment, c.ParsedDeviceEventType));
+                    // TempBasal treatments can also be bulk-inserted
+                    if (!c.IsProfileSwitch && !c.IsOverride && !c.IsTemporaryTarget)
+                    {
+                        tempBasalList.Add(await BuildTempBasalAsync(treatment, correlationId, ct));
+                    }
+                    else
+                    {
+                        stateSpanTreatments.Add((treatment, correlationId, c.IsProfileSwitch, c.IsOverride, c.IsTemporaryTarget));
+                    }
                 }
+
+                if (c.ProduceBolus)
+                    bolusList.Add(await BuildBolusAsync(treatment, correlationId, ct));
+
+                if (c.ProduceCarbIntake)
+                {
+                    carbList.Add(MapToCarbIntake(treatment, correlationId));
+                    // Keyed by the per-record correlation id, so the line describes whichever duplicate
+                    // of a legacy id the bulk write kept.
+                    foodLineTreatments[correlationId] = treatment;
+                }
+
+                if (c.ProduceBGCheck)
+                    bgCheckList.Add(MapToBGCheck(treatment, correlationId));
+
+                if (c.ProduceNote)
+                    noteList.Add(MapToNote(treatment, correlationId, c.IsAnnouncement));
+
+                if (c.ProduceBolusCalc)
+                    bolusCalcList.Add(MapToBolusCalculation(treatment, correlationId));
+
+                if (c.ProduceDeviceEvent)
+                {
+                    deviceEventList.Add(
+                        await BuildDeviceEventAsync(treatment, correlationId, c.ParsedDeviceEventType, ct));
+
+                    if (c.ParsedDeviceEventType is DeviceEventType.PumpSuspend or DeviceEventType.PumpResume)
+                    {
+                        pumpSuspendResumeTreatments.Add((treatment, c.ParsedDeviceEventType));
+                    }
+                }
+
+                // Track for post-insert linking
+                if (c.ProduceBolus && c.ProduceBolusCalc && treatment.Id != null)
+                    bolusCalcLinkTreatmentIds.Add(treatment.Id);
+
+                await DropAbsentMealHalfAsync(treatment, c, origin, ct);
             }
-
-            // Track for post-insert linking
-            if (c.ProduceBolus && c.ProduceBolusCalc && treatment.Id != null)
-                bolusCalcLinkTreatmentIds.Add(treatment.Id);
-
-            await DropAbsentMealHalfAsync(treatment, c, origin, ct);
-        }
+        }, ct);
 
         if (result.SkippedUnsupported > 0)
         {

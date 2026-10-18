@@ -909,7 +909,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         var overrideStatuses = new List<(DeviceStatus Status, Guid CorrelationId)>();
         var correlationIds = await GetStoredCorrelationIdsAsync(statuses, ct);
 
-        await using (_deviceService.DeferLastSeen(ct))
+        await DeferLastSeenAsync(_deviceService, async () =>
         {
             foreach (var ds in statuses)
             {
@@ -962,7 +962,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
                     extrasList.Add(extrasModel);
                 }
             }
-        }
+        }, ct);
 
         using (SystemAttributedBatchWrites(_auditContext))
         {
