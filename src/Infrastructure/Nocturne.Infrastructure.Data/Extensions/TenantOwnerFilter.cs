@@ -14,14 +14,19 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// </remarks>
 public static class TenantOwnerFilter
 {
+    /// <summary>The tenant's memberships held by a person who can sign in: not a system subject, not deactivated.</summary>
+    public static IQueryable<TenantMemberEntity> PeopleOf(
+        this IQueryable<TenantMemberEntity> members, Guid tenantId) =>
+        members.Where(m => m.TenantId == tenantId
+            && !m.Subject!.IsSystemSubject
+            && m.Subject.IsActive);
+
     /// <summary>The tenant's owning memberships, longest-standing first.</summary>
     public static IQueryable<TenantMemberEntity> OwnersOf(
         this IQueryable<TenantMemberEntity> members, Guid tenantId) =>
         members
-            .Where(m => m.TenantId == tenantId
-                && !m.Subject!.IsSystemSubject
-                && m.Subject.IsActive
-                && m.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
+            .PeopleOf(tenantId)
+            .Where(m => m.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
             .OrderBy(m => m.SysCreatedAt)
             .ThenBy(m => m.Id);
 }
