@@ -1,7 +1,13 @@
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Devices;
+using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
@@ -29,7 +35,14 @@ public class PebbleController : ControllerBase
     private readonly IEntryService _entryService;
     private readonly DeviceStatusProjectionService _projectionService;
     private readonly ITreatmentService _treatmentService;
+    private readonly IShareAppearanceReader _appearanceReader;
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<PebbleController> _logger;
+
+    /// <summary>
+    /// Largest <c>count</c> honoured: 24 hours of readings at 5 minute intervals.
+    /// </summary>
+    public const int MaxCount = 288;
 
     /// <summary>
     /// Initializes a new instance of <see cref="PebbleController"/>.
@@ -37,17 +50,23 @@ public class PebbleController : ControllerBase
     /// <param name="entryService">Service for glucose entry retrieval.</param>
     /// <param name="projectionService">Service for projecting device status from V4 snapshots.</param>
     /// <param name="treatmentService">Service for treatment data retrieval.</param>
+    /// <param name="appearanceReader">Reader of the owner's display preferences, for the default units.</param>
+    /// <param name="tenantAccessor">Accessor for the current tenant.</param>
     /// <param name="logger">Logger instance.</param>
     public PebbleController(
         IEntryService entryService,
         DeviceStatusProjectionService projectionService,
         ITreatmentService treatmentService,
+        IShareAppearanceReader appearanceReader,
+        ITenantAccessor tenantAccessor,
         ILogger<PebbleController> logger
     )
     {
         _entryService = entryService;
         _projectionService = projectionService;
         _treatmentService = treatmentService;
+        _appearanceReader = appearanceReader;
+        _tenantAccessor = tenantAccessor;
         _logger = logger;
     }
 
@@ -55,8 +74,8 @@ public class PebbleController : ControllerBase
     /// Get pebble-formatted data for smartwatch apps and CGM monitors
     /// Returns current glucose, trend, delta, battery, IOB, and COB information
     /// </summary>
-    /// <param name="units">Units for glucose display (mg/dl or mmol)</param>
-    /// <param name="count">Number of glucose readings to return (default: 1)</param>
+    /// <param name="units">Units for glucose display (mg/dl or mmol); the tenant's display units when omitted</param>
+    /// <param name="count">Number of glucose readings to return (default: 1, at most <see cref="MaxCount"/>)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Pebble-formatted response with bgs, cals, and status</returns>
     [HttpGet("pebble")]
@@ -79,8 +98,8 @@ public class PebbleController : ControllerBase
 
         try
         {
-            var useMmol = string.Equals(units, "mmol", StringComparison.OrdinalIgnoreCase);
-            count = Math.Max(1, Math.Min(count, 10)); // Limit to reasonable range
+            var useMmol = await ResolveUseMmolAsync(units, cancellationToken);
+            count = Math.Clamp(count, 1, MaxCount);
 
             // Fetch required data in parallel
             var entriesTask = _entryService.GetEntriesAsync(type: "sgv", count: count + 1, skip: 0, cancellationToken);
@@ -109,20 +128,11 @@ public class PebbleController : ControllerBase
                 // Add extra data to first entry (legacy compatibility)
                 if (i == 0)
                 {
-                    // Calculate delta from previous entry
-                    if (entries.Length > 1)
-                    {
-                        var currentBg = entry.Sgv ?? entry.Mgdl;
-                        var previousBg = entries[1].Sgv ?? entries[1].Mgdl;
-                        var delta = currentBg - previousBg;
-                        bg.Bgdelta = useMmol
-                            ? (delta / 18.0).ToString("F1")
-                            : delta.ToString("F0");
-                    }
-                    else
-                    {
-                        bg.Bgdelta = "0";
-                    }
+                    var delta = DirectionService.CalculateDelta(entries, useMmol ? "mmol" : "mg/dl");
+                    bg.Bgdelta = new PebbleBgdelta(
+                        (useMmol ? delta?.Scaled : delta?.Mgdl) ?? 0,
+                        useMmol
+                    );
 
                     // Get battery from device status
                     var uploaderStatus = deviceStatuses.FirstOrDefault();
@@ -181,6 +191,21 @@ public class PebbleController : ControllerBase
             });
         }
     }
+
+    private async Task<bool> ResolveUseMmolAsync(string? units, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrEmpty(units))
+            return IsMmol(units);
+
+        var appearance = await _appearanceReader.GetSharedAppearanceAsync(
+            _tenantAccessor.TenantId,
+            cancellationToken
+        );
+        return IsMmol(appearance.GlucoseUnits);
+    }
+
+    private static bool IsMmol(string? units) =>
+        units?.StartsWith("mmol", StringComparison.OrdinalIgnoreCase) == true;
 
     private static string FormatGlucose(double mgdl, bool useMmol)
     {
@@ -250,9 +275,10 @@ public class PebbleBg
     public long Datetime { get; set; }
 
     /// <summary>
-    /// Delta from previous reading (formatted string)
+    /// Delta from <see cref="DirectionService.CalculateDelta"/>; a JSON number in mg/dL and a
+    /// one decimal string in mmol
     /// </summary>
-    public string? Bgdelta { get; set; }
+    public PebbleBgdelta? Bgdelta { get; set; }
 
     /// <summary>
     /// Battery percentage (formatted string)
@@ -299,4 +325,38 @@ public class PebbleCal
     /// Calibration scale
     /// </summary>
     public double? Scale { get; set; }
+}
+
+/// <summary>
+/// Glucose delta in the units the response was requested in.
+/// </summary>
+/// <param name="Value">The delta in <paramref name="Mmol"/> units.</param>
+/// <param name="Mmol">Whether <paramref name="Value"/> is mmol/L rather than mg/dL.</param>
+[JsonConverter(typeof(PebbleBgdeltaConverter))]
+public sealed record PebbleBgdelta(double Value, bool Mmol);
+
+/// <summary>
+/// Writes mg/dL as a JSON number and mmol as a one decimal string, as Nightscout's pebble does.
+/// </summary>
+public sealed class PebbleBgdeltaConverter : JsonConverter<PebbleBgdelta>
+{
+    /// <inheritdoc />
+    public override PebbleBgdelta Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options
+    ) => throw new NotSupportedException();
+
+    /// <inheritdoc />
+    public override void Write(
+        Utf8JsonWriter writer,
+        PebbleBgdelta value,
+        JsonSerializerOptions options
+    )
+    {
+        if (value.Mmol)
+            writer.WriteStringValue((value.Value + 0.0).ToString("F1", CultureInfo.InvariantCulture));
+        else
+            writer.WriteNumberValue(value.Value);
+    }
 }

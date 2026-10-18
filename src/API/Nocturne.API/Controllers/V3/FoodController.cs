@@ -546,12 +546,12 @@ public class FoodController : BaseV3Controller<Food>
     /// </summary>
     /// <param name="id">Food ID to delete</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>No content on success</returns>
+    /// <returns><c>{"status": 200}</c> on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.FoodReadWrite)]
     [NightscoutEndpoint("/api/v3/food/{id}")]
-    [ProducesResponseType(204)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -579,7 +579,7 @@ public class FoodController : BaseV3Controller<Food>
 
         _logger.LogDebug("Successfully deleted food with ID {Id}", id);
 
-        return NoContent();
+        return CreateV3DeleteResponse();
     }
 
     /// <summary>

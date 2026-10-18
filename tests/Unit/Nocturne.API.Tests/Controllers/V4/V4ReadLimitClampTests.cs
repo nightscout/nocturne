@@ -306,7 +306,7 @@ public class V4ReadLimitClampTests
         var result = await controller.GetHeartRates(count: Ceiling, skip: 0);
 
         result.Result.Should().BeOfType<OkObjectResult>();
-        service.Verify(s => s.GetHeartRatesAsync(Ceiling, 0, It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(s => s.GetHeartRatesAsync(Ceiling, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -318,7 +318,7 @@ public class V4ReadLimitClampTests
         var result = await controller.GetHeartRates(count: AboveCeiling, skip: -1);
 
         result.Result.Should().BeOfType<OkObjectResult>();
-        service.Verify(s => s.GetHeartRatesAsync(Ceiling, 0, It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(s => s.GetHeartRatesAsync(Ceiling, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -372,7 +372,7 @@ public class V4ReadLimitClampTests
         var result = await controller.GetStepCounts(count: Ceiling, skip: 0);
 
         result.Result.Should().BeOfType<OkObjectResult>();
-        service.Verify(s => s.GetStepCountsAsync(Ceiling, 0, It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(s => s.GetStepCountsAsync(Ceiling, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -384,7 +384,7 @@ public class V4ReadLimitClampTests
         var result = await controller.GetStepCounts(count: AboveCeiling, skip: -1);
 
         result.Result.Should().BeOfType<OkObjectResult>();
-        service.Verify(s => s.GetStepCountsAsync(Ceiling, 0, It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(s => s.GetStepCountsAsync(Ceiling, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

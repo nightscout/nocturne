@@ -87,7 +87,7 @@ public class LoopNotificationData
 
 /// <summary>
 /// Loop configuration settings for Apple Push Notification Service integration.
-/// Bound from appsettings.json section "Loop".
+/// Bound from the "Loop" section, with the legacy <c>LOOP_*</c> variables filling empty values.
 /// </summary>
 public class LoopConfiguration
 {
@@ -111,12 +111,6 @@ public class LoopConfiguration
     /// TestFlight and App Store Loop builds hold production tokens, which the sandbox rejects.
     /// </summary>
     public string PushServerEnvironment { get; set; } = ConnectorDefaults.LoopPushServerEnvironment;
-
-    /// <summary>
-    /// Optional override URL for APNS server (used for testing)
-    /// When set, requests are sent to this URL instead of Apple's servers
-    /// </summary>
-    public string? ApnsServerOverrideUrl { get; set; }
 }
 
 /// <summary>

@@ -138,7 +138,7 @@
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Updating</h2>
     <p class="text-muted-foreground mb-4">
-        Watchtower is included and checks for image updates daily. To update manually in Portainer:
+        Watchtower is included and checks for image updates daily, except for Caddy and Postgres. To update everything, including Caddy and Postgres, in Portainer:
     </p>
     <ol class="list-decimal list-inside space-y-2 text-muted-foreground mb-8">
         <li>Navigate to your <strong class="text-foreground">nocturne</strong> stack</li>

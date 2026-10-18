@@ -13,7 +13,10 @@ public interface IActivityService
     /// <summary>
     /// Get <see cref="Activity"/> records with optional filtering and pagination.
     /// </summary>
-    /// <param name="find">Optional MongoDB-style query filter string (e.g., <c>find[type][$eq]=exercise</c>).</param>
+    /// <param name="find">
+    /// Optional MongoDB-style query filter string (e.g., <c>find[type][$eq]=exercise</c>). Bounds on
+    /// <c>created_at</c> narrow each source's read; any other condition is evaluated per record.
+    /// </param>
     /// <param name="count">Maximum number of records to return.</param>
     /// <param name="skip">Number of records to skip for pagination.</param>
     /// <param name="cancellationToken">Cancellation token.</param>

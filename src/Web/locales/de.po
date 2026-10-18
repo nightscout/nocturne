@@ -6132,10 +6132,8 @@ msgstr "Gesamt:"
 msgid "Click to view"
 msgstr "Zum Anzeigen klicken"
 
-#. 0: reliability.daysOfData ?? 0; 1: reliability.recommendedMinimumDays ?? 14
-#: src/lib/components/reports/ReliabilityBadge.svelte
-msgid "Based on {0} days of data ({1} recommended)"
-msgstr "Basiert auf {0} Tagen Daten ({1} empfohlen)"
+#~ msgid "Based on {0} days of data ({1} recommended)"
+#~ msgstr "Basiert auf {0} Tagen Daten ({1} empfohlen)"
 
 #~ msgid "Period Averages"
 #~ msgstr "Zeitraum-Durchschnitte"
@@ -9025,12 +9023,8 @@ msgstr "Etwas ist schiefgelaufen"
 #~ msgid "{0} readings analyzed"
 #~ msgstr "Analysierte Messwerte: {0}"
 
-#: src/routes/(authenticated)/reports/agp/+page.svelte
-#: src/routes/(authenticated)/reports/comparison/+page.svelte
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-#: src/routes/(authenticated)/reports/idp/+page.svelte
-msgid "Est. A1C"
-msgstr "Geschätzter HbA1c"
+#~ msgid "Est. A1C"
+#~ msgstr "Geschätzter HbA1c"
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 msgid "Variability"
@@ -11699,9 +11693,8 @@ msgstr "<0/> Zeit im Zielbereich"
 msgid "Time Breakdown (per day avg)"
 msgstr "Zeitaufschlüsselung (Tagesdurchschnitt)"
 
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "<0/> Estimated A1C"
-msgstr "<0/> Geschätzter A1C"
+#~ msgid "<0/> Estimated A1C"
+#~ msgstr "<0/> Geschätzter A1C"
 
 #~ msgid "Great! Below the 7% target"
 #~ msgstr ""
@@ -11712,9 +11705,8 @@ msgstr "<0/> Geschätzter A1C"
 #~ msgid "Room for improvement"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "<0>What is eA1C?</0> This estimates what your lab A1C would be based on your average glucose."
-msgstr "<0>Was ist eA1C?</0> Dieser Wert schätzt anhand deiner durchschnittlichen Glukose, wie hoch dein A1C-Laborwert wäre."
+#~ msgid "<0>What is eA1C?</0> This estimates what your lab A1C would be based on your average glucose."
+#~ msgstr "<0>Was ist eA1C?</0> Dieser Wert schätzt anhand deiner durchschnittlichen Glukose, wie hoch dein A1C-Laborwert wäre."
 
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "Clinical details"
@@ -11878,9 +11870,8 @@ msgstr "Stündliche Verteilung"
 msgid "Percentage of time in each glucose range by hour of day"
 msgstr "Prozentsatz der Zeit in jedem Glukosebereich nach Stunde des Tages"
 
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
-msgid "A1c Estimation"
-msgstr "A1c-Schätzung"
+#~ msgid "A1c Estimation"
+#~ msgstr "A1c-Schätzung"
 
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "Based on average glucose"
@@ -11892,12 +11883,8 @@ msgstr "Basierend auf durchschnittlicher Glukose"
 #~ msgid "A1c (IFCC)"
 #~ msgstr ""
 
-#. 0: Math.round(toIfccMmolMol(percent))
-#. 0: Math.round(value)
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "{0} mmol/mol"
-msgstr "{0} mmol/mol"
+#~ msgid "{0} mmol/mol"
+#~ msgstr "{0} mmol/mol"
 
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "Glycemic Variability"
@@ -14635,6 +14622,7 @@ msgid "Data is {0} old"
 msgstr "Daten sind {0} alt"
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Inferred"
 msgstr "Abgeleitet"
 
@@ -17677,9 +17665,8 @@ msgstr ""
 msgid "Statistics"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Time-in-range, A1c estimates, and averages"
-msgstr ""
+#~ msgid "Time-in-range, A1c estimates, and averages"
+#~ msgstr ""
 
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
@@ -20674,9 +20661,8 @@ msgstr ""
 #~ msgid "Once running, the bundled Caddy proxy obtains Let's Encrypt TLS certificates automatically and serves the stack at <0/> on ports 80 and 443 — no certificate files to manage. Each tenant subdomain gets its own certificate on demand the first time it is visited."
 #~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Watchtower is included and checks for image updates daily. To update manually in Portainer:"
-msgstr ""
+#~ msgid "Watchtower is included and checks for image updates daily. To update manually in Portainer:"
+#~ msgstr ""
 
 #~ msgid "Data source connectors (Dexcom, LibreLinkUp, Glooko, etc.) are configured through the Nocturne UI after deployment — no compose changes required."
 #~ msgstr ""
@@ -20733,9 +20719,8 @@ msgstr ""
 msgid "Step 4: Verify the installation"
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Watchtower checks for image updates daily. To update manually:"
-msgstr ""
+#~ msgid "Watchtower checks for image updates daily. To update manually:"
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Check the logs for error details:"
@@ -21432,9 +21417,8 @@ msgstr ""
 msgid "Invite the people who follow you, or create a <0>share link</0>."
 msgstr ""
 
-#: ../portal/src/lib/components/docs/NextSteps.svelte
-msgid "Watchtower is included and checks for image updates daily; no action required."
-msgstr ""
+#~ msgid "Watchtower is included and checks for image updates daily; no action required."
+#~ msgstr ""
 
 #~ msgid "Four things Nocturne is <0>good at.</0>"
 #~ msgstr ""
@@ -22029,9 +22013,8 @@ msgstr ""
 #~ msgid "Time in Range, glucose variability and estimated A1C over the last {0} days, each shown with the consensus target it is read against."
 #~ msgstr ""
 
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "Target: below 7%. Your care team sets your individual target."
-msgstr ""
+#~ msgid "Target: below 7%. Your care team sets your individual target."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "No estimate for this window"
@@ -22066,11 +22049,9 @@ msgstr ""
 msgid "No readings in this date range"
 msgstr ""
 
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
-msgid "Distribution, A1c estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
-msgstr ""
+#~ msgid "Distribution, A1c estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
@@ -23091,33 +23072,26 @@ msgstr ""
 msgid "Failed to delete lab result"
 msgstr ""
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0/> Estimated HbA1c (eHbA1c)"
-msgstr ""
+#~ msgid "<0/> Estimated HbA1c (eHbA1c)"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average glucose in mg/dL + 46.7) / 28.7."
-msgstr ""
+#~ msgid "eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average glucose in mg/dL + 46.7) / 28.7."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Show as percent"
-msgstr ""
+#~ msgid "Show as percent"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Show as mmol/mol"
-msgstr ""
+#~ msgid "Show as mmol/mol"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "mmol/mol"
-msgstr ""
+#~ msgid "mmol/mol"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "<0/> Loading eHbA1c timeline..."
-msgstr ""
+#~ msgid "<0/> Loading eHbA1c timeline..."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Failed to load eHbA1c data. Please try again later."
-msgstr ""
+#~ msgid "Failed to load eHbA1c data. Please try again later."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Not enough glucose history yet — each point needs at least a month of readings within the trailing 90 days."
@@ -23151,9 +23125,8 @@ msgstr ""
 msgid "Lab results"
 msgstr ""
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not included in the eHbA1c calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
-msgstr ""
+#~ msgid "Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not included in the eHbA1c calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "No lab results added yet."
@@ -23167,7 +23140,7 @@ msgstr ""
 msgid "Date of blood draw"
 msgstr ""
 
-#. 0: a1cUnit === "percent" ? "%" \\: "mmol/mol"
+#. 0: a1cUnits.current === "percent" ? "%" \\: "mmol/mol"
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Result ({0})"
 msgstr ""
@@ -23176,7 +23149,7 @@ msgstr ""
 msgid "<0/> Add lab result"
 msgstr ""
 
-#. 0: formatA1c(point.data.valuePercent); 1: formatLongDate(point.data.date); 2: point.data.note ? ` — ${point.data.note}` \\: ""
+#. 0: formatA1c(point.data.a1cDisplay); 1: formatLongDate(point.data.date); 2: point.data.note ? ` — ${point.data.note}` \\: ""
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lab result: {0} ({1}){2}"
 msgstr ""
@@ -23185,7 +23158,7 @@ msgstr ""
 msgid "Delete this lab result?"
 msgstr ""
 
-#. 0: formatA1c(pendingDeleteLabResult.valuePercent ?? 0); 1: formatLongDate(toDate(pendingDeleteLabResult.measuredAt))
+#. 0: formatA1c(pendingDeleteLabResult.a1cDisplay); 1: formatLongDate(toDate(pendingDeleteLabResult.measuredAt))
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Delete the {0} lab result from {1}."
 msgstr ""
@@ -23458,29 +23431,24 @@ msgstr ""
 msgid "BASE_DOMAIN=nocturne.example.com bash <(curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/oracle-cloud-install.sh)"
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "An <0>Oracle Cloud account</0>. Sign-up asks for a payment card to verify your identity. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage; this guide uses half the processor and memory and a quarter of the storage, so nothing is charged. Oracle reduced that allowance in June 2026, so older guides quoting 4 cores and 24 GB are out of date."
-msgstr ""
+#~ msgid "An <0>Oracle Cloud account</0>. Sign-up asks for a payment card to verify your identity. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage; this guide uses half the processor and memory and a quarter of the storage, so nothing is charged. Oracle reduced that allowance in June 2026, so older guides quoting 4 cores and 24 GB are out of date."
+#~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from deSEC works well; see below."
-msgstr ""
+#~ msgid "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from deSEC works well; see below."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "A decision about how to keep the server from being reclaimed as idle. It changes the command you run, so make it before you start."
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Create an account at desec.io and confirm your email address."
-msgstr ""
+#~ msgid "Create an account at desec.io and confirm your email address."
+#~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Under <0>Domains</0>, add a dynDNS domain and pick a name. Your domain is then <1/>."
-msgstr ""
+#~ msgid "Under <0>Domains</0>, add a dynDNS domain and pick a name. Your domain is then <1/>."
+#~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Under <0>Token management</0>, create a token and copy the long secret it shows you once — not the name you gave the token. You can delete the token afterwards."
-msgstr ""
+#~ msgid "Under <0>Token management</0>, create a token and copy the long secret it shows you once — not the name you gave the token. You can delete the token afterwards."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Which one should you pick?"
@@ -23494,25 +23462,21 @@ msgstr ""
 msgid "In the Oracle console, open <0>Billing & Cost Management</0>, then <1>Upgrade and Manage Payment</1>, and choose Pay As You Go. Your card is already on file from sign-up. Always Free resources stay free after the upgrade, and Oracle's own terms exempt Pay As You Go accounts from idle reclamation. Everything this installer creates is within the free allowance, so the upgrade does not by itself cost anything."
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "What changes is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends: it refuses a server size above the free allowance, and it writes an Oracle quota policy that stops the account creating anything outside the Always Free compute shapes at all, whether or not you have upgraded. That policy is a real limit rather than a warning: Oracle refuses the request instead of billing you for it. On top of that it sets a spending alert that emails you the moment the account is billed one unit of your currency. Nothing needs adding to the command in Step 2."
-msgstr ""
+#~ msgid "What changes is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends: it refuses a server size above the free allowance, and it writes an Oracle quota policy that stops the account creating anything outside the Always Free compute shapes at all, whether or not you have upgraded. That policy is a real limit rather than a warning: Oracle refuses the request instead of billing you for it. On top of that it sets a spending alert that emails you the moment the account is billed one unit of your currency. Nothing needs adding to the command in Step 2."
+#~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Option 2: stay on the trial and donate spare time to Folding@home"
-msgstr ""
+#~ msgid "Option 2: stay on the trial and donate spare time to Folding@home"
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "<0>Folding@home</0> is a research project that simulates how proteins fold, to help understand diseases such as Alzheimer's, cancer and, yes, diabetes. With this option the installer adds its client to the server and runs it from 02:00 to 04:00 UTC each night. Two hours a day of real computation is well above Oracle's idle threshold, so the server is never a candidate for reclamation, and the time goes to something useful."
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "The client runs at the lowest priority the system has, so Nocturne and its alarms always come first. To choose this option, add <0/> to the command in Step 2:"
-msgstr ""
+#~ msgid "The client runs at the lowest priority the system has, so Nocturne and its alarms always come first. To choose this option, add <0/> to the command in Step 2:"
+#~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Work is contributed anonymously by default. To count it towards a team, add <0/> as well. Trial accounts cannot be charged, but the installer still creates the spending alert in case the account is upgraded later."
-msgstr ""
+#~ msgid "Work is contributed anonymously by default. To count it towards a team, add <0/> as well. Trial accounts cannot be charged, but the installer still creates the spending alert in case the account is upgraded later."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Keep the run alive if Cloud Shell disconnects"
@@ -23574,17 +23538,15 @@ msgstr ""
 msgid "Running the installer a second time is the fix for almost any failure. It looks every resource up before creating it, and checks the server itself on every run, so a run that was interrupted or stopped part-way carries on from where it got to rather than starting over. It remembers your domain, so the command on its own is enough."
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "The script ends by printing your <0>instance key</0>. It is the master credential for this installation, used for administrative API access and account recovery. Save it in a password manager. Running the script again shows it again."
-msgstr ""
+#~ msgid "The script ends by printing your <0>instance key</0>. It is the master credential for this installation, used for administrative API access and account recovery. Save it in a password manager. Running the script again shows it again."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Download the SSH key the script created. It lives only in your Cloud Shell home, which Oracle deletes after six months without a Cloud Shell session. Use the Cloud Shell menu, <0>Download</0>, and enter <1/>. Nocturne keeps running without it, but it is your only way onto the server."
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Updates are automatic. Watchtower checks for new Nocturne images daily."
-msgstr ""
+#~ msgid "Updates are automatic. Watchtower checks for new Nocturne images daily."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Nocturne starts again by itself when the server reboots."
@@ -23594,9 +23556,8 @@ msgstr ""
 msgid "To get a shell on the server, run the SSH command the script printed. Everything lives in <0/>."
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups, so take them by hand and delete old ones rather than attaching a scheduled policy."
-msgstr ""
+#~ msgid "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups, so take them by hand and delete old ones rather than attaching a scheduled policy."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "To remove everything, terminate the instance in the Oracle console, then delete the reserved public IP and the <0>nocturne</0> virtual cloud network."
@@ -23610,29 +23571,24 @@ msgstr ""
 msgid "What you need"
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "No domain yet? Get one from deSEC"
-msgstr ""
+#~ msgid "No domain yet? Get one from deSEC"
+#~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "<0>deSEC</0> is a non-profit DNS provider that gives out free names under <1>dedyn.io</1>. With one of those, the installer creates the DNS records for you and there is nothing to configure by hand."
-msgstr ""
+#~ msgid "<0>deSEC</0> is a non-profit DNS provider that gives out free names under <1>dedyn.io</1>. With one of those, the installer creates the DNS records for you and there is nothing to configure by hand."
+#~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "The same works for a domain you already own if its DNS is hosted at deSEC. If it is hosted elsewhere, you add two records by hand in Step 3."
-msgstr ""
+#~ msgid "The same works for a domain you already own if its DNS is hosted at deSEC. If it is hosted elsewhere, you add two records by hand in Step 3."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Before you start: keeping it free"
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Oracle switches off Always Free servers on trial accounts that it judges idle for seven days in a row. Its measure is whether the processor, network and memory each stayed below 20 percent of capacity for nearly all of that week. A Nocturne server for one person does very little work by that yardstick, so left alone it is likely to be stopped after its first quiet week. There are two ways to prevent that, and one of them changes the command in Step 2, so pick now rather than later."
-msgstr ""
+#~ msgid "Oracle switches off Always Free servers on trial accounts that it judges idle for seven days in a row. Its measure is whether the processor, network and memory each stayed below 20 percent of capacity for nearly all of that week. A Nocturne server for one person does very little work by that yardstick, so left alone it is likely to be stopped after its first quiet week. There are two ways to prevent that, and one of them changes the command in Step 2, so pick now rather than later."
+#~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Pay As You Go suits most people: it is a single change in the Oracle console, adds nothing to the server, and paying accounts are served first when Ampere capacity is scarce. The trade-off is that the card already on file <0>can</0> be charged if anything outside the free allowance is ever created. Choose Folding@home instead if you would rather the account stay a trial that cannot be billed at all, and you do not mind a second piece of software with network access on the server that holds your health data."
-msgstr ""
+#~ msgid "Pay As You Go suits most people: it is a single change in the Oracle console, adds nothing to the server, and paying accounts are served first when Ampere capacity is scarce. The trade-off is that the card already on file <0>can</0> be charged if anything outside the free allowance is ever created. Choose Folding@home instead if you would rather the account stay a trial that cannot be billed at all, and you do not mind a second piece of software with network access on the server that holds your health data."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Step 1: Open Cloud Shell"
@@ -23646,21 +23602,18 @@ msgstr ""
 msgid "Step 2: Run the installer"
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Paste this into Cloud Shell, replacing <0/> with your domain. Nocturne will answer on that name and every site you create gets a subdomain under it, so pick something you are happy to keep. If you chose Folding@home above, add <1/> in front."
-msgstr ""
+#~ msgid "Paste this into Cloud Shell, replacing <0/> with your domain. Nocturne will answer on that name and every site you create gets a subdomain under it, so pick something you are happy to keep. If you chose Folding@home above, add <1/> in front."
+#~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Early on it asks for a deSEC token. <0>Nothing appears on screen as you paste it</0> — the token is hidden, and the installer tells you how many characters it read so you can see the paste landed. If deSEC does not accept it you can paste another. Press Enter with nothing pasted and it prints two records for you to create by hand instead. Either way it keeps working while the server boots, and waits for the records before it requests certificates."
-msgstr ""
+#~ msgid "Early on it asks for a deSEC token. <0>Nothing appears on screen as you paste it</0> — the token is hidden, and the installer tells you how many characters it read so you can see the paste landed. If deSEC does not accept it you can paste another. Press Enter with nothing pasted and it prints two records for you to create by hand instead. Either way it keeps working while the server boots, and waits for the records before it requests certificates."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Step 3: Add the DNS records"
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Skip this step if you gave the installer a deSEC token. Otherwise, at your domain provider, create two <0>A</0> records pointing at the IP address the script printed:"
-msgstr ""
+#~ msgid "Skip this step if you gave the installer a deSEC token. Otherwise, at your domain provider, create two <0>A</0> records pointing at the IP address the script printed:"
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "The second one is a wildcard. It makes every site's subdomain resolve without a record each. If you use Cloudflare, leave the proxy off for both records, shown as a grey cloud. Cloudflare's proxy cannot carry the certificates Nocturne issues for its own subdomains."
@@ -23670,9 +23623,8 @@ msgstr ""
 msgid "Step 4: Create your first site"
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
-msgid "Once the script reports that Nocturne is answering, open <0/> in a browser. You are taken to the setup page to name your first site and register a passkey, which is your phone's or computer's built-in unlock. Register a second device as soon as you can, because there is no password to fall back on."
-msgstr ""
+#~ msgid "Once the script reports that Nocturne is answering, open <0/> in a browser. You are taken to the setup page to name your first site and register a passkey, which is your phone's or computer's built-in unlock. Register a second device as soon as you can, because there is no password to fall back on."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Afterwards"
@@ -24055,10 +24007,8 @@ msgstr ""
 msgid "Showing {0} only"
 msgstr ""
 
-#. 0: bgOr(stats?.mean); 1: bgLabel(); 2: dayCount
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "Calculated using the ADAG formula: eA1C = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {0} {1} over {2} days."
-msgstr ""
+#~ msgid "Calculated using the ADAG formula: eA1C = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {0} {1} over {2} days."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Shown in % (NGSP)"
@@ -24068,13 +24018,11 @@ msgstr ""
 msgid "Shown in mmol/mol (IFCC)"
 msgstr ""
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "Lab HbA1c draws, shown as triangles on the chart above. They are not included in the eHbA1c calculation."
-msgstr ""
+#~ msgid "Lab HbA1c draws, shown as triangles on the chart above. They are not included in the eHbA1c calculation."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
-msgid "Est. A1c (DCCT %)"
-msgstr ""
+#~ msgid "Est. A1c (DCCT %)"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
@@ -24407,9 +24355,8 @@ msgstr ""
 msgid "Consensus target: at least 70% of time in range."
 msgstr ""
 
-#: src/routes/(authenticated)/reports/+page.svelte
-msgid "Estimated A1C"
-msgstr ""
+#~ msgid "Estimated A1C"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/reports/+page.svelte
 msgid "Coefficient of variation"
@@ -24540,9 +24487,8 @@ msgstr ""
 msgid "Lasted: {0} ({1}% to {2}%)"
 msgstr ""
 
-#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-msgid "Target: <7%"
-msgstr ""
+#~ msgid "Target: <7%"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "Standard deviation"
@@ -24770,13 +24716,11 @@ msgstr ""
 msgid "Assess the reliability of your data"
 msgstr ""
 
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "Estimated HbA1c"
-msgstr ""
+#~ msgid "Estimated HbA1c"
+#~ msgstr ""
 
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "How your estimated HbA1c has trended over the years"
-msgstr ""
+#~ msgid "How your estimated HbA1c has trended over the years"
+#~ msgstr ""
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Patterns & Trends"
@@ -25499,9 +25443,8 @@ msgstr ""
 msgid "Snoozed until {0}"
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Watchtower updates images, not the compose file. If you installed before the restart policy and log rotation below were added, download the new bundle and run <0/> to pick them up. That first run recreates the containers, which clears their old logs; your database data is kept."
-msgstr ""
+#~ msgid "Watchtower updates images, not the compose file. If you installed before the restart policy and log rotation below were added, download the new bundle and run <0/> to pick them up. That first run recreates the containers, which clears their old logs; your database data is kept."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
@@ -25520,9 +25463,8 @@ msgstr ""
 msgid "The stack uses the same restart policy and log rotation as the <0>Docker Compose bundle</0>. Portainer stacks do not read override files, so to keep your own logging driver, edit the <1/> section of each service in the stack editor instead."
 msgstr ""
 
-#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
-msgid "eHbA1c"
-msgstr "eHbA1c"
+#~ msgid "eHbA1c"
+#~ msgstr "eHbA1c"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lab result"
@@ -26575,6 +26517,95 @@ msgstr "<0/>Verbindung wird getrennt…"
 msgid "Real-time data unavailable"
 msgstr ""
 
+#. 0: a1cLabel()
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Estimated {0}"
+msgstr ""
+
+#. 0: a1cLabel(true)
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "How your {0} has trended over the years"
+msgstr ""
+
+#. 0: a1cLabel(true)
+#: src/lib/components/rbac/PermissionCategorySelector.svelte
+msgid "Time-in-range, {0} estimates, and averages"
+msgstr ""
+
+#. 0: a1cLabel()
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "{0} display name"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Estimated values retain the e prefix: eHbA1c or eA1c."
+msgstr ""
+
+#. 0: a1cLabel()
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "{0} display unit"
+msgstr ""
+
+#. 0: a1cLabel()
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {0}. Blood glucose units are set separately."
+msgstr ""
+
+#. 0: formatA1c(variability.a1cTarget)
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "Target: <{0}"
+msgstr ""
+
+#. 0: formatA1c(variability?.a1cTarget)
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "Target: below {0}. Your care team sets your individual target."
+msgstr ""
+
+#. 0: a1cLabel(true); 1: bgOr(stats?.mean); 2: bgLabel(); 3: dayCount
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "Calculated using the ADAG formula (NGSP %): {0} = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {1} {2} over {3} days."
+msgstr ""
+
+#. 0.0: a1cLabel(true); 0: a1cLabel()
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "<0>What is {0}?</0> This estimates what your lab {0} would be based on your average glucose."
+msgstr ""
+
+#. 0: a1cLabel(true)
+#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
+msgid "Distribution, {0} estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
+msgstr ""
+
+#. 0: a1cLabel(); 1: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "<0/> Estimated {0} ({1})"
+msgstr ""
+
+#. 0: a1cLabel(true); 1: a1cLabel(); 2: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "{0} estimates what a lab {1} test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to NGSP percent with the ADAG formula: {2} (%) = (average glucose in mg/dL + 46.7) / 28.7."
+msgstr ""
+
+#. 0: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "<0/> Loading {0} timeline..."
+msgstr ""
+
+#. 0: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Failed to load {0} data. Please try again later."
+msgstr ""
+
+#. 0: a1cLabel(); 1: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Lab {0} draws, shown as triangles on the chart above. They are not included in the {1} calculation."
+msgstr ""
+
+#. 0: a1cLabel(); 1: a1cLabel(true); 2: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Enter a lab {0} result here — shown as a triangle marker on the chart above, so you can see how closely the {1} estimate tracks an actual lab draw. Lab results are not included in the {2} calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
+msgstr ""
+
 #: src/lib/components/clock-builder/DisplaySettings.svelte
 msgid "Glucose units"
 msgstr ""
@@ -26636,4 +26667,124 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Scanning the selected history in Google Health… The catalog remains available while the inventory is loading."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/NextSteps.svelte
+msgid "Watchtower is included and checks for image updates daily. It does not update Caddy or Postgres; see the update steps on this page."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Watchtower checks for image updates daily, except for Caddy and Postgres. To update everything, including Caddy and Postgres:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Watchtower updates images, not the compose file. If you installed before the restart policy and log rotation below were added, download the new bundle and run <0/> to pick them up. That first run recreates the containers, which clears their old logs; your database data is kept. If you installed before Caddy was excluded from Watchtower, set <1/> to <2/> on the <3/> service, or download the new bundle, then run <4/> to recreate it."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Watchtower is included and checks for image updates daily, except for Caddy and Postgres. To update everything, including Caddy and Postgres, in Portainer:"
+msgstr ""
+
+#~ msgid "Watchtower checks for new Nocturne images daily. It does not update Caddy or Postgres; update them with <0/>."
+#~ msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "An <0>Oracle Cloud account</0>. Sign-up asks for a payment card to verify your identity. The region you pick at sign-up becomes your home region. The free server can only be created there, and the choice cannot be changed later, so pick the region closest to you. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage. Oracle halved the cores and memory in June 2026, so older guides that quote 4 cores and 24 GB are out of date. This guide uses half the cores and memory and a quarter of the storage, which stays well inside the free allowance."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "A domain name. Nocturne gives every site its own subdomain, so the DNS provider must support wildcard records. If you do not have a domain, a free one from DuckDNS works well; <0>see below</0>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Sign in at duckdns.org with one of the accounts it offers, such as GitHub or Google."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Under <0>domains</0>, type a name and click <1>add domain</1>. Your domain is then <2/>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Copy the <0>token</0> shown at the top of the page. It looks like <1/>. It controls every name on your account, so keep it to yourself."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "What changes is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends: it refuses a server size above the free allowance, and it writes an Oracle quota policy that stops the account creating anything outside the Always Free compute shapes at all, whether or not you have upgraded. That policy is a real limit rather than a warning: Oracle refuses the request instead of billing you for it. The installer also sets a spending alert that emails you the moment the account is billed one unit of your currency. Nothing needs adding to the command in <0>Step 2</0>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Option 2: stay on an Always Free account and donate spare time to Folding@home"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "The client runs at the lowest priority the system has, so Nocturne and its alarms always come first. To choose this option, add <0/> to the command in <1>Step 2</1>:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Work is contributed anonymously by default. To count it towards a team, add <0/> as well. Always Free accounts cannot be charged, but the installer still creates the spending alert in case the account is upgraded later."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Points your DuckDNS name at that address when you give it the token; for any other domain, it prints the two records to create by hand"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "The script ends by printing your <0>instance key</0>. It is the master credential for this installation, used for administrative API access and account recovery. Save it in a password manager. Running the script a second time prints it once more."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "To update Caddy and Postgres, run <0/> on the server."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups, so take them by hand and delete old ones rather than attaching a scheduled policy, which would keep more than five and be charged."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "No domain yet? Get one from DuckDNS"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "<0>DuckDNS</0> is a free dynamic DNS service that gives out names under <1>duckdns.org</1>, each with a wildcard for the subdomains below it. The installer uses your DuckDNS token to point your name at your server, so there is nothing to set up by hand."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "For a domain you already own, you add two records by hand at your DNS provider in <0>Step 3</0>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Oracle switches off servers on Always Free accounts that it judges idle for seven days in a row. Its measure is whether the processor, network and memory each stayed below 20 percent of capacity for nearly all of that week. A Nocturne server for one person does very little work by that yardstick, so left alone it is likely to be stopped after its first quiet week. There are two ways to prevent that, and one of them changes the command in <0>Step 2</0>, so pick now rather than later."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Pay As You Go suits most people: it is a single change in the Oracle console, adds nothing to the server, and paying accounts are served first when Ampere capacity is scarce. The trade-off is that the card already on file <0>can</0> be charged if anything outside the free allowance is ever created. Choose Folding@home instead if you would rather keep an Always Free account that cannot be billed at all, and you do not mind a second piece of software with network access on the server that holds your health data."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Paste this into Cloud Shell, replacing <0/> with your domain, such as <1/>. Nocturne will answer on that name and every site you create gets a subdomain under it, so pick something you are happy to keep. If you chose Folding@home above, add <2/> in front."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "If your domain is under duckdns.org, the installer asks early on for your DuckDNS token. <0>Nothing appears on screen as you paste it</0> – the token is hidden, and the installer tells you how many characters it read so you can see the paste landed. If DuckDNS does not accept it you can paste another. Press Enter with nothing pasted and it tells you the address to set yourself in <1>Step 3</1> instead. For any other domain, it prints the two records to create by hand. Either way it keeps working while the server boots, and waits for DNS before it requests certificates."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Skip this step if you gave the installer a DuckDNS token. For a DuckDNS name without one, sign in at duckdns.org, put the IP address the script printed into the <0>current ip</0> box next to your name and click <1>update ip</1>. For any other domain, create two <2>A</2> records at your domain provider, pointing at that address:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
+msgid "Once the script reports that Nocturne is answering, open <0/> in a browser. You are taken to the setup page to name your first site and create the owner account, with a passkey or a sign-in provider. A passkey is your phone's or computer's built-in unlock. If you choose one, register a second device as soon as you can, because there is no password to fall back on."
+msgstr ""
+
+#. 0: daysOfData; 1: daysOfData === 1 ? "day" \\: "days"; 2: reliability.recommendedMinimumDays ?? 14
+#: src/lib/components/reports/ReliabilityBadge.svelte
+msgid "Based on {0} {1} of data ({2} recommended)"
+msgstr ""
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Nocturne inferred this sensor start from the warm-up gap in your CGM's readings. Correct the time if it is off, or delete it if this was not a sensor change."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Failed to read migration status"
 msgstr ""

@@ -1,12 +1,10 @@
 using FluentAssertions;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.V4.Platform;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Core.Contracts.Connectors;
@@ -40,22 +38,8 @@ public class ServicesControllerDeleteFailureMappingTests
             Mock.Of<ITenantAccessor>(),
             Options.Create(new BaseDomainOptions()))
         {
-            ProblemDetailsFactory = new PassThroughProblemDetailsFactory(),
+            ProblemDetailsFactory = new EchoingProblemDetailsFactory(),
         };
-
-    /// <summary>Stands in for the MVC-registered factory, which needs a request scope.</summary>
-    private sealed class PassThroughProblemDetailsFactory : ProblemDetailsFactory
-    {
-        public override ProblemDetails CreateProblemDetails(
-            HttpContext httpContext, int? statusCode = null, string? title = null,
-            string? type = null, string? detail = null, string? instance = null) =>
-            new() { Status = statusCode, Title = title, Type = type, Detail = detail, Instance = instance };
-
-        public override ValidationProblemDetails CreateValidationProblemDetails(
-            HttpContext httpContext, ModelStateDictionary modelStateDictionary, int? statusCode = null,
-            string? title = null, string? type = null, string? detail = null, string? instance = null) =>
-            new(modelStateDictionary) { Status = statusCode, Title = title, Type = type, Detail = detail, Instance = instance };
-    }
 
     [Fact]
     public async Task DeleteDataSourceData_MissingSource_Returns404_WhateverTheMessageSays()

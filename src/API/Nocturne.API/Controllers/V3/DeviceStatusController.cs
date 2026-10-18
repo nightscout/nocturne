@@ -296,7 +296,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 return CreatedAtAction(
                     nameof(GetDeviceStatusById),
                     new { id = projectedResults.First().Id },
-                    new { status = 200, result = projectedResults.Select(MapToV3Dto) }
+                    new V3Envelope<object> { Result = projectedResults.Select(MapToV3Dto).ToList() }
                 );
             }
 
@@ -405,12 +405,12 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// </summary>
     /// <param name="id">Device status ID to delete</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>No content on success</returns>
+    /// <returns><c>{"status": 200}</c> on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus/{id}")]
-    [ProducesResponseType(204)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -448,7 +448,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
         _logger.LogDebug("Successfully deleted device status with ID {Id}", id);
 
-        return NoContent();
+        return CreateV3DeleteResponse();
     }
 
     /// <summary>

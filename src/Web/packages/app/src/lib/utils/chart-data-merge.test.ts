@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeChartData, replaceWindow } from "./chart-data-merge";
+import { markerKey, mergeChartData, replaceWindow } from "./chart-data-merge";
 import type { TransformedChartData } from "./chart-data-transform";
 import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
 
@@ -147,6 +147,18 @@ describe("replaceWindow", () => {
     const result = replaceWindow(current, chartData(), start);
 
     expect(result.bolusMarkers.map((m) => m.insulin)).toEqual([1]);
+  });
+
+  it("keeps an older bolus whose fresh copy falls before the window", () => {
+    const withId = (iso: string) => ({ time: T(iso), insulin: 1, treatmentId: "b1" }) as never;
+    const current = chartData({ bolusMarkers: [withId("2026-08-29T09:50:00Z")] });
+    const recent = chartData({ bolusMarkers: [withId("2026-08-29T09:55:00Z")] });
+
+    const result = replaceWindow(current, recent, start);
+
+    expect(result.bolusMarkers.map((m) => m.time.toISOString())).toEqual([
+      "2026-08-29T09:50:00.000Z",
+    ]);
   });
 
   it("does not duplicate a span that began before the window and is still running", () => {
@@ -302,5 +314,158 @@ describe("one copy of an id on each side of the boundary", () => {
     );
 
     expect(merged[list]).toHaveLength(1);
+  });
+});
+
+describe("a meal with an offset carb marker", () => {
+  const parent = (iso: string, treatmentId = "meal1") =>
+    ({ time: new Date(iso), carbs: 40, treatmentId }) as never;
+  const offset = (iso: string, treatmentId = "meal1") =>
+    ({ time: new Date(iso), carbs: 15, treatmentId, isOffset: true }) as never;
+  const boundary = new Date("2026-08-29T10:00:00Z").getTime();
+  const times = (markers: { time: Date }[]) =>
+    markers.map((m) => m.time.toISOString().slice(11, 16)).sort();
+
+  it("replaceWindow keeps a later offset whose meal is before the refresh line", () => {
+    const result = replaceWindow(
+      chartData({ carbMarkers: [parent("2026-08-29T09:50:00Z"), offset("2026-08-29T10:20:00Z")] }),
+      chartData(),
+      boundary
+    );
+
+    expect(times(result.carbMarkers)).toEqual(["09:50", "10:20"]);
+  });
+
+  it("replaceWindow keeps an earlier offset whose meal is after the refresh line once", () => {
+    const rows = [parent("2026-08-29T10:10:00Z"), offset("2026-08-29T09:40:00Z")];
+    const result = replaceWindow(
+      chartData({ carbMarkers: rows }),
+      chartData({ carbMarkers: rows }),
+      boundary
+    );
+
+    expect(times(result.carbMarkers)).toEqual(["09:40", "10:10"]);
+  });
+
+  it("replaceWindow drops an earlier offset with its deleted meal", () => {
+    const result = replaceWindow(
+      chartData({
+        carbMarkers: [parent("2026-08-29T10:10:00Z"), offset("2026-08-29T09:40:00Z")],
+      }),
+      chartData(),
+      boundary
+    );
+
+    expect(result.carbMarkers).toHaveLength(0);
+  });
+
+  it("replaceWindow moves an offset with its meal", () => {
+    const result = replaceWindow(
+      chartData({ carbMarkers: [parent("2026-08-29T09:50:00Z"), offset("2026-08-29T10:20:00Z")] }),
+      chartData({ carbMarkers: [parent("2026-08-29T10:30:00Z"), offset("2026-08-29T11:00:00Z")] }),
+      boundary
+    );
+
+    expect(times(result.carbMarkers)).toEqual(["10:30", "11:00"]);
+  });
+
+  it("mergeChartData keeps an earlier offset whose meal is in the recent half", () => {
+    const merged = mergeChartData(
+      chartData({ carbMarkers: [parent("2026-08-29T10:10:00Z"), offset("2026-08-29T09:40:00Z")] }),
+      chartData({
+        carbMarkers: [
+          parent("2026-08-29T08:00:00Z", "meal0"),
+          offset("2026-08-29T08:30:00Z", "meal0"),
+        ],
+      })
+    );
+
+    expect(times(merged.carbMarkers)).toEqual(["08:00", "08:30", "09:40", "10:10"]);
+  });
+
+  it("mergeChartData keeps an offset that lands on the same minute as another carb entry", () => {
+    const merged = mergeChartData(
+      chartData({
+        carbMarkers: [parent("2026-08-29T10:30:00Z", "snack")],
+      }),
+      chartData({ carbMarkers: [parent("2026-08-29T10:00:00Z"), offset("2026-08-29T10:30:00Z")] })
+    );
+
+    expect(merged.carbMarkers).toHaveLength(3);
+  });
+
+  it("mergeChartData drops the older copy of a meal moved across the boundary, offset included", () => {
+    const merged = mergeChartData(
+      chartData({ carbMarkers: [parent("2026-08-29T10:10:00Z"), offset("2026-08-29T10:40:00Z")] }),
+      chartData({ carbMarkers: [parent("2026-08-29T09:50:00Z"), offset("2026-08-29T10:20:00Z")] })
+    );
+
+    expect(times(merged.carbMarkers)).toEqual(["10:10", "10:40"]);
+  });
+
+  it("mergeChartData still drops a true duplicate offset", () => {
+    const merged = mergeChartData(
+      chartData({ carbMarkers: [offset("2026-08-29T10:20:00Z")] }),
+      chartData({ carbMarkers: [offset("2026-08-29T10:20:00Z")] })
+    );
+
+    expect(merged.carbMarkers).toHaveLength(1);
+  });
+});
+
+describe("markerKey", () => {
+  const at = new Date("2026-08-29T10:00:00Z");
+
+  it("is the id when there is one", () => {
+    expect(markerKey("a1", at, 3)).toBe("a1");
+  });
+
+  it.each<{ kind: string; id: string | null | undefined }>([
+    { kind: "empty", id: "" },
+    { kind: "missing", id: undefined },
+    { kind: "null", id: null },
+  ])("falls back to time and position for a $kind id", ({ id }) => {
+    expect(markerKey(id, at, 3)).toBe(`${at.getTime()}-3`);
+  });
+
+  it("gives two id-less rows at one time distinct keys", () => {
+    expect(markerKey("", at, 0)).not.toBe(markerKey("", at, 1));
+  });
+});
+
+describe("a moment shared by two markers with ids", () => {
+  it("mergeChartData keeps both when the ids differ", () => {
+    const bolus = (id: string, iso: string) =>
+      ({ time: new Date(iso), insulin: 1, treatmentId: id }) as never;
+    const merged = mergeChartData(
+      chartData({ bolusMarkers: [bolus("a", "2026-08-29T10:00:00Z")] }),
+      chartData({ bolusMarkers: [bolus("b", "2026-08-29T10:00:00Z")] })
+    );
+
+    expect(merged.bolusMarkers).toHaveLength(2);
+  });
+});
+
+describe("spans without an id", () => {
+  const span = (iso: string) => ({ id: "", startTime: new Date(iso), endTime: null }) as never;
+  const boundary = new Date("2026-08-29T10:00:00Z").getTime();
+
+  it("mergeChartData keeps every one", () => {
+    const merged = mergeChartData(
+      chartData({ pumpModeSpans: [span("2026-08-29T11:00:00Z")] }),
+      chartData({ pumpModeSpans: [span("2026-08-29T04:00:00Z"), span("2026-08-29T05:00:00Z")] })
+    );
+
+    expect(merged.pumpModeSpans).toHaveLength(3);
+  });
+
+  it("replaceWindow keeps older ones beside the fresh ones", () => {
+    const result = replaceWindow(
+      chartData({ pumpModeSpans: [span("2026-08-29T04:00:00Z"), span("2026-08-29T05:00:00Z")] }),
+      chartData({ pumpModeSpans: [span("2026-08-29T11:00:00Z")] }),
+      boundary
+    );
+
+    expect(result.pumpModeSpans).toHaveLength(3);
   });
 });

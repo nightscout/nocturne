@@ -749,10 +749,17 @@ public class StateSpanRepository : IStateSpanRepository
         string? type = null,
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default
     )
     {
         var query = _context.StateSpans.AsNoTracking().Where(s => ActivityCategories.Contains(s.Category));
+
+        if (from is { } fromValue)
+            query = query.Where(s => s.StartTimestamp >= fromValue);
+        if (to is { } toValue)
+            query = query.Where(s => s.StartTimestamp <= toValue);
 
         // Filter by type/state if provided
         if (!string.IsNullOrEmpty(type))

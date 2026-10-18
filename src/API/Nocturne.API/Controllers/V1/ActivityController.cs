@@ -30,6 +30,7 @@ public class ActivityController : ControllerBase
     private readonly IActivityService _activityService;
     private readonly IActivityDecomposer _activityDecomposer;
     private readonly ILogger<ActivityController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ActivityController"/>.
@@ -37,10 +38,12 @@ public class ActivityController : ControllerBase
     /// <param name="activityService">Service handling activity data operations.</param>
     /// <param name="activityDecomposer">Classifier mapping each activity to its required write scope.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">Clock the default find window is measured from.</param>
     public ActivityController(
         IActivityService activityService,
         IActivityDecomposer activityDecomposer,
-        ILogger<ActivityController> logger
+        ILogger<ActivityController> logger,
+        TimeProvider timeProvider
     )
     {
         _activityService =
@@ -48,6 +51,7 @@ public class ActivityController : ControllerBase
         _activityDecomposer =
             activityDecomposer ?? throw new ArgumentNullException(nameof(activityDecomposer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
     /// <summary>
@@ -55,6 +59,9 @@ public class ActivityController : ControllerBase
     /// Returns regular activities, heart rate, and step count data merged by timestamp.
     /// </summary>
     /// <remarks>
+    /// Like Nightscout, <c>find[...]</c> filters narrow the result, a find that bounds neither
+    /// <c>created_at</c> nor <c>dateString</c> reads only the last four days, and the result is
+    /// unlimited unless <paramref name="count"/> is given, up to the merged read cap.
     /// The scope requirement is an OR because the response merges four storages, each with its own
     /// read scope. Admission means the caller holds at least one of those categories;
     /// <see cref="ActivityReadScopeGuard"/> then removes the records whose category the caller does
@@ -70,7 +77,7 @@ public class ActivityController : ControllerBase
         Scope.StepCountRead,
         Scope.SleepRead)]
     public async Task<ActionResult<IEnumerable<Activity>>> GetActivities(
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] int skip = 0,
         CancellationToken cancellationToken = default
     )
@@ -85,13 +92,20 @@ public class ActivityController : ControllerBase
 
             // An empty array covers both a 0-or-negative count (Nightscout behavior) and a page
             // starting past the merged paging window.
-            var pageCount = LegacyReadLimits.ClampMergedPage(count, skip);
+            var pageCount = LegacyReadLimits.ClampMergedPage(
+                count ?? LegacyReadLimits.MaxMergedCount, skip);
             if (pageCount <= 0)
             {
                 return Ok(Array.Empty<Activity>());
             }
 
+            var find = LegacyFindDateWindow.Apply(
+                LegacyFindQueryString.Resolve(Request, null),
+                _timeProvider.GetUtcNow(),
+                windowUnfiltered: true);
+
             var activities = await _activityService.GetActivitiesAsync(
+                find: find,
                 count: pageCount,
                 skip: skip,
                 cancellationToken: cancellationToken

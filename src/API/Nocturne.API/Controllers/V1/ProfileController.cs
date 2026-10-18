@@ -366,11 +366,10 @@ public class ProfileController : ControllerBase
     /// Get the current active profile
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The current active profile as a single object (Nightscout format), or empty array if no profiles exist</returns>
+    /// <returns>The current active profile as a single object (Nightscout format), or the JSON literal <c>null</c> when no profile exists</returns>
     [HttpGet("current")]
     [NightscoutEndpoint("/api/v1/profile/current")]
     [ProducesResponseType(typeof(Profile), 200)]
-    [ProducesResponseType(typeof(Profile[]), 200)] // Empty array when no profile
     [ProducesResponseType(typeof(Profile[]), 304)] // Not Modified response
     [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult> GetCurrentProfile(
@@ -388,8 +387,8 @@ public class ProfileController : ControllerBase
 
             if (profile == null)
             {
-                _logger.LogDebug("No current profile found, returning empty array");
-                return Ok(Array.Empty<Profile>());
+                _logger.LogDebug("No current profile found, returning null");
+                return Content("null", "application/json");
             }
 
             // Set Last-Modified header for caching

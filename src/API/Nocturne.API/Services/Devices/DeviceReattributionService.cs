@@ -66,8 +66,8 @@ internal sealed class DeviceReattributionService : IDeviceReattributionService
     {
         // Device usage dates are local; pad ±1 day for local/UTC skew, matching the ingest stamper's
         // candidate window. Null bounds mean the device has an open-ended window.
-        var from = device.StartDate is { } start ? start.ToDateTime(TimeOnly.MinValue).AddDays(-1) : (DateTime?)null;
-        var to = device.EndDate is { } end ? end.ToDateTime(TimeOnly.MaxValue).AddDays(1) : (DateTime?)null;
+        var from = device.StartDate is { } start ? start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddDays(-1) : (DateTime?)null;
+        var to = device.EndDate is { } end ? end.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc).AddDays(1) : (DateTime?)null;
 
         // A record type is in scope when the registered category is one of the categories ingest
         // lets own that type — the same map, so back-stamping and live stamping cannot diverge.

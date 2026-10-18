@@ -386,4 +386,199 @@ public class TrackerTriggerServiceTests
             Times.Once
         );
     }
+
+    private readonly List<(Guid DefinitionId, string StartTreatmentId)> _reverts = [];
+
+    /// <summary>
+    /// Wires the delete path over <paramref name="runs"/>: each run's start can be reverted once,
+    /// reopening the runs in <paramref name="replaced"/> keyed by the reverted run.
+    /// </summary>
+    private void GivenRunsStartedByDeletes(
+        IReadOnlyList<TrackerInstanceEntity> runs,
+        IReadOnlyDictionary<Guid, TrackerInstanceEntity[]>? replaced = null)
+    {
+        var running = runs.Where(r => r.CompletedAt == null).ToList();
+        _repository
+            .Setup(r => r.GetRunningStartedByAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<string> ids, CancellationToken _) =>
+                running.Where(r => ids.Contains(r.StartTreatmentId!)).ToList());
+        _repository
+            .Setup(r => r.ExecuteUnderDefinitionLockAsync(
+                It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<TrackerStartRevert?>>>(),
+                It.IsAny<Func<TrackerStartRevert?, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid _, Func<CancellationToken, Task<TrackerStartRevert?>> work,
+                Func<TrackerStartRevert?, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(ct));
+        _repository
+            .Setup(r => r.RevertStartAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid definitionId, string startTreatmentId, CancellationToken _) =>
+            {
+                _reverts.Add((definitionId, startTreatmentId));
+                var run = running.FirstOrDefault(r => r.DefinitionId == definitionId && r.StartTreatmentId == startTreatmentId);
+                if (run is null)
+                    return null;
+                running.Remove(run);
+                var reopened = replaced?.GetValueOrDefault(run.Id) ?? [];
+                foreach (var resumed in reopened)
+                {
+                    resumed.CompletedAt = null;
+                    running.Add(resumed);
+                }
+                return new TrackerStartRevert(run, reopened);
+            });
+    }
+
+    private static TrackerInstanceEntity Run(
+        TrackerDefinitionEntity definition, DeviceEvent? startedBy, DateTime startedAt, DateTime? completedAt = null) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            DefinitionId = definition.Id,
+            UserId = definition.UserId,
+            Definition = definition,
+            StartTreatmentId = startedBy?.Id.ToString(),
+            StartedAt = startedAt,
+            CompletedAt = completedAt,
+        };
+
+    private void VerifyBroadcast(string action, TrackerInstanceEntity instance, Times times) =>
+        _broadcast.Verify(b => b.BroadcastTrackerUpdateAsync(
+            action, It.Is<TrackerInstanceDto>(d => d.Id == instance.Id), instance.UserId, It.IsAny<TrackerVisibility>()), times);
+
+    private static readonly DateTime T0 = new(2026, 9, 11, 10, 43, 30, DateTimeKind.Utc);
+
+    [Fact]
+    public async Task DeletedChange_UndoesTheRunItStartedAndBroadcastsTheResumedOne()
+    {
+        var definition = GivenDefinition();
+        var deviceEvent = Event(T0);
+        var previous = Run(definition, null, T0.AddDays(-3), completedAt: T0);
+        var started = Run(definition, deviceEvent, T0);
+        GivenRunsStartedByDeletes([started], new Dictionary<Guid, TrackerInstanceEntity[]> { [started.Id] = [previous] });
+
+        await _sut.OnDeletedAsync([deviceEvent]);
+
+        _reverts.Should().Equal((definition.Id, deviceEvent.Id.ToString()));
+        VerifyBroadcast("delete", started, Times.Once());
+        VerifyBroadcast("reopen", previous, Times.Once());
+    }
+
+    [Fact]
+    public async Task DeletedChange_ThatStartedNothingStillRunning_ChangesNothing()
+    {
+        GivenDefinition();
+        GivenRunsStartedByDeletes([]);
+
+        await _sut.OnDeletedAsync([Event(T0)]);
+
+        _reverts.Should().BeEmpty();
+        _broadcast.VerifyNoOtherCalls();
+    }
+
+    /// <summary>The run is found by the event that started it, whatever its definition follows now.</summary>
+    [Fact]
+    public async Task DeletedChange_UndoesItsRunEvenWhenTheDefinitionNoLongerFollowsIt()
+    {
+        var definition = GivenDefinition(triggerEventTypes: ["Sensor Change"]);
+        var deviceEvent = Event(T0);
+        GivenRunsStartedByDeletes([Run(definition, deviceEvent, T0)]);
+
+        await _sut.OnDeletedAsync([deviceEvent]);
+
+        _reverts.Should().ContainSingle();
+    }
+
+    /// <summary>
+    /// Deleting two chained changes at once: only once the newer one's run is undone is the older
+    /// one's run running again, and then it is undone too.
+    /// </summary>
+    [Fact]
+    public async Task DeletedChain_IsUndoneBackToTheRunBeforeIt()
+    {
+        var definition = GivenDefinition();
+        var older = Event(T0.AddDays(-2));
+        var newer = Event(T0);
+        var first = Run(definition, null, T0.AddDays(-5), completedAt: T0.AddDays(-2));
+        var second = Run(definition, older, T0.AddDays(-2), completedAt: T0);
+        var third = Run(definition, newer, T0);
+        GivenRunsStartedByDeletes(
+            [first, second, third],
+            new Dictionary<Guid, TrackerInstanceEntity[]> { [third.Id] = [second], [second.Id] = [first] });
+
+        await _sut.OnDeletedAsync([older, newer]);
+
+        _reverts.Select(r => r.StartTreatmentId).Should().Equal(newer.Id.ToString(), older.Id.ToString());
+        VerifyBroadcast("reopen", first, Times.Once());
+    }
+
+    [Fact]
+    public async Task Replay_ReplacesTheRunningRun()
+    {
+        var definition = GivenDefinition();
+        var running = GivenActiveInstance(definition, T0.AddDays(-3));
+
+        await _sut.OnReplayedAsync([Event(T0)]);
+
+        _completed.Should().ContainSingle().Which.InstanceId.Should().Be(running.Id);
+        _started.Should().ContainSingle();
+    }
+
+    /// <summary>A run the user ended by hand after the event stays ended.</summary>
+    [Fact]
+    public async Task Replay_StartsNothingOnATrackerEndedSinceTheEvent()
+    {
+        var definition = GivenDefinition();
+        _repository
+            .Setup(r => r.HasRunEndedAfterAsync(definition.Id, T0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        await _sut.OnReplayedAsync([Event(T0)]);
+
+        _started.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// The undone run was the tracker's first, so nothing reopened: the replayed change is the one
+    /// that should have started it.
+    /// </summary>
+    [Fact]
+    public async Task Replay_StartsTheFirstRunOfAnIdleTracker()
+    {
+        var definition = GivenDefinition();
+        _repository
+            .Setup(r => r.HasRunEndedAfterAsync(definition.Id, T0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        await _sut.OnReplayedAsync([Event(T0)]);
+
+        _started.Should().ContainSingle().Which.StartedAt.Should().Be(T0);
+    }
+
+    [Fact]
+    public async Task Create_StartsAnIdleTrackerWhateverEndedBefore()
+    {
+        var definition = GivenDefinition();
+        _repository
+            .Setup(r => r.HasRunEndedAfterAsync(definition.Id, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        await _sut.OnCreatedAsync([Event(T0)]);
+
+        _started.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Followed_IsTheEventsThatStartedARunStillGoing()
+    {
+        var definition = GivenDefinition();
+        var following = Event(T0);
+        var other = Event(T0.AddDays(-3));
+        _repository
+            .Setup(r => r.GetRunningStartedByAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Run(definition, following, T0)]);
+
+        var followed = await _sut.GetFollowedAsync([following.Id, other.Id]);
+
+        followed.Should().BeEquivalentTo([following.Id]);
+    }
 }
+

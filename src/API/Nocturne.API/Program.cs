@@ -4,10 +4,12 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Audit;
+using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.DevOnly;
@@ -26,6 +28,7 @@ using Nocturne.API.OpenApi;
 using Scalar.AspNetCore;
 using Nocturne.Aspire.Scalar;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Extensions;
 using Nocturne.Core.Contracts.Entries;
@@ -286,7 +289,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-var loopApnsKeyId = app.Configuration["Loop:ApnsKeyId"];
+var loopApnsKeyId = app.Services.GetRequiredService<IOptions<LoopConfiguration>>().Value.ApnsKeyId;
 app.Logger.LogInformation(
     "Loop configuration loaded - APNS Key ID: {LoopApnsKeyId}",
     string.IsNullOrEmpty(loopApnsKeyId) ? "Not configured" : $"{loopApnsKeyId[..Math.Min(4, loopApnsKeyId.Length)]}****");
@@ -519,7 +522,7 @@ app.MapGet(
             new
             {
                 name = "Nocturne API",
-                version = "1.0.0",
+                version = AppVersion.Current,
                 description = "Modern C# rewrite of Nightscout API",
                 api_documentation = "/openapi/v1.json",
                 aspire_dashboard_note = "API documentation is available via Scalar in the Aspire dashboard",

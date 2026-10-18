@@ -157,7 +157,7 @@ public class CountController : ControllerBase
         try
         {
             var count = await _treatmentStore.CountAsync(
-                LegacyTreatmentDateWindow.Apply(find, _timeProvider.GetUtcNow()), cancellationToken);
+                LegacyFindDateWindow.Apply(find, _timeProvider.GetUtcNow()), cancellationToken);
 
             _logger.LogDebug("Found {Count} treatments matching criteria", count);
             return LegacyCountResult.For(count);
@@ -343,7 +343,7 @@ public class CountController : ControllerBase
                     break;
                 case "treatments":
                     count = await _treatmentStore.CountAsync(
-                        LegacyTreatmentDateWindow.Apply(
+                        LegacyFindDateWindow.Apply(
                             LegacyFindQueryString.Resolve(HttpContext?.Request, find), _timeProvider.GetUtcNow()),
                         cancellationToken);
                     break;

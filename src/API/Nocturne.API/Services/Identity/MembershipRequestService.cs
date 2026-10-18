@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -72,14 +73,18 @@ public class MembershipRequestService : IMembershipRequestService
         var subject = await _dbContext.Subjects.FindAsync([subjectId], ct);
         var subjectName = subject?.Name ?? "Someone";
 
-        // Find all tenant members whose roles include "members.manage" or "*"
-        var membersToNotify = await _dbContext.TenantMembers
-            .Where(m => m.TenantId == tenantId)
-            .Where(m => m.MemberRoles.Any(mr =>
-                mr.TenantRole.Permissions.Any(p => p == "members.manage" || p == "*")))
+        var candidates = await _dbContext.TenantMembers
+            .AsNoTracking()
+            .Include(m => m.MemberRoles)
+                .ThenInclude(mr => mr.TenantRole)
+            .PeopleOf(tenantId)
+            .ToListAsync(ct);
+
+        var membersToNotify = candidates
+            .Where(m => m.Holds(Scope.MembersManage))
             .Select(m => m.SubjectId)
             .Distinct()
-            .ToListAsync(ct);
+            .ToList();
 
         foreach (var recipientSubjectId in membersToNotify)
         {

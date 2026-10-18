@@ -27,7 +27,7 @@ public class ExperimentsController : ControllerBase
     /// <remarks>
     /// Gated on read access to any core Nightscout data type (matched via scopes, like the
     /// rest of v1). Using <see cref="RequireScopeAttribute"/> rather than a broad
-    /// <c>RequireRead</c> permission means scoped uploader tokens (e.g. a Loop key with
+    /// read permission means scoped uploader tokens (e.g. a Loop key with
     /// <c>glucose.readwrite</c>) pass, instead of only full-access/legacy <c>*</c> secrets.
     /// </remarks>
     [HttpGet("experiments/test")]

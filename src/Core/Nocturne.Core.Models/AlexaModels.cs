@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Nocturne.Core.Models;
 
 /// <summary>
@@ -155,6 +157,7 @@ public class AlexaResponseBody
     /// <summary>
     /// Whether to end the session
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public bool ShouldEndSession { get; set; } = true;
 
     /// <summary>
