@@ -93,27 +93,27 @@ public enum GoogleHealthTypeState
     AvailableNoData
 }
 
-/// <summary>The connection as a whole, for a one-line summary of it.</summary>
+/// <summary>
+/// Where the connection is in its lifecycle, the first that applies in declaration order. A
+/// failure is reported separately, by <see cref="GoogleHealthStatus.ErrorCode"/>.
+/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<GoogleHealthConnectionState>))]
 public enum GoogleHealthConnectionState
 {
-    [EnumMember(Value = "syncing"), JsonStringEnumMemberName("syncing")]
-    Syncing,
-
     [EnumMember(Value = "unavailable"), JsonStringEnumMemberName("unavailable")]
     Unavailable,
 
     [EnumMember(Value = "disconnected"), JsonStringEnumMemberName("disconnected")]
     Disconnected,
 
-    [EnumMember(Value = "needs_attention"), JsonStringEnumMemberName("needs_attention")]
-    NeedsAttention,
-
     [EnumMember(Value = "review_required"), JsonStringEnumMemberName("review_required")]
     ReviewRequired,
 
     [EnumMember(Value = "nothing_selected"), JsonStringEnumMemberName("nothing_selected")]
     NothingSelected,
+
+    [EnumMember(Value = "syncing"), JsonStringEnumMemberName("syncing")]
+    Syncing,
 
     [EnumMember(Value = "active"), JsonStringEnumMemberName("active")]
     Active

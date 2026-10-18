@@ -14,24 +14,27 @@
   let { connection }: { connection: GoogleHealthStatus } = $props();
 
   const rowStatus: Record<GoogleHealthConnectionState, DataSourceStatus> = {
-    [GoogleHealthConnectionState.Syncing]: "syncing",
     [GoogleHealthConnectionState.Unavailable]: "offline",
     [GoogleHealthConnectionState.Disconnected]: "offline",
-    [GoogleHealthConnectionState.NeedsAttention]: "error",
     [GoogleHealthConnectionState.ReviewRequired]: "configured",
     [GoogleHealthConnectionState.NothingSelected]: "configured",
+    [GoogleHealthConnectionState.Syncing]: "syncing",
     [GoogleHealthConnectionState.Active]: "active",
   };
   const state = $derived(
     connection.connectionState ?? GoogleHealthConnectionState.Disconnected
+  );
+  const offline = $derived(rowStatus[state] === "offline");
+  const failed = $derived(
+    !!connection.errorCode && !offline && state !== GoogleHealthConnectionState.Syncing
   );
 </script>
 
 <DataSourceRow
   name="Google Health"
   icon={undefined}
-  status={rowStatus[state]}
-  statusMessage={state === GoogleHealthConnectionState.NeedsAttention
+  status={failed ? "error" : rowStatus[state]}
+  statusMessage={failed
     ? "Google Health needs attention. Open the connector for details and recovery options."
     : undefined}
   lastSyncAttempt={connection.lastAttempt}

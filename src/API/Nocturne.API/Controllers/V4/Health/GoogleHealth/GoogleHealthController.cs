@@ -78,7 +78,7 @@ public class GoogleHealthController(
         try { return Ok(await action()); }
         catch (GoogleHealthException ex)
         {
-            if (ex.RetryAfter is { TotalSeconds: > 0 } retryAfter)
+            if (ex.Message == "rate_limited" && ex.RetryAfter is { TotalSeconds: > 0 } retryAfter)
                 Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
             return Problem(
                 statusCode: ex.Message switch

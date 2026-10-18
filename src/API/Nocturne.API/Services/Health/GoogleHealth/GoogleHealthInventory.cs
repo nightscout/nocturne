@@ -55,8 +55,8 @@ public static class GoogleHealthInventory
             return status;
         }
 
-        // The grant can change after a scan (a reconnect granting less), so it comes from the
-        // live session; the scan contributes only what it counted.
+        // The grant can change after a scan (a token refresh returning a narrower grant), so it
+        // comes from the live session; the scan contributes only what it counted.
         var granted = context.GrantedScopes.Contains(
             GoogleHealthClient.ScopeFor(capability.DataType), StringComparer.Ordinal);
         status.Selectable = granted && scanned?.ErrorCode is null;

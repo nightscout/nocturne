@@ -976,11 +976,11 @@ public class V4WriteScopeGatingTests
         return httpContext;
     }
 
-    /// <summary>The scopes an action's gate requires: the controller's declaration, or the explicit list.</summary>
     /// <summary>The attributes MVC applies to an action: its controller's, then its own.</summary>
     private static object[] AppliedAttributes(Type controller, MethodInfo action) =>
         [.. controller.GetCustomAttributes(inherit: true), .. action.GetCustomAttributes(inherit: true)];
 
+    /// <summary>The scopes an action's gate requires: the controller's declaration, or the explicit list.</summary>
     /// <remarks>
     /// The action's own gate when it has one: a controller-wide read gate alongside it still leaves
     /// the action requiring the write scope. Without one, the controller's gate is the action's.

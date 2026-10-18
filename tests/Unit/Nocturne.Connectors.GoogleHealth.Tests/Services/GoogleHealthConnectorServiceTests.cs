@@ -131,6 +131,27 @@ public class GoogleHealthConnectorServiceTests
     }
 
     [Fact]
+    public async Task A_session_from_a_former_client_is_revoked_and_cleared_without_reading()
+    {
+        var requests = new List<string>();
+        var fixture = new Fixture(request =>
+        {
+            requests.Add(request.RequestUri!.AbsolutePath + " " + request.Content?.ReadAsStringAsync().GetAwaiter().GetResult());
+            return Json("{}");
+        });
+        fixture.SetSession("refresh", GoogleHealthClient.MetricsScope);
+        var config = fixture.Configuration();
+        config.SessionClientId = "former.apps.googleusercontent.com";
+
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("client_changed", result.Message);
+        Assert.Equal(["/revoke token=refresh"], requests);
+        Assert.False(fixture.Secrets.ContainsKey("refreshToken"));
+    }
+
+    [Fact]
     public async Task Sync_requires_a_durable_oauth_session()
     {
         var fixture = new Fixture(_ => Json("{}"));

@@ -136,7 +136,7 @@ describe("Google Health source presentation", () => {
       guidance: "Choose at least one data type to start importing",
     },
     {
-      change: { connectionState: GoogleHealthConnectionState.NeedsAttention },
+      change: { errorCode: "google_unavailable" },
       label: "Error",
       guidance: null,
     },

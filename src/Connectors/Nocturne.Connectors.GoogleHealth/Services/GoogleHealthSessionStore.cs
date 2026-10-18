@@ -11,10 +11,12 @@ namespace Nocturne.Connectors.GoogleHealth.Services;
 /// A tenant's Google session: the refresh token, its grant and the client it was issued to, kept
 /// in the connector's encrypted secrets, plus the cached access token.
 /// </summary>
+/// <param name="revokeTimeout">How long a best-effort revocation may wait for Google; five seconds unless set.</param>
 public sealed class GoogleHealthSessionStore(
     IConnectorConfigurationService configurations,
     GoogleHealthAuthTokenProvider oauth,
-    IOptions<GoogleHealthPlatformOptions> platform)
+    IOptions<GoogleHealthPlatformOptions> platform,
+    TimeSpan? revokeTimeout = null)
 {
     private const string ConnectorName = "GoogleHealth";
     private const string RefreshTokenKey = "refreshToken";
@@ -133,17 +135,14 @@ public sealed class GoogleHealthSessionStore(
     /// Also forget which Google account was connected, which is what lets a different account
     /// connect afterwards.
     /// </param>
-    /// <param name="revoke">
-    /// Also ask Google, best effort, to revoke the stored refresh token. Revocation needs no client
-    /// credentials, so it works for a token no longer usable by this instance's client.
-    /// </param>
-    public async Task ClearAsync(bool removeAccount, Guid? subject, CancellationToken ct, bool revoke = false)
+    /// <param name="revoke">Also revoke the stored refresh token (<see cref="TryRevokeAsync"/>).</param>
+    public async Task ClearAsync(bool removeAccount, Guid? subject, bool revoke, CancellationToken ct)
     {
         oauth.InvalidateToken();
         await SetEnabledAsync(false, subject?.ToString(), ct);
         var secrets = await configurations.GetSecretsAsync(ConnectorName, ct);
         if (revoke && secrets.GetValueOrDefault(RefreshTokenKey) is { Length: > 0 } refreshToken)
-            await TryRevokeAsync(refreshToken);
+            await TryRevokeAsync(refreshToken, ct);
         secrets.Remove(RefreshTokenKey);
         secrets.Remove(GrantedScopesKey);
         secrets.Remove(SessionClientIdKey);
@@ -152,16 +151,23 @@ public sealed class GoogleHealthSessionStore(
         await configurations.SaveSecretsAsync(ConnectorName, secrets, subject?.ToString(), ct);
     }
 
-    private async Task TryRevokeAsync(string refreshToken)
+    /// <summary>
+    /// Asks Google to revoke <paramref name="refreshToken"/>, giving up after the revoke timeout
+    /// or when <paramref name="ct"/> is cancelled. Revocation needs no client credentials.
+    /// </summary>
+    /// <returns>Whether Google confirmed the revocation.</returns>
+    public async Task<bool> TryRevokeAsync(string refreshToken, CancellationToken ct)
     {
         try
         {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await oauth.RevokeAsync(refreshToken, timeout.Token);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(revokeTimeout ?? TimeSpan.FromSeconds(5));
+            return await oauth.RevokeAsync(refreshToken, timeout.Token);
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or
-                                       GoogleHealthException or Polly.ExecutionRejectedException)
+                                       Polly.ExecutionRejectedException)
         {
+            return false;
         }
     }
 

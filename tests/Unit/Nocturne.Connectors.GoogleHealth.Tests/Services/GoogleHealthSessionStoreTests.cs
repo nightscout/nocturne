@@ -49,7 +49,7 @@ public class GoogleHealthSessionStoreTests
     {
         var store = Store(out _);
 
-        await store.ClearAsync(removeAccount, Guid.NewGuid(), default);
+        await store.ClearAsync(removeAccount, Guid.NewGuid(), revoke: false, default);
 
         secrets.Keys.Should().BeEquivalentTo(removeAccount ? [] : new[] { "accountKey" });
         savedEnabled.Should().BeFalse();
@@ -58,7 +58,8 @@ public class GoogleHealthSessionStoreTests
     private bool? savedEnabled;
 
     private GoogleHealthSessionStore Store(
-        out Mock<IConnectorConfigurationService> configurations, HttpMessageHandler? handler = null)
+        out Mock<IConnectorConfigurationService> configurations, HttpMessageHandler? handler = null,
+        TimeSpan? revokeTimeout = null)
     {
         configurations = new Mock<IConnectorConfigurationService>();
         configurations.Setup(service => service.GetSecretsAsync("GoogleHealth", It.IsAny<CancellationToken>()))
@@ -88,31 +89,56 @@ public class GoogleHealthSessionStoreTests
             tenant.Object,
             TestPlatform.Options(),
             NullLogger<GoogleHealthAuthTokenProvider>.Instance);
-        return new GoogleHealthSessionStore(configurations.Object, oauth, TestPlatform.Options());
+        return new GoogleHealthSessionStore(configurations.Object, oauth, TestPlatform.Options(), revokeTimeout);
     }
 
-    [Theory]
-    [InlineData(System.Net.HttpStatusCode.OK)]
-    [InlineData(System.Net.HttpStatusCode.ServiceUnavailable)]
-    public async Task Clearing_a_former_clients_session_revokes_its_token_best_effort(System.Net.HttpStatusCode response)
+    [Fact]
+    public async Task Clearing_a_former_clients_session_revokes_its_token()
     {
         var revoked = new List<string>();
-        var store = Store(out _, new RecordingHandler(request =>
+        var store = Store(out _, new RecordingHandler((request, _) =>
         {
             revoked.Add(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
-            return new HttpResponseMessage(response) { Content = new StringContent("{}") };
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("{}") });
         }));
 
-        await store.ClearAsync(removeAccount: false, Guid.NewGuid(), default, revoke: true);
+        await store.ClearAsync(removeAccount: false, Guid.NewGuid(), revoke: true, default);
 
         revoked.Should().ContainSingle().Which.Should().Contain("token=refresh");
         secrets.Should().NotContainKey("refreshToken");
     }
 
-    private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+    public static TheoryData<string> RevokeOutcomes => ["ok", "refused", "unreachable", "hanging"];
+
+    [Theory]
+    [MemberData(nameof(RevokeOutcomes))]
+    public async Task Revocation_is_best_effort_and_bounded(string outcome)
+    {
+        var store = Store(out _, new RecordingHandler(async (_, ct) =>
+        {
+            switch (outcome)
+            {
+                case "unreachable":
+                    throw new HttpRequestException("unreachable");
+                case "hanging":
+                    await Task.Delay(Timeout.Infinite, ct);
+                    break;
+            }
+            return new HttpResponseMessage(outcome == "ok"
+                ? System.Net.HttpStatusCode.OK
+                : System.Net.HttpStatusCode.ServiceUnavailable) { Content = new StringContent("{}") };
+        }), revokeTimeout: TimeSpan.FromMilliseconds(100));
+
+        var revoke = store.TryRevokeAsync("refresh", default);
+
+        (await revoke.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(outcome == "ok");
+    }
+
+    private sealed class RecordingHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond)
+        : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
-            Task.FromResult(respond(request));
+            respond(request, ct);
     }
 
     private sealed class ThrowingHandler : HttpMessageHandler

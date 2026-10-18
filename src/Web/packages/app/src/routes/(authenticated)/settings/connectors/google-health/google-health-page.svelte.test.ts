@@ -541,18 +541,39 @@ describe("Google Health connector page", () => {
       .toHaveAttribute("href", "/settings/admin/connector-cursors");
   });
 
-  it("follows the server's connection state when an error is also reported", async () => {
+  it("asks for review rather than promising automatic sync when an error is also reported", async () => {
     googleHealthMocks.status.mockResolvedValue(
       connected({
         previewRequired: true,
-        errorCode: "rate_limited",
-        connectionState: GoogleHealthConnectionState.NeedsAttention,
+        errorCode: "partial_consent",
+        connectionState: GoogleHealthConnectionState.ReviewRequired,
       })
     );
     render(GoogleHealthPage);
-    await expect.element(page.getByText("Connected", { exact: true })).toBeVisible();
+    await expect
+      .element(page.getByText("Review the available data below", { exact: false }))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("Not every requested permission was granted.", { exact: true }))
+      .toBeVisible();
     await expect
       .element(page.getByText("Automatic sync runs approximately every 15 minutes", { exact: false }))
+      .not.toBeInTheDocument();
+  });
+
+  it("shows a running import as paused once the operator turns Google Health off", async () => {
+    googleHealthMocks.status.mockResolvedValue(
+      connected({
+        available: false,
+        isSyncing: true,
+        syncPhase: GoogleHealthSyncPhase.Reading,
+        connectionState: GoogleHealthConnectionState.Unavailable,
+      })
+    );
+    render(GoogleHealthPage);
+    await expect.element(page.getByText("Unavailable", { exact: true })).toBeVisible();
+    await expect
+      .element(page.getByText("imports are paused because your Nocturne operator", { exact: false }))
       .toBeVisible();
   });
 

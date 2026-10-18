@@ -1192,11 +1192,13 @@ public class GoogleHealthTests
     public async Task The_session_records_its_client_and_a_rotated_instance_client_requires_reconnection()
     {
         var tokenCalls = 0;
+        var revoked = new List<string>();
         var store = new TestConnectorStore();
         var handler = new StubHandler(request => request.RequestUri!.AbsolutePath switch
         {
             "/token" => Json($$"""{"access_token":"access-{{++tokenCalls}}","refresh_token":"refresh","expires_in":1,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
             "/v1/userinfo" => Json("{\"sub\":\"account\"}"),
+            "/revoke" => Revoked(request, revoked),
             _ => Json("{}")
         });
         await ConnectAsync(Service(store, handler, Guid.NewGuid()));
@@ -1212,6 +1214,7 @@ public class GoogleHealthTests
 
         Assert.Equal("client_changed", error.Message);
         Assert.Equal(1, tokenCalls);
+        Assert.Equal(["token=refresh"], revoked);
         Assert.False(store.Secrets.ContainsKey("refreshToken"));
         Assert.Equal("client_changed", (await rotated.StatusAsync(default)).ErrorCode);
     }
@@ -1219,11 +1222,14 @@ public class GoogleHealthTests
     [Fact]
     public async Task A_session_from_a_former_client_does_not_block_connecting_again()
     {
+        var refreshTokens = 0;
+        var revoked = new List<string>();
         var store = new TestConnectorStore();
         var handler = new StubHandler(request => request.RequestUri!.AbsolutePath switch
         {
-            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh-{{++refreshTokens}}","expires_in":3600,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
             "/v1/userinfo" => Json("{\"sub\":\"account\"}"),
+            "/revoke" => Revoked(request, revoked),
             _ => Json("{}")
         });
         await ConnectAsync(Service(store, handler, Guid.NewGuid()));
@@ -1231,6 +1237,8 @@ public class GoogleHealthTests
         await ConnectAsync(Service(store, handler, Guid.NewGuid(), platform: Platform("rotated.apps.googleusercontent.com")));
 
         Assert.Equal("rotated.apps.googleusercontent.com", store.Secrets["clientId"]);
+        Assert.Equal(["token=refresh-1"], revoked);
+        Assert.Equal("refresh-2", store.Secrets["refreshToken"]);
     }
 
     [Theory]
@@ -1276,6 +1284,12 @@ public class GoogleHealthTests
         Assert.DoesNotContain("inventory", (await store.Cursors.GetAsync("GoogleHealth", "health", default))?.LastGuid ?? "");
         Assert.All(SupportedTypes(await service.StatusAsync(default)),
             type => Assert.Equal(GoogleHealthTypeState.NotScanned, type.State));
+    }
+
+    private static HttpResponseMessage Revoked(HttpRequestMessage request, List<string> revoked)
+    {
+        revoked.Add(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        return Json("{}");
     }
 
     private static async Task ConnectAsync(GoogleHealthService service)

@@ -188,7 +188,7 @@ public sealed class GoogleHealthService(
         await using var gate = await coordinator.AcquireAsync(TenantId, ct);
         var configuration = await StoredConfigurationAsync(ct);
         if (sessions.IssuedToAnotherClient(configuration))
-            await sessions.ClearAsync(removeAccount: false, subject, ct, revoke: true);
+            await sessions.ClearAsync(removeAccount: false, subject, revoke: true, ct);
         else if (!string.IsNullOrWhiteSpace(configuration.RefreshToken))
             throw new GoogleHealthException("disconnect_first");
         var verifier = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(48));
@@ -289,21 +289,10 @@ public sealed class GoogleHealthService(
         await coordinator.CompleteAsync(TenantId);
         var refreshToken = (await configurationLoader.LoadForTenantAsync(CancellationToken.None)).RefreshToken;
         await ClearFlowAsync(CancellationToken.None);
-        await sessions.ClearAsync(removeAccount: false, subject, CancellationToken.None);
+        await sessions.ClearAsync(removeAccount: false, subject, revoke: false, CancellationToken.None);
         await ForgetInventoryAsync(CancellationToken.None);
-        var revokeFailed = false;
-        if (!string.IsNullOrWhiteSpace(refreshToken))
-        {
-            try
-            {
-                using var revokeCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                revokeFailed = !await oauth.RevokeAsync(refreshToken, revokeCancellation.Token);
-            }
-            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or Polly.ExecutionRejectedException)
-            {
-                revokeFailed = true;
-            }
-        }
+        var revokeFailed = !string.IsNullOrWhiteSpace(refreshToken) &&
+            !await sessions.TryRevokeAsync(refreshToken, CancellationToken.None);
         await connectorConfigurations.UpdateHealthStateAsync(
             ConnectorName,
             lastErrorMessage: revokeFailed ? "revoke_in_google" : string.Empty,
@@ -332,7 +321,7 @@ public sealed class GoogleHealthService(
             using var document = JsonDocument.Parse(configuration.ToJsonString(Json));
             await connectorConfigurations.SaveConfigurationAsync(ConnectorName, document, subject.ToString(), ct);
         }
-        await sessions.ClearAsync(removeAccount: true, subject, ct);
+        await sessions.ClearAsync(removeAccount: true, subject, revoke: false, ct);
     }
 
     public async Task<GoogleHealthStatus> PreviewAsync(Guid subject, CancellationToken ct)
@@ -376,7 +365,7 @@ public sealed class GoogleHealthService(
         }
         catch (GoogleHealthException ex) when (ex.RequiresReconnect)
         {
-            await sessions.ClearAsync(removeAccount: false, subject, ct, revoke: ex.Message == "client_changed");
+            await sessions.ClearAsync(removeAccount: false, subject, revoke: ex.Message == "client_changed", ct);
             await connectorConfigurations.UpdateHealthStateAsync(ConnectorName,
                 lastErrorMessage: GoogleHealthErrorCode.Encode(ex.Message, ex.DataType is null ? null : [ex.DataType]),
                 lastErrorAt: DateTime.UtcNow, isHealthy: false, ct: ct);
@@ -447,14 +436,13 @@ public sealed class GoogleHealthService(
         return status;
     }
 
-    private static GoogleHealthConnectionState ConnectionState(GoogleHealthStatus status, bool syncing) => status switch
+    internal static GoogleHealthConnectionState ConnectionState(GoogleHealthStatus status, bool syncing) => status switch
     {
-        _ when syncing => GoogleHealthConnectionState.Syncing,
         { Available: false } => GoogleHealthConnectionState.Unavailable,
         { Connected: false } => GoogleHealthConnectionState.Disconnected,
-        { ErrorCode: not null } => GoogleHealthConnectionState.NeedsAttention,
         { PreviewRequired: true } => GoogleHealthConnectionState.ReviewRequired,
         { SelectedTypes.Length: 0 } => GoogleHealthConnectionState.NothingSelected,
+        _ when syncing => GoogleHealthConnectionState.Syncing,
         _ => GoogleHealthConnectionState.Active
     };
 

@@ -225,15 +225,11 @@
         </p>
       </div>
     </div>
-    <Badge variant={status?.connected && !unavailable ? "default" : "outline"}>
-      {!status
-        ? ""
-        : unavailable
-          ? "Unavailable"
-          : status.connected
-            ? "Connected"
-            : "Not connected"}
-    </Badge>
+    {#if status}
+      <Badge variant={status.connected && !unavailable ? "default" : "outline"}>
+        {unavailable ? "Unavailable" : status.connected ? "Connected" : "Not connected"}
+      </Badge>
+    {/if}
   </header>
   {#if message}
     <p role="alert" class="rounded-lg border border-destructive p-4">{message}</p>
