@@ -67,7 +67,7 @@ public class TreatmentReadService : ITreatmentStore
     /// <inheritdoc />
     public async Task<IReadOnlyList<Treatment>> QueryAsync(TreatmentQuery query, CancellationToken ct = default)
     {
-        var find = FindQuery.Parse(query.Find);
+        var find = FindQuery.Parse(query.Find, FindQuery.TreatmentBareRegexFields);
 
         var results = find.HasFieldFilters
             ? await QueryFilteredAsync(find, query.Count, query.Skip, ct)
@@ -283,7 +283,7 @@ public class TreatmentReadService : ITreatmentStore
     /// <inheritdoc />
     public async Task<long> CountAsync(string? find = null, CancellationToken ct = default)
     {
-        var findQuery = FindQuery.Parse(find);
+        var findQuery = FindQuery.Parse(find, FindQuery.TreatmentBareRegexFields);
 
         if (findQuery.HasFieldFilters)
         {
