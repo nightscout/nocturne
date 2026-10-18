@@ -3,6 +3,7 @@ import { render } from "vitest-browser-svelte";
 import { page as browserPage } from "vitest/browser";
 import { page } from "$app/state";
 import ConnectorsPage from "./+page.svelte";
+import { GoogleHealthConnectionState } from "$lib/api";
 
 const mocks = vi.hoisted(() => ({
   googleHealth: vi.fn(),
@@ -78,7 +79,7 @@ describe("connector overview Google Health authorization", () => {
         refresh: mocks.refreshOverview,
       });
       mocks.googleHealth.mockReturnValue({
-        current: cached ? { available: true, configured: true, connected: true } : undefined,
+        current: cached ? { available: true, connectionState: GoogleHealthConnectionState.Active, configured: true, connected: true } : undefined,
         loading,
         error,
         refresh: mocks.refreshGoogleHealth,
@@ -125,7 +126,7 @@ describe("connector overview Google Health authorization", () => {
       refresh: mocks.refreshOverview,
     });
     mocks.googleHealth.mockReturnValue({
-      current: { available: true, configured: true, connected: true, selectedTypes: ["steps"] },
+      current: { available: true, connectionState: GoogleHealthConnectionState.Active, configured: true, connected: true, selectedTypes: ["steps"] },
       loading: false,
       error: undefined,
       refresh: mocks.refreshGoogleHealth,

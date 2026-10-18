@@ -3,7 +3,11 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { page as appPage } from "$app/state";
 import { goto } from "$app/navigation";
-import type { GoogleHealthStatus, ServicesOverview } from "$lib/api";
+import {
+  GoogleHealthConnectionState,
+  type GoogleHealthStatus,
+  type ServicesOverview,
+} from "$lib/api";
 
 import GoogleHealthSourceRow from "./GoogleHealthSourceRow.svelte";
 import ServerConnectorsCard from "./ServerConnectorsCard.svelte";
@@ -46,6 +50,7 @@ vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
 
 const connected: GoogleHealthStatus = {
   available: true,
+  connectionState: GoogleHealthConnectionState.Active,
   configured: true,
   connected: true,
   selectedTypes: ["steps", "sleep"],
@@ -92,8 +97,8 @@ describe("Google Health source presentation", () => {
     const google = page.getByRole("button", { name: /Google Health/ });
     const dexcom = page.getByRole("button", { name: /Dexcom/ });
     await expect.element(google).toHaveTextContent("Active");
-    await expect.element(google).toHaveClass(/border-success/);
-    await expect.element(dexcom).toHaveClass(/border-success/);
+    await expect.element(dexcom).toHaveTextContent("Active");
+    expect(google.element().className).toBe(dexcom.element().className);
     await expect.element(google).toHaveTextContent("Last successful sync:");
     await expect.element(google).not.toHaveTextContent("0 records");
     await google.click();
@@ -104,7 +109,12 @@ describe("Google Health source presentation", () => {
     "shows an active import instead of persisted status %s",
     async (errorCode) => {
       render(GoogleHealthSourceRow, {
-        connection: { ...connected, isSyncing: true, errorCode },
+        connection: {
+          ...connected,
+          isSyncing: true,
+          errorCode,
+          connectionState: GoogleHealthConnectionState.Syncing,
+        },
       });
       const row = page.getByRole("button", { name: /Google Health/ });
       await expect.element(row).toHaveTextContent("Syncing");
@@ -116,23 +126,27 @@ describe("Google Health source presentation", () => {
 
   it.each([
     {
-      change: { previewRequired: true },
+      change: { connectionState: GoogleHealthConnectionState.ReviewRequired },
       label: "Configured",
       guidance: "Review available data and confirm the import selection",
     },
     {
-      change: { selectedTypes: [] },
+      change: { connectionState: GoogleHealthConnectionState.NothingSelected },
       label: "Configured",
       guidance: "Choose at least one data type to start importing",
     },
     {
-      change: { errorCode: "google_unavailable" },
+      change: { connectionState: GoogleHealthConnectionState.NeedsAttention },
       label: "Error",
       guidance: null,
     },
-    { change: { connected: false }, label: "Offline", guidance: null },
     {
-      change: { available: false },
+      change: { connectionState: GoogleHealthConnectionState.Disconnected },
+      label: "Offline",
+      guidance: "Reconnect to resume importing",
+    },
+    {
+      change: { connectionState: GoogleHealthConnectionState.Unavailable },
       label: "Offline",
       guidance: "Not enabled on this Nocturne server",
     },
@@ -145,7 +159,6 @@ describe("Google Health source presentation", () => {
       const row = page.getByRole("button", { name: /Google Health/ });
       await expect.element(row).toHaveTextContent(label);
       await expect.element(row).not.toHaveTextContent("Active");
-      await expect.element(row).not.toHaveClass(/border-success/);
       if (guidance) await expect.element(row).toHaveTextContent(guidance);
     }
   );
@@ -200,7 +213,11 @@ describe("Google Health source presentation", () => {
       };
       overviewMocks.services.mockReturnValue({ current: overview });
       overviewMocks.google.mockReturnValue({
-        current: { ...connected, connected: false },
+        current: {
+          ...connected,
+          connected: false,
+          connectionState: GoogleHealthConnectionState.Disconnected,
+        },
       });
       render(ConnectorsPage);
 

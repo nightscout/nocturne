@@ -9,7 +9,7 @@ describe("Google Health OAuth security and sleep deletion", () => {
     const tenant = await seedTenant();
     await tenant.api.ok("PUT", "/api/v4/google-health/options", googleOptions());
     const pending = await tenant.api.ok<{ url: string }>("POST", "/api/v4/google-health/start");
-    const callback = await googleConsent(pending.url, tenant);
+    const callback = await googleConsent(pending.url, tenant.slug);
     await tenant.api.ok("DELETE", "/api/v4/google-health/readings");
     const rejected = await tenant.api.post<{ detail: string }>("/api/v4/google-health/complete", {
       code: callback.searchParams.get("code"), state: callback.searchParams.get("state"),
@@ -20,7 +20,7 @@ describe("Google Health OAuth security and sleep deletion", () => {
     expect(await googleReadings(tenant)).toEqual({ heart: [], steps: [], weight: [], sleep: [] });
 
     const fresh = await tenant.api.ok<{ url: string }>("POST", "/api/v4/google-health/start");
-    const freshCallback = await googleConsent(fresh.url, tenant);
+    const freshCallback = await googleConsent(fresh.url, tenant.slug);
     expect(freshCallback.searchParams.get("state")).not.toBe(callback.searchParams.get("state"));
     await tenant.api.ok("POST", "/api/v4/google-health/complete", {
       code: freshCallback.searchParams.get("code"), state: freshCallback.searchParams.get("state"),
@@ -32,7 +32,7 @@ describe("Google Health OAuth security and sleep deletion", () => {
     const tenant = await seedTenant();
     await tenant.api.ok("PUT", "/api/v4/google-health/options", googleOptions());
     const start = await tenant.api.ok<{ url: string }>("POST", "/api/v4/google-health/start");
-    const callback = await googleConsent(start.url, tenant);
+    const callback = await googleConsent(start.url, tenant.slug);
     const payload = { code: callback.searchParams.get("code"), state: callback.searchParams.get("state") };
     const wrong = await tenant.api.post<{ detail: string }>("/api/v4/google-health/complete", { ...payload, state: "wrong-state" });
     expect(wrong.status).toBe(400);
@@ -54,7 +54,7 @@ describe("Google Health OAuth security and sleep deletion", () => {
     const options = googleOptions();
     await tenant.api.ok("PUT", "/api/v4/google-health/options", options);
     const start = await tenant.api.ok<{ url: string }>("POST", "/api/v4/google-health/start");
-    const callback = await googleConsent(start.url, tenant);
+    const callback = await googleConsent(start.url, tenant.slug);
     await tenant.api.ok("POST", "/api/v4/google-health/complete", {
       code: callback.searchParams.get("code"), state: callback.searchParams.get("state"),
     });
@@ -85,7 +85,7 @@ describe("Google Health OAuth security and sleep deletion", () => {
     expect(authorization.get("client_id")).toBe(googleClientId);
     expect(authorization.get("redirect_uri")).toBe(googleRedirectUri);
 
-    const callback = await googleConsent(start.url, tenant);
+    const callback = await googleConsent(start.url, tenant.slug);
     expect(`${callback.origin}${callback.pathname}`).toBe(googleRedirectUri);
     const https = { "x-forwarded-proto": "https" };
     const apex = await new ApiClient({ host: callback.host }).get(callback.pathname + callback.search, https);

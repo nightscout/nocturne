@@ -13,7 +13,7 @@ async function connectGoogle(page: Page, seeded: Tenant) {
   // host and every Nocturne request are real.
   await page.route("https://accounts.google.com/o/oauth2/v2/auth**", async (route) => {
     authorizations.push(new URL(route.request().url()));
-    const callback = await googleConsent(route.request().url(), tenant);
+    const callback = await googleConsent(route.request().url(), tenant.slug);
     expect(`${callback.origin}${callback.pathname}`).toBe(googleRedirectUri);
     await route.fulfill({ status: 302, headers: { location: callback.href }, body: "" });
   });

@@ -68,7 +68,7 @@ export const googleHealth: Vendor = {
         stats.set(input.account, { ...statsFor(input.account), reads: 0, revocations: 0 });
         return { status: 200, body: {} };
       }
-      return { status: 200, body: statsFor(request.query.account!) };
+      return { status: 200, body: stats.get(request.query.account!) ?? { reads: 0, revocations: 0, grants: [] } };
     }
     if (request.method === "GET" && request.path === "/authorize") {
       const q = request.query;

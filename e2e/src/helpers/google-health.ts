@@ -27,12 +27,12 @@ export function googleOptions() {
   };
 }
 
-/** Consents as the fake Google account named after the tenant, as its owner would pick it. */
-export async function googleConsent(authorizationUrl: string, tenant: Tenant): Promise<URL> {
+/** Consents as the fake Google account `account` names, as a tenant's owner would pick it. */
+export async function googleConsent(authorizationUrl: string, account: string): Promise<URL> {
   const url = new URL(authorizationUrl);
   if (url.origin !== "https://accounts.google.com" || url.pathname !== "/o/oauth2/v2/auth")
     throw new Error("Unexpected Google authorization destination");
-  url.searchParams.set("mock_account", tenant.slug);
+  url.searchParams.set("mock_account", account);
   const response = await fetch(`${env.mocksUrl}/googlehealth/authorize?${url.searchParams}`);
   if (!response.ok) throw new Error(`Mock consent failed: ${response.status}`);
   const body = await response.json() as { redirectUrl: string };
