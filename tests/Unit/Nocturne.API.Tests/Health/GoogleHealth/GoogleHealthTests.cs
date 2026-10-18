@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.Sqlite;
@@ -10,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Health;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -360,18 +362,6 @@ public class GoogleHealthTests
         Assert.True((await coordinator.ProgressAsync(tenant, default))!.WorkerOwned);
     }
 
-    [Theory]
-    [InlineData("http://example.com/settings/connectors/google-health/callback")]
-    [InlineData("https://192.168.2.238/settings/connectors/google-health/callback")]
-    [InlineData("https://example.com/settings/connectors/google-health/callback?x=1")]
-    [InlineData("https://example.com/auth/login")]
-    public void Requires_exact_https_callback(string url)
-    {
-        var options = Options();
-        options.CallbackUrl = url;
-        Assert.Throws<GoogleHealthException>(() => GoogleHealthService.ValidateOptions(options));
-    }
-
     [Fact]
     public void Import_selection_and_history_are_validated()
     {
@@ -407,7 +397,7 @@ public class GoogleHealthTests
 
         await service.SaveAsync(options, subject, default);
         Assert.False(store.IsActive);
-        var authorization = await service.StartAsync(subject, default);
+        var authorization = await service.StartAsync(subject, null, default);
         var query = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query);
         Assert.Equal("S256", query["code_challenge_method"]);
 
@@ -432,7 +422,7 @@ public class GoogleHealthTests
         Assert.True(disconnected.Configured);
         Assert.False(store.IsActive);
         Assert.Equal(accountKey, store.Secrets["accountKey"]);
-        var reconnect = await service.StartAsync(subject, default);
+        var reconnect = await service.StartAsync(subject, null, default);
         Assert.Contains("client_id=synthetic.apps.googleusercontent.com", reconnect.Url);
     }
 
@@ -505,7 +495,7 @@ public class GoogleHealthTests
         var options = Options();
         options.DataTypes = ["weight"];
         await service.SaveAsync(options, subject, default);
-        var authorization = await service.StartAsync(subject, default);
+        var authorization = await service.StartAsync(subject, null, default);
         var query = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query);
 
         await service.CompleteAsync(new GoogleHealthCallback
@@ -574,7 +564,7 @@ public class GoogleHealthTests
         });
         var first = Service(store, handler, tenant, new GoogleHealthCoordinator());
         await first.SaveAsync(Options(), subject, default);
-        var authorization = await first.StartAsync(subject, default);
+        var authorization = await first.StartAsync(subject, null, default);
         var state = System.Web.HttpUtility.ParseQueryString(new Uri(authorization.Url).Query)["state"]!;
         Assert.True(store.Secrets.ContainsKey("oauthFlow"));
         var second = Service(store, handler, tenant, new GoogleHealthCoordinator());
@@ -604,7 +594,7 @@ public class GoogleHealthTests
         var tokenCache = new ConnectorTokenCache();
         var first = Service(store, handler, tenant, new GoogleHealthCoordinator(), tokenCache);
         await first.SaveAsync(Options(), subject, default);
-        var authorization = await first.StartAsync(subject, default);
+        var authorization = await first.StartAsync(subject, null, default);
         var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
 
         await tokenCache.SetAsync("GoogleHealth", tenant, new ConnectorSession("stale-access", DateTime.UtcNow.AddHours(1)));
@@ -618,7 +608,7 @@ public class GoogleHealthTests
         Assert.Equal("expired_signin", rejected.Message);
         Assert.False((await first.StatusAsync(default)).Connected);
         Assert.False(store.IsActive);
-        var fresh = await second.StartAsync(subject, default);
+        var fresh = await second.StartAsync(subject, null, default);
         Assert.NotEqual(state, QueryHelpers.ParseQuery(new Uri(fresh.Url).Query)["state"].ToString());
     }
 
@@ -656,7 +646,7 @@ public class GoogleHealthTests
         Assert.False(store.Configuration.GetProperty("enabled").GetBoolean());
         Assert.Equal(30, store.Configuration.GetProperty("syncIntervalMinutes").GetInt32());
         Assert.Equal(45, store.Configuration.GetProperty("activeThresholdMinutes").GetInt32());
-        Assert.Contains("https://accounts.google.com/", (await service.StartAsync(subject, default)).Url);
+        Assert.Contains("https://accounts.google.com/", (await service.StartAsync(subject, null, default)).Url);
     }
 
     [Fact]
@@ -700,7 +690,7 @@ public class GoogleHealthTests
         });
         var service = Service(store, handler, tenantId);
         await service.SaveAsync(Options(), subject, default);
-        var authorization = await service.StartAsync(subject, default);
+        var authorization = await service.StartAsync(subject, null, default);
         var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
         await service.CompleteAsync(new GoogleHealthCallback { State = state, Code = "code" }, subject, default);
 
@@ -1044,7 +1034,7 @@ public class GoogleHealthTests
     [Fact]
     public async Task Sync_endpoint_maps_network_failure_to_problem_details()
     {
-        var controller = new GoogleHealthController(new ThrowingGoogleHealthService());
+        var controller = new GoogleHealthController(new ThrowingGoogleHealthService(), Microsoft.Extensions.Options.Options.Create(new BaseDomainOptions()));
 
         var result = await controller.SyncGoogleHealth(default);
 
@@ -1059,7 +1049,7 @@ public class GoogleHealthTests
     [InlineData("configure_first", 400)]
     public async Task Sync_endpoint_preserves_provider_error_codes_and_retryable_status(string code, int status)
     {
-        var controller = new GoogleHealthController(new ThrowingGoogleHealthService(new GoogleHealthException(code)));
+        var controller = new GoogleHealthController(new ThrowingGoogleHealthService(new GoogleHealthException(code)), Microsoft.Extensions.Options.Options.Create(new BaseDomainOptions()));
 
         var result = await controller.SyncGoogleHealth(default);
 
@@ -1125,11 +1115,88 @@ public class GoogleHealthTests
         Assert.False(await coordinator.StartQueuedAsync(tenantId, default));
     }
 
+    [Fact]
+    public async Task An_instance_without_a_client_is_unavailable_and_refuses_google_calls()
+    {
+        var store = new TestConnectorStore();
+        var handler = new StubHandler(_ => throw new InvalidOperationException("Google must not be called."));
+        var service = Service(store, handler, Guid.NewGuid(), platform: new GoogleHealthPlatformOptions());
+        await service.SaveAsync(Options(), Guid.NewGuid(), default);
+
+        Assert.False((await service.StatusAsync(default)).Available);
+        foreach (var call in new Func<Task>[]
+                 {
+                     () => service.StartAsync(Guid.NewGuid(), null, default),
+                     () => service.PreviewAsync(Guid.NewGuid(), default),
+                     () => service.QueueSyncAsync(default)
+                 })
+            Assert.Equal("platform_not_configured", (await Assert.ThrowsAsync<GoogleHealthException>(call)).Message);
+    }
+
+    [Fact]
+    public async Task Sign_in_uses_the_instance_client_and_a_state_that_routes_to_the_starting_tenant()
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
+        var subject = Guid.NewGuid();
+        await service.SaveAsync(Options(), subject, default);
+
+        var query = QueryHelpers.ParseQuery(new Uri((await service.StartAsync(subject, "alice", default)).Url).Query);
+
+        Assert.True((await service.StatusAsync(default)).Available);
+        Assert.Equal("synthetic.apps.googleusercontent.com", query["client_id"]);
+        Assert.Equal(Platform().RedirectUri, query["redirect_uri"]);
+        Assert.Equal("alice", OAuthState.TryReadTenantSlug(query["state"]));
+    }
+
+    [Fact]
+    public async Task A_state_this_instance_issued_for_another_flow_does_not_complete_the_sign_in()
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
+        var subject = Guid.NewGuid();
+        await service.SaveAsync(Options(), subject, default);
+        await service.StartAsync(subject, "alice", default);
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => service.CompleteAsync(new GoogleHealthCallback
+        {
+            State = OAuthState.Protect("alice", DateTimeOffset.UtcNow.AddMinutes(10)),
+            Code = "code"
+        }, subject, default));
+
+        Assert.Equal("expired_signin", error.Message);
+        Assert.False(store.Secrets.ContainsKey("refreshToken"));
+    }
+
+    [Fact]
+    public async Task The_session_records_its_client_and_a_rotated_instance_client_requires_reconnection()
+    {
+        var tokenCalls = 0;
+        var store = new TestConnectorStore();
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access-{{++tokenCalls}}","refresh_token":"refresh","expires_in":1,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
+            "/v1/userinfo" => Json("{\"sub\":\"account\"}"),
+            _ => Json("{}")
+        });
+        await ConnectAsync(Service(store, handler, Guid.NewGuid()));
+        Assert.Equal("synthetic.apps.googleusercontent.com", store.Secrets["clientId"]);
+        Assert.Equal(1, tokenCalls);
+
+        var rotated = Service(store, handler, Guid.NewGuid(), platform: Platform("rotated.apps.googleusercontent.com"));
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => rotated.PreviewAsync(Guid.NewGuid(), default));
+
+        Assert.Equal("reconnect_required", error.Message);
+        Assert.Equal(1, tokenCalls);
+        Assert.False(store.Secrets.ContainsKey("refreshToken"));
+        Assert.Equal("reconnect_required", (await rotated.StatusAsync(default)).ErrorCode);
+    }
+
     private static async Task ConnectAsync(GoogleHealthService service)
     {
         var subject = Guid.NewGuid();
         await service.SaveAsync(Options(), subject, default);
-        var authorization = await service.StartAsync(subject, default);
+        var authorization = await service.StartAsync(subject, null, default);
         var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
         await service.CompleteAsync(new GoogleHealthCallback { State = state, Code = "code" }, subject, default);
     }
@@ -1202,8 +1269,10 @@ public class GoogleHealthTests
         HttpMessageHandler handler,
         Guid tenantId,
         GoogleHealthCoordinator? coordinator = null,
-        ConnectorTokenCache? tokenCache = null)
+        ConnectorTokenCache? tokenCache = null,
+        GoogleHealthPlatformOptions? platform = null)
     {
+        var platformOptions = Microsoft.Extensions.Options.Options.Create(platform ?? Platform());
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(value => value.IsResolved).Returns(true);
         tenant.SetupGet(value => value.TenantId).Returns(tenantId);
@@ -1215,20 +1284,26 @@ public class GoogleHealthTests
                 tokenCache ?? new ConnectorTokenCache(),
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
                 tenant.Object,
+                platformOptions,
                 NullLogger<GoogleHealthAuthTokenProvider>.Instance),
             store.Configurations,
             store.Loader,
             tenant.Object,
-            store.Cursors);
+            store.Cursors,
+            platformOptions,
+            OAuthState);
     }
 
-    private static GoogleHealthOptions Options() => new()
+    private static readonly GoogleHealthOAuthState OAuthState = new(new EphemeralDataProtectionProvider());
+
+    private static GoogleHealthPlatformOptions Platform(string clientId = "synthetic.apps.googleusercontent.com") => new()
     {
-        ClientId = "synthetic.apps.googleusercontent.com",
+        ClientId = clientId,
         ClientSecret = "synthetic-secret",
-        CallbackUrl = "https://example.test:8450/settings/connectors/google-health/callback",
-        DataTypes = ["weight"]
+        RedirectUri = "https://example.test:8450" + GoogleHealthPlatformOptions.CallbackPath
     };
+
+    private static GoogleHealthOptions Options() => new() { DataTypes = ["weight"] };
 
     private static HttpResponseMessage Json(string text) => new(HttpStatusCode.OK)
     {
@@ -1342,7 +1417,7 @@ public class GoogleHealthTests
             Task.FromResult(new GoogleHealthStatus());
         public Task SaveAsync(GoogleHealthOptions options, Guid subject, CancellationToken ct) =>
             Task.CompletedTask;
-        public Task<GoogleHealthAuthorize> StartAsync(Guid subject, CancellationToken ct) =>
+        public Task<GoogleHealthAuthorize> StartAsync(Guid subject, string? tenantSlug, CancellationToken ct) =>
             Task.FromResult(new GoogleHealthAuthorize());
         public Task CompleteAsync(GoogleHealthCallback callback, Guid subject, CancellationToken ct) =>
             Task.CompletedTask;

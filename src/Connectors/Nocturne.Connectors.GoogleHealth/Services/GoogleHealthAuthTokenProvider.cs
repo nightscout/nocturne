@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -16,6 +17,7 @@ public sealed class GoogleHealthAuthTokenProvider(
     IConnectorTokenCache tokenCache,
     IConnectorServerResolver<GoogleHealthConnectorConfiguration> serverResolver,
     ITenantAccessor tenantAccessor,
+    IOptions<GoogleHealthPlatformOptions> platformOptions,
     ILogger<GoogleHealthAuthTokenProvider> logger)
     : AuthTokenProviderBase<GoogleHealthConnectorConfiguration>(
         httpClient,
@@ -28,6 +30,7 @@ public sealed class GoogleHealthAuthTokenProvider(
     private const string ScopesKey = "Scopes";
     private const string ExpiresAtKey = "AccessTokenExpiresAt";
     private readonly GoogleHealthOAuthClient oauth = new(httpClient);
+    private readonly GoogleHealthPlatformOptions platform = platformOptions.Value;
     private readonly ConcurrentDictionary<Guid, GoogleHealthTokenSession> storedSessions = new();
 
     protected override string ConnectorName => "GoogleHealth";
@@ -89,7 +92,6 @@ public sealed class GoogleHealthAuthTokenProvider(
     }
 
     public async Task<GoogleHealthTokenSession> ExchangeAuthorizationCodeAsync(
-        GoogleHealthConnectorConfiguration configuration,
         string code,
         string verifier,
         IReadOnlyCollection<string> requestedScopes,
@@ -100,9 +102,9 @@ public sealed class GoogleHealthAuthTokenProvider(
             ["grant_type"] = "authorization_code",
             ["code"] = code,
             ["code_verifier"] = verifier,
-            ["client_id"] = configuration.ClientId,
-            ["client_secret"] = configuration.ClientSecret!,
-            ["redirect_uri"] = configuration.CallbackUrl
+            ["client_id"] = platform.ClientId,
+            ["client_secret"] = platform.ClientSecret,
+            ["redirect_uri"] = platform.RedirectUri
         }, cancellationToken);
 
         return Parse(response, "authorization_code", null, requestedScopes, requireRefreshToken: true);
@@ -126,13 +128,17 @@ public sealed class GoogleHealthAuthTokenProvider(
         var refreshToken = stored?.RefreshToken ?? configuration.RefreshToken;
         if (string.IsNullOrWhiteSpace(refreshToken))
             return (null, DateTime.MinValue, null);
+        if (!platform.IsConfigured)
+            throw new GoogleHealthException("platform_not_configured", stage: "token_refresh");
+        if (!string.Equals(configuration.SessionClientId, platform.ClientId, StringComparison.Ordinal))
+            throw new GoogleHealthException("reconnect_required", stage: "client_changed");
 
         var response = await oauth.RefreshAccessTokenAsync(new()
         {
             ["grant_type"] = "refresh_token",
             ["refresh_token"] = refreshToken,
-            ["client_id"] = configuration.ClientId,
-            ["client_secret"] = configuration.ClientSecret!
+            ["client_id"] = platform.ClientId,
+            ["client_secret"] = platform.ClientSecret
         }, cancellationToken);
         var session = Parse(response, "token_refresh", refreshToken, stored?.Scopes ?? []);
         storedSessions[tenantId] = session;

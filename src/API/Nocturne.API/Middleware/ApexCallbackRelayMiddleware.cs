@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Options;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Core.Contracts.Auth;
 
 namespace Nocturne.API.Middleware;
@@ -21,7 +23,8 @@ namespace Nocturne.API.Middleware;
 /// </para>
 /// <para>
 /// The slug is read out of the protected <c>state</c> query parameter by the flow that issued it
-/// (<see cref="IOidcAuthService.TryReadTenantSlug"/>), never from a caller-supplied
+/// (<see cref="IOidcAuthService.TryReadTenantSlug"/>,
+/// <see cref="GoogleHealthOAuthState.TryReadTenantSlug"/>), never from a caller-supplied
 /// parameter, so the redirect target is one this instance issued.
 /// </para>
 /// </remarks>
@@ -37,6 +40,8 @@ public partial class ApexCallbackRelayMiddleware(
         {
             ["/api/auth/oidc/callback"] = ReadOidcSlug,
             ["/api/auth/oidc/link/callback"] = ReadOidcSlug,
+            [GoogleHealthPlatformOptions.CallbackPath] = (services, state) =>
+                services.GetRequiredService<GoogleHealthOAuthState>().TryReadTenantSlug(state),
         };
 
     private readonly BaseDomainOptions _config = config.Value;

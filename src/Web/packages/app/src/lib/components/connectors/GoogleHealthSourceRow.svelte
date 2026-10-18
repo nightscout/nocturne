@@ -12,7 +12,7 @@
   const status = $derived<DataSourceStatus>(
     connection.isSyncing
       ? "syncing"
-      : !connection.connected
+      : !connection.connected || !connection.available
         ? "offline"
         : connection.errorCode
           ? "error"
@@ -36,7 +36,9 @@
   {#snippet logo()}<HeartPulse class="h-5 w-5" />{/snippet}
   {#snippet metrics()}
     <p class="text-sm text-muted-foreground">
-      {#if !connection.connected}
+      {#if !connection.available}
+        Not enabled on this Nocturne server
+      {:else if !connection.connected}
         Reconnect to resume importing
       {:else if connection.previewRequired}
         Review available data and confirm the import selection

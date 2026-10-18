@@ -43,10 +43,7 @@
 
   let status = $state<GoogleHealthStatus | null>(null),
     preview = $state<GoogleHealthPreview | null>(null);
-  let clientId = $state(""),
-    clientSecret = $state(""),
-    callbackUrl = $state(""),
-    importFrom = $state(""),
+  let importFrom = $state(""),
     historyDays = $state(7);
   let selected = $state<string[]>(["steps", "heart-rate", "weight", "sleep"]),
     busy = $state(true),
@@ -179,22 +176,23 @@
       .filter((group) => group.entries.length > 0);
   });
   const errors: Record<string, string> = {
-    configure_first: "Save the Google configuration first.",
-    invalid_configuration: "Check the client ID and import start date.",
+    configure_first: "Connect Google Health first.",
+    platform_not_configured: "Google Health is not enabled on this Nocturne server.",
+    invalid_configuration: "Check the import start date.",
     invalid_callback:
-      "Use an HTTPS URL ending exactly in /settings/connectors/google-health/callback.",
-    invalid_client_credentials: "Google rejected the client ID or secret.",
+      "Google rejected this server's redirect URI. Ask your Nocturne operator to check the Google Health setup.",
+    invalid_client_credentials:
+      "Google rejected this server's Google client. Ask your Nocturne operator to check the Google Health setup.",
     oauth_scope_configuration: "Google rejected a requested Health scope.",
     oauth_request_invalid: "Google rejected the OAuth request.",
     invalid_token_response: "Google did not return a usable session.",
-    client_secret_required: "A Google client secret is required.",
     preview_required:
       "Review and save the available data types before importing.",
     no_types_selected:
       "Select at least one data type before starting an import.",
     connection_owner_required:
       "Only the user who created this connection can change it.",
-    disconnect_first: "Disconnect before changing these settings.",
+    disconnect_first: "Disconnect Google Health first.",
     account_mismatch:
       "This is a different Google account. Purge the old import before switching.",
     expired_signin: "The sign-in attempt expired. Start again.",
@@ -241,9 +239,6 @@
   const day = (value?: string | Date | null) =>
     value ? new Date(value).toISOString().slice(0, 10) : "";
   const options = (previewOnly: boolean) => ({
-    clientId,
-    clientSecret: clientSecret || null,
-    callbackUrl,
     dataTypes: selected,
     historyDays,
     importFrom: importFrom ? `${importFrom}T00:00:00.000Z` : null,
@@ -283,10 +278,6 @@
   async function refresh() {
     operation = "status";
     status = await getGoogleHealth().run();
-    clientId = status.clientId ?? "";
-    callbackUrl =
-      status.callbackUrl ||
-      `${location.origin}/settings/connectors/google-health/callback`;
     selected = status.configured ? (status.selectedTypes ?? []) : selected;
     historyDays = status.historyDays ?? 7;
     importFrom = day(status.importFrom);
@@ -303,9 +294,10 @@
     }
   }
   async function connect() {
-    operation = "save";
-    await saveGoogleHealth(options(true));
-    clientSecret = "";
+    if (!status?.configured) {
+      operation = "save";
+      await saveGoogleHealth(options(true));
+    }
     operation = "signin";
     const auth = await startGoogleHealth();
     if (auth.url) location.assign(auth.url);
@@ -499,9 +491,9 @@
     <Badge variant={status?.connected ? "default" : "outline"}>
       {status?.connected
         ? "Connected"
-        : status?.configured
-          ? "Configured"
-          : "Not Configured"}
+        : status && !status.available
+          ? "Unavailable"
+          : "Not connected"}
     </Badge>
   </header>
   {#if message}<p role="alert" class="rounded-lg border border-destructive p-4">
@@ -582,130 +574,32 @@
         Read-only OAuth connection to the Google Health API
       </CardDescription>
     </CardHeader><CardContent class="space-y-4">
-      {#if !status}<p>Loading connection status…</p>{:else if !status.connected}
-        {#if !status.configured}<form
-            class="space-y-4"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void run(connect);
-            }}
-          >
-            <label class="block text-sm font-medium">
-              Google client ID
-              <Input class="mt-1 w-full" required bind:value={clientId} />
-            </label>
-            <label class="block text-sm font-medium">
-              Client secret
-              <Input
-                class="mt-1 w-full"
-                type="password"
-                required
-                bind:value={clientSecret}
-              />
-            </label>
-            <label class="block text-sm font-medium">
-              Callback URL
-              <Input
-                class="mt-1 w-full"
-                type="url"
-                required
-                bind:value={callbackUrl}
-              />
-            </label>
-            <label class="block text-sm font-medium">
-              Import data from
-              <Input
-                class="mt-1 block"
-                type="date"
-                min="2000-01-01"
-                max={day(new Date())}
-                bind:value={importFrom}
-              />
-            </label>
-            <p class="text-sm text-muted-foreground">
-              Nocturne retrieves every available page from this date. An early
-              start date can make the first import take longer.
-            </p>
-            <Button type="submit" disabled={busy || disconnecting}>
-              Save and connect
-            </Button>
-          </form>{:else}<p>
-            The encrypted Google Cloud configuration is saved.
-          </p>
-          <div class="flex gap-2">
-            <Button
-              disabled={busy || disconnecting}
-              onclick={() =>
-                void run(async () => {
-                  operation = "signin";
-                  const auth = await startGoogleHealth();
-                  if (auth.url) location.assign(auth.url);
-                })}
-            >
-              Sign in with Google
-            </Button><Button
-              variant="outline"
-              disabled={busy || disconnecting}
-              onclick={() => void run(disconnect)}
-            >
-              {#if disconnecting}<Unplug
-                  class="mr-2 h-4 w-4"
-                />Disconnecting…{:else}<Unplug
-                  class="mr-2 h-4 w-4"
-                />Disconnect{/if}
-            </Button>
-          </div>
-          <details>
-            <summary class="cursor-pointer text-sm font-medium">
-              Edit connection settings
-            </summary>
-            <form
-              class="mt-4 space-y-4"
-              onsubmit={(event) => {
-                event.preventDefault();
-                void run(connect);
-              }}
-            >
-              <label class="block text-sm font-medium">
-                Google client ID
-                <Input class="mt-1 w-full" required bind:value={clientId} />
-              </label>
-              <label class="block text-sm font-medium">
-                Client secret
-                <Input
-                  class="mt-1 w-full"
-                  type="password"
-                  bind:value={clientSecret}
-                  placeholder="Leave empty to keep the saved secret"
-                />
-              </label>
-              <label class="block text-sm font-medium">
-                Callback URL
-                <Input
-                  class="mt-1 w-full"
-                  type="url"
-                  required
-                  bind:value={callbackUrl}
-                />
-              </label>
-              <label class="block text-sm font-medium">
-                Import data from
-                <Input
-                  class="mt-1 block"
-                  type="date"
-                  min="2000-01-01"
-                  max={day(new Date())}
-                  bind:value={importFrom}
-                />
-              </label>
-              <Button type="submit" disabled={busy || disconnecting}>
-                Save and reconnect
-              </Button>
-            </form>
-          </details>{/if}
+      {#if !status}<p>Loading connection status…</p>{:else if !status.connected && !status.available}
+        <p>Your Nocturne operator hasn't enabled Google Health on this server.</p>
+        <a
+          class="inline-block text-sm underline"
+          href="https://getnocturne.dev/docs/data-sources/google-health"
+          target="_blank"
+          rel="noreferrer"
+        >
+          How Google Health is enabled
+        </a>
+      {:else if !status.connected}
+        <p>
+          Link Google Health in the Google Health app first, then connect. Google
+          asks which data to share with Nocturne.
+        </p>
+        <Button
+          disabled={busy || disconnecting}
+          onclick={() => void run(connect)}
+        >
+          Connect Google Health
+        </Button>
       {:else}
         <p>
-          {status.previewRequired
+          {!status.available
+            ? "Google Health is connected, but imports are paused because your Nocturne operator has turned Google Health off."
+            : status.previewRequired
             ? "Google Health is connected. Review the available data below, then save your selection to start importing."
             : !status.selectedTypes?.length
               ? "Google Health is connected. Imports are paused because no data types are selected."
@@ -713,7 +607,6 @@
         </p>
         <p class="text-sm text-muted-foreground">
           Change the import start date and selection below without reconnecting.
-          Disconnect only to change OAuth settings.
         </p>
         <div class="flex gap-2">
           <Button
@@ -909,27 +802,6 @@
       </CardContent>
     </Card>{/if}
 
-  <details class="rounded-lg border p-4">
-    <summary class="cursor-pointer font-medium">Google Cloud setup</summary>
-    <ol class="mt-3 list-inside list-decimal space-y-2 text-sm">
-      <li>
-        Enable the Google Health API and create an OAuth Web application client.
-      </li>
-      <li>
-        Add your account as a test user while the consent screen is in testing.
-      </li>
-      <li>Register the callback URL above as an Authorized redirect URI.</li>
-      <li>Keep the client secret private.</li>
-    </ol>
-    <a
-      class="mt-3 inline-block underline"
-      href="https://developers.google.com/health/setup"
-      target="_blank"
-      rel="noreferrer"
-    >
-      Google setup documentation
-    </a>
-  </details>
   {#if status?.configured && !status.connected}
     <ConfirmDialog
       bind:open={purgeDialogOpen}

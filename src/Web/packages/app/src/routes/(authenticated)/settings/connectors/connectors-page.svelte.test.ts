@@ -78,7 +78,7 @@ describe("connector overview Google Health authorization", () => {
         refresh: mocks.refreshOverview,
       });
       mocks.googleHealth.mockReturnValue({
-        current: cached ? { configured: true, connected: true } : undefined,
+        current: cached ? { available: true, configured: true, connected: true } : undefined,
         loading,
         error,
         refresh: mocks.refreshGoogleHealth,
@@ -102,7 +102,7 @@ describe("connector overview Google Health authorization", () => {
         )
         .toBeVisible();
       await expect
-        .element(browserPage.getByText("Not Configured", { exact: true }))
+        .element(browserPage.getByText("Not connected", { exact: true }))
         .not.toBeInTheDocument();
     }
   );
@@ -125,7 +125,7 @@ describe("connector overview Google Health authorization", () => {
       refresh: mocks.refreshOverview,
     });
     mocks.googleHealth.mockReturnValue({
-      current: { configured: true, connected: true, selectedTypes: ["steps"] },
+      current: { available: true, configured: true, connected: true, selectedTypes: ["steps"] },
       loading: false,
       error: undefined,
       refresh: mocks.refreshGoogleHealth,
@@ -145,7 +145,7 @@ describe("connector overview Google Health authorization", () => {
       )
       .not.toBeInTheDocument();
     await expect
-      .element(browserPage.getByText("Not Configured", { exact: true }))
+      .element(browserPage.getByText("Not connected", { exact: true }))
       .not.toBeInTheDocument();
   });
 

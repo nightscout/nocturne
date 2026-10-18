@@ -18,10 +18,17 @@ public sealed class GoogleHealthConnectorInstaller : IConnectorInstaller
         services.AddConnectorConfiguration<GoogleHealthConnectorConfiguration>(
             configuration,
             "GoogleHealth");
+        services.AddOptions<GoogleHealthPlatformOptions>().Configure(options =>
+        {
+            options.ClientId = configuration[GoogleHealthPlatformOptions.ClientIdKey]?.Trim() ?? "";
+            options.ClientSecret = configuration[GoogleHealthPlatformOptions.ClientSecretKey]?.Trim() ?? "";
+            options.RedirectUri = configuration[GoogleHealthPlatformOptions.RedirectUriKey]?.Trim() ?? "";
+        });
         services.AddSingleton<IConnectorServerResolver<GoogleHealthConnectorConfiguration>>(
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null));
+        services.AddScoped<ConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>>();
         services.AddScoped<IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>,
-            ConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>>();
+            GoogleHealthConfigurationLoader>();
         services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
         services.TryAddSingleton<IConnectorCacheInvalidator>(provider =>
             provider.GetRequiredService<IConnectorTokenCache>());

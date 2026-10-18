@@ -28,9 +28,6 @@ public enum GoogleHealthSyncPhase
 
 public class GoogleHealthOptions
 {
-    [Required, MaxLength(200)] public string ClientId { get; set; } = "";
-    [MaxLength(500)] public string? ClientSecret { get; set; }
-    [Required, MaxLength(500)] public string CallbackUrl { get; set; } = "";
     [MaxLength(32)] public string[] DataTypes { get; set; } = [];
     [Range(1, 90)] public int HistoryDays { get; set; } = 7;
     public DateTimeOffset? ImportFrom { get; set; }
@@ -40,11 +37,11 @@ public class GoogleHealthOptions
 public class GoogleHealthStatus
 {
     public GoogleHealthCapability[] Capabilities { get; set; } = [];
+    /// <summary>Whether the instance operator has configured a Google client to connect through.</summary>
+    public bool Available { get; set; }
     public bool Configured { get; set; }
     public bool Connected { get; set; }
     public bool IsDisconnecting { get; set; }
-    public string ClientId { get; set; } = "";
-    public string CallbackUrl { get; set; } = "";
     public string[] SelectedTypes { get; set; } = [];
     public string[] GrantedTypes { get; set; } = [];
     public int HistoryDays { get; set; } = 7;
@@ -95,7 +92,7 @@ public class GoogleHealthCapability
 public class GoogleHealthAuthorize { public string Url { get; set; } = ""; }
 public class GoogleHealthCallback
 {
-    [Required, MaxLength(256)] public string State { get; set; } = "";
+    [Required, MaxLength(1024)] public string State { get; set; } = "";
     [Required, MaxLength(4096)] public string Code { get; set; } = "";
 }
 

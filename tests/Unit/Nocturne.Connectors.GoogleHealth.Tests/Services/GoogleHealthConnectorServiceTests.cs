@@ -969,6 +969,7 @@ public class GoogleHealthConnectorServiceTests
                 new ConnectorTokenCache(),
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
                 tenant.Object,
+                TestPlatform.Options(),
                 NullLogger<GoogleHealthAuthTokenProvider>.Instance);
             Service = new GoogleHealthConnectorService(
                 new HttpClient(),
@@ -1004,9 +1005,7 @@ public class GoogleHealthConnectorServiceTests
 
         public GoogleHealthConnectorConfiguration Configuration() => currentConfiguration = new()
         {
-            ClientId = "client.apps.googleusercontent.com",
-            ClientSecret = "secret",
-            CallbackUrl = "https://example.test/settings/connectors/google-health/callback",
+            SessionClientId = TestPlatform.ClientId,
             RefreshToken = secrets["refreshToken"],
             GrantedScopes = secrets["grantedScopes"],
             SyncSteps = false,

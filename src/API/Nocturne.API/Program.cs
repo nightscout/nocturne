@@ -149,6 +149,7 @@ builder.Services.AddSingleton<GoogleHealthCoordinator>();
 builder.Services.AddSingleton<IGoogleHealthSyncCoordinator>(provider =>
     provider.GetRequiredService<GoogleHealthCoordinator>());
 builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
+builder.Services.AddGoogleHealthPlatform();
 builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
 builder.Services.AddHostedService<GoogleHealthWorker>();
 builder.Services.AddDevOnlyGoogleHealthMock(builder.Environment, builder.Configuration);

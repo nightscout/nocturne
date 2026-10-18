@@ -7,7 +7,11 @@ public interface IGoogleHealthService
 {
     Task<GoogleHealthStatus> StatusAsync(CancellationToken ct);
     Task SaveAsync(GoogleHealthOptions options, Guid subject, CancellationToken ct);
-    Task<GoogleHealthAuthorize> StartAsync(Guid subject, CancellationToken ct);
+    /// <param name="tenantSlug">
+    /// The tenant subdomain the browser started on, carried through the OAuth state so the apex
+    /// callback can return there; null when it started on the apex.
+    /// </param>
+    Task<GoogleHealthAuthorize> StartAsync(Guid subject, string? tenantSlug, CancellationToken ct);
     Task CompleteAsync(GoogleHealthCallback callback, Guid subject, CancellationToken ct);
     Task DisconnectAsync(Guid subject, CancellationToken ct);
     Task ResumeDisconnectAsync(Guid subject, Guid requestId);

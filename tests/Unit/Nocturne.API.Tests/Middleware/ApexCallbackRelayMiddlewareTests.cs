@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -6,6 +7,8 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Middleware;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Core.Contracts.Auth;
 using Xunit;
 
@@ -15,6 +18,7 @@ public class ApexCallbackRelayMiddlewareTests
 {
     private readonly BaseDomainOptions _config = new() { BaseDomain = "nocturne.run" };
     private readonly Mock<IOidcAuthService> _oidcAuthService = new();
+    private readonly GoogleHealthOAuthState _googleHealthState = new(new EphemeralDataProtectionProvider());
 
     private ApexCallbackRelayMiddleware CreateMiddleware(RequestDelegate? next = null)
     {
@@ -42,6 +46,7 @@ public class ApexCallbackRelayMiddlewareTests
     {
         var services = new ServiceCollection();
         services.AddSingleton(_oidcAuthService.Object);
+        services.AddSingleton(_googleHealthState);
         return new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
     }
 
@@ -250,20 +255,88 @@ public class ApexCallbackRelayMiddlewareTests
     }
 
     [Fact]
+    public async Task Relays_apex_google_health_callback_to_the_tenant_its_state_names()
+    {
+        var middleware = CreateMiddleware();
+        var state = _googleHealthState.Protect("alice", DateTimeOffset.UtcNow.AddMinutes(10));
+        var context = NewContext();
+        context.Request.Scheme = "https";
+        context.Request.Host = new HostString("nocturne.run");
+        context.Request.Path = GoogleHealthPlatformOptions.CallbackPath;
+        context.Request.QueryString = new QueryString($"?code=abc&state={state}");
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.StatusCode.Should().Be(302);
+        context.Response.Headers.Location.ToString()
+            .Should().Be($"https://alice.nocturne.run{GoogleHealthPlatformOptions.CallbackPath}{context.Request.QueryString}");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("evil.attacker.com")]
+    public async Task Google_health_callback_without_a_routable_slug_stays_on_the_apex(string? slug)
+    {
+        var called = false;
+        var middleware = CreateMiddleware(_ => { called = true; return Task.CompletedTask; });
+        var context = NewContext();
+        context.Request.Host = new HostString("nocturne.run");
+        context.Request.Path = GoogleHealthPlatformOptions.CallbackPath;
+        context.Request.QueryString = QueryString.Create(
+            "state", _googleHealthState.Protect(slug, DateTimeOffset.UtcNow.AddMinutes(10)));
+
+        await middleware.InvokeAsync(context);
+
+        called.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Google_health_callback_with_an_expired_state_stays_on_the_apex()
+    {
+        var called = false;
+        var middleware = CreateMiddleware(_ => { called = true; return Task.CompletedTask; });
+        var context = NewContext();
+        context.Request.Host = new HostString("nocturne.run");
+        context.Request.Path = GoogleHealthPlatformOptions.CallbackPath;
+        context.Request.QueryString = QueryString.Create(
+            "state", _googleHealthState.Protect("alice", DateTimeOffset.UtcNow.AddMinutes(-1)));
+
+        await middleware.InvokeAsync(context);
+
+        called.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Google_health_callback_on_a_tenant_host_passes_through()
+    {
+        var called = false;
+        var middleware = CreateMiddleware(_ => { called = true; return Task.CompletedTask; });
+        var context = NewContext();
+        context.Request.Host = new HostString("alice.nocturne.run");
+        context.Request.Path = GoogleHealthPlatformOptions.CallbackPath;
+        context.Request.QueryString = QueryString.Create(
+            "state", _googleHealthState.Protect("bob", DateTimeOffset.UtcNow.AddMinutes(10)));
+
+        await middleware.InvokeAsync(context);
+
+        called.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Redirect_keeps_the_port_the_browser_reached_the_apex_on()
     {
         _config.BaseDomain = "nocturne.localhost:1631";
         var middleware = CreateMiddleware();
-        var state = StateFor("alice");
+        var state = _googleHealthState.Protect("alice", DateTimeOffset.UtcNow.AddMinutes(10));
         var context = NewContext();
         context.Request.Scheme = "https";
         context.Request.Host = new HostString("nocturne.localhost", 1612);
-        context.Request.Path = "/api/auth/oidc/callback";
+        context.Request.Path = GoogleHealthPlatformOptions.CallbackPath;
         context.Request.QueryString = QueryString.Create("state", state);
 
         await middleware.InvokeAsync(context);
 
         context.Response.Headers.Location.ToString()
-            .Should().StartWith("https://alice.nocturne.localhost:1612/api/auth/oidc/callback?");
+            .Should().StartWith($"https://alice.nocturne.localhost:1612{GoogleHealthPlatformOptions.CallbackPath}?");
     }
 }

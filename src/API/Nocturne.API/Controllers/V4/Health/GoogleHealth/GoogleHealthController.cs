@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Models.Authorization;
@@ -17,7 +19,9 @@ namespace Nocturne.API.Controllers.V4.Health;
 [ProducesResponseType(typeof(ProblemDetails), 400)]
 [ProducesResponseType(typeof(ProblemDetails), 429)]
 [ProducesResponseType(typeof(ProblemDetails), 502)]
-public class GoogleHealthController(IGoogleHealthService service) : ControllerBase
+public class GoogleHealthController(
+    IGoogleHealthService service,
+    IOptions<BaseDomainOptions> baseDomain) : ControllerBase
 {
     private Guid Subject => HttpContext.GetAuthContext()?.SubjectId ?? throw new UnauthorizedAccessException();
 
@@ -33,7 +37,9 @@ public class GoogleHealthController(IGoogleHealthService service) : ControllerBa
     [ProducesResponseType(typeof(GoogleHealthAuthorize), 200)]
     public async Task<ActionResult<GoogleHealthAuthorize>> StartGoogleHealth(CancellationToken ct)
     {
-        try { return Ok(await service.StartAsync(Subject, ct)); }
+        // A sign-in started on the apex (a single-tenant install) must come back to the apex.
+        var tenantSlug = SubdomainParser.Extract(Request.Host.Host, baseDomain.Value.BaseDomain);
+        try { return Ok(await service.StartAsync(Subject, tenantSlug, ct)); }
         catch (GoogleHealthException ex) { return GoogleProblem(ex); }
         catch (HttpRequestException) { return Problem(statusCode: 502, detail: "google_unavailable"); }
     }

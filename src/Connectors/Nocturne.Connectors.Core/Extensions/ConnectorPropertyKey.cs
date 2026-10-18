@@ -99,8 +99,6 @@ public enum ConnectorPropertyKey
 
     // Google Health-specific (appended so earlier members keep their values)
     ClientId,
-    ClientSecret,
-    CallbackUrl,
     ImportFrom,
     PreviewOnly,
     GrantedScopes,

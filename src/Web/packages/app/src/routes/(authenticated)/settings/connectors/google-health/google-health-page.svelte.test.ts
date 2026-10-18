@@ -18,10 +18,9 @@ function status(
   overrides: Partial<GoogleHealthStatus> = {}
 ): GoogleHealthStatus {
   return {
+    available: true,
     configured: false,
     connected: false,
-    clientId: "",
-    callbackUrl: "",
     historyDays: 7,
     selectedTypes: ["steps", "heart-rate", "weight", "sleep"],
     grantedTypes: [],
@@ -119,7 +118,7 @@ describe("Google Health connector page", () => {
     failPreview(new Error("cancelled scan"));
     await expect
       .element(
-        page.getByRole("button", { name: "Sign in with Google", exact: true })
+        page.getByRole("button", { name: "Connect Google Health", exact: true })
       )
       .toBeEnabled();
     await expect
@@ -139,7 +138,7 @@ describe("Google Health connector page", () => {
       .toHaveTextContent("Disconnecting Google Health");
     await expect
       .element(
-        page.getByRole("button", { name: "Sign in with Google", exact: true })
+        page.getByRole("button", { name: "Connect Google Health", exact: true })
       )
       .toBeDisabled();
     expect(googleHealthMocks.preview).not.toHaveBeenCalled();
@@ -381,29 +380,46 @@ describe("Google Health connector page", () => {
     googleHealthMocks.preview.mockResolvedValue({ items: [] });
   });
 
-  it("connects with the default seven-day history when no import date is entered", async () => {
+  it("connects with one click, saving the default selection and seven-day history", async () => {
     googleHealthMocks.start.mockResolvedValue({ url: "" });
     render(GoogleHealthPage);
     await page
-      .getByLabelText("Google client ID", { exact: true })
-      .fill("test.apps.googleusercontent.com");
-    await page
-      .getByLabelText("Client secret", { exact: true })
-      .fill("test-secret");
-    await page
-      .getByLabelText("Callback URL", { exact: true })
-      .fill("https://nocturne.test/settings/connectors/google-health/callback");
-    await expect
-      .element(page.getByLabelText("Import data from"))
-      .toHaveValue("");
-    await page
-      .getByRole("button", { name: "Save and connect", exact: true })
+      .getByRole("button", { name: "Connect Google Health", exact: true })
       .click();
-    await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
-    expect(googleHealthMocks.save).toHaveBeenCalledWith(
-      expect.objectContaining({ importFrom: null, historyDays: 7 })
-    );
-    expect(googleHealthMocks.start).toHaveBeenCalledTimes(1);
+    await expect.poll(() => googleHealthMocks.start.mock.calls.length).toBe(1);
+    expect(googleHealthMocks.save).toHaveBeenCalledWith({
+      dataTypes: ["steps", "heart-rate", "weight", "sleep"],
+      historyDays: 7,
+      importFrom: null,
+      previewOnly: true,
+    });
+    await expect
+      .element(page.getByLabelText("Client secret"))
+      .not.toBeInTheDocument();
+  });
+
+  it("explains that the operator has not enabled Google Health", async () => {
+    googleHealthMocks.status.mockResolvedValue(status({ available: false }));
+    render(GoogleHealthPage);
+    await expect
+      .element(
+        page.getByText(
+          "Your Nocturne operator hasn't enabled Google Health on this server."
+        )
+      )
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("link", { name: "How Google Health is enabled" }))
+      .toHaveAttribute(
+        "href",
+        "https://getnocturne.dev/docs/data-sources/google-health"
+      );
+    await expect
+      .element(page.getByRole("button", { name: "Connect Google Health" }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(page.getByText("Unavailable", { exact: true }))
+      .toBeVisible();
   });
 
   it("uses frontend labels and reason copy instead of backend display text", async () => {
@@ -652,14 +668,11 @@ describe("Google Health connector page", () => {
     );
   });
 
-  it("allows reconnecting after the backfill consumes the import date", async () => {
+  it("reconnects a saved connection without overwriting its settings", async () => {
     googleHealthMocks.status.mockResolvedValue(
       status({
         configured: true,
         connected: false,
-        clientId: "test-client.apps.googleusercontent.com",
-        callbackUrl:
-          "https://nocturne.test/settings/connectors/google-health/callback",
         importFrom: undefined,
         backfillComplete: true,
       })
@@ -667,17 +680,12 @@ describe("Google Health connector page", () => {
     googleHealthMocks.start.mockResolvedValue({ url: "" });
     render(GoogleHealthPage);
 
-    await page.getByText("Edit connection settings", { exact: true }).click();
-    await expect
-      .element(page.getByLabelText("Import data from"))
-      .toHaveValue("");
-    await page.getByRole("button", { name: "Save and reconnect" }).click();
+    await page
+      .getByRole("button", { name: "Connect Google Health", exact: true })
+      .click();
 
-    await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
-    expect(googleHealthMocks.save).toHaveBeenCalledWith(
-      expect.objectContaining({ importFrom: null })
-    );
-    expect(googleHealthMocks.start).toHaveBeenCalledTimes(1);
+    await expect.poll(() => googleHealthMocks.start.mock.calls.length).toBe(1);
+    expect(googleHealthMocks.save).not.toHaveBeenCalled();
   });
 
   it("saves an older history date and an empty selection without reconnecting", async () => {
@@ -717,7 +725,6 @@ describe("Google Health connector page", () => {
       expect.objectContaining({
         dataTypes: [],
         importFrom: "2020-01-01T00:00:00.000Z",
-        clientSecret: null,
       })
     );
     expect(googleHealthMocks.sync).not.toHaveBeenCalled();

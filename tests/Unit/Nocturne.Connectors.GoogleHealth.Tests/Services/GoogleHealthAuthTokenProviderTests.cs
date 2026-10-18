@@ -35,7 +35,7 @@ public class GoogleHealthAuthTokenProviderTests
         var error = await Assert.ThrowsAsync<GoogleHealthException>(async () =>
         {
             if (stage == "authorization_code")
-                await provider.ExchangeAuthorizationCodeAsync(Configuration("refresh"), "code", "verifier", ["scope-a"], default);
+                await provider.ExchangeAuthorizationCodeAsync("code", "verifier", ["scope-a"], default);
             else
                 await provider.GetValidTokenAsync(Configuration("refresh"));
         });
@@ -57,7 +57,7 @@ public class GoogleHealthAuthTokenProviderTests
         await provider.SeedSessionAsync(new GoogleHealthTokenSession("refresh", ["scope-a"]));
         GoogleHealthTokenSession session;
         if (stage == "authorization_code")
-            session = await provider.ExchangeAuthorizationCodeAsync(Configuration("refresh"), "code", "verifier", ["scope-a"], default);
+            session = await provider.ExchangeAuthorizationCodeAsync("code", "verifier", ["scope-a"], default);
         else
         {
             await provider.GetValidTokenAsync(Configuration("refresh"));
@@ -130,6 +130,63 @@ public class GoogleHealthAuthTokenProviderTests
     }
 
     [Fact]
+    public async Task Refresh_and_exchange_present_the_instance_client()
+    {
+        var posted = new List<string>();
+        var provider = CreateProvider(new StubHandler(request =>
+        {
+            posted.Add(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            return Json("""{"access_token":"access","refresh_token":"refresh","expires_in":3600}""");
+        }));
+
+        await provider.ExchangeAuthorizationCodeAsync("code", "verifier", ["scope-a"], default);
+        provider.InvalidateToken();
+        await provider.GetValidTokenAsync(Configuration("refresh"));
+
+        posted.Should().HaveCount(2).And.AllSatisfy(body =>
+        {
+            body.Should().Contain("client_id=client.apps.googleusercontent.com")
+                .And.Contain("client_secret=client-secret");
+        });
+        posted[0].Should().Contain("redirect_uri=" + Uri.EscapeDataString(
+            "https://example.test" + GoogleHealthPlatformOptions.CallbackPath));
+    }
+
+    [Theory]
+    [InlineData("tenant.apps.googleusercontent.com")]
+    [InlineData(null)]
+    public async Task A_session_issued_to_another_client_must_reconnect_without_calling_google(string? sessionClientId)
+    {
+        var calls = 0;
+        var provider = CreateProvider(new StubHandler(_ =>
+        {
+            calls++;
+            return Json("""{"access_token":"access","expires_in":3600}""");
+        }));
+        var configuration = Configuration("refresh");
+        configuration.SessionClientId = sessionClientId;
+
+        var exception = await Assert.ThrowsAsync<GoogleHealthException>(
+            () => provider.GetValidTokenAsync(configuration));
+
+        exception.Message.Should().Be("reconnect_required");
+        calls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task An_unconfigured_instance_refuses_to_refresh_without_dropping_the_session()
+    {
+        var provider = CreateProvider(
+            new StubHandler(_ => throw new InvalidOperationException("Google must not be called.")),
+            platform: Microsoft.Extensions.Options.Options.Create(new GoogleHealthPlatformOptions()));
+
+        var exception = await Assert.ThrowsAsync<GoogleHealthException>(
+            () => provider.GetValidTokenAsync(Configuration("refresh")));
+
+        exception.Message.Should().Be("platform_not_configured");
+    }
+
+    [Fact]
     public async Task Malformed_cached_scopes_are_discarded_before_refreshing()
     {
         var tenantId = Guid.NewGuid();
@@ -164,7 +221,8 @@ public class GoogleHealthAuthTokenProviderTests
     private static GoogleHealthAuthTokenProvider CreateProvider(
         HttpMessageHandler handler,
         ConnectorTokenCache? cache = null,
-        Guid? tenantId = null)
+        Guid? tenantId = null,
+        Microsoft.Extensions.Options.IOptions<GoogleHealthPlatformOptions>? platform = null)
     {
         var tenantAccessor = new Mock<ITenantAccessor>();
         tenantAccessor.SetupGet(accessor => accessor.IsResolved).Returns(true);
@@ -174,14 +232,13 @@ public class GoogleHealthAuthTokenProviderTests
             cache ?? new ConnectorTokenCache(),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
             tenantAccessor.Object,
+            platform ?? TestPlatform.Options(),
             NullLogger<GoogleHealthAuthTokenProvider>.Instance);
     }
 
     private static GoogleHealthConnectorConfiguration Configuration(string refreshToken) => new()
     {
-        ClientId = "client.apps.googleusercontent.com",
-        ClientSecret = "client-secret",
-        CallbackUrl = "https://example.test/google-health/callback",
+        SessionClientId = TestPlatform.ClientId,
         RefreshToken = refreshToken
     };
 

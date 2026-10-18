@@ -45,6 +45,7 @@ vi.mock("./DataSourceManageDialog.svelte", () => ({ default: () => {} }));
 vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
 
 const connected: GoogleHealthStatus = {
+  available: true,
   configured: true,
   connected: true,
   selectedTypes: ["steps", "sleep"],
@@ -130,6 +131,11 @@ describe("Google Health source presentation", () => {
       guidance: null,
     },
     { change: { connected: false }, label: "Offline", guidance: null },
+    {
+      change: { available: false },
+      label: "Offline",
+      guidance: "Not enabled on this Nocturne server",
+    },
   ])(
     "does not show a healthy active status for $label",
     async ({ change, label, guidance }) => {
@@ -245,7 +251,7 @@ describe("Google Health source presentation", () => {
         .toBeVisible();
       expect(overviewMocks.google).not.toHaveBeenCalled();
       await expect
-        .element(page.getByText("Not Configured", { exact: true }))
+        .element(page.getByText("Not connected", { exact: true }))
         .not.toBeInTheDocument();
       await expect
         .element(page.getByText("No data sources detected"))
@@ -270,7 +276,7 @@ describe("Google Health source presentation", () => {
         },
       });
       overviewMocks.google.mockReturnValue({
-        current: { configured: false, connected: false },
+        current: { available: true, configured: false, connected: false },
       });
       render(ConnectorsPage);
 

@@ -23,17 +23,16 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
         SyncIntervalMinutes = 15;
     }
 
-    [ConnectorProperty(ConnectorPropertyKey.ClientId, Required = true)]
-    public string ClientId { get; set; } = string.Empty;
-
-    [ConnectorProperty(ConnectorPropertyKey.ClientSecret, Required = true, Secret = true)]
-    public string? ClientSecret { get; set; }
-
     [ConnectorProperty(ConnectorPropertyKey.RefreshToken, Secret = true, Hidden = true)]
     public string? RefreshToken { get; set; }
 
-    [ConnectorProperty(ConnectorPropertyKey.CallbackUrl, Required = true, Format = "uri")]
-    public string CallbackUrl { get; set; } = string.Empty;
+    /// <summary>
+    /// The OAuth client <see cref="RefreshToken"/> was issued to. Google refuses a refresh token
+    /// presented by any other client, so a value that differs from
+    /// <see cref="GoogleHealthPlatformOptions.ClientId"/> means the tenant must reconnect.
+    /// </summary>
+    [ConnectorProperty(ConnectorPropertyKey.ClientId, Secret = true, Hidden = true)]
+    public string? SessionClientId { get; set; }
 
     [ConnectorProperty(ConnectorPropertyKey.LookbackDays, DefaultValue = "7", MinValue = 1, MaxValue = 90)]
     public int HistoryDays { get; set; } = 7;
@@ -59,28 +58,8 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
     [ConnectorProperty(ConnectorPropertyKey.SyncSleep, DefaultValue = "true")]
     public bool SyncSleep { get; set; } = true;
 
-    public static bool IsValidClientId(string clientId) =>
-        !string.IsNullOrWhiteSpace(clientId) &&
-        clientId.EndsWith(".apps.googleusercontent.com", StringComparison.Ordinal);
-
-    public static bool IsValidCallbackUrl(string callbackUrl) =>
-        Uri.TryCreate(callbackUrl, UriKind.Absolute, out var callback) &&
-        (callback.Scheme == Uri.UriSchemeHttps ||
-         callback.Scheme == Uri.UriSchemeHttp && callback.IsLoopback) &&
-        callback.HostNameType == UriHostNameType.Dns &&
-        callback.UserInfo == string.Empty &&
-        callback.Query == string.Empty &&
-        callback.Fragment == string.Empty &&
-        callback.AbsolutePath == "/settings/connectors/google-health/callback";
-
     protected override void ValidateSourceSpecificConfiguration()
     {
-        if (!IsValidClientId(ClientId))
-            throw new ArgumentException("Google Health ClientId is invalid.");
-
-        if (!IsValidCallbackUrl(CallbackUrl))
-            throw new ArgumentException("Google Health CallbackUrl is invalid.");
-
         if (HistoryDays is < 1 or > 90)
             throw new ArgumentException("Google Health LookbackDays must be between 1 and 90.");
 
