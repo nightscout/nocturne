@@ -1455,6 +1455,41 @@ public class StatisticsServiceTests
             })
             .ToArray();
 
+    /// <summary>
+    /// One warm-up per sensor session, recorded or inferred, however many records the change left:
+    /// here xDrip logs a change and a start for one insertion and AAPS a copy, two days later
+    /// Nocturne infers the next one, and a site change is no sensor session at all.
+    /// </summary>
+    [Fact]
+    public void AnalyzeGlucoseData_CountsOneSensorWarmupPerSession()
+    {
+        var start = DateTime.UtcNow.AddDays(-3);
+        DeviceEvent Event(DeviceEventType type, DateTime at, string source) =>
+            new() { EventType = type, Timestamp = at, DataSource = source };
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(start, 5, 864), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            deviceEvents:
+            [
+                Event(DeviceEventType.SensorChange, start.AddHours(2), "xdrip"),
+                Event(DeviceEventType.SensorStart, start.AddHours(2).AddMinutes(3), "xdrip"),
+                Event(DeviceEventType.SensorStart, start.AddHours(2).AddMinutes(9), "aaps"),
+                Event(DeviceEventType.SensorStart, start.AddDays(2), "sensor-session-inference"),
+                Event(DeviceEventType.SiteChange, start.AddDays(1), "aaps"),
+            ]);
+
+        result.DataQuality.SensorWarmups.Should().Be(2);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_WithoutDeviceEvents_CountsNoSensorWarmups()
+    {
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(DateTime.UtcNow.AddDays(-1), 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>());
+
+        result.DataQuality.SensorWarmups.Should().Be(0);
+    }
+
     [Fact]
     public void AnalyzeGlucoseData_HalfCoverage_Returns50PercentCgmActive()
     {

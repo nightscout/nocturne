@@ -72,6 +72,28 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
+    /// Delete only <paramref name="dataSource"/>'s own record under <paramref name="syncIdentifier"/>.
+    /// Unlike <see cref="DeleteBySyncIdentifierAsync"/>, which takes every copy deduplication linked
+    /// to it, a copy another source reported survives and becomes its group's primary.
+    /// </summary>
+    /// <returns>Number of records deleted.</returns>
+    Task<int> WithdrawBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
+    /// Every live event of <paramref name="eventTypes"/> in [<paramref name="from"/>, <paramref name="to"/>),
+    /// oldest first, including the copies deduplication hides behind another source's primary.
+    /// </summary>
+    Task<IReadOnlyList<DeviceEvent>> GetAllCopiesAsync(
+        DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, CancellationToken ct = default);
+
+    /// <summary>
+    /// The events of <paramref name="eventTypes"/> in [<paramref name="from"/>, <paramref name="to"/>)
+    /// that the user deleted, oldest first.
+    /// </summary>
+    Task<IReadOnlyList<DeviceEvent>> GetUserDeletedAsync(
+        DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, CancellationToken ct = default);
+
+    /// <summary>
     /// Retrieve the timestamp of the most recently stored <see cref="DeviceEvent"/>, optionally scoped to a data source.
     /// </summary>
     /// <remarks>Used by connectors to resume per-source sync without re-fetching already-stored data.</remarks>

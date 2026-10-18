@@ -157,4 +157,14 @@ public interface ISensorGlucoseRepository
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Every live reading attributed to <paramref name="patientDeviceId"/> in [<paramref name="from"/>,
+    /// <paramref name="to"/>], oldest first, carrying only <see cref="V4RecordBase.Timestamp"/> and
+    /// <see cref="V4RecordBase.UtcOffset"/>. Unlike the other reads it includes the copies
+    /// deduplication hides behind another source's primary: the attributed copy of a reading need not
+    /// be the one that is shown, and the device's own series must not lose it.
+    /// </summary>
+    Task<IReadOnlyList<SensorGlucose>> GetAttributedReadingTimesAsync(
+        Guid patientDeviceId, DateTime from, DateTime to, CancellationToken ct = default);
 }

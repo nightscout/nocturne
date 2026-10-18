@@ -50,6 +50,11 @@ public class StatisticsControllerTests
         tenantAccessor.SetupGet(a => a.Context)
             .Returns(new TenantContext(Guid.CreateVersion7(), "test", "Test", true, false));
 
+        _deviceEventRepoMock
+            .Setup(r => r.GetAllCopiesAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<IReadOnlyCollection<DeviceEventType>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
         var controller = new StatisticsController(
             statisticsService ?? _statsServiceMock.Object,
             cacheService ?? Mock.Of<ICacheService>(),
@@ -1909,6 +1914,30 @@ public class StatisticsControllerTests
             category.MarkShare();
         else
             category.ClampMemberHistory();
+        SetupGlucose([]);
+        SetupEmptyTreatments();
+
+        var result = await CreateController(cacheService: cache.Object, categoryReadContext: category)
+            .GetMultiPeriodStatistics();
+
+        result.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().NotBeSameAs(cached);
+        cache.Invocations.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A share with full history is not clamped, but the categories it was granted decide what the
+    /// statistics count (sensor warm-ups need device events), and the key carries only the tenant.
+    /// </summary>
+    [Fact]
+    public async Task GetMultiPeriodStatistics_FullHistoryShare_NeitherReadsNorWritesTheCache()
+    {
+        var cached = new MultiPeriodStatistics();
+        var cache = new Mock<ICacheService>();
+        cache.Setup(c => c.GetAsync<MultiPeriodStatistics>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(cached);
+        var category = new CategoryReadContext();
+        category.MarkShare();
+        category.SetFullHistory(true);
         SetupGlucose([]);
         SetupEmptyTreatments();
 

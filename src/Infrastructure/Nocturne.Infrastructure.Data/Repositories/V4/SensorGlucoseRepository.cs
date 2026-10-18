@@ -410,6 +410,18 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<SensorGlucose>> GetAttributedReadingTimesAsync(
+        Guid patientDeviceId, DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await ctx.SensorGlucose.AsNoTracking()
+            .Where(e => e.PatientDeviceId == patientDeviceId && e.Timestamp >= from && e.Timestamp <= to)
+            .OrderBy(e => e.Timestamp)
+            .Select(e => new SensorGlucose { Timestamp = e.Timestamp, UtcOffset = e.UtcOffset })
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<DiscoveredSource>> GetDiscoveredSourcesAsync(DateTime since, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);

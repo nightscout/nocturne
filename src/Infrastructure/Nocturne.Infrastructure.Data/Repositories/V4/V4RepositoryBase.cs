@@ -111,6 +111,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             _broadcaster, created, updated, deleted.Select(m => m.Id).ToList(), origin, ct);
         await RaiseEntriesProjectionAsync(created, updated, deleted, origin, ct);
         await RaiseLiveCreatedAsync(created, origin, ct);
+        await RaiseLiveDeletedAsync(deleted, origin, ct);
     }
 
     /// <summary>
@@ -131,6 +132,18 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// so an override that throws faults the caller on work the write itself no longer depends on.
     /// </summary>
     protected virtual Task OnLiveCreatedAsync(IReadOnlyList<TModel> created, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>The <see cref="RaiseLiveCreatedAsync"/> counterpart for deletes.</summary>
+    private async Task RaiseLiveDeletedAsync(IReadOnlyList<TModel> deleted, WriteOrigin origin, CancellationToken ct)
+    {
+        if (origin != WriteOrigin.Live || deleted.Count == 0)
+            return;
+
+        await OnLiveDeletedAsync(deleted, ct);
+    }
+
+    /// <summary>The <see cref="OnLiveCreatedAsync"/> counterpart for live soft-deletes.</summary>
+    protected virtual Task OnLiveDeletedAsync(IReadOnlyList<TModel> deleted, CancellationToken ct) => Task.CompletedTask;
 
     /// <summary>
     /// The coarse substitute for per-record delete events when a delete matched more rows than

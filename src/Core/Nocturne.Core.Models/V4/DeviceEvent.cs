@@ -1,4 +1,5 @@
 using NJsonSchema.Annotations;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Core.Models.V4;
 
@@ -44,4 +45,10 @@ public class DeviceEvent : V4RecordBase, IDeviceAttributed
     /// APS system sync/deduplication identifier (used by Loop and AAPS)
     /// </summary>
     public string? SyncIdentifier { get; set; }
+
+    /// <summary>
+    /// Whether Nocturne inferred this event from the warm-up gap in a CGM's readings, rather than
+    /// an uploader or the user recording it.
+    /// </summary>
+    public bool IsInferred => DataSource == DataSources.SensorSessionInference;
 }

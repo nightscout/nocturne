@@ -759,6 +759,13 @@ export class RealtimeStore {
         }
         break;
 
+      case "reopen":
+        // A run resumed because the change that replaced it was deleted: no new start to announce.
+        if (!this.trackerInstances.some((i) => i.id === instance.id)) {
+          this.trackerInstances = [instance, ...this.trackerInstances];
+        }
+        break;
+
       case "ack": {
         const index = this.trackerInstances.findIndex((i) => i.id === instance.id);
         if (index !== -1) {

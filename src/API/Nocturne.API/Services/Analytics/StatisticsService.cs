@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
@@ -2904,7 +2905,8 @@ public class StatisticsService : IStatisticsService
         IEnumerable<CarbIntake> carbIntakes,
         ExtendedAnalysisConfig? config = null,
         DateTime? startDate = null,
-        DateTime? endDate = null
+        DateTime? endDate = null,
+        IEnumerable<DeviceEvent>? deviceEvents = null
     )
     {
         config ??= new ExtendedAnalysisConfig();
@@ -2931,7 +2933,7 @@ public class StatisticsService : IStatisticsService
         var basicStats = CalculateBasicStats(glucoseValues);
         var timeInRange = CalculateTimeInRange(sortedEntries, config.Thresholds);
         var glycemicVariability = CalculateGlycemicVariability(glucoseValues, sortedEntries);
-        var dataQuality = AssessDataQuality(sortedEntries, startDate, endDate);
+        var dataQuality = AssessDataQuality(sortedEntries, startDate, endDate, deviceEvents);
 
         var timeStart = sortedEntries.FirstOrDefault()?.Mills ?? 0;
         var timeEnd = sortedEntries.LastOrDefault()?.Mills ?? 0;
@@ -2967,7 +2969,8 @@ public class StatisticsService : IStatisticsService
     private DataQuality AssessDataQuality(
         IList<SensorGlucose> entries,
         DateTime? reportStart = null,
-        DateTime? reportEnd = null)
+        DateTime? reportEnd = null,
+        IEnumerable<DeviceEvent>? deviceEvents = null)
     {
         var totalReadings = entries.Count;
         var gaps = new List<DataGap>();
@@ -3026,7 +3029,7 @@ public class StatisticsService : IStatisticsService
             },
             NoiseLevel = 0,
             CalibrationEvents = 0,
-            SensorWarmups = 0,
+            SensorWarmups = deviceEvents is null ? 0 : SensorSessionInference.DistinctSessions(deviceEvents).Count,
         };
     }
 

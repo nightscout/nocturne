@@ -785,6 +785,23 @@ describe("RealtimeStore tracker updates", () => {
     store.destroy();
   });
 
+  it("restores a reopened instance without announcing a new start", () => {
+    const store = makeStore();
+    store.trackerInstances = [trackerInstance("sensor")];
+    vi.mocked(toast.info).mockClear();
+
+    emit(store, { action: "reopen", instance: trackerInstance("site") });
+    emit(store, { action: "reopen", instance: trackerInstance("site") });
+
+    expect(store.trackerInstances).toEqual([
+      trackerInstance("site"),
+      trackerInstance("sensor"),
+    ]);
+    expect(toast.info).not.toHaveBeenCalled();
+
+    store.destroy();
+  });
+
   it("ignores an ack for an instance it does not hold", () => {
     const store = makeStore();
     store.trackerInstances = [trackerInstance("site")];

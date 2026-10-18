@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Nocturne.API.Services.Devices;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Analytics;
@@ -807,8 +808,9 @@ public class StatisticsController : ControllerBase
         var cacheKey = $"statistics:multi-period:{TenantCacheId}";
 
         // A history-clamped request bypasses the cache, for the reason given on
-        // EntryCacheAdapter.
-        var useCache = !_categoryReadContext.IsHistoryClamped;
+        // EntryCacheAdapter. So does a share: its categories decide what the body counts, and the key
+        // carries only the tenant.
+        var useCache = !_categoryReadContext.IsHistoryClamped && !_categoryReadContext.IsShare;
         var cachedResult = useCache
             ? await _cacheService.GetAsync<MultiPeriodStatistics>(cacheKey, cancellationToken)
             : null;
@@ -829,9 +831,11 @@ public class StatisticsController : ControllerBase
         var widestStart = now.AddDays(-periods.Max());
         var glucoseTask = _sensorGlucoseRepository.GetForAnalyticsAsync(from: (DateTime?)widestStart, to: (DateTime?)now, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
         var carbTask    = _carbIntakeRepository.GetAsync(from: (DateTime?)widestStart, to: (DateTime?)now, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
-        var insulin = await FetchInsulinRecordsAsync(widestStart, now, cancellationToken, glucoseTask, carbTask);
+        var sessionTask = _deviceEventRepository.GetAllCopiesAsync(widestStart, now, SensorSessionInference.SessionEventTypes, cancellationToken);
+        var insulin = await FetchInsulinRecordsAsync(widestStart, now, cancellationToken, glucoseTask, carbTask, sessionTask);
         var allGlucose = (await glucoseTask).ToList();
         var allCarbs = (await carbTask).ToList();
+        var allDeviceEvents = await sessionTask;
 
         foreach (var days in periods)
         {
@@ -856,7 +860,8 @@ public class StatisticsController : ControllerBase
                 analytics = _statisticsService.AnalyzeGlucoseData(
                     filteredEntries,
                     filteredBoluses,
-                    filteredCarbs
+                    filteredCarbs,
+                    deviceEvents: allDeviceEvents.Where(e => e.Timestamp >= startDate).ToList()
                 );
 
                 treatmentSummary = _statisticsService.CalculateTreatmentSummary(

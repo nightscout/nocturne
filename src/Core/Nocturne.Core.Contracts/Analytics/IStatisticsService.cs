@@ -312,13 +312,17 @@ public interface IStatisticsService
     double MmolToMGDL(double mmol);
 
     // Comprehensive Analytics
+    /// <param name="deviceEvents">The period's device events, from which
+    /// <see cref="DataQuality.SensorWarmups"/> counts the sensor sessions begun, recorded or inferred,
+    /// one per change however many sources logged it. Without them it is 0.</param>
     GlucoseAnalytics AnalyzeGlucoseData(
         IEnumerable<SensorGlucose> entries,
         IEnumerable<Bolus> boluses,
         IEnumerable<CarbIntake> carbIntakes,
         ExtendedAnalysisConfig? config = null,
         DateTime? startDate = null,
-        DateTime? endDate = null
+        DateTime? endDate = null,
+        IEnumerable<DeviceEvent>? deviceEvents = null
     );
 
     /// <summary>
