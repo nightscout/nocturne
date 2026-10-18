@@ -88,16 +88,8 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <returns>Authorization response with JWT token</returns>
     public async Task<AuthorizationResponse?> GenerateJwtFromAccessTokenAsync(string accessToken)
     {
-        try
-        {
-            _logger.LogDebug("Generating JWT for access token");
-            return await GenerateJwtFromDirectGrantAsync(accessToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating JWT from access token");
-            return null;
-        }
+        _logger.LogDebug("Generating JWT for access token");
+        return await GenerateJwtFromDirectGrantAsync(accessToken);
     }
 
     /// <summary>
@@ -191,50 +183,42 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <returns>List of permissions with usage statistics</returns>
     public async Task<PermissionsResponse> GetAllPermissionsAsync()
     {
-        try
+        _logger.LogDebug("Getting all seen permissions");
+
+        var permissions = new List<Permission>();
+
+        lock (_permissionsLock)
         {
-            _logger.LogDebug("Getting all seen permissions");
+            permissions = _seenPermissions.Values.ToList();
+        }
 
-            var permissions = new List<Permission>();
+        var roles = await _roleService.GetAllRolesAsync();
 
-            lock (_permissionsLock)
+        var now = DateTime.UtcNow;
+
+        foreach (var role in roles)
+        {
+            foreach (var permission in role.Permissions)
             {
-                permissions = _seenPermissions.Values.ToList();
-            }
-
-            var roles = await _roleService.GetAllRolesAsync();
-
-            var now = DateTime.UtcNow;
-
-            foreach (var role in roles)
-            {
-                foreach (var permission in role.Permissions)
+                if (!_seenPermissions.ContainsKey(permission))
                 {
-                    if (!_seenPermissions.ContainsKey(permission))
-                    {
-                        permissions.Add(
-                            new Permission
-                            {
-                                Name = permission,
-                                Count = 0,
-                                FirstSeen = now,
-                                LastSeen = now,
-                            }
-                        );
-                    }
+                    permissions.Add(
+                        new Permission
+                        {
+                            Name = permission,
+                            Count = 0,
+                            FirstSeen = now,
+                            LastSeen = now,
+                        }
+                    );
                 }
             }
+        }
 
-            return new PermissionsResponse
-            {
-                Permissions = permissions.OrderBy(p => p.Name).ToList(),
-            };
-        }
-        catch (Exception ex)
+        return new PermissionsResponse
         {
-            _logger.LogError(ex, "Error getting all permissions");
-            return new PermissionsResponse();
-        }
+            Permissions = permissions.OrderBy(p => p.Name).ToList(),
+        };
     }
 
     /// <summary>
@@ -243,49 +227,38 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <returns>Permission trie structure</returns>
     public async Task<PermissionTrieResponse> GetPermissionTrieAsync()
     {
-        try
+        _logger.LogDebug("Building permission trie structure");
+
+        var roles = await _roleService.GetAllRolesAsync();
+
+        var allPermissions = new HashSet<string>();
+        foreach (var role in roles)
         {
-            _logger.LogDebug("Building permission trie structure");
-
-            var roles = await _roleService.GetAllRolesAsync();
-
-            var allPermissions = new HashSet<string>();
-            foreach (var role in roles)
+            foreach (var permission in role.Permissions)
             {
-                foreach (var permission in role.Permissions)
-                {
-                    allPermissions.Add(permission);
-                }
+                allPermissions.Add(permission);
             }
-
-            // Add seen permissions
-            lock (_permissionsLock)
-            {
-                foreach (var permission in _seenPermissions.Keys)
-                {
-                    allPermissions.Add(permission);
-                }
-            }
-
-            // Build new trie with all permissions
-            var trie = new PermissionTrie();
-            trie.Add(allPermissions);
-
-            // Convert to our response format
-            var response = new PermissionTrieResponse
-            {
-                Root = BuildTrieNode(trie),
-                Count = trie.Count,
-            };
-
-            _logger.LogDebug("Built permission trie with {Count} permissions", response.Count);
-            return response;
         }
-        catch (Exception ex)
+
+        lock (_permissionsLock)
         {
-            _logger.LogError(ex, "Error building permission trie");
-            return new PermissionTrieResponse();
+            foreach (var permission in _seenPermissions.Keys)
+            {
+                allPermissions.Add(permission);
+            }
         }
+
+        var trie = new PermissionTrie();
+        trie.Add(allPermissions);
+
+        var response = new PermissionTrieResponse
+        {
+            Root = BuildTrieNode(trie),
+            Count = trie.Count,
+        };
+
+        _logger.LogDebug("Built permission trie with {Count} permissions", response.Count);
+        return response;
     }
 
     /// <summary>

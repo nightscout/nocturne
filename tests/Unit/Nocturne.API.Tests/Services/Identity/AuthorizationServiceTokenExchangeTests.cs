@@ -1,5 +1,7 @@
 using Nocturne.Connectors.Core.Utilities;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -318,5 +320,65 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
         var result = await _authorizationService.GenerateJwtFromAccessTokenAsync(token);
 
         result.Should().NotBeNull("an unexpired grant is still usable");
+    }
+
+    /// <summary>
+    /// AAPS reads a 401 from the exchange as a revoked token and stops retrying, so a database that
+    /// cannot answer must not look like a grant that does not exist.
+    /// </summary>
+    [Fact]
+    public async Task A_grant_lookup_that_fails_throws_rather_than_reading_as_an_invalid_token()
+    {
+        const string token = "noc_uploadertoken123";
+        SeedGrant(token);
+        SetupActiveSubject();
+        SetupMintedJwt();
+
+        var options = new DbContextOptionsBuilder<NocturneDbContext>(_db.Options)
+            .AddInterceptors(new FailingQueryInterceptor())
+            .Options;
+        using var failingContext = new NocturneDbContext(options) { TenantId = _testTenantId };
+        var service = new AuthorizationService(
+            new Mock<IConfiguration>().Object,
+            Mock.Of<ILogger<AuthorizationService>>(),
+            _mockSubjectService.Object,
+            new Mock<IRoleService>().Object,
+            new Mock<IDirectGrantService>().Object,
+            _mockJwtService.Object,
+            failingContext,
+            _categoryReadContext
+        );
+
+        var exchange = () => service.GenerateJwtFromAccessTokenAsync(token);
+
+        await exchange.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage(FailingQueryInterceptor.Message);
+    }
+
+    [Fact]
+    public async Task A_subject_lookup_that_fails_throws_rather_than_reading_as_an_invalid_token()
+    {
+        const string token = "noc_uploadertoken123";
+        SeedGrant(token);
+        _mockSubjectService
+            .Setup(s => s.GetSubjectByIdAsync(_subjectId))
+            .ThrowsAsync(new InvalidOperationException("subject store unavailable"));
+
+        var exchange = () => _authorizationService.GenerateJwtFromAccessTokenAsync(token);
+
+        await exchange.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("subject store unavailable");
+    }
+
+    private sealed class FailingQueryInterceptor : DbCommandInterceptor
+    {
+        public const string Message = "database unavailable";
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException(Message);
     }
 }
