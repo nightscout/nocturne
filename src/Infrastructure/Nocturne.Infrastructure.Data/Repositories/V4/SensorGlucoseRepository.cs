@@ -237,10 +237,11 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
-    public override async Task<SensorGlucose> CreateAsync(SensorGlucose model, WriteOrigin origin, CancellationToken ct = default)
+    public override async Task<SyncUpsert<SensorGlucose>> UpsertAsync(
+        SensorGlucose model, WriteOrigin origin, CancellationToken ct = default)
     {
-        var written = await base.CreateAsync(model, origin, ct);
-        await AdvanceTenantLastReadingAsync([written], ct);
+        var written = await base.UpsertAsync(model, origin, ct);
+        await AdvanceTenantLastReadingAsync([written.Record], ct);
         return written;
     }
 
