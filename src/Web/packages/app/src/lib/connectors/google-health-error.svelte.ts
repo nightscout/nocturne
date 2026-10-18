@@ -46,13 +46,13 @@ function explain(http: number | undefined): string {
 export function describeGoogleHealthError(
   error: unknown,
   operation: GoogleHealthOperation,
-  knownErrors: Record<string, string>
+  knownError: (code: string) => string | undefined
 ): string {
   const http = httpStatus(error);
   const reason = errorMessage(error);
-  const known = reason !== undefined && Object.hasOwn(knownErrors, reason);
-  const code = known ? reason : http ? `http_${http}` : "page_or_network_error";
-  const message = known ? knownErrors[reason] : explain(http);
+  const known = reason === undefined ? undefined : knownError(reason);
+  const code = known !== undefined ? reason : http ? `http_${http}` : "page_or_network_error";
+  const message = known ?? explain(http);
   const technical = http ? `${operation}/${code} · HTTP ${http}` : `${operation}/${code}`;
   return `${message} Technical code: ${technical}.`;
 }

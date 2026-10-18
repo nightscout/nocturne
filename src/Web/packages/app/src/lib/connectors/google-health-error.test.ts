@@ -4,10 +4,11 @@ import {
   isGoogleHealthAlreadyRunningError,
 } from "./google-health-error.svelte";
 
-const known = {
+const messages: Record<string, string> = {
   reconnect_required: "Reconnect to Google.",
   already_running: "Another import is running.",
 };
+const known = (code: string) => (Object.hasOwn(messages, code) ? messages[code] : undefined);
 
 describe("Google Health diagnostics", () => {
   it("identifies a failed Nocturne session separately from Google consent", () => {

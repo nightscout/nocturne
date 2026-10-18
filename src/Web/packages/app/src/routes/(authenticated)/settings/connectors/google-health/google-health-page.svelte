@@ -32,10 +32,10 @@
     purgeGoogleHealth,
   } from "$lib/api/generated/googleHealths.generated.remote";
   import {
-    IMPORT_FAILED,
-    connectionOutcomes,
-    errorMessages,
-    notices,
+    connectionOutcome,
+    errorMessage,
+    knownErrorMessage,
+    noticeText,
     type NoticeKey,
   } from "./google-health-copy.svelte";
   import GoogleHealthCategoryTable from "./GoogleHealthCategoryTable.svelte";
@@ -76,7 +76,7 @@
       await action();
       return true;
     } catch (error) {
-      message = describeGoogleHealthError(error, operation, errorMessages);
+      message = describeGoogleHealthError(error, operation, knownErrorMessage);
       return false;
     } finally {
       busy = false;
@@ -104,7 +104,7 @@
       if (generation !== inventoryGeneration || disconnecting || !status?.connected)
         return;
       if (isGoogleHealthAlreadyRunningError(error)) notice = "alreadyRunning";
-      else message = describeGoogleHealthError(error, "readings", errorMessages);
+      else message = describeGoogleHealthError(error, "readings", knownErrorMessage);
     } finally {
       if (generation === inventoryGeneration) inventoryBusy = false;
     }
@@ -190,8 +190,8 @@
       void run("status", async () => {
         const outcome = new URLSearchParams(location.search).get("connection");
         await refresh();
-        if (outcome && Object.hasOwn(connectionOutcomes, outcome))
-          message = connectionOutcomes[outcome];
+        const explanation = outcome ? connectionOutcome(outcome) : undefined;
+        if (explanation) message = explanation;
       });
     });
     return () => {
@@ -239,12 +239,12 @@
   {/if}
   {#if notice}
     <p role="status" class="rounded-lg border border-primary/40 p-4">
-      {notices[notice]}
+      {noticeText(notice)}
     </p>
   {/if}
   {#if status?.errorCode && !status.isSyncing}
     <div role="status" class="rounded-lg border p-4">
-      <p>{errorMessages[status.errorCode] ?? IMPORT_FAILED}</p>
+      <p>{errorMessage(status.errorCode)}</p>
       <p class="mt-2 text-sm text-muted-foreground">
         Technical code: <code>{status.errorCode}</code>
         {status.errorDataTypes?.length ? ` · ${status.errorDataTypes.join(", ")}` : ""}

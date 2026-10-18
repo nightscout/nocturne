@@ -7,7 +7,7 @@ import {
   type GoogleHealthStatus,
 } from "$lib/api";
 
-export const errorMessages: Record<string, string> = {
+const errorMessages: Record<string, string> = {
   configure_first: "Connect Google Health first.",
   platform_not_configured: "Google Health is not enabled on this Nocturne server.",
   client_changed:
@@ -62,9 +62,18 @@ export const errorMessages: Record<string, string> = {
     "Nocturne downloaded the data, but could not store it locally. Retry the same range; if it persists, use the technical stage from the server log.",
 };
 
-export const IMPORT_FAILED = "The import could not be completed.";
+/** The sentence for a server error code, or a generic one for a code this page does not know. */
+export function errorMessage(code: string): string {
+  return Object.hasOwn(errorMessages, code)
+    ? errorMessages[code]
+    : "The import could not be completed.";
+}
 
-export const notices = {
+export function knownErrorMessage(code: string): string | undefined {
+  return Object.hasOwn(errorMessages, code) ? errorMessages[code] : undefined;
+}
+
+const notices = {
   importRunning:
     "The import is running in the background. You can leave this page and return later.",
   importCompleted: "Google Health import completed.",
@@ -75,14 +84,23 @@ export const notices = {
 
 export type NoticeKey = keyof typeof notices;
 
-export const connectionOutcomes: Record<string, string> = {
+export function noticeText(key: NoticeKey): string {
+  return notices[key];
+}
+
+const connectionOutcomes: Record<string, string> = {
   failed: "Google sign-in failed or was cancelled.",
   provider_denied: "Google did not grant the requested read access.",
   no_session:
     "The Nocturne session was missing after the Google redirect. Sign in and reconnect in the same browser.",
 };
 
-export const categoryLabels: Record<GoogleHealthCategoryKind, string> = {
+/** Why the sign-in redirect came back without connecting, or undefined for any other value. */
+export function connectionOutcome(outcome: string): string | undefined {
+  return Object.hasOwn(connectionOutcomes, outcome) ? connectionOutcomes[outcome] : undefined;
+}
+
+const categoryLabels: Record<GoogleHealthCategoryKind, string> = {
   [GoogleHealthCategoryKind.Vitals]: "Vitals",
   [GoogleHealthCategoryKind.Activity]: "Activity",
   [GoogleHealthCategoryKind.BodyMeasurement]: "Body measurement",
@@ -119,9 +137,14 @@ const dataTypeLabels: Record<string, string> = {
   sexualactivity: "Sexual activity",
 };
 
+export function categoryLabel(kind: GoogleHealthCategoryKind): string {
+  return categoryLabels[kind];
+}
+
 // Dashes stripped so no key reads as a translatable message to Wuchale.
-export const dataTypeLabel = (type: string | null | undefined) =>
-  dataTypeLabels[(type ?? "").replaceAll("-", "")] ?? "Unknown data type";
+export function dataTypeLabel(type: string | null | undefined): string {
+  return dataTypeLabels[(type ?? "").replaceAll("-", "")] ?? "Unknown data type";
+}
 
 const destinationLabels: Record<string, string> = {
   stepcounts: "Step history",
@@ -130,10 +153,11 @@ const destinationLabels: Record<string, string> = {
   sleepsessions: "Sleep history",
 };
 
-export const destinationLabel = (destination: string | null | undefined) =>
-  destination
+export function destinationLabel(destination: string | null | undefined): string {
+  return destination
     ? (destinationLabels[destination.replaceAll("-", "")] ?? destination)
     : "No destination yet";
+}
 
 export function typeStateLabel(type: GoogleHealthDataTypeStatus): string {
   switch (type.state) {

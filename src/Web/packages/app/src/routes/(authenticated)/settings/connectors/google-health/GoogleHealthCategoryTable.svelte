@@ -2,7 +2,7 @@
   import type { GoogleHealthCategory } from "$lib/api";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import {
-    categoryLabels,
+    categoryLabel,
     dataTypeLabel,
     destinationLabel,
     foundLabel,
@@ -37,7 +37,7 @@
   <summary
     class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 font-medium"
   >
-    <span>{category.kind ? categoryLabels[category.kind] : ""}</span>
+    <span>{category.kind ? categoryLabel(category.kind) : ""}</span>
     <span class="tabular-nums text-sm text-muted-foreground">
       {selectedCount}/{types.length} selected
     </span>
