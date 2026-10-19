@@ -206,7 +206,7 @@ describe("chart data engine — realtime glucose source", () => {
       s.chartThresholds = { low: 70, high: 180, veryLow: 54, veryHigh: 250, glucoseYMax: 370 };
     });
 
-    expect(engine.glucoseYMax).toBe(370);
+    expect(engine.thresholds.glucoseYMax).toBe(370);
   });
 
   it("makes no remote call at all", async () => {

@@ -5,6 +5,8 @@
    */
   import { type DayBucket } from "./buckets";
   import NoiseDayChart from "./NoiseDayChart.svelte";
+  import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
+  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
 
   interface Props {
     buckets: DayBucket[];
@@ -15,10 +17,15 @@
 
   let {
     buckets,
-    thresholds = { low: 70, high: 180 },
+    thresholds: suppliedThresholds,
     selectedDateMs = null,
     onSelectDay,
   }: Props = $props();
+
+  const realtimeStore = tryGetRealtimeStore();
+  const thresholds = $derived(
+    suppliedThresholds ?? resolveChartThresholds(realtimeStore?.chartThresholds)
+  );
 
   // Shared y-axis ceiling so every row is comparable; rounded up to a sensible bound.
   const yMax = $derived.by(() => {

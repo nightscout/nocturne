@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { FALLBACK_GLUCOSE_THRESHOLDS } from "$lib/constants/glucose-thresholds";
+  import {
+    FALLBACK_GLUCOSE_THRESHOLDS,
+    FALLBACK_GLUCOSE_Y_MAX,
+  } from "$lib/constants/glucose-thresholds";
   import { AreaChart, Tooltip } from "layerchart";
   import BarChart3 from "@lucide/svelte/icons/chart-column";
   import {
@@ -40,7 +43,10 @@
   const HOUR_TICKS = [0, 3, 6, 9, 12, 15, 18, 21, 24];
 
   // Dynamic Y-axis domain based on units
-  const yDomain = $derived<[number, number]>(isMMOL ? [0, 22.2] : [0, 400]);
+  const yDomain = $derived<[number, number]>([
+    0,
+    convertToDisplayUnits(FALLBACK_GLUCOSE_Y_MAX, units),
+  ]);
 
   // Convert threshold values to display units
   const lowThreshold = $derived(

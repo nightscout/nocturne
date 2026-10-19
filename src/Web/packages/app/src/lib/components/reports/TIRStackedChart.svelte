@@ -27,6 +27,8 @@
   import { scaleBand, scaleLinear } from "d3-scale";
   import { bandScale as toBandScale, numericScale } from "$lib/components/charts/scale-guards";
   import { bgRange } from "$lib/utils/formatting";
+  import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
+  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
   import type { TimeInRangePercentages } from "$api-clients";
@@ -66,13 +68,18 @@
 
   let {
     percentages,
-    thresholds = { low: 70, high: 180 },
+    thresholds: suppliedThresholds,
     orientation = "vertical",
     showThresholds = false,
     showLabels = true,
     compact = false,
     personalRange,
   }: Props = $props();
+
+  const realtimeStore = tryGetRealtimeStore();
+  const thresholds = $derived(
+    suppliedThresholds ?? resolveChartThresholds(realtimeStore?.chartThresholds)
+  );
 
   const vertical = $derived(orientation === "vertical");
 

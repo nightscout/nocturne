@@ -95,6 +95,8 @@ describe('resolveTargetRange', () => {
 		veryLow: 54,
 		veryHigh: 250,
 		glucoseYMax: 300,
+		targetLow: null,
+		targetHigh: null,
 	};
 
 	it('prefers the personal target when the profile supplies one', () => {
@@ -108,12 +110,6 @@ describe('resolveTargetRange', () => {
 
 	it('falls back to the clinical band when there is no target', () => {
 		expect(resolveTargetRange(clinical)).toEqual({ low: 70, high: 180 });
-		expect(
-			resolveTargetRange({ ...clinical, targetLow: null, targetHigh: null }),
-		).toEqual({
-			low: 70,
-			high: 180,
-		});
 	});
 });
 
