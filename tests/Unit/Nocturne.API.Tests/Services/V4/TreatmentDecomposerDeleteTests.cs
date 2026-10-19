@@ -412,7 +412,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         SeedStateSpan("ds-override", "Override", "aaps", """{"reason":"devicestatus"}""", Inside);
 
         await using var ctx = NewContext();
-        var factory = new TestTenantDbContextFactory(ctx);
+        var factory = new TestNocturneDbContextFactory(ctx);
         var profiles = new ProfileDecomposer(
             new TherapySettingsRepository(factory, _userAuditContext, NullLogger<TherapySettingsRepository>.Instance),
             new BasalScheduleRepository(factory, _userAuditContext, NullLogger<BasalScheduleRepository>.Instance),
@@ -452,7 +452,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         SeedStateSpan(switchId, "Profile", "aaps", """{"profileName":"Weekend","profileJson":"{}"}""", Inside);
 
         await using var ctx = NewContext();
-        var factory = new TestTenantDbContextFactory(ctx);
+        var factory = new TestNocturneDbContextFactory(ctx);
         var profiles = new ProfileDecomposer(
             new TherapySettingsRepository(factory, _userAuditContext, NullLogger<TherapySettingsRepository>.Instance),
             new BasalScheduleRepository(factory, _userAuditContext, NullLogger<BasalScheduleRepository>.Instance),

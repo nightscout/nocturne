@@ -239,7 +239,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
 
         await using (var ctx = NewContext())
         {
-            var factory = new TestTenantDbContextFactory(ctx);
+            var factory = new TestNocturneDbContextFactory(ctx);
             var profiles = new ProfileDecomposer(
                 new TherapySettingsRepository(factory, _auditContext, NullLogger<TherapySettingsRepository>.Instance),
                 new BasalScheduleRepository(factory, _auditContext, NullLogger<BasalScheduleRepository>.Instance),
