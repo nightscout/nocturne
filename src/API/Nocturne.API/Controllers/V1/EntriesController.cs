@@ -918,17 +918,21 @@ public class EntriesController : ControllerBase
     }
 
     /// <summary>
-    /// Delete an entry by ID
+    /// Delete an entry by ID, or the entries a type spec and <c>find[...]</c> select
     /// </summary>
-    /// <param name="id">The entry ID to delete</param>
+    /// <param name="id">The entry ID to delete, an entry type, or <c>*</c> for every type</param>
     /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>The <see cref="LegacyDeleteStatus"/> body, found or not</returns>
+    /// <returns>The <see cref="LegacyDeleteStatus"/> body for an id, the <see cref="BulkDeleteEntries"/> body for a type</returns>
+    /// <remarks>
+    /// A type spec is the bulk delete with the path type replacing any <c>find[type]</c>.
+    /// </remarks>
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/{id}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
+    [ProducesResponseType(typeof(object), 403)]
     [ProducesResponseType(typeof(object), 500)]
     [ErrorEnvelope]
     public async Task<ActionResult> DeleteEntry(
@@ -941,6 +945,15 @@ public class EntriesController : ControllerBase
             id,
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
+
+        if (id == LegacyDeleteStatus.AnyId || LegacyEntryTypes.All.Contains(id))
+        {
+            // NIGHTSCOUT-COMPAT: Nightscout lets the entries delete permission sweep by type. This
+            // needs the bulk delete's full access.
+            return HttpContext?.HasScope(Scope.FullAccess) == true
+                ? await DeleteEntriesOfTypeAsync(id, cancellationToken)
+                : Forbid();
+        }
 
         // A 32-hex id is a record uuid, or a legacy id an older POST /api/v1/entries assigned.
         if (
@@ -994,7 +1007,40 @@ public class EntriesController : ControllerBase
 
         var findQuery = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
 
-        if (!LegacyFindQueryString.HasConditions(findQuery))
+        return await DeleteMatchingEntriesAsync(findQuery, findQuery, cancellationToken);
+    }
+
+    /// <summary>
+    /// The bulk delete over the request's <c>find[...]</c> with <paramref name="type"/> as its
+    /// <c>find[type]</c>, or with none for <see cref="LegacyDeleteStatus.AnyId"/>. The type does not
+    /// count as a condition, so a type with no other find is refused like an empty bulk find.
+    /// </summary>
+    private async Task<ActionResult> DeleteEntriesOfTypeAsync(
+        string type,
+        CancellationToken cancellationToken
+    )
+    {
+        var find = LegacyFindQueryString.Resolve(HttpContext?.Request, null);
+        var withoutType = find is null ? null : WithoutFindType(find);
+        var typedFind =
+            type == LegacyDeleteStatus.AnyId ? withoutType : $"{withoutType}&find[type]={type}";
+
+        // NIGHTSCOUT-COMPAT: Nightscout deletes every entry of the type when the find is empty.
+        // The type does not count as a condition, so this refuses like an empty bulk find.
+        return await DeleteMatchingEntriesAsync(withoutType, typedFind, cancellationToken);
+    }
+
+    /// <summary>
+    /// Refuses with 400 unless <paramref name="conditionsFind"/> carries a condition, then deletes
+    /// with <paramref name="deleteFind"/>.
+    /// </summary>
+    private async Task<ActionResult> DeleteMatchingEntriesAsync(
+        string? conditionsFind,
+        string? deleteFind,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!LegacyFindQueryString.HasConditions(conditionsFind))
         {
             return BadRequest(
                 new
@@ -1006,7 +1052,7 @@ public class EntriesController : ControllerBase
             );
         }
 
-        var deletedCount = await _entryService.DeleteEntriesAsync(findQuery, cancellationToken);
+        var deletedCount = await _entryService.DeleteEntriesAsync(deleteFind, cancellationToken);
 
         _logger.LogDebug("Successfully deleted {Count} entries with query", deletedCount);
         return Ok(

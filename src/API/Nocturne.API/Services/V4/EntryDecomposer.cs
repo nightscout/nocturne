@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Audit;
 using System.Linq;
 using Nocturne.Core.Contracts.Devices;
@@ -281,7 +282,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
 
         // A find[type]=x equality narrows the sweep to that record type.
         var typeFilter = findQuery.GetEqualityValue("type");
-        if (typeFilter is not null and not ("sgv" or "mbg" or "cal"))
+        if (typeFilter is not null && !LegacyEntryTypes.All.Contains(typeFilter))
         {
             Logger.LogWarning("BulkDelete refused: the find names a record type the sweep does not cover");
             return 0;
