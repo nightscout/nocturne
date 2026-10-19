@@ -129,11 +129,11 @@ public static class HttpContextExtensions
     }
 
     /// <summary>
-    /// Check if the current request has admin permissions
+    /// Check if the current request holds superuser permissions
     /// </summary>
     /// <param name="context">HTTP context</param>
     /// <returns>True if the request holds superuser permissions</returns>
-    public static bool IsAdmin(this HttpContext context)
+    public static bool IsSuperuser(this HttpContext context)
     {
         return context.HasPermission("*");
     }

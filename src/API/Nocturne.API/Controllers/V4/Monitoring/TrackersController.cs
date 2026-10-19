@@ -81,8 +81,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// </summary>
     private bool CanViewTracker(TrackerDefinitionEntity tracker)
     {
-        // Admins can see everything
-        if (HttpContext.IsAdmin())
+        if (HttpContext.IsSuperuser())
             return true;
 
         // Public trackers visible to everyone
@@ -423,7 +422,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return NotFound();
 
         var userId = HttpContext.GetSubjectIdString()!;
-        if (existing.UserId != userId && !HttpContext.IsAdmin())
+        if (existing.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         // Validate thresholds if being updated
@@ -533,7 +532,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return NotFound();
 
         var userId = HttpContext.GetSubjectIdString()!;
-        if (existing.UserId != userId && !HttpContext.IsAdmin())
+        if (existing.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         // Definition first, rules second: if the definition delete fails the tracker
@@ -644,7 +643,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (definition == null)
             return NotFound("Definition not found");
 
-        if (definition.UserId != userId && !HttpContext.IsAdmin())
+        if (definition.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         // Validate mode-specific requirements
@@ -699,7 +698,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return NotFound();
 
         var userId = HttpContext.GetSubjectIdString()!;
-        if (existing.UserId != userId && !HttpContext.IsAdmin())
+        if (existing.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         if (existing.CompletedAt != null)
@@ -751,7 +750,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return NotFound();
 
         var userId = HttpContext.GetSubjectIdString()!;
-        if (existing.UserId != userId && !HttpContext.IsAdmin())
+        if (existing.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         await _repository.AckInstanceAsync(id, request.SnoozeMins, HttpContext.RequestAborted);
@@ -794,7 +793,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return NotFound();
 
         var userId = HttpContext.GetSubjectIdString()!;
-        if (existing.UserId != userId && !HttpContext.IsAdmin())
+        if (existing.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         // Broadcast before deleting to get the definition name
@@ -853,7 +852,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (definition == null)
             return NotFound("Definition not found");
 
-        if (definition.UserId != userId && !HttpContext.IsAdmin())
+        if (definition.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         var entity = new TrackerPresetEntity
@@ -893,7 +892,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
         var preset = await _repository.GetPresetByIdAsync(id, HttpContext.RequestAborted);
         if (preset == null)
             return NotFound();
-        if (preset.UserId != userId && !HttpContext.IsAdmin())
+        if (preset.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
         var succession = await StartSuccessorAsync(
             preset.Definition,
@@ -937,7 +936,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return NotFound();
 
         var userId = HttpContext.GetSubjectIdString()!;
-        if (existing.UserId != userId && !HttpContext.IsAdmin())
+        if (existing.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         await _repository.DeletePresetAsync(id, HttpContext.RequestAborted);

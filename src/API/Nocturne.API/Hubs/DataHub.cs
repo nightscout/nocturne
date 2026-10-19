@@ -114,9 +114,8 @@ public class DataHub : TenantAwareHub
                         Context.ConnectionId, TenantGroup(RealtimeGroups.Relay));
                 }
 
-                // If user is admin, also add to admin group for admin-specific notifications
                 var httpContext = Context.GetHttpContext();
-                if (httpContext?.IsAdmin() == true)
+                if (httpContext?.IsSuperuser() == true)
                 {
                     await Groups.AddToGroupAsync(
                         Context.ConnectionId, TenantGroup(RealtimeGroups.Admin));

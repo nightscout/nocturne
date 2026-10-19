@@ -16,7 +16,7 @@ namespace Nocturne.API.Tests.Authorization;
 /// Reflection guard asserting that every MVC controller action carries an explicit authorization
 /// decision. An action passes when it (or its controller) has an <see cref="IAuthorizeData"/>
 /// attribute (<c>[Authorize]</c> and friends), a Nocturne authorization filter
-/// (<c>[RequireAdmin]</c>, <c>[RequireScope]</c>, <c>[RequireInstanceKeyAuth]</c>, …), or an
+/// (<c>[RequireSuperuser]</c>, <c>[RequireScope]</c>, <c>[RequireInstanceKeyAuth]</c>, …), or an
 /// explicit <c>[AllowAnonymous]</c>.
 /// </summary>
 /// <remarks>
