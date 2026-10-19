@@ -74,6 +74,7 @@ public class StatisticsController : ControllerBase
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ICanonicalGlucoseService _canonicalGlucose;
     private readonly ICategoryReadContext _categoryReadContext;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<StatisticsController> _logger;
 
     private string TenantCacheId =>
@@ -101,6 +102,7 @@ public class StatisticsController : ControllerBase
         IActiveProfileResolver activeProfileResolver,
         ICanonicalGlucoseService canonicalGlucose,
         ICategoryReadContext categoryReadContext,
+        TimeProvider timeProvider,
         ILogger<StatisticsController> logger
     )
     {
@@ -123,6 +125,7 @@ public class StatisticsController : ControllerBase
         _basalInjectionRepository = basalInjectionRepository;
         _activeProfileResolver = activeProfileResolver;
         _canonicalGlucose = canonicalGlucose;
+        _timeProvider = timeProvider;
         _categoryReadContext = categoryReadContext;
         _logger = logger;
     }
@@ -1175,7 +1178,7 @@ public class StatisticsController : ControllerBase
             monthBucket.TotalReadings += dayStats.TotalReadings;
         }
 
-        // Per-month summaries from days that actually had data.
+        var today = TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), tz).ToString("yyyy-MM-dd");
         foreach (var month in monthsMap.Values)
         {
             var daysWithData = month.Days.Where(d => d.TotalReadings > 0).ToList();
@@ -1189,6 +1192,9 @@ public class StatisticsController : ControllerBase
             var totalLow = daysWithData.Sum(d => d.LowCount);
             var totalHigh = daysWithData.Sum(d => d.HighCount);
             var totalReadings = daysWithData.Sum(d => d.TotalReadings);
+            var totalInsulin = month.Days.Sum(d => d.TotalInsulin);
+            var totalCarbs = month.Days.Sum(d => d.TotalCarbs);
+            var elapsedDays = Math.Max(1, month.Days.Count(d => string.CompareOrdinal(d.Date, today) <= 0));
 
             month.Summary = new PunchCardMonthSummary
             {
@@ -1198,6 +1204,8 @@ public class StatisticsController : ControllerBase
                 LowPercent = totalReadings > 0 ? (double)totalLow / totalReadings * 100 : 0,
                 HighPercent = totalReadings > 0 ? (double)totalHigh / totalReadings * 100 : 0,
                 AvgGlucose = daysWithData.Sum(d => d.AverageGlucose * d.TotalReadings) / totalReadings,
+                Tdd = totalInsulin > 0 ? totalInsulin / elapsedDays : null,
+                AvgDailyCarbs = totalCarbs > 0 ? totalCarbs / elapsedDays : null,
             };
         }
 
