@@ -11,9 +11,16 @@ const realtime = vi.hoisted(() => ({
 	chartThresholds: null as ChartThresholdsDto | null,
 }));
 
-vi.mock("$lib/stores/realtime-store.svelte", () => ({
-	tryGetRealtimeStore: () => realtime,
-}));
+vi.mock("$lib/stores/realtime-store.svelte", async () => {
+	const { resolveChartThresholds } = await import("$lib/constants/glucose-thresholds");
+	return {
+		tenantChartThresholds: () => ({
+			get current() {
+				return resolveChartThresholds(realtime.chartThresholds);
+			},
+		}),
+	};
+});
 
 const dayStartMills = Date.UTC(2026, 9, 6);
 const entries = [90, 140, 200].map((mgdl, i) => ({

@@ -10,8 +10,7 @@
   import { ClusterConfidence } from "$lib/api";
   import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import type { DayBucket } from "./buckets";
-  import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
-  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { tenantChartThresholds } from "$lib/stores/realtime-store.svelte";
   import { confidenceKey } from "./format";
   import HypoMarker from "./HypoMarker.svelte";
 
@@ -32,12 +31,9 @@
     detailed = false,
   }: Props = $props();
 
-  const realtimeStore = tryGetRealtimeStore();
-  const tenantThresholds = $derived(
-    resolveChartThresholds(realtimeStore?.chartThresholds)
-  );
-  const thresholds = $derived(suppliedThresholds ?? tenantThresholds);
-  const yMax = $derived(suppliedYMax ?? tenantThresholds.glucoseYMax);
+  const tenantThresholds = tenantChartThresholds();
+  const thresholds = $derived(suppliedThresholds ?? tenantThresholds.current);
+  const yMax = $derived(suppliedYMax ?? tenantThresholds.current.glucoseYMax);
 
   const yMin = 40;
 

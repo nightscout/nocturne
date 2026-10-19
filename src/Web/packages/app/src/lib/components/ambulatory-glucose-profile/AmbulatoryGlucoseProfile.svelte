@@ -1,8 +1,5 @@
 <script lang="ts">
-  import {
-    FALLBACK_GLUCOSE_THRESHOLDS,
-    FALLBACK_GLUCOSE_Y_MAX,
-  } from "$lib/constants/glucose-thresholds";
+  import { tenantChartThresholds } from "$lib/stores/realtime-store.svelte";
   import { AreaChart, Tooltip } from "layerchart";
   import BarChart3 from "@lucide/svelte/icons/chart-column";
   import {
@@ -42,18 +39,21 @@
 
   const HOUR_TICKS = [0, 3, 6, 9, 12, 15, 18, 21, 24];
 
+  const tenantThresholds = tenantChartThresholds();
+  const thresholds = $derived(tenantThresholds.current);
+
   // Dynamic Y-axis domain based on units
   const yDomain = $derived<[number, number]>([
     0,
-    convertToDisplayUnits(FALLBACK_GLUCOSE_Y_MAX, units),
+    convertToDisplayUnits(thresholds.glucoseYMax, units),
   ]);
 
   // Convert threshold values to display units
   const lowThreshold = $derived(
-    convertToDisplayUnits(FALLBACK_GLUCOSE_THRESHOLDS.low, units)
+    convertToDisplayUnits(thresholds.low, units)
   );
   const highThreshold = $derived(
-    convertToDisplayUnits(FALLBACK_GLUCOSE_THRESHOLDS.high, units)
+    convertToDisplayUnits(thresholds.high, units)
   );
 
   // Time format for X-axis labels
@@ -147,7 +147,7 @@
         type: "line",
         layer: "above",
         y: lowThreshold,
-        label: `Low ${bg(FALLBACK_GLUCOSE_THRESHOLDS.low)}`,
+        label: `Low ${bg(thresholds.low)}`,
         labelPlacement: "bottom-left",
         labelXOffset: 4,
         labelYOffset: 4,
@@ -160,7 +160,7 @@
         type: "line",
         layer: "above",
         y: highThreshold,
-        label: `High ${bg(FALLBACK_GLUCOSE_THRESHOLDS.high)}`,
+        label: `High ${bg(thresholds.high)}`,
         labelPlacement: "top-left",
         labelXOffset: 4,
         labelYOffset: 4,
@@ -229,7 +229,7 @@
       { texture: "percentile-outer", label: "10–90%", color: BAND_OUTER },
       { texture: "percentile-inner", label: "25–75%", color: BAND_INNER },
       { texture: "percentile-median", label: "Median", color: MEDIAN_COLOR, shape: "line" },
-      { texture: "target-band", label: `Target range ${bgRange(FALLBACK_GLUCOSE_THRESHOLDS.low, FALLBACK_GLUCOSE_THRESHOLDS.high)}` },
+      { texture: "target-band", label: `Target range ${bgRange(thresholds.low, thresholds.high)}` },
     ]}
   />
 </div>
