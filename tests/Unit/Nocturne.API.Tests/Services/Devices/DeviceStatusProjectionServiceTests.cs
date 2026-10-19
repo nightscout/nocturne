@@ -986,7 +986,7 @@ public class DeviceStatusProjectionServiceTests
     private void ReturnOverrides(params StateSpan[] spans) =>
         _stateSpanRepo
             .Setup(r => r.GetByCategory(
-                StateSpanCategory.Override, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+                StateSpanCategory.Override, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(spans);
 
     private static StateSpan OverrideSpan(int startMinutes, int? endMinutes) => new()
