@@ -18,7 +18,13 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { Item } from "$lib/components/ui/item";
-  import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
+  import {
+    isDndInEffect,
+    isDndManualActive,
+    isDndScheduleActiveNow,
+    isDndScheduleConfigured,
+  } from "./dnd";
+  import { refreshOnReturn } from "$lib/utils/refresh-on-return.svelte";
 
   interface Props {
     /** Called after navigating away (e.g. to close a parent popover). */
@@ -39,12 +45,18 @@
   let expanded = $state(false);
   let errorMessage = $state<string | null>(null);
 
+  let reads = 0;
+
   async function load(): Promise<void> {
+    const read = ++reads;
     try {
-      settings = await getDnd().run();
+      const fetched = await getDnd().run();
+      if (read === reads) settings = fetched;
     } catch (err) {
-      settings = null;
-      errorMessage = remoteErrorMessage(err, "Couldn't load Do Not Disturb.");
+      if (read === reads) {
+        settings = null;
+        errorMessage = remoteErrorMessage(err, "Couldn't load Do Not Disturb.");
+      }
     } finally {
       loading = false;
     }
@@ -65,6 +77,7 @@
         dndScheduleStart: settings?.dndScheduleStart,
         dndScheduleEnd: settings?.dndScheduleEnd,
       });
+      reads++;
       settings = r;
       expanded = false;
     } catch (e) {
@@ -81,18 +94,22 @@
   onMount(() => {
     if (canSetDnd) queueMicrotask(load);
   });
+  refreshOnReturn(() => {
+    if (canSetDnd && !loading && !saving) void load();
+  });
 
-  // Only the manual mute is knowable as "on now"; a configured schedule reads as
-  // "Scheduled" without muting the bell. See lib/components/alerts/dnd.ts.
-  let isActive = $derived(isDndActiveNow(settings));
+  let isActive = $derived(isDndManualActive(settings));
+  let inEffect = $derived(isDndInEffect(settings));
   let label = $derived(
     settings?.dndManualActive
       ? settings.dndManualUntil
         ? `Until ${new Date(settings.dndManualUntil).toLocaleTimeString(formatLocale(), { hour: "numeric", minute: "2-digit" })}`
         : "On"
-      : isDndScheduleConfigured(settings)
-        ? "Scheduled"
-        : "Off",
+      : isDndScheduleActiveNow(settings)
+        ? "Scheduled, on now"
+        : isDndScheduleConfigured(settings)
+          ? "Scheduled"
+          : "Off",
   );
 </script>
 
@@ -102,12 +119,12 @@
       <DropdownMenu.Trigger>
         {#snippet child({ props }: { props: Record<string, unknown> })}
           <Item {...props} variant="ghost" size="sm">
-            {#if isActive}
+            {#if inEffect}
               <BellOff class="h-4 w-4 text-status-info" />
             {:else}
               <Bell class="h-4 w-4" />
             {/if}
-            <span class="flex-1 truncate text-sm {isActive ? 'text-status-info' : ''}">Do Not Disturb</span>
+            <span class="flex-1 truncate text-sm {inEffect ? 'text-status-info' : ''}">Do Not Disturb</span>
             {#if saving}
               <Loader2 class="h-3.5 w-3.5 animate-spin text-muted-foreground" />
             {:else}
