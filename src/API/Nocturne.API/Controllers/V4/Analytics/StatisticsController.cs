@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.Core.Clinical.Devices;
 using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Models.Authorization;
@@ -1230,6 +1231,10 @@ public class StatisticsController : ControllerBase
     /// <summary>
     /// Calculate comprehensive insulin delivery statistics for a date range
     /// </summary>
+    /// <param name="startDate">Start of the period.</param>
+    /// <param name="endDate">End of the period.</param>
+    /// <param name="includeBoluses">Fill <see cref="InsulinDeliveryStatistics.ManualBoluses"/> with the records behind <see cref="InsulinDeliveryStatistics.TotalBolus"/>; ignored unless the caller holds treatments.read.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Comprehensive insulin delivery statistics</returns>
     [HttpGet("insulin-delivery-stats")]
     [RequireScope(Scope.ReportsRead)]
@@ -1237,6 +1242,7 @@ public class StatisticsController : ControllerBase
     public async Task<ActionResult<InsulinDeliveryStatistics>> GetInsulinDeliveryStatistics(
         [FromQuery] DateTime startDate,
         [FromQuery] DateTime endDate,
+        [FromQuery] bool includeBoluses = false,
         CancellationToken cancellationToken = default
     )
     {
@@ -1262,6 +1268,8 @@ public class StatisticsController : ControllerBase
             endDate,
             basalInjections
         );
+        if (includeBoluses && AnalyticsReadScopes.Allows(HttpContext.GetGrantedScopes(), Scope.TreatmentsRead))
+            result.ManualBoluses = StatisticsService.CountedBoluses(boluses).ToList();
         return Ok(result);
     }
 

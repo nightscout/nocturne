@@ -1860,6 +1860,12 @@ public class InsulinDeliveryStatistics
     public int BasalInjectionCount { get; set; }
 
     /// <summary>
+    /// The manual boluses that make up <see cref="TotalBolus"/>, one record per counted bolus.
+    /// Filled only when the caller asks for them and holds treatments.read; null otherwise.
+    /// </summary>
+    public List<Bolus>? ManualBoluses { get; set; }
+
+    /// <summary>
     /// Reliability assessment for insulin delivery statistics
     /// </summary>
     public StatisticReliability? Reliability { get; set; }
