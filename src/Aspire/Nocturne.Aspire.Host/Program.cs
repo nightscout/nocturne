@@ -153,6 +153,10 @@ class Program
                 // Aspire's default moves with its releases (18.x from 13.5); a major
                 // Postgres upgrade cannot reuse an existing data volume.
                 .WithImageTag("17.6")
+                // max_connections: API pool 100 (PostgreSqlConfiguration.MaxPoolSize) + web pool 10 (@chat-adapter/state-pg's pg.Pool default)
+                // + migrator 5 + superuser_reserved_connections 3 + 12 for operators and sibling tools = 130.
+                // The stock 100 lets the API pool alone take every slot.
+                .WithArgs("-c", "max_connections=130")
                 .WithUserName(postgresUsername)
                 .WithPassword(postgresPassword)
                 .WithBindMount(pgInitPath, "/docker-entrypoint-initdb.d", isReadOnly: true)

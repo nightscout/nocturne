@@ -82,6 +82,8 @@ instanceKey:
 # Postgres connection details. Bring-your-own only in v0.
 # Three roles are required (see https://github.com/nightscout/nocturne/blob/main/docs/postgres/bootstrap-roles.sql);
 # the chart's bootstrap Job (below) creates them for you.
+# Size the server's max_connections for 100 per API replica + 10 per web replica + about 20 for the
+# migrator, reserved slots and operators (the reasoning is at the Postgres resource in the Aspire AppHost).
 externalDatabase:
   host: ""                     # e.g. postgres.databases.svc.cluster.local
   port: 5432
@@ -170,6 +172,10 @@ postgresql:
     database: nocturne
     username: nocturne_bootstrap   # Bitnami creates this user but the chart does not use it
   primary:
+    # Sized for one API and one web replica, as the AppHost's compose bundle is; raise it by 100 per
+    # extra API replica and 10 per extra web replica (autoscaling counts its maximum).
+    extendedConfiguration: |
+      max_connections = 130
     persistence:
       enabled: true
       size: 10Gi
