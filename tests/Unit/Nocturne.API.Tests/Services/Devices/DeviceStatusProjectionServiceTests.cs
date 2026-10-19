@@ -285,6 +285,46 @@ public class DeviceStatusProjectionServiceTests
         result.Override.CurrentCorrectionRange.MaxValue.Should().Be(160.0);
     }
 
+    [Theory]
+    [InlineData(-30, 30, true)]
+    [InlineData(-30, 1, true)]
+    [InlineData(-30, null, true)]
+    [InlineData(0, 30, true)]
+    [InlineData(-30, 0, null)]
+    [InlineData(1, 30, null)]
+    public async Task GetAsync_ProjectsTheOverrideActiveAtTheStatusTime(int startMinutes, int? endMinutes, bool? expectedActive)
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.Loop);
+        aps.LoopJson = "{}";
+        ReturnGroups(new DeviceStatusGroup(aps, null, null, null, ReferenceTime));
+        ReturnOverrides(OverrideSpan(startMinutes, endMinutes));
+
+        var result = (await _service.GetAsync(10, 0, null, CancellationToken.None)).Should().ContainSingle().Subject;
+
+        result.Override?.Active.Should().Be(expectedActive);
+        (result.Override is null).Should().Be(expectedActive is null);
+    }
+
+    [Theory]
+    [InlineData(-30, 30, true)]
+    [InlineData(-30, 1, true)]
+    [InlineData(-30, null, true)]
+    [InlineData(-30, 0, null)]
+    public async Task GetByIdAsync_ProjectsTheOverrideActiveAtTheStatusTime(int startMinutes, int? endMinutes, bool? expectedActive)
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.Loop);
+        aps.LoopJson = "{}";
+        _apsRepo
+            .Setup(r => r.GetByIdAsync(aps.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(aps);
+        ReturnOverrides(OverrideSpan(startMinutes, endMinutes));
+
+        var result = await _service.GetByIdAsync(aps.Id.ToString(), CancellationToken.None);
+
+        result!.Override?.Active.Should().Be(expectedActive);
+        (result.Override is null).Should().Be(expectedActive is null);
+    }
+
     #endregion
 
     #region ProjectFromSnapshots — Extras
@@ -942,6 +982,19 @@ public class DeviceStatusProjectionServiceTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(groups);
+
+    private void ReturnOverrides(params StateSpan[] spans) =>
+        _stateSpanRepo
+            .Setup(r => r.GetByCategory(
+                StateSpanCategory.Override, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(spans);
+
+    private static StateSpan OverrideSpan(int startMinutes, int? endMinutes) => new()
+    {
+        Category = StateSpanCategory.Override,
+        StartTimestamp = ReferenceTime.AddMinutes(startMinutes),
+        EndTimestamp = endMinutes is { } end ? ReferenceTime.AddMinutes(end) : null,
+    };
 
     private void ReturnHistory(params HistoryRecord<DeviceStatusGroup>[] page) =>
         _groupRepo
