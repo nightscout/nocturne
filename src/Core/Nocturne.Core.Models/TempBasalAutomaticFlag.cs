@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models;
 
@@ -9,7 +10,8 @@ namespace Nocturne.Core.Models;
 /// <remarks>
 /// <see cref="V4.TempBasal.Origin"/> cannot stand in for it: a temp basal without the flag falls back
 /// to Manual, and Trio, iAPS and AAPS never send the flag, so deriving it from the origin would state
-/// <c>automatic: false</c> for temp basals their algorithms set.
+/// <c>automatic: false</c> for temp basals whose algorithm set them. Where the origin is a reported fact
+/// (a connector, or a v4 request that names it) <see cref="Of(TempBasalOrigin)"/> gives the flag to keep.
 /// </remarks>
 public static class TempBasalAutomaticFlag
 {
@@ -22,6 +24,14 @@ public static class TempBasalAutomaticFlag
 
         return record;
     }
+
+    public static bool? Of(TempBasalOrigin origin) =>
+        origin switch
+        {
+            TempBasalOrigin.Algorithm => true,
+            TempBasalOrigin.Manual => false,
+            _ => null,
+        };
 
     public static bool? Of(IReadOnlyDictionary<string, object?>? record) =>
         record?.GetValueOrDefault(Field) switch

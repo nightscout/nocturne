@@ -352,6 +352,47 @@ public class TreatmentPublisherTests
         records[0].Origin.Should().Be(TempBasalOrigin.Scheduled);
     }
 
+    [Theory]
+    [InlineData(TempBasalOrigin.Algorithm, true)]
+    [InlineData(TempBasalOrigin.Manual, false)]
+    [InlineData(TempBasalOrigin.Scheduled, null)]
+    [InlineData(TempBasalOrigin.Suspended, null)]
+    [InlineData(TempBasalOrigin.Inferred, null)]
+    public async Task PublishTempBasalsAsync_StampsAutomaticFromOrigin_SoV1ReadsItBack(
+        TempBasalOrigin origin, bool? expected)
+    {
+        var record = new TempBasal
+        {
+            Id = Guid.NewGuid(),
+            StartTimestamp = new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc),
+            Rate = 1.0,
+            ScheduledRate = 1.0,
+            Origin = origin,
+        };
+
+        await _publisher.PublishTempBasalsAsync([record], "tandem-connector", WriteOrigin.Live);
+
+        Nocturne.Infrastructure.Data.Mappers.TempBasalToTreatmentMapper.ToTreatment(record)
+            .Automatic.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task PublishTempBasalsAsync_StampsAlgorithm_WhenScheduledIsReclassified()
+    {
+        var record = new TempBasal
+        {
+            Id = Guid.NewGuid(),
+            StartTimestamp = new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc),
+            Rate = 0.4,
+            Origin = TempBasalOrigin.Scheduled,
+        };
+
+        await _publisher.PublishTempBasalsAsync([record], "glooko-connector", WriteOrigin.Live);
+
+        Nocturne.Infrastructure.Data.Mappers.TempBasalToTreatmentMapper.ToTreatment(record)
+            .Automatic.Should().BeTrue();
+    }
+
     [Fact]
     public async Task PublishTempBasalsAsync_DoesNotTouchAlreadyAlgorithmOrManualOrigins()
     {

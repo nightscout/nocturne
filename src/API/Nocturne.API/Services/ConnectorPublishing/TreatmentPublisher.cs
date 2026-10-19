@@ -187,6 +187,10 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
                 "Reclassified {Count}/{Total} TempBasal records from Scheduled to Algorithm "
                 + "(rate differs from programmed basal schedule) for {Source}",
                 reclassifiedCount, recordList.Count, source);
+
+        foreach (var record in recordList)
+            record.AdditionalProperties = TempBasalAutomaticFlag.Keep(
+                record.AdditionalProperties, TempBasalAutomaticFlag.Of(record.Origin));
     }
 
     /// <summary>
