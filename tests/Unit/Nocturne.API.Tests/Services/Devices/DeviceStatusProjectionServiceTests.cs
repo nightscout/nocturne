@@ -67,7 +67,7 @@ public class DeviceStatusProjectionServiceTests
         _stateSpanRepo
             .Setup(r => r.GetByCategory(
                 It.IsAny<StateSpanCategory>(),
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<StateSpan>());
     }
@@ -495,7 +495,7 @@ public class DeviceStatusProjectionServiceTests
             new DeviceStatusGroup(null, null, uploader, null, ReferenceTime));
         _stateSpanRepo
             .Setup(r => r.GetByCategory(
-                StateSpanCategory.Override, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+                StateSpanCategory.Override, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new StateSpan { StartTimestamp = ReferenceTime.AddMinutes(-5) }]);
 
         var results = (await _service.GetAsync(10, 0, null, CancellationToken.None)).ToList();
@@ -621,7 +621,7 @@ public class DeviceStatusProjectionServiceTests
             .ReturnsAsync([]);
         _stateSpanRepo
             .Setup(r => r.GetByCategory(
-                It.IsAny<StateSpanCategory>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<StateSpanCategory>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         var result = await _service.GetByIdAsync(extras.Id.ToString(), CancellationToken.None);

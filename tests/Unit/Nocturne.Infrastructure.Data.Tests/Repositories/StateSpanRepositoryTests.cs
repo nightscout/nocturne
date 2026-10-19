@@ -769,6 +769,25 @@ public class StateSpanRepositoryTests : IDisposable
             Times.Once);
     }
 
+    [Fact]
+    public async Task GetByCategory_RangeOverlappingMoreThanAHundredSpans_ReturnsAllNewestFirst()
+    {
+        var from = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        for (var i = 0; i < 150; i++)
+            _context.StateSpans.Add(SpanEntity(
+                TestTenantId, StateSpanCategory.Override, "Pre-Meal",
+                from.AddMinutes(i), from.AddMinutes(i).AddSeconds(30)));
+        _context.StateSpans.Add(SpanEntity(
+            TestTenantId, StateSpanCategory.Exercise, "Running", from, from.AddMinutes(1)));
+        await _context.SaveChangesAsync();
+
+        var overrides = (await _repository.GetByCategory(
+            StateSpanCategory.Override, from, from.AddHours(3))).ToList();
+
+        overrides.Should().HaveCount(150);
+        overrides.Select(s => s.StartTimestamp).Should().BeInDescendingOrder();
+    }
+
     // --- Soft-delete re-creation guard ---
 
     private static StateSpan ConnectorSpan() => new()

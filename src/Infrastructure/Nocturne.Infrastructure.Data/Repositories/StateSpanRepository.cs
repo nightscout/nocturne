@@ -609,27 +609,20 @@ public class StateSpanRepository : IStateSpanRepository
             : null;
     }
 
-    /// <summary>
-    /// Get state spans by category
-    /// </summary>
-    /// <param name="category">The category to filter by.</param>
-    /// <param name="from">Optional start date filter.</param>
-    /// <param name="to">Optional end date filter.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A collection of state spans matching the category.</returns>
+    /// <inheritdoc />
     public async Task<IEnumerable<StateSpan>> GetByCategory(
         StateSpanCategory category,
-        DateTime? from = null,
-        DateTime? to = null,
+        DateTime from,
+        DateTime to,
         CancellationToken cancellationToken = default
     )
     {
-        return await GetStateSpansAsync(
-            category: category,
-            from: from,
-            to: to,
-            cancellationToken: cancellationToken
-        );
+        var entities = await BuildFilteredQuery(category, null, from, to, null, null)
+            .OrderByDescending(s => s.StartTimestamp)
+            .ThenByDescending(s => s.Id)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(StateSpanMapper.ToDomainModel);
     }
 
     /// <inheritdoc />
