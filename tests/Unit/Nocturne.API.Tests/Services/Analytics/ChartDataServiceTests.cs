@@ -1,6 +1,11 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Services.ChartData;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
@@ -1451,6 +1456,151 @@ public class ChartDataServiceTests
         }
 
         #endregion
+    }
+
+    #endregion
+
+    #region SelectDisplayTempBasals Tests
+
+    public class SelectDisplayTempBasalsTests
+    {
+        private const long Start = TestMills;
+        private const long End = TestMills + 6 * 60 * 60 * 1000;
+        private const long Minute = 60 * 1000;
+
+        private static TempBasal Basal(long startMills, long? endMills) =>
+            new()
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime,
+                EndTimestamp = endMills.HasValue
+                    ? DateTimeOffset.FromUnixTimeMilliseconds(endMills.Value).UtcDateTime
+                    : null,
+                Rate = 1.0,
+                Origin = TempBasalOrigin.Algorithm,
+            };
+
+        [Fact]
+        public void StartedBeforeWindowAndEndedInside_IsSelected()
+        {
+            var running = Basal(Start - 20 * Minute, Start + 10 * Minute);
+
+            ChartDataService.SelectDisplayTempBasals([running], Start, End).Should().Equal(running);
+        }
+
+        [Fact]
+        public void EndedBeforeWindow_IsNotSelected()
+        {
+            var ended = Basal(Start - 60 * Minute, Start - 10 * Minute);
+
+            ChartDataService.SelectDisplayTempBasals([ended], Start, End).Should().BeEmpty();
+        }
+
+        [Fact]
+        public void StartedAfterWindow_IsNotSelected()
+        {
+            var later = Basal(End + Minute, End + 30 * Minute);
+
+            ChartDataService.SelectDisplayTempBasals([later], Start, End).Should().BeEmpty();
+        }
+
+        [Fact]
+        public void OpenEndedBeforeWindowAndSupersededByLaterRow_IsNotSelected()
+        {
+            var stale = Basal(Start - 3 * 60 * Minute, null);
+            var later = Basal(Start + 30 * Minute, Start + 60 * Minute);
+
+            ChartDataService.SelectDisplayTempBasals([stale, later], Start, End).Should().Equal(later);
+        }
+
+        [Fact]
+        public void DurationZeroCancelBeforeWindow_IsNotSelected()
+        {
+            var cancel = Basal(Start - 4 * 60 * Minute, null);
+            cancel.Rate = 0;
+
+            ChartDataService.SelectDisplayTempBasals([cancel], Start, End).Should().BeEmpty();
+        }
+
+        [Fact]
+        public void EndingExactlyAtWindowStart_IsNotSelected()
+        {
+            var touching = Basal(Start - 30 * Minute, Start);
+            var overlapping = Basal(Start - 30 * Minute, Start + Minute);
+
+            ChartDataService.SelectDisplayTempBasals([touching, overlapping], Start, End).Should().Equal(overlapping);
+        }
+
+        [Fact]
+        public void OpenEndedInsideWindow_IsSelected()
+        {
+            var open = Basal(Start + 30 * Minute, null);
+
+            ChartDataService.SelectDisplayTempBasals([open], Start, End).Should().Equal(open);
+        }
+    }
+
+    #endregion
+
+    #region GetBasalSeriesAsync Tests
+
+    public class GetBasalSeriesAsyncTests
+    {
+        private const long Start = TestMills;
+        private const long End = TestMills + 60 * 60 * 1000;
+        private const long Minute = 60 * 1000;
+
+        [Fact]
+        public async Task ReadsFromBufferAndDrawsRunningRowClippedToWindowStart()
+        {
+            var running = new TempBasal
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start - 20 * Minute).UtcDateTime,
+                EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start + 10 * Minute).UtcDateTime,
+                Rate = 0.4,
+                Origin = TempBasalOrigin.Algorithm,
+            };
+            var cancel = new TempBasal
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start - 120 * Minute).UtcDateTime,
+                Rate = 0,
+                Origin = TempBasalOrigin.Algorithm,
+            };
+            var repository = new Mock<ITempBasalRepository>();
+            DateTime? requestedFrom = null;
+            repository
+                .Setup(r => r.GetAsync(
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .Callback<DateTime?, DateTime?, string?, string?, int, int, bool, CancellationToken>(
+                    (from, _, _, _, _, _, _, _) => requestedFrom = from)
+                .ReturnsAsync([cancel, running]);
+            var settings = new Mock<ITherapySettingsResolver>();
+            settings.Setup(s => s.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+            var timelineResolver = new Mock<ITherapyTimelineResolver>();
+            timelineResolver
+                .Setup(t => t.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new TherapyTimeline([
+                    new TherapySegment(Start, End + 1,
+                        new TherapySnapshot(3.0, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour,
+                            null, null, 0, null, null, null))
+                ]));
+            var service = new ChartDataService(
+                [],
+                Mock.Of<IChartDataAssembler>(),
+                new BasalSeriesBuilder(settings.Object, NullLogger<BasalSeriesBuilder>.Instance),
+                repository.Object,
+                settings.Object,
+                Mock.Of<IBasalRateResolver>(),
+                timelineResolver.Object,
+                NullLogger<ChartDataService>.Instance);
+
+            var series = await service.GetBasalSeriesAsync(Start, End);
+
+            requestedFrom.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(Start - ChartDataService.BufferMs).UtcDateTime);
+            series.Should().ContainSingle();
+            series[0].Timestamp.Should().Be(Start);
+            series[0].Rate.Should().BeApproximately(0.4, 0.001);
+        }
     }
 
     #endregion
