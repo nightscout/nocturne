@@ -35,6 +35,22 @@ public class ProfileDecomposerTests
         });
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(null)]
+    public void MapToTherapySettings_CarriesTheDocumentsApnsEnvironmentToEveryStore(bool? isApnsProduction)
+    {
+        var profile = BuildProfile(stores: ["Default", "Weekday"]);
+        profile.IsAPNSProduction = isApnsProduction;
+
+        var rows = profile.Store
+            .Select(s => ProfileDecomposer.MapToTherapySettings(profile, s.Value, s.Key, "profile1:" + s.Key, false, null))
+            .ToList();
+
+        rows.Should().HaveCount(2).And.AllSatisfy(r => r.IsAPNSProduction.Should().Be(isApnsProduction));
+    }
+
     /// <summary>
     /// Only the therapy settings row may keep its stored correlation id; the four schedules are
     /// stamped from what it reads back, so preserving on them would let a fork survive.

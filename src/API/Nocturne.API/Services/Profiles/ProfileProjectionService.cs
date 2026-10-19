@@ -297,6 +297,7 @@ public class ProfileProjectionService : IProfileProjectionService
             Units = settings.Units ?? "mg/dL",
             EnteredBy = settings.EnteredBy,
             LoopSettings = settings.LoopSettings,
+            IsAPNSProduction = settings.IsAPNSProduction,
             IsExternallyManaged = settings.IsExternallyManaged,
             Store = new Dictionary<string, ProfileData>
             {

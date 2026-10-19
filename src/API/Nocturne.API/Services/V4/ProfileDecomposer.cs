@@ -240,6 +240,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             DelayMedium = profileData.DelayMedium,
             DelayLow = profileData.DelayLow,
             LoopSettings = profile.LoopSettings,
+            IsAPNSProduction = profile.IsAPNSProduction,
             IsDefault = isDefault,
             EnteredBy = profile.EnteredBy,
             IsExternallyManaged = profile.IsExternallyManaged,

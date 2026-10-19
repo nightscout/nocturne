@@ -29,6 +29,26 @@ public class ProfileProjectionServiceTests
 
     #region GetCurrentProfileAsync
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(null)]
+    public async Task GetCurrentProfileAsync_ReturnsTheStoredApnsEnvironmentAndNothingWhenAbsent(bool? stored)
+    {
+        var correlationId = Guid.NewGuid();
+        var settings = CreateTherapySettings(correlationId: correlationId);
+        settings.IsAPNSProduction = stored;
+
+        SetupGetLatest(settings);
+        SetupCorrelationLookups(correlationId);
+
+        var result = await _sut.GetCurrentProfileAsync();
+
+        result!.IsAPNSProduction.Should().Be(stored);
+        System.Text.Json.JsonSerializer.Serialize(result).Contains("isAPNSProduction")
+            .Should().Be(stored.HasValue, "an upload that never said stays without the field on a legacy read");
+    }
+
     [Fact]
     public async Task GetCurrentProfileAsync_NoSettings_ReturnsNull()
     {
