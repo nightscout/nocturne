@@ -18,7 +18,7 @@
   import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
   import type { ChartThresholdsDto } from "$lib/api/generated/nocturne-api-client";
   import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
-  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { tenantChartThresholds } from "$lib/stores/realtime-store.svelte";
 
   interface Props {
     /** Glucose entries for the day: { mills, mgdl } */
@@ -31,9 +31,9 @@
 
   let { entries, dayStartMills, thresholds: supplied }: Props = $props();
 
-  const realtimeStore = tryGetRealtimeStore();
+  const tenantThresholds = tenantChartThresholds();
   const thresholds = $derived(
-    resolveChartThresholds(supplied ?? realtimeStore?.chartThresholds)
+    supplied ? resolveChartThresholds(supplied) : tenantThresholds.current
   );
 
   const glucoseData = $derived(
