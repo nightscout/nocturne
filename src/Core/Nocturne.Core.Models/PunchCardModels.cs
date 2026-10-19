@@ -50,6 +50,18 @@ public class PunchCardMonthSummary
     public double LowPercent { get; set; }
     public double HighPercent { get; set; }
     public double AvgGlucose { get; set; }
+
+    /// <summary>
+    /// Total daily dose in units: the month's insulin over the calendar days the requested range
+    /// covers in it up to and including the tenant's today, whether or not the sensor read on those
+    /// days. Null when no insulin was recorded. Absent with the whole summary for a month with no readings.
+    /// </summary>
+    public double? Tdd { get; set; }
+
+    /// <summary>
+    /// Carbs per calendar day over the same days as <see cref="Tdd"/>. Null when no carbs were recorded.
+    /// </summary>
+    public double? AvgDailyCarbs { get; set; }
 }
 
 /// <summary>One month bucket within a punch-card response — days plus per-month maxes for chart scaling.</summary>
