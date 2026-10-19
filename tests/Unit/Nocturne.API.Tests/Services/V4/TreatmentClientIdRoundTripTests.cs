@@ -112,7 +112,6 @@ public class TreatmentClientIdRoundTripTests : IDisposable
             NullLogger<TreatmentDecomposer>.Instance);
 
         var projection = new V4ToLegacyProjectionService(
-            Mock.Of<ISensorGlucoseRepository>(),
             bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo,
             tempBasalRepo.Object, bolusCalcRepo,
             foods.Object,
