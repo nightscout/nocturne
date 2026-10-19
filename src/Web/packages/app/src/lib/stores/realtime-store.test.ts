@@ -81,6 +81,7 @@ type TestStore = StoreInternals &
     | "boluses"
     | "currentEntry"
     | "bgDelta"
+    | "previousBG"
     | "direction"
     | "syncProgressByConnector"
     | "trackerInstances"
@@ -540,6 +541,50 @@ describe("RealtimeStore current reading", () => {
       store.destroy();
     }
   );
+});
+
+describe("RealtimeStore delta", () => {
+  it("is null for a lone reading that carries no delta", () => {
+    const store = makeStore();
+    store.entries = [{ _id: "only", type: "sgv", sgv: 142, mills: 1_000 }];
+
+    expect(store.previousBG).toBeNull();
+    expect(store.bgDelta).toBeNull();
+
+    store.destroy();
+  });
+
+  it("is the delta the lone reading carries", () => {
+    const store = makeStore();
+    store.entries = [
+      { _id: "only", type: "sgv", sgv: 142, mills: 1_000, delta: 6 },
+    ];
+
+    expect(store.bgDelta).toBe(6);
+
+    store.destroy();
+  });
+
+  it("is the gap to the previous reading when none is carried", () => {
+    const store = makeStore();
+    store.entries = [
+      { _id: "older", type: "sgv", sgv: 142, mills: 1_000 },
+      { _id: "newer", type: "sgv", sgv: 130, mills: 2_000 },
+    ];
+
+    expect(store.bgDelta).toBe(-12);
+
+    store.destroy();
+  });
+
+  it("is null with no readings", () => {
+    const store = makeStore();
+    store.entries = [];
+
+    expect(store.bgDelta).toBeNull();
+
+    store.destroy();
+  });
 });
 
 describe("RealtimeStore entry create batching", () => {
