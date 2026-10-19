@@ -291,4 +291,35 @@ describe("Google Health source presentation", () => {
         .not.toBeInTheDocument();
     }
   );
+
+  it("shows a disabled connector's lifetime count from the API, never a made-up zero", async () => {
+    render(ServerConnectorsCard, {
+      googleHealth: null,
+      googleHealthLoading: false,
+      googleHealthFailed: false,
+      availableConnectors: [{ id: "dexcom", name: "Dexcom" }],
+      connectorStatuses: [
+        {
+          id: "dexcom",
+          isEnabled: false,
+          hasDatabaseConfig: true,
+          isHealthy: false,
+          state: "Disabled",
+          totalEntries: 4200,
+        },
+      ],
+      connectorCapabilitiesById: {},
+      syncProgressByConnector: {},
+      activeDataSources: [],
+      isLoadingConnectorStatuses: false,
+      isManualSyncing: false,
+      quickSyncingById: {},
+      onRefreshStatuses: vi.fn(),
+      onManualSync: vi.fn(),
+      onQuickSync: vi.fn(),
+      onConnectorClick: vi.fn(),
+    });
+    const dexcom = page.getByRole("button", { name: /Dexcom/ });
+    await expect.element(dexcom).toHaveTextContent("4,200 records in total");
+  });
 });
