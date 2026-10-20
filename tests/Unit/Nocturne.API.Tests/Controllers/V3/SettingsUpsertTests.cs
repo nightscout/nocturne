@@ -164,6 +164,18 @@ public class SettingsUpsertTests : IDisposable
         read.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
     }
 
+    [Fact]
+    public async Task A_search_dates_its_answer_by_the_newest_srvModified()
+    {
+        await _controller.UpdateSettings("aaps", Json(AapsDocument("{}")));
+        var srvModified = (await Read("aaps")).GetProperty("srvModified").GetInt64();
+
+        await _controller.GetSettings();
+
+        _controller.Response.Headers.LastModified.ToString()
+            .Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(srvModified).UtcDateTime.ToString("R"));
+    }
+
     /// <summary>The document a v3 READ answers, from its <c>{status, result}</c> envelope.</summary>
     private async Task<JsonElement> Read(string identifier)
     {

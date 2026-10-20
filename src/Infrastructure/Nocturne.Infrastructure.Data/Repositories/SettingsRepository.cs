@@ -186,8 +186,14 @@ public class SettingsRepository : ISettingsRepository
         }
         catch (DbUpdateException ex) when (ex.IsUniqueViolation())
         {
-            // A concurrent PUT inserted this key first; ours replaces what it stored.
+            // A concurrent PUT inserted this key first; ours replaces what it stored. The failed
+            // save also left its audit row for the insert tracked, which must not be saved either.
             _context.Entry(entity).State = EntityState.Detached;
+            foreach (var audit in _context.ChangeTracker.Entries<MutationAuditLogEntity>()
+                         .Where(e => e.State == EntityState.Added).ToList())
+            {
+                audit.State = EntityState.Detached;
+            }
             if (await ReplaceAsync(id, settings, cancellationToken))
             {
                 return false;

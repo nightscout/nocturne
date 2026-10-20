@@ -774,12 +774,14 @@ public abstract class BaseV3Controller<T> : ControllerBase
                     itemModified = DateTimeOffset.FromUnixTimeMilliseconds(mills);
                 }
 
-                // Check for SrvModified property
-                var srvModifiedProperty = itemType.GetProperty("SrvModified");
-                if (
-                    srvModifiedProperty != null
-                    && srvModifiedProperty.GetValue(item) is DateTimeOffset srvModified
-                )
+                // Check for SrvModified property (DateTimeOffset or Unix milliseconds)
+                var srvModified = itemType.GetProperty("SrvModified")?.GetValue(item) switch
+                {
+                    DateTimeOffset dto => dto,
+                    long srvMills => DateTimeOffset.FromUnixTimeMilliseconds(srvMills),
+                    _ => (DateTimeOffset?)null,
+                };
+                if (srvModified != null)
                 {
                     itemModified = srvModified;
                 }
