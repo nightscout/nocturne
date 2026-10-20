@@ -102,6 +102,11 @@ public class GlookoBolus
     [JsonPropertyName("deliveredUnits")] public double DeliveredUnits { get; set; }
 
     [JsonPropertyName("programmedUnits")] public double ProgrammedUnits { get; set; }
+
+    /// <summary>Real-UTC upload time, present on SSV2 pages.</summary>
+    [JsonPropertyName("syncTimestamp")] public string? SyncTimestamp { get; set; }
+
+    [JsonPropertyName("softDeleted")] public bool SoftDeleted { get; set; }
 }
 
 public class GlookoCgmReading
