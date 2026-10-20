@@ -267,7 +267,7 @@
             <GuestBanner expiresAt={data.guestExpiresAt} />
           {/if}
           {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
-            <BackupSignInPrompt />
+            <BackupSignInPrompt show={data.showBackupSignInPrompt} />
           {/if}
       </div>
       {#if data.user && !data.isGuestSession}

@@ -56,6 +56,7 @@ const pageData: HarnessProps["data"] = {
   isAuthenticated: true,
   isShareHost: false,
   canViewRealtimeData: false,
+  showBackupSignInPrompt: false,
   isDemo: false,
   isGuestSession: false,
   isPlatformAdmin: false,
