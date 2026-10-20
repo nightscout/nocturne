@@ -527,6 +527,7 @@ jobs:
           working-directory: src/Web/packages/app
       - name: App unit tests
         run: |
+          node tools/ensure-check-deps.mjs
           pnpm exec svelte-kit sync
           pnpm exec vitest --config vitest.config.ts --run --coverage
       - name: App browser component tests

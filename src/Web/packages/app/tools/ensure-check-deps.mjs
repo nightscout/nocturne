@@ -1,6 +1,7 @@
-// svelte-check needs what the app imports but does not build: vite.config.ts
-// (loaded for style preprocessing) imports @nocturne/bridge, server code imports
-// @nocturne/bot's types, and most components import the generated API client.
+// svelte-check and the node unit suite need what the app imports but does not
+// build: vite.config.ts (loaded for style preprocessing) and the realtime ticket
+// route import @nocturne/bridge, server code imports @nocturne/bot's types, and
+// most components import the generated API client.
 /* eslint-disable security/detect-non-literal-fs-filename -- every path is fixed relative to this file */
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
