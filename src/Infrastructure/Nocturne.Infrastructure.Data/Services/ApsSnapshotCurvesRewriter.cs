@@ -70,6 +70,8 @@ public static class ApsSnapshotCurvesRewriter
             FROM page
             WHERE a.id = page.id
               AND a.loop_json IS NOT NULL
+              AND (a.suggested_json IS NOT NULL OR a.enacted_json IS NOT NULL
+                   OR a.loop_json #> '{predicted,values}' IS NOT NULL)
               AND (a.suggested_json IS DISTINCT FROM {{LoopSuggested}}
                    OR a.enacted_json IS DISTINCT FROM {{LoopEnacted}}
                    OR a.loop_json IS DISTINCT FROM {{LoopLoop}})
@@ -86,12 +88,14 @@ public static class ApsSnapshotCurvesRewriter
     /// <param name="tenantId">The tenant whose snapshots to rewrite.</param>
     /// <param name="pageSize">Rows read per page.</param>
     /// <param name="pauseAfterWrite">The pause after a page that wrote, which leaves the database to live traffic.</param>
+    /// <param name="pauseAfterRead">The pause after a page that wrote nothing, so a rewritten table's read is throttled too.</param>
     /// <param name="ct">Cancellation token.</param>
     public static async Task<int> RewriteTenantAsync(
         NocturneDbContext db,
         Guid tenantId,
         int pageSize,
         TimeSpan pauseAfterWrite,
+        TimeSpan pauseAfterRead,
         CancellationToken ct)
     {
         var afterAt = DateTime.UnixEpoch;
@@ -110,10 +114,7 @@ public static class ApsSnapshotCurvesRewriter
 
             (afterAt, afterId) = (read.LastAt, read.LastId);
             changed += read.Changed;
-            if (read.Changed > 0)
-            {
-                await Task.Delay(pauseAfterWrite, ct);
-            }
+            await Task.Delay(read.Changed > 0 ? pauseAfterWrite : pauseAfterRead, ct);
         }
     }
 

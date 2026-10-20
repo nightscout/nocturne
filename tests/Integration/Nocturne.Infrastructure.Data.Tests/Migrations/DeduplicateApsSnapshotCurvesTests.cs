@@ -90,7 +90,8 @@ public class DeduplicateApsSnapshotCurvesFixture : IAsyncLifetime
     private async Task<int> RewriteAsync(Guid pinnedTo, Guid tenant, int pageSize)
     {
         await using var db = new NocturneDbContext(Options()) { TenantId = pinnedTo };
-        return await ApsSnapshotCurvesRewriter.RewriteTenantAsync(db, tenant, pageSize, TimeSpan.Zero, CancellationToken.None);
+        return await ApsSnapshotCurvesRewriter.RewriteTenantAsync(
+            db, tenant, pageSize, TimeSpan.Zero, TimeSpan.Zero, CancellationToken.None);
     }
 
     private async Task ReadAsync(Dictionary<Guid, Row> rows)
