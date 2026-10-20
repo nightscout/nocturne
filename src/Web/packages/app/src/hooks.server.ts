@@ -10,6 +10,7 @@ import {
   getApiBaseUrl,
   createServerApiClient,
 } from "$lib/server/api-client-factory";
+import { isApiOutage } from "$lib/server/api-outage";
 import { authenticateGuestSession } from "$lib/server/guest-session-auth";
 import { sequence } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
@@ -131,6 +132,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
   } catch (error) {
     // Log but don't fail the request - user will be treated as unauthenticated
     console.error("Failed to validate session:", error);
+    if (isApiOutage(error)) event.locals.sessionUnreadable = true;
   }
 
   return resolve(event);

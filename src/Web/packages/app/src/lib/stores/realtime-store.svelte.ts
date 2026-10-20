@@ -71,6 +71,10 @@ import {
 import { isEntryDocument } from "$lib/websocket/payloads";
 import { isRecord } from "$lib/utils/type-guards";
 import { toIsoString } from "$lib/utils/api-date";
+import {
+  resolveChartThresholds,
+  type ChartThresholds,
+} from "$lib/constants/glucose-thresholds";
 
 /** The tracker levels loud enough for the notifications list; Info stays on the pill. */
 const TRACKER_NOTIFICATION_LEVELS: Partial<Record<NotificationUrgency, "warn" | "hazard" | "urgent">> = {
@@ -365,7 +369,7 @@ export class RealtimeStore {
       );
   });
 
-  constructor(config: WebSocketConfig) {
+  constructor(private readonly config: WebSocketConfig) {
     this.websocketClient = new WebSocketClient(config);
     this.setupEventHandlers();
   }
@@ -987,6 +991,9 @@ export class RealtimeStore {
       }
     }
     this.websocketClient.destroy();
+    this.websocketClient = new WebSocketClient(this.config);
+    this.setupEventHandlers();
+    this._initStarted = false;
 
     if (this.entryCreateFlushTimeout !== null) {
       clearTimeout(this.entryCreateFlushTimeout);
@@ -1269,6 +1276,20 @@ export function tryGetRealtimeStore(): RealtimeStore | null {
 }
 
 /**
+ * The tenant's chart thresholds with the shared fallbacks laid over whatever the
+ * realtime store has not loaded. Call during component initialisation, like
+ * {@link tryGetRealtimeStore}; `current` is reactive.
+ */
+export function tenantChartThresholds(): { readonly current: ChartThresholds } {
+  const store = tryGetRealtimeStore();
+  return {
+    get current() {
+      return resolveChartThresholds(store?.chartThresholds);
+    },
+  };
+}
+
+/**
  * The minimal live-glucose surface a clock face renders. Satisfied by the
  * lightweight polling `PublicClockStore` (anonymous public clock links) and by
  * {@link clockGlucoseSourceOf} over the full {@link RealtimeStore}
@@ -1285,6 +1306,8 @@ export interface ClockGlucoseSource {
   /** Null when there is no reading, so age and staleness have nothing to measure. */
   readonly lastUpdated: number | null;
   readonly demoMode: boolean;
+  /** The shared fallbacks when the source has no tenant thresholds, as the public clock has none. */
+  readonly thresholds: ChartThresholds;
 }
 
 /**
@@ -1310,7 +1333,7 @@ export function glucoseDelta(
 export function clockGlucoseSourceOf(
   store: Pick<
     RealtimeStore,
-    "currentEntry" | "previousEntry" | "direction" | "demoMode"
+    "currentEntry" | "previousEntry" | "direction" | "demoMode" | "chartThresholds"
   >
 ): ClockGlucoseSource {
   const mgdlOf = (entry: Entry | null) => entry?.sgv ?? entry?.mgdl ?? null;
@@ -1333,6 +1356,9 @@ export function clockGlucoseSourceOf(
     },
     get demoMode() {
       return store.demoMode;
+    },
+    get thresholds() {
+      return resolveChartThresholds(store.chartThresholds);
     },
   };
 }

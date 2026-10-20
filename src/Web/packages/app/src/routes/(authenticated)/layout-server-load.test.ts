@@ -10,6 +10,7 @@ vi.mock("$app/environment", () => ({
 }));
 import { isRedirect, type Cookies } from "@sveltejs/kit";
 import { classifyHost, isTenantlessHost } from "$lib/server/tenantless-host";
+import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
 import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 import { load } from "./+layout.server";
 import { load as universalLoad } from "./+layout";
@@ -53,6 +54,9 @@ interface Situation {
 /** URL properties the server load read outside `untrack`, which SvelteKit would re-run it on. */
 let trackedUrlReads: string[] = [];
 
+/** The invalidation keys the server load registered. */
+let declaredDependencies: string[] = [];
+
 function trackingUrl(href: string): { url: URL; untrack: <T>(fn: () => T) => T } {
   trackedUrlReads = [];
   let untracked = false;
@@ -76,6 +80,7 @@ function trackingUrl(href: string): { url: URL; untrack: <T>(fn: () => T) => T }
 }
 
 async function runLoad(situation: Situation) {
+  declaredDependencies = [];
   const { kind } = classifyHost(situation.host, BASE, situation.dashboardSlugs ?? []);
   const tenantless = isTenantlessHost(kind, situation.apexResolvesTenant ?? false);
   const shareHost = kind === "share";
@@ -119,6 +124,7 @@ async function runLoad(situation: Situation) {
     cookies,
     url,
     untrack,
+    depends: (key: string) => declaredDependencies.push(key),
     parent: async () => ({ tenantless }),
   };
 
@@ -482,6 +488,27 @@ describe("(authenticated) layout load — client navigation", () => {
         parent: async () => ({ tenantless: false }),
       } as unknown as UniversalLoadEvent)
     ).resolves.toBe(data);
+  });
+});
+
+describe("(authenticated) layout load — revalidation", () => {
+  it("registers the shell key, so invalidating it re-runs the load without a navigation", async () => {
+    await loadedData({
+      host: `acme.${BASE}`,
+      status: { status: "ok", tenantSlug: "acme" },
+      authStatus: { onboardingCompleted: true },
+    });
+    expect(declaredDependencies).toEqual([SHELL_DATA_KEY]);
+  });
+
+  it("registers the shell key before it redirects a visitor whose session has gone", async () => {
+    await redirectLocation({
+      host: `acme.${BASE}`,
+      signedIn: false,
+      status: { status: "ok", tenantSlug: "acme" },
+      authStatus: { onboardingCompleted: true },
+    });
+    expect(declaredDependencies).toEqual([SHELL_DATA_KEY]);
   });
 });
 
