@@ -2,6 +2,7 @@ import { redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
 import { checkOnboarding } from "$lib/server/onboarding-check";
 import { getRequestStatus } from "$lib/server/request-status";
+import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
 import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 import { toIsoString } from "$lib/utils/api-date";
 import { autoLoginEndpoint, autoLoginRedirect } from "$lib/server/auto-login";
@@ -22,7 +23,9 @@ function hasGlucoseReadPermission(permissions: string[]): boolean {
   return permissions.some((p) => GLUCOSE_READ_PERMISSIONS.includes(p));
 }
 
-export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, parent }) => {
+export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, parent, depends }) => {
+  depends(SHELL_DATA_KEY);
+
   // Untracked, so SvelteKit reuses this load's data across client navigations instead of re-running
   // it whenever the path changes: the URL only shapes a cookie flag and the login return address.
   const { protocol, pathname, search, origin } = untrack(() => ({

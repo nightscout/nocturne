@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "name": "time-of-day-mis-cased-timezones",
+  "description": "a mis-cased ETC/GMT-2 resolves to UTC\u002B2, per rule and tenant, rather than failing closed or falling back to UTC",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "time_of_day",
+      "condition_params": {
+        "from": "14:00",
+        "to": "15:00",
+        "timezone": "ETC/GMT-2"
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "time_of_day",
+      "condition_params": {
+        "from": "14:00",
+        "to": "15:00",
+        "timezone": null
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "tenant_time_zone_id": "ETC/GMT-2",
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:01:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:01:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:01:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

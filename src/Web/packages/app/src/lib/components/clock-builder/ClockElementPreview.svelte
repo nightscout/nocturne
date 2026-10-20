@@ -35,7 +35,7 @@
   {@const size = elementSize(element) * 0.8}
   <div
     class="flex items-center"
-    style="color: {getElementColor(element, glucose.currentBG)}; opacity: {element
+    style="color: {getElementColor(element, glucose.currentBG, glucose.thresholds)}; opacity: {element
       .style?.opacity ?? 1.0};{customCss ? ` ${customCss}` : ''}"
   >
     <TrendArrow direction={glucose.direction} {size} />
@@ -48,7 +48,7 @@
     class="flex items-center gap-1 {getFontClass(
       element.style?.font
     )} {getFontWeightClass(element.style?.fontWeight)}"
-    style="color: {getElementColor(element, glucose.currentBG)}; opacity: {element
+    style="color: {getElementColor(element, glucose.currentBG, glucose.thresholds)}; opacity: {element
       .style?.opacity ?? 1.0}; font-size: {size * 0.8}px;{customCss
       ? ` ${customCss}`
       : ''}"
@@ -70,7 +70,7 @@
     class="leading-none tabular-nums {getFontClass(
       element.style?.font
     )} {getFontWeightClass(element.style?.fontWeight)}"
-    style={buildStyleString(element, glucose.currentBG, 0.8)}
+    style={buildStyleString(element, glucose.currentBG, 0.8, glucose.thresholds)}
   >
     {value}
   </span>
@@ -79,7 +79,7 @@
        inventing a value; an empty span could not be selected or removed. -->
   <span
     class="leading-none italic opacity-60"
-    style={buildStyleString(element, glucose.currentBG, 0.8)}
+    style={buildStyleString(element, glucose.currentBG, 0.8, glucose.thresholds)}
   >
     {elementInfo(element.type)?.name ?? element.type}
   </span>

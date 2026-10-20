@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { PermissionAtom } from "$api-clients";
-import { permissionGroups } from "./permission-categories";
+import { permissionGroups } from "./permission-categories.svelte";
 
 const knownAtoms = new Set<string>(Object.values(PermissionAtom));
 
 describe("permission categories", () => {
   it("offers only atoms the backend knows", () => {
-    const emitted = permissionGroups.flatMap((group) =>
+    const emitted = permissionGroups().flatMap((group) =>
       group.categories.flatMap((cat) => cat.levels.flatMap((level) => level.atoms)),
     );
 
