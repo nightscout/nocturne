@@ -1,10 +1,12 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Services.Demo.Configuration;
 using Nocturne.Services.Demo.Services;
 using Xunit;
 
@@ -40,56 +42,97 @@ public class DemoGenerationTests
     }
 
     [Fact]
-    public void CoverageSeeds_CreateOverlappingCgmReadingsAndACompressionArtifact()
+    public void CoverageSeeds_PinTheCompressionArtifactAndSilenceTheComparisonSensorThroughIt()
     {
-        var night = new DateTime(2026, 3, 18, 4, 0, 0, DateTimeKind.Local);
-        var values = new[] { 0, 5, 10, 15, 20 }
-            .Select(minutes =>
+        var night = new DateOnly(2026, 3, 17);
+        var from = new DateTime(2026, 3, 18, 3, 35, 0, DateTimeKind.Local);
+        var steps = Enumerable.Range(0, 13)
+            .Select(index =>
             {
-                var time = night.AddMinutes(minutes);
-                var entry = new Entry { Mills = new DateTimeOffset(time).ToUnixTimeMilliseconds(), Mgdl = 120, Sgv = 120 };
-                return DemoCoverageSeeds.ApplyCompressionArtifact(entry, time);
+                var time = from.AddMinutes(index * 5);
+                return new DemoTimeStep
+                {
+                    Time = time,
+                    Entry = new Entry
+                    {
+                        Mills = new DateTimeOffset(time).ToUnixTimeMilliseconds(),
+                        Date = time,
+                        Mgdl = 120,
+                        Sgv = 120,
+                    },
+                    Iob = 0,
+                    Cob = 0,
+                    EffectiveIsf = 50,
+                    EffectiveCarbRatio = 10,
+                    Scenario = DayScenario.Normal,
+                };
             })
             .ToList();
 
-        values.Select(entry => entry.Sgv).Should().Equal(110, 90, 58, 82, 108);
+        var readings = steps.SelectMany(step => DemoCoverageSeeds.CgmReadings(step)).ToList();
 
-        var comparison = DemoCoverageSeeds.CreateComparisonReading(new Entry
-        {
-            Mills = values[0].Mills,
-            Sgv = 120,
-            Mgdl = 120,
-        });
-        comparison.Device.Should().Be(DemoCoverageSeeds.ComparisonCgmSerial);
-        comparison.Mills.Should().Be(values[0].Mills + 120_000);
+        DemoCoverageSeeds.IsCompressionNight(night).Should().BeTrue();
+        readings.Where(entry => entry.Device != DemoCoverageSeeds.ComparisonCgmSerial)
+            .Select(entry => entry.Sgv)
+            .Should().Equal(120, 110, 110, 110, 110, 110, 90, 58, 82, 108, 120, 120, 120);
+        var comparison = readings.Should().ContainSingle(
+            entry => entry.Device == DemoCoverageSeeds.ComparisonCgmSerial).Subject;
+        comparison.Mills.Should().Be(new DateTimeOffset(from.AddMinutes(57)).ToUnixTimeMilliseconds());
         comparison.Sgv.Should().BeInRange(118, 122);
+
+        var nadir = DemoCoverageSeeds.CompressionNadirMills(night);
+        var detector = new CompressionLowDetectionService(
+            Mock.Of<IServiceProvider>(),
+            ActiveTenantSnapshotTestDoubles.Unread(),
+            NullLogger<CompressionLowDetectionService>.Instance);
+        detector.DetectVShapeCandidates(readings.OrderBy(entry => entry.Mills).ToList())
+            .Should().ContainSingle(candidate => candidate.LowestGlucose == DemoCoverageSeeds.CompressionNadirMgdl
+                && candidate.RecoveryMinutes == 10
+                && candidate.StartMills <= nadir
+                && candidate.EndMills >= nadir);
     }
 
-    [Fact]
-    public void CoverageSeeds_CompressionArtifactIsRecognisedByTheDetector()
+    [Theory]
+    [InlineData(9)]
+    [InlineData(31)]
+    [InlineData(47)]
+    [InlineData(50)]
+    [InlineData(69)]
+    public void CoverageSeeds_CompressionArtifactIsFoundWhateverTheOvernightTrace(int seed)
     {
-        var start = new DateTime(2026, 3, 18, 3, 55, 0, DateTimeKind.Utc);
-        var entries = new[] { 0, 5, 10, 15, 20, 25, 30 }
-            .Select(minutes =>
-            {
-                var time = start.AddMinutes(minutes);
-                var entry = new Entry
-                {
-                    Mills = new DateTimeOffset(time).ToUnixTimeMilliseconds(),
-                    Date = time,
-                    Mgdl = 110,
-                    Sgv = 110,
-                };
-                return DemoCoverageSeeds.ApplyCompressionArtifact(entry, time);
-            })
+        var end = new DateTime(2026, 10, 20, 4, 4, 0);
+        var generator = new DemoDataGenerator(
+            Options.Create(new DemoModeConfiguration { BackfillDays = 14, RandomSeed = seed }),
+            NullLogger<DemoDataGenerator>.Instance,
+            NullLoggerFactory.Instance);
+        var readings = generator.GenerateHistoricalTimeline(end)
+            .SelectMany(step => DemoCoverageSeeds.CgmReadings(step))
+            .OrderBy(entry => entry.Mills)
             .ToList();
         var detector = new CompressionLowDetectionService(
             Mock.Of<IServiceProvider>(),
             ActiveTenantSnapshotTestDoubles.Unread(),
             NullLogger<CompressionLowDetectionService>.Instance);
+        var nights = Enumerable.Range(1, 10)
+            .Select(daysAgo => DateOnly.FromDateTime(end).AddDays(-daysAgo))
+            .Where(DemoCoverageSeeds.IsCompressionNight)
+            .ToList();
 
-        detector.DetectVShapeCandidates(entries).Should().ContainSingle(candidate =>
-            candidate.LowestGlucose == 58 && candidate.RecoveryMinutes == 10);
+        nights.Should().HaveCount(4);
+        foreach (var night in nights)
+        {
+            var (windowStart, windowEnd) = TimeZoneHelper.GetOvernightWindow(night, TimeZoneInfo.Local);
+            var nadir = DemoCoverageSeeds.CompressionNadirMills(night);
+            var overnight = readings
+                .Where(entry => entry.Mills >= windowStart && entry.Mills <= windowEnd)
+                .ToList();
+
+            detector.DetectVShapeCandidates(overnight).Should().Contain(
+                candidate => candidate.StartMills <= nadir
+                    && candidate.EndMills >= nadir
+                    && candidate.LowestGlucose <= DemoCoverageSeeds.CompressionNadirMgdl,
+                $"the night of {night} carries the planted compression low");
+        }
     }
 
     [Fact]
