@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -158,6 +159,57 @@ public class SettingsRepository : ISettingsRepository
         await _context.SaveChangesAsync(cancellationToken);
 
         return resultEntities.Select(SettingsMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> PutSettingsAsync(
+        string id,
+        Settings settings,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (await ReplaceAsync(id, settings, cancellationToken))
+        {
+            return false;
+        }
+
+        settings.Id = null;
+        settings.Key = id;
+        settings.SrvCreated = settings.SrvModified;
+        var entity = SettingsMapper.ToEntity(settings);
+        _context.Settings.Add(entity);
+
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateException ex) when (ex.IsUniqueViolation())
+        {
+            // A concurrent PUT inserted this key first; ours replaces what it stored.
+            _context.Entry(entity).State = EntityState.Detached;
+            if (await ReplaceAsync(id, settings, cancellationToken))
+            {
+                return false;
+            }
+
+            throw;
+        }
+    }
+
+    private async Task<bool> ReplaceAsync(string id, Settings settings, CancellationToken cancellationToken)
+    {
+        var entity = await FindByIdAsync(_context.Settings, id, cancellationToken);
+        if (entity == null)
+        {
+            return false;
+        }
+
+        settings.Key = entity.Key;
+        settings.SrvCreated = entity.SrvCreated?.ToUnixTimeMilliseconds() ?? settings.SrvModified;
+        SettingsMapper.UpdateEntity(entity, settings);
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     /// <summary>

@@ -121,7 +121,7 @@ public class SettingsController : BaseV3Controller<Settings>
     /// <returns>Single settings record in V3 format</returns>
     [HttpGet("{id}")]
     [NightscoutEndpoint("/api/v3/settings/{id}")]
-    [ProducesResponseType(typeof(Settings), 200)]
+    [ProducesResponseType(typeof(V3Envelope<Settings>), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 403)]
     [ProducesResponseType(500)]
@@ -152,12 +152,12 @@ public class SettingsController : BaseV3Controller<Settings>
         }
 
         var parameters = ParseV3QueryParameters(); // Apply field selection if specified
-        var result = ApplyFieldSelection(new[] { settings }, parameters.Fields)
-            .FirstOrDefault();
+        var result = ApplyFieldSelection(new[] { settings }, parameters.Fields).First();
 
         _logger.LogDebug("Successfully returned settings with ID {Id}", id);
 
-        return Ok(result);
+        // Upstream's v3 READ answers {status, result}; AAPS reads the document from result.
+        return CreateV3SuccessResponse(result);
     }
 
     /// <summary>
@@ -284,23 +284,12 @@ public class SettingsController : BaseV3Controller<Settings>
             );
         }
 
-        settings.SrvModified = DateTimeOffset.UtcNow;
-        var stored = await _settings.GetSettingsByIdAsync(id, cancellationToken);
-
-        if (stored != null)
+        settings.SrvModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        if (!await _settings.PutSettingsAsync(id, settings, cancellationToken))
         {
-            settings.Id = stored.Id;
-            settings.Key = stored.Key;
-            settings.SrvCreated = stored.SrvCreated ?? settings.SrvModified;
-            await _settings.UpdateSettingsAsync(id, settings, cancellationToken);
-
             _logger.LogDebug("Replaced settings with ID {Id}", id);
             return V3Replaced();
         }
-
-        settings.Key = id;
-        settings.SrvCreated = settings.SrvModified;
-        await _settings.CreateSettingsAsync([settings], cancellationToken);
 
         _logger.LogDebug("Inserted settings with ID {Id}", id);
         return V3Inserted(nameof(GetSettingsById), id);
@@ -312,14 +301,14 @@ public class SettingsController : BaseV3Controller<Settings>
     /// </summary>
     private static JsonElement WithoutServerFields(JsonElement document)
     {
-        if (JsonNode.Parse(document.GetRawText()) is not JsonObject fields)
+        var fields = new JsonObject();
+        foreach (var field in document.EnumerateObject())
         {
-            return document;
-        }
-
-        foreach (var field in ServerFields)
-        {
-            fields.Remove(field);
+            // Case-insensitive, as the body binds: "_ID" would otherwise reach Settings.Id.
+            if (!ServerFields.Contains(field.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                fields[field.Name] = JsonNode.Parse(field.Value.GetRawText());
+            }
         }
 
         return JsonSerializer.SerializeToElement(fields);
@@ -402,7 +391,7 @@ public class SettingsController : BaseV3Controller<Settings>
         // Unlike other collections, settings collection in legacy API doesn't use fallbackGetDate
 
         // Set server timestamps if not present
-        var now = DateTimeOffset.UtcNow;
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         if (!settings.SrvModified.HasValue)
         {

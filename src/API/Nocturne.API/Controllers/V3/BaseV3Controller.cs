@@ -479,7 +479,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <c>lastModified</c>, <c>Location</c> pointing at <paramref name="getAction"/>, and
     /// <c>Last-Modified</c>.
     /// </summary>
-    protected ActionResult V3Inserted(string getAction, string identifier)
+    protected ActionResult V3Inserted(string getAction, string? identifier)
     {
         var lastModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
@@ -510,6 +510,12 @@ public abstract class BaseV3Controller<T> : ControllerBase
     protected ActionResult? ValidateV3CommonFields(JsonElement jsonData)
     {
         const long MinTimestamp = 946684800000; // Year 2000 in milliseconds
+
+        // A document is an object; any other body has no fields to read, and upstream refuses it.
+        if (jsonData.ValueKind != JsonValueKind.Object)
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing request body");
+        }
 
         // Check for 'date' field - Nightscout requires this for all V3 operations
         if (!jsonData.TryGetProperty("date", out var dateProperty))

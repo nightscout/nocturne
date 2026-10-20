@@ -55,15 +55,15 @@ public class Settings : ProcessableDocumentBase
     /// Server timestamp when the setting was created (Unix timestamp in milliseconds)
     /// </summary>
     [JsonPropertyName("srvCreated")]
-    [JsonConverter(typeof(UnixMillisecondsConverter))]
-    public DateTimeOffset? SrvCreated { get; set; }
+    [JsonConverter(typeof(FlexibleNullableLongConverter))]
+    public long? SrvCreated { get; set; }
 
     /// <summary>
     /// Server timestamp when the setting was last modified (Unix timestamp in milliseconds)
     /// </summary>
     [JsonPropertyName("srvModified")]
-    [JsonConverter(typeof(UnixMillisecondsConverter))]
-    public DateTimeOffset? SrvModified { get; set; }
+    [JsonConverter(typeof(FlexibleNullableLongConverter))]
+    public long? SrvModified { get; set; }
 
     /// <summary>
     /// Optional app field indicating which application created/modified this setting
