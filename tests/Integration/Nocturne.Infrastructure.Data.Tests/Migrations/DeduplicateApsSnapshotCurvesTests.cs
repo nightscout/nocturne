@@ -3,14 +3,17 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Infrastructure.Data.Services;
 using Npgsql;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 
 /// <summary>
-/// Runs <c>DeduplicateApsSnapshotCurves</c> over rows stored the way the decomposer wrote them
-/// before it, in two tenants, then down and up again, on a real PostgreSQL.
+/// Migrates over rows stored the way the decomposer wrote them before
+/// <c>DeduplicateApsSnapshotCurves</c>, in two tenants, then runs
+/// <see cref="ApsSnapshotCurvesRewriter"/> as the background backfill does, then down and up and
+/// rewrites again, on a real PostgreSQL.
 /// </summary>
 public class DeduplicateApsSnapshotCurvesFixture : IAsyncLifetime
 {
@@ -34,7 +37,11 @@ public class DeduplicateApsSnapshotCurvesFixture : IAsyncLifetime
     /// <summary>A Loop status, with its recommended, enacted and predicted values copied out.</summary>
     internal static readonly Guid Loop = Guid.Parse("c0000000-0000-7000-8000-000000000004");
 
+    internal Dictionary<Guid, Row> Seeded { get; } = [];
+    internal Dictionary<Guid, Row> AfterMigrate { get; } = [];
     internal Dictionary<Guid, Row> AfterUp { get; } = [];
+    internal int FirstRewriteChanged { get; private set; }
+    internal int RerunChanged { get; private set; }
     internal Dictionary<Guid, Row> AfterDown { get; } = [];
     internal Dictionary<Guid, Row> AfterSecondUp { get; } = [];
 
@@ -47,25 +54,48 @@ public class DeduplicateApsSnapshotCurvesFixture : IAsyncLifetime
 
         await MigrateToAsync(PriorMigration);
         await SeedAsync();
+        await ReadAsync(Seeded);
         await MigrateToAsync(targetMigration: null);
+        await ReadAsync(AfterMigrate);
+        FirstRewriteChanged = await RewriteAsync();
         await ReadAsync(AfterUp);
+        RerunChanged = await RewriteAsync();
         await MigrateToAsync(PriorMigration);
         await ReadAsync(AfterDown);
         await MigrateToAsync(targetMigration: null);
+        await RewriteAsync();
         await ReadAsync(AfterSecondUp);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    private async Task MigrateToAsync(string? targetMigration)
-    {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+    private DbContextOptions<NocturneDbContext> Options() =>
+        new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(_migratorConnectionString, npgsql => npgsql.UseNocturneMigrations())
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options;
 
-        await using var context = new NocturneDbContext(options);
+    private async Task MigrateToAsync(string? targetMigration)
+    {
+        await using var context = new NocturneDbContext(Options());
         await context.GetService<IMigrator>().MigrateAsync(targetMigration);
+    }
+
+    /// <summary>Each tenant's candidates, one batch of one row at a time, as the backfill runs them.</summary>
+    private async Task<int> RewriteAsync()
+    {
+        var changed = 0;
+        foreach (var tenant in new[] { TenantA, TenantB })
+        {
+            await using var db = new NocturneDbContext(Options()) { TenantId = tenant };
+            var candidates = await ApsSnapshotCurvesRewriter.ListCandidatesAsync(db, tenant, CancellationToken.None);
+            foreach (var batch in candidates.Chunk(1))
+            {
+                changed += await ApsSnapshotCurvesRewriter.RewriteAsync(db, batch, CancellationToken.None);
+            }
+        }
+
+        return changed;
     }
 
     private async Task ReadAsync(Dictionary<Guid, Row> rows)
@@ -155,6 +185,19 @@ public class DeduplicateApsSnapshotCurvesTests(DeduplicateApsSnapshotCurvesFixtu
     : IClassFixture<DeduplicateApsSnapshotCurvesFixture>
 {
     private static IDictionary<string, JsonNode?> Json(string? text) => JsonNode.Parse(text!)!.AsObject();
+
+    [Fact]
+    public void The_migration_leaves_stored_rows_to_the_backfill()
+    {
+        fixture.AfterMigrate.Should().BeEquivalentTo(fixture.Seeded);
+    }
+
+    [Fact]
+    public void The_rewrite_changes_every_seeded_row_once_and_a_rerun_writes_nothing()
+    {
+        fixture.FirstRewriteChanged.Should().Be(4);
+        fixture.RerunChanged.Should().Be(0);
+    }
 
     [Fact]
     public void Curves_the_columns_hold_leave_both_commands_with_their_nulls()
