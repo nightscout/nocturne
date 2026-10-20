@@ -49,7 +49,7 @@
   const layout = $derived(
     computeTrackLayout(
       chartHeight,
-      engine.glucoseYMax,
+      engine.thresholds.glucoseYMax,
       engine.maxBasalRate,
       engine.maxIOB,
       {
@@ -125,7 +125,7 @@
     y="sgv"
     xScale={scaleTime()}
     xDomain={[chartXDomain.from, chartXDomain.to]}
-    yDomain={[0, engine.glucoseYMax]}
+    yDomain={[0, engine.thresholds.glucoseYMax]}
     {padding}
     tooltipContext={{ mode: "quadtree-x" }}
   >

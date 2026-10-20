@@ -11,8 +11,7 @@ import {
   elementInfo,
   type InternalElement,
 } from "./types";
-import { getGlucoseColor } from "$lib/utils/chart-colors";
-import { FALLBACK_GLUCOSE_THRESHOLDS } from "$lib/constants/glucose-thresholds";
+import { getGlucoseColor, type GlucoseThresholds } from "$lib/utils/chart-colors";
 
 export const DEFAULT_ELEMENT_COLOR = "#ffffff";
 
@@ -23,17 +22,6 @@ export const DEFAULT_ELEMENT_COLOR = "#ffffff";
 const NAMED_ELEMENT_COLORS = new Map([["muted", "var(--muted-foreground)"]]);
 
 const HEX_COLOR = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
-
-/**
- * Colour of the glucose band a reading falls in. The clock has no access to the
- * tenant's own cut-points, so it takes the app-wide fallbacks. The result is an
- * unresolved `var()`: every theme redefines the `--glucose-*` palette, and a
- * value resolved here would hold the colours of whichever theme was active when
- * the reading last changed.
- */
-export function getBgColor(bg: number): string {
-  return getGlucoseColor(bg, FALLBACK_GLUCOSE_THRESHOLDS);
-}
 
 /** Font size an element renders at before the caller's scale. */
 export function elementSize(element: ClockElement): number {
@@ -48,13 +36,14 @@ export function elementSize(element: ClockElement): number {
 export function clockBackgroundStyle(
   settings: ClockSettings | undefined,
   currentBG: number | null,
-  fallback: string
+  fallback: string,
+  thresholds: GlucoseThresholds
 ): string {
   if (settings?.backgroundImage) {
     return `background-image: url(${settings.backgroundImage}); background-size: cover; background-position: center;`;
   }
   if (settings?.bgColor && currentBG !== null) {
-    return `background-color: ${getBgColor(currentBG)};`;
+    return `background-color: ${getGlucoseColor(currentBG, thresholds)};`;
   }
   return `background-color: ${fallback};`;
 }
@@ -125,11 +114,12 @@ export function getFontWeightClass(weight: string | undefined): string {
  */
 export function getElementColor(
   element: ClockElement,
-  currentBG: number | null
+  currentBG: number | null,
+  thresholds: GlucoseThresholds
 ): string {
   const color = element.style?.color;
   if (color === "dynamic") {
-    return currentBG === null ? DEFAULT_ELEMENT_COLOR : getBgColor(currentBG);
+    return currentBG === null ? DEFAULT_ELEMENT_COLOR : getGlucoseColor(currentBG, thresholds);
   }
   if (!color) return DEFAULT_ELEMENT_COLOR;
   return (
@@ -156,13 +146,14 @@ export function buildCustomCssString(element: ClockElement): string {
 export function buildStyleString(
   element: ClockElement,
   currentBG: number | null,
-  scale: number
+  scale: number,
+  thresholds: GlucoseThresholds
 ): string {
   const style = element.style;
   const parts: string[] = [];
 
   parts.push(`font-size: ${elementSize(element) * scale}px`);
-  parts.push(`color: ${getElementColor(element, currentBG)}`);
+  parts.push(`color: ${getElementColor(element, currentBG, thresholds)}`);
   parts.push(`opacity: ${style?.opacity ?? 1.0}`);
 
   const customCss = buildCustomCssString(element);
