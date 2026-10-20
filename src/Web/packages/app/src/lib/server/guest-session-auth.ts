@@ -1,4 +1,5 @@
 import type { RequestEvent } from "@sveltejs/kit";
+import { isApiOutage } from "$lib/server/api-outage";
 import { createServerApiClient } from "$lib/server/api-client-factory";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
 import { getEffectiveHost, getOriginalProto } from "$lib/server/request-host";
@@ -44,5 +45,6 @@ export async function authenticateGuestSession(
     }
   } catch (error) {
     console.error("Failed to validate guest session:", error);
+    if (isApiOutage(error)) event.locals.sessionUnreadable = true;
   }
 }

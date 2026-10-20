@@ -365,7 +365,7 @@ export class RealtimeStore {
       );
   });
 
-  constructor(config: WebSocketConfig) {
+  constructor(private readonly config: WebSocketConfig) {
     this.websocketClient = new WebSocketClient(config);
     this.setupEventHandlers();
   }
@@ -987,6 +987,9 @@ export class RealtimeStore {
       }
     }
     this.websocketClient.destroy();
+    this.websocketClient = new WebSocketClient(this.config);
+    this.setupEventHandlers();
+    this._initStarted = false;
 
     if (this.entryCreateFlushTimeout !== null) {
       clearTimeout(this.entryCreateFlushTimeout);
