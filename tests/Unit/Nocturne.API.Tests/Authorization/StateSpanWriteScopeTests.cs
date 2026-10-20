@@ -33,6 +33,7 @@ public class StateSpanWriteScopeTests
     [InlineData(StateSpanCategory.Illness, Scope.TreatmentsReadWrite)]
     [InlineData(StateSpanCategory.Travel, Scope.TreatmentsReadWrite)]
     [InlineData(StateSpanCategory.TemporaryTarget, Scope.TreatmentsReadWrite)]
+    [InlineData(StateSpanCategory.Motion, Scope.TreatmentsReadWrite)]
     public void EveryCategory_MapsToItsDataCategoryScope(StateSpanCategory category, string expected)
     {
         StateSpanWriteScopeGuard.RequiredWriteScope(category).Should().Be(expected);

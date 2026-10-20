@@ -31,6 +31,7 @@ public class StateSpanRepository : IStateSpanRepository
         nameof(StateSpanCategory.TemporaryTarget),
         nameof(StateSpanCategory.Profile),
         nameof(StateSpanCategory.PumpMode),
+        nameof(StateSpanCategory.Motion),
     };
 
     /// <summary>
@@ -772,9 +773,11 @@ public class StateSpanRepository : IStateSpanRepository
         if (to is { } toValue)
             query = query.Where(s => s.StartTimestamp <= toValue);
 
-        // Filter by type/state if provided
-        if (!string.IsNullOrEmpty(type))
-            query = query.Where(s => s.State == type);
+        // A Motion span's state is its class; its v1 type is the category, as ToActivity maps it.
+        if (string.Equals(type, ActivityStateSpanMapper.MotionClassType, StringComparison.Ordinal))
+            query = query.Where(s => s.Category == nameof(StateSpanCategory.Motion));
+        else if (!string.IsNullOrEmpty(type))
+            query = query.Where(s => s.State == type && s.Category != nameof(StateSpanCategory.Motion));
 
         query = query.ExcludeNonPrimary(_context, RecordType.StateSpan);
 

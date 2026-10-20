@@ -1101,6 +1101,35 @@ public class StateSpanRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateActivitiesAsStateSpansAsync_XDripMotionClass_EachRecordEndsTheOneBeforeIt()
+    {
+        static StateSpan Motion(string motionClass, long at)
+        {
+            var activity = System.Text.Json.JsonSerializer.Deserialize<Activity>($$"""
+                {"type":"motion-class","timeStamp":{{at}},"created_at":"2026-05-28T20:26:40Z","class":"{{motionClass}}"}
+                """)!;
+            activity.Mills = at;
+            return Nocturne.Infrastructure.Data.Mappers.ActivityStateSpanMapper.ToStateSpan(activity);
+        }
+
+        var still = new DateTimeOffset(BatchDay.AddHours(8)).ToUnixTimeMilliseconds();
+        var walking = still + 600_000;
+        var inVehicle = walking + 600_000;
+
+        await _repository.CreateActivitiesAsStateSpansAsync([Motion("still", still)]);
+        await _repository.CreateActivitiesAsStateSpansAsync(
+            [Motion("walking", walking), Motion("in vehicle", inVehicle)]);
+
+        var rows = await _context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.State);
+        rows.Values.Should().OnlyContain(s => s.Category == nameof(StateSpanCategory.Motion));
+        rows["still"].EndTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(walking).UtcDateTime);
+        rows["still"].SupersededById.Should().Be(rows["walking"].Id);
+        rows["walking"].EndTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(inVehicle).UtcDateTime);
+        rows["walking"].SupersededById.Should().Be(rows["in vehicle"].Id);
+        rows["in vehicle"].EndTimestamp.Should().BeNull();
+    }
+
+    [Fact]
     public async Task BulkUpsertAsync_OutOfOrderBatch_EndsEachSpanAtTheNextStart()
     {
         await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 3, "pr-stored"));
