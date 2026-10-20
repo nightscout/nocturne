@@ -6,11 +6,11 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     /// <summary>
-    /// Was the rewrite of stored APS snapshots into the shape <c>ApsSnapshotCurves</c> in the API
-    /// writes and reads. That rewrite now runs in batches in the background
-    /// (<see cref="ApsSnapshotCurvesRewriter"/>): run here it held production's API down past the
-    /// one-hour migration timeout without finishing, and the API reads both shapes, so it need not
-    /// gate startup. Up is a no-op; Down still returns every row to the shape the code before it reads.
+    /// Marks the move to the stored shape <c>ApsSnapshotCurves</c> in the API writes and reads. Up
+    /// changes no rows: the API reads both shapes, and <see cref="ApsSnapshotCurvesRewriter"/>
+    /// rewrites stored rows a page at a time after startup, since one statement over a large table
+    /// can outlast the migration command timeout. Down returns every row to the shape the code
+    /// before it reads, in one pass per tenant.
     /// </summary>
     public partial class DeduplicateApsSnapshotCurves : Migration
     {
