@@ -51,7 +51,7 @@ public class DiscrepancyController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Compatibility metrics including success rate and response times</returns>
     [HttpGet("metrics")]
-    [RequireAdmin]
+    [RequireSuperuser]
     public async Task<ActionResult<CompatibilityMetrics>> GetCompatibilityMetrics(
         [FromQuery] DateTimeOffset? fromDate = null,
         [FromQuery] DateTimeOffset? toDate = null,
@@ -89,7 +89,7 @@ public class DiscrepancyController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of endpoint-specific compatibility metrics</returns>
     [HttpGet("endpoints")]
-    [RequireAdmin]
+    [RequireSuperuser]
     public async Task<ActionResult<IEnumerable<EndpointMetrics>>> GetEndpointMetrics(
         [FromQuery] DateTimeOffset? fromDate = null,
         [FromQuery] DateTimeOffset? toDate = null,
@@ -131,7 +131,7 @@ public class DiscrepancyController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of detailed discrepancy analyses</returns>
     [HttpGet("analyses")]
-    [RequireAdmin]
+    [RequireSuperuser]
     public async Task<ActionResult<IEnumerable<DiscrepancyAnalysisDto>>> GetDiscrepancyAnalyses(
         [FromQuery] string? requestPath = null,
         [FromQuery] int? overallMatch = null,
@@ -231,7 +231,7 @@ public class DiscrepancyController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Detailed discrepancy analysis</returns>
     [HttpGet("analyses/{id:guid}")]
-    [RequireAdmin]
+    [RequireSuperuser]
     public async Task<ActionResult<DiscrepancyAnalysisDto>> GetDiscrepancyAnalysis(
         Guid id,
         CancellationToken cancellationToken = default
@@ -299,7 +299,7 @@ public class DiscrepancyController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Current compatibility status</returns>
     [HttpGet("status")]
-    [RequireAdmin]
+    [RequireSuperuser]
     public async Task<ActionResult<CompatibilityStatus>> GetCompatibilityStatus(
         CancellationToken cancellationToken = default
     )

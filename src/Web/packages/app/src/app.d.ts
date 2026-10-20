@@ -62,6 +62,11 @@ declare global {
 			 */
 			statusPromise?: Promise<TenantStatusResponse | null>;
 			/**
+			 * Set when the API could not be reached (or answered 5xx) while resolving the session,
+			 * so that an unauthenticated request is not known to be signed out.
+			 */
+			sessionUnreadable?: boolean;
+			/**
 			 * Current authenticated user, or null if not authenticated
 			 */
 			user: AuthUser | null;

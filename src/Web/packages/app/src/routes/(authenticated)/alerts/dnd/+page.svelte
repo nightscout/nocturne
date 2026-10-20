@@ -29,6 +29,8 @@
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import { EditorActionBar } from "$lib/components/layout";
   import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { refreshOnReturn } from "$lib/utils/refresh-on-return.svelte";
+  import { isDndScheduleActiveNow, isDndScheduleConfigured } from "$lib/components/alerts/dnd";
 
   // Manual DND is tenant-wide — it suppresses delivery of every non-critical
   // alert for every member — so the server gates it on alerts.readwrite.
@@ -38,6 +40,20 @@
 
   const dndQuery = $derived(canSetDnd ? getDnd() : undefined);
   retainQuery(() => dndQuery);
+  refreshOnReturn(() => void dndQuery?.refresh());
+
+  let latest = $state<TenantAlertSettingsResponse | null>(null);
+  $effect(() => {
+    const dnd = dndQuery?.current;
+    if (dnd) latest = dnd;
+  });
+  let scheduleStatus = $derived(
+    isDndScheduleActiveNow(latest)
+      ? "Scheduled, on now"
+      : isDndScheduleConfigured(latest)
+        ? "Scheduled"
+        : null,
+  );
 
   let saving = $state(false);
   let error = $state<string | null>(null);
@@ -67,6 +83,7 @@
   }
 
   function applyResponse(r: TenantAlertSettingsResponse | null): void {
+    latest = r;
     dndManualActive = r?.dndManualActive ?? false;
     dndManualUntilLocal = isoToLocal(r?.dndManualUntil);
     dndScheduleEnabled = r?.dndScheduleEnabled ?? false;
@@ -196,7 +213,12 @@
 
     <Card>
       <CardHeader>
-        <CardTitle>Schedule</CardTitle>
+        <div class="flex items-center justify-between gap-2">
+          <CardTitle>Schedule</CardTitle>
+          {#if scheduleStatus}
+            <span class="text-xs text-muted-foreground">{scheduleStatus}</span>
+          {/if}
+        </div>
         <CardDescription>Recurring quiet hours. Cross-midnight windows are allowed.</CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">

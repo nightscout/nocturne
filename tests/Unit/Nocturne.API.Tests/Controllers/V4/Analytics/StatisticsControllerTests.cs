@@ -1,9 +1,12 @@
+using Microsoft.Extensions.Time.Testing;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.API.Extensions;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Glucose;
@@ -44,7 +47,8 @@ public class StatisticsControllerTests
         ICanonicalGlucoseService? canonicalGlucose = null,
         IStatisticsService? statisticsService = null,
         ICacheService? cacheService = null,
-        ICategoryReadContext? categoryReadContext = null)
+        ICategoryReadContext? categoryReadContext = null,
+        TimeProvider? timeProvider = null)
     {
         var tenantAccessor = new Mock<ITenantAccessor>();
         tenantAccessor.SetupGet(a => a.Context)
@@ -76,6 +80,7 @@ public class StatisticsControllerTests
             _activeProfileResolverMock.Object,
             canonicalGlucose ?? TestDoubles.CanonicalGlucosePassThrough.Create(),
             categoryReadContext ?? new CategoryReadContext(),
+            timeProvider ?? new FakeTimeProvider(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero)),
             _loggerMock.Object);
 
         controller.ControllerContext = new ControllerContext
@@ -863,6 +868,87 @@ public class StatisticsControllerTests
     }
 
     [Fact]
+    public async Task GetInsulinDeliveryStatistics_BolusArcPlusBasalArcsEqualTotalInsulinOnADayWithAutomaticBoluses()
+    {
+        var start = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+        var manual = new List<Bolus>
+        {
+            new() { Timestamp = start.AddHours(8), Insulin = 4.5 },
+            new() { Timestamp = start.AddHours(12), Insulin = 3.25 },
+            new() { Timestamp = start.AddHours(13), Insulin = 0 },
+        };
+        var algorithm = new List<Bolus>
+        {
+            new() { Timestamp = start.AddMinutes(5), Insulin = 0.15, Kind = BolusKind.Algorithm },
+            new() { Timestamp = start.AddMinutes(10), Insulin = 0.2, Kind = BolusKind.Algorithm },
+        };
+
+        SetupEmptyTreatments();
+        SetupBoluses(BolusKind.Manual, manual);
+        SetupBoluses(BolusKind.Algorithm, algorithm);
+        _tempBasalRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<TempBasal>
+            {
+                new()
+                {
+                    StartTimestamp = start,
+                    EndTimestamp = start.AddHours(4),
+                    Rate = 1.5,
+                    ScheduledRate = 1.0,
+                },
+            });
+
+        var stats = await DeliveryStatsAsync(start, Scope.ReportsRead, Scope.TreatmentsRead);
+
+        stats.ManualBoluses.Should().HaveCount(2);
+        stats.ManualBoluses!.Sum(b => b.Insulin).Should().BeApproximately(stats.TotalBolus, 1e-9);
+        stats.TotalBolus.Should().Be(7.75);
+        (stats.TotalBolus + stats.ScheduledBasal + stats.AdditionalBasal)
+            .Should().BeApproximately(stats.TotalInsulin, 0.011);
+        stats.ScheduledBasal.Should().Be(4);
+        stats.AdditionalBasal.Should().Be(2.35);
+        stats.TotalInsulin.Should().Be(14.1);
+    }
+
+    [Fact]
+    public async Task GetInsulinDeliveryStatistics_KeepsTheBolusRecordsFromACallerWithoutTreatmentsRead()
+    {
+        var start = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+        SetupEmptyTreatments();
+        SetupBoluses(BolusKind.Manual, new List<Bolus> { new() { Timestamp = start, Insulin = 2 } });
+        SetupBoluses(BolusKind.Algorithm, new List<Bolus>());
+
+        var withRecords = await DeliveryStatsAsync(start, Scope.ReportsRead, Scope.TreatmentsRead);
+        var reportsOnly = await DeliveryStatsAsync(start, Scope.ReportsRead);
+
+        withRecords.ManualBoluses.Should().ContainSingle();
+        reportsOnly.ManualBoluses.Should().BeNull();
+        reportsOnly.TotalBolus.Should().Be(2);
+        reportsOnly.TotalInsulin.Should().Be(withRecords.TotalInsulin);
+    }
+
+    [Fact]
+    public async Task GetInsulinDeliveryStatistics_LeavesTheBolusRecordsOutUnlessAsked()
+    {
+        var start = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+        SetupEmptyTreatments();
+        SetupBoluses(BolusKind.Manual, new List<Bolus> { new() { Timestamp = start, Insulin = 2 } });
+        SetupBoluses(BolusKind.Algorithm, new List<Bolus>());
+
+        var result = await CreateController(statisticsService: new StatisticsService())
+            .GetInsulinDeliveryStatistics(start, start.AddDays(1));
+
+        result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<InsulinDeliveryStatistics>().Subject
+            .ManualBoluses.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetHourlyInsulinDelivery_FetchesUncapped()
     {
         var start = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -1044,7 +1130,7 @@ public class StatisticsControllerTests
         using var cts = new CancellationTokenSource();
 
         var result = await CreateController(statisticsService: new StatisticsService())
-            .GetInsulinDeliveryStatistics(DenseDay, DenseDay.AddDays(4), cts.Token);
+            .GetInsulinDeliveryStatistics(DenseDay, DenseDay.AddDays(4), cancellationToken: cts.Token);
 
         var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<InsulinDeliveryStatistics>().Subject;
@@ -1387,6 +1473,18 @@ public class StatisticsControllerTests
             It.IsAny<TimeZoneInfo?>()), Times.Once);
     }
 
+    private async Task<InsulinDeliveryStatistics> DeliveryStatsAsync(DateTime start, params string[] grantedScopes)
+    {
+        var controller = CreateController(statisticsService: new StatisticsService());
+        controller.HttpContext.Items[AuthContextKeys.GrantedScopes] =
+            (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
+
+        var result = await controller.GetInsulinDeliveryStatistics(start, start.AddDays(1), includeBoluses: true);
+
+        return result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<InsulinDeliveryStatistics>().Subject;
+    }
+
     private async Task<InsulinDeliveryStatistics> MultiPeriodLastDayDelivery()
     {
         var result = await CreateController(statisticsService: new StatisticsService())
@@ -1622,6 +1720,145 @@ public class StatisticsControllerTests
         month.Days.Single(d => d.Date == "2026-06-02").AverageGlucose.Should().Be(200);
         // Four readings averaging 140, not the 160 an average of the two daily means would give.
         month.Summary!.AvgGlucose.Should().Be(140);
+    }
+
+    private const double DailyBolus = 10;
+    private const double DailyBasalInjection = 20;
+    private const double DailyCarbs = 50;
+
+    private void SetupPunchCardGlucose(IEnumerable<SensorGlucose> glucose) =>
+        _glucoseRepoMock
+            .Setup(r => r.GetForAnalyticsAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+            .ReturnsAsync(glucose);
+
+    private void SetupDailyTreatmentsForJune(int firstDay, int lastDay, IEnumerable<SensorGlucose> glucose)
+    {
+        var days = Enumerable.Range(firstDay, lastDay - firstDay + 1)
+            .Select(d => new DateTime(2026, 6, d, 12, 0, 0, DateTimeKind.Utc))
+            .ToList();
+        var boluses = days.Select(t => new Bolus { Timestamp = t, Insulin = DailyBolus }).ToList();
+        var carbs = days.Select(t => new CarbIntake { Timestamp = t, Carbs = DailyCarbs }).ToList();
+        var injections = days.Select(t => new BasalInjection { Timestamp = t, Units = DailyBasalInjection }).ToList();
+
+        SetupEmptyTreatments();
+        SetupPunchCardGlucose(glucose);
+        _bolusRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), BolusKind.Manual,
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(boluses);
+        _carbIntakeRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(carbs);
+        _basalInjectionRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(injections);
+    }
+
+    private static IEnumerable<SensorGlucose> JuneReadings(int firstDay, int lastDay) =>
+        Enumerable.Range(firstDay, lastDay - firstDay + 1)
+            .Select(d => new SensorGlucose { Timestamp = new DateTime(2026, 6, d, 8, 0, 0, DateTimeKind.Utc), Mgdl = 110 });
+
+    private async Task<PunchCardMonthSummary> JuneSummary(DateOnly from, DateOnly to, TimeProvider? timeProvider = null)
+    {
+        var result = await CreateController(statisticsService: new StatisticsService(), timeProvider: timeProvider)
+            .GetPunchCardData(from, to);
+
+        return result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<PunchCardResponse>().Subject
+            .Months.Should().ContainSingle().Subject
+            .Summary!;
+    }
+
+    [Fact]
+    public async Task GetPunchCardData_DividesTddAndCarbsByTheMonthsDaysNotTheDaysTheSensorRead()
+    {
+        SetupDailyTreatmentsForJune(1, 30, JuneReadings(1, 20));
+
+        var summary = await JuneSummary(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+
+        summary.DayCount.Should().Be(20);
+        summary.Tdd.Should().BeApproximately(DailyBolus + DailyBasalInjection, 1e-9);
+        summary.AvgDailyCarbs.Should().BeApproximately(DailyCarbs, 1e-9);
+    }
+
+    [Fact]
+    public async Task GetPunchCardData_DividesTddAndCarbsByTheRangeDaysWhenTheMonthIsPartial()
+    {
+        SetupDailyTreatmentsForJune(1, 30, JuneReadings(1, 30));
+
+        var summary = await JuneSummary(new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 20));
+
+        summary.DayCount.Should().Be(11);
+        summary.Tdd.Should().BeApproximately(DailyBolus + DailyBasalInjection, 1e-9);
+        summary.AvgDailyCarbs.Should().BeApproximately(DailyCarbs, 1e-9);
+    }
+
+    [Fact]
+    public async Task GetPunchCardData_AveragesTheCurrentMonthOverTheDaysSoFarIncludingToday()
+    {
+        SetupDailyTreatmentsForJune(1, 19, JuneReadings(1, 19));
+        var midMonth = new FakeTimeProvider(new DateTimeOffset(2026, 6, 19, 12, 0, 0, TimeSpan.Zero));
+
+        var summary = await JuneSummary(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), midMonth);
+
+        summary.Tdd.Should().BeApproximately(DailyBolus + DailyBasalInjection, 1e-9);
+        summary.AvgDailyCarbs.Should().BeApproximately(DailyCarbs, 1e-9);
+    }
+
+    [Fact]
+    public async Task GetPunchCardData_ReadsTodayInTheTenantTimezone()
+    {
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Australia/Sydney");
+        SetupDailyTreatmentsForJune(1, 19, JuneReadings(1, 19));
+        // 20 June 00:30 in Sydney is still 19 June in UTC.
+        var sydneyNextDay = new FakeTimeProvider(new DateTimeOffset(2026, 6, 19, 14, 30, 0, TimeSpan.Zero));
+
+        var summary = await JuneSummary(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), sydneyNextDay);
+
+        summary.Tdd.Should().BeApproximately(19 * (DailyBolus + DailyBasalInjection) / 20, 1e-9);
+    }
+
+    [Fact]
+    public async Task GetPunchCardData_SpreadsTreatmentOnSomeDaysAcrossEveryDayOfTheRange()
+    {
+        SetupDailyTreatmentsForJune(1, 10, JuneReadings(1, 30));
+
+        var summary = await JuneSummary(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+
+        summary.Tdd.Should().BeApproximately(10 * (DailyBolus + DailyBasalInjection) / 30, 1e-9);
+        summary.AvgDailyCarbs.Should().BeApproximately(10 * DailyCarbs / 30, 1e-9);
+    }
+
+    [Fact]
+    public async Task GetPunchCardData_LeavesTddAndCarbsNullWhenNoneWereRecorded()
+    {
+        SetupEmptyTreatments();
+        SetupPunchCardGlucose(JuneReadings(1, 3).ToArray());
+
+        var summary = await JuneSummary(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+
+        summary.Tdd.Should().BeNull();
+        summary.AvgDailyCarbs.Should().BeNull();
     }
 
     [Fact]

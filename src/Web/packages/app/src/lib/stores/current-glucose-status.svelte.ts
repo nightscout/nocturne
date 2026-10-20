@@ -61,7 +61,7 @@ export function currentGlucoseStatus(
 export interface DisplayedGlucose {
   readonly mills: number | undefined;
   readonly currentBG: number;
-  readonly bgDelta: number;
+  readonly bgDelta: number | null;
   readonly direction: string;
   readonly status: GlucoseStatus | undefined;
 }
@@ -69,7 +69,7 @@ export interface DisplayedGlucose {
 interface GlucoseSource {
   readonly currentEntry: { readonly mills?: number } | null | undefined;
   readonly currentBG: number;
-  readonly bgDelta: number;
+  readonly bgDelta: number | null;
   readonly direction: string;
 }
 
@@ -173,7 +173,8 @@ export function displayedGlucose(
       return held()?.currentBG ?? store?.currentBG ?? 0;
     },
     get bgDelta() {
-      return held()?.bgDelta ?? store?.bgDelta ?? 0;
+      const pair = held();
+      return pair ? pair.bgDelta : (store?.bgDelta ?? null);
     },
     get direction() {
       return held()?.direction ?? store?.direction ?? "";

@@ -34,9 +34,6 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 // the schema — which describes a connector's declared fields and holds no tenant state — requires
 // tenant.settings. Repeated per action rather than declared on the class because the schema route
 // is [AllowAnonymous], and an authorization filter on the class would run for it regardless.
-// [RequireAdmin] would not do: it resolves against the PermissionTrie, which ScopeTranslator never
-// populates with a tenant-administration atom, so it admits only a superuser membership and would
-// lock the Administrator role out of the connector settings it holds tenant.settings for.
 public class ConfigurationController : ControllerBase
 {
     private readonly IConnectorConfigurationService _configService;

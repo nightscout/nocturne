@@ -1,5 +1,38 @@
 import type { BlogPostMeta, BlogManifest } from './types.ts';
 
+function unquote(text: string): string {
+  if (text.length < 2 || !text.startsWith('"') || !text.endsWith('"')) return text;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return typeof parsed === 'string' ? parsed : text;
+  } catch (error) {
+    if (error instanceof SyntaxError) return text;
+    throw error;
+  }
+}
+
+function splitFlowItems(inner: string): string[] {
+  const items: string[] = [];
+  let current = '';
+  let quoted = false;
+  for (let i = 0; i < inner.length; i++) {
+    const char = inner[i];
+    if (quoted && char === '\\') {
+      current += char + (inner[++i] ?? '');
+      continue;
+    }
+    if (char === '"' && (quoted || current.trim() === '')) quoted = !quoted;
+    if (char === ',' && !quoted) {
+      items.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  items.push(current);
+  return items;
+}
+
 export function parseFrontmatter(content: string, filename: string): BlogPostMeta | null {
   // `\r?` matters: a post authored on Windows arrives with CRLF, and an `\n`-only
   // delimiter silently fails to match. The post then parses as having no frontmatter,
@@ -21,15 +54,14 @@ export function parseFrontmatter(content: string, filename: string): BlogPostMet
 
     // Parse arrays: [a, b, c]
     if (typeof value === 'string' && value.startsWith('[') && value.endsWith(']')) {
-      value = value
-        .slice(1, -1)
-        .split(',')
-        .map((s) => s.trim())
+      value = splitFlowItems(value.slice(1, -1))
+        .map((s) => unquote(s.trim()))
         .filter(Boolean);
     }
     // Parse booleans
     else if (value === 'true') value = true;
     else if (value === 'false') value = false;
+    else if (typeof value === 'string') value = unquote(value);
 
     meta[key] = value;
   }

@@ -16,9 +16,10 @@ namespace Nocturne.Core.Constants.Tests;
 /// mmol reading, and a range or colour off by any amount means two surfaces describe the same
 /// reading differently.
 /// <para>
-/// TypeScript and Rust are read by regex, with comments blanked so a superseded copy left behind in
-/// one cannot answer for the live line. The mod is read as data: <c>src/Taskbar/settings-defaults.json</c>
-/// holds its unit, range and colour defaults, and both surfaces that ship those values — the
+/// TypeScript, Rust and the mod's <c>kMgdlPerMmol</c> are read by regex, with comments blanked so a
+/// superseded copy left behind in one cannot answer for the live line. The mod's defaults are read
+/// as data: <c>src/Taskbar/settings-defaults.json</c> holds its unit, range and colour defaults,
+/// and both surfaces that ship those values — the
 /// <c>==WindhawkModSettings==</c> block Windhawk hands to a user who has overridden nothing, and the
 /// <c>==SettingsDefaults==</c> block of <c>constexpr</c>s the mod falls back on for a value Windhawk
 /// cannot supply or the mod cannot parse — are held against that file line for line. Nothing here
@@ -30,11 +31,9 @@ namespace Nocturne.Core.Constants.Tests;
 /// nothing; and a mod default that ships in one of the mod's two blocks but not the other.
 /// </para>
 /// <para>
-/// Not caught: the mod's compiled-in constants that are not settings defaults, which
-/// <c>settings-defaults.json</c> does not cover — its own copy of the factor
-/// (<c>mod.wh.cpp</c>'s <c>kMgdlPerMmol</c>) and the theme-derived text colours. Beyond that: this
-/// reads text, not programs, so a value assembled at runtime is invisible, and declarations that
-/// agree are not proof a surface uses the one it declares —
+/// Not caught: the mod's theme-derived text colours, which <c>settings-defaults.json</c> does not
+/// cover. Beyond that: this reads text, not programs, so a value assembled at runtime is invisible,
+/// and declarations that agree are not proof a surface uses the one it declares —
 /// <see cref="ModReferencesEveryCompiledDefault"/> only establishes that each <c>constexpr</c> is
 /// named somewhere besides its own declaration, not that it is named at the read site it belongs to.
 /// </para>
@@ -44,6 +43,7 @@ public class GlucoseMirrorTests
     private const string UiGlucose = "@nocturne/ui glucose.ts";
     private const string TrayIcon = "desktop tray.rs";
     private const string GlucosePoll = "desktop glucose_poll.rs";
+    private const string TaskbarMod = "taskbar mod.wh.cpp";
 
     private static readonly Dictionary<string, string> Sources = new()
     {
@@ -51,6 +51,7 @@ public class GlucoseMirrorTests
         [TrayIcon] = Path.Combine("src", "Web", "packages", "desktop", "src-tauri", "src", "tray.rs"),
         [GlucosePoll] =
             Path.Combine("src", "Web", "packages", "desktop", "src-tauri", "src", "glucose_poll.rs"),
+        [TaskbarMod] = Path.Combine("src", "Taskbar", "mod.wh.cpp"),
     };
 
     private static readonly string ModDefaultsPath = Path.Combine("src", "Taskbar", "settings-defaults.json");
@@ -87,6 +88,7 @@ public class GlucoseMirrorTests
     {
         { UiGlucose, @"export const MGDL_PER_MMOL = ([0-9.]+);" },
         { GlucosePoll, @"pub const MGDL_PER_MMOL: f64 = ([0-9.]+);" },
+        { TaskbarMod, @"constexpr double kMgdlPerMmol = ([0-9.]+);" },
     };
 
     [Theory]

@@ -28,7 +28,6 @@ namespace Nocturne.API.Tests.Services.V4;
 /// </summary>
 public class V4ToLegacyProjectionServiceTests
 {
-    private readonly Mock<ISensorGlucoseRepository> _sensorGlucoseRepo = new();
     private readonly Mock<IBolusRepository> _bolusRepo = new();
     private readonly Mock<ICarbIntakeRepository> _carbIntakeRepo = new();
     private readonly Mock<IBGCheckRepository> _bgCheckRepo = new();
@@ -1104,7 +1103,6 @@ public class V4ToLegacyProjectionServiceTests
 
     private V4ToLegacyProjectionService CreateService(NocturneDbContext dbContext) =>
         new(
-            _sensorGlucoseRepo.Object,
             _bolusRepo.Object,
             _carbIntakeRepo.Object,
             _bgCheckRepo.Object,

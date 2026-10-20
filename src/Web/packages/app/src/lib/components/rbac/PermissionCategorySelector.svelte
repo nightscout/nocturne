@@ -4,7 +4,7 @@
   import {
     permissionGroups,
     type PermissionCategory,
-  } from "./permission-categories";
+  } from "./permission-categories.svelte";
 
   let {
     selected = $bindable<string[]>([]),
@@ -15,6 +15,8 @@
     readonly?: boolean;
     grantedByRoles?: string[];
   } = $props();
+
+  const groups = $derived(permissionGroups());
 
   /** All unique atoms across every level of a category. */
   function allAtoms(cat: PermissionCategory): string[] {
@@ -56,10 +58,8 @@
 </script>
 
 <div class="space-y-1">
-  {#each permissionGroups as group (group.header ?? '')}
-    {#if group.header}
-      <p class="text-sm font-medium pt-3 pb-1">{group.header}</p>
-    {/if}
+  {#each groups as group (group.header)}
+    <p class="text-sm font-medium pt-3 pb-1">{group.header}</p>
     {#each group.categories as cat (cat.name)}
       {@const level = getLevel(cat)}
       {@const roleGranted = isGrantedByRole(cat)}
@@ -74,7 +74,7 @@
               <span class="text-xs text-muted-foreground">Granted by role</span>
             {/if}
           </div>
-          {#if cat.description && !roleGranted}
+          {#if !roleGranted}
             <p class="text-xs text-muted-foreground leading-tight">{cat.description}</p>
           {/if}
         </div>

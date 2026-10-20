@@ -24,7 +24,7 @@
     page.data.isPlatformAdmin === true
   );
 
-  // The two tools answer to different gates: deduplication is RequireAdmin, so it resolves to
+  // The two tools answer to different gates: deduplication is RequireSuperuser, so it resolves to
   // the wildcard; deleting demo data is tenant.settings and refuses the demo visitor. Data
   // Quality is a page an ordinary member opens to set a sleep schedule, so neither control is
   // offered to someone the API would refuse.

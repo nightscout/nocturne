@@ -14,6 +14,7 @@ public class GlookoSensorGlucoseMapper
     private readonly string _connectorSource;
     private readonly ILogger _logger;
     private readonly GlookoTimeMapper _timeMapper;
+    private readonly HashSet<string> _unrecognisedTrends = new(StringComparer.OrdinalIgnoreCase);
 
     public GlookoSensorGlucoseMapper(
         GlookoConnectorConfiguration config,
@@ -304,11 +305,11 @@ public class GlookoSensorGlucoseMapper
         }
     }
 
-    private static GlucoseDirection ParseTrendToDirection(string? trend)
+    private GlucoseDirection? ParseTrendToDirection(string? trend)
     {
-        if (string.IsNullOrWhiteSpace(trend)) return GlucoseDirection.None;
+        if (string.IsNullOrWhiteSpace(trend)) return null;
 
-        return trend.ToUpperInvariant() switch
+        var direction = trend.ToUpperInvariant() switch
         {
             "DOUBLEUP" or "DOUBLE_UP" => GlucoseDirection.DoubleUp,
             "SINGLEUP" or "SINGLE_UP" => GlucoseDirection.SingleUp,
@@ -319,8 +320,17 @@ public class GlookoSensorGlucoseMapper
             "DOUBLEDOWN" or "DOUBLE_DOWN" => GlucoseDirection.DoubleDown,
             "NOT COMPUTABLE" or "NOTCOMPUTABLE" => GlucoseDirection.NotComputable,
             "RATE OUT OF RANGE" or "RATEOUTOFRANGE" => GlucoseDirection.RateOutOfRange,
-            _ => GlucoseDirection.NotComputable
+            _ => (GlucoseDirection?)null
         };
+
+        if (direction == null && _unrecognisedTrends.Add(trend))
+        {
+            _logger.LogInformation(
+                "[{ConnectorSource}] Unrecognised Glooko trend '{Trend}', storing no direction",
+                _connectorSource, trend);
+        }
+
+        return direction;
     }
 
     private static double ConvertToMgdl(double value, string? meterUnits) =>

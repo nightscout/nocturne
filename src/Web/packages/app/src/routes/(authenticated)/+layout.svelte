@@ -19,7 +19,10 @@
   import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
   import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
   import { browser, dev } from "$app/environment";
-  import { beforeNavigate, goto } from "$app/navigation";
+  import { beforeNavigate, goto, invalidate } from "$app/navigation";
+  import { refreshOnVisible } from "$lib/utils/refresh-on-return.svelte";
+  import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "$lib/constants/shell-data";
+  import { createShellRevalidator } from "$lib/utils/shell-session";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import AlertSurfaces from "$lib/components/alerts/AlertSurfaces.svelte";
@@ -73,7 +76,23 @@
     () => realtimeStore.currentEntry?.mills,
     () => data.canViewRealtimeData
   );
-  createAuthStore(); // Initialize auth store in context
+  const authStore = createAuthStore(); // Initialize auth store in context
+  refreshOnVisible(
+    createShellRevalidator(
+      () => data,
+      () => void invalidate(SHELL_DATA_KEY)
+    ),
+    SHELL_REVALIDATE_INTERVAL_MS
+  );
+
+  // svelte-ignore state_referenced_locally
+  let sessionSubjectId = data.user?.subjectId ?? null;
+  $effect(() => {
+    const subjectId = data.user?.subjectId ?? null;
+    if (subjectId === sessionSubjectId) return;
+    sessionSubjectId = subjectId;
+    void authStore.loadSession();
+  });
 
   // Suppress the auth interceptor's login redirect for guest and public
   // sessions — these have limited scopes so some endpoints return 401/403.
@@ -132,10 +151,16 @@
 
   // Initialize realtime and title/favicon services for users authorized to
   // view glucose data (authenticated with read permissions, or public site visitors).
+  let realtimeRunning = false;
   $effect(() => {
     if (data.canViewRealtimeData) {
+      realtimeRunning = true;
       realtimeStore.initialize();
       titleFaviconService.initialize();
+    } else if (realtimeRunning) {
+      realtimeRunning = false;
+      realtimeStore.destroy();
+      titleFaviconService.destroy();
     }
   });
 

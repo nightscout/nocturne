@@ -28,6 +28,12 @@ namespace Nocturne.API.Services.Connectors;
 /// <seealso cref="IDataSourceService"/>
 public class DataSourceService : IDataSourceService
 {
+    /// <summary>
+    /// How far back discovery counts records. Published on every <see cref="DataSourceInfo"/> as its
+    /// <see cref="DataSourceInfo.TotalEntriesWindowDays"/>.
+    /// </summary>
+    internal const int DiscoveryWindowDays = 30;
+
     private readonly NocturneDbContext _context;
     private readonly ISensorGlucoseRepository _sensorGlucose;
     private readonly IMeterGlucoseRepository _meterGlucose;
@@ -152,7 +158,7 @@ public class DataSourceService : IDataSourceService
     /// that no contributing table could tell.
     /// </summary>
     private async Task<Dictionary<string, TableStats>> GetNonGlucoseStatsAsync(
-        DateTime thirtyDaysAgo, DateTime last24HoursDate, CancellationToken ct)
+        DateTime windowStart, DateTime last24HoursDate, CancellationToken ct)
     {
         var result = new Dictionary<string, TableStats>(StringComparer.OrdinalIgnoreCase);
 
@@ -190,7 +196,7 @@ public class DataSourceService : IDataSourceService
         async Task MergeTimeSeriesAsync<TEntity>() where TEntity : class, IV4TimeSeriesEntity
         {
             var stats = await _context.Set<TEntity>()
-                .Where(e => e.Timestamp >= thirtyDaysAgo)
+                .Where(e => e.Timestamp >= windowStart)
                 .GroupBy(e => e.DataSource ?? e.Device)
                 .Select(g => new
                 {
@@ -223,7 +229,7 @@ public class DataSourceService : IDataSourceService
         // to the entering party (TreatmentDecomposer). It therefore names neither handle in
         // particular and contributes no evidence about which one its bucket's key is.
         var ssStats = await _context.StateSpans
-            .Where(s => s.StartTimestamp >= thirtyDaysAgo)
+            .Where(s => s.StartTimestamp >= windowStart)
             .GroupBy(s => s.Source)
             .Select(g => new { Key = g.Key, Count = g.LongCount(), Count24H = g.Count(x => x.StartTimestamp >= last24HoursDate), Latest = g.Max(x => x.StartTimestamp), Oldest = (DateTime?)g.Min(x => x.StartTimestamp) })
             .ToListAsync(ct);
@@ -241,12 +247,12 @@ public class DataSourceService : IDataSourceService
 
         var now = DateTimeOffset.UtcNow;
         var last24Hours = now.AddHours(-24);
-        var thirtyDaysAgoDate = now.AddDays(-30).UtcDateTime;
+        var windowStart = now.AddDays(-DiscoveryWindowDays).UtcDateTime;
         var last24HoursDate = last24Hours.UtcDateTime;
 
-        // Get distinct devices from V4 sensor glucose in the last 30 days
+        // Get distinct devices from V4 sensor glucose inside the discovery window
         var entryDevices = await _context
-            .SensorGlucose.Where(e => e.Timestamp >= thirtyDaysAgoDate && e.Device != null && e.Device != "")
+            .SensorGlucose.Where(e => e.Timestamp >= windowStart && e.Device != null && e.Device != "")
             .GroupBy(e => e.Device)
             .Select(g => new
             {
@@ -269,7 +275,7 @@ public class DataSourceService : IDataSourceService
         // The connector keeps its own entry via GetNonGlucoseStatsAsync, which keys on DataSource.
         var deviceStatusDevices = await _context
             .ApsSnapshots.Where(ds =>
-                ds.Timestamp >= thirtyDaysAgoDate && ds.Device != null && ds.Device != ""
+                ds.Timestamp >= windowStart && ds.Device != null && ds.Device != ""
             )
             .GroupBy(ds => ds.Device)
             .Select(g => new
@@ -281,7 +287,7 @@ public class DataSourceService : IDataSourceService
             .ToListAsync(cancellationToken);
 
         // Batch-aggregate non-glucose tables
-        var nonGlucoseStats = await GetNonGlucoseStatsAsync(thirtyDaysAgoDate, last24HoursDate, cancellationToken);
+        var nonGlucoseStats = await GetNonGlucoseStatsAsync(windowStart, last24HoursDate, cancellationToken);
 
         // Load user threshold overrides and connector configs for LastSuccessfulSync
         var thresholdOverrides = await LoadThresholdOverridesAsync(cancellationToken);
@@ -630,6 +636,7 @@ public class DataSourceService : IDataSourceService
             Id = GenerateId(deviceId),
             DeviceId = deviceId,
             DeviceIdHandle = handle,
+            TotalEntriesWindowDays = DiscoveryWindowDays,
         };
 
         // Parse device identifier to determine type

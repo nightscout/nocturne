@@ -214,7 +214,7 @@ public class NotificationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     // Operator diagnostics, not alert data: alerts.read would be the wrong category, and no
     // production grant carries it. Gated like DebugController.
-    [RequireAdmin]
+    [RequireSuperuser]
     public async Task<ActionResult<object>> GetNotificationStatus(
         CancellationToken cancellationToken = default
     )

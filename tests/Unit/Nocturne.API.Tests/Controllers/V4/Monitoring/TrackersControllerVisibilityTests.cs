@@ -29,7 +29,7 @@ public class TrackersControllerVisibilityTests
 
     private readonly Mock<ITrackerRepository> _repository = new();
 
-    private TrackersController CreateController(string? subjectId, bool isAdmin = false)
+    private TrackersController CreateController(string? subjectId, bool isSuperuser = false)
     {
         var controller = new TrackersController(
             _repository.Object,
@@ -50,7 +50,7 @@ public class TrackersControllerVisibilityTests
             };
         }
 
-        if (isAdmin)
+        if (isSuperuser)
         {
             var trie = new PermissionTrie();
             trie.Add("*");
@@ -118,11 +118,11 @@ public class TrackersControllerVisibilityTests
     [InlineData(TrackerVisibility.Public)]
     [InlineData(TrackerVisibility.Private)]
     [InlineData(TrackerVisibility.RoleRestricted)]
-    public async Task GetDefinition_AdminReadsAnyTracker_AtEveryVisibility(
+    public async Task GetDefinition_SuperuserReadsAnyTracker_AtEveryVisibility(
         TrackerVisibility visibility)
     {
         var definition = ArrangeDefinition(visibility);
-        var controller = CreateController(StrangerId, isAdmin: true);
+        var controller = CreateController(StrangerId, isSuperuser: true);
 
         var result = await controller.GetDefinition(definition.Id);
 

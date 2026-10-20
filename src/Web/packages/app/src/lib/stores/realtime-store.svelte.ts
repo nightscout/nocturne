@@ -281,16 +281,16 @@ export class RealtimeStore {
   /** Current glucose values */
   currentBG = $derived(this.currentEntry?.sgv ?? this.currentEntry?.mgdl ?? 0);
   previousBG = $derived(
-    this.previousEntry?.sgv ?? this.previousEntry?.mgdl ?? 0
+    this.previousEntry?.sgv ?? this.previousEntry?.mgdl ?? null
   );
 
-  /** Delta calculation - prefer entry delta, fallback to computed */
-  bgDelta = $derived.by(() => {
-    if (this.currentEntry?.delta != null) {
-      return this.currentEntry.delta;
-    }
-    return this.currentBG - this.previousBG;
-  });
+  bgDelta = $derived(
+    glucoseDelta(
+      this.currentEntry?.delta,
+      this.currentEntry?.sgv ?? this.currentEntry?.mgdl ?? null,
+      this.previousBG
+    )
+  );
 
   /**
    * Trend direction exactly as the reading carried it, empty when it carried none.
@@ -369,7 +369,7 @@ export class RealtimeStore {
       );
   });
 
-  constructor(config: WebSocketConfig) {
+  constructor(private readonly config: WebSocketConfig) {
     this.websocketClient = new WebSocketClient(config);
     this.setupEventHandlers();
   }
@@ -991,6 +991,9 @@ export class RealtimeStore {
       }
     }
     this.websocketClient.destroy();
+    this.websocketClient = new WebSocketClient(this.config);
+    this.setupEventHandlers();
+    this._initStarted = false;
 
     if (this.entryCreateFlushTimeout !== null) {
       clearTimeout(this.entryCreateFlushTimeout);
@@ -1308,11 +1311,11 @@ export interface ClockGlucoseSource {
 }
 
 /**
- * The change a face may show: the reading's own delta, else the gap to the
- * previous reading. Null when there is neither — a lone reading is not a rise
+ * The change a surface may show: the reading's own delta, else the gap to the
+ * previous reading. Null when there is neither, since a lone reading is not a rise
  * from zero.
  */
-export function clockGlucoseDelta(
+export function glucoseDelta(
   carried: number | null | undefined,
   currentBG: number | null | undefined,
   previousBG: number | null | undefined
@@ -1323,7 +1326,7 @@ export function clockGlucoseDelta(
 }
 
 /**
- * The store's own `currentBG`/`lastUpdated`/`bgDelta` fall back to 0 and the
+ * The store's own `currentBG`/`lastUpdated` fall back to 0 and the
  * current time for the dashboard tiles, which cannot tell an absent reading
  * from a real one.
  */
@@ -1339,7 +1342,7 @@ export function clockGlucoseSourceOf(
       return mgdlOf(store.currentEntry);
     },
     get bgDelta() {
-      return clockGlucoseDelta(
+      return glucoseDelta(
         store.currentEntry?.delta,
         mgdlOf(store.currentEntry),
         mgdlOf(store.previousEntry)

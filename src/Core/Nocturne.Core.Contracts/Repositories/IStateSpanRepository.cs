@@ -156,17 +156,14 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Returns all state spans in the specified category within an optional time range.
+    /// Returns every state span in the category overlapping the range, newest start first. Not capped.
     /// </summary>
-    /// <param name="category">The <see cref="StateSpanCategory"/> to filter by.</param>
-    /// <param name="from">Optional start of the time range (inclusive).</param>
-    /// <param name="to">Optional end of the time range (inclusive).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A collection of matching <see cref="StateSpan"/> records.</returns>
+    /// <param name="from">Start of the range (inclusive).</param>
+    /// <param name="to">End of the range (inclusive).</param>
     Task<IEnumerable<StateSpan>> GetByCategory(
         StateSpanCategory category,
-        DateTime? from = null,
-        DateTime? to = null,
+        DateTime from,
+        DateTime to,
         CancellationToken cancellationToken = default);
 
     /// <summary>

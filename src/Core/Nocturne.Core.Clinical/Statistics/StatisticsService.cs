@@ -2114,11 +2114,8 @@ public class StatisticsService : IStatisticsService
         const long mealWindowMs = 15 * 60 * 1000; // 15 minutes
         var carbTimestamps = carbList.Select(c => c.Mills).ToList();
 
-        foreach (var bolus in bolusList)
+        foreach (var bolus in CountedBoluses(bolusList))
         {
-            if (bolus.Insulin <= 0)
-                continue;
-
             totalBolus += bolus.Insulin;
             bolusCount++;
 
@@ -2194,6 +2191,13 @@ public class StatisticsService : IStatisticsService
             CarbBolusCount = carbBolusCount,
         };
     }
+
+    /// <summary>
+    /// The boluses that <see cref="InsulinDeliveryStatistics.TotalBolus"/> and
+    /// <see cref="InsulinDeliveryStatistics.BolusCount"/> count: those that delivered insulin.
+    /// </summary>
+    public static IEnumerable<Bolus> CountedBoluses(IEnumerable<Bolus> boluses) =>
+        boluses.Where(b => b.Insulin > 0);
 
     /// <summary>
     /// Whole days in the requested window, rounded to nearest and at least one: the

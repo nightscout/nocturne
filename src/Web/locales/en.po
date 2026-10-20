@@ -677,11 +677,13 @@ msgstr "<0/> Log Out"
 msgid "Glucose"
 msgstr "Glucose"
 
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
 #: src/lib/components/actogram/Actogram.svelte
 #: src/lib/components/actogram/Actogram.svelte
 msgid "ArrowDown"
 msgstr "ArrowDown"
 
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
 #: src/lib/components/actogram/Actogram.svelte
 msgid "ArrowUp"
 msgstr "ArrowUp"
@@ -877,6 +879,7 @@ msgstr "Permissions"
 msgid "Custom Permission"
 msgstr "Custom Permission"
 
+#: ../cms/src/editor/ComponentPropsEditor.svelte
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
@@ -1184,11 +1187,13 @@ msgstr "by {0}"
 msgid "Page {0} of {1} ({2} total)"
 msgstr "Page {0} of {1} ({2} total)"
 
+#: ../cms/src/translations/TranslationEditor.svelte
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Previous"
 msgstr "Previous"
 
+#: ../cms/src/translations/TranslationEditor.svelte
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Next"
@@ -1406,6 +1411,8 @@ msgstr "Timezone"
 #~ msgid "{0}m <0/>"
 #~ msgstr "{0}m <0/>"
 
+#: ../cms/src/editor/ComponentPropsEditor.svelte
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/reports/sleep/SleepCompositionChart.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
@@ -1740,7 +1747,6 @@ msgid "Carbs:"
 msgstr "Carbs:"
 
 #. 0: stats.totalCarbs.toFixed(0)
-#. 0: monthSummary.avgDailyCarbs.toFixed(0)
 #. 0: carbs
 #. 0: totalCarbs
 #. 0: carbIntake.carbs ?? 0
@@ -1762,7 +1768,6 @@ msgstr "Carbs:"
 #. 0: (summary?.totals?.food?.carbs ?? 0).toFixed(0)
 #. 0: row.carbs
 #: src/lib/components/calendar/CalendarDayCell.svelte
-#: src/lib/components/calendar/CalendarMonthSummary.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/CarbMarker.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
@@ -1792,7 +1797,6 @@ msgstr "Bolus:"
 
 #. 0: stats.totalBolus.toFixed(1)
 #. 0: stats.totalBasal.toFixed(1)
-#. 0: monthSummary.tdd.toFixed(1)
 #. 0: units.toFixed(1)
 #. 0: insulin.toFixed(1)
 #. 0: formatInsulinDisplay(bolus.insulin)
@@ -1806,7 +1810,6 @@ msgstr "Bolus:"
 #. 0: (row.insulin ?? 0).toFixed(2)
 #: src/lib/components/calendar/CalendarDayCell.svelte
 #: src/lib/components/calendar/CalendarDayCell.svelte
-#: src/lib/components/calendar/CalendarMonthSummary.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BasalInjectionMarker.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BolusMarker.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
@@ -2023,6 +2026,7 @@ msgstr "Undo (Ctrl+Z)"
 msgid "Redo (Ctrl+Shift+Z)"
 msgstr "Redo (Ctrl+Shift+Z)"
 
+#: ../cms/src/editor/PreviewPane.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
 msgid "Preview"
@@ -2221,6 +2225,7 @@ msgstr "System"
 msgid "Weight"
 msgstr "Weight"
 
+#: ../cms/src/lib/components/edra/shadcn/components/toolbar/FontSize.svelte
 #: src/lib/components/clock-builder/TextStyleControls.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
 #: src/routes/(authenticated)/food/GiLabel.svelte
@@ -2442,7 +2447,6 @@ msgstr "Unknown Device"
 
 #: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/components/status-pills/COBPill.svelte
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
@@ -2523,9 +2527,8 @@ msgstr "Connector Disabled"
 msgid "Connector Not Running"
 msgstr "Connector Not Running"
 
-#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-msgid "Total records"
-msgstr "Total records"
+#~ msgid "Total records"
+#~ msgstr "Total records"
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
@@ -3450,7 +3453,6 @@ msgid "({0} min)"
 msgstr "({0} min)"
 
 #: src/lib/components/settings/ClientDevices.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
 #: src/routes/(authenticated)/settings/patient/+page.svelte
 msgid "Devices"
@@ -3460,9 +3462,7 @@ msgstr "Devices"
 msgid "Insulins"
 msgstr "Insulins"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/Finish.svelte
@@ -3589,6 +3589,7 @@ msgstr "Last 24 hours"
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
+#: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -3645,6 +3646,7 @@ msgstr "Edit Food"
 msgid "Add Food"
 msgstr "Add Food"
 
+#: ../cms/src/editor/ContentEditor.svelte
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
@@ -4254,9 +4256,7 @@ msgstr "Boost"
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
@@ -4451,9 +4451,7 @@ msgid "Time Spans"
 msgstr "Time Spans"
 
 #: ../portal/src/routes/features/+page.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/+layout.svelte
 #: src/routes/(authenticated)/reports/+page.svelte
@@ -4509,7 +4507,7 @@ msgid "Setup"
 msgstr "Setup"
 
 #: src/lib/components/layout/UserMenu.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/account/+page.svelte
@@ -4517,7 +4515,7 @@ msgstr "Setup"
 msgid "Account"
 msgstr "Account"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/patient/+page.svelte
 msgid "Patient Record"
@@ -4924,6 +4922,7 @@ msgstr "Who is this for?"
 msgid "No guest links yet. Create one to share temporary read-only access."
 msgstr "No guest links yet. Create one to share temporary read-only access."
 
+#: ../cms/src/editor/ContentSidebar.svelte
 #: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
@@ -5558,109 +5557,75 @@ msgid "No time blocks configured. Click \"Add Time Block\" to get started."
 msgstr "No time blocks configured. Click \"Add Time Block\" to get started."
 
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "No access"
 msgstr "No access"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 msgid "Read"
 msgstr "Read"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 msgid "Read & Write"
 msgstr "Read & Write"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 msgid "Full access"
 msgstr "Full access"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Blood Glucose"
 msgstr "Blood Glucose"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Treatments"
 msgstr "Treatments"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "Identity"
 msgstr "Identity"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 #: src/routes/(authenticated)/settings/admin/+page.svelte
 msgid "Administration"
 msgstr "Administration"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Manage Roles"
 msgstr "Manage Roles"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Invite Members"
 msgstr "Invite Members"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Manage Members"
 msgstr "Manage Members"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-msgid "Tenant Settings"
-msgstr "Tenant Settings"
+#~ msgid "Tenant Settings"
+#~ msgstr "Tenant Settings"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Manage Sharing"
 msgstr "Manage Sharing"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 msgid "Audit"
 msgstr "Audit"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "View Audit Logs"
 msgstr "View Audit Logs"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Manage Audit Settings"
 msgstr "Manage Audit Settings"
 
@@ -5741,7 +5706,7 @@ msgstr "Auto-bolus"
 msgid "Recommended"
 msgstr "Recommended"
 
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "All permissions"
 msgstr "All permissions"
 
@@ -6235,6 +6200,7 @@ msgstr "Temp"
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
+#: src/routes/(authenticated)/alerts/dnd/+page.svelte
 msgid "Scheduled"
 msgstr "Scheduled"
 
@@ -6888,10 +6854,8 @@ msgstr "<0/> Stale"
 msgid "<0/> Inactive"
 msgstr "<0/> Inactive"
 
-#. 0: formatNumber(totalEntries)
 #. 0: formatNumber(allRows.length)
 #. 0: formatCount(col.migrated)
-#: src/lib/components/settings/DataSourceRow.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "{0} records"
@@ -7145,17 +7109,13 @@ msgstr "Flash on alarms"
 msgid "Flash the title and favicon during urgent glucose levels"
 msgstr "Flash the title and favicon during urgent glucose levels"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
 msgid "Heart Rate"
 msgstr "Heart Rate"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Step Count"
 msgstr "Step Count"
@@ -7164,7 +7124,7 @@ msgstr "Step Count"
 msgid "Platform"
 msgstr "Platform"
 
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Sharing"
 msgstr "Sharing"
 
@@ -7913,6 +7873,7 @@ msgstr "Schedule"
 msgid "Start"
 msgstr "Start"
 
+#: ../cms/src/editor/ContentSidebar.svelte
 #: src/lib/components/treatments/ColumnFilterPopover.svelte
 msgid "Search..."
 msgstr "Search..."
@@ -7931,8 +7892,10 @@ msgstr "{0} of {1} row(s) selected"
 msgid "Rows per page"
 msgstr "Rows per page"
 
+#. 0: clampedPage + 1; 1: pageCount
 #. 0: table.getState().pagination.pageIndex + 1; 1: table.getPageCount()
 #. 0: page; 1: history.totalPages
+#: ../cms/src/translations/TranslationEditor.svelte
 #: src/lib/components/treatments/DataTablePagination.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Page {0} of {1}"
@@ -13247,7 +13210,6 @@ msgid "Member updated successfully."
 msgstr "Member updated successfully."
 
 #: src/routes/(authenticated)/settings/members/+page.svelte
-#: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "Failed to update member. Please try again."
 msgstr "Failed to update member. Please try again."
 
@@ -13426,9 +13388,8 @@ msgstr "Failed to load migration data"
 msgid "Failed to cancel migration"
 msgstr "Failed to cancel migration"
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Validating"
-msgstr "Validating"
+#~ msgid "Validating"
+#~ msgstr "Validating"
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
@@ -17621,117 +17582,97 @@ msgstr "Continue to Sign Up"
 msgid "{0}g carbs · {1}% match"
 msgstr "{0}g carbs · {1}% match"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "CGM readings and manual blood glucose entries"
 msgstr "CGM readings and manual blood glucose entries"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Insulin doses, carb entries, and therapy events"
 msgstr "Insulin doses, carb entries, and therapy events"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Device Status"
 msgstr "Device Status"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Pump, CGM, and phone status reports"
 msgstr "Pump, CGM, and phone status reports"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Heart rate data from wearables"
 msgstr "Heart rate data from wearables"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Daily step counts from activity trackers"
 msgstr "Daily step counts from activity trackers"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Food & Meals"
 msgstr "Food & Meals"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Food database entries and nutritional information"
 msgstr "Food database entries and nutritional information"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Statistics"
-msgstr "Statistics"
+#~ msgid "Statistics"
+#~ msgstr "Statistics"
 
 #~ msgid "Time-in-range, A1c estimates, and averages"
 #~ msgstr "Time-in-range, A1c estimates, and averages"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-msgid "Generated reports and data exports"
-msgstr "Generated reports and data exports"
+#~ msgid "Generated reports and data exports"
+#~ msgstr "Generated reports and data exports"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 msgid "Therapy Settings"
 msgstr "Therapy Settings"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Treatment Profile"
 msgstr "Treatment Profile"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Basal rates, sensitivity factors, carb ratios, and targets"
 msgstr "Basal rates, sensitivity factors, carb ratios, and targets"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Alert rules, notification delivery, and history"
 msgstr "Alert rules, notification delivery, and history"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Display name, email, and account details"
 msgstr "Display name, email, and account details"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Create, edit, and delete roles"
-msgstr "Create, edit, and delete roles"
+#~ msgid "Create, edit, and delete roles"
+#~ msgstr "Create, edit, and delete roles"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Create and send invite links"
 msgstr "Create and send invite links"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Edit member roles and remove members"
 msgstr "Edit member roles and remove members"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Site name, units, and preferences"
-msgstr "Site name, units, and preferences"
+#~ msgid "Site name, units, and preferences"
+#~ msgstr "Site name, units, and preferences"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Public sharing and follower configuration"
-msgstr "Public sharing and follower configuration"
+#~ msgid "Public sharing and follower configuration"
+#~ msgstr "Public sharing and follower configuration"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Guest Links"
 msgstr "Guest Links"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Create and revoke temporary guest access links"
 msgstr "Create and revoke temporary guest access links"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Read the history of data changes"
 msgstr "Read the history of data changes"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Configure audit retention and export"
 msgstr "Configure audit retention and export"
 
@@ -18014,25 +17955,21 @@ msgstr "No linked sign-in methods. Add one to sign in with an external provider.
 msgid "Health Data"
 msgstr "Health Data"
 
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "All Health Data"
 msgstr "All Health Data"
 
-#: src/lib/components/settings/TokenScopeSelector.svelte
-msgid "Shortcut — covers all health categories below"
-msgstr "Shortcut — covers all health categories below"
+#~ msgid "Shortcut — covers all health categories below"
+#~ msgstr "Shortcut — covers all health categories below"
 
-#: src/lib/components/settings/TokenScopeSelector.svelte
-msgid "Read-only"
-msgstr "Read-only"
+#~ msgid "Read-only"
+#~ msgstr "Read-only"
 
-#: src/lib/components/settings/TokenScopeSelector.svelte
-msgid "Follower access and data sharing configuration"
-msgstr "Follower access and data sharing configuration"
+#~ msgid "Follower access and data sharing configuration"
+#~ msgstr "Follower access and data sharing configuration"
 
-#: src/lib/components/settings/TokenScopeSelector.svelte
-msgid "Unrestricted access to all data including deletion"
-msgstr "Unrestricted access to all data including deletion"
+#~ msgid "Unrestricted access to all data including deletion"
+#~ msgstr "Unrestricted access to all data including deletion"
 
 #. 0: data.tempBasal.duration
 #. 0: data.tempBasal.remaining
@@ -21761,8 +21698,7 @@ msgstr "Prefer not to say"
 msgid "We couldn't save your patient record. Your changes are still here — please try again."
 msgstr "We couldn't save your patient record. Your changes are still here — please try again."
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Sleep sessions, stages, and overnight biometrics"
 msgstr "Sleep sessions, stages, and overnight biometrics"
 
@@ -24065,7 +24001,7 @@ msgstr "Showing {0} of {1} records <0/> <1/>"
 msgid "{0} print:stroke-2"
 msgstr "{0} print:stroke-2"
 
-#. 0: bg(lowThreshold); 1: bg(highThreshold)
+#. 0: bg(lowThreshold, glucoseUnits); 1: bg(highThreshold, glucoseUnits)
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 msgid "Range limits {0} / {1}"
 msgstr "Range limits {0} / {1}"
@@ -24978,18 +24914,15 @@ msgstr "Pump modes can't be checked with a “State active” condition. Use a �
 msgid "Part of this rule's conditions has a setting its kind of condition doesn't have, so it can't be saved."
 msgstr "Part of this rule's conditions has a setting its kind of condition doesn't have, so it can't be saved."
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "Records in the last 30 days"
-msgstr "Records in the last 30 days"
+#~ msgid "Records in the last 30 days"
+#~ msgstr "Records in the last 30 days"
 
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "All glucose records"
 msgstr "All glucose records"
 
-#. 0: formatNumber(selectedDataSource.totalEntries)
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "This source sent {0} records in the last 30 days."
-msgstr "This source sent {0} records in the last 30 days."
+#~ msgid "This source sent {0} records in the last 30 days."
+#~ msgstr "This source sent {0} records in the last 30 days."
 
 #. 0: inviterName; 1: url
 #: src/lib/components/members/CopyInvitationMessageButton.svelte
@@ -25009,9 +24942,8 @@ msgstr "<0/> Message copied"
 msgid "<0/> Copy invitation message"
 msgstr "<0/> Copy invitation message"
 
-#: src/lib/components/members/CreateInviteCard.svelte
-msgid "Couldn't copy the message to the clipboard. Copy the link manually instead."
-msgstr "Couldn't copy the message to the clipboard. Copy the link manually instead."
+#~ msgid "Couldn't copy the message to the clipboard. Copy the link manually instead."
+#~ msgstr "Couldn't copy the message to the clipboard. Copy the link manually instead."
 
 #: src/lib/components/members/InviteSummary.svelte
 msgid "the person who sent it"
@@ -25063,10 +24995,8 @@ msgstr "Nocturne is a website for viewing diabetes information, such as glucose 
 msgid "<0/> <1/> on Nocturne."
 msgstr "<0/> <1/> on Nocturne."
 
-#. 0: formatNumber(totalEntries)
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "{0} records in the last 30 days"
-msgstr "{0} records in the last 30 days"
+#~ msgid "{0} records in the last 30 days"
+#~ msgstr "{0} records in the last 30 days"
 
 #: src/routes/(unauthenticated)/join/+page.svelte
 msgid "You're signed in as <0/>"
@@ -26527,10 +26457,8 @@ msgstr "Estimated {0}"
 msgid "How your {0} has trended over the years"
 msgstr "How your {0} has trended over the years"
 
-#. 0: a1cLabel(true)
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Time-in-range, {0} estimates, and averages"
-msgstr "Time-in-range, {0} estimates, and averages"
+#~ msgid "Time-in-range, {0} estimates, and averages"
+#~ msgstr "Time-in-range, {0} estimates, and averages"
 
 #. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -26814,3 +26742,288 @@ msgstr "Year chart"
 #: src/lib/components/reports/year-overview/VisibleChart.test-harness.svelte
 msgid "Update data"
 msgstr "Update data"
+
+#: ../cms/src/editor/ContentSidebar.svelte
+msgid "Content"
+msgstr "Content"
+
+#: ../cms/src/editor/ContentSidebar.svelte
+msgid "No content found."
+msgstr "No content found."
+
+#. 0: selectedComponent.name
+#: ../cms/src/editor/ComponentPropsEditor.svelte
+msgid "{0} Props"
+msgstr "{0} Props"
+
+#: ../cms/src/editor/MetadataPanel.svelte
+msgid "Metadata <0/>"
+msgstr "Metadata <0/>"
+
+#: ../cms/src/editor/PreviewPane.svelte
+msgid "Email preview will use better-svelte-email renderer."
+msgstr "Email preview will use better-svelte-email renderer."
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "Editing"
+msgstr "Editing"
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "No content selected"
+msgstr "No content selected"
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "Save Draft"
+msgstr "Save Draft"
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "Publish"
+msgstr "Publish"
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "All messages"
+msgstr "All messages"
+
+#: ../cms/src/translations/TranslationEditor.svelte
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Untranslated"
+msgstr "Untranslated"
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "With drafts"
+msgstr "With drafts"
+
+#. 0: translatedCount; 1: messages.length
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "{0} of {1} messages translated or drafted"
+msgstr "{0} of {1} messages translated or drafted"
+
+#. 0: drafts.size; 1: drafts.size === 1 ? '' \\: 's'
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "{0} draft{1}"
+msgstr "{0} draft{1}"
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "Search source text or translations"
+msgstr "Search source text or translations"
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "No messages match."
+msgstr "No messages match."
+
+#. 0: message.msgidPlural
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Plural: {0}"
+msgstr "Plural: {0}"
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Discard draft"
+msgstr "Discard draft"
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Draft"
+msgstr "Draft"
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Fuzzy"
+msgstr "Fuzzy"
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Translated"
+msgstr "Translated"
+
+#. 0: n
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Form {0}"
+msgstr "Form {0}"
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "No translation yet"
+msgstr "No translation yet"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View glucose readings"
+msgstr "View glucose readings"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, record and remove glucose readings"
+msgstr "View, record and remove glucose readings"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View treatments"
+msgstr "View treatments"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, record and remove treatments"
+msgstr "View, record and remove treatments"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View device status"
+msgstr "View device status"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, update and remove device status"
+msgstr "View, update and remove device status"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View treatment profile"
+msgstr "View treatment profile"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, update and remove treatment profile"
+msgstr "View, update and remove treatment profile"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View alerts"
+msgstr "View alerts"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Manage alerts"
+msgstr "Manage alerts"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View reports and analytics"
+msgstr "View reports and analytics"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View basic account info"
+msgstr "View basic account info"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Manage sharing settings"
+msgstr "Manage sharing settings"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View heart rate data"
+msgstr "View heart rate data"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, record and remove heart rate data"
+msgstr "View, record and remove heart rate data"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View step count data"
+msgstr "View step count data"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, record and remove step count data"
+msgstr "View, record and remove step count data"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View sleep data"
+msgstr "View sleep data"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, record and remove sleep data"
+msgstr "View, record and remove sleep data"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View food data"
+msgstr "View food data"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, record and remove food data"
+msgstr "View, record and remove food data"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View all health data (read-only)"
+msgstr "View all health data (read-only)"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, update and remove all health data"
+msgstr "View, update and remove all health data"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Send notifications to this device, and mute an alert for yourself from it"
+msgstr "Send notifications to this device, and mute an alert for yourself from it"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Use this device's alarms: sound, vibration, flashlight, and full-screen alerts"
+msgstr "Use this device's alarms: sound, vibration, flashlight, and full-screen alerts"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Create, edit and delete roles"
+msgstr "Create, edit and delete roles"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Change site name, units and preferences"
+msgstr "Change site name, units and preferences"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Manage public sharing and followers"
+msgstr "Manage public sharing and followers"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Full access to all data and settings, including deletion"
+msgstr "Full access to all data and settings, including deletion"
+
+#. 0: a1cLabel(true)
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Generated reports and data exports, and statistics: time in range, {0} estimates, and averages"
+msgstr "Generated reports and data exports, and statistics: time in range, {0} estimates, and averages"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Site Settings"
+msgstr "Site Settings"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Covers all the health categories"
+msgstr "Covers all the health categories"
+
+#: src/lib/components/alerts/DndPanel.svelte
+#: src/routes/(authenticated)/alerts/dnd/+page.svelte
+msgid "Scheduled, on now"
+msgstr "Scheduled, on now"
+
+#: src/lib/components/alerts/SidebarDndToggle.svelte
+msgid "Scheduled Do Not Disturb window is on now"
+msgstr "Scheduled Do Not Disturb window is on now"
+
+#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Records in total"
+msgstr "Records in total"
+
+#. 0: selectedConnector.totalEntriesWindowDays
+#. 0: selectedDataSource.totalEntriesWindowDays
+#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Records in the last {0} days"
+msgstr "Records in the last {0} days"
+
+#. 0: formatNumber(selectedDataSource.totalEntries)
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "This source sent {0} records in total."
+msgstr "This source sent {0} records in total."
+
+#. 0: formatNumber(selectedDataSource.totalEntries); 1: selectedDataSource.totalEntriesWindowDays
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "This source sent {0} records in the last {1} days."
+msgstr "This source sent {0} records in the last {1} days."
+
+#. 0: formatNumber(totalEntries)
+#: src/lib/components/settings/DataSourceRow.svelte
+msgid "{0} records in total"
+msgstr "{0} records in total"
+
+#. 0: formatNumber(totalEntries); 1: totalEntriesWindowDays
+#: src/lib/components/settings/DataSourceRow.svelte
+msgid "{0} records in the last {1} days"
+msgstr "{0} records in the last {1} days"
+
+#: ../cms/src/lib/components/edra/shadcn/editor.svelte
+msgid "Unable to load the content"
+msgstr "Unable to load the content"
+
+#: ../cms/src/lib/components/edra/shadcn/editor.svelte
+msgid "The content of this page might be corrupted."
+msgstr "The content of this page might be corrupted."
+
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
+msgid "Tab"
+msgstr "Tab"
+
+#. 0: text; 1: value; 2: border; 3: value
+#: ../cms/src/lib/components/edra/shadcn/components/toolbar/QuickColors.svelte
+msgid "{0} background-color: {1}50; border: {2} {3};"
+msgstr "{0} background-color: {1}50; border: {2} {3};"

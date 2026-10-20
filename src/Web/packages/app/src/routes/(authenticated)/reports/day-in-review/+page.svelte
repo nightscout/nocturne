@@ -4,7 +4,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { BolusKind, type Bolus, type CarbIntake } from "$lib/api";
+  import type { Bolus, CarbIntake } from "$lib/api";
   import type { EntryRecord } from "$lib/constants/entry-categories";
   import { cn } from "$lib/utils";
   import * as Card from "$lib/components/ui/card";
@@ -151,16 +151,6 @@
 
     return result;
   });
-
-  // Insulin delivery values for the donut chart. All come from the delivery stats, which
-  // already folds algorithm micro-boluses into additional basal, so the donut draws only
-  // manual boluses to keep its arcs equal to the total it prints.
-  const scheduledBasal = $derived(delivery?.scheduledBasal ?? 0);
-  const additionalBasal = $derived(delivery?.additionalBasal ?? 0);
-  const totalInsulin = $derived(delivery?.totalInsulin ?? 0);
-  const manualBoluses = $derived(
-    (dayData?.boluses ?? []).filter((b) => b.kind !== BolusKind.Algorithm)
-  );
 
   // === Treatment Edit Dialog ===
   let editDialogOpen = $state(false);
@@ -374,10 +364,11 @@
       <Card.Root>
       <Card.Content class="p-4 flex flex-col items-center gap-4">
         <InsulinDonutChart
-          boluses={manualBoluses}
-          {scheduledBasal}
-          {additionalBasal}
-          {totalInsulin}
+          boluses={delivery?.manualBoluses ?? []}
+          totalBolus={delivery?.totalBolus ?? 0}
+          scheduledBasal={delivery?.scheduledBasal ?? 0}
+          additionalBasal={delivery?.additionalBasal ?? 0}
+          totalInsulin={delivery?.totalInsulin ?? 0}
           carbIntakes={dayData?.carbIntakes ?? []}
           onBolusClick={openBolusDialog}
         />
