@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using Nocturne.Core.Models.Serializers;
 
 namespace Nocturne.Core.Models;
 
@@ -53,12 +55,14 @@ public class Settings : ProcessableDocumentBase
     /// Server timestamp when the setting was created (Unix timestamp in milliseconds)
     /// </summary>
     [JsonPropertyName("srvCreated")]
+    [JsonConverter(typeof(UnixMillisecondsConverter))]
     public DateTimeOffset? SrvCreated { get; set; }
 
     /// <summary>
     /// Server timestamp when the setting was last modified (Unix timestamp in milliseconds)
     /// </summary>
     [JsonPropertyName("srvModified")]
+    [JsonConverter(typeof(UnixMillisecondsConverter))]
     public DateTimeOffset? SrvModified { get; set; }
 
     /// <summary>
@@ -98,4 +102,17 @@ public class Settings : ProcessableDocumentBase
     [JsonPropertyName("notes")]
     [Sanitizable]
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// The V3 identifier, which addresses a settings document by its key.
+    /// </summary>
+    [JsonPropertyName("identifier")]
+    public string? Identifier => string.IsNullOrEmpty(Key) ? null : Key;
+
+    /// <summary>
+    /// The writer's own fields, kept as sent: upstream stores a v3 settings document whole, and
+    /// AAPS reads back its <c>aaps</c> document's fields (e.g. <c>runningConfig</c>, <c>date</c>).
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? AdditionalProperties { get; set; }
 }

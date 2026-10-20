@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
@@ -227,26 +228,27 @@ public class SettingsController : BaseV3Controller<Settings>
     }
 
     /// <summary>
-    /// Update a settings record by ID with V3 format
-    /// Requires admin permissions as per legacy API v3 behavior
+    /// Replace the settings document with this identifier, or insert it when none is stored:
+    /// upstream's v3 UPDATE, which AAPS uses to keep its <c>aaps</c> document and its
+    /// client-control pairing offers.
     /// </summary>
-    /// <param name="id">Settings ID to update</param>
-    /// <param name="settings">Updated settings data</param>
+    /// <param name="id">Identifier of the document, which is its key</param>
+    /// <param name="settingsData">The whole document</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Updated settings record</returns>
+    /// <returns>201 with the identifier on insert, 200 on replace</returns>
     [HttpPut("{id}")]
     [Authorize]
     [RequireScope(Scope.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/settings/{id}")]
-    [ProducesResponseType(typeof(Settings), 200)]
-    [ProducesResponseType(typeof(V3ErrorResponse), 404)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(typeof(V3ErrorResponse), 403)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
     public async Task<ActionResult> UpdateSettings(
         string id,
-        [FromBody] Settings settings,
+        [FromBody] JsonElement settingsData,
         CancellationToken cancellationToken = default
     )
     {
@@ -256,46 +258,75 @@ public class SettingsController : BaseV3Controller<Settings>
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
+        var validationError = ValidateV3CommonFields(settingsData);
+        if (validationError != null)
+        {
+            return validationError;
+        }
+
+        Settings? settings;
         try
         {
-            // CHECKME: Should validate admin permissions here
-
-            if (settings == null)
-            {
-                return CreateV3ErrorResponse(
-                    400,
-                    "Invalid request body",
-                    "Request body must contain valid settings data"
-                );
-            }
-
-            ProcessSettingsForCreation(settings);
-
-            var updatedSettings = await _settings.UpdateSettingsAsync(
-                id,
-                settings,
-                cancellationToken
-            );
-
-            if (updatedSettings == null)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Settings not found",
-                    $"Settings with ID '{id}' was not found"
-                );
-            }
-
-            _logger.LogDebug("Successfully updated settings with ID {Id}", id);
-
-            return Ok(updatedSettings);
+            settings = NightscoutJsonBody.ReadObject<Settings>(WithoutServerFields(settingsData));
         }
-        catch (ArgumentException ex)
+        catch (JsonException ex)
         {
-            _logger.LogWarning(ex, "Invalid V3 settings update request for ID {Id}", id);
+            _logger.LogWarning(ex, "Invalid JSON in V3 settings update request for ID {Id}", id);
             return CreateV3ErrorResponse(400, "Invalid request data", ex.Message);
         }
+
+        if (settings == null)
+        {
+            return CreateV3ErrorResponse(
+                400,
+                "Invalid request body",
+                "Request body must contain valid settings data"
+            );
+        }
+
+        settings.SrvModified = DateTimeOffset.UtcNow;
+        var stored = await _settings.GetSettingsByIdAsync(id, cancellationToken);
+
+        if (stored != null)
+        {
+            settings.Id = stored.Id;
+            settings.Key = stored.Key;
+            settings.SrvCreated = stored.SrvCreated ?? settings.SrvModified;
+            await _settings.UpdateSettingsAsync(id, settings, cancellationToken);
+
+            _logger.LogDebug("Replaced settings with ID {Id}", id);
+            return V3Replaced();
+        }
+
+        settings.Key = id;
+        settings.SrvCreated = settings.SrvModified;
+        await _settings.CreateSettingsAsync([settings], cancellationToken);
+
+        _logger.LogDebug("Inserted settings with ID {Id}", id);
+        return V3Inserted(nameof(GetSettingsById), id);
     }
+
+    /// <summary>
+    /// The document without the fields the server owns. A writer echoes back what it last read,
+    /// and upstream sets these itself on every write rather than taking them from the body.
+    /// </summary>
+    private static JsonElement WithoutServerFields(JsonElement document)
+    {
+        if (JsonNode.Parse(document.GetRawText()) is not JsonObject fields)
+        {
+            return document;
+        }
+
+        foreach (var field in ServerFields)
+        {
+            fields.Remove(field);
+        }
+
+        return JsonSerializer.SerializeToElement(fields);
+    }
+
+    private static readonly string[] ServerFields =
+        ["_id", "identifier", "key", "srvCreated", "srvModified", "subject"];
 
     /// <summary>
     /// Delete a settings record by ID

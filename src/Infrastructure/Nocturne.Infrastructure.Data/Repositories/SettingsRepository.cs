@@ -86,20 +86,7 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        // Try to find by original ID first (MongoDB ObjectId)
-        var entity = await _context.Settings.AsNoTracking().FirstOrDefaultAsync(
-            s => s.OriginalId == id,
-            cancellationToken
-        );
-
-        // If not found by original ID, try by GUID
-        if (entity == null && Guid.TryParse(id, out var guid))
-        {
-            entity = await _context.Settings.AsNoTracking().FirstOrDefaultAsync(
-                s => s.Id == guid,
-                cancellationToken
-            );
-        }
+        var entity = await FindByIdAsync(_context.Settings.AsNoTracking(), id, cancellationToken);
 
         return entity != null ? SettingsMapper.ToDomainModel(entity) : null;
     }
@@ -186,20 +173,7 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        // Try to find by original ID first (MongoDB ObjectId)
-        var entity = await _context.Settings.FirstOrDefaultAsync(
-            s => s.OriginalId == id,
-            cancellationToken
-        );
-
-        // If not found by original ID, try by GUID
-        if (entity == null && Guid.TryParse(id, out var guid))
-        {
-            entity = await _context.Settings.FirstOrDefaultAsync(
-                s => s.Id == guid,
-                cancellationToken
-            );
-        }
+        var entity = await FindByIdAsync(_context.Settings, id, cancellationToken);
 
         if (entity == null)
         {
@@ -223,20 +197,7 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        // Try to find by original ID first (MongoDB ObjectId)
-        var entity = await _context.Settings.FirstOrDefaultAsync(
-            s => s.OriginalId == id,
-            cancellationToken
-        );
-
-        // If not found by original ID, try by GUID
-        if (entity == null && Guid.TryParse(id, out var guid))
-        {
-            entity = await _context.Settings.FirstOrDefaultAsync(
-                s => s.Id == guid,
-                cancellationToken
-            );
-        }
+        var entity = await FindByIdAsync(_context.Settings, id, cancellationToken);
 
         if (entity == null)
         {
@@ -247,6 +208,26 @@ public class SettingsRepository : ISettingsRepository
         await _context.SaveChangesAsync(cancellationToken);
 
         return true;
+    }
+
+    /// <summary>
+    /// Find a setting by any id a reader may hold: a legacy Mongo <c>_id</c>, the row's GUID, or
+    /// the key, which is what a v3 <c>identifier</c> names.
+    /// </summary>
+    private static async Task<SettingsEntity?> FindByIdAsync(
+        IQueryable<SettingsEntity> settings,
+        string id,
+        CancellationToken cancellationToken
+    )
+    {
+        var entity = await settings.FirstOrDefaultAsync(s => s.OriginalId == id, cancellationToken);
+
+        if (entity == null && Guid.TryParse(id, out var guid))
+        {
+            entity = await settings.FirstOrDefaultAsync(s => s.Id == guid, cancellationToken);
+        }
+
+        return entity ?? await settings.FirstOrDefaultAsync(s => s.Key == id, cancellationToken);
     }
 
     /// <summary>

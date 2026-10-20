@@ -32,6 +32,7 @@ public static class SettingsMapper
             Version = settings.Version,
             IsActive = settings.IsActive,
             Notes = settings.Notes,
+            AdditionalPropertiesJson = SerializeAdditionalProperties(settings),
         };
     }
 
@@ -70,6 +71,9 @@ public static class SettingsMapper
             Version = entity.Version,
             IsActive = entity.IsActive,
             Notes = entity.Notes,
+            AdditionalProperties = MapperHelpers.DeserializeJson<Dictionary<string, JsonElement>>(
+                entity.AdditionalPropertiesJson
+            ),
         };
     }
 
@@ -91,5 +95,11 @@ public static class SettingsMapper
         entity.Version = settings.Version;
         entity.IsActive = settings.IsActive;
         entity.Notes = settings.Notes;
+        entity.AdditionalPropertiesJson = SerializeAdditionalProperties(settings);
     }
+
+    private static string? SerializeAdditionalProperties(Settings settings) =>
+        settings.AdditionalProperties is { Count: > 0 }
+            ? JsonSerializer.Serialize(settings.AdditionalProperties)
+            : null;
 }
