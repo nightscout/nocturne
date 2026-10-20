@@ -3,6 +3,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import type { ClockSettings } from "$lib/api";
 import { glucoseUnits, timeFormat } from "$lib/stores/appearance-store.svelte";
 import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
+import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
 import { renderClockElementValue } from "$lib/components/clock/element-value";
 import {
   ELEMENT_GROUPS,
@@ -20,6 +21,7 @@ const glucose = {
   direction: "Flat",
   lastUpdated: now.getTime() - 7 * 60_000,
   demoMode: false,
+  thresholds: resolveChartThresholds(),
 };
 
 const noReading = {
@@ -28,6 +30,7 @@ const noReading = {
   direction: "",
   lastUpdated: null,
   demoMode: false,
+  thresholds: resolveChartThresholds(),
 };
 
 const mgdl12: ClockSettings = { glucoseUnits: "mg/dl", timeFormat: "12" };

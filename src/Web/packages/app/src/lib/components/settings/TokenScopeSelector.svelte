@@ -2,12 +2,8 @@
   import { distinct } from "$lib/utils/collections";
   import * as Select from "$lib/components/ui/select";
   import { Separator } from "$lib/components/ui/separator";
-
-  interface AccessLevel {
-    value: string;
-    label: string;
-    atoms: string[];
-  }
+  import { scopeCategories, type Scope, type ScopeCategory } from "$lib/constants/scope-labels.svelte";
+  import { levelsOf, type AccessLevel } from "$lib/components/rbac/permission-categories.svelte";
 
   interface PermissionCategory {
     name: string;
@@ -19,148 +15,57 @@
   }
 
   interface PermissionGroup {
-    header?: string;
+    header: string;
     categories: PermissionCategory[];
   }
 
   let { selected = $bindable<string[]>([]) }: { selected: string[] } = $props();
 
-  function rw(domain: string): AccessLevel[] {
-    return [
-      { value: "none", label: "No access", atoms: [] },
-      { value: "read", label: "Read", atoms: [`${domain}.read`] },
-      {
-        value: "readwrite",
-        label: "Read & Write",
-        atoms: [`${domain}.read`, `${domain}.readwrite`],
-      },
-    ];
-  }
-
-  function readOnly(domain: string): AccessLevel[] {
-    return [
-      { value: "none", label: "No access", atoms: [] },
-      { value: "read", label: "Read", atoms: [`${domain}.read`] },
-    ];
-  }
-
-  function toggle(atom: string): AccessLevel[] {
-    return [
-      { value: "none", label: "No access", atoms: [] },
-      { value: "full", label: "Full access", atoms: [atom] },
-    ];
-  }
-
-  const groups: PermissionGroup[] = [
-    {
-      header: "Health Data",
-      categories: [
-        {
-          name: "All Health Data",
-          description: "Shortcut — covers all health categories below",
-          levels: [
-            { value: "none", label: "No access", atoms: [] },
-            { value: "read", label: "Read-only", atoms: ["health.read"] },
-            { value: "full", label: "Full access", atoms: ["health.read", "health.readwrite"] },
-          ],
-        },
-        {
-          name: "Blood Glucose",
-          description: "CGM readings and manual blood glucose entries",
-          isSubItem: true,
-          coveredBy: "health",
-          levels: rw("glucose"),
-        },
-        {
-          name: "Treatments",
-          description: "Insulin doses, carb entries, and therapy events",
-          isSubItem: true,
-          coveredBy: "health",
-          levels: rw("treatments"),
-        },
-        {
-          name: "Devices",
-          description: "Pump, CGM, and phone status reports",
-          isSubItem: true,
-          coveredBy: "health",
-          levels: rw("devices"),
-        },
-        {
-          name: "Therapy Settings",
-          description: "Basal rates, sensitivity factors, carb ratios, and targets",
-          isSubItem: true,
-          coveredBy: "health",
-          levels: rw("therapy"),
-        },
-        {
-          name: "Food",
-          description: "Food database entries and nutritional information",
-          isSubItem: true,
-          coveredBy: "health",
-          levels: rw("food"),
-        },
-        {
-          name: "Heart Rate",
-          description: "Heart rate data from wearables",
-          isSubItem: true,
-          coveredBy: "health",
-          levels: rw("heartrate"),
-        },
-        {
-          name: "Step Count",
-          description: "Daily step counts from activity trackers",
-          isSubItem: true,
-          coveredBy: "health",
-          levels: rw("stepcount"),
-        },
-        {
-          name: "Sleep",
-          description: "Sleep sessions, stages, and overnight biometrics",
-          isSubItem: true,
-          coveredBy: "health",
-          levels: rw("sleep"),
-        },
-      ],
-    },
-    {
-      header: "Platform",
-      categories: [
-        {
-          name: "Alerts",
-          description: "Alert rules, notification delivery, and history",
-          levels: rw("alerts"),
-        },
-        {
-          name: "Reports",
-          description: "Generated reports and data exports",
-          levels: readOnly("reports"),
-        },
-      ],
-    },
-    {
-      header: "Account",
-      categories: [
-        {
-          name: "Identity",
-          description: "Display name, email, and account details",
-          levels: readOnly("identity"),
-        },
-        {
-          name: "Sharing",
-          description: "Follower access and data sharing configuration",
-          levels: toggle("sharing.readwrite"),
-        },
-      ],
-    },
+  const healthReadScopes: Scope[] = [
+    "glucose.read",
+    "treatments.read",
+    "devices.read",
+    "therapy.read",
+    "food.read",
+    "heartrate.read",
+    "stepcount.read",
+    "sleep.read",
   ];
 
-  const fullAccessCategory: PermissionCategory = {
-    name: "Full access",
-    levels: [
-      { value: "none", label: "No access", atoms: [] },
-      { value: "full", label: "Full access", atoms: ["*"] },
-    ],
-  };
+  function row(cat: ScopeCategory, extra: Partial<PermissionCategory> = {}): PermissionCategory {
+    return { name: cat.label, description: cat.description, levels: levelsOf(cat), ...extra };
+  }
+
+  const groups = $derived.by((): PermissionGroup[] => {
+    const categories = scopeCategories();
+    const rowsFor = (scopes: Scope[], extra: Partial<PermissionCategory> = {}) =>
+      scopes.flatMap((scope) =>
+        categories.filter((cat) => cat.read === scope || cat.full === scope).map((cat) => row(cat, extra)),
+      );
+    return [
+      {
+        header: "Health Data",
+        categories: [
+          ...rowsFor(["health.read"]),
+          ...rowsFor(healthReadScopes, { isSubItem: true, coveredBy: "health" }),
+        ],
+      },
+      {
+        header: "Platform",
+        categories: rowsFor(["alerts.read", "reports.read"]),
+      },
+      {
+        header: "Account",
+        categories: rowsFor(["identity.read", "sharing.readwrite"]),
+      },
+    ];
+  });
+
+  const fullAccessCategories = $derived(
+    scopeCategories()
+      .filter((cat) => cat.full === "*")
+      .map((cat) => row(cat)),
+  );
 
   /** All unique atoms across every level of a category. */
   function allAtoms(cat: PermissionCategory): string[] {
@@ -203,10 +108,8 @@
 </script>
 
 <div class="space-y-1">
-  {#each groups as group (group.header ?? '')}
-    {#if group.header}
-      <p class="text-sm font-medium pt-3 pb-1">{group.header}</p>
-    {/if}
+  {#each groups as group (group.header)}
+    <p class="text-sm font-medium pt-3 pb-1">{group.header}</p>
     {#each group.categories as cat (cat.name)}
       {@const level = getLevel(cat)}
       {@const covered = isCoveredByParent(cat)}
@@ -248,12 +151,12 @@
 
   <Separator class="my-3" />
 
-  {#each [fullAccessCategory] as cat (cat.name)}
+  {#each fullAccessCategories as cat (cat.name)}
     {@const level = getLevel(cat)}
     <div class="flex items-center justify-between gap-4 py-1.5">
       <div class="min-w-0 flex-1">
         <span class="text-sm font-medium">{cat.name}</span>
-        <p class="text-xs text-muted-foreground leading-tight">Unrestricted access to all data including deletion</p>
+        <p class="text-xs text-muted-foreground leading-tight">{cat.description}</p>
       </div>
       <Select.Root
         type="single"

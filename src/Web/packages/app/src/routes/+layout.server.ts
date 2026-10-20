@@ -1,8 +1,10 @@
 import type { LayoutServerLoad } from "./$types";
-import type { MyPermissionsResponse, UserDisplayPreferences } from "$lib/api";
+import type { UserDisplayPreferences } from "$lib/api";
+import { resolvePermissions } from "$lib/server/resolve-permissions";
 import { classifyRequestHost, isTenantlessHost } from "$lib/server/tenantless-host";
 import { getRequestStatus } from "$lib/server/request-status";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
 import { parseLastSignIn } from "$lib/components/auth/last-sign-in";
 import {
   LANGUAGE_COOKIE_NAME,
@@ -11,30 +13,6 @@ import {
   parsePrefsCookie,
   resolveLanguage,
 } from "$lib/stores/appearance-store.svelte";
-
-/**
- * The viewer's granted scopes and history window, which the UI uses to offer only what the
- * viewer can load. `authHandle` resolves them for a signed-in member; a public share link and a
- * guest link never reach that branch, so their grant (the share's shareable read categories, or
- * the scopes on the guest grant) is resolved here instead. Failure leaves the viewer with
- * nothing rather than an over-offer.
- */
-async function resolvePermissions(locals: App.Locals): Promise<MyPermissionsResponse> {
-  if (locals.effectivePermissions) {
-    return {
-      scopes: locals.effectivePermissions,
-      limitTo24Hours: locals.limitTo24Hours ?? false,
-      refusedAsDemoSubject: locals.refusedAsDemoSubject ?? false,
-    };
-  }
-  if (!locals.isShareHost && !locals.isGuestSession) return {};
-
-  try {
-    return await locals.apiClient.myPermissions.getMyPermissions();
-  } catch {
-    return {};
-  }
-}
 
 /**
  * The saved display preferences this viewer's page is rendered with. A signed-in member has
@@ -64,7 +42,9 @@ async function resolveServerPreferences(
  * Auth gating is handled by route group layouts.
  * Setup/recovery mode detection is in hooks.server.ts.
  */
-export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
+export const load: LayoutServerLoad = async ({ locals, request, cookies, depends }) => {
+  depends(SHELL_DATA_KEY);
+
   // Tenant identity is resolved here, from the request host against BASE_DOMAIN,
   // so the browser never has to guess it by counting hostname labels. A share
   // host carries a token rather than a slug, so it has no tenant to name, and a

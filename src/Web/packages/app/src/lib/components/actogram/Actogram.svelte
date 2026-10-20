@@ -5,8 +5,8 @@
     ActogramPoint,
     ActogramRowContext,
     GlucosePoint,
-    GlucoseThresholds,
   } from './actogram';
+  import type { ChartThresholds } from '$lib/constants/glucose-thresholds';
   import {
     sliceIntoRows,
     sliceBgIntoRows,
@@ -29,7 +29,7 @@
     data: T[];
     bgData?: GlucosePoint[];
     days: Date[];
-    thresholds?: GlucoseThresholds;
+    thresholds?: ChartThresholds;
     rowHeight?: number;
     visibleCount?: number;
     /** Leading rows a print carries: the report's range, without scroll-back padding. */
