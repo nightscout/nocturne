@@ -12,6 +12,5 @@ export type {
 	ActogramRowContext,
 	ActogramTooltipData,
 	GlucosePoint,
-	GlucoseThresholds,
 	RowDataPoint,
 } from './actogram';

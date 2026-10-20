@@ -121,7 +121,7 @@
   // Computed styles
   const hasBackgroundImage = $derived(!!config.settings?.backgroundImage);
   const previewBgStyle = $derived(
-    clockBackgroundStyle(config.settings, currentBG, "#0a0a0a")
+    clockBackgroundStyle(config.settings, currentBG, "#0a0a0a", glucose.thresholds)
   );
   const overlayOpacity = $derived(
     hasBackgroundImage

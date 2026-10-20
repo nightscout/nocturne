@@ -4,6 +4,7 @@ import type { ClockFaceConfig } from "$lib/api";
 import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
 import { TRACKER_SHOW_OPTIONS } from "$lib/clock-builder";
 import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
 import Harness from "./ClockFaceRendererHarness.test.svelte";
 
 const WHITE = "rgb(255, 255, 255)";
@@ -27,6 +28,7 @@ const reading: ClockGlucoseSource = {
   direction: "Flat",
   lastUpdated: Date.now() - 7 * 60_000,
   demoMode: false,
+  thresholds: resolveChartThresholds(),
 };
 
 const noReading: ClockGlucoseSource = {
@@ -35,6 +37,7 @@ const noReading: ClockGlucoseSource = {
   direction: "",
   lastUpdated: null,
   demoMode: false,
+  thresholds: resolveChartThresholds(),
 };
 
 /** Computed value of a CSS variable, to compare a rendered colour against. */
@@ -80,6 +83,18 @@ describe("ClockFaceRenderer", () => {
     expect(text).toContain("55 mg/dL");
     expect(text).toContain("7m ago");
     expect(glucoseColor("55 mg/dL")).not.toBe(WHITE);
+  });
+
+  it("colours the reading by the tenant's thresholds when the source carries them", () => {
+    const at75 = { ...reading, currentBG: 75 };
+    const fallbackColor = face(at75).glucoseColor("75 mg/dL");
+    const tenantColor = face({
+      ...at75,
+      thresholds: { ...resolveChartThresholds(), low: 80, high: 160 },
+    }).glucoseColor("75 mg/dL");
+
+    expect(fallbackColor).toBe(cssColor("--glucose-in-range"));
+    expect(tenantColor).toBe(cssColor("--glucose-low"));
   });
 
   it("renders in the face's units, not the viewer's", () => {

@@ -1,12 +1,9 @@
 <script lang="ts">
-    // The scope list and descriptions are the single source of truth shared with the
-    // OAuth consent screen, derived from the backend OAuthScope enum (NSwag-generated),
-    // so this table can never drift from the scopes the API actually accepts. Adding a
-    // backend scope regenerates the enum; OAUTH_SCOPE_DESCRIPTIONS is typed
-    // Record<OAuthScope, string>, so the build fails until the new scope gets a description.
+    // The scope list and labels are shared with the OAuth consent screen and derived from the
+    // backend OAuthScope enum, so this table can never drift from the scopes the API accepts.
     import {
         OAUTH_AVAILABLE_SCOPES,
-        OAUTH_SCOPE_DESCRIPTIONS,
+        getOAuthScopeDescription,
     } from "@nocturne/app/constants/oauth-scopes";
 </script>
 
@@ -21,7 +18,7 @@
         {#each OAUTH_AVAILABLE_SCOPES as scope (scope)}
             <tr>
                 <td><code>{scope}</code></td>
-                <td>{OAUTH_SCOPE_DESCRIPTIONS[scope]}</td>
+                <td>{getOAuthScopeDescription(scope)}</td>
             </tr>
         {/each}
     </tbody>

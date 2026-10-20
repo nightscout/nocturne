@@ -5,6 +5,7 @@
 // Type-only so the generated client is not loaded at runtime; this module is imported by
 // code whose tests run without codegen.
 import type { ChartColor } from '$api-clients';
+import type { ChartThresholds } from '$lib/constants/glucose-thresholds';
 
 /**
  * Resolve a ChartColor enum value to a CSS variable reference
@@ -15,15 +16,13 @@ export function resolveChartColor(color: ChartColor | string): string {
 }
 
 /**
- * Glucose threshold boundaries in mg/dL, defining the four cut-points between
- * the five discrete colour buckets (very-low / low / in-range / high / very-high).
+ * The four cut-points between the five discrete colour buckets
+ * (very-low / low / in-range / high / very-high), in mg/dL.
  */
-export interface GlucoseThresholds {
-	low: number;
-	high: number;
-	veryLow: number;
-	veryHigh: number;
-}
+export type GlucoseThresholds = Pick<
+	ChartThresholds,
+	'low' | 'high' | 'veryLow' | 'veryHigh'
+>;
 
 /**
  * Get glucose color based on mg/dL value and thresholds

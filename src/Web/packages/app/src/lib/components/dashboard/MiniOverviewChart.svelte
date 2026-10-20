@@ -38,10 +38,6 @@
     expanded?: boolean;
     /** Callback when selection changes */
     onSelectionChange?: (xDomain: [Date, Date] | null) => void;
-    /** High threshold for coloring (reserved for future use) */
-    highThreshold?: number;
-    /** Low threshold for coloring (reserved for future use) */
-    lowThreshold?: number;
     /** Prediction data to display */
     predictionData?: PredictionPoint[] | null;
     /** Whether to show predictions */
@@ -65,8 +61,6 @@
     yDomain,
     expanded = $bindable(true),
     onSelectionChange,
-    highThreshold: _highThreshold = 180,
-    lowThreshold: _lowThreshold = 70,
     predictionData = null,
     showPredictions = false,
     isZoomed,
@@ -75,12 +69,6 @@
 
   /** Widest range label at this font, used to keep it inside the strip. */
   const RANGE_LABEL_HALF_WIDTH = 60;
-
-  // Reserved for future threshold coloring
-  // svelte-ignore state_referenced_locally
-  void _highThreshold;
-  // svelte-ignore state_referenced_locally
-  void _lowThreshold;
 
   // Whether we have an active selection (zoomed in)
   const hasSelection = $derived(

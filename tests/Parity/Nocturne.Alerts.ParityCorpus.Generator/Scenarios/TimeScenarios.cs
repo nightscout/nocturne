@@ -64,6 +64,20 @@ public static class TimeScenarios
             [Tick(T0, Ctx(T0) with { TenantTimeZoneId = "Atlantis/Lost_City" })]);
 
         yield return Scenario(
+            "time-of-day-mis-cased-timezones",
+            "a mis-cased ETC/GMT-2 resolves to UTC+2, per rule and tenant, rather than failing closed or falling back to UTC",
+            [
+                Rule(1, "time_of_day", """{"from": "14:00", "to": "15:00", "timezone": "ETC/GMT-2"}"""),
+                Rule(2, "time_of_day", """{"from": "14:00", "to": "15:00", "timezone": null}"""),
+            ],
+            [
+                // 12:00 UTC is 14:00 at UTC+2: both rules inside.
+                Tick(T0, Ctx(T0) with { TenantTimeZoneId = "ETC/GMT-2" }),
+                // No tenant tz: rule 1 still inside on its own zone, rule 2 outside in UTC.
+                Tick(T(1), Ctx(T(1))),
+            ]);
+
+        yield return Scenario(
             "time-of-day-malformed-times",
             "unparseable from/to strings (not exact HH:mm) evaluate false",
             [
@@ -125,5 +139,14 @@ public static class TimeScenarios
                 Tick(T0, Ctx(T0) with { TenantTimeZoneId = "Pacific/Auckland" }),
                 Tick(T0, Ctx(T0) with { TenantTimeZoneId = "Narnia/Lamp_Post" }),
             ]);
+
+        yield return Scenario(
+            "day-of-week-mis-cased-tenant-timezone",
+            "a mis-cased ETC/GMT-2 tenant tz resolves rather than falling back to UTC: Monday 23:00 UTC is Tuesday 01:00 at UTC+2",
+            [
+                Rule(1, "day_of_week", """{"days": ["tuesday"]}"""),
+                Rule(2, "day_of_week", """{"days": ["monday"]}"""),
+            ],
+            [Tick(T0.AddHours(11), Ctx(T0.AddHours(11)) with { TenantTimeZoneId = "ETC/GMT-2" })]);
     }
 }

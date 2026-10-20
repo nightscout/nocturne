@@ -4,7 +4,10 @@
   import { scaleTime } from 'd3-scale';
   import { timeScale } from '$lib/components/charts/scale-guards';
   import { curveMonotoneX } from 'd3';
-  import { FALLBACK_GLUCOSE_Y_MAX } from '$lib/constants/glucose-thresholds';
+  import {
+    FALLBACK_GLUCOSE_Y_MAX,
+    type ChartThresholds,
+  } from '$lib/constants/glucose-thresholds';
   import { bg, bgLabel, time } from '$lib/utils/formatting';
   import { dashClass } from '$lib/components/charts/print/chart-print-patterns';
   import {
@@ -16,7 +19,6 @@
     type ActogramRowContext,
     type ActogramTooltipData,
     type GlucosePoint,
-    type GlucoseThresholds,
     type RowDataPoint,
     resolveTargetRange,
   } from './actogram';
@@ -25,7 +27,7 @@
     day: Date;
     data: RowDataPoint<T>[];
     bgData: RowDataPoint<GlucosePoint>[];
-    thresholds: GlucoseThresholds | undefined;
+    thresholds: ChartThresholds | undefined;
     height: number;
     row: Snippet<[ActogramRowContext<T>]>;
     tooltipValue?: Snippet<[{ point: T; day: Date }]>;
