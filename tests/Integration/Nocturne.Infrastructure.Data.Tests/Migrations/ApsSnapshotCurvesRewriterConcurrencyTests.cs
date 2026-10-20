@@ -9,25 +9,20 @@ using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 
-/// <summary>
-/// An upload that changes a snapshot while <see cref="ApsSnapshotCurvesRewriter"/> rewrites it is
-/// kept: the rewrite waits on the upload's lock and rewrites the upload's version, on a real
-/// PostgreSQL.
-/// </summary>
-[Trait("Category", "Integration")]
-public class ApsSnapshotCurvesRewriterConcurrencyTests : IAsyncLifetime
+/// <summary>A migrated database holding one oref snapshot whose command still carries its curves.</summary>
+public class ApsSnapshotCurvesRewriterConcurrencyFixture : IAsyncLifetime
 {
-    private static readonly Guid Tenant = Guid.Parse("a1111111-1111-7111-8111-111111111111");
-    private static readonly Guid Snapshot = Guid.Parse("c0000000-0000-7000-8000-000000000001");
+    internal static readonly Guid Tenant = Guid.Parse("a1111111-1111-7111-8111-111111111111");
+    internal static readonly Guid Snapshot = Guid.Parse("c0000000-0000-7000-8000-000000000001");
 
-    private const string Curves = """{"IOB": [120, 115, 110], "ZT": [120, 118], "UAM": [120, 130]}""";
+    internal const string Curves = """{"IOB": [120, 115, 110], "ZT": [120, 118], "UAM": [120, 130]}""";
 
-    private string _connectionString = string.Empty;
+    internal string ConnectionString { get; private set; } = string.Empty;
 
     public async Task InitializeAsync()
     {
         var database = await SharedPostgres.CreateEmptyDatabaseAsync("aps_curves_concurrency");
-        _connectionString = database.MigratorConnectionString;
+        ConnectionString = database.MigratorConnectionString;
 
         await using (var context = new NocturneDbContext(Options()))
         {
@@ -52,10 +47,40 @@ public class ApsSnapshotCurvesRewriterConcurrencyTests : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
+    internal async Task<NpgsqlConnection> OpenPinnedAsync()
+    {
+        var conn = new NpgsqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        await using var pin = conn.CreateCommand();
+        pin.CommandText = $"SELECT set_config('app.current_tenant_id', '{Tenant}', false);";
+        await pin.ExecuteNonQueryAsync();
+        return conn;
+    }
+
+    internal DbContextOptions<NocturneDbContext> Options() =>
+        new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(ConnectionString, npgsql => npgsql.UseNocturneMigrations())
+            .AddInterceptors(new TenantConnectionInterceptor())
+            .Options;
+}
+
+/// <summary>
+/// An upload that changes a snapshot while <see cref="ApsSnapshotCurvesRewriter"/> rewrites it is
+/// kept: the rewrite waits on the upload's lock and rewrites the upload's version, on a real
+/// PostgreSQL.
+/// </summary>
+[Trait("Category", "Integration")]
+public class ApsSnapshotCurvesRewriterConcurrencyTests(ApsSnapshotCurvesRewriterConcurrencyFixture fixture)
+    : IClassFixture<ApsSnapshotCurvesRewriterConcurrencyFixture>
+{
+    private static readonly Guid Tenant = ApsSnapshotCurvesRewriterConcurrencyFixture.Tenant;
+    private static readonly Guid Snapshot = ApsSnapshotCurvesRewriterConcurrencyFixture.Snapshot;
+    private const string Curves = ApsSnapshotCurvesRewriterConcurrencyFixture.Curves;
+
     [Fact]
     public async Task A_snapshot_an_upload_changes_mid_rewrite_is_rewritten_from_the_uploads_version()
     {
-        await using var upload = await OpenPinnedAsync();
+        await using var upload = await fixture.OpenPinnedAsync();
         await using var transaction = await upload.BeginTransactionAsync();
         await using (var change = upload.CreateCommand())
         {
@@ -70,7 +95,7 @@ public class ApsSnapshotCurvesRewriterConcurrencyTests : IAsyncLifetime
 
         var rewrite = Task.Run(async () =>
         {
-            await using var db = new NocturneDbContext(Options()) { TenantId = Tenant };
+            await using var db = new NocturneDbContext(fixture.Options()) { TenantId = Tenant };
             return await ApsSnapshotCurvesRewriter.RewriteTenantAsync(
                 db, Tenant, 500, TimeSpan.Zero, TimeSpan.Zero, CancellationToken.None);
         });
@@ -87,7 +112,7 @@ public class ApsSnapshotCurvesRewriterConcurrencyTests : IAsyncLifetime
 
     private async Task WaitUntilBlockedOnALockAsync()
     {
-        await using var observer = new NpgsqlConnection(_connectionString);
+        await using var observer = new NpgsqlConnection(fixture.ConnectionString);
         await observer.OpenAsync();
         for (var attempt = 0; attempt < 100; attempt++)
         {
@@ -109,25 +134,9 @@ public class ApsSnapshotCurvesRewriterConcurrencyTests : IAsyncLifetime
 
     private async Task<string> ReadSuggestedAsync()
     {
-        await using var conn = await OpenPinnedAsync();
+        await using var conn = await fixture.OpenPinnedAsync();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"SELECT suggested_json::text FROM aps_snapshots WHERE id = '{Snapshot}';";
         return (string)(await cmd.ExecuteScalarAsync())!;
     }
-
-    private async Task<NpgsqlConnection> OpenPinnedAsync()
-    {
-        var conn = new NpgsqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var pin = conn.CreateCommand();
-        pin.CommandText = $"SELECT set_config('app.current_tenant_id', '{Tenant}', false);";
-        await pin.ExecuteNonQueryAsync();
-        return conn;
-    }
-
-    private DbContextOptions<NocturneDbContext> Options() =>
-        new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_connectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
 }
