@@ -232,7 +232,7 @@
     {@const needsReview = rules.filter(
       (r) => !!r.reviewReason || (r.conditionIssues?.length ?? 0) > 0,
     ).length}
-    {#if needsReview > 0}
+    {#if needsReview > 0 && canManageAlerts}
       <div
         role="status"
         class="flex items-center gap-3 rounded-lg border px-4 py-3 {severity('warning', 'strip')}"

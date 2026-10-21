@@ -35,12 +35,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
     /// <para>
     /// Each is rewritten to what it was meant to be: the alias value, read as a number even when
     /// stored as a numeric string, fills a missing canonical field, then the alias is dropped; a
-    /// legacy threshold type becomes <c>threshold</c> with the direction it named; a kind spelt in
-    /// another case or without underscores gets its wire name; a timeout is rounded to whole
-    /// minutes; an operator-less composite becomes <c>and</c>, which is what the wizard's
-    /// "combined with" preset meant. A rule the rewrite changed is marked
-    /// <c>legacy_condition_converted</c>, or <c>legacy_threshold_implausible</c> when a glucose
-    /// threshold in it is below 40 mg/dL, which is likely a mmol/L value or a missing one. Its
+    /// legacy threshold type becomes <c>threshold</c> with the direction it named; the kinds it
+    /// rewrites (threshold, rate of change, signal loss, composite, not and sustained) get their
+    /// wire name when spelt in another case or without underscores; a timeout is rounded down to
+    /// whole minutes, so a signal loss only ever fires sooner; an operator-less composite becomes
+    /// <c>and</c>, which is what the wizard's "combined with" preset meant. A rule the rewrite
+    /// changed is marked <c>legacy_condition_converted</c>, or <c>legacy_threshold_implausible</c>
+    /// when a glucose threshold in it is missing, not a number, or below 40 mg/dL (likely a
+    /// mmol/L value); an implausible "above" threshold fires at once, which is loud but seen. Its
     /// confirmation readings and hysteresis are not reconstructed: AlertsRedesign dropped their
     /// columns, and the tracker reads every rule as one confirmation reading and no hysteresis,
     /// which fires sooner and closes sooner than the rule was set to, never later.
@@ -164,7 +166,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         pg_temp.repair_853_number(r->'timeoutMinutes'),
                         pg_temp.repair_853_number(r->'minutes'));
                     IF timeout IS NOT NULL THEN
-                        r := jsonb_set(r, '{timeout_minutes}', to_jsonb(round((timeout #>> '{}')::numeric)::int));
+                        r := jsonb_set(r, '{timeout_minutes}', to_jsonb(floor((timeout #>> '{}')::numeric)::int));
                         r := r - 'timeoutMinutes' - 'minutes';
                     END IF;
                     RETURN r;
@@ -290,12 +292,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 END;
                 $fn$ LANGUAGE plpgsql IMMUTABLE;
 
-                -- Whether a glucose threshold in the rule's tree is below 40 mg/dL.
+                -- Whether a glucose threshold in the rule's tree is missing, not a number, or below
+                -- 40 mg/dL.
                 CREATE OR REPLACE FUNCTION pg_temp.repair_853_implausible(ctype text, params jsonb) RETURNS boolean AS $fn$
-                    SELECT (ctype = 'threshold' AND jsonb_typeof(params) = 'object'
-                            AND jsonb_typeof(params->'value') = 'number' AND (params->>'value')::numeric < 40)
+                    SELECT CASE
+                            WHEN ctype <> 'threshold' THEN false
+                            WHEN jsonb_typeof(params->'value') IS DISTINCT FROM 'number' THEN true
+                            ELSE (params->>'value')::numeric < 40
+                        END
                         OR (jsonb_typeof(params) IN ('object', 'array')
-                            AND jsonb_path_exists(params, 'lax $.**.threshold.value ? (@ < 40)'));
+                            AND jsonb_path_exists(params,
+                                'lax $.** ? (@.type == "threshold" && (!exists(@.threshold.value) || @.threshold.value.type() != "number" || @.threshold.value < 40))'));
                 $fn$ LANGUAGE sql IMMUTABLE;
 
                 -- The rule's repaired columns, or NULL when it needs nothing.

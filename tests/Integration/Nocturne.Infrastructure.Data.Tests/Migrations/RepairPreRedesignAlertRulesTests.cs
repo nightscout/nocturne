@@ -45,6 +45,8 @@ public class RepairPreRedesignAlertRulesFixture : IAsyncLifetime
     internal static readonly Guid FractionalSignalLoss = Rule(27);
     internal static readonly Guid StringThreshold = Rule(28);
     internal static readonly Guid CamelCaseChild = Rule(29);
+    internal static readonly Guid MissingThreshold = Rule(30);
+    internal static readonly Guid MissingNestedThreshold = Rule(31);
 
     internal static readonly Guid UrgentLow = Rule(1);
     internal static readonly Guid High = Rule(2);
@@ -196,7 +198,9 @@ public class RepairPreRedesignAlertRulesFixture : IAsyncLifetime
             RuleRow(Redesigned, MmolLow, "threshold_low", """{"direction": "below", "value": 3.9, "threshold": 3.9}""", "critical"),
             RuleRow(Redesigned, FractionalSignalLoss, "signal_loss", """{"minutes": 12.6}""", "warning"),
             RuleRow(Redesigned, StringThreshold, "threshold_low", """{"threshold": "54", "direction": "below"}""", "critical"),
-            RuleRow(Redesigned, CamelCaseChild, "composite", """{"operator": "or", "conditions": [{"type": "RateOfChange", "rateOfChange": {"direction": "falling", "rate": 2}}]}""", "warning")));
+            RuleRow(Redesigned, CamelCaseChild, "composite", """{"operator": "or", "conditions": [{"type": "RateOfChange", "rateOfChange": {"direction": "falling", "rate": 2}}]}""", "warning"),
+            RuleRow(Redesigned, MissingThreshold, "threshold_low", """{"direction": "below", "value": null, "threshold": null}""", "critical"),
+            RuleRow(Redesigned, MissingNestedThreshold, "composite", """{"conditions": [{"type": "threshold_low", "threshold": {"direction": "below"}}]}""", "critical")));
 
         (Guid Id, string Type, string Params, string Severity)[] wizard =
         [
@@ -254,7 +258,7 @@ public class RepairPreRedesignAlertRulesTests(RepairPreRedesignAlertRulesFixture
     [Fact]
     public void After_the_repair_every_rule_of_every_tenant_is_read()
     {
-        fixture.ReadAfter.Should().HaveCount(23);
+        fixture.ReadAfter.Should().HaveCount(25);
     }
 
     [Fact]
@@ -322,9 +326,24 @@ public class RepairPreRedesignAlertRulesTests(RepairPreRedesignAlertRulesFixture
     }
 
     [Fact]
-    public void A_fractional_timeout_is_rounded_to_whole_minutes()
+    public void A_fractional_timeout_is_rounded_down_so_signal_loss_only_fires_sooner()
     {
-        ShouldHold(After(RepairPreRedesignAlertRulesFixture.FractionalSignalLoss), "signal_loss", """{"timeout_minutes": 13}""");
+        ShouldHold(After(RepairPreRedesignAlertRulesFixture.FractionalSignalLoss), "signal_loss", """{"timeout_minutes": 12}""");
+    }
+
+    [Fact]
+    public void A_threshold_with_no_value_is_flagged_as_implausible()
+    {
+        var rule = After(RepairPreRedesignAlertRulesFixture.MissingThreshold);
+        rule.ConditionType.Should().Be("threshold");
+        rule.ReviewReason.Should().Be(AlertRuleReviewReasons.LegacyThresholdImplausible);
+    }
+
+    [Fact]
+    public void A_nested_threshold_with_no_value_is_flagged_as_implausible()
+    {
+        After(RepairPreRedesignAlertRulesFixture.MissingNestedThreshold).ReviewReason
+            .Should().Be(AlertRuleReviewReasons.LegacyThresholdImplausible);
     }
 
     [Fact]
@@ -406,7 +425,7 @@ public class RepairPreRedesignAlertRulesTests(RepairPreRedesignAlertRulesFixture
     {
         var rule = After(RepairPreRedesignAlertRulesFixture.NullParams);
         rule.ConditionType.Should().Be("threshold");
-        rule.ReviewReason.Should().Be(Converted);
+        rule.ReviewReason.Should().Be(AlertRuleReviewReasons.LegacyThresholdImplausible, "it has no threshold at all");
     }
 
     [Fact]

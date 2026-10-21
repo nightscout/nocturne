@@ -127,7 +127,7 @@ public class AlertOrchestratorConditionIssueTests
     }
 
     [Fact]
-    public async Task A_failing_issue_check_does_not_stop_the_tenants_other_rules()
+    public async Task A_failing_issue_check_stops_no_rule_evaluating()
     {
         var harness = new Harness();
         harness.Validator
@@ -146,6 +146,10 @@ public class AlertOrchestratorConditionIssueTests
 
         await harness.EvaluateAsync(first, second);
 
+        harness.Engine.Verify(
+            e => e.EvaluateRuleAsync(It.Is<AlertRuleSnapshot>(r => r.Id == first.Id), It.IsAny<SensorContext>(),
+                It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()),
+            Times.Once, "the rule whose check failed still evaluates");
         harness.Engine.Verify(
             e => e.EvaluateRuleAsync(It.Is<AlertRuleSnapshot>(r => r.Id == second.Id), It.IsAny<SensorContext>(),
                 It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()),
