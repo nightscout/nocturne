@@ -8,6 +8,7 @@ using Nocturne.API.Services.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services;
@@ -35,7 +36,7 @@ public class SupportDiagnosticsServiceTests
             .Returns(() => ValueTask.FromResult(NewContext()));
 
         var broken = NewContext();
-        var uiSettings = new UISettingsService(broken, NullLogger<UISettingsService>.Instance);
+        var uiSettings = new UISettingsService(broken.AsFactory(), NullLogger<UISettingsService>.Instance);
         await broken.DisposeAsync();
 
         var sut = new SupportDiagnosticsService(

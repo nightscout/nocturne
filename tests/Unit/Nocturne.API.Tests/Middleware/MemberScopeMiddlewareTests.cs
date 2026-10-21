@@ -769,8 +769,8 @@ public class MemberScopeMiddlewareTests
     }
 
     /// <summary>
-    /// Runs the middleware with a real <see cref="ICategoryReadContext"/> and a scoped context reading
-    /// it, as the request pipeline registers them, and returns both.
+    /// Runs the middleware with a real <see cref="ICategoryReadContext"/> and returns it with a context
+    /// opened before the middleware ran that reads it, as one from the request's factory does.
     /// </summary>
     private static async Task<(CategoryReadContext Category, NocturneDbContext Scoped)> ResolveClampAsync(
         SqliteTestDatabase db,
@@ -784,7 +784,7 @@ public class MemberScopeMiddlewareTests
         scoped.ReadingFrom(reader: category);
         var services = new ServiceCollection();
         services.AddSingleton<ICategoryReadContext>(category);
-        services.AddSingleton(scoped);
+        services.AddSingleton(db.ContextFactory.AsNocturneFactory());
         using var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };
@@ -834,7 +834,7 @@ public class MemberScopeMiddlewareTests
         AuthType authType)
     {
         var services = new ServiceCollection();
-        services.AddScoped(_ => db.CreateContext());
+        services.AddSingleton(db.ContextFactory.AsNocturneFactory());
         using var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };

@@ -40,30 +40,30 @@ public static class TrackerSuccession
         DateTime startedAt,
         string? completionNotes,
         string? completeTreatmentId,
-        Func<CancellationToken, Task<TrackerInstanceEntity>> start,
+        Func<ITrackerRepository, CancellationToken, Task<TrackerInstanceEntity>> start,
         CancellationToken ct,
         Func<IReadOnlyList<TrackerInstanceEntity>, bool>? alreadyStarted = null,
         bool replay = false)
     {
         var result = await repository.ExecuteUnderDefinitionLockAsync(
             definition.Id,
-            async token =>
+            async (tx, token) =>
             {
                 List<TrackerInstanceEntity> completed = [];
                 if (definition.Mode == TrackerMode.Duration)
                 {
-                    var running = await repository.GetActiveInstancesForDefinitionAsync(definition.Id, token);
+                    var running = await tx.GetActiveInstancesForDefinitionAsync(definition.Id, token);
                     if (alreadyStarted?.Invoke(running) == true)
                         return new TrackerSuccessionResult(TrackerSuccessionOutcome.AlreadyStarted, null, completed);
                     if (replay && running.Count == 0
-                        && await repository.HasRunEndedAfterAsync(definition.Id, startedAt, token))
+                        && await tx.HasRunEndedAfterAsync(definition.Id, startedAt, token))
                         return new TrackerSuccessionResult(TrackerSuccessionOutcome.EndedSince, null, completed);
                     if (running.Any(i => i.StartedAt >= startedAt))
                         return new TrackerSuccessionResult(TrackerSuccessionOutcome.NewerRunning, null, completed);
 
                     foreach (var instance in running)
                     {
-                        var won = await repository.CompleteInstanceAsync(
+                        var won = await tx.CompleteInstanceAsync(
                             instance.Id,
                             TrackerSchedule.ReasonForReplacement(definition.LifespanHours, instance.StartedAt, startedAt),
                             completionNotes,
@@ -77,11 +77,11 @@ public static class TrackerSuccession
                     }
                 }
 
-                return new TrackerSuccessionResult(TrackerSuccessionOutcome.Started, await start(token), completed);
+                return new TrackerSuccessionResult(TrackerSuccessionOutcome.Started, await start(tx, token), completed);
             },
-            async (attempt, token) =>
+            async (tx, attempt, token) =>
                 attempt.Started is { } started
-                && await repository.GetInstanceByIdAsync(started.Id, token) is not null,
+                && await tx.GetInstanceByIdAsync(started.Id, token) is not null,
             ct
         );
 

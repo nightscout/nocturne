@@ -13,6 +13,8 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -57,9 +59,10 @@ public class PlatformAccessCookieHandlerTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton(_jwt);
-        services.AddDbContext<NocturneDbContext>(o => o
+        services.AddDbContextFactory<NocturneDbContext>(o => o
             .UseSqlite(_db.Connection)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
+        services.AddDataServices();
         var provider = services.BuildServiceProvider();
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 

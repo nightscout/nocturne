@@ -62,6 +62,30 @@ public class SensorGlucoseEntryReadTests(V4GoldenFixture fixture)
         LegacyJson(actual).Should().Be(LegacyJson(expected));
     }
 
+    [Theory]
+    [InlineData(false, new[] { 60d, 60d, 90d })]
+    [InlineData(true, new[] { 200d, 150d, 90d })]
+    public async Task ReadByValue_PagesTheLowestOrHighestReadings_NotTheOldestOrNewest(
+        bool descending, double[] expected)
+    {
+        using var scope = await fixture.BeginTenantScopeAsync(Guid.NewGuid());
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+        var start = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        double[] values = [200, 90, 60, 150, 60];
+        await repo.BulkCreateAsync(values.Select((mgdl, i) => new SensorGlucose
+        {
+            Timestamp = start.AddMinutes(i), Mgdl = mgdl, Device = "a", DataSource = "value-order-test",
+        }), WriteOrigin.Backfill);
+
+        var page = (await repo.GetForEntriesByValueAsync(null, null, null, 3, 0, descending)).ToList();
+
+        page.Select(r => r.Mgdl).Should().Equal(expected);
+        if (!descending)
+            page[0].Timestamp.Should().BeBefore(page[1].Timestamp);
+        var next = (await repo.GetForEntriesByValueAsync(null, null, null, 3, 3, descending)).ToList();
+        page.Concat(next).Select(r => r.Id).Should().OnlyHaveUniqueItems().And.HaveCount(5);
+    }
+
     [Fact]
     public async Task PartialReadKeepsDedupSoftDeleteAndTenantIsolation()
     {

@@ -810,8 +810,8 @@ public class StatisticsController : ControllerBase
     /// <see cref="AddScheduledBasalFallbackAsync"/> for the rest of the gate.
     /// GMI reliability is assessed per-period using context-appropriate recommended-day minimums
     /// (e.g., 1-day periods cannot require 14 days of data).
-    /// The cached value breaks the rule on <see cref="ITenantCache"/> for what a value may contain
-    /// (#2138).
+    /// The cached value holds every category; <see cref="StatisticsReadScopeGuard"/> narrows each
+    /// response to the caller's scopes.
     /// </remarks>
     [HttpGet("periods")]
     [RequireScope(Scope.GlucoseRead)]
@@ -825,7 +825,7 @@ public class StatisticsController : ControllerBase
         var cachedResult = await _cache.GetAsync<MultiPeriodStatistics>(cacheKey, cancellationToken);
         if (cachedResult != null)
         {
-            return Ok(cachedResult);
+            return Ok(StatisticsReadScopeGuard.Redact(cachedResult, HttpContext.GetGrantedScopes()));
         }
 
         // Calculate statistics for each period
@@ -958,7 +958,7 @@ public class StatisticsController : ControllerBase
         var expiry = DateTime.UtcNow.AddMinutes(5);
         await _cache.SetAsync(cacheKey, result, expiry, cancellationToken);
 
-        return Ok(result);
+        return Ok(StatisticsReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
     }
 
     /// <summary>
@@ -1027,6 +1027,10 @@ public class StatisticsController : ControllerBase
     /// <param name="endDate">Inclusive end calendar date in the tenant's timezone.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see cref="PunchCardResponse"/> with months, days, and global maxes for chart scaling.</returns>
+    /// <remarks>
+    /// For a caller without <c>treatments.read</c> no insulin or carbs are read, so every carb,
+    /// insulin and ratio figure is zero (<see cref="StatisticsReadScopeGuard"/>).
+    /// </remarks>
     [HttpGet("punch-card")]
     [RequireScope(Scope.GlucoseRead)]
     [RemoteQuery]
@@ -1047,10 +1051,14 @@ public class StatisticsController : ControllerBase
         var endDt = TimeZoneInfo.ConvertTimeToUtc(endLocalDate.AddDays(1).AddTicks(-1), tz);
 
         var rawGlucoseTask = _sensorGlucoseRepository.GetForAnalyticsAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken);
-        var carbTask       = _carbIntakeRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken);
+        var treatmentsAllowed = StatisticsReadScopeGuard.AllowsTreatments(HttpContext.GetGrantedScopes());
+        var carbTask = treatmentsAllowed
+            ? _carbIntakeRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)
+            : Task.FromResult(Enumerable.Empty<CarbIntake>());
 
-        var (manualBoluses, algorithmBoluses, tempBasals, basalInjections) =
-            await FetchInsulinRecordsAsync(startDt, endDt, cancellationToken, rawGlucoseTask, carbTask);
+        var (manualBoluses, algorithmBoluses, tempBasals, basalInjections) = treatmentsAllowed
+            ? await FetchInsulinRecordsAsync(startDt, endDt, cancellationToken, rawGlucoseTask, carbTask)
+            : new InsulinRecords([], [], [], []);
 
         var rawGlucose  = (await rawGlucoseTask).ToList();
         var glucoseData = (await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken)).ToList();

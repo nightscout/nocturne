@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.API.Services.Realtime;
@@ -20,19 +21,18 @@ public class BodyWeightService
     : SimpleEntityService<BodyWeight, BodyWeightEntity>,
         IBodyWeightService
 {
-    /// <param name="dbContext">EF Core context providing access to the body weights table.</param>
     /// <param name="documentProcessingService">Service that applies field processing (e.g. identifier generation) before save.</param>
     /// <param name="signalRBroadcastService">Service used to broadcast entity changes over SignalR.</param>
     /// <param name="logger">Logger instance for this service.</param>
     public BodyWeightService(
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         IDocumentProcessingService documentProcessingService,
         ISignalRBroadcastService signalRBroadcastService,
         ILogger<BodyWeightService> logger
     )
-        : base(dbContext, documentProcessingService, signalRBroadcastService, logger) { }
+        : base(contexts, documentProcessingService, signalRBroadcastService, logger) { }
 
-    protected override DbSet<BodyWeightEntity> EntitySet => DbContext.BodyWeights;
+    protected override DbSet<BodyWeightEntity> EntitySet(NocturneDbContext db) => db.BodyWeights;
     protected override string CollectionName => "bodyweight";
     protected override string EntityTypeName => "body weight";
 

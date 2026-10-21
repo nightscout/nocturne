@@ -7,6 +7,7 @@ using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Npgsql;
 using Nocturne.API.Multitenancy;
 
@@ -27,7 +28,7 @@ public sealed class PostgresGoogleHealthCoordinatorStore(IServiceScopeFactory sc
     public async Task<IAsyncDisposable?> LockAsync(Guid tenantId, int lockClass, TimeSpan? timeout, CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreatePlatformAsync(ct);
         // A dedicated, unpooled session releases the lock even if cleanup cannot reach PostgreSQL.
         var connection = CreateDedicatedConnection(db);
         try
@@ -100,7 +101,7 @@ public sealed class PostgresGoogleHealthCoordinatorStore(IServiceScopeFactory sc
     public async Task NotifyAsync(Guid tenantId, CancellationToken ct)
     {
         using var scope = TenantScope(tenantId);
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT pg_notify({RequestChannel}, {tenantId}::text)", ct);
     }
@@ -142,7 +143,7 @@ public sealed class PostgresGoogleHealthCoordinatorStore(IServiceScopeFactory sc
                     while (requests.Reader.TryRead(out var tenant))
                     {
                         using var scope = TenantScope(tenant);
-                        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+                        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
                         if (await db.Tenants.AnyAsync(row => row.Id == tenant && row.IsActive, ct))
                             yield return tenant;
                     }
@@ -163,7 +164,7 @@ public sealed class PostgresGoogleHealthCoordinatorStore(IServiceScopeFactory sc
     private async Task<NpgsqlConnection> OpenRequestListenerAsync(CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreatePlatformAsync(ct);
         var connection = CreateDedicatedConnection(db);
         try
         {
@@ -182,7 +183,7 @@ public sealed class PostgresGoogleHealthCoordinatorStore(IServiceScopeFactory sc
     private async Task<string?> ReadCursorsAsync(Guid tenantId, CancellationToken ct)
     {
         using var scope = TenantScope(tenantId);
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
         return await db.ConnectorConfigurations.AsNoTracking()
             .Where(row => row.TenantId == tenantId && row.ConnectorName == "googlehealth")
             .Select(row => row.SyncCursorsJson).SingleOrDefaultAsync(ct);
@@ -191,7 +192,7 @@ public sealed class PostgresGoogleHealthCoordinatorStore(IServiceScopeFactory sc
     private async Task WriteCursorAsync(Guid tenantId, string key, string? json, CancellationToken ct)
     {
         using var scope = TenantScope(tenantId);
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
         if (json is null)
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE connector_configurations SET sync_cursors = (CASE WHEN jsonb_typeof(sync_cursors) = 'object'

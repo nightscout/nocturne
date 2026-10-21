@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Auth;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
@@ -44,7 +45,7 @@ public class OAuthClientServiceRegistrationTests : IDisposable
         new(_options) { TenantId = _tenantId };
 
     private OAuthClientService CreateService(NocturneDbContext context) =>
-        new(context, new RedirectUriValidator(), NullLogger<OAuthClientService>.Instance);
+        new(context.AsFactory(), new RedirectUriValidator(), NullLogger<OAuthClientService>.Instance);
 
     [Fact]
     public async Task Register_WhenSoftwareIdMatchesEmptyKnownSeed_AdoptsSubmittedRedirectUris()

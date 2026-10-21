@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Multitenancy;
@@ -75,7 +76,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         });
         await db.SaveChangesAsync();
         await UseTenantAsync(db, tenantId);
-        var service = new HeartRateService(db, Mock.Of<IDocumentProcessingService>(),
+        var service = new HeartRateService(db.AsFactory(), Mock.Of<IDocumentProcessingService>(),
             Mock.Of<ISignalRBroadcastService>(), NullLogger<HeartRateService>.Instance);
 
         var averages = (await service.GetHeartRateMinuteAveragesByDateRangeAsync(start, end)).ToArray();
@@ -106,7 +107,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
                 DataSource = GoogleHealthReadingWriter.Source
             });
         await db.SaveChangesAsync();
-        var service = new HeartRateService(db, Mock.Of<IDocumentProcessingService>(),
+        var service = new HeartRateService(db.AsFactory(), Mock.Of<IDocumentProcessingService>(),
             Mock.Of<ISignalRBroadcastService>(), NullLogger<HeartRateService>.Instance);
 
         var averages = (await service.GetHeartRateMinuteAveragesByDateRangeAsync(
@@ -328,9 +329,9 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
             Assert.False(await second.QueueAsync(tenantId, 4, default));
 
             using var scope = firstProvider.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-            db.TenantId = tenantId;
-            var cursors = new ConnectorSyncCursorStore(db, NullLogger<ConnectorSyncCursorStore>.Instance);
+            await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+                .CreateForTenantAsync(tenantId);
+            var cursors = new ConnectorSyncCursorStore(db.AsFactory(), NullLogger<ConnectorSyncCursorStore>.Instance);
             await cursors.SetAsync("GoogleHealth", "health", new(null, "{\"backfillComplete\":true}"));
             Assert.Equal(3, (await second.ProgressAsync(tenantId, default))!.PagesRead);
             await first.CompleteScheduledAsync(tenantId);
@@ -473,9 +474,9 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         Assert.Null(await coordinator.ProgressAsync(tenantId, default));
 
         using var scope = provider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        db.TenantId = tenantId;
-        var cursors = new ConnectorSyncCursorStore(db, NullLogger<ConnectorSyncCursorStore>.Instance);
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+            .CreateForTenantAsync(tenantId);
+        var cursors = new ConnectorSyncCursorStore(db.AsFactory(), NullLogger<ConnectorSyncCursorStore>.Instance);
         await cursors.SetAsync("GoogleHealth", "health", new(null, "restored"));
         Assert.Equal("restored", (await cursors.GetAsync("GoogleHealth", "health"))!.LastGuid);
 
@@ -536,9 +537,14 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         db.TenantId = tenant;
     }
 
-    private static GoogleHealthReadingWriter Writer(NocturneDbContext db) => new(
-        Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(), Mock.Of<IBodyWeightService>(),
-        Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
+    private static GoogleHealthReadingWriter Writer(NocturneDbContext db)
+    {
+        var tenant = new Mock<ITenantAccessor>();
+        tenant.SetupGet(a => a.TenantId).Returns(() => db.TenantId);
+        return new(
+            Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(), Mock.Of<IBodyWeightService>(),
+            Mock.Of<ISleepService>(), db.AsFactory(), tenant.Object, NullLogger<GoogleHealthReadingWriter>.Instance);
+    }
 
 }
 

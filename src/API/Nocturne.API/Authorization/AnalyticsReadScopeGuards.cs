@@ -309,3 +309,53 @@ internal static class CurrentTherapyStateReadScopeGuard
         return data;
     }
 }
+
+/// <summary>
+/// Per-category read scopes for the statistics admitted on <c>glucose.read</c> alone that also
+/// summarise insulin and carbs. Category row level security hides treatments only from shares, so
+/// for a member, guest, OAuth client or token the narrowing has to happen here.
+/// </summary>
+/// <remarks>
+/// <c>GET /periods</c> is served from <see cref="Nocturne.API.Services.Caching.ITenantCache"/>,
+/// whose value holds every category; <see cref="Redact"/> narrows a copy and never the cached
+/// instance.
+/// </remarks>
+/// <seealso cref="AnalyticsReadScopes"/>
+internal static class StatisticsReadScopeGuard
+{
+    public static bool AllowsTreatments(IReadOnlySet<string> grantedScopes) =>
+        AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead);
+
+    public static MultiPeriodStatistics Redact(
+        MultiPeriodStatistics data,
+        IReadOnlySet<string> grantedScopes)
+    {
+        if (AllowsTreatments(grantedScopes))
+            return data;
+
+        return new MultiPeriodStatistics
+        {
+            LastDay = WithoutTreatments(data.LastDay),
+            Last3Days = WithoutTreatments(data.Last3Days),
+            LastWeek = WithoutTreatments(data.LastWeek),
+            LastMonth = WithoutTreatments(data.LastMonth),
+            Last90Days = WithoutTreatments(data.Last90Days),
+            LastUpdated = data.LastUpdated,
+        };
+    }
+
+    private static PeriodStatistics WithoutTreatments(PeriodStatistics period) => new()
+    {
+        PeriodDays = period.PeriodDays,
+        StartDate = period.StartDate,
+        EndDate = period.EndDate,
+        Analytics = period.Analytics,
+        TreatmentSummary = null,
+        InsulinDelivery = null,
+        HasSufficientData = period.HasSufficientData,
+        Gmi = period.Gmi,
+        Reliability = period.Reliability,
+        EntryCount = period.EntryCount,
+        TreatmentCount = 0,
+    };
+}

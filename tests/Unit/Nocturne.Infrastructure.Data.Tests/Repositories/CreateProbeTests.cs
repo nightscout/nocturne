@@ -34,8 +34,8 @@ public class CreateProbeTests : IDisposable
         _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
 
         _context = _db.CreateContext();
-        _foods = new FoodRepository(_context, NullLogger<FoodRepository>.Instance);
-        _settings = new SettingsRepository(_context);
+        _foods = new FoodRepository(_context.AsFactory(), NullLogger<FoodRepository>.Instance);
+        _settings = new SettingsRepository(_context.AsFactory());
     }
 
     public void Dispose()

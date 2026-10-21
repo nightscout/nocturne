@@ -102,7 +102,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
     private TreatmentDecomposer CreateDecomposer(IDeviceService deviceService)
     {
         return new TreatmentDecomposer(
-            _context,
+            _context.AsFactory(),
             _bolusRepoMock.Object,
             _tempBasalRepoMock.Object,
             _carbRepoMock.Object,

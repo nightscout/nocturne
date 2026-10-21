@@ -43,7 +43,7 @@ public class DDataServiceTests
         _mockGroupRepo = new Mock<IDeviceStatusGroupRepository>();
         _mockGroupRepo.Setup(x => x.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
 
         var projectionService = new DeviceStatusProjectionService(
@@ -88,7 +88,7 @@ public class DDataServiceTests
             .ReturnsAsync(Array.Empty<Treatment>());
         _mockProfileProjectionService
             .Setup(x =>
-                x.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>())
+                x.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(Array.Empty<Profile>());
         _mockFoodRepository
@@ -131,7 +131,7 @@ public class DDataServiceTests
 
         _mockGroupRepo.Verify(x => x.GetAsync(
             at.UtcDateTime.AddDays(-1), at.UtcDateTime, It.IsAny<string?>(),
-            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()));
+            It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<CancellationToken>()));
     }
 
     [Fact]

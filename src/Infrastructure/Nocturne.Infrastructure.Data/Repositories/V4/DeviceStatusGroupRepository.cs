@@ -21,14 +21,14 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
 
     /// <inheritdoc />
     /// <remarks>
-    /// The arms are read one at a time, newest first, each cut at <c>offset + limit</c> rows and
-    /// bounded below by the last row of the page so far: no older row can enter the page, and an
-    /// arm whose rows mostly belong to statuses an earlier arm anchors would otherwise be walked to
-    /// its end through its anti-joins. Each arm is an index walk on its table's tenant timestamp
-    /// index.
+    /// The arms are read one at a time in the page's order, each cut at <c>offset + limit</c> rows
+    /// and bounded on the far side by the last row of the page so far: no row past it can enter the
+    /// page, and an arm whose rows mostly belong to statuses an earlier arm anchors would otherwise
+    /// be walked to its end through its anti-joins. Each arm is an index walk on its table's tenant
+    /// timestamp index.
     /// </remarks>
     public async Task<IReadOnlyList<DeviceStatusGroup>> GetAsync(
-        DateTime? from, DateTime? to, string? device, int limit, int offset, CancellationToken ct = default)
+        DateTime? from, DateTime? to, string? device, int limit, int offset, bool descending, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var rows = Rows.Live(ctx);
@@ -40,16 +40,18 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
             var bounded = arm;
             if (page.Count == take)
             {
-                var floor = page[^1].Timestamp;
-                bounded = arm.Where(a => a.Timestamp >= floor);
+                var edge = page[^1].Timestamp;
+                bounded = descending
+                    ? arm.Where(a => a.Timestamp >= edge)
+                    : arm.Where(a => a.Timestamp <= edge);
             }
 
-            var read = await bounded
-                .OrderByDescending(a => a.Timestamp)
-                .ThenByDescending(a => a.Id)
+            var read = await (descending
+                    ? bounded.OrderByDescending(a => a.Timestamp).ThenByDescending(a => a.Id)
+                    : bounded.OrderBy(a => a.Timestamp).ThenBy(a => a.Id))
                 .Take(take)
                 .ToListAsync(ct);
-            page = NewestFirst(page.Concat(read)).Take(take).ToList();
+            page = Ordered(page.Concat(read), descending).Take(take).ToList();
         }
 
         var anchors = page.Skip(offset).ToList();
@@ -158,8 +160,10 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
     private static DateTime Millisecond(DateTime stamp) =>
         DateTimeOffset.FromUnixTimeMilliseconds(HistoryPage.ToMilliseconds(stamp)).UtcDateTime;
 
-    private static IEnumerable<AnchorRow> NewestFirst(IEnumerable<AnchorRow> anchors) =>
-        anchors.OrderByDescending(a => a.Timestamp).ThenByDescending(a => a.Id);
+    private static IEnumerable<AnchorRow> Ordered(IEnumerable<AnchorRow> anchors, bool descending) =>
+        descending
+            ? anchors.OrderByDescending(a => a.Timestamp).ThenByDescending(a => a.Id)
+            : anchors.OrderBy(a => a.Timestamp).ThenBy(a => a.Id);
 
     /// <summary>
     /// The rows that place each status, one arm per table in the order APS, pump, uploader, extras.

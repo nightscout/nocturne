@@ -19,7 +19,7 @@ namespace Nocturne.API.Services.Auth;
 /// <seealso cref="IOidcProviderService"/>
 public class OidcProviderService : IOidcProviderService
 {
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<OidcProviderService> _logger;
     private readonly IDataProtector _clientSecretProtector;
@@ -28,7 +28,6 @@ public class OidcProviderService : IOidcProviderService
     /// <summary>
     /// Initialises a new <see cref="OidcProviderService"/>.
     /// </summary>
-    /// <param name="dbContext">Database context for OIDC provider records.</param>
     /// <param name="httpClientFactory">Factory for the HTTP client used to fetch discovery documents.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="dataProtectionProvider">
@@ -36,14 +35,14 @@ public class OidcProviderService : IOidcProviderService
     /// </param>
     /// <param name="oidcOptions">Config-file OIDC provider definitions for config-managed mode.</param>
     public OidcProviderService(
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         IHttpClientFactory httpClientFactory,
         ILogger<OidcProviderService> logger,
         IDataProtectionProvider dataProtectionProvider,
         IOptions<OidcOptions> oidcOptions
     )
     {
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _clientSecretProtector = dataProtectionProvider.CreateProtector(
@@ -129,6 +128,7 @@ public class OidcProviderService : IOidcProviderService
     /// <inheritdoc />
     public async Task<List<OidcProvider>> GetEnabledProvidersAsync()
     {
+        await using var db = await _contexts.CreateAsync();
         if (IsConfigManaged)
             return _oidcOptions.Providers
                 .Where(p => p.IsEnabled)
@@ -137,7 +137,7 @@ public class OidcProviderService : IOidcProviderService
                 .Select(MapConfigToModel)
                 .ToList();
 
-        var entities = await _dbContext
+        var entities = await db
             .OidcProviders.Where(p => p.IsEnabled)
             .OrderBy(p => p.DisplayOrder)
             .ThenBy(p => p.Name)
@@ -149,6 +149,7 @@ public class OidcProviderService : IOidcProviderService
     /// <inheritdoc />
     public async Task<List<OidcProvider>> GetAllProvidersAsync()
     {
+        await using var db = await _contexts.CreateAsync();
         if (IsConfigManaged)
             return _oidcOptions.Providers
                 .OrderBy(p => p.DisplayOrder)
@@ -156,7 +157,7 @@ public class OidcProviderService : IOidcProviderService
                 .Select(MapConfigToModel)
                 .ToList();
 
-        var entities = await _dbContext
+        var entities = await db
             .OidcProviders.OrderBy(p => p.DisplayOrder)
             .ThenBy(p => p.Name)
             .ToListAsync();
@@ -167,22 +168,24 @@ public class OidcProviderService : IOidcProviderService
     /// <inheritdoc />
     public async Task<OidcProvider?> GetProviderByIdAsync(Guid providerId)
     {
+        await using var db = await _contexts.CreateAsync();
         if (IsConfigManaged)
             return _oidcOptions.Providers
                 .Select(MapConfigToModel)
                 .FirstOrDefault(p => p.Id == providerId);
 
-        var entity = await _dbContext.OidcProviders.FindAsync(providerId);
+        var entity = await db.OidcProviders.FindAsync(providerId);
         return entity != null ? MapToModel(entity) : null;
     }
 
     /// <inheritdoc />
     public async Task<OidcProvider?> GetProviderByIssuerAsync(string issuerUrl)
     {
+        await using var db = await _contexts.CreateAsync();
         // Normalize the issuer URL (remove trailing slash)
         var normalizedIssuer = issuerUrl.TrimEnd('/');
 
-        var entity = await _dbContext.OidcProviders.FirstOrDefaultAsync(p =>
+        var entity = await db.OidcProviders.FirstOrDefaultAsync(p =>
             p.IssuerUrl == normalizedIssuer
             || p.IssuerUrl == normalizedIssuer + "/"
             || p.IssuerUrl.TrimEnd('/') == normalizedIssuer
@@ -194,6 +197,7 @@ public class OidcProviderService : IOidcProviderService
     /// <inheritdoc />
     public async Task<OidcProvider> CreateProviderAsync(OidcProvider provider)
     {
+        await using var db = await _contexts.CreateAsync();
         var entity = new OidcProviderEntity
         {
             Name = provider.Name,
@@ -211,8 +215,8 @@ public class OidcProviderService : IOidcProviderService
             DisplayOrder = provider.DisplayOrder,
         };
 
-        _dbContext.OidcProviders.Add(entity);
-        await _dbContext.SaveChangesAsync();
+        db.OidcProviders.Add(entity);
+        await db.SaveChangesAsync();
 
         provider.Id = entity.Id;
         return provider;
@@ -221,7 +225,8 @@ public class OidcProviderService : IOidcProviderService
     /// <inheritdoc />
     public async Task<OidcProvider?> UpdateProviderAsync(OidcProvider provider)
     {
-        var entity = await _dbContext.OidcProviders.FindAsync(provider.Id);
+        await using var db = await _contexts.CreateAsync();
+        var entity = await db.OidcProviders.FindAsync(provider.Id);
         if (entity == null)
             return null;
 
@@ -243,45 +248,48 @@ public class OidcProviderService : IOidcProviderService
         entity.DisplayOrder = provider.DisplayOrder;
         entity.UpdatedAt = DateTime.UtcNow;
 
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
         return MapToModel(entity);
     }
 
     /// <inheritdoc />
     public async Task<bool> DeleteProviderAsync(Guid providerId)
     {
-        var entity = await _dbContext.OidcProviders.FindAsync(providerId);
+        await using var db = await _contexts.CreateAsync();
+        var entity = await db.OidcProviders.FindAsync(providerId);
         if (entity == null)
             return false;
 
-        _dbContext.OidcProviders.Remove(entity);
-        await _dbContext.SaveChangesAsync();
+        db.OidcProviders.Remove(entity);
+        await db.SaveChangesAsync();
         return true;
     }
 
     /// <inheritdoc />
     public async Task<bool> EnableProviderAsync(Guid providerId)
     {
-        var entity = await _dbContext.OidcProviders.FindAsync(providerId);
+        await using var db = await _contexts.CreateAsync();
+        var entity = await db.OidcProviders.FindAsync(providerId);
         if (entity == null)
             return false;
 
         entity.IsEnabled = true;
         entity.UpdatedAt = DateTime.UtcNow;
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
         return true;
     }
 
     /// <inheritdoc />
     public async Task<bool> DisableProviderAsync(Guid providerId)
     {
-        var entity = await _dbContext.OidcProviders.FindAsync(providerId);
+        await using var db = await _contexts.CreateAsync();
+        var entity = await db.OidcProviders.FindAsync(providerId);
         if (entity == null)
             return false;
 
         entity.IsEnabled = false;
         entity.UpdatedAt = DateTime.UtcNow;
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
         return true;
     }
 
@@ -291,6 +299,7 @@ public class OidcProviderService : IOidcProviderService
         bool forceRefresh = false
     )
     {
+        await using var db = await _contexts.CreateAsync();
         if (IsConfigManaged)
         {
             var configProvider = _oidcOptions.Providers
@@ -306,7 +315,7 @@ public class OidcProviderService : IOidcProviderService
             return await FetchDiscoveryDocumentAsync(configProvider.IssuerUrl);
         }
 
-        var entity = await _dbContext.OidcProviders.FindAsync(providerId);
+        var entity = await db.OidcProviders.FindAsync(providerId);
         if (entity == null)
             return null;
 
@@ -340,7 +349,7 @@ public class OidcProviderService : IOidcProviderService
         {
             entity.DiscoveryDocumentJson = JsonSerializer.Serialize(document);
             entity.DiscoveryCachedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync();
+            await db.SaveChangesAsync();
         }
 
         return document;
@@ -349,6 +358,7 @@ public class OidcProviderService : IOidcProviderService
     /// <inheritdoc />
     public async Task<OidcProviderTestResult> TestProviderAsync(Guid providerId)
     {
+        await using var db = await _contexts.CreateAsync();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var result = new OidcProviderTestResult { Warnings = new List<string>() };
 
@@ -410,12 +420,12 @@ public class OidcProviderService : IOidcProviderService
             // Cache the document (DB providers only)
             if (!IsConfigManaged)
             {
-                var entity = await _dbContext.OidcProviders.FindAsync(providerId);
+                var entity = await db.OidcProviders.FindAsync(providerId);
                 if (entity != null)
                 {
                     entity.DiscoveryDocumentJson = JsonSerializer.Serialize(document);
                     entity.DiscoveryCachedAt = DateTime.UtcNow;
-                    await _dbContext.SaveChangesAsync();
+                    await db.SaveChangesAsync();
                 }
             }
         }

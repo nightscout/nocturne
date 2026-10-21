@@ -83,28 +83,16 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
                 ?? ConvertV3FilterToV1Find(parameters.Filter);
 
-            // Determine sort direction from sort$desc query parameter
-            // Nightscout V3: sort$desc=field means descending (newest first)
-            // reverseResults=false means descending, reverseResults=true means ascending
-            var query = HttpContext!.Request.Query;
-            var hasSortDesc = query.ContainsKey("sort$desc");
-            var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
-
-            // Project device status from V4 snapshot tables
-            var deviceStatusListRaw = await _projection.GetAsync(
-                parameters.Limit,
-                parameters.Offset,
-                findQuery,
-                cancellationToken
-            );
-
-            var deviceStatusList = deviceStatusListRaw.ToList();
-
-            // Reverse results if needed (projection returns newest-first by default)
-            if (reverseResults)
-            {
-                deviceStatusList.Reverse();
-            }
+            var deviceStatusList = (
+                await _projection.GetAsync(
+                    parameters.Limit,
+                    parameters.Offset,
+                    findQuery,
+                    cancellationToken,
+                    parameters.Sort.Descending,
+                    ReadSortFieldOf(parameters.Sort)
+                )
+            ).ToList();
 
             var totalCount = await _projection.CountAsync(findQuery, cancellationToken);
 

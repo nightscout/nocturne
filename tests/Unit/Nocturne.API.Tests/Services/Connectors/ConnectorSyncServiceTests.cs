@@ -13,6 +13,7 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -54,14 +55,9 @@ public class ConnectorSyncServiceTests
         // the mutable scoped AuditContext to mark it system for the sync's duration.
         services.AddScoped<IAuditContext, AuditContext>();
 
-        // A real NocturneDbContext reading the scope's audit context, as production's does. Sqlite
-        // rather than InMemory so the relational model builds; no connection is ever opened
-        // because nothing queries.
-        services.AddScoped(sp => new NocturneDbContext(
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseSqlite("DataSource=:memory:")
-                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-                .Options).AttributedTo(sp.GetRequiredService<IAuditContext>()));
+        // The scope's read context, which every context created in it reads, over the scope's audit
+        // context as production's is.
+        services.AddScoped(sp => new TenantReadContext(null, null, sp.GetRequiredService<IAuditContext>()));
 
         foreach (var executor in executors)
         {
@@ -274,12 +270,12 @@ public class ConnectorSyncServiceTests
     [Fact]
     public async Task TriggerSyncAsync_SystemAttributesTheScopeInjectedDbContext()
     {
-        // Writes on the scope's directly-injected context are attributed by that context's
+        // Writes on a context the scope creates are attributed by the scope's read context's
         // AuditContext.
         IAuditContext? captured = null;
         var executor = CreateMockExecutor(
             "test",
-            onSyncScope: sp => captured = sp.GetRequiredService<NocturneDbContext>().AuditContext);
+            onSyncScope: sp => captured = sp.GetRequiredService<TenantReadContext>().AuditContext);
         var sut = CreateService(BuildProvider(executor));
 
         // Act

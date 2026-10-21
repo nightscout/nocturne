@@ -22,6 +22,7 @@ public class ServiceCollectionExtensionsTests
         provider.GetRequiredService<INocturneDbContextFactory>().Should().NotBeNull(
             "singletons and hosted services take it from the root");
         scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().Should().NotBeNull();
-        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().Should().NotBeNull();
+        scope.ServiceProvider.GetService<NocturneDbContext>().Should().BeNull(
+            "every context comes from the factory and is disposed by the method that opened it");
     }
 }

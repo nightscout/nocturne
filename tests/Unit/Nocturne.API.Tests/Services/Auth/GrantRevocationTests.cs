@@ -89,7 +89,7 @@ public class GrantRevocationTests : IDisposable
         {
             case Guest:
                 var guestLinks = new GuestLinkService(
-                    db,
+                    db.AsFactory(),
                     _sessionCache,
                     new GrantRevocationService(_sessionCache),
                     NullLogger<GuestLinkService>.Instance);
@@ -98,7 +98,6 @@ public class GrantRevocationTests : IDisposable
 
             case App:
                 var grants = new OAuthGrantService(
-                    db,
                     _db.ContextFactory.AsNocturneFactory(),
                     new Mock<IOAuthClientService>().Object,
                     _sessionCache,

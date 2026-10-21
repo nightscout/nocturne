@@ -10,8 +10,8 @@ namespace Nocturne.API.Services.Demo;
 /// <summary>
 /// The one owner of "everything the demo service wrote": the table list and the delete that empties
 /// it, for every caller that clears demo data. Takes the context so a caller may bring either
-/// tenant-scoping pattern — an injected scoped context, or a factory context with
-/// <see cref="NocturneDbContext.TenantId"/> pinned from the demo tenant lookup.
+/// tenant-scoping pattern — a context reading as the scope's tenant, or one pinned to the demo
+/// tenant the caller looked up.
 /// </summary>
 /// <remarks>
 /// Hard delete (<see cref="PurgeExtensions.PurgeAsync{TEntity}"/>), unlike the audited soft-delete

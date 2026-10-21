@@ -172,7 +172,9 @@ public class ConnectorCursorResetJobService : IConnectorCursorResetJobService
     private async Task<ConnectorResetJobEntity?> FindRecordAsync(Guid jobId, CancellationToken ct)
     {
         using var scope = _serviceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider
+            .GetRequiredService<INocturneDbContextFactory>()
+            .CreateAsync(ct);
         return await db.ConnectorResetJobs.FindAsync([jobId], ct);
     }
 }
@@ -322,7 +324,9 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
         {
             var status = GetStatus();
             using var scope = _serviceProvider.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            await using var db = await scope.ServiceProvider
+                .GetRequiredService<INocturneDbContextFactory>()
+                .CreateAsync(ct);
 
             var record = await db.ConnectorResetJobs.FindAsync([_id], ct);
             if (record is null)

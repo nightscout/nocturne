@@ -6,13 +6,14 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
 
 /// <summary>
-/// <see cref="AlertRuleRearm"/> clears the hold through the scoped context, whose tenant Row Level
-/// Security reads. That context reads the scope's tenant live, whenever it is resolved.
+/// <see cref="AlertRuleRearm"/> clears the hold on a context from the scope's factory, whose tenant
+/// Row Level Security reads. That context reads the scope's tenant live, whenever it is opened.
 /// </summary>
 [Trait("Category", "Unit")]
 public class AlertRuleRearmWiringTests
@@ -77,8 +78,8 @@ public class AlertRuleRearmWiringTests
         using var scope = provider.CreateScope();
         accessor.SetTenant(new TenantContext(Tenant, "t", "T", true, IsDemo: false));
         var rearm = scope.ServiceProvider.GetRequiredService<AlertRuleRearm>();
-        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId.Should().Be(Tenant,
-            "the tracker repository the clear writes through shares this scoped context");
+        scope.ServiceProvider.GetRequiredService<TenantReadContext>().TenantId.Should().Be(Tenant,
+            "every context the tracker repository opens in this scope reads its tenant");
 
         await rearm.ClearAsync([Rule], CancellationToken.None);
 

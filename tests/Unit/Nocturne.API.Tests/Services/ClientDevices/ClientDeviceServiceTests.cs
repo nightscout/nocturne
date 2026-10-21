@@ -19,7 +19,7 @@ public class ClientDeviceServiceTests
         new HashSet<string> { Scope.DeviceNotify, Scope.DeviceActuate };
 
     private static ClientDeviceService CreateService(NocturneDbContext ctx)
-        => new(ctx, NullLogger<ClientDeviceService>.Instance);
+        => new(ctx.AsFactory(), NullLogger<ClientDeviceService>.Instance);
 
     private static NocturneDbContext CreateContext()
     {

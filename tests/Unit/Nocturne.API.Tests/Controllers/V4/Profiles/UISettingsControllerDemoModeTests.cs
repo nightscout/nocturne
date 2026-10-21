@@ -7,6 +7,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Profiles;
 using Nocturne.API.Services.Profiles;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using static Nocturne.API.Tests.Controllers.V4.Profiles.UISettingsControllerHarness;
 
@@ -123,7 +124,7 @@ public class UISettingsControllerDemoModeTests
     {
         var demoService = new StubDemoService(HttpStatusCode.OK, ProxiedSettings);
         var controller = NewController(
-            new UISettingsService(NewDatabase(), NullLogger<UISettingsService>.Instance),
+            new UISettingsService(NewDatabase().AsFactory(), NullLogger<UISettingsService>.Instance),
             DemoMode(enabled: false, serviceUrl: "http://demo-service"),
             demoService.Factory
         );
@@ -154,7 +155,7 @@ public class UISettingsControllerDemoModeTests
     )
     {
         var controller = NewController(
-            new UISettingsService(NewDatabase(), NullLogger<UISettingsService>.Instance),
+            new UISettingsService(NewDatabase().AsFactory(), NullLogger<UISettingsService>.Instance),
             DemoMode(enabled: true, serviceUrl: serviceUrl),
             demoService.Factory
         );

@@ -19,6 +19,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -41,7 +42,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
     private readonly IHeartRateService _heartRateService;
     private readonly ITenantOwnerResolver _tenantOwnerResolver;
     private readonly ITenantAccessor _tenantAccessor;
-    private readonly NocturneDbContext _db;
+    private readonly INocturneDbContextFactory _contexts;
 
     public MetadataPublisher(
         IProfileWriteService profileWriteService,
@@ -56,7 +57,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         IHeartRateService heartRateService,
         ITenantOwnerResolver tenantOwnerResolver,
         ITenantAccessor tenantAccessor,
-        NocturneDbContext db,
+        INocturneDbContextFactory contexts,
         IAuditContext auditContext,
         PublishSkipTally skips,
         ILogger<MetadataPublisher> logger)
@@ -74,7 +75,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         _heartRateService = heartRateService ?? throw new ArgumentNullException(nameof(heartRateService));
         _tenantOwnerResolver = tenantOwnerResolver ?? throw new ArgumentNullException(nameof(tenantOwnerResolver));
         _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
-        _db = db ?? throw new ArgumentNullException(nameof(db));
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <summary>
@@ -232,11 +233,18 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             activities, a => a.Id,
             unheld => WriteActivityAsync(unheld, source, cancellationToken),
             source,
-            ids => _db.GetHeldOriginalIdsAsync<StateSpanEntity>(ids, cancellationToken),
-            ids => _db.GetHeldOriginalIdsAsync<HeartRateEntity>(ids, cancellationToken),
-            ids => _db.GetHeldOriginalIdsAsync<StepCountEntity>(ids, cancellationToken),
-            ids => _db.GetHeldOriginalIdsAsync<SleepSessionEntity>(
-                ids, s => s.Source == ActivityStateSpanMapper.SleepSessionSource, cancellationToken));
+            ids => HeldAsync(db => db.GetHeldOriginalIdsAsync<StateSpanEntity>(ids, cancellationToken), cancellationToken),
+            ids => HeldAsync(db => db.GetHeldOriginalIdsAsync<HeartRateEntity>(ids, cancellationToken), cancellationToken),
+            ids => HeldAsync(db => db.GetHeldOriginalIdsAsync<StepCountEntity>(ids, cancellationToken), cancellationToken),
+            ids => HeldAsync(db => db.GetHeldOriginalIdsAsync<SleepSessionEntity>(
+                ids, s => s.Source == ActivityStateSpanMapper.SleepSessionSource, cancellationToken), cancellationToken));
+
+    private async Task<IReadOnlySet<string>> HeldAsync(
+        Func<NocturneDbContext, Task<IReadOnlySet<string>>> held, CancellationToken ct)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        return await held(db);
+    }
 
     public async Task<bool> PublishStateSpansAsync(
         IEnumerable<StateSpan> stateSpans,
@@ -421,7 +429,8 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string collection,
         CancellationToken cancellationToken = default)
     {
-        var config = await FindConnectorConfigurationAsync(source, cancellationToken);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var config = await FindConnectorConfigurationAsync(db, source, cancellationToken);
         if (config?.BackfillLowWaterMarks is null)
             return null;
 
@@ -446,7 +455,8 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         DateTime? lowWaterMark,
         CancellationToken cancellationToken = default)
     {
-        var config = await FindConnectorConfigurationAsync(source, cancellationToken);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var config = await FindConnectorConfigurationAsync(db, source, cancellationToken);
         if (config is null)
         {
             Logger.LogWarning(
@@ -455,11 +465,11 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             return;
         }
 
-        if (_db.Database.IsNpgsql())
+        if (db.Database.IsNpgsql())
         {
             if (lowWaterMark is null)
             {
-                await _db.Database.ExecuteSqlAsync(
+                await db.Database.ExecuteSqlAsync(
                     $"""
                      UPDATE connector_configurations
                      SET backfill_low_water_marks =
@@ -473,7 +483,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
                 // Serialized as an ISO-8601 UTC string ("...Z"), matching what
                 // System.Text.Json writes so Get round-trips without a timezone shift.
                 var value = lowWaterMark.Value.ToString("O");
-                await _db.Database.ExecuteSqlAsync(
+                await db.Database.ExecuteSqlAsync(
                     $"""
                      UPDATE connector_configurations
                      SET backfill_low_water_marks =
@@ -496,7 +506,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             marks[collection] = lowWaterMark.Value;
 
         config.BackfillLowWaterMarks = marks.Count == 0 ? null : JsonSerializer.Serialize(marks);
-        await _db.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
@@ -507,6 +517,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
     /// jsonb-path updates, and a stale tracked snapshot must never flow back into the row.
     /// </summary>
     private async Task<ConnectorConfigurationEntity?> FindConnectorConfigurationAsync(
+        NocturneDbContext db,
         string source,
         CancellationToken cancellationToken)
     {
@@ -516,9 +527,9 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             ? canonicalSource[..^suffix.Length]
             : canonicalSource;
 
-        var query = _db.Database.IsNpgsql()
-            ? _db.ConnectorConfigurations.AsNoTracking()
-            : _db.ConnectorConfigurations;
+        var query = db.Database.IsNpgsql()
+            ? db.ConnectorConfigurations.AsNoTracking()
+            : db.ConnectorConfigurations;
 
         return await query
             .FirstOrDefaultAsync(

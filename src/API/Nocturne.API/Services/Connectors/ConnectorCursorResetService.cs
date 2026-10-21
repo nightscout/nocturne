@@ -107,7 +107,6 @@ public record TenantCursorResetResult(
 /// <inheritdoc cref="IConnectorCursorResetService"/>
 public class ConnectorCursorResetService : IConnectorCursorResetService
 {
-    private readonly NocturneDbContext _db;
     private readonly INocturneDbContextFactory _dbFactory;
     private readonly IConnectorSyncService _syncService;
     private readonly ITenantAccessor _tenantAccessor;
@@ -115,13 +114,11 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
 
     /// <summary>Initializes a new instance of <see cref="ConnectorCursorResetService"/>.</summary>
     public ConnectorCursorResetService(
-        NocturneDbContext db,
         INocturneDbContextFactory dbFactory,
         IConnectorSyncService syncService,
         ITenantAccessor tenantAccessor,
         ILogger<ConnectorCursorResetService> logger)
     {
-        _db = db;
         _dbFactory = dbFactory;
         _syncService = syncService;
         _tenantAccessor = tenantAccessor;
@@ -136,7 +133,8 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
         IConnectorResetProgress? progress,
         CancellationToken ct)
     {
-        var tenant = await _db.Tenants.AsNoTracking()
+        await using var db = await _dbFactory.CreateAsync(ct);
+        var tenant = await db.Tenants.AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == tenantId, ct);
 
         if (tenant is null)
@@ -145,7 +143,7 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
             return null;
         }
 
-        // _db and the executor scope IConnectorSyncService.TriggerSyncAsync opens both read the
+        // db and the executor scope IConnectorSyncService.TriggerSyncAsync opens both read the
         // tenant from the accessor, so the caller opens this scope on the target tenant
         // (TenantJobScope.Open); moving the accessor here would move every context of the scope.
         if (_tenantAccessor.Context?.TenantId != tenantId)
@@ -154,7 +152,7 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
                 $"A cursor reset for tenant {tenantId} must run in a scope opened on that tenant.");
         }
 
-        var configs = await _db.ConnectorConfigurations.AsNoTracking()
+        var configs = await db.ConnectorConfigurations.AsNoTracking()
             .Where(c => c.TenantId == tenantId)
             .OrderBy(c => c.ConnectorName)
             .ToListAsync(ct);
@@ -217,7 +215,8 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
     /// <inheritdoc />
     public async Task<TenantConnectorsDto?> GetTenantConnectorsAsync(Guid tenantId, CancellationToken ct)
     {
-        var tenant = await _db.Tenants.AsNoTracking()
+        await using var db = await _dbFactory.CreateAsync(ct);
+        var tenant = await db.Tenants.AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == tenantId, ct);
 
         if (tenant is null)

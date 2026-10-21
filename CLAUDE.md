@@ -282,6 +282,16 @@ request's state, and nothing reads `HttpContext` for it. A write that outlives i
 never the request's factory: that one reads the request's scope after it is disposed. The raw
 `IDbContextFactory<NocturneDbContext>` stays registered for Infrastructure's own use only.
 
+No `NocturneDbContext` is registered in DI. Each method opens its own
+(`await using var db = await _contexts.CreateAsync(ct)`), and nothing tracked and no
+`IQueryable` leaves it. Writes that must commit together, or share an advisory lock or a
+transaction, share a caller-owned `DbUnitOfWork`: the owner opens it and hands it to each
+writer taking part (`AlertTrackerRepository`/`TrackerRepository` take one in their
+constructor; `AlertRuleRearm.SaveAndClearAsync` takes one). `PerOperationContextGuardTests`
+keeps contexts and the raw factory out of constructors and scope lookups outside
+Infrastructure, and `ServiceProviderValidationTests` builds the real API registrations with
+`ValidateOnBuild` and `ValidateScopes`, which `Program.cs` enables only in Development.
+
 Background work opens its scope with `TenantJobScope.Open(provider, tenant, actor)`
 (`Nocturne.API.Multitenancy`): the tenant (or none) set on the scope's `ITenantAccessor` and
 the audit actor system-attributed. Everything the scope resolves or creates follows it. A

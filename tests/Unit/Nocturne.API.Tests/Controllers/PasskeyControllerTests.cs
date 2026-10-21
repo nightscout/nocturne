@@ -92,7 +92,6 @@ public class PasskeyControllerTests : IDisposable
             // The real service, not a mock: the enrolment probe's cross-tenant reach is the
             // property under test, and a mock would assert the mock.
             new TenantMemberService((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
-            _dbContext,
             (new SharedSqliteFactory(_db.Options)).AsNocturneFactory(),
             oidcOptions,
             logger.Object);

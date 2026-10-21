@@ -91,7 +91,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
     private OAuthDeviceCodeService CreateService(NocturneDbContext dbContext)
     {
         return new OAuthDeviceCodeService(
-            dbContext,
+            dbContext.AsFactory(),
             _mockJwtService.Object,
             _mockClientService.Object,
             _mockGrantService.Object,
@@ -206,7 +206,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         Assert.Equal(5, result.Interval);
 
         // Verify entity was persisted with the hashed device code
-        var entity = await db.OAuthDeviceCodes
+        var entity = await db.OAuthDeviceCodes.AsNoTracking()
             .FirstOrDefaultAsync(d => d.DeviceCodeHash == TestDeviceCodeHash);
         Assert.NotNull(entity);
         Assert.Equal(TestClientId, entity.ClientId);
@@ -318,7 +318,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         Assert.True(result);
 
         // Verify entity was updated
-        var entity = await db.OAuthDeviceCodes
+        var entity = await db.OAuthDeviceCodes.AsNoTracking()
             .FirstAsync(d => d.UserCode == "PNDNG001");
         Assert.NotNull(entity.ApprovedAt);
         Assert.Equal(_testGrantId, entity.GrantId);
@@ -406,7 +406,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         Assert.True(result);
 
         // Verify entity was updated
-        var entity = await db.OAuthDeviceCodes
+        var entity = await db.OAuthDeviceCodes.AsNoTracking()
             .FirstAsync(d => d.UserCode == "DENY0001");
         Assert.NotNull(entity.DeniedAt);
     }
@@ -510,7 +510,7 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
     private OAuthTokenService CreateService(NocturneDbContext dbContext)
     {
         return new OAuthTokenService(
-            dbContext,
+            dbContext.AsFactory(),
             _mockJwtService.Object,
             _mockSubjectService.Object,
             _mockGrantService.Object,
@@ -652,7 +652,7 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
         Assert.Null(result.ErrorDescription);
 
         // Verify a refresh token was persisted
-        var refreshToken = await db.OAuthRefreshTokens
+        var refreshToken = await db.OAuthRefreshTokens.AsNoTracking()
             .FirstOrDefaultAsync(t => t.TokenHash == TestRefreshTokenHash);
         Assert.NotNull(refreshToken);
         Assert.Equal(grantId, refreshToken.GrantId);
@@ -771,7 +771,7 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
         Assert.Equal("slow_down", result.Error);
 
         // Verify interval was increased by 5 seconds per RFC 8628
-        var entity = await db.OAuthDeviceCodes
+        var entity = await db.OAuthDeviceCodes.AsNoTracking()
             .FirstAsync(d => d.DeviceCodeHash == TestDeviceCodeHash);
         Assert.Equal(10, entity.Interval); // 5 + 5
     }

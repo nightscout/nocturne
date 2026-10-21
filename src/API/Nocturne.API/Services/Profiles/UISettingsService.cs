@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Profiles;
 
@@ -27,7 +28,7 @@ namespace Nocturne.API.Services.Profiles;
 /// <seealso cref="IUISettingsService"/>
 public class UISettingsService : IUISettingsService
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<UISettingsService> _logger;
 
     private const string SettingsKeyPrefix = "ui:settings:";
@@ -41,9 +42,9 @@ public class UISettingsService : IUISettingsService
         WriteIndented = false,
     };
 
-    public UISettingsService(NocturneDbContext context, ILogger<UISettingsService> logger)
+    public UISettingsService(INocturneDbContextFactory contexts, ILogger<UISettingsService> logger)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger;
     }
 
@@ -52,9 +53,10 @@ public class UISettingsService : IUISettingsService
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         try
         {
-            var stored = await ReadAllAsync(cancellationToken);
+            var stored = await ReadAllAsync(db, cancellationToken);
             var legacy = Value(stored, LegacyAggregateKey);
             var legacyAggregate = legacy == null ? null : JsonNode.Parse(legacy) as JsonObject;
             var settings = new UISettingsConfiguration();
@@ -93,6 +95,7 @@ public class UISettingsService : IUISettingsService
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         try
         {
             foreach (var section in UISettingsSections.All)
@@ -100,11 +103,11 @@ public class UISettingsService : IUISettingsService
                 var value = section.Get(settings);
                 if (value != null)
                 {
-                    await WriteSectionAsync(section.Name, value, cancellationToken);
+                    await WriteSectionAsync(db, section.Name, value, cancellationToken);
                 }
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("UI settings saved successfully");
 
             return settings;
@@ -156,6 +159,7 @@ public class UISettingsService : IUISettingsService
     )
         where T : class
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         if (UISettingsSections.Find(sectionName) == null && !IsAlarmConfigurationName(sectionName))
         {
             throw new ArgumentException(
@@ -166,9 +170,9 @@ public class UISettingsService : IUISettingsService
 
         try
         {
-            await WriteSectionAsync(sectionName, sectionSettings, cancellationToken);
+            await WriteSectionAsync(db, sectionName, sectionSettings, cancellationToken);
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Settings section {Section} saved successfully", sectionName);
 
             return sectionSettings;
@@ -234,16 +238,18 @@ public class UISettingsService : IUISettingsService
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         try
         {
             await UpsertAsync(
+                db,
                 AlarmConfigurationKey,
                 JsonSerializer.Serialize(config, JsonOptions),
                 AlarmConfigurationNotes,
                 cancellationToken
             );
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
             _logger.LogInformation(
                 "Alarm configuration saved with {ProfileCount} profiles",
                 config.Profiles?.Count ?? 0
@@ -288,7 +294,8 @@ public class UISettingsService : IUISettingsService
 
     private async Task<object?> ReadAsync(string key, Type type, CancellationToken cancellationToken)
     {
-        return Deserialize(await ReadValueAsync(key, cancellationToken), type);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return Deserialize(await ReadValueAsync(db, key, cancellationToken), type);
     }
 
     private static object? Deserialize(string? value, Type type)
@@ -306,10 +313,11 @@ public class UISettingsService : IUISettingsService
     /// round trip per section.
     /// </summary>
     private async Task<IReadOnlyDictionary<string, string>> ReadAllAsync(
+        NocturneDbContext db,
         CancellationToken cancellationToken
     )
     {
-        var rows = await _context
+        var rows = await db
             .Settings.Where(s => s.IsActive && s.Key.StartsWith(SettingsKeyPrefix))
             .Select(s => new { s.Key, s.Value })
             .ToListAsync(cancellationToken);
@@ -319,9 +327,9 @@ public class UISettingsService : IUISettingsService
             .ToDictionary(g => g.Key, g => g.First().Value!);
     }
 
-    private async Task<string?> ReadValueAsync(string key, CancellationToken cancellationToken)
+    private async Task<string?> ReadValueAsync(NocturneDbContext db, string key, CancellationToken cancellationToken)
     {
-        var entity = await _context.Settings.FirstOrDefaultAsync(
+        var entity = await db.Settings.FirstOrDefaultAsync(
             s => s.Key == key && s.IsActive,
             cancellationToken
         );
@@ -335,6 +343,7 @@ public class UISettingsService : IUISettingsService
     /// splits in two, so its alarm configuration is additionally staged to the row that owns it.
     /// </summary>
     private async Task WriteSectionAsync(
+        NocturneDbContext db,
         string sectionName,
         object sectionSettings,
         CancellationToken cancellationToken
@@ -343,6 +352,7 @@ public class UISettingsService : IUISettingsService
         if (sectionSettings is NotificationSettings notifications)
         {
             await UpsertAsync(
+                db,
                 AlarmConfigurationKey,
                 JsonSerializer.Serialize(notifications.AlarmConfiguration, JsonOptions),
                 AlarmConfigurationNotes,
@@ -351,6 +361,7 @@ public class UISettingsService : IUISettingsService
         }
 
         await UpsertAsync(
+            db,
             GetSectionKey(sectionName),
             SerializeForRow(sectionName, sectionSettings),
             $"UI settings section: {sectionName}",
@@ -382,6 +393,7 @@ public class UISettingsService : IUISettingsService
     }
 
     private async Task UpsertAsync(
+        NocturneDbContext db,
         string key,
         string value,
         string notes,
@@ -390,14 +402,14 @@ public class UISettingsService : IUISettingsService
     {
         var now = DateTimeOffset.UtcNow;
 
-        var entity = await _context.Settings.FirstOrDefaultAsync(
+        var entity = await db.Settings.FirstOrDefaultAsync(
             s => s.Key == key,
             cancellationToken
         );
 
         if (entity == null)
         {
-            _context.Settings.Add(
+            db.Settings.Add(
                 new SettingsEntity
                 {
                     Id = Guid.CreateVersion7(),

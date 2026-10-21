@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -20,7 +21,7 @@ public class MemberInviteService : IMemberInviteService
     /// <summary>Longest lifetime an invite token may be minted with.</summary>
     private const int MaxExpiresInDays = 90;
 
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly IJwtService _jwtService;
     private readonly ITenantService _tenantService;
     private readonly ITenantRoleService _tenantRoleService;
@@ -28,14 +29,14 @@ public class MemberInviteService : IMemberInviteService
     private readonly ILogger<MemberInviteService> _logger;
 
     public MemberInviteService(
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         IJwtService jwtService,
         ITenantService tenantService,
         ITenantRoleService tenantRoleService,
         IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<MemberInviteService> logger)
     {
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _jwtService = jwtService;
         _tenantService = tenantService;
         _tenantRoleService = tenantRoleService;
@@ -56,6 +57,7 @@ public class MemberInviteService : IMemberInviteService
         bool limitTo24Hours = false,
         string? baseUrl = null)
     {
+        await using var db = await _contexts.CreateAsync();
         if (roleIds.Count == 0 && (directPermissions == null || directPermissions.Count == 0))
             throw new ArgumentException("At least one role or direct permission is required.");
 
@@ -94,8 +96,8 @@ public class MemberInviteService : IMemberInviteService
             CreatedAt = DateTime.UtcNow,
         };
 
-        _dbContext.MemberInvites.Add(entity);
-        await _dbContext.SaveChangesAsync();
+        db.MemberInvites.Add(entity);
+        await db.SaveChangesAsync();
 
         _logger.LogInformation(
             "MemberInviteAudit: {Event} invite_id={InviteId} tenant_id={TenantId} role_count={RoleCount} expires_at={ExpiresAt}",
@@ -108,7 +110,7 @@ public class MemberInviteService : IMemberInviteService
         var inviteUrl =
             $"{origin}{IMemberInviteService.JoinPath}?{IMemberInviteService.TokenQueryParameter}={token}";
 
-        var createdByName = await _dbContext.Subjects
+        var createdByName = await db.Subjects
             .Where(s => s.Id == createdBySubjectId)
             .Select(s => s.Name)
             .FirstOrDefaultAsync();
@@ -124,12 +126,13 @@ public class MemberInviteService : IMemberInviteService
     /// <inheritdoc />
     public async Task<MemberInviteInfo?> GetInviteByTokenAsync(string token, Guid tenantId)
     {
+        await using var db = await _contexts.CreateAsync();
         if (string.IsNullOrEmpty(token))
             return null;
 
         var tokenHash = HashUtils.Sha256Hex(token);
 
-        var entity = await _dbContext.MemberInvites
+        var entity = await db.MemberInvites
             .Include(i => i.Tenant)
             .Include(i => i.CreatedBy)
             .Where(i => i.TokenHash == tokenHash && i.TenantId == tenantId)
@@ -138,13 +141,14 @@ public class MemberInviteService : IMemberInviteService
         if (entity == null)
             return null;
 
-        return MapToInfo(entity, await LoadRolesAsync(tenantId, entity.RoleIds));
+        return MapToInfo(entity, await LoadRolesAsync(db, tenantId, entity.RoleIds));
     }
 
     /// <inheritdoc />
     public async Task<AcceptMemberInviteResult> AcceptInviteAsync(
         string token, Guid acceptingSubjectId, Guid tenantId)
     {
+        await using var db = await _contexts.CreateAsync();
         if (string.IsNullOrEmpty(token))
             return new AcceptMemberInviteResult(false, "invalid_token", "Invite token is required.");
 
@@ -153,7 +157,7 @@ public class MemberInviteService : IMemberInviteService
         // Bounded by the tenant the request resolved to, not by the one the token names. The token
         // is the only thing authorizing the join, so a token minted for another tenant must read as
         // unknown here rather than as an invite that happens to point elsewhere.
-        var entity = await _dbContext.MemberInvites
+        var entity = await db.MemberInvites
             .Include(i => i.Tenant)
             .Where(i => i.TokenHash == tokenHash && i.TenantId == tenantId)
             .FirstOrDefaultAsync();
@@ -171,7 +175,7 @@ public class MemberInviteService : IMemberInviteService
             return new AcceptMemberInviteResult(false, "exhausted", "This invite has reached its maximum uses.");
 
         // Check if already an active member of this tenant
-        var existingMember = await _dbContext.TenantMembers
+        var existingMember = await db.TenantMembers
             .Where(m => m.TenantId == entity.TenantId
                         && m.SubjectId == acceptingSubjectId)
             .FirstOrDefaultAsync();
@@ -181,7 +185,7 @@ public class MemberInviteService : IMemberInviteService
 
         // Filter out deleted roles from the invite
         var validRoleIds = entity.RoleIds.Count > 0
-            ? await _dbContext.TenantRoles
+            ? await db.TenantRoles
                 .Where(r => r.TenantId == entity.TenantId && entity.RoleIds.Contains(r.Id))
                 .Select(r => r.Id)
                 .ToListAsync()
@@ -199,7 +203,7 @@ public class MemberInviteService : IMemberInviteService
         // failure in between burns the use without joining anyone: a single-use invite then reads
         // as exhausted and the owner has to mint another. That is the direction to fail in — the
         // alternative admits the double join this guards against.
-        var claimed = await _dbContext.MemberInvites
+        var claimed = await db.MemberInvites
             .Where(i => i.Id == entity.Id && (i.MaxUses == null || i.UseCount < i.MaxUses))
             .ExecuteUpdateAsync(s => s.SetProperty(i => i.UseCount, i => i.UseCount + 1));
 
@@ -208,7 +212,7 @@ public class MemberInviteService : IMemberInviteService
 
         // The guarded update bypasses the change tracker, so the entity loaded above still carries
         // the pre-claim count. Reload it rather than leave a stale row for anything downstream.
-        await _dbContext.Entry(entity).ReloadAsync();
+        await db.Entry(entity).ReloadAsync();
 
         // Create the tenant membership via the tenant service
         await _tenantService.AddMemberAsync(
@@ -220,13 +224,13 @@ public class MemberInviteService : IMemberInviteService
             entity.LimitTo24Hours);
 
         // Get the member ID for the result
-        var member = await _dbContext.TenantMembers
+        var member = await db.TenantMembers
             .Where(m => m.TenantId == entity.TenantId && m.SubjectId == acceptingSubjectId)
             .FirstAsync();
 
         // Update the invite link to the member
         member.CreatedFromInviteId = entity.Id;
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         _logger.LogInformation(
             "MemberInviteAudit: {Event} invite_id={InviteId} tenant_id={TenantId} subject_id={SubjectId} member_id={MemberId}",
@@ -238,7 +242,8 @@ public class MemberInviteService : IMemberInviteService
     /// <inheritdoc />
     public async Task<List<MemberInviteInfo>> GetInvitesForTenantAsync(Guid tenantId)
     {
-        var entities = await _dbContext.MemberInvites
+        await using var db = await _contexts.CreateAsync();
+        var entities = await db.MemberInvites
             .Include(i => i.Tenant)
             .Include(i => i.CreatedBy)
             .Include(i => i.CreatedMembers)
@@ -247,14 +252,15 @@ public class MemberInviteService : IMemberInviteService
             .OrderByDescending(i => i.CreatedAt)
             .ToListAsync();
 
-        var roles = await LoadRolesAsync(tenantId, entities.SelectMany(i => i.RoleIds).Distinct().ToList());
+        var roles = await LoadRolesAsync(db, tenantId, entities.SelectMany(i => i.RoleIds).Distinct().ToList());
         return entities.Select(e => MapToInfo(e, roles)).ToList();
     }
 
     /// <inheritdoc />
     public async Task<bool> RevokeInviteAsync(Guid inviteId, Guid tenantId)
     {
-        var entity = await _dbContext.MemberInvites
+        await using var db = await _contexts.CreateAsync();
+        var entity = await db.MemberInvites
             .Where(i => i.Id == inviteId && i.TenantId == tenantId)
             .FirstOrDefaultAsync();
 
@@ -265,7 +271,7 @@ public class MemberInviteService : IMemberInviteService
             return true; // Already revoked
 
         entity.RevokedAt = DateTime.UtcNow;
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         _logger.LogInformation(
             "MemberInviteAudit: {Event} invite_id={InviteId} tenant_id={TenantId}",
@@ -274,12 +280,12 @@ public class MemberInviteService : IMemberInviteService
         return true;
     }
 
-    private async Task<Dictionary<Guid, TenantRoleEntity>> LoadRolesAsync(Guid tenantId, List<Guid> roleIds)
+    private async Task<Dictionary<Guid, TenantRoleEntity>> LoadRolesAsync(NocturneDbContext db, Guid tenantId, List<Guid> roleIds)
     {
         if (roleIds.Count == 0)
             return [];
 
-        return await _dbContext.TenantRoles
+        return await db.TenantRoles
             .Where(r => r.TenantId == tenantId && roleIds.Contains(r.Id))
             .ToDictionaryAsync(r => r.Id);
     }

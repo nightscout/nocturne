@@ -13,6 +13,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -52,11 +53,7 @@ public class AlertSweepServiceAuditAttributionTests
         services.AddSingleton(Mock.Of<ICanonicalGlucoseService>());
         services.AddScoped<ITenantAccessor>(_ => Mock.Of<ITenantAccessor>());
         services.AddScoped<IAuditContext, AuditContext>();
-        services.AddScoped(sp => new NocturneDbContext(
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseSqlite("DataSource=:memory:")
-                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-                .Options).AttributedTo(sp.GetRequiredService<IAuditContext>()));
+        services.AddScoped(sp => new TenantReadContext(null, null, sp.GetRequiredService<IAuditContext>()));
         services.AddScoped<IAlertOrchestrator>(sp =>
         {
             var orchestrator = new Mock<IAlertOrchestrator>();
@@ -68,7 +65,7 @@ public class AlertSweepServiceAuditAttributionTests
                     It.IsAny<CancellationToken>()))
                 .Returns(() =>
                 {
-                    scopeContextAudit = sp.GetRequiredService<NocturneDbContext>().AuditContext;
+                    scopeContextAudit = sp.GetRequiredService<TenantReadContext>().AuditContext;
                     ambientIsSystemMutation = sp.GetRequiredService<IAuditContext>().IsSystemMutation();
                     return Task.CompletedTask;
                 });

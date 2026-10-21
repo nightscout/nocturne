@@ -82,6 +82,35 @@ public sealed class FindQuery
     public long? ToMills { get; }
 
     /// <summary>
+    /// The modification stamp, in Unix milliseconds, a modified-since read resumes after, when the
+    /// query is nothing but lower bounds on <c>srvModified</c>: <c>$gt</c> v is after v, and
+    /// <c>$gte</c> v is after v - 1. Any other condition leaves it null, since the read pages by stamp
+    /// and cannot apply one.
+    /// </summary>
+    public long? ModifiedAfterMills
+    {
+        get
+        {
+            long? after = null;
+            var bounds = 0;
+            foreach (var cond in EnumerateAndReachable(_root).Where(c => c.Path == "srvModified"))
+            {
+                if (cond.Op is not ("$gt" or "$gte")
+                    || !long.TryParse(cond.StringValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var stamp))
+                    return null;
+
+                bounds++;
+                after = Max(after, cond.Op == "$gt" ? stamp : stamp - 1);
+            }
+
+            return bounds > 0 && bounds == CountConditions(_root) ? after : null;
+        }
+    }
+
+    private static int CountConditions(Group group) =>
+        group.Children.Sum(child => child is Condition ? 1 : child is Group nested ? CountConditions(nested) : 0);
+
+    /// <summary>
     /// <c>true</c> when the query carries no condition a caller could honour: nothing at all, only
     /// empty <c>$and</c>/<c>$or</c> groups or operand objects, or only <c>find[…]</c> keys the parser
     /// could not interpret.

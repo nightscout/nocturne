@@ -78,13 +78,13 @@ public class TenantDirectGrantControllerTests : IDisposable
         factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _db.CreateContext());
 
-        // The audit service runs on the request-scoped context, which on this path carries no
-        // tenant — so a recorded tenant can only have come from the grant's own pinned context.
+        // The audit service's contexts carry no tenant on this path, so a recorded tenant can only
+        // have come from the grant's own pinned context.
         _auditDbContext = _db.CreateContext();
         var httpContext = new DefaultHttpContext();
         var directGrantService = new DirectGrantService(
             new AuthAuditService(
-                _auditDbContext,
+                _auditDbContext.AsFactory(),
                 new HttpContextAccessor { HttpContext = httpContext },
                 new AuditContext(),
                 new Mock<ILogger<AuthAuditService>>().Object),

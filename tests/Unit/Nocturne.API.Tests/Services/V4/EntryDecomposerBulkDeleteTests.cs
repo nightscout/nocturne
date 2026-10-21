@@ -32,7 +32,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
     }
 
     private EntryDecomposer CreateDecomposer() =>
-        new(_dbContext, _sgRepo.Object, _mgRepo.Object, _calRepo.Object, new Mock<IGlucoseProcessingResolver>().Object, Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), _logger.Object);
+        new(_sgRepo.Object, _mgRepo.Object, _calRepo.Object, new Mock<IGlucoseProcessingResolver>().Object, Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), _logger.Object);
 
     [Fact]
     [Trait("Category", "Unit")]

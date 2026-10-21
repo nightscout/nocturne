@@ -5,27 +5,28 @@ using Nocturne.Core.Models.Timezones;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Timezones;
 
 /// <summary>
 /// Persists and reads the current tenant's timezone timeline, in HTTP request scopes and background
-/// connector-sync scopes alike: the scoped context reads its tenant from the scope's
+/// connector-sync scopes alike: every context it opens reads its tenant from the scope's
 /// <see cref="ITenantAccessor"/>, which must be resolved.
 /// </summary>
 /// <seealso cref="ITimezoneTimelineService"/>
 public class TimezoneTimelineService : ITimezoneTimelineService
 {
-    private readonly NocturneDbContext _db;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<TimezoneTimelineService> _logger;
 
     public TimezoneTimelineService(
-        NocturneDbContext db,
+        INocturneDbContextFactory contexts,
         ITenantAccessor tenantAccessor,
         ILogger<TimezoneTimelineService> logger)
     {
-        _db = db ?? throw new ArgumentNullException(nameof(db));
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -37,8 +38,9 @@ public class TimezoneTimelineService : ITimezoneTimelineService
     /// <inheritdoc />
     public async Task<IReadOnlyList<TimezoneTimelineEntry>> GetTimelineAsync(CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         _ = TenantId;
-        var entities = await _db.TimezoneTimeline
+        var entities = await db.TimezoneTimeline
             .OrderBy(e => e.EffectiveFrom)
             .ToListAsync(cancellationToken);
 
@@ -55,12 +57,13 @@ public class TimezoneTimelineService : ITimezoneTimelineService
     /// <inheritdoc />
     public async Task<bool> EnsureOriginAsync(string ianaTimezone, CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(ianaTimezone))
             return false;
 
         var tenantId = TenantId;
 
-        if (await _db.TimezoneTimeline.AnyAsync(cancellationToken))
+        if (await db.TimezoneTimeline.AnyAsync(cancellationToken))
             return false;
 
         var origin = new TimezoneTimelineEntity
@@ -74,8 +77,8 @@ public class TimezoneTimelineService : ITimezoneTimelineService
             UpdatedAt = DateTime.UtcNow,
         };
 
-        _db.TimezoneTimeline.Add(origin);
-        await _db.SaveChangesAsync(cancellationToken);
+        db.TimezoneTimeline.Add(origin);
+        await db.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "Seeded timezone timeline origin {Timezone} for tenant {TenantId}", ianaTimezone, tenantId);
@@ -85,17 +88,18 @@ public class TimezoneTimelineService : ITimezoneTimelineService
     /// <inheritdoc />
     public async Task<TimezoneTimelineEntry> UpsertAsync(TimezoneTimelineEntry entry, CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         ArgumentNullException.ThrowIfNull(entry);
         var tenantId = TenantId;
 
         TimezoneTimelineEntity? entity = null;
         if (entry.Id != Guid.Empty)
-            entity = await _db.TimezoneTimeline.FirstOrDefaultAsync(e => e.Id == entry.Id, cancellationToken);
+            entity = await db.TimezoneTimeline.FirstOrDefaultAsync(e => e.Id == entry.Id, cancellationToken);
 
         if (entity is null)
         {
             entity = TimezoneTimelineMapper.ToEntity(entry, tenantId);
-            _db.TimezoneTimeline.Add(entity);
+            db.TimezoneTimeline.Add(entity);
         }
         else
         {
@@ -104,20 +108,21 @@ public class TimezoneTimelineService : ITimezoneTimelineService
             entity.UpdatedAt = DateTime.UtcNow;
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         return TimezoneTimelineMapper.ToDomainModel(entity);
     }
 
     /// <inheritdoc />
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         _ = TenantId;
-        var entity = await _db.TimezoneTimeline.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
+        var entity = await db.TimezoneTimeline.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
         if (entity is null)
             return false;
 
-        _db.TimezoneTimeline.Remove(entity);
-        await _db.SaveChangesAsync(cancellationToken);
+        db.TimezoneTimeline.Remove(entity);
+        await db.SaveChangesAsync(cancellationToken);
         return true;
     }
 }

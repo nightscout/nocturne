@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.WebUtilities;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Platform;
@@ -65,18 +66,18 @@ public class TimeQueryService : ITimeQueryService
         return storage.ToLowerInvariant() switch
         {
             "entries" => await _entries.GetEntriesWithAdvancedFilterAsync(
-                findQuery,
+                type: null,
                 count: 1000,
                 skip: 0,
+                findQuery: findQuery,
+                dateString: null,
+                reverseResults: false,
                 cancellationToken: cancellationToken
             ),
             "treatments" => (
-                await _treatments.GetTreatmentsWithAdvancedFilterAsync(
-                    count: 1000,
-                    skip: 0,
-                    findQuery: findQuery,
-                    reverseResults: false,
-                    cancellationToken: cancellationToken
+                await _treatments.QueryTreatmentsAsync(
+                    new TreatmentQuery { Count = 1000, Find = findQuery },
+                    cancellationToken
                 )
             ).Select(t => ConvertTreatmentToEntry(t)),
             "devicestatus" => (
@@ -119,18 +120,18 @@ public class TimeQueryService : ITimeQueryService
         return storage.ToLowerInvariant() switch
         {
             "entries" => await _entries.GetEntriesWithAdvancedFilterAsync(
-                findQuery,
+                type: null,
                 count: 1000,
                 skip: 0,
+                findQuery: findQuery,
+                dateString: null,
+                reverseResults: false,
                 cancellationToken: cancellationToken
             ),
             "treatments" => (
-                await _treatments.GetTreatmentsWithAdvancedFilterAsync(
-                    count: 1000,
-                    skip: 0,
-                    findQuery: findQuery,
-                    reverseResults: false,
-                    cancellationToken: cancellationToken
+                await _treatments.QueryTreatmentsAsync(
+                    new TreatmentQuery { Count = 1000, Find = findQuery },
+                    cancellationToken
                 )
             ).Select(t => ConvertTreatmentToEntry(t)),
             "devicestatus" => (

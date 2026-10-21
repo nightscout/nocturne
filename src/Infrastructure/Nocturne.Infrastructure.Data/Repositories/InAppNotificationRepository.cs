@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -11,7 +12,7 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class InAppNotificationRepository : IInAppNotificationRepository
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -22,10 +23,9 @@ public class InAppNotificationRepository : IInAppNotificationRepository
     /// <summary>
     /// Initializes a new instance of the <see cref="InAppNotificationRepository"/> class.
     /// </summary>
-    /// <param name="context">The database context.</param>
-    public InAppNotificationRepository(NocturneDbContext context)
+    public InAppNotificationRepository(INocturneDbContextFactory contexts)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <summary>
@@ -39,7 +39,8 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         CancellationToken cancellationToken = default
     )
     {
-        return await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db
             .InAppNotifications
             .Where(n => n.UserId == userId && !n.IsArchived)
             .OrderByDescending(n => n.Urgency)
@@ -58,7 +59,8 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         CancellationToken cancellationToken = default
     )
     {
-        return await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db
             .InAppNotifications
             .FirstOrDefaultAsync(n => n.Id == id, cancellationToken);
     }
@@ -72,7 +74,8 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         CancellationToken cancellationToken = default
     )
     {
-        return await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db
             .InAppNotifications
             .Where(n => !n.IsArchived && n.ResolutionConditionsJson != null)
             .ToListAsync(cancellationToken);
@@ -89,11 +92,12 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         entity.Id = Guid.CreateVersion7();
         entity.CreatedAt = DateTime.UtcNow;
 
-        _context.InAppNotifications.Add(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        db.InAppNotifications.Add(entity);
+        await db.SaveChangesAsync(cancellationToken);
 
         return entity;
     }
@@ -111,7 +115,8 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db
             .InAppNotifications
             .FirstOrDefaultAsync(n => n.Id == id, cancellationToken);
 
@@ -122,7 +127,7 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         entity.ArchivedAt = DateTime.UtcNow;
         entity.ArchiveReason = reason;
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
 
         return entity;
     }
@@ -138,7 +143,8 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db
             .InAppNotifications
             .FirstOrDefaultAsync(n => n.Id == id, cancellationToken);
 
@@ -148,7 +154,7 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         if (entity.ReadAt == null)
         {
             entity.ReadAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
         }
 
         return entity;
@@ -165,7 +171,8 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         CancellationToken cancellationToken = default
     )
     {
-        var unread = await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var unread = await db
             .InAppNotifications
             .Where(n => n.UserId == userId && !n.IsArchived && n.ReadAt == null)
             .ToListAsync(cancellationToken);
@@ -177,7 +184,7 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         foreach (var entity in unread)
             entity.ReadAt = now;
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
 
         return unread;
     }
@@ -192,7 +199,8 @@ public class InAppNotificationRepository : IInAppNotificationRepository
     public virtual async Task<List<InAppNotificationEntity>> GetActiveBySourceAsync(
         string userId, string source, CancellationToken cancellationToken = default)
     {
-        return await _context.InAppNotifications
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db.InAppNotifications
             .Where(n => n.UserId == userId && n.Source == source && !n.IsArchived)
             .OrderBy(n => n.CreatedAt)
             .ThenBy(n => n.Id)
@@ -208,7 +216,8 @@ public class InAppNotificationRepository : IInAppNotificationRepository
     public async Task<int> DeleteArchivedBeforeAsync(
         DateTime cutoff, CancellationToken cancellationToken = default)
     {
-        return await _context.InAppNotifications
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db.InAppNotifications
             .Where(n => n.IsArchived && n.ArchivedAt < cutoff)
             .ExecuteDeleteAsync(cancellationToken);
     }
@@ -228,7 +237,8 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         CancellationToken cancellationToken = default
     )
     {
-        return await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db
             .InAppNotifications
             .FirstOrDefaultAsync(
                 n => n.UserId == userId

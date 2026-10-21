@@ -118,14 +118,13 @@ public sealed class SqliteTestDatabase : IDisposable
 
     /// <summary>
     /// Registers this database the way the request pipeline resolves it: <see cref="ContextFactory"/>
-    /// as the context pool and behind <c>INocturneDbContextFactory</c>, plus one scoped <see cref="NocturneDbContext"/> per service scope, every
-    /// one of them over the same connection.
+    /// as the context pool and behind <c>INocturneDbContextFactory</c>, every context over the same
+    /// connection.
     /// </summary>
     public IServiceCollection AddToServices(IServiceCollection services)
     {
         services.AddSingleton(ContextFactory);
         services.AddSingleton(ContextFactory.AsNocturneFactory());
-        services.AddScoped(_ => CreateContext());
         return services;
     }
 

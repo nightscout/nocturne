@@ -30,15 +30,11 @@ public class TenantReadContextLiveReadTests : IAsyncLifetime
 
     public async Task DisposeAsync() => await _provider.DisposeAsync();
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task AContextCreatedBeforeAuthentication_IsNarrowedOnceTheScopeResolves(bool viaFactory)
+    [Fact]
+    public async Task AContextCreatedBeforeAuthentication_IsNarrowedOnceTheScopeResolves()
     {
         await using var scope = _provider.CreateAsyncScope();
-        var context = viaFactory
-            ? await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync()
-            : scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var context = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         (await TenantReaderData.CountAsync(context, _tenant)).Should().Be(ReaderCounts.Nothing,
             "nothing is resolved yet");
@@ -51,9 +47,6 @@ public class TenantReadContextLiveReadTests : IAsyncLifetime
 
         (await TenantReaderData.CountAsync(context, _tenant)).Should().Be(
             new ReaderCounts(Steps: 1, Foods: 0, Notes: 0, Spans: 0));
-
-        if (viaFactory)
-            await context.DisposeAsync();
     }
 
     [Fact]
@@ -75,7 +68,7 @@ public class TenantReadContextLiveReadTests : IAsyncLifetime
     public async Task AnOpenConnection_KeepsTheStateItOpenedWith_UntilPinned()
     {
         await using var scope = _provider.CreateAsyncScope();
-        var context = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var context = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         await context.Database.OpenConnectionAsync();
         try

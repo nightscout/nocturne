@@ -17,6 +17,7 @@ using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Services.Realtime;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -28,7 +29,7 @@ namespace Nocturne.API.Services.Connectors;
 /// <seealso cref="IConnectorConfigurationService"/>
 public class ConnectorConfigurationService : IConnectorConfigurationService
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ISecretEncryptionService _encryptionService;
     private readonly ISignalRBroadcastService _broadcastService;
     private readonly IAuditContext _auditContext;
@@ -43,7 +44,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     };
 
     public ConnectorConfigurationService(
-        NocturneDbContext context,
+        INocturneDbContextFactory contexts,
         ISecretEncryptionService encryptionService,
         ISignalRBroadcastService broadcastService,
         IAuditContext auditContext,
@@ -52,7 +53,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         IEnumerable<IConnectorCacheInvalidator> cacheInvalidators,
         ILogger<ConnectorConfigurationService> logger)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _encryptionService = encryptionService;
         _broadcastService = broadcastService;
         _auditContext = auditContext;
@@ -67,8 +68,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string connectorName,
         CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var canonicalName = ConnectorNames.Canonical(connectorName);
-        var entity = await _context.ConnectorConfigurations
+        var entity = await db.ConnectorConfigurations
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.ConnectorName == canonicalName, ct);
 
@@ -122,12 +124,12 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// </para>
     /// </remarks>
     /// <exception cref="UnauthorizedAccessException">The caller is the demo visitor account.</exception>
-    private async Task EnsureNotDemoSubjectAsync(string connectorName, CancellationToken ct)
+    private async Task EnsureNotDemoSubjectAsync(NocturneDbContext db, string connectorName, CancellationToken ct)
     {
         if (_auditContext.SubjectId is not { } subjectId)
             return;
 
-        var isDemoSubject = await _context.Subjects
+        var isDemoSubject = await db.Subjects
             .AsNoTracking()
             .Where(s => s.Id == subjectId)
             .Select(s => (bool?)s.IsDemoSubject)
@@ -151,10 +153,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string? modifiedBy = null,
         CancellationToken ct = default)
     {
-        await EnsureNotDemoSubjectAsync(connectorName, ct);
+        await using var db = await _contexts.CreateAsync(ct);
+        await EnsureNotDemoSubjectAsync(db, connectorName, ct);
 
         var canonicalName = ConnectorNames.Canonical(connectorName);
-        var entity = await _context.ConnectorConfigurations
+        var entity = await db.ConnectorConfigurations
             .FirstOrDefaultAsync(c => c.ConnectorName == canonicalName, ct);
 
         var configJson = configuration.RootElement.GetRawText();
@@ -171,7 +174,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 SecretsJson = "{}",
                 ModifiedBy = modifiedBy
             };
-            _context.ConnectorConfigurations.Add(entity);
+            db.ConnectorConfigurations.Add(entity);
             _logger.LogInformation("Creating new configuration for connector {ConnectorName}", connectorName);
         }
         else
@@ -182,8 +185,8 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             _logger.LogInformation("Updating configuration for connector {ConnectorName}", connectorName);
         }
 
-        await _context.SaveChangesAsync(ct);
-        InvalidateCaches(canonicalName);
+        await db.SaveChangesAsync(ct);
+        InvalidateCaches(db, canonicalName);
 
         // Broadcast configuration change
         await _broadcastService.BroadcastConfigChangeAsync(new ConfigurationChangeEvent
@@ -211,7 +214,8 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string? modifiedBy = null,
         CancellationToken ct = default)
     {
-        await EnsureNotDemoSubjectAsync(connectorName, ct);
+        await using var db = await _contexts.CreateAsync(ct);
+        await EnsureNotDemoSubjectAsync(db, connectorName, ct);
 
         if (!_encryptionService.IsConfigured)
         {
@@ -220,7 +224,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         }
 
         var canonicalName = ConnectorNames.Canonical(connectorName);
-        var entity = await _context.ConnectorConfigurations
+        var entity = await db.ConnectorConfigurations
             .FirstOrDefaultAsync(c => c.ConnectorName == canonicalName, ct);
 
         var encryptedSecrets = _encryptionService.EncryptSecrets(secrets);
@@ -235,7 +239,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 SecretsJson = secretsJson,
                 ModifiedBy = modifiedBy
             };
-            _context.ConnectorConfigurations.Add(entity);
+            db.ConnectorConfigurations.Add(entity);
             _logger.LogInformation("Creating new secrets for connector {ConnectorName}", connectorName);
         }
         else
@@ -246,12 +250,12 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             _logger.LogInformation("Updating secrets for connector {ConnectorName}", connectorName);
         }
 
-        await _context.SaveChangesAsync(ct);
-        InvalidateCaches(canonicalName);
+        await db.SaveChangesAsync(ct);
+        InvalidateCaches(db, canonicalName);
 
         // When saving Nightscout connector secrets that include an API secret,
         // create a DirectGrant with the SHA-1 hash so existing uploaders keep working.
-        await TryCreateLegacyGrantAsync(connectorName, secrets, ct);
+        await TryCreateLegacyGrantAsync(db, connectorName, secrets, ct);
 
         // Broadcast secrets update (note: doesn't reveal actual secrets)
         await _broadcastService.BroadcastConfigChangeAsync(new ConfigurationChangeEvent
@@ -268,6 +272,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// <c>api-secret</c> header continue to work without reconfiguration.
     /// </summary>
     private async Task TryCreateLegacyGrantAsync(
+        NocturneDbContext db,
         string connectorName,
         Dictionary<string, string> secrets,
         CancellationToken ct)
@@ -295,8 +300,8 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         // with SHA-1, so legacy clients (xDrip, etc.) send that hash and we must match it.
         var sha1Hash = HashUtils.Sha1Hex(apiSecret);
 
-        var alreadyExists = await _context.OAuthGrants
-            .AnyAsync(g => g.TenantId == _context.TenantId
+        var alreadyExists = await db.OAuthGrants
+            .AnyAsync(g => g.TenantId == db.TenantId
                         && g.LegacySecretHash == sha1Hash
                         && g.GrantType == OAuthGrantTypes.Direct
                         && g.RevokedAt == null, ct);
@@ -313,12 +318,12 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             [Scope.HealthReadWrite],
             legacySecretHash: sha1Hash);
 
-        _context.OAuthGrants.Add(grant);
-        await _context.SaveChangesAsync(ct);
+        db.OAuthGrants.Add(grant);
+        await db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "Created legacy DirectGrant {GrantId} for Nightscout migration (tenant {TenantId})",
-            grant.Id, _context.TenantId);
+            grant.Id, db.TenantId);
     }
 
     /// <inheritdoc />
@@ -326,6 +331,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string connectorName,
         CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         if (!_encryptionService.IsConfigured)
         {
             _logger.LogWarning("Secret encryption not configured, returning empty secrets for {ConnectorName}", connectorName);
@@ -333,7 +339,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         }
 
         var canonicalName = ConnectorNames.Canonical(connectorName);
-        var entity = await _context.ConnectorConfigurations
+        var entity = await db.ConnectorConfigurations
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.ConnectorName == canonicalName, ct);
 
@@ -373,8 +379,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// <inheritdoc />
     public async Task<IReadOnlyList<ConnectorStatusInfo>> GetAllConnectorStatusAsync(CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var allConnectors = ConnectorMetadataService.GetAll();
-        var dbConfigsList = await _context.ConnectorConfigurations
+        var dbConfigsList = await db.ConnectorConfigurations
             .AsNoTracking()
             .ToListAsync(ct);
         var dbConfigs = dbConfigsList.ToDictionary(
@@ -437,10 +444,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string? modifiedBy = null,
         CancellationToken ct = default)
     {
-        await EnsureNotDemoSubjectAsync(connectorName, ct);
+        await using var db = await _contexts.CreateAsync(ct);
+        await EnsureNotDemoSubjectAsync(db, connectorName, ct);
 
         var canonicalName = ConnectorNames.Canonical(connectorName);
-        var entity = await _context.ConnectorConfigurations
+        var entity = await db.ConnectorConfigurations
             .FirstOrDefaultAsync(c => c.ConnectorName == canonicalName, ct);
 
         // Create the config JSON with the enabled field
@@ -455,7 +463,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 SecretsJson = "{}",
                 ModifiedBy = modifiedBy
             };
-            _context.ConnectorConfigurations.Add(entity);
+            db.ConnectorConfigurations.Add(entity);
         }
         else
         {
@@ -464,8 +472,8 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             entity.ModifiedBy = modifiedBy;
         }
 
-        await _context.SaveChangesAsync(ct);
-        InvalidateCaches(canonicalName);
+        await db.SaveChangesAsync(ct);
+        InvalidateCaches(db, canonicalName);
         _logger.LogInformation("Set connector {ConnectorName} active={IsActive}", connectorName, isActive);
 
         // Broadcast enable/disable change
@@ -481,9 +489,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// Tells every tenant-keyed cache — auth tokens, sessions, the pollers' schedules — that this
     /// connector's stored configuration changed, so the next sync reads it afresh and runs now.
     /// </summary>
-    private void InvalidateCaches(string connectorName)
+    private void InvalidateCaches(NocturneDbContext db, string connectorName)
     {
-        var tenantId = _context.TenantId;
+        var tenantId = db.TenantId;
         foreach (var invalidator in _cacheInvalidators)
             invalidator.Invalidate(connectorName, tenantId);
     }
@@ -513,10 +521,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// <inheritdoc />
     public async Task<bool> DeleteConfigurationAsync(string connectorName, CancellationToken ct = default)
     {
-        await EnsureNotDemoSubjectAsync(connectorName, ct);
+        await using var db = await _contexts.CreateAsync(ct);
+        await EnsureNotDemoSubjectAsync(db, connectorName, ct);
 
         var canonicalName = ConnectorNames.Canonical(connectorName);
-        var entity = await _context.ConnectorConfigurations
+        var entity = await db.ConnectorConfigurations
             .FirstOrDefaultAsync(c => c.ConnectorName == canonicalName, ct);
 
         if (entity == null)
@@ -524,9 +533,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             return false;
         }
 
-        _context.ConnectorConfigurations.Remove(entity);
-        await _context.SaveChangesAsync(ct);
-        InvalidateCaches(canonicalName);
+        db.ConnectorConfigurations.Remove(entity);
+        await db.SaveChangesAsync(ct);
+        InvalidateCaches(db, canonicalName);
         _logger.LogInformation("Deleted configuration for connector {ConnectorName}", connectorName);
 
         // Broadcast deletion
@@ -881,8 +890,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         CancellationToken ct = default
     )
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var canonicalName = ConnectorNames.Canonical(connectorName);
-        var config = await _context.ConnectorConfigurations
+        var config = await db.ConnectorConfigurations
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.ConnectorName == canonicalName, ct);
 
@@ -915,8 +925,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         CancellationToken ct = default
     )
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var canonicalName = ConnectorNames.Canonical(connectorName);
-        var config = await _context.ConnectorConfigurations
+        var config = await db.ConnectorConfigurations
             .FirstOrDefaultAsync(c => c.ConnectorName == canonicalName, ct);
 
         if (config == null)
@@ -956,7 +967,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
         config.SysUpdatedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         _logger.LogDebug(
             "Updated health state for connector {ConnectorName}: IsHealthy={IsHealthy}",

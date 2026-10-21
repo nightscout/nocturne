@@ -108,7 +108,7 @@ public class TenantReaderMatrixTests : IAsyncLifetime
     {
         await using var scope = _provider.CreateAsyncScope();
         TenantReaderData.Resolve(scope.ServiceProvider, _tenant);
-        var scoped = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var scoped = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         (await TenantReaderData.CountAsync(scoped, _tenant)).Should().Be(ReaderCounts.Owner);
     }

@@ -178,7 +178,7 @@ public class RecentTreatmentRepublishTests : IDisposable
         var calculations = new BolusCalculationRepository(ctxFactory, dedup, audit, NullLogger<BolusCalculationRepository>.Instance);
 
         var decomposer = new TreatmentDecomposer(
-            _context, bolus, Mock.Of<ITempBasalRepository>(), carbs, bgChecks, notes, deviceEvents, calculations,
+            _context.AsFactory(), bolus, Mock.Of<ITempBasalRepository>(), carbs, bgChecks, notes, deviceEvents, calculations,
             Mock.Of<IStateSpanService>(), Mock.Of<ITreatmentFoodService>(), Mock.Of<IDeviceService>(),
             Mock.Of<IPatientDeviceStamper>(), Mock.Of<IProfileDecomposer>(), Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(), audit, NullLogger<TreatmentDecomposer>.Instance);

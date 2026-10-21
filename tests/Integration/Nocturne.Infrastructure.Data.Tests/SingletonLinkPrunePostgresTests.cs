@@ -10,6 +10,7 @@ using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Tests.Rls;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -38,7 +39,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
             singles.Add(await IngestGlucoseAsync(context, service, Event.AddHours(i), "dexcom-connector", 100 + i));
         var reading = await IngestGlucoseAsync(context, service, Event.AddHours(5), "dexcom-connector", 150);
         var copy = await IngestGlucoseAsync(context, service, Event.AddHours(5).AddSeconds(10), "glooko-connector", 150);
-        await AgeAsync(context, service);
+        await AgeAsync(context);
 
         (await service.PruneSingletonLinksAsync(2, 10)).Should().Be(3);
 
@@ -55,7 +56,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
         var service = Service(context);
 
         var reading = await IngestGlucoseAsync(context, service, Event, "dexcom-connector", 120);
-        await AgeAsync(context, service);
+        await AgeAsync(context);
         (await service.PruneSingletonLinksAsync(100, 1)).Should().Be(1);
 
         var copy = await IngestGlucoseAsync(context, service, Event.AddSeconds(10), "glooko-connector", 121);
@@ -75,7 +76,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
         await using var context = await ContextAsync(provider, tenant);
         var service = Service(context);
         await IngestGlucoseAsync(context, service, Event, "dexcom-connector", 120);
-        await AgeAsync(context, service);
+        await AgeAsync(context);
 
         await using var holder = await ContextAsync(provider, tenant);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -100,7 +101,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
     }
 
     private static DeduplicationService Service(NocturneDbContext context) =>
-        new(context, new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+        new(context.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
 
     private static async Task<Guid> IngestGlucoseAsync(
         NocturneDbContext context, DeduplicationService service, DateTime at, string source, double mgdl)
@@ -120,12 +121,13 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
     }
 
     /// <summary>Stamps the tenant's readings and links two days old and the cursor an hour ago.</summary>
-    private static async Task AgeAsync(NocturneDbContext context, DeduplicationService service)
+    private static async Task AgeAsync(NocturneDbContext context)
     {
         var old = DateTime.UtcNow.AddDays(-2);
         await context.SensorGlucose.ExecuteUpdateAsync(s => s.SetProperty(e => e.SysCreatedAt, old));
         await context.LinkedRecords.ExecuteUpdateAsync(s => s.SetProperty(l => l.SysCreatedAt, old));
-        await service.SetCursorAsync(new ReconcileCursor(DateTime.UtcNow.AddHours(-1), Guid.Empty), CancellationToken.None);
+        await DeduplicationService.SetCursorAsync(
+            context, new ReconcileCursor(DateTime.UtcNow.AddHours(-1), Guid.Empty), CancellationToken.None);
         context.ChangeTracker.Clear();
     }
 

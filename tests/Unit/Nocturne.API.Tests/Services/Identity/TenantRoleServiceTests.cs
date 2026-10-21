@@ -50,7 +50,7 @@ public class TenantRoleServiceTests : IDisposable
             DisplayName = "Test Tenant",
         });
         _context.SaveChanges();
-        _service = new TenantRoleService(_context, factory.AsNocturneFactory());
+        _service = new TenantRoleService(factory.AsNocturneFactory());
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class TenantRoleServiceTests : IDisposable
         _factory.Handed.Should().ContainSingle("the seed takes exactly one context of its own");
         _factory.Handed[0].TenantId.Should().Be(_tenantId);
         _context.ChangeTracker.Entries<TenantRoleEntity>().Should().BeEmpty(
-            "the roles are written through that context, not the injected one");
+            "the roles are written through that context, not the test's own");
     }
 
     [Fact]

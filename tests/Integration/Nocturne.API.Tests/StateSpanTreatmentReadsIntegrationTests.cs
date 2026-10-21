@@ -747,7 +747,6 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         using var scope = Fixture.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
             new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
-        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = Fixture.TenantId;
         return await action(scope.ServiceProvider);
     }
 

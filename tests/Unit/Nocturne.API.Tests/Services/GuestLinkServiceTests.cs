@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services;
 
@@ -44,7 +45,7 @@ public class GuestLinkServiceTests : IDisposable
         _sessionCache = new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()));
 
         _service = new GuestLinkService(
-            _dbContext,
+            _dbContext.AsFactory(),
             _sessionCache,
             new GrantRevocationService(_sessionCache),
             NullLogger<GuestLinkService>.Instance);

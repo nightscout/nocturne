@@ -116,7 +116,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
             .ReturnsAsync((GlucoseProcessing?)null);
 
         var decomposer = new EntryDecomposer(
-            Context(tenant), sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
+            sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
             Mock.Of<IPatientDeviceStamper>(), audit, NullLogger<EntryDecomposer>.Instance);
         var store = new EntryReadService(
             sensorGlucose, meterGlucose, calibration, TestDoubles.CanonicalGlucosePassThrough.Create(),
@@ -128,7 +128,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         documents.Setup(d => d.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
             .Returns<IEnumerable<Entry>>(entries => entries);
         var controller = new EntriesController(
-            service, documents.Object, Mock.Of<IProcessingStatusService>(), Mock.Of<ICanonicalAlertEvaluator>(),
+            service, documents.Object, Mock.Of<ICanonicalAlertEvaluator>(),
             NullLogger<EntriesController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },

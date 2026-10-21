@@ -130,11 +130,6 @@ public class AlertSweepServiceSnoozeTests
             return snooze.Object;
         });
         services.AddScoped<IAuditContext, AuditContext>();
-        services.AddScoped(_ => new NocturneDbContext(
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseSqlite("DataSource=:memory:")
-                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-                .Options));
         services.AddAlertEvaluators();
         services.AddScoped<ConditionEvaluatorRegistry>();
         services.AddSingleton<ConditionVersionLog>();

@@ -1,10 +1,11 @@
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Repositories;
@@ -14,6 +15,7 @@ using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
@@ -115,14 +117,18 @@ public static class ServiceCollectionExtensions
             }
         );
 
-        // Register scoped DbContext, repositories, and shared services.
+        // AddDbContextFactory also registers the context itself as scoped. Every context comes from
+        // INocturneDbContextFactory instead, so that registration goes.
+        services.RemoveAll<NocturneDbContext>();
+
+        // Register the context factory, repositories, and shared services.
         AddDataServices(services);
 
         return services;
     }
 
     /// <summary>
-    /// Register <see cref="INocturneDbContextFactory"/>, the scoped NocturneDbContext, repository
+    /// Register <see cref="INocturneDbContextFactory"/>, repository
     /// interfaces and deduplication. Called by AddPostgreSqlInfrastructure; also usable independently
     /// by test factories that provide their own IDbContextFactory without creating an NpgsqlDataSource.
     /// </summary>
@@ -138,8 +144,6 @@ public static class ServiceCollectionExtensions
         services.TryAddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
         services.AddScoped<IReaderCachePartition, ReaderCachePartition>();
 
-        services.AddScoped(sp => sp.GetRequiredService<NocturneDbContextFactory>().Create());
-
         // Register deduplication service (required by repositories)
         services.AddScoped<IDeduplicationService, DeduplicationService>();
 
@@ -152,34 +156,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAvatarStore, DatabaseAvatarStore>();
 
         return services;
-    }
-
-    /// <summary>
-    /// Ensure the database is created and up to date
-    /// </summary>
-    /// <param name="serviceProvider">Service provider</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Task</returns>
-    public static async Task EnsureDatabaseCreatedAsync(
-        this IServiceProvider serviceProvider,
-        CancellationToken cancellationToken = default
-    )
-    {
-        using var scope = serviceProvider.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<NocturneDbContext>>();
-
-        try
-        {
-            logger.LogInformation("Ensuring PostgreSQL database is created and up to date");
-            await context.Database.EnsureCreatedAsync(cancellationToken);
-            logger.LogInformation("PostgreSQL database is ready");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to ensure PostgreSQL database is created");
-            throw;
-        }
     }
 
     /// <summary>
@@ -214,10 +190,17 @@ public static class ServiceCollectionExtensions
 
     /// <summary>
     /// Persists Data Protection keys to <see cref="NocturneDbContext"/> so the key ring
-    /// survives container restarts. Call this on the builder returned by
-    /// <c>services.AddDataProtection()</c>.
+    /// survives container restarts (<see cref="NocturneDbXmlRepository"/>). Call this on the builder
+    /// returned by <c>services.AddDataProtection()</c>.
     /// </summary>
     public static IDataProtectionBuilder PersistKeysToNocturneDb(
         this IDataProtectionBuilder builder)
-        => builder.PersistKeysToDbContext<NocturneDbContext>();
+    {
+        builder.Services.AddSingleton<IConfigureOptions<KeyManagementOptions>>(services =>
+            new ConfigureOptions<KeyManagementOptions>(options =>
+                options.XmlRepository = new NocturneDbXmlRepository(
+                    services.GetRequiredService<IDbContextFactory<NocturneDbContext>>(),
+                    services.GetRequiredService<ILogger<NocturneDbXmlRepository>>())));
+        return builder;
+    }
 }

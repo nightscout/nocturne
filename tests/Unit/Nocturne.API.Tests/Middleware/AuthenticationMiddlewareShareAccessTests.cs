@@ -85,7 +85,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         var services = new ServiceCollection();
         services.AddSingleton<IJwtService>(jwt);
-        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(_dbName));
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(_dbName).AsFactory());
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         var handler = new SessionCookieHandler(

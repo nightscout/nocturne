@@ -24,10 +24,10 @@ public class TrackerSuccessionTests
     {
         _repository
             .Setup(r => r.ExecuteUnderDefinitionLockAsync(
-                It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<TrackerSuccessionResult>>>(),
-                It.IsAny<Func<TrackerSuccessionResult, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
-            .Returns((Guid _, Func<CancellationToken, Task<TrackerSuccessionResult>> work,
-                Func<TrackerSuccessionResult, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(ct));
+                It.IsAny<Guid>(), It.IsAny<Func<ITrackerRepository, CancellationToken, Task<TrackerSuccessionResult>>>(),
+                It.IsAny<Func<ITrackerRepository, TrackerSuccessionResult, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid _, Func<ITrackerRepository, CancellationToken, Task<TrackerSuccessionResult>> work,
+                Func<ITrackerRepository, TrackerSuccessionResult, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(_repository.Object, ct));
 
         _broadcast
             .Setup(b => b.BroadcastTrackerUpdateAsync(
@@ -86,7 +86,7 @@ public class TrackerSuccessionTests
             T0,
             completionNotes: null,
             completeTreatmentId: null,
-            _ => Task.FromResult(started),
+            (_, _) => Task.FromResult(started),
             CancellationToken.None);
 
     [Fact]

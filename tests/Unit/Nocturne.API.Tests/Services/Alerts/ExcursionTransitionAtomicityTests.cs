@@ -44,7 +44,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private sealed class FailingUpsertRepository(NocturneDbContext context) : AlertTrackerRepository(context)
+    private sealed class FailingUpsertRepository(NocturneDbContext context) : AlertTrackerRepository(DbUnitOfWork.Own(context))
     {
         public override Task UpsertTrackerStateAsync(AlertTrackerState state, CancellationToken ct = default) =>
             throw new InvalidOperationException("upsert failed");
@@ -73,7 +73,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
     {
         await using var context = _db.CreateContext();
         var tracker = new ExcursionTracker(
-            new AlertTrackerRepository(context),
+            new AlertTrackerRepository(DbUnitOfWork.Own(context)),
             new AlertRuleEvaluationGate(),
             new FakeTimeProvider(new DateTimeOffset(2026, 1, 5, 12, 0, 0, TimeSpan.Zero)),
             NullLogger<ExcursionTracker>.Instance);
@@ -107,7 +107,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
     /// before it got the rule's transition lock.
     /// </summary>
     private sealed class ConcurrentOpenRepository(NocturneDbContext context, Guid excursionId)
-        : AlertTrackerRepository(context)
+        : AlertTrackerRepository(DbUnitOfWork.Own(context))
     {
         private readonly NocturneDbContext _context = context;
 
@@ -200,7 +200,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
             .Options) { TenantId = TenantId };
 
     private static ExcursionTracker TrackerOver(NocturneDbContext context) =>
-        new(new AlertTrackerRepository(context), new AlertRuleEvaluationGate(),
+        new(new AlertTrackerRepository(DbUnitOfWork.Own(context)), new AlertRuleEvaluationGate(),
             new FakeTimeProvider(Now), NullLogger<ExcursionTracker>.Instance);
 
     [Fact]

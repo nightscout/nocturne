@@ -29,12 +29,6 @@ public class AuthenticationTestFactory : SqliteWebAppFactoryBase<Nocturne.API.Pr
         RemoveService<IFoodRepository>(services);
         RemoveService<ISettingsRepository>(services);
 
-        var conn = Connection;
-        services.AddDbContext<NocturneDbContext>(options =>
-            options.UseSqlite(conn)
-                .ConfigureWarnings(w =>
-                    w.Ignore(RelationalEventId.PendingModelChangesWarning)));
-
         var mockCacheService = new Mock<ICacheService>();
         mockCacheService
             .Setup(x => x.GetAsync<object>(It.IsAny<string>(), It.IsAny<CancellationToken>()))

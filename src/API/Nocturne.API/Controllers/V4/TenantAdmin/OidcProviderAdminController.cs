@@ -7,6 +7,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
@@ -29,16 +30,16 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 public class OidcProviderAdminController : ControllerBase
 {
     private readonly IOidcProviderService _providerService;
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly IHttpClientFactory _httpClientFactory;
 
     public OidcProviderAdminController(
         IOidcProviderService providerService,
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         IHttpClientFactory httpClientFactory)
     {
         _providerService = providerService;
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _httpClientFactory = httpClientFactory;
     }
 
@@ -131,7 +132,8 @@ public class OidcProviderAdminController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var conflict = await CheckWouldLockOutUsersAsync(id, disable: false);
+        await using var db = await _contexts.CreateAsync();
+        var conflict = await CheckWouldLockOutUsersAsync(db, id, disable: false);
         if (conflict is not null) return conflict;
 
         var deleted = await _providerService.DeleteProviderAsync(id);
@@ -157,7 +159,8 @@ public class OidcProviderAdminController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Disable(Guid id)
     {
-        var conflict = await CheckWouldLockOutUsersAsync(id, disable: true);
+        await using var db = await _contexts.CreateAsync();
+        var conflict = await CheckWouldLockOutUsersAsync(db, id, disable: true);
         if (conflict is not null) return conflict;
 
         var disabled = await _providerService.DisableProviderAsync(id);
@@ -248,7 +251,7 @@ public class OidcProviderAdminController : ControllerBase
     /// Checks whether deleting or disabling the given provider would leave zero enabled providers
     /// while OIDC-only users exist. Returns a 409 Conflict result if so, or null if the operation is safe.
     /// </summary>
-    private async Task<IActionResult?> CheckWouldLockOutUsersAsync(Guid providerId, bool disable)
+    private async Task<IActionResult?> CheckWouldLockOutUsersAsync(NocturneDbContext db, Guid providerId, bool disable)
     {
         var allProviders = await _providerService.GetAllProvidersAsync();
 
@@ -261,10 +264,10 @@ public class OidcProviderAdminController : ControllerBase
             return null;
 
         // Zero enabled providers would remain. Check for OIDC-only users.
-        var oidcOnlyUserCount = await _dbContext.Subjects
+        var oidcOnlyUserCount = await db.Subjects
             .Where(s => s.OidcIdentities.Any())
-            .Where(s => !_dbContext.PasskeyCredentials.Any(p => p.SubjectId == s.Id))
-            .Where(s => !_dbContext.TotpCredentials.Any(t => t.SubjectId == s.Id))
+            .Where(s => !db.PasskeyCredentials.Any(p => p.SubjectId == s.Id))
+            .Where(s => !db.TotpCredentials.Any(t => t.SubjectId == s.Id))
             .CountAsync();
 
         if (oidcOnlyUserCount == 0)

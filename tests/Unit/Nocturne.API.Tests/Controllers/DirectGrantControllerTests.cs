@@ -63,7 +63,7 @@ public class DirectGrantControllerTests : IDisposable
         };
 
         var auditService = new AuthAuditService(
-            _dbContext,
+            _dbContext.AsFactory(),
             new HttpContextAccessor { HttpContext = httpContext },
             new AuditContext(),
             new Mock<ILogger<AuthAuditService>>().Object);
@@ -73,7 +73,7 @@ public class DirectGrantControllerTests : IDisposable
                 new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             new Mock<ILogger<DirectGrantService>>().Object);
 
-        _controller = new DirectGrantController(_dbContext, directGrantService);
+        _controller = new DirectGrantController(_dbContext.AsFactory(), directGrantService);
         _controller.ControllerContext = new ControllerContext
         {
             HttpContext = httpContext,
@@ -142,7 +142,7 @@ public class DirectGrantControllerTests : IDisposable
         var response = Assert.IsType<CreateDirectGrantResponse>(okResult.Value);
 
         // Verify the stored hash matches what we'd compute
-        var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == response.Id);
+        var grant = await _dbContext.OAuthGrants.AsNoTracking().FirstOrDefaultAsync(g => g.Id == response.Id);
         Assert.NotNull(grant);
         var expectedHash = HashUtils.Sha256Hex(response.Token);
         Assert.Equal(expectedHash, grant!.TokenHash);
@@ -167,7 +167,7 @@ public class DirectGrantControllerTests : IDisposable
         var response = Assert.IsType<CreateDirectGrantResponse>(okResult.Value);
         Assert.Equal(expiresAt, response.ExpiresAt);
 
-        var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == response.Id);
+        var grant = await _dbContext.OAuthGrants.AsNoTracking().FirstOrDefaultAsync(g => g.Id == response.Id);
         Assert.Equal(expiresAt, grant!.ExpiresAt);
 
         var listResult = await _controller.List();
@@ -233,7 +233,7 @@ public class DirectGrantControllerTests : IDisposable
         var response = Assert.IsType<CreateDirectGrantResponse>(okResult.Value);
         Assert.Null(response.ExpiresAt);
 
-        var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == response.Id);
+        var grant = await _dbContext.OAuthGrants.AsNoTracking().FirstOrDefaultAsync(g => g.Id == response.Id);
         Assert.Null(grant!.ExpiresAt);
     }
 
@@ -379,7 +379,7 @@ public class DirectGrantControllerTests : IDisposable
 
         Assert.IsType<NoContentResult>(result);
 
-        var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == grantId);
+        var grant = await _dbContext.OAuthGrants.AsNoTracking().FirstOrDefaultAsync(g => g.Id == grantId);
         Assert.NotNull(grant);
         Assert.NotNull(grant!.RevokedAt);
     }
@@ -506,7 +506,7 @@ public class DirectGrantControllerTests : IDisposable
         var result = await _controller.Revoke(siteToken);
 
         result.Should().BeOfType<NoContentResult>();
-        var reloaded = await _dbContext.OAuthGrants.SingleAsync(g => g.Id == siteToken);
+        var reloaded = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == siteToken);
         reloaded.RevokedAt.Should().NotBeNull();
     }
 
@@ -519,7 +519,7 @@ public class DirectGrantControllerTests : IDisposable
 
         await _controller.Revoke(siteToken);
 
-        var reloaded = await _dbContext.OAuthGrants.SingleAsync(g => g.Id == siteToken);
+        var reloaded = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == siteToken);
         reloaded.RevokedAt.Should().BeNull();
     }
 }

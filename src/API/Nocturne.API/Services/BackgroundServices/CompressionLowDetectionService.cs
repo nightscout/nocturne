@@ -346,11 +346,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
             }
         }
 
-        // Save suggestions
-        foreach (var suggestion in suggestions)
-        {
-            await repository.CreateAsync(suggestion, cancellationToken);
-        }
+        await repository.CreateManyAsync(suggestions, cancellationToken);
 
         // Create notification if any suggestions found.
         // Notification uses i18n keys so the frontend can render localized text.

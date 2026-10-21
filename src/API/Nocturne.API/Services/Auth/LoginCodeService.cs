@@ -13,9 +13,9 @@ namespace Nocturne.API.Services.Auth;
 /// </summary>
 /// <remarks>
 /// Callers pass the <see cref="NocturneDbContext"/> the operation runs on: issuance pins one to
-/// the target tenant, redemption uses the request-scoped context the host resolved. The context's
-/// tenant is therefore what binds a code to a tenant on both sides, and a code minted on one
-/// tenant is invisible on another's host.
+/// the target tenant, redemption uses one from the request's factory, which reads the tenant the
+/// host resolved. The context's tenant is therefore what binds a code to a tenant on both sides,
+/// and a code minted on one tenant is invisible on another's host.
 /// </remarks>
 public interface ILoginCodeService
 {

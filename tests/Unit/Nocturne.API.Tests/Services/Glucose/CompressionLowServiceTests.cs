@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -94,7 +95,7 @@ public class CompressionLowServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         var context = new NocturneDbContext(options) { TenantId = TenantId };
-        var uiSettings = new UISettingsService(context, NullLogger<UISettingsService>.Instance);
+        var uiSettings = new UISettingsService(context.AsFactory(), NullLogger<UISettingsService>.Instance);
         await context.DisposeAsync();
 
         var sut = new CompressionLowService(

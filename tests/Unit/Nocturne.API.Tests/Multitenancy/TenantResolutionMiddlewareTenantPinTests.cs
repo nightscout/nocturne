@@ -4,13 +4,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Multitenancy;
 
 /// <summary>
-/// A request-scoped <see cref="NocturneDbContext"/> resolved before <see cref="TenantResolutionMiddleware"/>
-/// runs reads the tenant it resolves. Unauthenticated requests (the setup/onboarding flow) have no
+/// A context created in the request's scope before <see cref="TenantResolutionMiddleware"/> runs reads
+/// the tenant it resolves. Unauthenticated requests (the setup/onboarding flow) have no
 /// auth handler to set the tenant, so this is the only thing scoping their reads and writes.
 /// </summary>
 public sealed class TenantResolutionMiddlewareTenantPinTests : TenantResolutionMiddlewareTestBase
@@ -25,7 +26,7 @@ public sealed class TenantResolutionMiddlewareTenantPinTests : TenantResolutionM
     public async Task A_context_resolved_before_tenant_resolution_reads_the_resolved_tenant()
     {
         var scope = Root.CreateScope();
-        var scoped = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var scoped = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
         scoped.TenantId.Should().Be(Guid.Empty);
 
         var (context, nextCalled) = await InvokeAsync(

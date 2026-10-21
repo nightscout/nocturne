@@ -151,20 +151,6 @@ public interface IEntryService
     );
 
     /// <summary>
-    /// Get entries with advanced filtering capabilities
-    /// </summary>
-    /// <param name="find">MongoDB query filter</param>
-    /// <param name="count">Maximum number of entries to return</param>
-    /// <param name="skip">Number of entries to skip for pagination</param>
-    /// <returns>Collection of entries matching the filter</returns>
-    Task<IEnumerable<Entry>> GetEntriesWithAdvancedFilterAsync(
-        string find,
-        int count,
-        int skip,
-        CancellationToken cancellationToken = default
-    );
-
-    /// <summary>
     /// Get entries with advanced filtering capabilities including type, date, and sorting
     /// </summary>
     /// <param name="type">Entry type filter (e.g., "sgv", "mbg", "cal")</param>
@@ -182,4 +168,7 @@ public interface IEntryService
         bool reverseResults,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>Entries matching <paramref name="query"/>, in the order it asks for.</summary>
+    Task<IEnumerable<Entry>> QueryEntriesAsync(EntryQuery query, CancellationToken cancellationToken = default);
 }

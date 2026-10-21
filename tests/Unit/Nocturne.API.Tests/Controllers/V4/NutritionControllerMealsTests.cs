@@ -82,7 +82,7 @@ public class NutritionControllerMealsTests : IDisposable
             bolusRepo ?? _bolusRepo,
             _foodServiceMock.Object,
             _demoModeMock.Object,
-            _dbContext);
+            _dbContext.AsFactory());
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext()

@@ -262,7 +262,7 @@ public class SingletonLinkPruningTests
             Ctx = _db.CreateContext();
             Ctx.TenantId = TenantId;
             Service = new DeduplicationService(
-                Ctx, new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+                Ctx.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
         }
 
         public NocturneDbContext Ctx { get; }
@@ -343,8 +343,8 @@ public class SingletonLinkPruningTests
 
             if (withCursor)
             {
-                await Service.SetCursorAsync(
-                    new ReconcileCursor(cursorAt ?? DateTime.UtcNow.AddHours(-1), Guid.Empty), CancellationToken.None);
+                await DeduplicationService.SetCursorAsync(
+                    Ctx, new ReconcileCursor(cursorAt ?? DateTime.UtcNow.AddHours(-1), Guid.Empty), CancellationToken.None);
             }
             Ctx.ChangeTracker.Clear();
         }

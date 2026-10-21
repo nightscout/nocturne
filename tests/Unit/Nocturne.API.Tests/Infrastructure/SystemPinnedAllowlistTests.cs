@@ -80,37 +80,9 @@ public class SystemPinnedAllowlistTests
                     && name.Parent is not (MemberAccessExpressionSyntax or MemberBindingExpressionSyntax),
                 _ => false,
             })
-            .Select(MemberName)
+            .Select(EnclosingMember.Of)
             .Distinct()
             .ToList();
-
-    private static string MemberName(SyntaxNode node)
-    {
-        var member = node.Ancestors().OfType<MemberDeclarationSyntax>()
-            .FirstOrDefault(m => m is not BaseTypeDeclarationSyntax);
-
-        var name = member switch
-        {
-            null => "(type)",
-            MethodDeclarationSyntax method => method.Identifier.ValueText,
-            ConstructorDeclarationSyntax constructor => constructor.Identifier.ValueText,
-            BasePropertyDeclarationSyntax property => property switch
-            {
-                PropertyDeclarationSyntax p => p.Identifier.ValueText,
-                EventDeclarationSyntax e => e.Identifier.ValueText,
-                _ => "this[]",
-            },
-            BaseFieldDeclarationSyntax field => string.Join(",", field.Declaration.Variables.Select(v => v.Identifier.ValueText)),
-            OperatorDeclarationSyntax op => $"operator {op.OperatorToken.ValueText}",
-            _ => member.Kind().ToString(),
-        };
-
-        var types = (member ?? node).Ancestors().OfType<BaseTypeDeclarationSyntax>()
-            .Reverse()
-            .Select(type => type.Identifier.ValueText);
-
-        return string.Join(".", types.Append(name));
-    }
 
     private static List<string> Scan()
     {

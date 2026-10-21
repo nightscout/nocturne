@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
+using Nocturne.API.Filters;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
 
@@ -20,6 +22,7 @@ namespace Nocturne.API.Controllers.V3;
 /// <seealso cref="V3CollectionResponse{T}"/>
 /// <seealso cref="V3FilterCriteria"/>
 [ApiController]
+[V3ParameterExceptionFilter]
 public abstract class BaseV3Controller<T> : ControllerBase
     where T : class
 {
@@ -47,14 +50,16 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// </summary>
     /// <returns>Parsed <see cref="V3QueryParameters"/> populated from the current request's query string.</returns>
     /// <exception cref="V3ParameterOutOfToleranceException">Thrown when limit is negative, matching Nightscout V3 behavior.</exception>
-    protected V3QueryParameters ParseV3QueryParameters()
+    /// <exception cref="V3SortConflictException">Thrown when both <c>sort</c> and <c>sort$desc</c> are given and <paramref name="readSort"/> is set.</exception>
+    /// <param name="readSort">Whether the request's sort and limit are read; a read of one document by identifier ignores both, as Nightscout does.</param>
+    protected V3QueryParameters ParseV3QueryParameters(bool readSort = true)
     {
         var query = HttpContext.Request.Query;
 
         var rawLimit = ParseIntParameter(query, "limit", 100);
 
         // Nightscout V3 API returns 400 for negative limit with "Parameter limit out of tolerance"
-        if (rawLimit < 0)
+        if (readSort && rawLimit < 0)
         {
             throw new V3ParameterOutOfToleranceException("limit");
         }
@@ -64,7 +69,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
             Limit = rawLimit,
             Offset = ParseIntParameter(query, "offset", 0),
             Fields = ParseStringArrayParameter(query, "fields"),
-            Sort = ParseStringParameter(query, "sort"),
+            Sort = readSort ? ParseSort(query) : V3Sort.Default,
             Filter = ParseJsonParameter(query, "filter"),
             IfModifiedSince = ParseDateTimeParameter(query, "if-modified-since"),
             IfNoneMatch = ParseStringParameter(query, "if-none-match"),
@@ -88,21 +93,6 @@ public abstract class BaseV3Controller<T> : ControllerBase
             parameters.Offset = 0;
 
         return parameters;
-    }
-
-    /// <summary>
-    /// Exception thrown when a V3 API parameter is out of tolerance.
-    /// Matches the Nightscout V3 API behavior of returning 400 with "Parameter {name} out of tolerance".
-    /// </summary>
-    public class V3ParameterOutOfToleranceException : Exception
-    {
-        public string ParameterName { get; }
-
-        public V3ParameterOutOfToleranceException(string parameterName)
-            : base($"Parameter {parameterName} out of tolerance")
-        {
-            ParameterName = parameterName;
-        }
     }
 
     /// <summary>
@@ -649,6 +639,28 @@ public abstract class BaseV3Controller<T> : ControllerBase
         return defaultValue;
     }
 
+    private V3Sort ParseSort(IQueryCollection query)
+    {
+        var ascending = ParseStringParameter(query, "sort");
+        var descending = ParseStringParameter(query, "sort$desc");
+
+        return (ascending, descending) switch
+        {
+            ({ Length: > 0 }, { Length: > 0 }) => throw new V3SortConflictException(),
+            (_, { Length: > 0 }) => new V3Sort(descending, true),
+            ({ Length: > 0 }, _) => new V3Sort(ascending, false),
+            _ => V3Sort.Default,
+        };
+    }
+
+    /// <summary>The read-side sort field a request names; any field a store cannot order by is time.</summary>
+    protected static ReadSortField ReadSortFieldOf(V3Sort sort) => sort.Field switch
+    {
+        "srvModified" => ReadSortField.SrvModified,
+        "sgv" => ReadSortField.Sgv,
+        _ => ReadSortField.Time,
+    };
+
     private string? ParseStringParameter(IQueryCollection query, string key)
     {
         if (query.TryGetValue(key, out var values))
@@ -726,26 +738,6 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <param name="filter">V3 filter object</param>
     /// <returns>The filter's JSON text, or null when there is no filter</returns>
     protected static string? ConvertV3FilterToV1Find(JsonElement? filter) => filter?.GetRawText();
-
-    /// <summary>
-    /// Extract sort direction from V3 sort parameter
-    /// </summary>
-    /// <param name="sort">V3 sort parameter</param>
-    /// <returns>True for reverse sorting (ascending), false for default (descending)</returns>
-    protected bool ExtractSortDirection(string? sort)
-    {
-        if (string.IsNullOrEmpty(sort))
-            return true; // Nightscout defaults to Ascending (Oldest first)
-
-        // Check if sort starts with '-' (descending) or 'desc' (descending)
-        if (sort.StartsWith('-') || sort.StartsWith("desc", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        // Default to ascending (true) if just field name is provided
-        return true;
-    }
 
     /// <summary>
     /// Extract type filter from V3 filter

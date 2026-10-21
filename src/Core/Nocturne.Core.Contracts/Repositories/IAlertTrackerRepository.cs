@@ -81,16 +81,18 @@ public interface IAlertTrackerRepository
     /// tracker state already holds the API's in-process per-rule lease
     /// (<c>AlertRuleEvaluationGate</c>) across read, decide and write, so no writer in the same
     /// process changes the state under another. This lock is a backstop for a second API process
-    /// briefly overlapping the first, such as a pod being drained while its replacement starts. The
-    /// default, for a store no other process shares, takes nothing.
+    /// briefly overlapping the first, such as a pod being drained while its replacement starts. Call
+    /// it on the repository the transaction hands its work. The default, for a store no other
+    /// process shares, takes nothing.
     /// </summary>
     /// <param name="alertRuleId">The rule whose transition is about to be written.</param>
     Task LockRuleAsync(Guid alertRuleId, CancellationToken ct = default) => Task.CompletedTask;
 
     /// <summary>
     /// Runs <paramref name="work"/> in one database transaction, so the writes it makes through
-    /// this repository commit or roll back together. The default, for a store with no
-    /// transactions, runs it as is.
+    /// the repository it is handed commit or roll back together. That repository runs on the
+    /// transaction; calls on this one outside it each run on their own. The default, for a store
+    /// with no transactions, hands over this repository and runs the work as is.
     /// </summary>
     /// <remarks>
     /// <paramref name="work"/> can run more than once when the store retries a transient failure.
@@ -101,7 +103,7 @@ public interface IAlertTrackerRepository
     /// again. Without it, a commit that landed but reported failure runs the work twice.
     /// </remarks>
     Task<T> ExecuteInTransactionAsync<T>(
-        Func<CancellationToken, Task<T>> work,
-        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
-        CancellationToken ct = default) => work(ct);
+        Func<IAlertTrackerRepository, CancellationToken, Task<T>> work,
+        Func<IAlertTrackerRepository, T, CancellationToken, Task<bool>>? verifySucceeded = null,
+        CancellationToken ct = default) => work(this, ct);
 }

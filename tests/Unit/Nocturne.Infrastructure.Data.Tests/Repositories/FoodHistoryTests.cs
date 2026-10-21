@@ -32,7 +32,7 @@ public class FoodHistoryTests : IDisposable
             TenantId, "test", new MutationAuditInterceptor());
         _context = _db.CreateContext();
         _context.AttributedTo(new UserAuditContext());
-        _foods = new FoodRepository(_context, NullLogger<FoodRepository>.Instance);
+        _foods = new FoodRepository(_context.AsFactory(), NullLogger<FoodRepository>.Instance);
     }
 
     public void Dispose()

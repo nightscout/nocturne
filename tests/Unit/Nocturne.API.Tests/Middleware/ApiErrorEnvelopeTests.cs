@@ -176,7 +176,6 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
                     .ThrowsAsync(new InvalidOperationException(BoomMessage));
                 services.AddSingleton(entries.Object);
                 services.AddSingleton(new Mock<IDocumentProcessingService>().Object);
-                services.AddSingleton(new Mock<IProcessingStatusService>().Object);
                 services.AddSingleton(new Mock<ICanonicalAlertEvaluator>().Object);
 
                 var bodyWeight = new Mock<IBodyWeightService>();

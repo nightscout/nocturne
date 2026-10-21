@@ -12,9 +12,8 @@ using Xunit;
 namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 
 /// <summary>
-/// Tenant-scoping regression tests for <see cref="AlertRepository"/>. The repository leases
-/// contexts from the pooled factory, which does not reset <c>TenantId</c>. These tests assert
-/// (a) per-tenant methods pin the requested tenant even when the pooled context arrives tagged
+/// Tenant-scoping regression tests for <see cref="AlertRepository"/>. These tests assert
+/// (a) per-tenant methods pin the requested tenant even when the factory's context arrives tagged
 /// with a different tenant, and (b) the cross-tenant sweeps iterate every active tenant rather
 /// than relying on a single (RLS-blocked) query.
 ///
@@ -41,8 +40,7 @@ public class AlertRepositoryTenantScopingTests
                 NewRule(TenantB, "Low"));
         });
 
-        // The factory hands back contexts already tagged with tenant B — the production hazard
-        // where a pooled context carries the previous lessee's tenant.
+        // The factory hands back contexts already tagged with tenant B.
         var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: TenantB));
 
         var rules = await repo.GetEnabledRulesAsync(TenantA, CancellationToken.None);

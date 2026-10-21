@@ -70,7 +70,7 @@ public class TreatmentDecomposerEffectiveProfileSwitchTests : IDisposable
             .ReturnsAsync((Guid?)null);
 
         _decomposer = new TreatmentDecomposer(
-            _context,
+            factory,
             new BolusRepository(factory, dedup, audit, NullLogger<BolusRepository>.Instance),
             new Mock<ITempBasalRepository>().Object,
             new CarbIntakeRepository(factory, dedup, audit, NullLogger<CarbIntakeRepository>.Instance),

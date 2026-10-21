@@ -192,7 +192,7 @@ public class DedupDeltaGoldenTests
     // which is inside C's ±30s window — so B is always a candidate for C. Whether C collapses with B
     // turns on whether the dedup engine, when value-matching, sees B's UPSERTED physical value.
     //
-    // The DeduplicationService runs on its own scoped NocturneDbContext (a separate connection from
+    // The DeduplicationService runs on a context of its own (a separate connection from
     // the repository's BulkCreate transaction). So it sees B's upserted physical row only once that
     // row is COMMITTED:
     //   - SensorGlucose has always committed before running dedup → B's new value is visible →

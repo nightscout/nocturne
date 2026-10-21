@@ -66,7 +66,6 @@ public class AuthorizationConfigurationTests
 
     [Theory]
     [InlineData("Nocturne.API.Controllers.V4.TenantAdmin.MigrationController")]
-    [InlineData("Nocturne.API.Controllers.V4.TenantAdmin.ProcessingController")]
     [InlineData("Nocturne.API.Controllers.V4.TenantAdmin.NightscoutTransitionController")]
     [InlineData("Nocturne.API.Controllers.V4.TenantAdmin.DeduplicationController")]
     public void TenantAdminController_RequiresSuperuser(string typeName)

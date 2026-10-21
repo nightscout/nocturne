@@ -72,7 +72,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
     private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
     private DataSourceService CreateService(NocturneDbContext context, ITreatmentDecomposer? decomposer = null) => new(
-        context,
+        context.AsFactory(),
         _sensorGlucose.Object,
         _meterGlucose.Object,
         _calibrations.Object,
@@ -82,7 +82,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         NullLogger<DataSourceService>.Instance);
 
     private TreatmentDecomposer CreateDecomposer(NocturneDbContext context, IProfileDecomposer profiles) => new(
-        context,
+        context.AsFactory(),
         Mock.Of<IBolusRepository>(), Mock.Of<ITempBasalRepository>(), Mock.Of<ICarbIntakeRepository>(),
         Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
         Mock.Of<IBolusCalculationRepository>(), Mock.Of<IStateSpanService>(), Mock.Of<ITreatmentFoodService>(),
@@ -305,6 +305,93 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
 
         _connectorConfig.Verify(c => c.SetActiveAsync(
             ConnectorId, false, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteConnectorData_AllowingReimport_LeavesEveryTypeReimportable()
+    {
+        SeedOneOfEachType();
+
+        await using (var ctx = NewContext())
+            (await CreateService(ctx).DeleteConnectorDataAsync(ConnectorId, allowReimport: true))
+                .Success.Should().BeTrue();
+
+        await using var assertCtx = NewContext();
+
+        (await assertCtx.Boluses.IgnoreQueryFilters().SingleAsync(b => b.LegacyId == "bolus-1")).DeletedAt.Should().NotBeNull();
+        (await assertCtx.ApsSnapshots.IgnoreQueryFilters().SingleAsync(a => a.LegacyId == "aps-1")).DeletedAt.Should().NotBeNull();
+        (await assertCtx.StateSpans.IgnoreQueryFilters().SingleAsync(s => s.Source == _deviceId)).DeletedAt.Should().NotBeNull();
+
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(["bolus-1"])).Held.Should().BeEmpty();
+        (await assertCtx.GetBlockingLegacyIdsAsync<CarbIntakeEntity>(["carb-1"])).Held.Should().BeEmpty();
+        (await assertCtx.GetBlockingLegacyIdsAsync<BGCheckEntity>(["bgcheck-1"])).Held.Should().BeEmpty();
+        (await assertCtx.GetBlockingLegacyIdsAsync<NoteEntity>(["note-1"])).Held.Should().BeEmpty();
+        (await assertCtx.GetBlockingLegacyIdsAsync<ApsSnapshotEntity>(["aps-1"])).Held.Should().BeEmpty();
+        (await assertCtx.UserTombstones<StateSpanEntity>().AnyAsync()).Should().BeFalse();
+
+        var release = await assertCtx.MutationAuditLog.SingleAsync(a =>
+            a.EntityType == "Bolus" && a.Action == "allow_reimport");
+        release.AuthType.Should().Be(AuthType);
+        release.ChangesJson.Should().Contain($"data_source={_deviceId}");
+    }
+
+    [Fact]
+    public async Task DeleteConnectorData_AllowingReimport_ReleasesTheSourcesEarlierDeletesOnly()
+    {
+        await using (var seed = NewContext())
+        {
+            seed.Boluses.AddRange(
+                new BolusEntity
+                {
+                    Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "earlier", DataSource = _deviceId,
+                    Timestamp = DateTime.UtcNow, Insulin = 1, DeletedAt = DateTime.UtcNow,
+                },
+                new BolusEntity
+                {
+                    Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "other-source", DataSource = "loop",
+                    Timestamp = DateTime.UtcNow, Insulin = 1, DeletedAt = DateTime.UtcNow,
+                });
+            await seed.SaveChangesAsync();
+            await seed.Boluses.IgnoreQueryFilters()
+                .ExecuteUpdateAsync(s => s.SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), true));
+        }
+
+        await using (var ctx = NewContext())
+            await CreateService(ctx).DeleteConnectorDataAsync(ConnectorId, allowReimport: true);
+
+        await using var assertCtx = NewContext();
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(["earlier", "other-source"])).Held
+            .Should().BeEquivalentTo(["other-source"]);
+    }
+
+    [Fact]
+    public async Task DeleteConnectorData_AllowingReimport_ReenablesAnEnabledConnector()
+    {
+        _connectorConfig
+            .Setup(c => c.GetConfigurationAsync(ConnectorId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse { ConnectorName = ConnectorId, IsActive = true });
+
+        await using (var ctx = NewContext())
+            await CreateService(ctx).DeleteConnectorDataAsync(ConnectorId, allowReimport: true);
+
+        _connectorConfig.Verify(c => c.SetActiveAsync(
+            ConnectorId, false, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _connectorConfig.Verify(c => c.SetActiveAsync(
+            ConnectorId, true, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteConnectorData_AllowingReimport_LeavesADisabledConnectorDisabled()
+    {
+        _connectorConfig
+            .Setup(c => c.GetConfigurationAsync(ConnectorId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse { ConnectorName = ConnectorId, IsActive = false });
+
+        await using (var ctx = NewContext())
+            await CreateService(ctx).DeleteConnectorDataAsync(ConnectorId, allowReimport: true);
+
+        _connectorConfig.Verify(c => c.SetActiveAsync(
+            ConnectorId, true, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

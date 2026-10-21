@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Services;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -119,6 +120,67 @@ public class V4ToLegacyProjectionServiceTests
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(carbs);
+
+    [Fact]
+    public async Task GetProjectedTreatments_Ascending_ReadsEachTableFromItsOldestEnd_AndReturnsOldestFirst()
+    {
+        var start = new DateTime(2025, 01, 01, 12, 0, 0, DateTimeKind.Utc);
+        var boluses = Enumerable.Range(0, 3)
+            .Select(i => new Bolus { Id = Guid.CreateVersion7(), Timestamp = start.AddMinutes(i), Insulin = 1.0 + i })
+            .ToList();
+        _bolusRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(),
+                false, It.IsAny<bool>(),
+                It.IsAny<BolusKind?>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? _, DateTime? _, string? _, string? _, int limit, int _, bool _, bool _,
+                    BolusKind? _, DateTime? _, Guid? _, CancellationToken _) =>
+                boluses.OrderBy(b => b.Timestamp).Take(limit).ToList());
+
+        var result = (await _service.GetProjectedTreatmentsAsync(null, null, 2, nativeOnly: false, descending: false)).ToList();
+
+        result.Select(t => t.Insulin).Should().Equal(1.0, 2.0);
+        _bolusRepo.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<bool>(), It.IsAny<BolusKind?>(),
+            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatments_Ascending_MergesTablesAndKeepsTheOldestRowsOfEachBeforeTheLimit()
+    {
+        var start = new DateTime(2025, 01, 01, 12, 0, 0, DateTimeKind.Utc);
+        var boluses = new[] { 0, 2, 4, 6 }
+            .Select(i => new Bolus { Id = Guid.CreateVersion7(), Timestamp = start.AddMinutes(i), Insulin = 1.0 })
+            .ToList();
+        var notes = new[] { 1, 3, 5, 7 }
+            .Select(i => new Note { Id = Guid.CreateVersion7(), Timestamp = start.AddMinutes(i), Text = $"n{i}" })
+            .ToList();
+        _bolusRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<BolusKind?>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? _, DateTime? _, string? _, string? _, int limit, int _, bool descending, bool _,
+                    BolusKind? _, DateTime? _, Guid? _, CancellationToken _) =>
+                (descending ? boluses.OrderByDescending(b => b.Timestamp) : boluses.OrderBy(b => b.Timestamp)).Take(limit).ToList());
+        _noteRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? _, DateTime? _, string? _, string? _, int limit, int _, bool descending, bool _, CancellationToken _) =>
+                (descending ? notes.OrderByDescending(n => n.Timestamp) : notes.OrderBy(n => n.Timestamp)).Take(limit).ToList());
+
+        var result = (await _service.GetProjectedTreatmentsAsync(
+            null, null, 5, nativeOnly: false, descending: false)).ToList();
+
+        result.Select(t => t.Mills).Should().Equal(
+            Enumerable.Range(0, 5).Select(i => new DateTimeOffset(start.AddMinutes(i)).ToUnixTimeMilliseconds()));
+    }
 
     [Fact]
     public async Task GetProjectedTreatments_MultipleBolusesInCorrelation_SelectsLargestAsMealBolus()
@@ -724,9 +786,9 @@ public class V4ToLegacyProjectionServiceTests
         using var abandoned = TestDbContextFactory.CreateInMemoryContext();
         var abandonedSet = abandoned.Set<BolusEntity>();
         await abandoned.DisposeAsync();
-        _dbContext.Boluses = abandonedSet;
+        var service = CreateService(new TestNocturneDbContextFactory(_dbContext) { Prepare = c => c.Boluses = abandonedSet });
 
-        var read = () => _service.GetProjectedTreatmentsModifiedSinceAsync(CursorMills, 100);
+        var read = () => service.GetProjectedTreatmentsModifiedSinceAsync(CursorMills, 100);
 
         await read.Should().ThrowAsync<ObjectDisposedException>();
     }
@@ -828,9 +890,9 @@ public class V4ToLegacyProjectionServiceTests
         using var abandoned = TestDbContextFactory.CreateInMemoryContext();
         var abandonedSet = abandoned.Set<StateSpanEntity>();
         await abandoned.DisposeAsync();
-        _dbContext.StateSpans = abandonedSet;
+        var service = CreateService(new TestNocturneDbContextFactory(_dbContext) { Prepare = c => c.StateSpans = abandonedSet });
 
-        var lookup = () => _service.GetProjectedStateSpanTreatmentAsync(Guid.NewGuid().ToString());
+        var lookup = () => service.GetProjectedStateSpanTreatmentAsync(Guid.NewGuid().ToString());
 
         await lookup.Should().ThrowAsync<ObjectDisposedException>();
     }
@@ -1102,6 +1164,9 @@ public class V4ToLegacyProjectionServiceTests
     }
 
     private V4ToLegacyProjectionService CreateService(NocturneDbContext dbContext) =>
+        CreateService(dbContext.AsFactory());
+
+    private V4ToLegacyProjectionService CreateService(INocturneDbContextFactory contexts) =>
         new(
             _bolusRepo.Object,
             _carbIntakeRepo.Object,
@@ -1111,7 +1176,7 @@ public class V4ToLegacyProjectionServiceTests
             _tempBasalRepo.Object,
             _bolusCalcRepo.Object,
             _treatmentFoodService.Object,
-            dbContext,
+            contexts,
             NullLogger<V4ToLegacyProjectionService>.Instance
         );
 }

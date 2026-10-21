@@ -68,6 +68,8 @@ public class ProfileByIdResolutionTests
         MongoObjectId.TryGetGuidPrefixRange(identifier, out var low, out var high);
         _therapyRepo.Setup(r => r.GetByGuidRangeAsync(low, high, It.IsAny<CancellationToken>()))
             .ReturnsAsync(row);
+        _therapyRepo.Setup(r => r.GetDocumentRowsAsync(row.Id.ToString(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([row]);
 
         var profile = await _sut.GetProfileByIdAsync(identifier);
 
@@ -92,7 +94,7 @@ public class ProfileByIdResolutionTests
     }
 
     [Fact]
-    public async Task DocumentWithSeveralStores_ResolvesItsNewestStore_WhicheverOrderTheyAreStoredIn()
+    public async Task DocumentWithSeveralStores_ServesEveryStore_NamedByItsNewest_WhicheverOrderTheyAreStoredIn()
     {
         const string documentId = "5f1d7a3b9c0e4a2b8d6c1e0f";
         var older = Row($"{documentId}:Weekday");
@@ -110,6 +112,8 @@ public class ProfileByIdResolutionTests
 
         first!.DefaultProfile.Should().Be("Weekend");
         second!.DefaultProfile.Should().Be("Weekend");
+        first.Store.Keys.Should().BeEquivalentTo("Weekday", "Weekend");
+        second.Store.Keys.Should().BeEquivalentTo("Weekday", "Weekend");
     }
 
     [Fact]
@@ -131,6 +135,16 @@ public class ProfileByIdResolutionTests
             .ReturnsAsync([Row($"{documentId}:Default")]);
 
         (await _sut.ResolveDocumentIdAsync(MongoObjectId.Coerce(documentId)!)).Should().Be(documentId);
+    }
+
+    [Fact]
+    public async Task IdThatIsAPrefixOfAColonBearingStoreKey_ResolvesTheWholeDocument()
+    {
+        var row = Row("a:b:c");
+        row.ProfileName = "b:c";
+        _therapyRepo.Setup(r => r.GetDocumentRowsAsync("a:b", It.IsAny<CancellationToken>())).ReturnsAsync([row]);
+
+        (await _sut.ResolveDocumentIdAsync("a:b")).Should().Be("a");
     }
 
     [Fact]

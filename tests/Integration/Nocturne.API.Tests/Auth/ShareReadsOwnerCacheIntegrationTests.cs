@@ -106,7 +106,7 @@ public class ShareReadsOwnerCacheIntegrationTests(ApiIntegrationTestFixture fixt
 
         ClearCaches();
         var cold = await LastDayBolusCountAsync(share, path);
-        cold.Should().Be(0, "row level security hides the boluses from a glucose-only share");
+        cold.Should().BeNull("a glucose-only share reads no treatment summary");
 
         ClearCaches();
         (await LastDayBolusCountAsync(AuthenticatedClient, path)).Should().Be(1);
@@ -144,7 +144,7 @@ public class ShareReadsOwnerCacheIntegrationTests(ApiIntegrationTestFixture fixt
             .ToList();
     }
 
-    private static async Task<int> LastDayBolusCountAsync(HttpClient client, string path)
+    private static async Task<int?> LastDayBolusCountAsync(HttpClient client, string path)
     {
         var response = await client.GetAsync(path);
         var body = await response.Content.ReadAsStringAsync();
@@ -152,7 +152,9 @@ public class ShareReadsOwnerCacheIntegrationTests(ApiIntegrationTestFixture fixt
         using var document = JsonDocument.Parse(body);
         var lastDay = document.RootElement.GetProperty("lastDay");
         lastDay.GetProperty("hasSufficientData").GetBoolean().Should().BeTrue(body);
-        return lastDay.GetProperty("treatmentSummary").GetProperty("bolusCount").GetInt32();
+        return lastDay.TryGetProperty("treatmentSummary", out var summary) && summary.ValueKind != JsonValueKind.Null
+            ? summary.GetProperty("bolusCount").GetInt32()
+            : null;
     }
 
     private static async Task<string> TimeZoneUnavailableReasonAsync(HttpClient client, string path)

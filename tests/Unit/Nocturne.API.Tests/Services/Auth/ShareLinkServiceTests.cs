@@ -79,7 +79,7 @@ public sealed class ShareLinkServiceTests : IDisposable
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(_dbName));
 
         return new ShareLinkService(
-            db,
+            db.AsFactory(),
             new ShareTokenGenerator(),
             new ShareTokenCacheService(
                 new MemoryCache(new MemoryCacheOptions()), factory.Object.AsNocturneFactory(), NullLogger<ShareTokenCacheService>.Instance),
@@ -165,6 +165,7 @@ public sealed class ShareLinkServiceTests : IDisposable
         await _service.RotateAsync(TenantId);
 
         // What a link minted before the recoverable copy existed looks like.
+        _db.ChangeTracker.Clear();
         var stored = await _db.Tenants.FirstAsync(t => t.Id == TenantId);
         stored.ShareTokenEncrypted = null;
         await _db.SaveChangesAsync();
@@ -183,6 +184,7 @@ public sealed class ShareLinkServiceTests : IDisposable
         await _service.RotateAsync(TenantId);
 
         // What a changed instance key leaves behind.
+        _db.ChangeTracker.Clear();
         var stored = await _db.Tenants.FirstAsync(t => t.Id == TenantId);
         stored.ShareTokenEncrypted = Convert.ToBase64String(new byte[48]);
         await _db.SaveChangesAsync();
@@ -198,6 +200,7 @@ public sealed class ShareLinkServiceTests : IDisposable
     public async Task Get_cannot_tell_a_stale_ciphertext_from_a_good_one()
     {
         await _service.RotateAsync(TenantId);
+        _db.ChangeTracker.Clear();
         var stored = await _db.Tenants.FirstAsync(t => t.Id == TenantId);
         stored.ShareTokenEncrypted = Convert.ToBase64String(new byte[48]);
         await _db.SaveChangesAsync();

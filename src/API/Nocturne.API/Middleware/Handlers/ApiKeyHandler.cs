@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
+using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -113,7 +114,7 @@ public class ApiKeyHandler : IAuthHandler
             var scopeFactory = context.RequestServices?.GetService<IServiceScopeFactory>();
             if (scopeFactory != null)
             {
-                _ = SendRotationNudgeAsync(scopeFactory, grant);
+                _ = SendRotationNudgeAsync(scopeFactory, tenantCtx, grant);
             }
         }
 
@@ -133,11 +134,16 @@ public class ApiKeyHandler : IAuthHandler
         });
     }
 
-    private async Task SendRotationNudgeAsync(IServiceScopeFactory scopeFactory, OAuthGrantEntity grant)
+    /// <remarks>
+    /// Runs after the request may have ended, on a scope of its own opened on the grant's tenant: the
+    /// notification is tenant-scoped, and a fresh scope carries no tenant until one is set.
+    /// </remarks>
+    private async Task SendRotationNudgeAsync(
+        IServiceScopeFactory scopeFactory, TenantContext tenant, OAuthGrantEntity grant)
     {
         try
         {
-            using var scope = scopeFactory.CreateScope();
+            await using var scope = TenantJobScope.Open(scopeFactory, tenant, "api-key-handler");
             var notificationService = scope.ServiceProvider.GetRequiredService<IInAppNotificationService>();
 
             await notificationService.CreateNotificationAsync(

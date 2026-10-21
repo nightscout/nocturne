@@ -14,7 +14,6 @@ namespace Nocturne.API.Services.Auth;
 /// <seealso cref="IOAuthClientService"/>
 public class OAuthGrantService : IOAuthGrantService
 {
-    private readonly NocturneDbContext _dbContext;
     private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly IOAuthClientService _clientService;
     private readonly GuestSessionCacheService _guestSessionCache;
@@ -24,23 +23,20 @@ public class OAuthGrantService : IOAuthGrantService
     /// <summary>
     /// Initialises a new <see cref="OAuthGrantService"/>.
     /// </summary>
-    /// <param name="dbContext">Database context for grant persistence.</param>
-    /// <param name="dbContextFactory">Factory used by <see cref="IsGrantRevokedAsync"/>, which pins
-    /// the token's tenant rather than reading its scope's: it runs inside the authentication handlers,
-    /// which may hold a scope with no tenant resolved.</param>
+    /// <param name="dbContextFactory">Opens each operation's context. <see cref="IsGrantRevokedAsync"/>
+    /// pins the token's tenant rather than reading its scope's: it runs inside the authentication
+    /// handlers, which may hold a scope with no tenant resolved.</param>
     /// <param name="clientService">Used to resolve client metadata (currently unused in this implementation).</param>
     /// <param name="guestSessionCache">Cache evicted when a grant's scopes are narrowed.</param>
     /// <param name="grantRevocation">Applies the consequences of a revoke.</param>
     /// <param name="logger">Logger instance.</param>
     public OAuthGrantService(
-        NocturneDbContext dbContext,
         INocturneDbContextFactory dbContextFactory,
         IOAuthClientService clientService,
         GuestSessionCacheService guestSessionCache,
         GrantRevocationService grantRevocation,
         ILogger<OAuthGrantService> logger)
     {
-        _dbContext = dbContext;
         _dbContextFactory = dbContextFactory;
         _clientService = clientService;
         _guestSessionCache = guestSessionCache;
@@ -58,7 +54,8 @@ public class OAuthGrantService : IOAuthGrantService
         bool limitTo24Hours = false,
         CancellationToken ct = default)
     {
-        var existingGrant = await _dbContext.OAuthGrants
+        await using var db = await _dbContextFactory.CreateAsync(ct);
+        var existingGrant = await db.OAuthGrants
             .Include(g => g.Client)
             .Where(g => g.ClientEntityId == clientEntityId
                      && g.SubjectId == subjectId
@@ -81,7 +78,7 @@ public class OAuthGrantService : IOAuthGrantService
                 existingGrant.Label = label;
             }
 
-            await _dbContext.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
 
             _logger.LogInformation(
                 "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} client_entity_id={ClientEntityId} scopes={Scopes}",
@@ -103,11 +100,11 @@ public class OAuthGrantService : IOAuthGrantService
             LimitTo24Hours = limitTo24Hours,
         };
 
-        _dbContext.OAuthGrants.Add(entity);
-        await _dbContext.SaveChangesAsync(ct);
+        db.OAuthGrants.Add(entity);
+        await db.SaveChangesAsync(ct);
 
         // Load the Client navigation property for the return DTO
-        await _dbContext.Entry(entity)
+        await db.Entry(entity)
             .Reference(e => e.Client)
             .LoadAsync(ct);
 
@@ -124,7 +121,8 @@ public class OAuthGrantService : IOAuthGrantService
         Guid subjectId,
         CancellationToken ct = default)
     {
-        var entity = await _dbContext.OAuthGrants
+        await using var db = await _dbContextFactory.CreateAsync(ct);
+        var entity = await db.OAuthGrants
             .AsNoTracking()
             .Include(g => g.Client)
             .Where(g => g.ClientEntityId == clientEntityId
@@ -145,7 +143,8 @@ public class OAuthGrantService : IOAuthGrantService
         Guid subjectId,
         CancellationToken ct = default)
     {
-        var entities = await _dbContext.OAuthGrants
+        await using var db = await _dbContextFactory.CreateAsync(ct);
+        var entities = await db.OAuthGrants
             .AsNoTracking()
             .Include(g => g.Client)
             .Where(g => g.SubjectId == subjectId && g.RevokedAt == null)
@@ -161,7 +160,8 @@ public class OAuthGrantService : IOAuthGrantService
         Guid ownerSubjectId,
         CancellationToken ct = default)
     {
-        var entity = await _dbContext.OAuthGrants
+        await using var db = await _dbContextFactory.CreateAsync(ct);
+        var entity = await db.OAuthGrants
             .AsNoTracking()
             .Include(g => g.Client)
             .Where(g => g.Id == grantId
@@ -180,7 +180,8 @@ public class OAuthGrantService : IOAuthGrantService
     /// <inheritdoc />
     public async Task RevokeGrantAsync(Guid grantId, CancellationToken ct = default)
     {
-        var grant = await _dbContext.OAuthGrants
+        await using var db = await _dbContextFactory.CreateAsync(ct);
+        var grant = await db.OAuthGrants
             .Where(g => g.Id == grantId)
             .FirstOrDefaultAsync(ct);
 
@@ -190,7 +191,7 @@ public class OAuthGrantService : IOAuthGrantService
             return;
         }
 
-        var outcome = await _grantRevocation.RevokeAsync(_dbContext, grant, ct);
+        var outcome = await _grantRevocation.RevokeAsync(db, grant, ct);
 
         _logger.LogInformation(
             "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} revoked_tokens={TokenCount} revoked_devices={DeviceCount}",
@@ -225,7 +226,8 @@ public class OAuthGrantService : IOAuthGrantService
         string? userAgent,
         CancellationToken ct = default)
     {
-        await _dbContext.OAuthGrants
+        await using var db = await _dbContextFactory.CreateAsync(ct);
+        await db.OAuthGrants
             .Where(g => g.Id == grantId)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(g => g.LastUsedAt, DateTime.UtcNow)
@@ -272,7 +274,8 @@ public class OAuthGrantService : IOAuthGrantService
         IEnumerable<string>? scopes = null,
         CancellationToken ct = default)
     {
-        var grant = await _dbContext.OAuthGrants
+        await using var db = await _dbContextFactory.CreateAsync(ct);
+        var grant = await db.OAuthGrants
             .Include(g => g.Client)
             .Where(g => g.Id == grantId && g.SubjectId == ownerSubjectId)
             .FirstOrDefaultAsync(ct);
@@ -299,7 +302,7 @@ public class OAuthGrantService : IOAuthGrantService
             grant.Scopes = validatedScopes;
         }
 
-        await _dbContext.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         // The cached guest session carries the grant's scopes, so narrowing a guest link's scopes
         // would otherwise leave the wider set live for the rest of the 30-second TTL.

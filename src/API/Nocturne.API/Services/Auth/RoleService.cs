@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -12,7 +13,7 @@ namespace Nocturne.API.Services.Auth;
 /// <seealso cref="IRoleService"/>
 public class RoleService : IRoleService
 {
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<RoleService> _logger;
 
     /// <summary>
@@ -69,29 +70,32 @@ public class RoleService : IRoleService
         ["denied"] = ("No access", Array.Empty<string>()),
     };
 
-    public RoleService(NocturneDbContext dbContext, ILogger<RoleService> logger)
+    public RoleService(INocturneDbContextFactory contexts, ILogger<RoleService> logger)
     {
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger;
     }
 
     public async Task<List<Role>> GetAllRolesAsync()
     {
-        var entities = await _dbContext.Roles.OrderBy(r => r.Name).ToListAsync();
+        await using var db = await _contexts.CreateAsync();
+        var entities = await db.Roles.OrderBy(r => r.Name).ToListAsync();
 
         return entities.Select(MapToModel).ToList();
     }
 
     public async Task<Role?> GetRoleByIdAsync(Guid roleId)
     {
-        var entity = await _dbContext.Roles.FindAsync(roleId);
+        await using var db = await _contexts.CreateAsync();
+        var entity = await db.Roles.FindAsync(roleId);
         return entity != null ? MapToModel(entity) : null;
     }
 
     public async Task<Role> CreateRoleAsync(Role role)
     {
+        await using var db = await _contexts.CreateAsync();
         // Check for duplicate name
-        var existing = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Name == role.Name);
+        var existing = await db.Roles.FirstOrDefaultAsync(r => r.Name == role.Name);
 
         if (existing != null)
         {
@@ -106,8 +110,8 @@ public class RoleService : IRoleService
             IsSystemRole = role.IsSystemRole,
         };
 
-        _dbContext.Roles.Add(entity);
-        await _dbContext.SaveChangesAsync();
+        db.Roles.Add(entity);
+        await db.SaveChangesAsync();
 
         _logger.LogInformation("Created role: {RoleName}", role.Name);
 
@@ -116,7 +120,8 @@ public class RoleService : IRoleService
 
     public async Task<Role?> UpdateRoleAsync(Role role)
     {
-        var entity = await _dbContext.Roles.FindAsync(role.Id);
+        await using var db = await _contexts.CreateAsync();
+        var entity = await db.Roles.FindAsync(role.Id);
         if (entity == null)
         {
             return null;
@@ -125,7 +130,7 @@ public class RoleService : IRoleService
         // Check for name conflict if name is changing
         if (entity.Name != role.Name)
         {
-            var existing = await _dbContext.Roles.FirstOrDefaultAsync(r =>
+            var existing = await db.Roles.FirstOrDefaultAsync(r =>
                 r.Name == role.Name && r.Id != role.Id
             );
 
@@ -146,7 +151,7 @@ public class RoleService : IRoleService
         entity.Permissions = role.Permissions;
         entity.UpdatedAt = DateTime.UtcNow;
 
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         _logger.LogInformation("Updated role: {RoleName}", role.Name);
 
@@ -155,7 +160,8 @@ public class RoleService : IRoleService
 
     public async Task<bool> DeleteRoleAsync(Guid roleId)
     {
-        var entity = await _dbContext.Roles.FindAsync(roleId);
+        await using var db = await _contexts.CreateAsync();
+        var entity = await db.Roles.FindAsync(roleId);
         if (entity == null)
         {
             return false;
@@ -168,13 +174,13 @@ public class RoleService : IRoleService
         }
 
         // Remove all subject-role assignments first
-        var assignments = await _dbContext
+        var assignments = await db
             .SubjectRoles.Where(sr => sr.RoleId == roleId)
             .ToListAsync();
 
-        _dbContext.SubjectRoles.RemoveRange(assignments);
-        _dbContext.Roles.Remove(entity);
-        await _dbContext.SaveChangesAsync();
+        db.SubjectRoles.RemoveRange(assignments);
+        db.Roles.Remove(entity);
+        await db.SaveChangesAsync();
 
         _logger.LogInformation(
             "Deleted role: {RoleName} and {Count} assignments",
@@ -187,11 +193,12 @@ public class RoleService : IRoleService
 
     public async Task<int> InitializeDefaultRolesAsync()
     {
+        await using var db = await _contexts.CreateAsync();
         int created = 0;
 
         foreach (var (name, (description, permissions)) in DefaultRoles)
         {
-            var existing = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Name == name);
+            var existing = await db.Roles.FirstOrDefaultAsync(r => r.Name == name);
 
             if (existing == null)
             {
@@ -203,7 +210,7 @@ public class RoleService : IRoleService
                     IsSystemRole = true,
                 };
 
-                _dbContext.Roles.Add(entity);
+                db.Roles.Add(entity);
                 created++;
                 _logger.LogInformation("Created default role: {RoleName}", name);
             }
@@ -222,7 +229,7 @@ public class RoleService : IRoleService
 
         if (created > 0)
         {
-            await _dbContext.SaveChangesAsync();
+            await db.SaveChangesAsync();
         }
 
         return created;

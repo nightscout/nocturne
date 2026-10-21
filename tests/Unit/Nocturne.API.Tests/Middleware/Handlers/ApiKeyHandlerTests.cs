@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Authorization;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -599,6 +600,7 @@ public class ApiKeyHandlerTests : IDisposable
             It.IsAny<ResolutionConditions?>(),
             It.IsAny<Dictionary<string, object>?>(),
             It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(_testTenantId, _nudgeTenantId);
     }
 
     [Fact]
@@ -644,10 +646,17 @@ public class ApiKeyHandlerTests : IDisposable
         return context;
     }
 
+    private Guid? _nudgeTenantId;
+
     private DefaultHttpContext CreateHttpContextWithServices(IInAppNotificationService notificationService)
     {
         var services = new ServiceCollection();
-        services.AddSingleton(notificationService);
+        services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
+        services.AddScoped(sp =>
+        {
+            _nudgeTenantId = sp.GetRequiredService<ITenantAccessor>().TenantId;
+            return notificationService;
+        });
         var serviceProvider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext

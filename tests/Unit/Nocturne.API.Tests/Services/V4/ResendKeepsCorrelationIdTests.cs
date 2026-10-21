@@ -112,7 +112,6 @@ public class ResendKeepsCorrelationIdTests : IDisposable
     public async Task Entry_UnchangedResend_KeepsTheStoredIdAndWritesNothing(bool batch)
     {
         var decomposer = new EntryDecomposer(
-            _context,
             new SensorGlucoseRepository(_factory, _dedup, _audit, NullLogger<SensorGlucoseRepository>.Instance),
             new MeterGlucoseRepository(_factory, _audit, NullLogger<MeterGlucoseRepository>.Instance),
             new CalibrationRepository(_factory, _audit, NullLogger<CalibrationRepository>.Instance),
@@ -142,7 +141,7 @@ public class ResendKeepsCorrelationIdTests : IDisposable
             .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         return new TreatmentDecomposer(
-            _context,
+            _factory,
             new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
             new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
             new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),

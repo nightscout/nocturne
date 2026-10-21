@@ -88,7 +88,7 @@ public abstract class SqliteWebAppFactoryBase<TEntryPoint> : WebApplicationFacto
 
             var sp = services.BuildServiceProvider();
             using var scope = sp.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            using var db = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync().AsTask().GetAwaiter().GetResult();
             db.Database.EnsureCreated();
             TestDatabaseSeeder.Seed(db, ApiSecretHash);
 
@@ -99,10 +99,7 @@ public abstract class SqliteWebAppFactoryBase<TEntryPoint> : WebApplicationFacto
         builder.ConfigureLogging(ConfigureTestLogging);
     }
 
-    /// <summary>
-    /// Registers the <see cref="NocturneDbContext"/> resolution the seeding step and the request
-    /// pipeline both depend on, plus whatever else the suite stubs out.
-    /// </summary>
+    /// <summary>Registers whatever the suite stubs out.</summary>
     protected abstract void ConfigureTestServices(IServiceCollection services);
 
     protected virtual void ConfigureTestLogging(ILoggingBuilder logging)

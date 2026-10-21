@@ -160,9 +160,9 @@ public class TrackerTriggerService : IDeviceEventReactor
         {
             var revert = await _trackerRepository.ExecuteUnderDefinitionLockAsync(
                 run.DefinitionId,
-                token => _trackerRepository.RevertStartAsync(run.DefinitionId, run.StartTreatmentId!, token),
-                async (attempt, token) =>
-                    attempt is not null && await _trackerRepository.GetInstanceByIdAsync(attempt.Removed.Id, token) is null,
+                (tx, token) => tx.RevertStartAsync(run.DefinitionId, run.StartTreatmentId!, token),
+                async (tx, attempt, token) =>
+                    attempt is not null && await tx.GetInstanceByIdAsync(attempt.Removed.Id, token) is null,
                 ct);
             if (revert is null)
                 continue;
@@ -226,7 +226,7 @@ public class TrackerTriggerService : IDeviceEventReactor
             deviceEvent.Timestamp,
             completionNotes: $"Auto-completed by {deviceEvent.EventType}",
             completeTreatmentId: startTreatmentId,
-            token => _trackerRepository.StartInstanceAsync(
+            (tx, token) => tx.StartInstanceAsync(
                 definition.Id,
                 definition.UserId,
                 startNotes: null,

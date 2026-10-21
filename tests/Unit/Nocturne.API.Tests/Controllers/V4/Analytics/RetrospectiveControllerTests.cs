@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
@@ -34,7 +35,7 @@ public class RetrospectiveControllerTests
         return new DeviceStatusProjectionService(
             Mock.Of<IDeviceStatusGroupRepository>(r => r.GetAsync(
                     It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>())
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())
                 == Task.FromResult<IReadOnlyList<DeviceStatusGroup>>(Array.Empty<DeviceStatusGroup>())),
             new Mock<IApsSnapshotRepository>().Object,
             new Mock<IPumpSnapshotRepository>().Object,
@@ -166,14 +167,7 @@ public class RetrospectiveControllerTests
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         _entryServiceMock
-            .Setup(s => s.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string?>(),
-                It.IsAny<int>(),
-                It.IsAny<int>(),
-                It.IsAny<string?>(),
-                It.IsAny<string?>(),
-                It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(s => s.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Entry>());
 
         _bolusRepoMock
@@ -236,13 +230,8 @@ public class RetrospectiveControllerTests
         var expectedFind = $"{{\"mills\":{{\"$gte\":{fromMills},\"$lte\":{toMills}}}}}";
 
         _entryServiceMock.Verify(
-            s => s.GetEntriesWithAdvancedFilterAsync(
-                "sgv",
-                50,
-                0,
-                expectedFind,
-                null,
-                false,
+            s => s.QueryEntriesAsync(
+                It.Is<EntryQuery>(q => q.Type == "sgv" && q.Count == 50 && q.Skip == 0 && q.Find == expectedFind && !q.ReverseResults),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }

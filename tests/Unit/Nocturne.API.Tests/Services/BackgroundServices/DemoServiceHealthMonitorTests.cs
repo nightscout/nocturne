@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
@@ -31,21 +32,18 @@ public class DemoServiceHealthMonitorTests
 
         var services = new ServiceCollection();
         services.AddScoped<IAuditContext, AuditContext>();
-        services.AddScoped(sp => new NocturneDbContext(
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseSqlite("Filename=:memory:")
-                .Options).AttributedTo(sp.GetRequiredService<IAuditContext>()));
+        services.AddScoped(sp => new TenantReadContext(null, null, sp.GetRequiredService<IAuditContext>()));
         services.AddScoped<IDataSourceService>(sp =>
         {
             var ambient = sp.GetRequiredService<IAuditContext>();
-            var dbContext = sp.GetRequiredService<NocturneDbContext>();
+            var readContext = sp.GetRequiredService<TenantReadContext>();
             var stub = new Mock<IDataSourceService>();
             stub.Setup(x => x.DeleteDemoDataAsync(It.IsAny<CancellationToken>()))
                 .Returns(() =>
                 {
                     ambientIsSystem = ambient.IsSystem;
-                    contextIsSystem = dbContext.AuditContext?.IsSystem;
-                    contextEndpoint = dbContext.AuditContext?.Endpoint;
+                    contextIsSystem = readContext.AuditContext?.IsSystem;
+                    contextEndpoint = readContext.AuditContext?.Endpoint;
                     cleanupCalled.TrySetResult();
                     return Task.FromResult(new DataSourceDeleteResult { Success = true });
                 });

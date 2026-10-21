@@ -44,7 +44,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         _context = _db.CreateContext();
 
         _decomposer = new(
-            _context,
+            _context.AsFactory(),
             Mock.Of<IBolusRepository>(), Mock.Of<ITempBasalRepository>(),
             Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(),
             Mock.Of<IDeviceEventRepository>(), Mock.Of<IBolusCalculationRepository>(),

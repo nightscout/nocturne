@@ -27,7 +27,7 @@ public class FoodByIdTests : IDisposable
         _db = TestDbContextFactory.CreateSqliteWithTenant(
             TenantId, "test", new MutationAuditInterceptor());
         _context = _db.CreateContext();
-        _foods = new FoodRepository(_context, NullLogger<FoodRepository>.Instance);
+        _foods = new FoodRepository(_context.AsFactory(), NullLogger<FoodRepository>.Instance);
     }
 
     public void Dispose()

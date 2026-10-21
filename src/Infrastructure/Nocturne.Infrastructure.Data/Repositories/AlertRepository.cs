@@ -11,11 +11,10 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// Methods are virtual to allow mocking with CallBase in tests.
 /// </summary>
 /// <remarks>
-/// Every method leases a context from the pooled factory and pins <c>context.TenantId</c>
-/// before touching any <c>ITenantScoped</c> table. Pooling does not reset that property, and
-/// both the EF global query filter and PostgreSQL Row-Level Security derive the active tenant
-/// from it — leaving it unset would scope reads/writes to whatever tenant the previous lessee
-/// left on the context (or fail closed under RLS when it lands as <see cref="Guid.Empty"/>).
+/// Every method opens a context from the raw factory, which reads no scope, and pins
+/// <c>context.TenantId</c> before touching any <c>ITenantScoped</c> table: both the EF global query
+/// filter and PostgreSQL Row-Level Security derive the active tenant from it, and unset it is
+/// <see cref="Guid.Empty"/>, which fails closed.
 /// Cross-tenant sweeps cannot be expressed as a single query because the RLS policy
 /// (<c>tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid</c>) admits
 /// no "see all" value for the non-bypass app role, so they iterate active tenants explicitly.

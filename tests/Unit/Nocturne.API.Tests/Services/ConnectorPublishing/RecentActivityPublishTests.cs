@@ -207,7 +207,7 @@ public class RecentActivityPublishTests : IDisposable
         Mock.Of<IHeartRateService>(),
         Mock.Of<ITenantOwnerResolver>(),
         Mock.Of<ITenantAccessor>(),
-        _context,
+        _context.AsFactory(),
         Mock.Of<IAuditContext>(),
         new PublishSkipTally(),
         NullLogger<MetadataPublisher>.Instance);

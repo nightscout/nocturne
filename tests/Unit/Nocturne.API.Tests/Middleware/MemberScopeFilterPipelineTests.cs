@@ -297,7 +297,7 @@ public class MemberScopeFilterPipelineTests
         }
 
         var services = new ServiceCollection();
-        services.AddScoped(_ => db.CreateContext());
+        services.AddSingleton(db.ContextFactory.AsNocturneFactory());
         using var provider = services.BuildServiceProvider();
 
         var httpContext = new DefaultHttpContext { RequestServices = provider };

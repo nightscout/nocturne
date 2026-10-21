@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -33,7 +34,7 @@ public class TotpService : ITotpService
     /// </summary>
     private static readonly byte[] DummySecret = new byte[20];
 
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly IDataProtector _protector;
     private readonly IDataProtector _stepUpProtector;
     private readonly ILogger<TotpService> _logger;
@@ -41,15 +42,14 @@ public class TotpService : ITotpService
     /// <summary>
     /// Initializes a new instance of <see cref="TotpService"/>.
     /// </summary>
-    /// <param name="dbContext">The EF Core database context for TOTP credential entity persistence.</param>
     /// <param name="dataProtectionProvider">ASP.NET Data Protection provider for encrypting setup challenge tokens.</param>
     /// <param name="logger">The logger instance.</param>
     public TotpService(
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         IDataProtectionProvider dataProtectionProvider,
         ILogger<TotpService> logger)
     {
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _protector = dataProtectionProvider.CreateProtector("Nocturne.Totp.Setup");
         // A distinct purpose string keeps a setup challenge (which carries a secret the caller
         // already knows) from being redeemed as proof that a primary factor completed.
@@ -69,6 +69,7 @@ public class TotpService : ITotpService
 
     public async Task<TotpCredentialResult> CompleteSetupAsync(string code, string label, string challengeToken)
     {
+        await using var db = await _contexts.CreateAsync();
         var payload = ReadChallengeToken(challengeToken);
 
         if (!TotpHelper.TryVerify(payload.Secret, code, lastUsedStep: null, out var setupStep))
@@ -88,8 +89,8 @@ public class TotpService : ITotpService
             LastUsedAt = DateTime.UtcNow,
         };
 
-        _dbContext.TotpCredentials.Add(entity);
-        await _dbContext.SaveChangesAsync();
+        db.TotpCredentials.Add(entity);
+        await db.SaveChangesAsync();
 
         _logger.LogInformation(
             "TOTP credential {CredentialId} registered for subject {SubjectId}",
@@ -100,6 +101,7 @@ public class TotpService : ITotpService
 
     public async Task<string> CreateStepUpTokenAsync(Guid subjectId)
     {
+        await using var db = await _contexts.CreateAsync();
         // The subject lives on the row, not in the token, so the token cannot assert an identity of
         // its own and redemption reads the subject from state this service wrote.
         var entity = new TotpStepUpTokenEntity
@@ -110,8 +112,8 @@ public class TotpService : ITotpService
             ExpiresAt = DateTime.UtcNow.Add(StepUpExpiry),
         };
 
-        _dbContext.TotpStepUpTokens.Add(entity);
-        await _dbContext.SaveChangesAsync();
+        db.TotpStepUpTokens.Add(entity);
+        await db.SaveChangesAsync();
 
         var payload = new TotpStepUpPayload
         {
@@ -124,6 +126,7 @@ public class TotpService : ITotpService
 
     public async Task<TotpLoginResult?> VerifyStepUpAsync(string stepUpToken, string code)
     {
+        await using var db = await _contexts.CreateAsync();
         Guid tokenId;
         try
         {
@@ -134,7 +137,7 @@ public class TotpService : ITotpService
             return null;
         }
 
-        var stepUp = await _dbContext.TotpStepUpTokens
+        var stepUp = await db.TotpStepUpTokens
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == tokenId
                 && t.ConsumedAt == null
@@ -148,7 +151,7 @@ public class TotpService : ITotpService
             return null;
         }
 
-        var subject = await _dbContext.Subjects
+        var subject = await db.Subjects
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == stepUp.SubjectId && s.IsActive);
 
@@ -169,7 +172,7 @@ public class TotpService : ITotpService
         List<TotpCredentialEntity> credentials;
         try
         {
-            credentials = await _dbContext.TotpCredentials
+            credentials = await db.TotpCredentials
                 .AsNoTracking()
                 .Where(c => c.SubjectId == subject.Id)
                 .ToListAsync();
@@ -213,7 +216,7 @@ public class TotpService : ITotpService
         // many valid codes are presented within its window. Consumed after the code is verified, so
         // a mistyped code does not force the user back through the primary factor. No rows updated
         // means a concurrent request already redeemed it.
-        var stepUpConsumed = await _dbContext.TotpStepUpTokens
+        var stepUpConsumed = await db.TotpStepUpTokens
             .Where(t => t.Id == stepUp.Id && t.ConsumedAt == null && t.ExpiresAt > DateTime.UtcNow)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(t => t.ConsumedAt, DateTime.UtcNow));
@@ -228,7 +231,7 @@ public class TotpService : ITotpService
 
         // Consume the time step with a conditional update so two concurrent requests carrying the
         // same code cannot both succeed. No rows updated means another request already took it.
-        var consumed = await _dbContext.TotpCredentials
+        var consumed = await db.TotpCredentials
             .Where(c => c.Id == matchedCredential.Id
                 && (c.LastUsedStep == null || c.LastUsedStep < matchedStep))
             .ExecuteUpdateAsync(setters => setters
@@ -252,7 +255,8 @@ public class TotpService : ITotpService
 
     public async Task<List<TotpCredentialInfo>> GetCredentialsAsync(Guid subjectId)
     {
-        return await _dbContext.TotpCredentials
+        await using var db = await _contexts.CreateAsync();
+        return await db.TotpCredentials
             .Where(c => c.SubjectId == subjectId)
             .OrderByDescending(c => c.CreatedAt)
             .Select(c => new TotpCredentialInfo(c.Id, c.Label, c.CreatedAt, c.LastUsedAt))
@@ -261,11 +265,12 @@ public class TotpService : ITotpService
 
     public async Task RemoveCredentialAsync(Guid credentialId, Guid subjectId)
     {
+        await using var db = await _contexts.CreateAsync();
         // Key-only projection, then delete a stub: loading the entity would decrypt secret_key and
         // throw, leaving an undecryptable credential undeletable — the case where removal matters
         // most, since re-enrolling is the recovery. ExecuteDeleteAsync would also skip the
         // materialization but is unsupported by the in-memory provider the unit tests use.
-        var existingId = await _dbContext.TotpCredentials
+        var existingId = await db.TotpCredentials
             .Where(c => c.Id == credentialId && c.SubjectId == subjectId)
             .Select(c => (Guid?)c.Id)
             .FirstOrDefaultAsync();
@@ -273,13 +278,8 @@ public class TotpService : ITotpService
         if (existingId is null)
             throw new InvalidOperationException("Credential not found.");
 
-        // Reuse the tracked instance when there is one; attaching a second instance with the same
-        // key throws.
-        var tracked = _dbContext.ChangeTracker.Entries<TotpCredentialEntity>()
-            .FirstOrDefault(e => e.Entity.Id == existingId.Value)?.Entity;
-
-        _dbContext.TotpCredentials.Remove(tracked ?? new TotpCredentialEntity { Id = existingId.Value });
-        await _dbContext.SaveChangesAsync();
+        db.TotpCredentials.Remove(new TotpCredentialEntity { Id = existingId.Value });
+        await db.SaveChangesAsync();
 
         _logger.LogInformation(
             "TOTP credential {CredentialId} removed for subject {SubjectId}",
@@ -288,7 +288,8 @@ public class TotpService : ITotpService
 
     public async Task<int> GetCredentialCountAsync(Guid subjectId)
     {
-        return await _dbContext.TotpCredentials
+        await using var db = await _contexts.CreateAsync();
+        return await db.TotpCredentials
             .CountAsync(c => c.SubjectId == subjectId);
     }
 

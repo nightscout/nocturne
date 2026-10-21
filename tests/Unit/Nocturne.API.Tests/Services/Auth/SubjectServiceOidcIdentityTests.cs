@@ -25,7 +25,7 @@ public class SubjectServiceOidcIdentityTests : IDisposable
     {
         _db = TestDbContextFactory.CreateInMemoryContext();
         _service = new SubjectService(
-            _db,
+            _db.AsFactory(),
             _audit.Object,
             Mock.Of<IRecoveryCodeService>(),
             NullLogger<SubjectService>.Instance

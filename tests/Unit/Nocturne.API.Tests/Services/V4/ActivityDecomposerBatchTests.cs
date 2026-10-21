@@ -27,7 +27,7 @@ public class ActivityDecomposerBatchTests : IDisposable
             .ReturnsAsync((IEnumerable<StateSpan> spans, CancellationToken _) => spans);
 
         _decomposer = new ActivityDecomposer(
-            _context,
+            _context.AsFactory(),
             _stateSpanRepoMock.Object,
             NullLogger<ActivityDecomposer>.Instance);
     }

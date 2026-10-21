@@ -6,6 +6,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
 
@@ -19,7 +20,7 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 [Authorize]
 public class UserPreferencesController : ControllerBase
 {
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<UserPreferencesController> _logger;
 
     // Supported language codes - must match supportedLocales.json
@@ -31,13 +32,12 @@ public class UserPreferencesController : ControllerBase
     /// <summary>
     /// Initializes a new instance of <see cref="UserPreferencesController"/>.
     /// </summary>
-    /// <param name="dbContext">Database context for subject entity access.</param>
     /// <param name="logger">Logger instance.</param>
     public UserPreferencesController(
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         ILogger<UserPreferencesController> logger)
     {
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger;
     }
 
@@ -51,13 +51,14 @@ public class UserPreferencesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UserPreferencesResponse>> GetPreferences()
     {
+        await using var db = await _contexts.CreateAsync();
         var authContext = HttpContext.GetAuthContext();
         if (authContext == null || !authContext.IsAuthenticated || !authContext.SubjectId.HasValue)
         {
             return Problem(detail: "Not authenticated", statusCode: 401, title: "Unauthorized");
         }
 
-        var subject = await _dbContext.Subjects
+        var subject = await db.Subjects
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == authContext.SubjectId.Value);
 
@@ -87,6 +88,7 @@ public class UserPreferencesController : ControllerBase
     public async Task<ActionResult<UserPreferencesResponse>> UpdatePreferences(
         [FromBody] UpdateUserPreferencesRequest request)
     {
+        await using var db = await _contexts.CreateAsync();
         var authContext = HttpContext.GetAuthContext();
         if (authContext == null || !authContext.IsAuthenticated || !authContext.SubjectId.HasValue)
         {
@@ -108,7 +110,7 @@ public class UserPreferencesController : ControllerBase
             return Problem(detail: validationError, statusCode: 400, title: "Bad Request");
         }
 
-        var subject = await _dbContext.Subjects
+        var subject = await db.Subjects
             .FirstOrDefaultAsync(s => s.Id == authContext.SubjectId.Value);
 
         if (subject == null)
@@ -131,7 +133,7 @@ public class UserPreferencesController : ControllerBase
         }
 
         subject.UpdatedAt = DateTime.UtcNow;
-        await _dbContext.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         _logger.LogInformation(
             "Updated preferences for subject {SubjectId}: PreferredLanguage={PreferredLanguage}",

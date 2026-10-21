@@ -260,6 +260,11 @@ public class SummaryServiceTests
         _mockTherapySettings
             .Setup(r => r.GetByProfileNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string name, CancellationToken _) => rows.Where(r => r.ProfileName == name).ToList());
+        _mockTherapySettings
+            .Setup(r => r.GetDocumentRowsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string documentId, CancellationToken _) => rows
+                .Where(r => TherapySettings.DocumentIdOf(r) == documentId && !TherapySettings.IsProfileSwitchSnapshot(r))
+                .ToList());
 
         foreach (var row in rows)
         {

@@ -123,20 +123,9 @@ public class TreatmentService : ITreatmentService
         => _store.IsDeletedByUserAsync(id, cancellationToken);
 
     /// <inheritdoc />
-    public async Task<IEnumerable<Treatment>> GetTreatmentsWithAdvancedFilterAsync(
-        int count, int skip, string? findQuery, bool reverseResults,
-        CancellationToken cancellationToken = default)
-    {
-        var query = new TreatmentQuery
-        {
-            Find = findQuery,
-            Count = count,
-            Skip = skip,
-            ReverseResults = reverseResults
-        };
-
-        return await _store.QueryAsync(query, cancellationToken);
-    }
+    public async Task<IEnumerable<Treatment>> QueryTreatmentsAsync(
+        TreatmentQuery query, CancellationToken cancellationToken = default) =>
+        await _store.QueryAsync(query, cancellationToken);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Treatment>> GetTreatmentsByRangeAsync(

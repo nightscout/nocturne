@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Nocturne.API.Helpers;
+using Nocturne.API.Services.Platform;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -70,29 +72,65 @@ public class TreatmentReadService : ITreatmentStore
     {
         var find = FindQuery.Parse(query.Find, FindQuery.TreatmentBareRegexFields);
 
-        var results = find.HasFieldFilters
-            ? await QueryFilteredAsync(find, query.Count, query.Skip, ct)
-            : await QueryByTimeRangeAsync(find, query.Count, query.Skip, ct);
+        var descending = !query.ReverseResults;
 
-        if (query.ReverseResults)
-            return results.OrderBy(t => t.Mills).ToList();
+        if (ModifiedSearch.CursorFor(find, query.SortField, descending) is { } after)
+            return await QueryModifiedAfterAsync(query, after, descending, ct);
 
-        return results;
+        return find.HasFieldFilters
+            ? await QueryFilteredAsync(find, query.Count, query.Skip, descending, ct)
+            : await QueryByTimeRangeAsync(find, query.Count, query.Skip, descending, ct);
+    }
+
+    /// <summary>
+    /// Serves a search bounded by <c>srvModified</c> from the modified-since pages, which are
+    /// index-served and oldest stamp first, so a client resuming from a stamp reads only what changed.
+    /// </summary>
+    private async Task<IReadOnlyList<Treatment>> QueryModifiedAfterAsync(
+        TreatmentQuery query, long after, bool descending, CancellationToken ct)
+    {
+        var live = await ModifiedSearch.CollectAsync(
+            async (cursor, limit, token) =>
+            {
+                var page = (await _projection.GetProjectedTreatmentsModifiedSinceAsync(cursor, limit, token)).ToList();
+                return new ModifiedSearch.Page<Treatment>(
+                    page, page.Count == 0 ? null : page.Max(t => t.SrvModified ?? t.Mills), page.Count == 0);
+            },
+            treatment => treatment.IsValid == false,
+            after,
+            ModifiedSearch.ArrivesInOrder(query.SortField, descending) ? (long)query.Count + query.Skip : null,
+            ModifiedSearch.MaxRead,
+            ct);
+
+        Func<Treatment, long> key = query.SortField == ReadSortField.SrvModified
+            ? treatment => treatment.SrvModified ?? treatment.Mills
+            : treatment => treatment.Mills;
+
+        return (descending ? live.OrderByDescending(key) : live.OrderBy(key))
+            .Skip(query.Skip)
+            .Take(query.Count)
+            .ToList();
     }
 
     private async Task<IReadOnlyList<Treatment>> QueryByTimeRangeAsync(
-        FindQuery find, int count, int skip, CancellationToken ct)
+        FindQuery find, int count, int skip, bool descending, CancellationToken ct)
     {
         var limit = (int)Math.Min((long)count + skip, int.MaxValue);
-        var projected = await _projection.GetProjectedTreatmentsAsync(
-            find.FromMills, find.ToMills, limit, nativeOnly: false, ct: ct);
+        var projected = await FetchWindowAsync(find, limit, descending, ct);
 
-        return projected
-            .OrderByDescending(t => t.Mills)
+        return OrderByTime(projected, descending)
             .Skip(skip)
             .Take(count)
             .ToList();
     }
+
+    private Task<IEnumerable<Treatment>> FetchWindowAsync(
+        FindQuery find, int limit, bool descending, CancellationToken ct) =>
+        _projection.GetProjectedTreatmentsAsync(
+            find.FromMills, find.ToMills, limit, nativeOnly: false, descending, ct);
+
+    private static IEnumerable<Treatment> OrderByTime(IEnumerable<Treatment> treatments, bool descending) =>
+        descending ? treatments.OrderByDescending(t => t.Mills) : treatments.OrderBy(t => t.Mills);
 
     /// <summary>
     /// Serves a find query with field filters (eventType, enteredBy, $exists, …) by matching the
@@ -100,20 +138,18 @@ public class TreatmentReadService : ITreatmentStore
     /// window grows geometrically until the page fills or the window is exhausted.
     /// </summary>
     private async Task<IReadOnlyList<Treatment>> QueryFilteredAsync(
-        FindQuery find, int count, int skip, CancellationToken ct)
+        FindQuery find, int count, int skip, bool descending, CancellationToken ct)
     {
         var (matching, truncated) = await FindFilteredFetch.MatchWindowAsync<Treatment>(
-            async limit => (await _projection.GetProjectedTreatmentsAsync(
-                find.FromMills, find.ToMills, limit, nativeOnly: false, ct: ct)).ToList(),
+            async limit => (await FetchWindowAsync(find, limit, descending, ct)).ToList(),
             find.Matches, (long)count + skip, MaxFilterFetch);
 
         if (truncated)
             _logger.LogWarning(
-                "Find-filtered treatment query hit the {MaxFetch}-row window; older matches are not returned",
+                "Find-filtered treatment query hit the {MaxFetch}-row window; matches beyond it are not returned",
                 MaxFilterFetch);
 
-        return matching
-            .OrderByDescending(t => t.Mills)
+        return OrderByTime(matching, descending)
             .Skip(skip)
             .Take(count)
             .ToList();

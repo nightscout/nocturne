@@ -80,7 +80,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
             .Options) { TenantId = tenant };
 
     private static DeduplicationService Service(NocturneDbContext context) =>
-        new(context, new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+        new(context.AsFactory(), new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             NullLogger<DeduplicationService>.Instance);
 
     [Fact]

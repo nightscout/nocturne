@@ -63,12 +63,12 @@ public class AuthenticationMiddlewarePlatformAdminTests
         var services = new ServiceCollection();
         services.AddScoped<ICategoryReadContext, CategoryReadContext>();
         services.AddSingleton(memberService.Object);
-        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName));
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
         var provider = services.BuildServiceProvider();
 
         using (var seedScope = provider.CreateScope())
         {
-            var db = seedScope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            await using var db = await seedScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
             db.Subjects.Add(new SubjectEntity
             {
                 Id = SubjectId,

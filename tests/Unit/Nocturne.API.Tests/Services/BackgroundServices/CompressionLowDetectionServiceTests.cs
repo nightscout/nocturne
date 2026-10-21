@@ -14,6 +14,7 @@ using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
@@ -85,7 +86,7 @@ public class CompressionLowDetectionServiceTests
             .Options;
         var context = new NocturneDbContext(options) { TenantId = TenantId };
         var settingsService = new UISettingsService(
-            context,
+            context.AsFactory(),
             NullLogger<UISettingsService>.Instance
         );
         await context.DisposeAsync();

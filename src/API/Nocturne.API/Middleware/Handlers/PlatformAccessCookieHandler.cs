@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware.Handlers;
@@ -87,7 +88,7 @@ public class PlatformAccessCookieHandler : IAuthHandler
         // Defense in depth: a self-contained grant can't be revoked, so confirm the subject
         // is STILL a platform admin on every request. Revoking the flag then ends access on
         // the next request instead of lingering until the grant expires.
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(context.RequestAborted);
         var stillPlatformAdmin = await db.Subjects
             .Where(s => s.Id == claims.SubjectId)
             .Select(s => s.IsPlatformAdmin)

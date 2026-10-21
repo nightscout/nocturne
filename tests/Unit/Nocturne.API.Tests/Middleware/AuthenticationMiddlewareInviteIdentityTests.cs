@@ -103,7 +103,7 @@ public sealed class AuthenticationMiddlewareInviteIdentityTests
         services.AddScoped<ICategoryReadContext, CategoryReadContext>();
         services.AddSingleton(memberService.Object);
         services.AddSingleton(inviteService.Object);
-        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext($"invite_identity_{Guid.NewGuid()}"));
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext($"invite_identity_{Guid.NewGuid()}").AsFactory());
         var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };

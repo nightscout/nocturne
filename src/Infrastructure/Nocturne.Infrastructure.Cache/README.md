@@ -1,7 +1,7 @@
 # Nocturne Caching Infrastructure
 
 An in-process cache over `IMemoryCache`, used for the hot read paths (current and recent entries,
-recent treatments) and for upload processing status. There is no distributed cache implementation:
+recent treatments). There is no distributed cache implementation:
 `MemoryCacheService` is the only `ICacheService`, so cache state is per API instance.
 
 ## Setup
@@ -10,7 +10,7 @@ recent treatments) and for upload processing status. There is no distributed cac
 builder.Services.AddNocturneMemoryCache();
 ```
 
-Registers `ICacheService` (singleton) and `IProcessingStatusService` (singleton). The key prefix
+Registers `ICacheService` (singleton). The key prefix
 (`nocturne`) and the 300-second default expiration are set in that call, not bound from
 configuration.
 
@@ -40,10 +40,6 @@ rotation-successor keys compute theirs at the call site.
 | Current entries    | 1 minute  | `Defaults.CurrentEntryExpirationSeconds`     |
 | Recent entries     | 2 minutes | `Defaults.RecentEntriesExpirationSeconds`    |
 | Recent treatments  | 5 minutes | `Defaults.RecentTreatmentsExpirationSeconds` |
-| Processing status  | 1 hour    | `DefaultTtl.ProcessingStatus`                |
-
-`MemoryProcessingStatusService` sweeps expired status entries on the
-`CleanupIntervals.StatusCleanup` interval.
 
 ## Testing
 

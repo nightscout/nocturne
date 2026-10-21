@@ -45,7 +45,7 @@ public class CrossSourceIngestDedupTests : IDisposable
         var dedupContext = _db.CreateContext();
         dedupContext.TenantId = TestTenantId;
         _dedup = new DeduplicationService(
-            dedupContext, new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+            dedupContext.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
 
         var factory = new TestNocturneDbContextFactory(_context);
         var audit = new Mock<IAuditContext>().Object;

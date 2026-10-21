@@ -53,13 +53,10 @@ public class MemberInviteServiceTests : IDisposable
         var logger = new Mock<ILogger<MemberInviteService>>();
 
         _service = new MemberInviteService(
-            _dbContext,
+            _dbContext.AsFactory(),
             _jwtService.Object,
             _tenantService.Object,
-            new TenantRoleService(
-                _dbContext,
-                // Only SeedRolesForTenantAsync takes a context of its own, and nothing here seeds.
-                Mock.Of<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory()),
+            new TenantRoleService(_dbContext.AsFactory()),
             Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
             logger.Object);
 

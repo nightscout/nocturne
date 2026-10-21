@@ -93,7 +93,7 @@ public class DeduplicationJobTenantScopeTests : IDisposable
             "the background scope runs as the tenant that asked for the job");
         calls.Should().ContainInOrder(
             new[] { "set-tenant", "resolve-dedup-service" },
-            "the scoped DbContext reads the accessor when it is built, so the tenant must be pinned first");
+            "the job's scope must carry the tenant before anything in it runs");
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class DeduplicationJobTenantScopeTests : IDisposable
     {
         var context = _db.CreateContext();
         return new DeduplicationService(
-            context, scopeFactory, NullLogger<DeduplicationService>.Instance, tenantAccessor);
+            context.AsFactory(), scopeFactory, NullLogger<DeduplicationService>.Instance, tenantAccessor);
     }
 
     /// <summary>

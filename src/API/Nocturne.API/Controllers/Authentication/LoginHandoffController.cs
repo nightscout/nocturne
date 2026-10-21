@@ -10,6 +10,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.Authentication;
 
@@ -18,7 +19,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// the tenant host the code belongs to.
 /// </summary>
 /// <remarks>
-/// The request-scoped context reads the tenant the host resolved to, and a login code is
+/// A context from the request's factory reads the tenant the host resolved to, and a login code is
 /// tenant-scoped, so a code minted for one tenant is not visible here on another's host and fails
 /// like any unknown code.
 /// </remarks>
@@ -28,20 +29,20 @@ namespace Nocturne.API.Controllers.Authentication;
 [AllowAnonymous]
 public class LoginHandoffController : ControllerBase
 {
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ILoginCodeService _loginCodeService;
     private readonly ISessionService _sessionService;
     private readonly OidcOptions _oidcOptions;
     private readonly BaseDomainOptions _baseDomain;
 
     public LoginHandoffController(
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         ILoginCodeService loginCodeService,
         ISessionService sessionService,
         IOptions<OidcOptions> oidcOptions,
         IOptions<BaseDomainOptions> baseDomainOptions)
     {
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _loginCodeService = loginCodeService;
         _sessionService = sessionService;
         _oidcOptions = oidcOptions.Value;
@@ -63,11 +64,12 @@ public class LoginHandoffController : ControllerBase
     public async Task<ActionResult<LoginHandoffResponse>> ExchangeLoginCode(
         [FromBody] LoginHandoffRequest request, CancellationToken ct)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
         var userAgent = Request.Headers.UserAgent.ToString();
 
         var subjectId = await _loginCodeService.RedeemAsync(
-            _dbContext, request.Code, ipAddress, userAgent, ct);
+            db, request.Code, ipAddress, userAgent, ct);
 
         if (subjectId is null)
         {

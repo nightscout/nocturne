@@ -98,7 +98,7 @@ public class TreatmentClientIdRoundTripTests : IDisposable
             .ReturnsAsync((Guid?)null);
 
         var decomposer = new TreatmentDecomposer(
-            _context,
+            _context.AsFactory(),
             bolusRepo, tempBasalRepo.Object,
             carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             Mock.Of<IStateSpanService>(),
@@ -115,7 +115,7 @@ public class TreatmentClientIdRoundTripTests : IDisposable
             bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo,
             tempBasalRepo.Object, bolusCalcRepo,
             foods.Object,
-            _context,
+            _context.AsFactory(),
             NullLogger<V4ToLegacyProjectionService>.Instance);
 
         var pipeline = new DecompositionPipeline(

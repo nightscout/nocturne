@@ -24,7 +24,6 @@ public class EntriesControllerTests
 {
     private readonly Mock<IEntryService> _mockEntryService;
     private readonly Mock<IDocumentProcessingService> _mockDocumentProcessingService;
-    private readonly Mock<IProcessingStatusService> _mockProcessingStatusService;
     private readonly Mock<ICanonicalAlertEvaluator> _mockAlertEvaluator;
     private readonly Mock<ILogger<EntriesController>> _mockLogger;
     private readonly EntriesController _controller;
@@ -36,14 +35,12 @@ public class EntriesControllerTests
             .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         _mockDocumentProcessingService = new Mock<IDocumentProcessingService>();
-        _mockProcessingStatusService = new Mock<IProcessingStatusService>();
         _mockAlertEvaluator = new Mock<ICanonicalAlertEvaluator>();
         _mockLogger = new Mock<ILogger<EntriesController>>();
 
         _controller = new EntriesController(
             _mockEntryService.Object,
             _mockDocumentProcessingService.Object,
-            _mockProcessingStatusService.Object,
             _mockAlertEvaluator.Object,
             _mockLogger.Object
         );
@@ -308,41 +305,6 @@ public class EntriesControllerTests
         // DateString should be set from Mills
         entry.DateString.Should().NotBeNullOrEmpty();
         entry.DateString.Should().Contain("2023-06-12");
-    }
-
-    [Fact]
-    public async Task CreateEntriesAsync_DerivesSameUtcMillsAsSyncEndpoint()
-    {
-        // A date-bearing entry must resolve to the same UTC mills on both the sync and async
-        // endpoints — the conversion lives in Entry.Mills (UTC), not in the controller, so the two
-        // endpoints can never diverge by timezone again.
-        var entryWithDate = new Entry
-        {
-            Sgv = 120,
-            Date = DateTimeOffset.Parse("2023-06-12T10:30:00.000Z").DateTime,
-        };
-
-        List<Entry>? processedInput = null;
-        _mockDocumentProcessingService
-            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
-            .Callback<IEnumerable<Entry>>(entries => processedInput = entries.ToList())
-            .Returns<IEnumerable<Entry>>(entries => entries);
-
-        StubNothingStored();
-
-        _mockEntryService
-            .Setup(x =>
-                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
-            )
-            .ReturnsAsync([new Entry { Id = "created-id", Sgv = 120 }]);
-
-        // Act
-        await _controller.CreateEntriesAsync(entryWithDate);
-
-        // Assert: identical UTC mills to the sync endpoint, regardless of server time zone.
-        processedInput.Should().NotBeNull();
-        processedInput.Should().HaveCount(1);
-        processedInput![0].Mills.Should().Be(1686565800000);
     }
 
     [Fact]

@@ -2,7 +2,9 @@ using System.Collections.Frozen;
 using System.Globalization;
 using System.Text.Json;
 using Nocturne.API.Helpers;
+using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -75,18 +77,51 @@ public class DeviceStatusProjectionService
     private const int MaxIdLookups = 100;
 
     /// <summary>
-    /// Returns paginated <see cref="DeviceStatus"/> documents projected from V4 snapshots, newest first.
+    /// Returns paginated <see cref="DeviceStatus"/> documents projected from V4 snapshots, newest first
+    /// or, when <paramref name="descending"/> is <c>false</c>, the oldest first.
     /// </summary>
     /// <param name="count">Maximum number of results.</param>
     /// <param name="skip">Number of results to skip for pagination.</param>
     /// <param name="find">JSON find honouring <c>device</c> and <c>created_at</c> only (see <see cref="ParseFindQuery"/>).</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="descending">Newest first when <c>true</c>, else the oldest first.</param>
+    /// <param name="sort">
+    /// <see cref="ReadSortField.SrvModified"/> orders by modification stamp when the find is empty or
+    /// only bounds <c>srvModified</c> from below, which is served by the modified-since pages; any
+    /// other field orders by time.
+    /// </param>
     public async Task<IEnumerable<DeviceStatus>> GetAsync(
-        int count, int skip, string? find, CancellationToken ct)
+        int count, int skip, string? find, CancellationToken ct,
+        bool descending = true, ReadSortField sort = ReadSortField.Time)
     {
+        if (ModifiedSearch.CursorFor(FindQuery.Parse(find), sort, descending) is { } after)
+            return await GetModifiedAfterAsync(count, skip, after, sort, descending, ct);
+
         var (device, from, to) = ParseFindQuery(find);
-        var groups = await _groupRepo.GetAsync(from, to, device, count, skip, ct);
+        var groups = await _groupRepo.GetAsync(from, to, device, count, skip, descending, ct);
         return await ProjectAsync(groups, ct);
+    }
+
+    private async Task<IEnumerable<DeviceStatus>> GetModifiedAfterAsync(
+        int count, int skip, long after, ReadSortField sort, bool descending, CancellationToken ct)
+    {
+        var live = await ModifiedSearch.CollectAsync(
+            async (cursor, limit, token) =>
+            {
+                var page = (await GetModifiedSinceAsync(cursor, limit, token)).ToList();
+                return new ModifiedSearch.Page<DeviceStatus>(page, page.Count == 0 ? null : page[^1].SrvModified, page.Count < limit);
+            },
+            status => status.IsValid == false,
+            after,
+            ModifiedSearch.ArrivesInOrder(sort, descending) ? (long)count + skip : null,
+            ModifiedSearch.MaxRead,
+            ct);
+
+        Func<DeviceStatus, long> key = sort == ReadSortField.SrvModified
+            ? status => status.SrvModified ?? status.Mills
+            : status => status.Mills;
+
+        return (descending ? live.OrderByDescending(key) : live.OrderBy(key)).Skip(skip).Take(count).ToList();
     }
 
     /// <summary>Parses a v1 find, in either wire form, for <see cref="GetMatchingAsync"/>.</summary>
@@ -110,12 +145,12 @@ public class DeviceStatusProjectionService
         var device = StoreDevice(find);
         if (!HasResidual(find, device))
         {
-            var page = await _groupRepo.GetAsync(from, to, device, count, skip, ct);
+            var page = await _groupRepo.GetAsync(from, to, device, count, skip, descending: true, ct);
             return (await ProjectAsync(page, ct)).Where(find.Matches).ToList();
         }
 
         var (matching, truncated) = await FindFilteredFetch.MatchAsync<DeviceStatus>(
-            async (limit, offset) => await ProjectAsync(await _groupRepo.GetAsync(from, to, device, limit, offset, ct), ct),
+            async (limit, offset) => await ProjectAsync(await _groupRepo.GetAsync(from, to, device, limit, offset, descending: true, ct), ct),
             find.Matches, status => status.Id, (long)count + skip, MaxFilterFetch);
 
         if (truncated)

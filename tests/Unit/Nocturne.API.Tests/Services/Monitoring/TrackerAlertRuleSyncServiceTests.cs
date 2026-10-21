@@ -49,7 +49,7 @@ public class TrackerAlertRuleSyncServiceTests
             factory,
             classifier.Object,
             _referenceService.Object,
-            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(Db())),
+            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(Db().AsFactory())),
             new AlertRuleRetirement(_excursionTracker.Object, _resolutionHandler.Object),
             NullLogger<TrackerAlertRuleSyncService>.Instance);
     }

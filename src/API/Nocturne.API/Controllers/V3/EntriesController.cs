@@ -6,6 +6,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Alerts;
@@ -87,21 +88,17 @@ public class EntriesController : BaseV3Controller<Entry>
                 ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
                 ?? ConvertV3FilterToV1Find(parameters.Filter);
 
-            // Determine sort direction from sort$desc query parameter
-            // Nightscout V3: sort$desc=field means descending (newest first)
-            // reverseResults=false means descending, reverseResults=true means ascending
-            var hasSortDesc = HttpContext?.Request.Query.ContainsKey("sort$desc") ?? false;
-            var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
-
-            // Get entries using service layer with V3 parameters
-            var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
-                type: type,
-                count: parameters.Limit,
-                skip: parameters.Offset,
-                findQuery: findQuery,
-                dateString: null, // V3 uses filter instead
-                reverseResults: reverseResults,
-                cancellationToken: cancellationToken
+            var entries = await _entryService.QueryEntriesAsync(
+                new EntryQuery
+                {
+                    Type = type,
+                    Find = findQuery,
+                    Count = parameters.Limit,
+                    Skip = parameters.Offset,
+                    ReverseResults = !parameters.Sort.Descending,
+                    SortField = ReadSortFieldOf(parameters.Sort),
+                },
+                cancellationToken
             );
 
             var entriesList = entries.ToList();

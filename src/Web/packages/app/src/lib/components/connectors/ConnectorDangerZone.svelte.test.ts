@@ -5,13 +5,17 @@ import { page as pageState } from "$app/state";
 
 let deleteConfigImpl: () => Promise<unknown>;
 let deleteDataImpl: () => Promise<unknown>;
+let deleteDataArgs: unknown[] = [];
 
 vi.mock("$lib/api/generated/configurations.generated.remote", () => ({
   deleteConfiguration: () => deleteConfigImpl(),
 }));
 
 vi.mock("$lib/api/generated/services.generated.remote", () => ({
-  deleteConnectorData: () => deleteDataImpl(),
+  deleteConnectorData: (args: unknown) => {
+    deleteDataArgs.push(args);
+    return deleteDataImpl();
+  },
 }));
 
 import ConnectorDangerZone from "./ConnectorDangerZone.svelte";
@@ -62,7 +66,37 @@ describe("ConnectorDangerZone", () => {
   beforeEach(() => {
     deleteConfigImpl = () => Promise.resolve({});
     deleteDataImpl = () => Promise.resolve({ success: true, totalDeleted: 1 });
+    deleteDataArgs = [];
     pageState.data = { effectivePermissions: ["tenant.settings"] };
+  });
+
+  it("deletes synced data without allowing re-import by default", async () => {
+    await attemptDeleteData();
+
+    await expect.poll(() => deleteDataArgs).toEqual([
+      { id: "dexcom", allowReimport: false },
+    ]);
+  });
+
+  it("allows re-import of synced data when the option is checked", async () => {
+    render(ConnectorDangerZone, {
+      props: {
+        connectorId: "dexcom",
+        displayName: "Dexcom",
+        hasExistingConfig: false,
+        hasData: true,
+        dataSummary: null,
+      },
+    });
+
+    await page.getByRole("button", { name: "Delete Data", exact: true }).click();
+    await page.getByRole("checkbox", { name: /Allow re-import/ }).click();
+    await page.getByRole("textbox").fill("DELETE DATA");
+    await page.getByRole("button", { name: "Delete and Allow Re-import" }).click();
+
+    await expect.poll(() => deleteDataArgs).toEqual([
+      { id: "dexcom", allowReimport: true },
+    ]);
   });
 
   it("hides every destructive control from a member without tenant.settings", async () => {

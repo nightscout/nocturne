@@ -7,6 +7,7 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Health;
 
@@ -16,21 +17,20 @@ namespace Nocturne.API.Services.Health;
 /// </summary>
 /// <seealso cref="IStepCountService"/>
 /// <seealso cref="TimeSeriesEntityService{TModel,TEntity}"/>
-/// <param name="dbContext">EF Core context providing access to the step counts table.</param>
 /// <param name="documentProcessingService">Service that applies field processing before save.</param>
 /// <param name="signalRBroadcastService">Service used to broadcast entity changes over SignalR.</param>
 /// <param name="logger">Logger instance for this service.</param>
 public class StepCountService(
-    NocturneDbContext dbContext,
+    INocturneDbContextFactory contexts,
     IDocumentProcessingService documentProcessingService,
     ISignalRBroadcastService signalRBroadcastService,
     ILogger<StepCountService> logger
 )
     : TimeSeriesEntityService<StepCount, StepCountEntity>(
-        dbContext, documentProcessingService, signalRBroadcastService, logger),
+        contexts, documentProcessingService, signalRBroadcastService, logger),
         IStepCountService
 {
-    protected override DbSet<StepCountEntity> EntitySet => DbContext.StepCounts;
+    protected override DbSet<StepCountEntity> EntitySet(NocturneDbContext db) => db.StepCounts;
     protected override string CollectionName => "stepcount";
     protected override string EntityTypeName => "step count";
 

@@ -8,6 +8,8 @@ using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
 
+using Nocturne.Infrastructure.Data.Services;
+
 namespace Nocturne.Infrastructure.Data.Extensions;
 
 /// <summary>
@@ -386,9 +388,10 @@ public static class DatabaseInitializationExtensions
         this IServiceProvider serviceProvider,
         CancellationToken cancellationToken = default)
     {
-        using var scope = serviceProvider.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<NocturneDbContext>>();
+        await using var context = await serviceProvider
+            .GetRequiredService<INocturneDbContextFactory>()
+            .CreatePlatformAsync(cancellationToken);
+        var logger = serviceProvider.GetRequiredService<ILogger<NocturneDbContext>>();
 
         await VerifyRlsAsync(
             context.Database.GetDbConnection(),

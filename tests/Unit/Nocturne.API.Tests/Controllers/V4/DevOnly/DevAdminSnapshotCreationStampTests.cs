@@ -83,7 +83,7 @@ public class DevAdminSnapshotCreationStampTests : IDisposable
 
     private DevAdminController NewController(NocturneDbContext context) =>
         new(
-            context,
+            context.AsFactory(),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ITenantService>(),
             new MemoryCache(new MemoryCacheOptions()),

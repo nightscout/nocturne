@@ -67,6 +67,7 @@ public class ProfileController : BaseV3Controller<Profile>
             var profiles = await _projectionService.GetProfilesAsync(
                 count: parameters.Limit,
                 skip: parameters.Offset,
+                descending: parameters.Sort.Descending,
                 ct: cancellationToken
             );
 
@@ -186,7 +187,7 @@ public class ProfileController : BaseV3Controller<Profile>
             );
         }
 
-        var parameters = ParseV3QueryParameters(); // Apply field selection if specified
+        var parameters = ParseV3QueryParameters(readSort: false); // Apply field selection if specified
         var result = ApplyFieldSelection(new[] { ToV3Document(profile, profile.Id) }, parameters.Fields)
             .FirstOrDefault();
 

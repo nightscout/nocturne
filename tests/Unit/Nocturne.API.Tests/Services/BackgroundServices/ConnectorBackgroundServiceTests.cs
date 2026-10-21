@@ -17,6 +17,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
@@ -151,8 +152,8 @@ public class ConnectorBackgroundServiceTests
         services.AddActiveTenantSnapshot();
 
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
-        services.AddScoped(sp => new NocturneDbContext(db.Options).ReadingFrom(
-            sp.GetRequiredService<ITenantAccessor>(), audit: sp.GetRequiredService<IAuditContext>()));
+        services.AddScoped(sp => new TenantReadContext(
+            sp.GetRequiredService<ITenantAccessor>(), null, sp.GetRequiredService<IAuditContext>()));
 
         services.AddScoped<IConnectorConfigurationService>(_ => configServiceMock.Object);
 
@@ -739,7 +740,7 @@ public class ConnectorBackgroundServiceTests
             serviceProvider,
             syncResult,
             NullLogger<TestConnectorBackgroundService>.Instance,
-            onSyncScope: sp => capturedTenantId = sp.GetRequiredService<NocturneDbContext>().TenantId);
+            onSyncScope: sp => capturedTenantId = sp.GetRequiredService<TenantReadContext>().TenantId);
 
         // Act
         await sut.ExecuteOnceAsync(CancellationToken.None);
@@ -790,7 +791,7 @@ public class ConnectorBackgroundServiceTests
             {
                 capturedIsSystem = sp.GetRequiredService<IAuditContext>().IsSystem;
                 capturedEndpoint = sp.GetRequiredService<IAuditContext>().Endpoint;
-                capturedContextIsSystem = sp.GetRequiredService<NocturneDbContext>().AuditContext?.IsSystem;
+                capturedContextIsSystem = sp.GetRequiredService<TenantReadContext>().AuditContext?.IsSystem;
             });
 
         // Act

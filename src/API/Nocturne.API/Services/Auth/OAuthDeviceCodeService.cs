@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -24,7 +25,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     private const int DeviceCodeExpirationMinutes = 30;
     private const int DefaultPollingInterval = 5;
 
-    private readonly NocturneDbContext _db;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly IJwtService _jwtService;
     private readonly IOAuthClientService _clientService;
     private readonly IOAuthGrantService _grantService;
@@ -33,20 +34,19 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     /// <summary>
     /// Initialises a new <see cref="OAuthDeviceCodeService"/>.
     /// </summary>
-    /// <param name="db">Database context for reading and writing device code records.</param>
     /// <param name="jwtService">Used to generate and hash the opaque device code value.</param>
     /// <param name="clientService">Used to look up registered OAuth clients by ID.</param>
     /// <param name="grantService">Used to create or update grants when a device code is approved.</param>
     /// <param name="logger">Logger instance.</param>
     public OAuthDeviceCodeService(
-        NocturneDbContext db,
+        INocturneDbContextFactory contexts,
         IJwtService jwtService,
         IOAuthClientService clientService,
         IOAuthGrantService grantService,
         ILogger<OAuthDeviceCodeService> logger
     )
     {
-        _db = db;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _jwtService = jwtService;
         _clientService = clientService;
         _grantService = grantService;
@@ -60,6 +60,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         CancellationToken ct = default
     )
     {
+        await using var db = await _contexts.CreateAsync(ct);
         // Generate a crypto-random device code and hash it for storage
         var deviceCode = _jwtService.GenerateRefreshToken();
         var deviceCodeHash = _jwtService.HashRefreshToken(deviceCode);
@@ -71,7 +72,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             userCode = GenerateUserCode();
             var normalized = NormalizeUserCode(userCode);
 
-            var exists = await _db.OAuthDeviceCodes.AnyAsync(d => d.UserCode == normalized, ct);
+            var exists = await db.OAuthDeviceCodes.AnyAsync(d => d.UserCode == normalized, ct);
 
             if (!exists)
                 break;
@@ -108,8 +109,8 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             Interval = DefaultPollingInterval,
         };
 
-        _db.OAuthDeviceCodes.Add(entity);
-        await _db.SaveChangesAsync(ct);
+        db.OAuthDeviceCodes.Add(entity);
+        await db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "Created device code for client {ClientId} with user code {UserCode}",
@@ -132,6 +133,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         CancellationToken ct = default
     )
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var normalized = NormalizeUserCode(userCode);
 
         _logger.LogInformation(
@@ -140,7 +142,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             normalized
         );
 
-        var entity = await _db.OAuthDeviceCodes.FirstOrDefaultAsync(
+        var entity = await db.OAuthDeviceCodes.FirstOrDefaultAsync(
             d => d.UserCode == normalized,
             ct
         );
@@ -184,9 +186,10 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         CancellationToken ct = default
     )
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var normalized = NormalizeUserCode(userCode);
 
-        var entity = await _db.OAuthDeviceCodes.FirstOrDefaultAsync(
+        var entity = await db.OAuthDeviceCodes.FirstOrDefaultAsync(
             d => d.UserCode == normalized,
             ct
         );
@@ -247,7 +250,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         entity.GrantId = grant.Id;
         entity.SubjectId = subjectId;
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "Device code {UserCode} approved by subject {SubjectId} for client {ClientId}, created grant {GrantId} of type {GrantType}",
@@ -264,9 +267,10 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     /// <inheritdoc />
     public async Task<bool> DenyDeviceCodeAsync(string userCode, CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var normalized = NormalizeUserCode(userCode);
 
-        var entity = await _db.OAuthDeviceCodes.FirstOrDefaultAsync(
+        var entity = await db.OAuthDeviceCodes.FirstOrDefaultAsync(
             d => d.UserCode == normalized,
             ct
         );
@@ -303,7 +307,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
 
         entity.DeniedAt = DateTime.UtcNow;
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "Device code {UserCode} denied for client {ClientId}",
