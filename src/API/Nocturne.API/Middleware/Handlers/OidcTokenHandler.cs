@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Middleware.Handlers;
@@ -163,7 +164,16 @@ public class OidcTokenHandler : IAuthHandler
             var validationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
-                ValidIssuer = provider.IssuerUrl,
+                IssuerValidator = (issuer, securityToken, _) =>
+                    OidcIssuer.Matches(
+                        issuer,
+                        (securityToken as JwtSecurityToken)?.Payload.TryGetValue("tid", out var tid) == true
+                            ? tid?.ToString()
+                            : null,
+                        provider.IssuerUrl,
+                        config.Issuer)
+                        ? issuer
+                        : throw new SecurityTokenInvalidIssuerException($"Issuer '{issuer}' is not this provider"),
                 ValidateAudience = true,
                 ValidAudience = provider.ClientId,
                 ValidateLifetime = true,

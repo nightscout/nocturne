@@ -248,7 +248,8 @@ public class OidcAuthService : IOidcAuthService
             }
             else
             {
-                idTokenClaims = ParseIdToken(providerTokens.IdToken, provider, DateTimeOffset.UtcNow);
+                idTokenClaims = ParseIdToken(
+                    providerTokens.IdToken, provider, discoveryDoc.Issuer, DateTimeOffset.UtcNow);
 
                 // Required, not conditional: every state this service issues carries a nonce, so
                 // an absent one means the ID token cannot be bound to this authorization request.
@@ -949,7 +950,8 @@ public class OidcAuthService : IOidcAuthService
     /// still have to name this provider and this client.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The token is malformed or fails a check.</exception>
-    internal static OidcIdTokenClaims ParseIdToken(string idToken, OidcProvider provider, DateTimeOffset now)
+    internal static OidcIdTokenClaims ParseIdToken(
+        string idToken, OidcProvider provider, string? discoveryIssuer, DateTimeOffset now)
     {
         var parts = idToken.Split('.');
         if (parts.Length != 3)
@@ -964,7 +966,7 @@ public class OidcAuthService : IOidcAuthService
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
         ) ?? throw new InvalidOperationException("Invalid ID token claims");
 
-        if (claims.Iss is null || claims.Iss.TrimEnd('/') != provider.IssuerUrl.TrimEnd('/'))
+        if (!OidcIssuer.Matches(claims.Iss, claims.Tid, provider.IssuerUrl, discoveryIssuer))
         {
             throw new InvalidOperationException("ID token was not issued by the provider");
         }
@@ -1283,11 +1285,22 @@ public class OidcAuthService : IOidcAuthService
         public string Sub { get; set; } = string.Empty;
         public string? Iss { get; set; }
         public JsonElement? Aud { get; set; }
+        public string? Tid { get; set; }
         public string? Email { get; set; }
+
+        [JsonPropertyName("email_verified")]
+        [JsonConverter(typeof(LenientBooleanConverter))]
         public bool? EmailVerified { get; set; }
+
         public string? Name { get; set; }
+
+        [JsonPropertyName("preferred_username")]
         public string? PreferredUsername { get; set; }
+
+        [JsonPropertyName("given_name")]
         public string? GivenName { get; set; }
+
+        [JsonPropertyName("family_name")]
         public string? FamilyName { get; set; }
         public string? Picture { get; set; }
         public string? Nonce { get; set; }
@@ -1295,6 +1308,36 @@ public class OidcAuthService : IOidcAuthService
         public string? SessionId => Sid;
         public long? Iat { get; set; }
         public long? Exp { get; set; }
+    }
+
+    /// <summary>
+    /// Reads a boolean claim sent as a JSON boolean or as the string <c>"true"</c>/<c>"false"</c>
+    /// (Amazon Cognito and older ADFS send <c>email_verified</c> as a string). Anything else reads
+    /// as absent rather than failing the login.
+    /// </summary>
+    internal sealed class LenientBooleanConverter : JsonConverter<bool?>
+    {
+        public override bool? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            switch (reader.TokenType)
+            {
+                case JsonTokenType.True:
+                    return true;
+                case JsonTokenType.False:
+                    return false;
+                case JsonTokenType.String:
+                    return bool.TryParse(reader.GetString(), out var parsed) ? parsed : null;
+                default:
+                    reader.Skip();
+                    return null;
+            }
+        }
+
+        public override void Write(Utf8JsonWriter writer, bool? value, JsonSerializerOptions options)
+        {
+            if (value is { } b) writer.WriteBooleanValue(b);
+            else writer.WriteNullValue();
+        }
     }
 
     #endregion
