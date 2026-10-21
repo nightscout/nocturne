@@ -44,10 +44,12 @@
 				message:
 					errorStatus(err) === 409
 						? "This Discord account is already linked to another member."
-						: describeSubmitError(
-								err,
-								"We couldn't complete the Discord link. The token may have expired. Please try again from Settings."
-							),
+						: errorStatus(err) === 400
+							? "This link is expired or invalid. Please run /connect in Discord again."
+							: describeSubmitError(
+									err,
+									"We couldn't complete the Discord link. The token may have expired. Please try again from Settings."
+								),
 			};
 		} finally {
 			loading = false;

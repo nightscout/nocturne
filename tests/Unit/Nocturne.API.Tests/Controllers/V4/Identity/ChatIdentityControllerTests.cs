@@ -107,9 +107,9 @@ public class ChatIdentityControllerTests : IDisposable
     }
 
     /// <summary>
-    /// Issues a pending link token with no tenant slug hint, which any tenant may claim.
+    /// Issues a pending link token, by default with no tenant slug hint, which any tenant may claim.
     /// </summary>
-    private string InsertPendingToken(string platformUserId)
+    private string InsertPendingToken(string platformUserId, string? tenantSlug = null)
     {
         var token = Convert.ToHexString(Guid.CreateVersion7().ToByteArray());
         using var db = _db.CreateContext();
@@ -118,7 +118,7 @@ public class ChatIdentityControllerTests : IDisposable
             Token = token,
             Platform = Platform,
             PlatformUserId = platformUserId,
-            TenantSlug = null,
+            TenantSlug = tenantSlug,
             Source = "connect-slash",
             ExpiresAt = DateTime.UtcNow.AddMinutes(10),
         });
@@ -155,6 +155,21 @@ public class ChatIdentityControllerTests : IDisposable
     {
         await using var db = _db.CreateContext();
         return await db.ChatIdentityDirectory.AsNoTracking().SingleAsync(d => d.Id == id);
+    }
+
+    private async Task<List<ChatIdentityDirectoryEntry>> LinksFor(string platformUserId)
+    {
+        await using var db = _db.CreateContext();
+        return await db.ChatIdentityDirectory.AsNoTracking()
+            .Where(d => d.PlatformUserId == platformUserId)
+            .ToListAsync();
+    }
+
+    private static void AssertProblem(ActionResult<ChatIdentityLinkResponse> result, int status)
+    {
+        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(status);
+        problem.Value.Should().BeOfType<ProblemDetails>();
     }
 
     private static ChatIdentityLinkResponse OkLink(ActionResult<ChatIdentityLinkResponse> result)
@@ -280,10 +295,29 @@ public class ChatIdentityControllerTests : IDisposable
         var result = await CreateController().ClaimLink(
             new ClaimChatIdentityLinkRequest { Token = token }, CancellationToken.None);
 
-        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        problem.StatusCode.Should().Be(StatusCodes.Status409Conflict);
-        problem.Value.Should().BeOfType<ProblemDetails>();
+        AssertProblem(result, StatusCodes.Status409Conflict);
         (await Reload(coMemberLink)).NocturneUserId.Should().Be(_coMemberSubjectId);
+    }
+
+    [Fact]
+    public async Task ClaimLink_answers_bad_request_for_a_token_that_was_never_issued()
+    {
+        var result = await CreateController().ClaimLink(
+            new ClaimChatIdentityLinkRequest { Token = "never-issued" }, CancellationToken.None);
+
+        AssertProblem(result, StatusCodes.Status400BadRequest);
+    }
+
+    [Fact]
+    public async Task ClaimLink_answers_bad_request_for_a_token_issued_for_another_tenant()
+    {
+        var token = InsertPendingToken(CallerChatUser, tenantSlug: "someone-else");
+
+        var result = await CreateController().ClaimLink(
+            new ClaimChatIdentityLinkRequest { Token = token }, CancellationToken.None);
+
+        AssertProblem(result, StatusCodes.Status400BadRequest);
+        (await LinksFor(CallerChatUser)).Should().BeEmpty();
     }
 
     [Fact]

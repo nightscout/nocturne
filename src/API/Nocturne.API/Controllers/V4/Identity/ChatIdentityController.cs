@@ -107,12 +107,16 @@ public class ChatIdentityController : ControllerBase
 
     /// <summary>Claim a pending link token after /connect slash command auth.</summary>
     /// <remarks>
-    /// Answers 409 when this tenant's link for the chat account belongs to another member; see
-    /// <see cref="ChatAccountLinkedToAnotherMemberException"/>.
+    /// Answers 400 for a token that cannot be claimed here
+    /// (<see cref="ChatLinkTokenRejectedException"/>) and 409 when this tenant's link for the chat
+    /// account belongs to another member (<see cref="ChatAccountLinkedToAnotherMemberException"/>).
+    /// 400 rather than 410 because the generated remote functions forward 400 and flatten 410 to a
+    /// 500.
     /// </remarks>
     [HttpPost("links/claim")]
     [RemoteCommand(Invalidates = ["GetLinks"])]
     [ProducesResponseType(typeof(ChatIdentityLinkResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ChatIdentityLinkResponse>> ClaimLink(
         [FromBody] ClaimChatIdentityLinkRequest body, CancellationToken ct)
@@ -122,7 +126,11 @@ public class ChatIdentityController : ControllerBase
         try
         {
             var entry = await _service.ClaimPendingLinkAsync(tenantId, userId, body.Token, ct);
-            return Ok(MapResponse(entry, ownedByCaller: entry.NocturneUserId == userId));
+            return Ok(MapResponse(entry, ownedByCaller: true));
+        }
+        catch (ChatLinkTokenRejectedException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
         }
         catch (ChatAccountLinkedToAnotherMemberException ex)
         {
