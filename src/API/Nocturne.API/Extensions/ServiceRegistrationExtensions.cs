@@ -289,9 +289,7 @@ public static class ServiceRegistrationExtensions
     )
     {
         // The clock every constructor-injected TimeProvider resolves to, stated here rather than
-        // left to AddAuthentication, which TryAdds the same instance in passing. In this host
-        // AddNocturneMemoryCache has already TryAdded it, so this is the registration for hosts
-        // that do not add the cache.
+        // left to AddAuthentication, which TryAdds the same instance in passing.
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ActiveTenantSnapshot>();
 

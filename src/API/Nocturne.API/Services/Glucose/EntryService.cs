@@ -141,16 +141,22 @@ public class EntryService : IEntryService
 
     /// <inheritdoc />
     public async Task<IEnumerable<Entry>> GetEntriesWithAdvancedFilterAsync(
-        string find,
+        string? type,
         int count,
         int skip,
+        string? findQuery,
+        string? dateString,
+        bool reverseResults,
         CancellationToken cancellationToken = default)
     {
         var query = new EntryQuery
         {
-            Find = find,
+            Type = type,
+            Find = findQuery,
             Count = count,
-            Skip = skip
+            Skip = skip,
+            DateString = dateString,
+            ReverseResults = reverseResults
         };
 
         return await _store.QueryAsync(query, cancellationToken);

@@ -128,7 +128,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         documents.Setup(d => d.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
             .Returns<IEnumerable<Entry>>(entries => entries);
         var controller = new EntriesController(
-            service, documents.Object, Mock.Of<IProcessingStatusService>(), Mock.Of<ICanonicalAlertEvaluator>(),
+            service, documents.Object, Mock.Of<ICanonicalAlertEvaluator>(),
             NullLogger<EntriesController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },

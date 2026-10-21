@@ -200,8 +200,8 @@ public class TimeQueryFindTests
         var entries = new Mock<IEntryService>();
         entries
             .Setup(e => e.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .Callback<string, int, int, CancellationToken>((find, _, _, _) => captured = find)
+                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Callback<string?, int, int, string?, string?, bool, CancellationToken>((_, _, _, find, _, _, _) => captured = find)
             .ReturnsAsync([]);
         var controller = Build(
             "?token=x&secret=y&_=1&count=5&find[sgv][$gte]=120", entryService: entries.Object);
@@ -231,8 +231,8 @@ public class TimeQueryFindTests
         var entries = new Mock<IEntryService>();
         entries
             .Setup(e => e.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .Callback<string, int, int, CancellationToken>((find, _, _, _) => captured = find)
+                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Callback<string?, int, int, string?, string?, bool, CancellationToken>((_, _, _, find, _, _, _) => captured = find)
             .ReturnsAsync([]);
         var controller = Build("?token=x", braces.Object, entries.Object);
 
@@ -342,8 +342,8 @@ public class TimeQueryFindTests
         var entries = new Mock<IEntryService>();
         entries
             .Setup(e => e.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string find, int _, int _, CancellationToken _) =>
+                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string? _, int _, int _, string? find, string? _, bool _, CancellationToken _) =>
             {
                 var parsed = FindQuery.Parse(find);
                 return Entries.Where(parsed.Matches).ToList().AsEnumerable();

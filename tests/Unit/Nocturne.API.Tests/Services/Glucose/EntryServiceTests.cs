@@ -276,33 +276,32 @@ public class EntryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task GetEntriesWithAdvancedFilterAsync_DelegatesToStore()
+    public async Task GetEntriesWithAdvancedFilterAsync_WithFullParameterSet_PassesAllParams()
     {
         // Arrange
-        var find = "{\"type\":\"sgv\",\"sgv\":{\"$gte\":100}}";
-        var expectedEntries = new List<Entry>
-        {
-            new() { Id = "1", Type = "sgv", Sgv = 120, Mills = 1234567890 },
-            new() { Id = "2", Type = "sgv", Sgv = 110, Mills = 1234567880 },
-        };
+        var type = "sgv";
+        var findQuery = "{\"sgv\":{\"$gte\":100}}";
+        var dateString = "2022-01-01T12:00:00.000Z";
+        var expectedEntries = new List<Entry> { new() { Id = "1" } };
 
         _store
             .Setup(x => x.QueryAsync(
-                It.Is<EntryQuery>(q => q.Find == find && q.Count == 50 && q.Skip == 10),
+                It.Is<EntryQuery>(q =>
+                    q.Type == type &&
+                    q.Find == findQuery &&
+                    q.Count == 20 &&
+                    q.Skip == 10 &&
+                    q.DateString == dateString &&
+                    q.ReverseResults == true),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedEntries);
 
         // Act
-        var result = await _sut.GetEntriesWithAdvancedFilterAsync(find, 50, 10, CancellationToken.None);
+        var result = await _sut.GetEntriesWithAdvancedFilterAsync(
+            type, 20, 10, findQuery, dateString, true, CancellationToken.None);
 
         // Assert
-        Assert.Equal(2, result.Count());
-        _cache.Verify(
-            x => x.GetOrComputeAsync(
-                It.IsAny<EntryQuery>(),
-                It.IsAny<Func<Task<IReadOnlyList<Entry>>>>(),
-                It.IsAny<CancellationToken>()),
-            Times.Never);
+        Assert.Single(result);
     }
 
     [Fact]
