@@ -111,7 +111,8 @@ public static class ShareDataCategories
     /// member's carb ratio, basal, sensitivity and targets on the default profile. It also holds the
     /// overrides, temporary targets and profile switches the legacy treatment reads serve.
     /// </summary>
-    /// <remarks>Every tenant-keyed cache over these tables bypasses a clamped request and a share.</remarks>
+    /// <remarks>A clamped request has no cache partition, so no cache serves it these rows; see
+    /// <c>IReaderCachePartition</c>.</remarks>
     public static readonly IReadOnlyDictionary<string, string> HiddenSpanEndColumns =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {

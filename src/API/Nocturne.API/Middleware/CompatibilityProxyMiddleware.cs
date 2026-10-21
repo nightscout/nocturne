@@ -14,8 +14,7 @@ namespace Nocturne.API.Middleware;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Runs after all authentication and authorization middleware, immediately before endpoint
-/// execution. Controlled by <see cref="CompatibilityProxyConfiguration.Enabled"/>.
+/// Controlled by <see cref="CompatibilityProxyConfiguration.Enabled"/>.
 /// </para>
 /// <para>
 /// Uses <see cref="IRequestCloningService"/> to snapshot the request before the pipeline

@@ -60,14 +60,14 @@ public class SyncUpsertTenantScopeTests : IDisposable
     }
 
     /// <summary>Persists a bolus on the sync key for <paramref name="tenant"/> and returns its id.</summary>
-    private Guid Seed(Guid tenant, double insulin)
+    private Guid Seed(Guid tenant, double insulin, DateTime? timestamp = null)
     {
         using var ctx = _db.CreateContext(tenant);
         var entity = new BolusEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = tenant,
-            Timestamp = T0,
+            Timestamp = timestamp ?? T0,
             Insulin = insulin,
             DataSource = DataSource,
             SyncIdentifier = SyncIdentifier,
@@ -156,5 +156,20 @@ public class SyncUpsertTenantScopeTests : IDisposable
         var inserted = await verify.Boluses.SingleAsync();
         inserted.TenantId.Should().Be(TenantA);
         inserted.Insulin.Should().Be(9.0);
+    }
+
+    [Fact]
+    public async Task GetUpsertTargetTimestamps_ReadsOnlyTheCallersRowOnTheKey()
+    {
+        Seed(TenantB, insulin: 1.0, timestamp: T0.AddYears(-3));
+        Seed(TenantA, insulin: 5.0, timestamp: T0.AddYears(-1));
+
+        var stored = await _repoA.GetUpsertTargetTimestampsAsync(
+        [
+            OnTheSyncKey(9.0),
+            new Bolus { Timestamp = T0, DataSource = DataSource, SyncIdentifier = "unmatched", Insulin = 1.0 },
+        ]);
+
+        stored.Should().Equal(T0.AddYears(-1));
     }
 }

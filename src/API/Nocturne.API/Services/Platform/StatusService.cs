@@ -113,7 +113,7 @@ public class StatusService : IStatusService
             };
         }
 
-        // Include demo mode in cache key to ensure correct status is returned
+        // Not an ITenantCache key: the response varies by authentication, not by readable rows (CLAUDE.md, PHI cache invariant).
         var demoSuffix = _demoModeService.IsEnabled ? ":demo" : "";
         var rulesSuffix = ReadsAlertRules ? "" : ":defaults";
         var cacheKey = $"status:system:{TenantCacheId}" + demoSuffix + rulesSuffix;

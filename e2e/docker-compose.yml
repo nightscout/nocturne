@@ -78,6 +78,10 @@ services:
       NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS: "true"
       NOCTURNE_GOOGLE_HEALTH_MOCK: "true"
       NOCTURNE_EVERSENSE_MOCK: "true"
+      GOOGLE_HEALTH_CLIENT_ID: e2e.apps.googleusercontent.com
+      GOOGLE_HEALTH_CLIENT_SECRET: e2e-google-secret
+      # The apex over the test TLS proxy: BASE_DOMAIN's default would name the plain-HTTP web port.
+      GOOGLE_HEALTH_REDIRECT_URI: https://nocturne.localhost:${E2E_WEB_TLS_PORT:-1635}/api/v4/google-health/oauth/callback
       # Workstation GC with a conserving heap: the server GC sizes its heaps per core.
       DOTNET_gcServer: "0"
       DOTNET_GCConserveMemory: "5"

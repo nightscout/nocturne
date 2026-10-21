@@ -183,8 +183,10 @@
                       Status unavailable
                     {:else if googleHealthLoading}
                       Loading...
+                    {:else if googleHealth && !googleHealth.available}
+                      Unavailable
                     {:else}
-                      Not Configured
+                      Not connected
                     {/if}
                   </Badge>
                 </div>

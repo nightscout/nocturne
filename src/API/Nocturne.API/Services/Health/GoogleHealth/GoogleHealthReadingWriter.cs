@@ -170,79 +170,54 @@ public sealed class GoogleHealthReadingWriter(
             "GoogleHealthReadingWriter.WriteAsync: processing {ReadingsCount} readings and {SleepCount} sleep sessions",
             readings.Count, sleepSessions.Count);
 
-        try
+        foreach (var heartRateBatch in Map(readings, "heart-rate", reading => new HeartRate
         {
-            foreach (var heartRateBatch in Map(readings, "heart-rate", reading => new HeartRate
-            {
-                Mills = reading.Mills,
-                UtcOffset = reading.UtcOffsetMinutes,
-                Bpm = checked((int)reading.Value),
-                Accuracy = 0,
-                Device = "Google Health",
-                EnteredBy = "Google Health",
-                DataSource = Source,
-                SyncIdentifier = GoogleHealthClient.Key(reading)
-            }).Chunk(batchSize))
-                await WriteBatchAsync("heart-rate", heartRateBatch.Length, heartRateBatch.Max(record => record.Mills),
-                    () => heartRates.CreateHeartRatesAsync(heartRateBatch, ct));
+            Mills = reading.Mills,
+            UtcOffset = reading.UtcOffsetMinutes,
+            Bpm = checked((int)reading.Value),
+            Accuracy = 0,
+            Device = "Google Health",
+            EnteredBy = "Google Health",
+            DataSource = Source,
+            SyncIdentifier = GoogleHealthClient.Key(reading)
+        }).Chunk(batchSize))
+            await heartRates.CreateHeartRatesAsync(heartRateBatch, ct);
 
-            foreach (var stepBatch in Map(readings, "steps", reading => new StepCount
-            {
-                Mills = reading.Mills,
-                UtcOffset = reading.UtcOffsetMinutes,
-                Metric = checked((int)reading.Value),
-                Source = 0,
-                Device = "Google Health",
-                EnteredBy = "Google Health",
-                DataSource = Source,
-                SyncIdentifier = GoogleHealthClient.Key(reading)
-            }).Chunk(batchSize))
-                await WriteBatchAsync("steps", stepBatch.Length, stepBatch.Max(record => record.Mills),
-                    () => stepCounts.CreateStepCountsAsync(stepBatch, ct));
+        foreach (var stepBatch in Map(readings, "steps", reading => new StepCount
+        {
+            Mills = reading.Mills,
+            UtcOffset = reading.UtcOffsetMinutes,
+            Metric = checked((int)reading.Value),
+            Source = 0,
+            Device = "Google Health",
+            EnteredBy = "Google Health",
+            DataSource = Source,
+            SyncIdentifier = GoogleHealthClient.Key(reading)
+        }).Chunk(batchSize))
+            await stepCounts.CreateStepCountsAsync(stepBatch, ct);
 
-            foreach (var weightBatch in Map(readings, "weight", reading => new BodyWeight
-            {
-                Mills = reading.Mills,
-                UtcOffset = reading.UtcOffsetMinutes,
-                WeightKg = reading.Value,
-                Device = "Google Health",
-                EnteredBy = "Google Health",
-                DataSource = Source,
-                SyncIdentifier = GoogleHealthClient.Key(reading)
-            }).Chunk(batchSize))
-                await WriteBatchAsync("weight", weightBatch.Length, weightBatch.Max(record => record.Mills),
-                    () => bodyWeights.CreateBodyWeightsAsync(weightBatch, ct));
+        foreach (var weightBatch in Map(readings, "weight", reading => new BodyWeight
+        {
+            Mills = reading.Mills,
+            UtcOffset = reading.UtcOffsetMinutes,
+            WeightKg = reading.Value,
+            Device = "Google Health",
+            EnteredBy = "Google Health",
+            DataSource = Source,
+            SyncIdentifier = GoogleHealthClient.Key(reading)
+        }).Chunk(batchSize))
+            await bodyWeights.CreateBodyWeightsAsync(weightBatch, ct);
 
-            foreach (var session in sleepSessions)
+        foreach (var session in sleepSessions)
+        {
+            try
             {
-                try
-                {
-                    await WriteBatchAsync("sleep", 1,
-                        new DateTimeOffset(DateTime.SpecifyKind(session.EndTime, DateTimeKind.Utc)).ToUnixTimeMilliseconds(),
-                        () => sleep.UpsertSessionAsync(session, ct));
-                }
-                catch (RecreationBlockedException)
-                {
-                    logger.LogDebug("Skipping a manually deleted Google Health sleep session");
-                }
+                await sleep.UpsertSessionAsync(session, ct);
             }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "GoogleHealthReadingWriter.WriteAsync failed while persisting health records");
-            throw;
-        }
-    }
-
-    private async Task WriteBatchAsync(string dataType, int count, long latestMills, Func<Task> write)
-    {
-        try
-        {
-            await write();
-        }
-        catch
-        {
-            throw;
+            catch (RecreationBlockedException)
+            {
+                logger.LogDebug("Skipping a manually deleted Google Health sleep session");
+            }
         }
     }
 

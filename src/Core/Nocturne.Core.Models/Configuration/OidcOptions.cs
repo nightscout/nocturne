@@ -103,7 +103,7 @@ public class CookieSettings
     /// The registered redirect_uri is the apex callback, so a login begun on any other host has to
     /// present its state cookie at the apex to be verifiable. A host-only state cookie cannot: the
     /// apex never receives it and the callback fails with <c>invalid_state</c>. That is invisible
-    /// on a tenant subdomain, where <c>OidcCallbackRedirectMiddleware</c> bounces the callback back
+    /// on a tenant subdomain, where <c>ApexCallbackRelayMiddleware</c> bounces the callback back
     /// to the originating host before the cookie is read, and fatal on a host that names no tenant
     /// — a reserved dashboard slug — because there is no slug in the state to bounce to.
     /// <para>

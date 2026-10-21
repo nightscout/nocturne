@@ -37,19 +37,9 @@ public interface ICategoryReadContext
     /// without full history, or a member or credential clamped by
     /// <see cref="ClampMemberHistory"/>. A non-share whose clamp is never resolved is not
     /// clamped, so members, owners and background work read full history unless something
-    /// narrows them. Tenant-keyed caches check <see cref="BypassesTenantCaches"/>, which includes it.
+    /// narrows them. Caches see it only through <see cref="IReaderCachePartition"/>.
     /// </summary>
     bool IsHistoryClamped { get; }
-
-    /// <summary>
-    /// True when this request must neither read nor write a tenant-keyed application cache of PHI:
-    /// a history-clamped request or any share. RLS narrows only database reads, and such a cache
-    /// is keyed by tenant alone, so a hit would serve rows this request's RLS hides and a write
-    /// would hand its narrowed result to every other reader of the tenant. A share differs from
-    /// the owner even with full history, since every table no granted scope governs is hidden
-    /// from it, including the profile, schedule and device tables derived values are computed from.
-    /// </summary>
-    bool BypassesTenantCaches { get; }
 
     /// <summary>
     /// Marks the request as an anonymous public share. Called by

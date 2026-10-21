@@ -5,22 +5,12 @@ using Microsoft.Extensions.Logging;
 namespace Nocturne.API.Middleware;
 
 /// <summary>
-/// Middleware to handle <c>.json</c>, <c>.txt</c>, <c>.csv</c> and <c>.tsv</c> extensions in API routes
-/// for legacy Nightscout compatibility. Strips the extension from the path so a standard controller
-/// route handles it, and turns it into the <c>Accept</c> header the response is negotiated by.
+/// Handles <c>.json</c>, <c>.txt</c>, <c>.csv</c> and <c>.tsv</c> extensions in API routes for legacy
+/// Nightscout compatibility. Strips the extension from the path so a standard controller route
+/// handles it, and replaces the caller's <c>Accept</c> header with the extension's media type.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Pipeline order (position 1 of 6 custom middleware -- runs first, before routing):
-/// <b>JsonExtensionMiddleware</b>,
-/// <see cref="OidcCallbackRedirectMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
-/// <see cref="TenantSetupMiddleware"/>, <see cref="AuthenticationMiddleware"/>,
-/// <see cref="MemberScopeMiddleware"/>.
-/// </para>
-/// <para>
-/// This middleware rewrites the request path before <c>UseRouting</c> so that the router
-/// matches the rewritten path. The extension's media type replaces the caller's <c>Accept</c> header.
-/// </para>
+/// Must run before <c>UseRouting</c>, so the router matches the stripped path.
 /// </remarks>
 /// <seealso cref="Attributes.NightscoutEndpointAttribute"/>
 public class JsonExtensionMiddleware

@@ -1,3 +1,4 @@
+using System.Text;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models;
@@ -97,6 +98,36 @@ public sealed class TherapySnapshot
         _basalEntries is null
             ? DefaultBasalRate
             : ApplyForwardCcp(LookupAt(_basalEntries, ShiftedSecondsFromMidnight(timeMills)) ?? DefaultBasalRate);
+
+    /// <summary>
+    /// Appends everything a lookup on this snapshot reads to <paramref name="sb"/>, so two snapshots
+    /// that append the same text answer every lookup alike.
+    /// </summary>
+    public void AppendFingerprint(StringBuilder sb)
+    {
+        sb.Append(Dia).Append(':')
+            .Append(PeakMinutes).Append(':')
+            .Append(CarbsPerHour).Append(':')
+            .Append(Timezone?.Id ?? "~").Append(':')
+            .Append(CcpPercentage?.ToString() ?? "~").Append(':')
+            .Append(CcpTimeshiftMs);
+        AppendEntries(sb, 's', _sensitivityEntries);
+        AppendEntries(sb, 'c', _carbRatioEntries);
+        AppendEntries(sb, 'b', _basalEntries);
+    }
+
+    private static void AppendEntries(StringBuilder sb, char schedule, IReadOnlyList<ScheduleEntry>? entries)
+    {
+        sb.Append('|').Append(schedule);
+        if (entries is null)
+        {
+            sb.Append('~');
+            return;
+        }
+
+        foreach (var entry in entries)
+            sb.Append(entry.TimeAsSeconds ?? 0).Append('=').Append(entry.Value).Append(',');
+    }
 
     private int ShiftedSecondsFromMidnight(long timeMills)
     {

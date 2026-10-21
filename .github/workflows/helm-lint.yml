@@ -69,6 +69,22 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Multi-replica API values fail the render
+        working-directory: deploy/helm/nocturne
+        run: |
+          set -u
+          for flag in api.replicaCount=2 api.autoscaling.enabled=true web.autoscaling.enabled=true; do
+            if out="$(helm template test . -f ci/example-values.yaml --set "$flag" 2>&1)"; then
+              echo "::error::helm template rendered with --set $flag; the chart must refuse it"
+              exit 1
+            fi
+            if ! grep -q "been removed" <<<"$out"; then
+              echo "::error::helm template failed with --set $flag, but not with the removed-value message:"
+              echo "$out"
+              exit 1
+            fi
+          done
+
       - name: Bootstrap password handling
         # Runs the rendered bootstrap Job script against a real Postgres:
         # awkward passwords round-trip, and none ever reach the Job's logs.
