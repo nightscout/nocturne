@@ -1,10 +1,10 @@
 using System.Data.Common;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Tests.Interceptors;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Extensions;
 
@@ -96,66 +96,6 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
         public bool IsSystem => false;
     }
 
-    /// <summary>
-    /// Records every statement the context issues, so a test can assert that a path materialized
-    /// nothing (no SELECT) or paged its work (more than one DELETE) — properties the row counts alone
-    /// cannot distinguish.
-    /// </summary>
-    private sealed class StatementRecorder : DbCommandInterceptor
-    {
-        private readonly List<string> _statements = [];
-
-        public int SelectCount => _statements.Count(s => s.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase));
-        public int DeleteCount => _statements.Count(s => s.StartsWith("DELETE", StringComparison.OrdinalIgnoreCase));
-
-        public override InterceptionResult<DbDataReader> ReaderExecuting(
-            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
-        {
-            Record(command);
-            return result;
-        }
-
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
-            CancellationToken cancellationToken = default)
-        {
-            Record(command);
-            return ValueTask.FromResult(result);
-        }
-
-        public override InterceptionResult<int> NonQueryExecuting(
-            DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
-        {
-            Record(command);
-            return result;
-        }
-
-        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<int> result,
-            CancellationToken cancellationToken = default)
-        {
-            Record(command);
-            return ValueTask.FromResult(result);
-        }
-
-        public override InterceptionResult<object> ScalarExecuting(
-            DbCommand command, CommandEventData eventData, InterceptionResult<object> result)
-        {
-            Record(command);
-            return result;
-        }
-
-        public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<object> result,
-            CancellationToken cancellationToken = default)
-        {
-            Record(command);
-            return ValueTask.FromResult(result);
-        }
-
-        private void Record(DbCommand command) => _statements.Add(command.CommandText.TrimStart());
-    }
-
     private static (int Count, string Scope) ReadSummary(string? changesJson)
     {
         using var doc = JsonDocument.Parse(changesJson!);
@@ -196,7 +136,7 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
             Scope);
 
         deleted.Should().Be(5);
-        recorder.SelectCount.Should().Be(0);
+        recorder.Count("SELECT").Should().Be(0);
     }
 
     [Fact]
@@ -331,8 +271,8 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
             SystemAuditContext.ForService("connector:nightscout"));
 
         deleted.Should().Be(5);
-        recorder.SelectCount.Should().Be(0);
-        recorder.DeleteCount.Should().Be(1);
+        recorder.Count("SELECT").Should().Be(0);
+        recorder.Count("DELETE").Should().Be(1);
     }
 
     [Fact]
@@ -365,7 +305,7 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
             new UserAuditContext());
 
         deleted.Should().Be(total);
-        recorder.DeleteCount.Should().Be(2);
+        recorder.Count("DELETE").Should().Be(2);
 
         await using var verify = CreateContext();
         (await verify.TestAuditables.CountAsync()).Should().Be(0);

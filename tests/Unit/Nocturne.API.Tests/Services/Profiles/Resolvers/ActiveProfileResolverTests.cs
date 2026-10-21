@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Profiles.Resolvers;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -613,24 +614,21 @@ public class ActiveProfileResolverTests : IDisposable
                 Times.Once);
         }
 
-        /// <summary>
-        /// A history-clamped request reads only the last 24 hours of state spans, so it must not
-        /// serve, or leave behind, the tenant-keyed result another caller reads.
-        /// </summary>
-        [Fact]
-        public async Task HistoryClampedRequest_NeitherReadsNorWritesTheCache()
+        [Theory]
+        [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
+        public async Task BypassingRequest_NeitherReadsNorWritesTheCache(string caller)
         {
             SetupSpans(MakeProfileSpan(startMills: NoonMills - 3_600_000, endMills: null, profileName: "Cached"));
-            var clamped = new ActiveProfileResolver(
+            var bypassing = new ActiveProfileResolver(
                 _stateSpanService.Object,
                 _tenantAccessor.Object,
                 _cache,
-                Mock.Of<ICategoryReadContext>(c => c.IsHistoryClamped),
+                CacheBypassingCallers.Context(caller),
                 NullLogger<ActiveProfileResolver>.Instance);
 
-            await clamped.GetActiveProfileNameAsync(NoonMills);
+            await bypassing.GetActiveProfileNameAsync(NoonMills);
             await _sut.GetActiveProfileNameAsync(NoonMills);
-            await clamped.GetActiveProfileNameAsync(NoonMills);
+            await bypassing.GetActiveProfileNameAsync(NoonMills);
 
             _stateSpanService.Verify(
                 s => s.GetStateSpansAsync(

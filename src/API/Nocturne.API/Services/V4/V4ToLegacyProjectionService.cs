@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Entries;
-using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.Treatments;
@@ -14,20 +13,18 @@ using Nocturne.Infrastructure.Data.Extensions;
 namespace Nocturne.API.Services.V4;
 
 /// <summary>
-/// Projects V4 granular records back into the legacy <see cref="Entry"/> and <see cref="Treatment"/>
-/// shapes for v1/v2/v3 API compatibility.
+/// Projects V4 granular records back into the legacy <see cref="Treatment"/> shape for v1/v2/v3 API
+/// compatibility.
 /// </summary>
 /// <remarks>
 /// This service is the read side of the dual-path architecture.
 /// The write side (legacy record → V4 typed record) is handled by <see cref="DecompositionPipeline"/>.
-/// Projection covers: <see cref="SensorGlucose"/> → <see cref="Entry"/>,
-/// <see cref="Bolus"/> and <see cref="CarbIntake"/> → <see cref="Treatment"/>,
+/// Projection covers: <see cref="Bolus"/> and <see cref="CarbIntake"/> → <see cref="Treatment"/>,
 /// <see cref="DeviceEvent"/> → <see cref="Treatment"/> using the legacy event-type map, and the
 /// <see cref="StateSpan"/>s a legacy treatment was decomposed into back into that treatment.
 /// <para>
-/// Entries are projected V4-native-only, supplementing the rows the legacy entries table still
-/// holds. Treatments have no legacy table left to supplement, so every treatment read projects
-/// records of both provenances — see <see cref="LegacyTreatmentRange.NativeOnly"/>.
+/// Every treatment read projects records of both provenances, since treatments have no legacy table
+/// left to supplement. See <see cref="LegacyTreatmentRange.NativeOnly"/>.
 /// </para>
 /// </remarks>
 /// <seealso cref="IV4ToLegacyProjectionService"/>
@@ -35,14 +32,12 @@ namespace Nocturne.API.Services.V4;
 /// <seealso cref="DecompositionPipeline"/>
 public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 {
-    private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly LegacyTreatmentRepositories _repositories;
     private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly NocturneDbContext _dbContext;
     private readonly ILogger<V4ToLegacyProjectionService> _logger;
 
     public V4ToLegacyProjectionService(
-        ISensorGlucoseRepository sensorGlucoseRepository,
         IBolusRepository bolusRepository,
         ICarbIntakeRepository carbIntakeRepository,
         IBGCheckRepository bgCheckRepository,
@@ -55,7 +50,6 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         ILogger<V4ToLegacyProjectionService> logger
     )
     {
-        _sensorGlucoseRepository = sensorGlucoseRepository;
         _repositories = new LegacyTreatmentRepositories(
             bolusRepository,
             carbIntakeRepository,
@@ -70,73 +64,11 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         _logger = logger;
     }
 
-    /// <inheritdoc />
     /// <summary>
     /// Converts nullable unix milliseconds to nullable DateTime.
     /// </summary>
     private static DateTime? MillsToDateTime(long? mills) =>
         mills.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(mills.Value).UtcDateTime : null;
-
-    public async Task<IEnumerable<Entry>> GetProjectedEntriesAsync(
-        long? fromMills,
-        long? toMills,
-        int limit,
-        int offset,
-        bool descending,
-        CancellationToken ct = default
-    )
-    {
-        IEnumerable<SensorGlucose> records;
-        try
-        {
-            records = await _sensorGlucoseRepository.GetAsync(
-                from: MillsToDateTime(fromMills),
-                to: MillsToDateTime(toMills),
-                device: null,
-                source: null,
-                limit: limit,
-                offset: offset,
-                descending: descending,
-                nativeOnly: true,
-                ct: ct
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to fetch V4 SensorGlucose records for projection");
-            return Enumerable.Empty<Entry>();
-        }
-
-        return records.Select(ProjectSensorGlucoseToEntry);
-    }
-
-    /// <inheritdoc />
-    public async Task<Entry?> GetLatestProjectedEntryAsync(CancellationToken ct = default)
-    {
-        IEnumerable<SensorGlucose> records;
-        try
-        {
-            records = await _sensorGlucoseRepository.GetAsync(
-                from: null,
-                to: null,
-                device: null,
-                source: null,
-                limit: 1,
-                offset: 0,
-                descending: true,
-                nativeOnly: true,
-                ct: ct
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to fetch V4 SensorGlucose records for latest projection");
-            return null;
-        }
-
-        var latest = records.FirstOrDefault();
-        return latest == null ? null : ProjectSensorGlucoseToEntry(latest);
-    }
 
     /// <inheritdoc />
     public async Task<IEnumerable<Treatment>> GetProjectedTreatmentsAsync(
@@ -473,7 +405,4 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             return fallback;
         }
     }
-
-    private static Entry ProjectSensorGlucoseToEntry(SensorGlucose sg) =>
-        SensorGlucoseToEntryMapper.ToEntry(sg);
 }

@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Contracts.Glucose;
 
@@ -107,6 +108,21 @@ public interface IStateSpanService
     /// <returns>True if deleted successfully, false otherwise</returns>
     Task<bool> DeleteStateSpanAsync(
         string id,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.ResolveDeletedAsync"/>
+    Task<IReadOnlyDictionary<Guid, Nocturne.Core.Contracts.Repositories.DeletedStateSpan>> ResolveDeletedAsync(
+        IReadOnlyCollection<string> ids,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.RestoreAsync"/>
+    Task<StateSpan> RestoreStateSpanAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.BulkRestoreAsync"/>
+    Task<BulkRestoreResult<StateSpan>> BulkRestoreStateSpansAsync(
+        IEnumerable<Guid> ids,
         CancellationToken cancellationToken = default);
 
     /// <summary>

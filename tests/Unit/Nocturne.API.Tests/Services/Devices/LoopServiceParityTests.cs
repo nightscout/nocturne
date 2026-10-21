@@ -61,6 +61,7 @@ public class LoopServiceParityTests
             new LoopNotificationData { EventType = "Temporary Override Cancel" },
             CreateValidLoopSettings(),
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -102,6 +103,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -159,6 +161,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "192.168.1.100",
+            null,
             CancellationToken.None
         );
 
@@ -207,6 +210,7 @@ public class LoopServiceParityTests
             data,
             CreateValidLoopSettings(),
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -234,6 +238,7 @@ public class LoopServiceParityTests
             new LoopNotificationData { EventType = "Temporary Override Cancel" },
             CreateValidLoopSettings(),
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -268,6 +273,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -312,6 +318,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "10.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -359,6 +366,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -394,6 +402,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -433,6 +442,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "172.16.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -477,6 +487,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -509,6 +520,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -546,6 +558,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -577,6 +590,7 @@ public class LoopServiceParityTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -602,6 +616,7 @@ public class LoopServiceParityTests
             new LoopNotificationData { EventType = "Temporary Override Cancel" },
             CreateValidLoopSettings(),
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 

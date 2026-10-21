@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { RealtimeGrant } from "@nocturne/bridge/ticket";
 
 /**
  * The ticket endpoint's one job beyond minting: telling the client whether a
@@ -8,18 +9,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const probe = vi.fn<typeof fetch>();
+const signed = vi.fn<(grant: RealtimeGrant) => void>();
 
-vi.mock("@nocturne/bridge/ticket", () => ({
-  REALTIME_ADMISSION_PATH: "/api/v4/me/realtime-admission",
-  signHandshakeTicket: (
-    _secret: string,
-    host: string,
-    tenantRelay: boolean,
-    subjectId?: string
-  ) =>
-    `${tenantRelay ? "member" : "restricted"}-ticket-for-${host}${
-      subjectId ? `:${subjectId}` : ""
-    }`,
+vi.mock("@nocturne/bridge/ticket", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@nocturne/bridge/ticket")>()),
+  signHandshakeTicket: (_secret: string, host: string, grant: RealtimeGrant) => {
+    signed(grant);
+    return `${grant.tenantRelay ? "member" : "restricted"}-ticket-for-${host}${
+      grant.subjectId ? `:${grant.subjectId}` : ""
+    }`;
+  },
 }));
 vi.mock("$env/dynamic/public", () => ({ env: {} }));
 vi.mock("$lib/server/api-client-factory", async (importOriginal) => ({
@@ -65,6 +64,7 @@ beforeEach(() => {
   apiBaseUrl = "http://api.internal";
   effectiveHost = "sleepy.nocturne.run";
   probe.mockReset();
+  signed.mockReset();
 });
 
 function admits(body: unknown) {
@@ -126,6 +126,26 @@ describe("realtime ticket endpoint", () => {
     expect(await mint()).toEqual({
       token: "restricted-ticket-for-sleepy.nocturne.run",
     });
+  });
+
+  it("signs the admission's categories and history clamp into the ticket", async () => {
+    probe.mockResolvedValue(
+      admits({ tenantRelay: true, categories: ["entries", "care"], historyClamped: false })
+    );
+
+    await mint({ access: "member-session" });
+
+    expect(signed).toHaveBeenCalledWith(
+      expect.objectContaining({ categories: ["entries", "care"], historyClamped: false })
+    );
+  });
+
+  it("signs an admission silent on the clamp as clamped", async () => {
+    probe.mockResolvedValue(admits({ tenantRelay: true, categories: ["entries"] }));
+
+    await mint({ access: "member-session" });
+
+    expect(signed).toHaveBeenCalledWith(expect.objectContaining({ historyClamped: true }));
   });
 
   it("asks with the caller's own credential and never the instance key", async () => {

@@ -594,6 +594,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     ];
 
     /// <summary>
+    /// Tables whose <see cref="IOriginalIdentified.OriginalId"/> is the re-import key. No unique index
+    /// backs it, so a restore checks for a live holder itself
+    /// (<see cref="Extensions.SoftDeleteRestoreExtensions"/>).
+    /// </summary>
+    internal static readonly Type[] OriginalIdKeyedEntities = [typeof(StateSpanEntity)];
+
+    /// <summary>
     /// The marker-declared timestamp columns, by the marker that declares them. Every column here
     /// gets a <c>CURRENT_TIMESTAMP</c> default, so a write that bypasses <see cref="UpdateTimestamps"/>
     /// — raw SQL, <c>ExecuteUpdate</c>-style bulk paths, a manual fix in psql — still lands a real

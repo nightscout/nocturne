@@ -54,6 +54,7 @@ public class LoopService : ILoopService, IDisposable
         LoopNotificationData data,
         LoopProfileSettings? loopSettings,
         string remoteAddress,
+        bool? isApnsProduction,
         CancellationToken cancellationToken = default
     )
     {
@@ -88,6 +89,7 @@ public class LoopService : ILoopService, IDisposable
                 data,
                 loopSettings!, // Validation ensures this is not null
                 remoteAddress,
+                isApnsProduction,
                 cancellationToken
             );
 
@@ -198,6 +200,7 @@ public class LoopService : ILoopService, IDisposable
         LoopNotificationData data,
         LoopProfileSettings loopSettings,
         string remoteAddress,
+        bool? isApnsProduction,
         CancellationToken cancellationToken
     )
     {
@@ -223,7 +226,9 @@ public class LoopService : ILoopService, IDisposable
             .AddContentAvailable()
             .AddCustomProperty("interruption-level", "time-sensitive", addToApsDict: true);
 
-        if (string.Equals(_configuration.PushServerEnvironment, "development", StringComparison.OrdinalIgnoreCase))
+        var production = isApnsProduction
+            ?? !string.Equals(_configuration.PushServerEnvironment, "development", StringComparison.OrdinalIgnoreCase);
+        if (!production)
         {
             push.SendToDevelopmentServer();
         }

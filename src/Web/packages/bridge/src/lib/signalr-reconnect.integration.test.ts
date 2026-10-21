@@ -83,7 +83,11 @@ it("recovers all real hubs after partial handshake failure and a prolonged outag
       transports: ["websocket"],
       extraHeaders: { "X-Forwarded-Host": "test.nocturne.test" },
       auth: {
-        token: signHandshakeTicket("test-key", "test.nocturne.test", true),
+        token: signHandshakeTicket("test-key", "test.nocturne.test", {
+          tenantRelay: true,
+          categories: ["entries"],
+          historyClamped: false,
+        }),
       },
     },
   );

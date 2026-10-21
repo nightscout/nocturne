@@ -103,4 +103,14 @@ public interface IDeduplicationService
     /// gained a second record costs no row. Returns the number of links deleted.
     /// </summary>
     Task<int> PruneSingletonLinksAsync(int batchSize, int maxBatches, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Moves, for the current tenant, the primary of every recent state span group whose closed
+    /// primary a live group mate superseded or is still open beside onto the member the survivor
+    /// rule picks. Groups linked before that rule existed can hold one, which reads would show as
+    /// ended while a copy runs on. Finds them with one query over groups with a member open or
+    /// recently started, so a tenant with none costs only that. Returns the number of groups whose
+    /// primary moved.
+    /// </summary>
+    Task<int> RepairStateSpanPrimariesAsync(CancellationToken cancellationToken = default);
 }

@@ -237,4 +237,63 @@ describe("AppSidebar", () => {
       ),
     );
   });
+
+  describe("Do Not Disturb indicator", () => {
+    const dndLink = () => page.getByRole("link", { name: "Do Not Disturb" });
+    const showsBellOff = () =>
+      document.querySelector('a[href$="/alerts/dnd"] svg.lucide-bell-off') !== null;
+
+    async function renderWith(settings: unknown) {
+      pageState.data = { effectivePermissions: ["*"] };
+      pageState.url.pathname = "/alerts/dnd";
+      getDnd.mockImplementation(() => remoteQuery(() => settings));
+      render(Harness, { user: MEMBER });
+      await vi.waitFor(() => expect(getDnd).toHaveBeenCalledOnce());
+    }
+
+    it("marks a schedule that is in effect", async () => {
+      await renderWith({ dndManualActive: false, dndScheduleEnabled: true, dndScheduleActiveNow: true });
+
+      await expect
+        .element(dndLink())
+        .toHaveAttribute("title", "Scheduled Do Not Disturb window is on now");
+      await vi.waitFor(() => expect(showsBellOff()).toBe(true));
+    });
+
+    it("says only that a schedule is configured while it is not in effect", async () => {
+      await renderWith({ dndManualActive: false, dndScheduleEnabled: true, dndScheduleActiveNow: false });
+
+      await expect
+        .element(dndLink())
+        .toHaveAttribute("title", "Scheduled Do Not Disturb window configured");
+      expect(showsBellOff()).toBe(false);
+    });
+
+    it("shows nothing when there is neither a schedule nor a mute", async () => {
+      await renderWith({ dndManualActive: false, dndScheduleEnabled: false, dndScheduleActiveNow: false });
+
+      await expect
+        .element(page.getByRole("switch", { name: "Toggle Do Not Disturb" }))
+        .toBeEnabled();
+      await expect.element(dndLink()).not.toHaveAttribute("title");
+      expect(showsBellOff()).toBe(false);
+    });
+
+    it("reads the settings again when the tab becomes visible", async () => {
+      await renderWith({ dndManualActive: false, dndScheduleEnabled: true, dndScheduleActiveNow: false });
+      await expect
+        .element(dndLink())
+        .toHaveAttribute("title", "Scheduled Do Not Disturb window configured");
+
+      getDnd.mockImplementation(() =>
+        remoteQuery(() => ({ dndManualActive: false, dndScheduleEnabled: true, dndScheduleActiveNow: true })),
+      );
+      document.dispatchEvent(new Event("visibilitychange"));
+
+      await vi.waitFor(() => expect(getDnd).toHaveBeenCalledTimes(2));
+      await expect
+        .element(dndLink())
+        .toHaveAttribute("title", "Scheduled Do Not Disturb window is on now");
+    });
+  });
 });

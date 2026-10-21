@@ -277,8 +277,8 @@
         previousGlucoseValue={inspection.context.previousGlucoseValue}
         dataSource={inspection.context.dataSource}
         glucoseData={engine.glucoseData}
-        highThreshold={engine.highThreshold}
-        lowThreshold={engine.lowThreshold}
+        highThreshold={engine.thresholds.high}
+        lowThreshold={engine.thresholds.low}
         iob={inspection.context.iob}
         cob={inspection.context.cob}
         basalRate={inspection.context.basalRate}
@@ -312,8 +312,8 @@
         isStaleBasal={inspection.context.isStaleBasal}
         dataSource={inspection.context.dataSource}
         glucoseData={engine.glucoseData}
-        highThreshold={engine.highThreshold}
-        lowThreshold={engine.lowThreshold}
+        highThreshold={engine.thresholds.high}
+        lowThreshold={engine.thresholds.low}
         hasGlucoseContext={true}
         hasTreatmentContext={inspection.context.nearbyBolus != null ||
           inspection.context.nearbyCarbs != null}
@@ -337,8 +337,8 @@
         cob={inspection.context.cob}
         glucoseValue={inspection.glucosePoint.sgv}
         glucoseData={engine.glucoseData}
-        highThreshold={engine.highThreshold}
-        lowThreshold={engine.lowThreshold}
+        highThreshold={engine.thresholds.high}
+        lowThreshold={engine.thresholds.low}
         hasGlucoseContext={true}
         hasDeliveryContext={inspection.context.basalRate != null}
         onClose={closeAllInspections}

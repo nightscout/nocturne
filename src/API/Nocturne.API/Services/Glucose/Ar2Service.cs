@@ -11,8 +11,6 @@ namespace Nocturne.API.Services.Glucose;
 /// </summary>
 /// <remarks>
 /// Uses an autoregressive model of order 2 (AR2) to predict future glucose values.
-/// The forecast cone is generated using pre-computed step factors (<see cref="CONE_STEPS"/>)
-/// that widen with each 5-minute interval into the future.
 /// Alarm thresholds (<see cref="WARN_THRESHOLD"/> and <see cref="URGENT_THRESHOLD"/>) are
 /// derived from the average log-loss across the prediction window.
 /// </remarks>
@@ -28,27 +26,10 @@ public class Ar2Service : IAr2Service
     private const double WARN_THRESHOLD = 0.05;
     private const double URGENT_THRESHOLD = 0.10;
     private const string AR2_COLOR = "cyan";
+    private const long ForecastPointOffsetMills = 2000;
 
     // AR coefficients from legacy code
     private static readonly double[] AR = { -0.723, 1.716 };
-
-    // Cone step factors for forecast cone generation (from legacy)
-    private static readonly double[] CONE_STEPS =
-    {
-        0.020,
-        0.041,
-        0.061,
-        0.081,
-        0.099,
-        0.116,
-        0.132,
-        0.146,
-        0.159,
-        0.171,
-        0.182,
-        0.192,
-        0.201,
-    };
 
     public Ar2Service(ILogger<Ar2Service> logger)
     {
@@ -100,69 +81,6 @@ public class Ar2Service : IAr2Service
         }
 
         return result;
-    }
-
-    /// <inheritdoc/>
-    /// <param name="ddata">Domain data context (currently unused; retained for interface compatibility).</param>
-    /// <param name="bgNowProperties">Properties map containing current BG statistics.</param>
-    /// <param name="deltaProperties">Properties map containing <c>mean5MinsAgo</c>.</param>
-    /// <param name="coneFactor">Cone width multiplier (default: <c>2.0</c>). Pass <c>0</c> to suppress negative cone points.</param>
-    /// <param name="cancellationToken">Cancellation token (not used; retained for interface compatibility).</param>
-    /// <returns>A list of <see cref="ForecastPoint"/> objects forming the upper and lower cone bounds.</returns>
-    public async Task<List<ForecastPoint>> GenerateForecastConeAsync(
-        DData ddata,
-        Dictionary<string, object> bgNowProperties,
-        Dictionary<string, object> deltaProperties,
-        double coneFactor = 2.0,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await Task.CompletedTask; // For async interface compatibility
-
-        if (!CanForecast(bgNowProperties, deltaProperties))
-        {
-            return new List<ForecastPoint>();
-        }
-
-        var state = InitializeAr2State(bgNowProperties, deltaProperties);
-        var conePoints = new List<ForecastPoint>();
-
-        // Generate cone points using exact legacy algorithm
-        foreach (var step in CONE_STEPS)
-        {
-            state = IncrementAr2State(state);
-
-            // Add negative cone point if coneFactor > 0
-            if (coneFactor > 0)
-            {
-                conePoints.Add(
-                    GenerateAr2Point(
-                        state,
-                        new Ar2PointOptions
-                        {
-                            Offset = 2000,
-                            ConeFactor = -coneFactor,
-                            Step = step,
-                        }
-                    )
-                );
-            }
-
-            // Add positive cone point
-            conePoints.Add(
-                GenerateAr2Point(
-                    state,
-                    new Ar2PointOptions
-                    {
-                        Offset = 4000,
-                        ConeFactor = coneFactor,
-                        Step = step,
-                    }
-                )
-            );
-        }
-
-        return conePoints;
     }
 
     /// <inheritdoc/>
@@ -219,7 +137,7 @@ public class Ar2Service : IAr2Service
         for (int i = 0; i < 6; i++)
         {
             state = IncrementAr2State(state);
-            state.Points.Add(GenerateAr2Point(state, new Ar2PointOptions { Offset = 2000 }));
+            state.Points.Add(GenerateAr2Point(state));
         }
 
         // Calculate average loss exactly as in legacy
@@ -273,17 +191,13 @@ public class Ar2Service : IAr2Service
     /// <summary>
     /// Generate AR2 point with exact legacy calculation
     /// </summary>
-    private ForecastPoint GenerateAr2Point(Ar2State state, Ar2PointOptions options)
+    private ForecastPoint GenerateAr2Point(Ar2State state)
     {
-        var step = options.Step;
-        var coneFactor = options.ConeFactor;
-        var offset = options.Offset;
-
-        var mgdl = (int)Math.Round(BG_REF * Math.Exp(state.Curr + coneFactor * step));
+        var mgdl = (int)Math.Round(BG_REF * Math.Exp(state.Curr));
 
         return new ForecastPoint
         {
-            Mills = state.ForecastTime + offset,
+            Mills = state.ForecastTime + ForecastPointOffsetMills,
             Mgdl = Math.Max(BG_MIN, Math.Min(BG_MAX, mgdl)),
             Color = AR2_COLOR,
         };
@@ -408,19 +322,4 @@ public class Ar2Service : IAr2Service
 
         return double.TryParse(value.ToString(), out result);
     }
-}
-
-/// <summary>
-/// Options that control the position and shape of a single AR2 forecast or cone point.
-/// </summary>
-public class Ar2PointOptions
-{
-    /// <summary>Gets or sets the cone step factor from <see cref="Ar2Service.CONE_STEPS"/> for this point.</summary>
-    public double Step { get; set; } = 0;
-
-    /// <summary>Gets or sets the cone width multiplier; negative values produce the lower cone bound.</summary>
-    public double ConeFactor { get; set; } = 0;
-
-    /// <summary>Gets or sets the millisecond time offset added to the forecast state's timestamp for this point.</summary>
-    public long Offset { get; set; } = 0;
 }

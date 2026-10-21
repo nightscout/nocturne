@@ -97,10 +97,16 @@ public class DataSourceInfo
     public int EntriesLast24Hours { get; set; }
 
     /// <summary>
-    /// Total number of entries from this source
+    /// Number of entries from this source inside the window named by <see cref="TotalEntriesWindowDays"/>
     /// </summary>
     [JsonPropertyName("totalEntries")]
     public long TotalEntries { get; set; }
+
+    /// <summary>
+    /// Days back from now that <see cref="TotalEntries"/> covers, or null when it counts the source's lifetime
+    /// </summary>
+    [JsonPropertyName("totalEntriesWindowDays")]
+    public int? TotalEntriesWindowDays { get; set; }
 
     /// <summary>
     /// Health status based on recent activity: "active", "stale", "inactive"

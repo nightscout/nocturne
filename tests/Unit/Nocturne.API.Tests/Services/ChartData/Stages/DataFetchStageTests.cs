@@ -405,7 +405,7 @@ public class DataFetchStageTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_FetchesTempBasalsFromBufferAndSplitsDisplayWindow()
+    public async Task ExecuteAsync_FetchesTempBasalsFromBufferAndSelectsThoseOverlappingDisplayWindow()
     {
         var beforeWindow = new TempBasal
         {
@@ -467,7 +467,7 @@ public class DataFetchStageTests
         requestedLimit.Should().Be(Nocturne.API.Services.Analytics.ChartDataService.TempBasalQueryLimit);
         requestedDescending.Should().BeFalse();
         result.TempBasalList.Should().BeEquivalentTo([beforeWindow, runningAcrossStart, atStart, inWindow]);
-        result.DisplayTempBasals.Should().BeEquivalentTo([atStart, inWindow]);
+        result.DisplayTempBasals.Should().BeEquivalentTo([runningAcrossStart, atStart, inWindow]);
     }
 
     [Fact]

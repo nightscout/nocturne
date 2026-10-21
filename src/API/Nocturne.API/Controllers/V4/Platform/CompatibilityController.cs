@@ -54,7 +54,7 @@ public class CompatibilityController : ControllerBase
     /// Get current proxy configuration
     /// </summary>
     [HttpGet("config")]
-    [RequireAdmin]
+    [RequireSuperuser]
     [ProducesResponseType(typeof(ProxyConfigurationDto), StatusCodes.Status200OK)]
     public ActionResult<ProxyConfigurationDto> GetConfiguration()
     {
@@ -72,7 +72,7 @@ public class CompatibilityController : ControllerBase
     /// Get overall compatibility metrics
     /// </summary>
     [HttpGet("metrics")]
-    [RequireAdmin]
+    [RequireSuperuser]
     [ProducesResponseType(typeof(CompatibilityMetrics), StatusCodes.Status200OK)]
     public async Task<ActionResult<CompatibilityMetrics>> GetMetrics(
         [FromQuery] DateTimeOffset? fromDate = null,
@@ -100,7 +100,7 @@ public class CompatibilityController : ControllerBase
     /// Get per-endpoint compatibility metrics
     /// </summary>
     [HttpGet("endpoints")]
-    [RequireAdmin]
+    [RequireSuperuser]
     [ProducesResponseType(typeof(IEnumerable<EndpointMetrics>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<EndpointMetrics>>> GetEndpointMetrics(
         [FromQuery] DateTimeOffset? fromDate = null,
@@ -128,7 +128,7 @@ public class CompatibilityController : ControllerBase
     /// Get list of analyses with filtering and pagination
     /// </summary>
     [HttpGet("analyses")]
-    [RequireAdmin]
+    [RequireSuperuser]
     [ProducesResponseType(typeof(AnalysesListResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AnalysesListResponse>> GetAnalyses(
         [FromQuery] string? requestPath = null,
@@ -194,7 +194,7 @@ public class CompatibilityController : ControllerBase
     /// Get detailed analysis by ID
     /// </summary>
     [HttpGet("analyses/{id}")]
-    [RequireAdmin]
+    [RequireSuperuser]
     [ProducesResponseType(typeof(AnalysisDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AnalysisDetailDto>> GetAnalysisDetail(
@@ -267,7 +267,7 @@ public class CompatibilityController : ControllerBase
     /// Test API compatibility by comparing responses from Nightscout and Nocturne
     /// </summary>
     [HttpPost("test")]
-    [RequireAdmin]
+    [RequireSuperuser]
     [ProducesResponseType(typeof(ManualTestResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ManualTestResult>> TestApiComparison(

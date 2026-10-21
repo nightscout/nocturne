@@ -60,7 +60,7 @@ public static class GlookoDeviceClockMapper
     /// records into a CGM batch would dilute the spacing that proves promptness.
     /// </summary>
     public static IReadOnlyList<DeviceClockObservation> MapUploadBatches(
-        string connector, GlookoClockEgv[]? egvs, GlookoClockBolus[]? boluses)
+        string connector, GlookoEgv[]? egvs, GlookoBolus[]? boluses)
     {
         var observations = new List<DeviceClockObservation>();
 

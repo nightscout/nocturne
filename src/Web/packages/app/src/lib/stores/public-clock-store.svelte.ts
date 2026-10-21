@@ -7,8 +7,9 @@
 
 import { clockFacesClient } from "$lib/api/browser-clients";
 import type { ClockGlucoseDto } from "$lib/api";
+import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
 import {
-  clockGlucoseDelta,
+  glucoseDelta,
   type ClockGlucoseSource,
 } from "./realtime-store.svelte";
 
@@ -32,10 +33,11 @@ export class PublicClockStore implements ClockGlucoseSource {
   currentBG = $derived(this.readings[0]?.mgdl ?? null);
   direction = $derived(this.readings[0]?.direction ?? "");
   lastUpdated = $derived(this.readings[0]?.mills ?? null);
+  thresholds = resolveChartThresholds();
   demoMode = $derived(this.readings.some((r) => r.dataSource === "demo-service"));
 
   bgDelta = $derived(
-    clockGlucoseDelta(
+    glucoseDelta(
       this.readings[0]?.delta,
       this.readings[0]?.mgdl,
       this.readings[1]?.mgdl

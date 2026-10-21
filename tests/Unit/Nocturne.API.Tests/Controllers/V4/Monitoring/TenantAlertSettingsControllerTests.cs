@@ -1,7 +1,10 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Time.Testing;
+using Moq;
 using Nocturne.API.Controllers.V4.Monitoring;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -194,16 +197,95 @@ public class TenantAlertSettingsControllerTests
         window.EndsAt.Should().BeCloseTo(until, TimeSpan.FromSeconds(1));
     }
 
+    [Theory]
+    [InlineData("2026-03-10T02:00:00Z", false)]
+    [InlineData("2026-03-10T12:00:00Z", true)]
+    [InlineData("2026-03-10T20:00:00Z", false)]
+    [InlineData("2026-03-10T17:00:00Z", true)]
+    public async Task ScheduleActiveNow_followsTheWindowInThePatientsZone(string utcNow, bool expected)
+    {
+        var (controller, _) = NewController(DateTimeOffset.Parse(utcNow), "Australia/Sydney");
+        await controller.Update(OvernightSchedule(), CancellationToken.None);
+
+        var got = OkValue(await controller.Get(CancellationToken.None));
+
+        got.DndScheduleActiveNow.Should().Be(expected);
+        got.DndManualActive.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("2026-03-10T12:00:00Z", false)]
+    [InlineData("2026-03-10T23:00:00Z", true)]
+    [InlineData("2026-03-11T02:00:00Z", true)]
+    [InlineData("2026-03-11T07:00:00Z", false)]
+    public async Task ScheduleActiveNow_acrossMidnight_inUtc(string utcNow, bool expected)
+    {
+        var (controller, _) = NewController(DateTimeOffset.Parse(utcNow), "UTC");
+        await controller.Update(OvernightSchedule(), CancellationToken.None);
+
+        OkValue(await controller.Get(CancellationToken.None)).DndScheduleActiveNow.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task ScheduleActiveNow_isFalseWhenTheScheduleIsDisabled()
+    {
+        var (controller, _) = NewController(DateTimeOffset.Parse("2026-03-10T23:30:00Z"), "UTC");
+        var request = OvernightSchedule();
+        request.DndScheduleEnabled = false;
+
+        var resp = OkValue(await controller.Update(request, CancellationToken.None));
+
+        resp.DndScheduleActiveNow.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Update_whenTheTimezoneCannotBeResolved_writesNothing()
+    {
+        var (controller, options) = NewController(timezoneFailure: new InvalidOperationException("no profile"));
+
+        var act = () => controller.Update(OvernightSchedule(), CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        (await db.TenantAlertSettings.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ManualMute_doesNotMakeTheScheduleActive()
+    {
+        var (controller, _) = NewController(DateTimeOffset.Parse("2026-03-10T12:00:00Z"), "UTC");
+        var request = OvernightSchedule();
+        request.DndManualActive = true;
+
+        var resp = OkValue(await controller.Update(request, CancellationToken.None));
+
+        resp.DndManualActive.Should().BeTrue();
+        resp.DndScheduleActiveNow.Should().BeFalse();
+    }
+
     // ---- helpers ----
 
-    private static (TenantAlertSettingsController Controller, DbContextOptions<NocturneDbContext> Options) NewController()
+    private static UpdateTenantAlertSettingsRequest OvernightSchedule() => new()
+    {
+        DndScheduleEnabled = true,
+        DndScheduleStart = new TimeOnly(22, 0),
+        DndScheduleEnd = new TimeOnly(7, 0),
+    };
+
+    private static (TenantAlertSettingsController Controller, DbContextOptions<NocturneDbContext> Options) NewController(
+        DateTimeOffset? now = null, string? timezoneId = null, Exception? timezoneFailure = null)
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         var seed = new NocturneDbContext(options) { TenantId = Tenant };
         var factory = new TestNocturneDbContextFactory(seed);
-        return (new TenantAlertSettingsController(factory), options);
+        var therapy = new Mock<ITherapySettingsResolver>();
+        var timezone = therapy.Setup(t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()));
+        if (timezoneFailure is null) timezone.ReturnsAsync(timezoneId);
+        else timezone.ThrowsAsync(timezoneFailure);
+        var time = new FakeTimeProvider(now ?? DateTimeOffset.UtcNow);
+        return (new TenantAlertSettingsController(factory, therapy.Object, time), options);
     }
 
     private static TenantAlertSettingsResponse OkValue(ActionResult<TenantAlertSettingsResponse> result)

@@ -36,8 +36,6 @@ public class PropertiesService : IPropertiesService
     private static readonly HashSet<string> DeviceAgeProperties =
         new(StringComparer.OrdinalIgnoreCase) { "cage", "sage", "iage", "bage" };
 
-    private const long BgNowBucketHalfWidthMills = 150_000;
-
     // Properties that should be filtered out for security
     private static readonly string[] SecureProperties =
     {
@@ -236,65 +234,58 @@ public class PropertiesService : IPropertiesService
     }
 
     /// <summary>
-    /// Sets <c>bgnow</c> to the most recent 5 minute bucket, as <c>bgnow.js</c> does: every reading
-    /// within 2.5 minutes of the newest one, with <c>mean</c>, <c>last</c> and <c>mills</c> taken
-    /// from the readings above 39 mg/dl (lower values are sensor error codes).
+    /// Sets <c>bgnow</c> to the newest 5 minute bucket, as <c>bgnow.js</c> does (see
+    /// <see cref="DirectionService.BuildBuckets"/>). A bucket holding only error codes has no
+    /// <c>mean</c>, <c>last</c> or <c>mills</c>, and so no delta or forecast follows it.
     /// </summary>
     private void SetBgNowPropertiesAsync(Dictionary<string, object> properties, DData ddata)
     {
-        var sgvs = ddata.Sgvs?.OrderByDescending(s => s.Mills).ToList();
-        if (sgvs?.Any() != true)
+        var currentSgv = ddata.Sgvs?.OrderByDescending(s => s.Mills).FirstOrDefault();
+        if (currentSgv == null)
             return;
 
-        var currentSgv = sgvs.First();
-        var mgdlValue = MgdlOf(currentSgv);
-
-        var bucketFrom = currentSgv.Mills - BgNowBucketHalfWidthMills;
-        var bucketSgvs = sgvs
-            .Where(s => s.Mills >= bucketFrom)
-            .OrderBy(s => s.Mills)
-            .ToList();
-        var valid = bucketSgvs.Where(s => MgdlOf(s) > 39).ToList();
-        var errors = bucketSgvs.Where(s => MgdlOf(s) <= 39).ToList();
-
-        var bgnow = new Dictionary<string, object>
-        {
-            ["sgvs"] = bucketSgvs,
-            ["mgdl"] = mgdlValue,
-            ["scaled"] = currentSgv.Scaled ?? mgdlValue,
-            ["displayLine"] = $"BG Now: {currentSgv.Scaled ?? mgdlValue} mg/dl",
-        };
-
-        if (valid.Count > 0)
-        {
-            var newest = valid[^1];
-            bgnow["mean"] = valid.Average(MgdlOf);
-            bgnow["last"] = MgdlOf(newest);
-            bgnow["mills"] = newest.Mills;
-        }
-
-        if (errors.Count > 0)
-            bgnow["errors"] = errors;
+        var mgdlValue = DirectionService.MgdlOf(currentSgv);
+        var bgnow = BucketProperties(DirectionService.BuildBuckets(ddata.Sgvs!)[0]);
+        bgnow["mgdl"] = mgdlValue;
+        bgnow["scaled"] = currentSgv.Scaled ?? mgdlValue;
+        bgnow["displayLine"] = $"BG Now: {currentSgv.Scaled ?? mgdlValue} mg/dl";
 
         properties["bgnow"] = bgnow;
     }
 
-    private static double MgdlOf(Entry entry) => entry.Mgdl != 0 ? entry.Mgdl : entry.Sgv ?? 0;
+    private static Dictionary<string, object> BucketProperties(BgNowBucket bucket)
+    {
+        var result = new Dictionary<string, object> { ["sgvs"] = bucket.Entries };
+
+        if (bucket.Last != null)
+        {
+            result["mean"] = bucket.Mean!.Value;
+            result["last"] = DirectionService.MgdlOf(bucket.Last);
+            result["mills"] = bucket.Last.Mills;
+        }
+
+        if (bucket.Errors.Count > 0)
+            result["errors"] = bucket.Errors;
+
+        return result;
+    }
 
     /// <summary>
-    /// Set delta properties showing glucose change - exact legacy algorithm
+    /// Set delta properties showing glucose change between the two most recent 5 minute buckets
     /// </summary>
     private void SetDeltaProperties(Dictionary<string, object> properties, DData ddata)
     {
-        var entries = ddata.Sgvs?.OrderByDescending(s => s.Mills).Take(10).ToList();
-        if (entries?.Count < 2)
+        if (ddata.Sgvs == null)
             return;
 
-        // Use the DirectionService for exact legacy delta calculation
-        var deltaInfo = DirectionService.CalculateDelta(entries!, "mg/dl");
-        if (deltaInfo == null)
+        var bucketDelta = DirectionService.CalculateBucketDelta(
+            DirectionService.BuildBuckets(ddata.Sgvs),
+            "mg/dl"
+        );
+        if (bucketDelta == null)
             return;
 
+        var deltaInfo = bucketDelta.Info;
         properties["delta"] = new Dictionary<string, object>
         {
             ["display"] = deltaInfo.Display ?? "",
@@ -304,8 +295,7 @@ public class PropertiesService : IPropertiesService
             ["absolute"] = deltaInfo.Absolute,
             ["elapsedMins"] = deltaInfo.ElapsedMins ?? 0,
             ["mean5MinsAgo"] = deltaInfo.Mean5MinsAgo ?? 0,
-            ["previous"] = deltaInfo.Previous ?? (object)null!,
-            ["current"] = deltaInfo.Current ?? (object)null!,
+            ["previous"] = BucketProperties(bucketDelta.Previous),
             ["times"] = deltaInfo.Times,
         };
     }

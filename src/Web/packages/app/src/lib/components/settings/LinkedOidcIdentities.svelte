@@ -2,6 +2,7 @@
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
+  import { invalidateAll } from "$app/navigation";
   import Link2 from "@lucide/svelte/icons/link-2";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -83,6 +84,7 @@
 
     try {
       await unlinkIdentity(removeTarget.id);
+      await invalidateAll();
       successMessage = "Sign-in method removed.";
       clearMessagesSoon();
     } catch (err) {

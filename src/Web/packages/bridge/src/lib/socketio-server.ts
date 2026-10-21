@@ -6,7 +6,8 @@ import {
   verifyHandshakeTicket,
   normalizeHandshakeHost,
   REALTIME_ADMISSION_PATH,
-  canonicalSubjectId,
+  readRealtimeGrant,
+  type RealtimeGrant,
 } from './handshake-ticket.js';
 import { isRecord, stringField, type Payload } from './payload.js';
 
@@ -18,8 +19,8 @@ interface BridgeSocketData {
   pendingTenantSlug?: string;
   /**
    * Whether the socket's credential may join the tenant-wide room. The room
-   * carries every category and every member's in-app notifications, so a guest
-   * link or anonymous share that holds single categories stays out of it.
+   * carries live payloads of more than one category, so a guest link or
+   * anonymous share that holds single categories stays out of it.
    */
   tenantRelay?: boolean;
   /**
@@ -28,11 +29,28 @@ interface BridgeSocketData {
    * subject, which then receives no per-subject notifications.
    */
   subjectId?: string;
+  /** The API broadcast categories whose storage events the socket receives. */
+  categories?: string[];
 }
 
 /** Room a socket joins for one subject's per-subject payloads within a tenant. */
 function subjectRoom(tenantSlug: string, subjectId: string): string {
   return `tenant:${tenantSlug}:subject:${subjectId}`;
+}
+
+/** Room a socket joins for one API broadcast category's storage events within a tenant. */
+function categoryRoom(tenantSlug: string, category: string): string {
+  return `tenant:${tenantSlug}:category:${category}`;
+}
+
+/**
+ * The categories a grant's socket receives storage events for. A storage event
+ * carries whatever record was just written, backdated or not, so a
+ * history-clamped credential receives none and catches up through its own
+ * clamped reads.
+ */
+function storageCategories(grant: RealtimeGrant): string[] {
+  return grant.historyClamped ? [] : grant.categories;
 }
 
 type BridgeServer = SocketIOServerClass<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>;
@@ -295,6 +313,7 @@ class SocketIOServer {
         socket.data.tenantSlug = tenantSlug;
         socket.data.tenantRelay = ticket.tenantRelay;
         socket.data.subjectId = ticket.subjectId;
+        socket.data.categories = storageCategories(ticket);
         return next();
       }
 
@@ -352,12 +371,12 @@ class SocketIOServer {
     });
   }
 
-  /** Join an authorized socket to its tenant room and, when its credential owns a subject, that
-   *  subject's room. A restricted socket stays authorized and joins nothing, as the API hub's
-   *  Authorize does; the bridge has no per-category room for the default namespace to offer it
-   *  instead. A socket with no subject receives no per-subject notifications. */
+  /** Join an authorized socket to its tenant room, the category rooms it was granted and, when its
+   *  credential owns a subject, that subject's room. A restricted socket stays authorized and joins
+   *  nothing, category rooms included, so a guest link or share receives no storage events. A socket
+   *  with no subject receives no per-subject notifications. */
   private joinTenantRoom(socket: BridgeSocket): void {
-    const { tenantSlug, tenantRelay, subjectId } = socket.data;
+    const { tenantSlug, tenantRelay, subjectId, categories = [] } = socket.data;
     if (!tenantSlug) return;
 
     if (tenantRelay !== true) {
@@ -367,6 +386,10 @@ class SocketIOServer {
 
     socket.join(`tenant:${tenantSlug}`);
     logger.info(`Client ${socket.id} joined tenant room: ${tenantSlug}`);
+
+    for (const category of categories) {
+      socket.join(categoryRoom(tenantSlug, category));
+    }
 
     if (subjectId) {
       socket.join(subjectRoom(tenantSlug, subjectId));
@@ -422,20 +445,21 @@ class SocketIOServer {
     socket.data.pendingTenantSlug = undefined;
     socket.data.tenantRelay = admission.tenantRelay;
     socket.data.subjectId = admission.subjectId;
+    socket.data.categories = storageCategories(admission);
     this.joinTenantRoom(socket);
     logger.info(`Client ${socket.id} authorized via legacy credentials for tenant: ${tenantSlug}`);
     callback?.({ read: true, write: false, write_treatment: false });
   }
 
   /** Replays a client credential against the API's realtime admission endpoint,
-   *  scoped to the connection's own tenant, and returns its `tenantRelay`
-   *  decision and the admitted subject, or null when the API refused the credential or the probe failed.
+   *  scoped to the connection's own tenant, and returns its grant, or null when
+   *  the API refused the credential or the probe failed.
    *  The probe carries the client's credential and nothing else: the bridge's
    *  instance key would authenticate any anonymous caller as a service. */
   private async probeRealtimeAdmission(
     tenantSlug: string,
     credential: { apiSecret?: string; token?: string; accessToken?: string },
-  ): Promise<{ tenantRelay: boolean; subjectId: string | undefined } | null> {
+  ): Promise<RealtimeGrant | null> {
     if (!this.apiBaseUrl) {
       logger.warn('Realtime admission probe has no API base URL configured');
       return null;
@@ -462,12 +486,7 @@ class SocketIOServer {
       });
 
       if (!probe.ok) return null;
-      const admission: unknown = await probe.json();
-      if (!isRecord(admission)) return { tenantRelay: false, subjectId: undefined };
-      return {
-        tenantRelay: admission.tenantRelay === true,
-        subjectId: canonicalSubjectId(admission.subjectId),
-      };
+      return readRealtimeGrant(await probe.json());
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       logger.warn(`Realtime admission probe failed: ${reason}`);
@@ -562,12 +581,18 @@ class SocketIOServer {
     target.emit('status', status);
   }
 
+  /** Emit a storage event to the sockets granted its category, read from `colName`. An event naming
+   *  no category reaches no default-namespace socket: the tenant room holds members whose scopes
+   *  do not cover every category. */
   broadcastStorageEvent(eventType: 'create' | 'update' | 'delete', data: Payload, tenantSlug?: string): void {
-    const target = this.emitTarget(tenantSlug);
-    if (!target) return;
+    if (!this.io) return;
+    if (!tenantSlug) {
+      logger.warn('Refusing to broadcast without a tenant slug');
+      return;
+    }
 
     const clientCount = this.clients.size;
-    logger.debug(`Broadcasting storage ${eventType} event to ${clientCount} connected clients${tenantSlug ? ` (tenant: ${tenantSlug})` : ''}`);
+    logger.debug(`Broadcasting storage ${eventType} event to ${clientCount} connected clients (tenant: ${tenantSlug})`);
 
     if (clientCount === 0) {
       // This is normal while the service starts or a connector catches up
@@ -576,20 +601,20 @@ class SocketIOServer {
       logger.debug('No Socket.IO clients connected - event will not be delivered to frontend');
     }
 
-    target.emit(eventType, data);
+    const broadcastCollection = stringField(data, 'colName') ?? stringField(data, 'collection');
+    if (!broadcastCollection) return;
+
+    this.io.to(categoryRoom(tenantSlug, broadcastCollection)).emit(eventType, data);
 
     // Fan out to v3 `/storage` namespace clients (AAPS, xDrip+, ...). Each
     // spelling of the collection has its own room and its own `colName`, since
     // AAPS routes the event by reading `colName` from the payload. A socket
     // joins one spelling only, so it never receives the event twice.
-    if (this.storageNsp && tenantSlug) {
-      const broadcastCollection = stringField(data, 'colName') ?? stringField(data, 'collection') ?? null;
-      if (broadcastCollection) {
-        for (const clientCollection of clientCollectionNames(broadcastCollection)) {
-          this.storageNsp
-            .to(storageRoom(tenantSlug, clientCollection))
-            .emit(eventType, { ...data, colName: clientCollection });
-        }
+    if (this.storageNsp) {
+      for (const clientCollection of clientCollectionNames(broadcastCollection)) {
+        this.storageNsp
+          .to(storageRoom(tenantSlug, clientCollection))
+          .emit(eventType, { ...data, colName: clientCollection });
       }
     }
   }

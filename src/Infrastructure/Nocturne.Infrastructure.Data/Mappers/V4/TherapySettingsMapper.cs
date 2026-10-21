@@ -35,6 +35,7 @@ public static class TherapySettingsMapper
             LoopSettingsJson = model.LoopSettings is not null
                 ? JsonSerializer.Serialize(model.LoopSettings)
                 : null,
+            IsApnsProduction = model.IsAPNSProduction,
             IsDefault = model.IsDefault,
             EnteredBy = model.EnteredBy,
             IsExternallyManaged = model.IsExternallyManaged,
@@ -67,6 +68,7 @@ public static class TherapySettingsMapper
             LoopSettings = MapperHelpers.DeserializeJson<LoopProfileSettings>(
                 entity.LoopSettingsJson
             ),
+            IsAPNSProduction = entity.IsApnsProduction,
             IsDefault = entity.IsDefault,
             EnteredBy = entity.EnteredBy,
             IsExternallyManaged = entity.IsExternallyManaged,
@@ -98,6 +100,7 @@ public static class TherapySettingsMapper
         entity.LoopSettingsJson = model.LoopSettings is not null
             ? JsonSerializer.Serialize(model.LoopSettings)
             : null;
+        entity.IsApnsProduction = model.IsAPNSProduction;
         entity.EnteredBy = model.EnteredBy;
         entity.IsExternallyManaged = model.IsExternallyManaged;
         entity.StartDate = model.StartDate;

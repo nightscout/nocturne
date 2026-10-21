@@ -11,6 +11,7 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// On each tick it enumerates active tenants and calls
 /// <see cref="IDeduplicationService.ReconcileNewLinksAsync(int, int, CancellationToken)"/> for each,
 /// merging duplicate canonical groups created since the tenant's persisted cursor, then
+/// <see cref="IDeduplicationService.RepairStateSpanPrimariesAsync(CancellationToken)"/> and
 /// <see cref="IDeduplicationService.PruneSingletonLinksAsync(int, int, CancellationToken)"/>. A tenant
 /// another instance is reconciling is left to it until the next tick.
 /// </summary>
@@ -94,11 +95,12 @@ internal sealed class DeduplicationReconciliationBackgroundService : BackgroundS
 
                 var dedup = scope.ServiceProvider.GetRequiredService<IDeduplicationService>();
                 var result = await dedup.ReconcileNewLinksAsync(BatchSize, MaxBatchesPerTick, ct);
+                var repaired = await dedup.RepairStateSpanPrimariesAsync(ct);
                 var pruned = await dedup.PruneSingletonLinksAsync(PruneBatchSize, MaxPruneBatchesPerTick, ct);
 
                 _logger.LogDebug(
-                    "Reconciled deduplication for tenant {TenantSlug}: {GroupsMerged} groups merged, {LinksPruned} singleton links pruned",
-                    tenant.Slug, result.GroupsMerged, pruned);
+                    "Reconciled deduplication for tenant {TenantSlug}: {GroupsMerged} groups merged, {SpanPrimariesRepaired} state span primaries repaired, {LinksPruned} singleton links pruned",
+                    tenant.Slug, result.GroupsMerged, repaired, pruned);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

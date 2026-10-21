@@ -656,6 +656,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IBatteryService, BatteryService>();
         services.AddScoped<IProfileWriteService, ProfileWriteService>();
         services.AddScoped<IActiveProfileResolver, ActiveProfileResolver>();
+        services.AddScoped<ProfileVersionCache>();
         services.AddScoped<IBasalRateResolver, BasalRateResolver>();
         services.AddScoped<IBasalSegmentService, BasalSegmentService>();
         services.AddScoped<ISensitivityResolver, SensitivityResolver>();
@@ -828,6 +829,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IEntryDecomposer, EntryDecomposer>();
         services.AddScoped<ITreatmentDecomposer, TreatmentDecomposer>();
         services.AddScoped<IDeviceStatusDecomposer, DeviceStatusDecomposer>();
+        services.AddHostedService<ApsSnapshotCurvesBackfillService>();
         services.AddScoped<IActivityDecomposer, ActivityDecomposer>();
         services.AddScoped<IProfileDecomposer, ProfileDecomposer>();
 

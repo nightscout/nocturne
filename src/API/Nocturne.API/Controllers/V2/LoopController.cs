@@ -38,7 +38,7 @@ public class LoopController : ControllerBase
     [HttpGet("loop/status")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     // APNS configuration diagnostics, not alert data. Gated like DebugController.
-    [RequireAdmin]
+    [RequireSuperuser]
     public ActionResult<object> GetLoopStatus()
     {
         var status = _loopService.GetConfigurationStatus();

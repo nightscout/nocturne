@@ -39,7 +39,7 @@ public class ReadEndpointScopeEnforcementTests
         // Self-introspection only. Class-level [Authorize] already requires an authenticated
         // caller, and GetAllPermissions/GetPermissionTrie describe that caller's OWN grants — there
         // is no cross-category tenant read to scope. Its subject/role management actions each carry
-        // [RequireAdmin], and its token-exchange action is explicitly [AllowAnonymous].
+        // [RequireSuperuser], and its token-exchange action is explicitly [AllowAnonymous].
         "AuthorizationController",
     };
 

@@ -16,7 +16,7 @@ namespace Nocturne.API.Attributes;
 /// dual permission + scope enforcement.
 /// </remarks>
 /// <seealso cref="RequireScopeAttribute"/>
-/// <seealso cref="RequireAdminAttribute"/>
+/// <seealso cref="RequireSuperuserAttribute"/>
 /// <seealso cref="Middleware.AuthenticationMiddleware"/>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public class RequirePermissionAttribute : Attribute, IAuthorizationFilter
@@ -93,8 +93,8 @@ public class RequireAuthenticationAttribute : Attribute, IAuthorizationFilter
 /// </summary>
 /// <seealso cref="RequirePermissionAttribute"/>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
-public class RequireAdminAttribute : RequirePermissionAttribute
+public class RequireSuperuserAttribute : RequirePermissionAttribute
 {
-    public RequireAdminAttribute()
+    public RequireSuperuserAttribute()
         : base(false, "*") { }
 }

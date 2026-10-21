@@ -49,12 +49,12 @@ async function rejectionFor(failure: unknown): Promise<unknown> {
   throw new Error("getUiSettings resolved where it was expected to reject");
 }
 
-/** The reason it put in `error(status, message)`, read as the store reads it. */
+/** The reason it put in `error(status, message)`, read as `remoteErrorMessage` reads it. */
 const reasonFor = async (failure: unknown) =>
   errorMessage(await rejectionFor(failure));
 
 /**
- * `SettingsStore` renders this query's rejection through `remoteErrorMessage`,
+ * The settings pages render this query's rejection through `remoteErrorMessage`,
  * whose half of the policy is documented at `RemoteErrorPolicy`. Nothing that
  * stands in for this query can observe what its catch answers with, so the
  * answer is pinned here.

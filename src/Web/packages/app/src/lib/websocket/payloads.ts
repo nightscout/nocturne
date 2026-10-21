@@ -31,6 +31,18 @@ export function isEntryDocument(value: unknown): value is Entry {
   );
 }
 
+/** A native record document: the id the realtime store keys on is a string, and
+ *  the mills it sorts on, where present, a number. */
+export function isRecordDocument<T extends { id?: string; mills?: number }>(
+  value: unknown
+): value is T {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    (value.mills === undefined || value.mills === null || typeof value.mills === "number")
+  );
+}
+
 export function parseDataUpdate(data: unknown): Entry[] {
   return (Array.isArray(data) ? data : [data]).filter(isEntryDocument);
 }
@@ -40,6 +52,8 @@ export function parseStorageEvent(data: unknown): StorageEvent {
   return {
     colName: nonEmptyString(fields.colName) ?? nonEmptyString(fields.collection) ?? "entries",
     doc: fields.doc || fields.document || data,
+    recordType: nonEmptyString(fields.recordType),
+    id: nonEmptyString(fields.id),
   };
 }
 

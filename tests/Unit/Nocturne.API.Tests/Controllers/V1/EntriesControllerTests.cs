@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Extensions;
 using Xunit;
 using Nocturne.Core.Contracts.Entries;
@@ -451,7 +452,7 @@ public class EntriesControllerTests
     }
 
     [Theory]
-    [InlineData("sgv")]
+    [InlineData("foo")]
     [InlineData("0123456789abcdef0123456")]
     public async Task DeleteEntry_NonIdSpec_AnswersBadRequestWithoutDeleting(string spec)
     {
@@ -506,6 +507,80 @@ public class EntriesControllerTests
 
         var body = JsonSerializer.SerializeToElement(result.Should().BeOfType<OkObjectResult>().Subject.Value);
         body.GetProperty("deletedCount").GetInt64().Should().Be(4);
+    }
+
+    [Theory]
+    [InlineData("sgv", "?find[date][$gte]=1704067200000", "find[date][$gte]=1704067200000&find[type]=sgv")]
+    [InlineData("mbg", "?find[date][$gte]=1704067200000&token=x", "find[date][$gte]=1704067200000&token=x&find[type]=mbg")]
+    [InlineData("cal", "?find%5Bdate%5D%5B%24lte%5D=1704067200000", "find%5Bdate%5D%5B%24lte%5D=1704067200000&find[type]=cal")]
+    [InlineData("sgv", "?find[type]=mbg&find[date][$gte]=1704067200000", "find[date][$gte]=1704067200000&find[type]=sgv")]
+    [InlineData("*", "?find[date][$lte]=1704067200000", "find[date][$lte]=1704067200000")]
+    [InlineData("*", "?find[type]=mbg&find[date][$lte]=1704067200000", "find[date][$lte]=1704067200000")]
+    public async Task DeleteEntry_TypeSpecWithAFind_DeletesThroughTheBulkDeleteWithThePathType(
+        string spec, string queryString, string expectedFind)
+    {
+        var controller = ControllerWithScope(Scope.FullAccess, queryString);
+        _mockEntryService
+            .Setup(x => x.DeleteEntriesAsync(expectedFind, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(4);
+
+        var result = await controller.DeleteEntry(spec);
+
+        var body = JsonSerializer.SerializeToElement(result.Should().BeOfType<OkObjectResult>().Subject.Value);
+        body.GetProperty("deletedCount").GetInt64().Should().Be(4);
+        _mockEntryService.Verify(
+            x => x.DeleteEntryAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
+    }
+
+    [Theory]
+    [InlineData("sgv", "")]
+    [InlineData("*", "")]
+    [InlineData("sgv", "?token=x")]
+    [InlineData("sgv", "?find[type]=sgv")]
+    [InlineData("*", "?find[type]=sgv")]
+    [InlineData("mbg", "?find={}")]
+    [InlineData("mbg", "?find[]=")]
+    public async Task DeleteEntry_TypeSpecWithNoConditionBesidesTheType_IsRefusedWithoutDeleting(
+        string spec, string queryString)
+    {
+        var controller = ControllerWithScope(Scope.FullAccess, queryString);
+
+        var result = await controller.DeleteEntry(spec);
+
+        var body = JsonSerializer.SerializeToElement(
+            result.Should().BeOfType<BadRequestObjectResult>().Subject.Value);
+        body.GetProperty("message").GetString().Should().Be("Find query parameter is required for bulk delete");
+        _mockEntryService.Verify(
+            x => x.DeleteEntriesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
+    }
+
+    [Theory]
+    [InlineData("sgv")]
+    [InlineData("*")]
+    public async Task DeleteEntry_TypeSpec_NeedsTheBulkDeleteScope(string spec)
+    {
+        var controller = ControllerWithScope(Scope.GlucoseReadWrite, "?find[date][$gte]=1704067200000");
+
+        var result = await controller.DeleteEntry(spec);
+
+        result.Should().BeOfType<ForbidResult>();
+        _mockEntryService.Verify(
+            x => x.DeleteEntriesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
+    }
+
+    private EntriesController ControllerWithScope(string scope, string queryString)
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.QueryString = new QueryString(queryString);
+        httpContext.Items["GrantedScopes"] = Scope.Normalize([scope]);
+        _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+        return _controller;
     }
 
     private static void AssertDeleteStatus(ActionResult result, long count)
