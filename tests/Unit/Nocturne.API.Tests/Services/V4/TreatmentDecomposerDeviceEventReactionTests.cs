@@ -71,6 +71,7 @@ public class TreatmentDecomposerDeviceEventReactionTests : IDisposable
             Mock.Of<IProfileDecomposer>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
+            TempBasalTestDeps.Unscheduled(),
             audit,
             NullLogger<TreatmentDecomposer>.Instance,
             reactor.Object);

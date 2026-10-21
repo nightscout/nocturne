@@ -13,6 +13,7 @@
 		getSuggestions as getCompressionLowSuggestions,
 		triggerDetection as triggerCompressionLowDetection
 	} from '$api/generated/compressionLows.generated.remote';
+	import { getRejectedUploads } from '$api/generated/rejectedUploads.generated.remote';
 	import { contextResource } from '$lib/hooks/resource-context.svelte';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -30,6 +31,9 @@
 	);
 
 	const suggestions = $derived(suggestionsResource.current ?? []);
+
+	const rejectedUploads = getRejectedUploads({ limit: 1 });
+	const rejectedCount = $derived(rejectedUploads.current?.pagination?.total ?? 0);
 
 	const pendingCount = $derived(
 		suggestions.filter((s: CompressionLowSuggestion) => s.status?.toLowerCase() === 'pending')
@@ -144,6 +148,25 @@
 						<ChevronRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/link:translate-x-0.5" aria-hidden="true" />
 					</a>
 				</li>
+				{#if rejectedUploads.current}
+				<li>
+					<a
+						href={resolve("/reports/data-quality/rejected-uploads")}
+						class="group/link -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
+					>
+						<div class="min-w-0 flex-1">
+							<div class="font-medium text-foreground">Rejected Uploads</div>
+							<div class="text-sm text-muted-foreground">
+								Records an uploader sent that Nocturne could not store
+							</div>
+							<div class="mt-1 text-sm text-muted-foreground tabular-nums">
+								{rejectedCount} records
+							</div>
+						</div>
+						<ChevronRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/link:translate-x-0.5" aria-hidden="true" />
+					</a>
+				</li>
+				{/if}
 			</ul>
 		</section>
 

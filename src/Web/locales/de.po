@@ -2573,6 +2573,7 @@ msgstr "Wähle einen Zeitraum aus, um bestimmte Daten erneut zu synchronisieren.
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 msgid "From"
@@ -6840,8 +6841,10 @@ msgstr "<0/> Veraltet"
 msgid "<0/> Inactive"
 msgstr "<0/> Inaktiv"
 
+#. 0: rejectedCount
 #. 0: formatNumber(allRows.length)
 #. 0: formatCount(col.migrated)
+#: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "{0} records"
@@ -7897,6 +7900,7 @@ msgstr "Datensätze suchen..."
 #: src/lib/components/treatments/DataTableToolbar.svelte
 #: src/lib/components/treatments/DataTableToolbar.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 msgid "Clear"
 msgstr "Löschen"
 
@@ -10968,6 +10972,7 @@ msgid "Selected Target"
 msgstr "Ausgewähltes Ziel"
 
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 msgid "Reason"
 msgstr "Grund"
 
@@ -11726,6 +11731,7 @@ msgid "90th %ile"
 msgstr "90. Perzentil"
 
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/sensor-integrity/+page.svelte
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "<0/> Data Quality"
@@ -27216,4 +27222,113 @@ msgstr ""
 
 #: src/lib/components/alerts/ChannelsSection.svelte
 msgid "Recipient"
+msgstr ""
+
+#: src/lib/components/alerts/AlertRuleRow.svelte
+msgid "Needs review"
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "Part of this rule's conditions is malformed, so the rule may not alert as set. Edit its conditions and save it."
+msgstr ""
+
+#. 0: needsReview
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "{0} alert rules need review."
+msgstr ""
+
+#. 0: needsReview === 1 ? "1 alert rule needs review." \\: `${needsReview} alert rules need review.`
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "{0} An update changed or turned off rules set up in an older format, or their conditions may not alert as set. They are marked below."
+msgstr ""
+
+#: src/lib/components/shared/SkippedRecordsNote.svelte
+msgid "1 record could not be stored. It is listed under"
+msgstr ""
+
+#. 0: formatNumber(refused)
+#: src/lib/components/shared/SkippedRecordsNote.svelte
+msgid "{0} records could not be stored. They are listed under"
+msgstr ""
+
+#: src/lib/components/shared/SkippedRecordsNote.svelte
+#: src/routes/(authenticated)/reports/data-quality/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Rejected Uploads"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/+page.svelte
+msgid "Records an uploader sent that Nocturne could not store"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Error Loading Rejected Uploads"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Rejected Uploads - Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Records an uploader sent that Nocturne answered but could not store, because a value in them could not be stored as sent. Most uploaders treat them as saved, so they are not in your data. Each is listed once, with how many times it was sent. Long text in a record is shortened here."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "<0/> Export this page"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "<0/> Clear this page"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "No rejected uploads."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Last sent"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Times sent"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Record"
+msgstr ""
+
+#. 0: formatDateTime(row.firstSeenAt)
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "First {0}"
+msgstr ""
+
+#. 0: formatNumber(row.payloadBytes ?? 0)
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Shortened from {0} bytes."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "<0/> Newer"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Older <0/>"
+msgstr ""
+
+#. 0: formatNumber(offset + 1); 1: formatNumber(offset + rows.length); 2: formatNumber(total)
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "{0}–{1} of {2}"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Clear rejected uploads"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Clearing..."
+msgstr ""
+
+#. 0: formatNumber(rows.length)
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Remove the {0} rejected uploads on this page? Export them first to keep a copy. They are not in your data and cannot be recovered once cleared. Uploads not on this page are kept."
 msgstr ""

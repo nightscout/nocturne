@@ -146,6 +146,60 @@ public class NulSanitizationTests : IDisposable
                 + "(a NUL would serialize into the audit row's own jsonb column as this escape)");
     }
 
+    [Fact]
+    public async Task AnUnpairedSurrogate_IsReplacedSoTheRowCanBeStored()
+    {
+        await using (var ctx = _db.CreateContext())
+        {
+            ctx.MeterGlucose.Add(NewReading(device: "a\uD800b\uDC00c\U0001F600"));
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var verify = _db.CreateContext();
+        (await verify.MeterGlucose.SingleAsync()).Device.Should().Be("a\uFFFDb\uFFFDc\U0001F600");
+    }
+
+    [Fact]
+    public async Task AFitToColumnValue_IsCutToItsColumn()
+    {
+        await using (var ctx = _db.CreateContext())
+        {
+            ctx.MeterGlucose.Add(NewReading(device: new string('d', 300)));
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var verify = _db.CreateContext();
+        (await verify.MeterGlucose.SingleAsync()).Device.Should().Be(new string('d', 256));
+    }
+
+    [Fact]
+    public async Task AFitToColumnCut_NeverSplitsASurrogatePair()
+    {
+        await using (var ctx = _db.CreateContext())
+        {
+            ctx.MeterGlucose.Add(NewReading(device: new string('d', 255) + "\U0001F600" + "tail"));
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var verify = _db.CreateContext();
+        (await verify.MeterGlucose.SingleAsync()).Device.Should().Be(new string('d', 255));
+    }
+
+    [Fact]
+    public async Task AnIdentifier_IsNeverCut()
+    {
+        var reading = NewReading(device: "meter");
+        reading.LegacyId = new string('i', 300);
+        await using (var ctx = _db.CreateContext())
+        {
+            ctx.MeterGlucose.Add(reading);
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var verify = _db.CreateContext();
+        (await verify.MeterGlucose.SingleAsync()).LegacyId.Should().HaveLength(300);
+    }
+
     private MeterGlucoseEntity NewReading(string device, string? app = null) => new()
     {
         Id = Guid.CreateVersion7(),

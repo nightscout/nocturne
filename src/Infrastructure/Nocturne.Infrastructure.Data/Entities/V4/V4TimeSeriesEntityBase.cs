@@ -53,6 +53,7 @@ public abstract class V4TimeSeriesEntityBase
     /// </summary>
     [Column("device")]
     [MaxLength(256)]
+    [FitToColumn]
     public string? Device { get; set; }
 
     /// <summary>
@@ -60,6 +61,7 @@ public abstract class V4TimeSeriesEntityBase
     /// </summary>
     [Column("app")]
     [MaxLength(256)]
+    [FitToColumn]
     public string? App { get; set; }
 
     /// <summary>

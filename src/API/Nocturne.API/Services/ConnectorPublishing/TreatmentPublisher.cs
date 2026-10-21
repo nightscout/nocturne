@@ -107,7 +107,15 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
             using var scope = UpstreamFingerprintScope.Open(fingerprints);
             var written = await _treatmentService.CreateTreatmentsAsync(list, cancellationToken);
             RecordSkippedDeleted(written.SkippedDeleted);
+            RecordRefused(written.Rejected.Count);
             return true;
+        }
+        catch (TreatmentBatchFailedException failed) when (!cancellationToken.IsCancellationRequested)
+        {
+            RecordSkippedDeleted(failed.Written.SkippedDeleted);
+            RecordRefused(failed.Written.Rejected.Count);
+            Logger.LogError(failed, "Failed to publish treatments for {Source}", source);
+            return false;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -233,7 +241,7 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
             var programmedRate = resolve(record.StartMills);
             record.ScheduledRate = programmedRate;
 
-            if (Math.Abs(record.Rate - programmedRate) > rateTolerance)
+            if (record.Rate is { } rate && Math.Abs(rate - programmedRate) > rateTolerance)
             {
                 record.Origin = TempBasalOrigin.Algorithm;
                 reclassified++;

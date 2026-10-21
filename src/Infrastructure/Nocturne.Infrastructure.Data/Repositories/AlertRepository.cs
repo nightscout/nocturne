@@ -1,7 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Infrastructure.Data.Converters;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -22,14 +25,19 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 public class AlertRepository : IAlertRepository
 {
     private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
+    private readonly ILogger<AlertRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AlertRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The database context factory.</param>
-    public AlertRepository(IDbContextFactory<NocturneDbContext> contextFactory)
+    /// <param name="logger">Reports enabled rules that cannot be read.</param>
+    public AlertRepository(
+        IDbContextFactory<NocturneDbContext> contextFactory,
+        ILogger<AlertRepository>? logger = null)
     {
         _contextFactory = contextFactory;
+        _logger = logger ?? NullLogger<AlertRepository>.Instance;
     }
 
     /// <summary>
@@ -44,15 +52,63 @@ public class AlertRepository : IAlertRepository
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
         context.TenantId = tenantId;
 
-        return await context.AlertRules
+        return await ReadEnabledRulesAsync(context, tenantId, ct);
+    }
+
+    /// <summary>
+    /// The tenant's enabled rules, less any whose condition type or severity no enum member has.
+    /// </summary>
+    /// <remarks>
+    /// The enum converter throws on such a value, which fails the whole read, so one stale row
+    /// would stop every rule of the tenant evaluating. Each skipped rule is logged as an error
+    /// instead, every time it is skipped.
+    /// </remarks>
+    private async Task<List<AlertRuleSnapshot>> ReadEnabledRulesAsync(
+        NocturneDbContext context, Guid tenantId, CancellationToken ct)
+    {
+        try
+        {
+            return await EnabledRules(context, tenantId, []).ToListAsync(ct);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            var unreadable = await context.Database
+                .SqlQuery<StoredRuleEnums>(
+                    $"""SELECT id AS "Id", condition_type AS "ConditionType", severity AS "Severity" FROM alert_rules WHERE tenant_id = {tenantId} AND is_enabled""")
+                .ToListAsync(ct);
+            unreadable.RemoveAll(r =>
+                EnumMemberValueConverter<AlertConditionType>.CanRead(r.ConditionType)
+                && EnumMemberValueConverter<AlertRuleSeverity>.CanRead(r.Severity));
+            if (unreadable.Count == 0)
+                throw;
+
+            foreach (var rule in unreadable)
+            {
+                _logger.LogError(
+                    "Alert rule {AlertRuleId} for tenant {TenantId} is not evaluated: condition type '{ConditionType}' or severity '{Severity}' is not one the engine knows",
+                    rule.Id, tenantId, rule.ConditionType, rule.Severity);
+            }
+
+            return await EnabledRules(context, tenantId, unreadable.Select(r => r.Id).ToList()).ToListAsync(ct);
+        }
+    }
+
+    private static IQueryable<AlertRuleSnapshot> EnabledRules(
+        NocturneDbContext context, Guid tenantId, List<Guid> excluded) =>
+        context.AlertRules
             .AsNoTracking()
-            .Where(r => r.TenantId == tenantId && r.IsEnabled)
+            .Where(r => r.TenantId == tenantId && r.IsEnabled && !excluded.Contains(r.Id))
             .OrderBy(r => r.SortOrder)
             .Select(r => new AlertRuleSnapshot(
                 r.Id, r.TenantId, r.Name, r.ConditionType,
                 r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
-                r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass))
-            .ToListAsync(ct);
+                r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass));
+
+    private sealed class StoredRuleEnums
+    {
+        public Guid Id { get; init; }
+        public string ConditionType { get; init; } = string.Empty;
+        public string Severity { get; init; } = string.Empty;
     }
 
     /// <inheritdoc/>
@@ -440,16 +496,7 @@ public class AlertRepository : IAlertRepository
             await using var context = await _contextFactory.CreateDbContextAsync(ct);
             context.TenantId = tenantId;
 
-            var rows = await context.AlertRules
-                .AsNoTracking()
-                .Where(r => r.IsEnabled)
-                .OrderBy(r => r.SortOrder)
-                .Select(r => new AlertRuleSnapshot(
-                    r.Id, r.TenantId, r.Name, r.ConditionType,
-                    r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
-                    r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass))
-                .ToListAsync(ct);
-            results.AddRange(rows);
+            results.AddRange(await ReadEnabledRulesAsync(context, tenantId, ct));
         }
 
         return results;

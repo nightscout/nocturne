@@ -26,11 +26,22 @@ public class HistoryClampLiftPremiseTests
         @"^\s*(CURRENT_TIMESTAMP|now\(\)|'[^']*'(::[a-z\[\]]+)?|-?\d+(\.\d+)?|true|false|NULL)\s*$",
         RegexOptions.IgnoreCase);
 
+    /// <summary>
+    /// Raw SQL upserts that never run lifted: they go through neither <c>SaveChangesAsync</c> nor
+    /// <c>WriteWithHistoryClampLiftedAsync</c>, so they read under the caller's clamp.
+    /// </summary>
+    private static readonly string[] UnliftedUpserts =
+    [
+        // rejected_uploads is unclamped, and its upsert runs as a plain query.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/RejectedUploadRepository.cs",
+    ];
+
     [Fact]
-    public void NoSqlUpserts()
+    public void NoSqlUpsertsButTheUnliftedOnes()
     {
         Matching(new Regex(@"\bON\s+CONFLICT\b", RegexOptions.IgnoreCase))
-            .Should().BeEmpty("an INSERT … ON CONFLICT DO UPDATE writes and returns an existing row");
+            .Should().BeEquivalentTo(UnliftedUpserts,
+                "an INSERT … ON CONFLICT DO UPDATE run lifted would write and return an existing row the clamp hides");
     }
 
     [Fact]

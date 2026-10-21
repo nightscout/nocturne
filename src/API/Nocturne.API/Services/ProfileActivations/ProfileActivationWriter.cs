@@ -1,4 +1,5 @@
 using Nocturne.API.Services.Caching;
+using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 
@@ -38,11 +39,14 @@ public sealed class ProfileActivationWriter
 
     private readonly IProfileActivationRepository _repository;
     private readonly ITenantCache _cache;
+    private readonly ITempBasalRateReresolver _tempBasalRates;
 
-    public ProfileActivationWriter(IProfileActivationRepository repository, ITenantCache cache)
+    public ProfileActivationWriter(
+        IProfileActivationRepository repository, ITenantCache cache, ITempBasalRateReresolver tempBasalRates)
     {
         _repository = repository;
         _cache = cache;
+        _tempBasalRates = tempBasalRates;
     }
 
     /// <summary>
@@ -68,22 +72,40 @@ public sealed class ProfileActivationWriter
             return null;
 
         await ApplyAsync(settlement, except: written.Id, ct);
-        if (stored is not null && MovedFrom(stored, written))
-            await ResettleNeighboursOfAsync([stored], ct);
+        var moved = stored is not null && MovedFrom(stored, written);
+        if (moved)
+            await ResettleNeighboursOfAsync([stored!], ct);
         await InvalidateAsync(ct);
+        await _tempBasalRates.AfterActivationsChangedAsync(
+            moved ? [Span(written), Span(stored!)] : [Span(written)], ct);
         return written;
     }
 
     /// <summary>Settles again the live neighbours of the removed activations, then clears the cache.</summary>
     public async Task ResettleAfterRemovalAsync(IReadOnlyCollection<Guid> removedIds, CancellationToken ct)
     {
-        if (removedIds.Count > 0)
-            await ResettleNeighboursOfAsync(await _repository.GetIncludingDeletedAsync(removedIds, ct), ct);
+        IReadOnlyList<ProfileActivation> removed =
+            removedIds.Count > 0 ? await _repository.GetIncludingDeletedAsync(removedIds, ct) : [];
+        await ResettleNeighboursOfAsync(removed, ct);
         await InvalidateAsync(ct);
+        await _tempBasalRates.AfterActivationsChangedAsync(removed.Select(Span).ToList(), ct);
     }
+
+    private static (string ProfileName, DateTime Start, DateTime? End) Span(ProfileActivation activation) =>
+        (activation.BaseProfileName, activation.StartTimestamp, activation.EndTimestamp);
 
     public Task InvalidateAsync(CancellationToken ct) =>
         _cache.RemoveFamilyAsync(TenantCacheFamily.ProfileActivations, ct);
+
+    /// <summary>
+    /// Clears the cache and re-resolves every schedule-derived temp basal rate, after activations
+    /// were removed in bulk without being read.
+    /// </summary>
+    public async Task AfterBulkRemovalAsync(CancellationToken ct)
+    {
+        await InvalidateAsync(ct);
+        await _tempBasalRates.AfterProfilesChangedAsync([], ct);
+    }
 
     /// <summary>
     /// Each live activation of the families of <paramref name="removed"/> that one of them ended or

@@ -737,7 +737,7 @@ public class StatisticsControllerTests
 
         synthesized.Should().NotBeNull();
         synthesized!.Should().OnlyContain(t => t.Origin == TempBasalOrigin.Scheduled);
-        synthesized.Select(t => (t.StartTimestamp, t.EndTimestamp, t.Rate)).Should().Equal(
+        synthesized.Select(t => (t.StartTimestamp, t.EndTimestamp, t.Rate!.Value)).Should().Equal(
             segments.Select(s => (
                 DateTimeOffset.FromUnixTimeMilliseconds(s.StartMills).UtcDateTime,
                 (DateTime?)DateTimeOffset.FromUnixTimeMilliseconds(s.EndMills).UtcDateTime,

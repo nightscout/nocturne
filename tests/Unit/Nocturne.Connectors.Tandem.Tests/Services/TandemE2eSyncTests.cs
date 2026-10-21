@@ -749,6 +749,8 @@ public class TandemE2eSyncTests
         public IMetadataPublisher Metadata => this;
         public int SkippedDeleted => 0;
 
+        public int Refused => 0;
+
         private static Task<bool> Record<T>(List<T> sink, IEnumerable<T> records)
         {
             sink.AddRange(records);

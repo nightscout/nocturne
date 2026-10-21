@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
@@ -217,15 +218,10 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 cancellationToken
             );
 
-            var createdTreatment = created.FirstOrDefault();
-            if (createdTreatment == null)
-            {
-                return CreateV3ErrorResponse(
-                    500,
-                    "Failed to create treatment",
-                    "Treatment creation failed"
-                );
-            }
+            if (created.Rejected is [{ Reason: var reason }])
+                return CreateV3ErrorResponse(400, "Treatment cannot be stored", reason);
+
+            var createdTreatment = created[0];
 
             _logger.LogDebug("Successfully created V3 treatment {Id}", createdTreatment.Id);
 
@@ -294,10 +290,10 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 cancellationToken
             );
 
-            var createdArray = createdTreatments.ToArray();
+            var createdArray = TreatmentEcho.InSubmittedOrder(createdTreatments);
             _logger.LogDebug(
                 "Successfully created {Count} V3 treatments via bulk operation",
-                createdArray.Length
+                createdTreatments.Count
             );
 
             return StatusCode(201, createdArray);

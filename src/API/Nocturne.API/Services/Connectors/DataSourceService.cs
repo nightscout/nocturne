@@ -1014,7 +1014,7 @@ public class DataSourceService : IDataSourceService
             db.StateSpans.Where(s => s.Source == source), _auditContext, scope, cancellationToken);
         stateSpansDeleted += await db.AuditedSoftDeleteAsync(
             db.ProfileActivations.FromSource(source), _auditContext, scope, cancellationToken);
-        await _profileActivationWriter.InvalidateAsync(cancellationToken);
+        await _profileActivationWriter.AfterBulkRemovalAsync(cancellationToken);
 
         if (allowReimport)
             await AllowSourceReimportAsync(db, source, scope, cancellationToken);

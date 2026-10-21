@@ -35,12 +35,25 @@ internal sealed class ProfileVersionCache
         string profileName,
         CancellationToken ct)
         where TRecord : class, IV4Record, IProfileScoped =>
-        _cache.GetOrCreateLocalAsync(
-            $"profile-versions:{typeof(TRecord).Name}:{profileName}",
-            async () => (await repo.GetByProfileNameAsync(profileName, ct))
-                .OrderByDescending(v => v.Timestamp)
-                .ToArray(),
-            Ttl);
+        _cache.GetOrCreateLocalAsync(Key<TRecord>(profileName), () => LoadAsync(repo, profileName, ct), Ttl);
+
+    /// <summary>
+    /// Reloads the cached versions of <paramref name="profileName"/>, for a reader that must see a
+    /// version just written rather than wait out the TTL.
+    /// </summary>
+    public async Task RefreshAsync<TRecord>(
+        IProfileScopedRepository<TRecord> repo, string profileName, CancellationToken ct)
+        where TRecord : class, IV4Record, IProfileScoped =>
+        _cache.SetLocal(Key<TRecord>(profileName), await LoadAsync(repo, profileName, ct), Ttl);
+
+    private static string Key<TRecord>(string profileName) => $"profile-versions:{typeof(TRecord).Name}:{profileName}";
+
+    private static async Task<TRecord[]> LoadAsync<TRecord>(
+        IProfileScopedRepository<TRecord> repo, string profileName, CancellationToken ct)
+        where TRecord : class, IV4Record, IProfileScoped =>
+        (await repo.GetByProfileNameAsync(profileName, ct))
+            .OrderByDescending(v => v.Timestamp)
+            .ToArray();
 
     /// <summary>
     /// The newest of <paramref name="newestFirst"/> at-or-before <paramref name="timestamp"/>; before the

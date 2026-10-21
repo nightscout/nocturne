@@ -11,7 +11,6 @@ Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.PostProfile_WithMult
 Nocturne.API.Tests.Integration.Parity.V1.TimeQueryParityTests.GetTimesEchoWithPrefix_ReturnsSameShape | times/echo omits req.query.find
 Nocturne.API.Tests.Integration.Parity.V1.TimeQueryParityTests.GetTimesEchoWithRegex_ReturnsSameShape | times/echo omits req.query.find
 Nocturne.API.Tests.Integration.Parity.V1.TimeQueryParityTests.GetTimesEcho_ReturnsSameShape | times/echo omits req.query.find
-Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.PostTreatment_TempBasal_ReturnsSameShape | a percent temp basal is stored as a 0 U/h absolute temp and served without percent
 Nocturne.API.Tests.Integration.Parity.V2.DDataParityTests.GetDDataAt_IsoDateString_ReturnsSameShape | ddata/at serves sgvs newest first and without rssi; the frame omits entries, dbstats sizes, a null lastProfileFromSwitch and page
 Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_Empty_ReturnsSameShape | v2 properties omit buckets/upbat/bgnow/pump/openaps/loop/bwp and differ on age-plugin and dbsize empty states; the with-data cases also compare Nightscout before it reloads
 Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_Pretty_ReturnsSameShape | v2 properties omit buckets/upbat/bgnow/pump/openaps/loop/bwp and differ on age-plugin and dbsize empty states; the with-data cases also compare Nightscout before it reloads

@@ -41,6 +41,9 @@ public class ShareDataCategoriesGuardTests
         // Time-series whose member clamp is not yet decided.
         "alert_deliveries", "alert_excursion_mutes", "discrepancy_analyses", "discrepancy_details",
         "linked_records",
+
+        // Owner/tenant.settings-only endpoint; history-clamped callers are refused.
+        "rejected_uploads",
     };
 
     private static readonly Lazy<IReadOnlySet<string>> TenantScopedTables = new(() =>

@@ -377,7 +377,7 @@ public sealed class ProfileActivationResolverTests : IDisposable
         await resolver.GetAtAsync(T0 + Hour);
 
         var written = Store(0, "Rhys");
-        await new ProfileActivationWriter(_repository.Object, cache).InvalidateAsync(CancellationToken.None);
+        await new ProfileActivationWriter(_repository.Object, cache, TempBasalTestDeps.NoReresolution()).InvalidateAsync(CancellationToken.None);
 
         (await Resolver(cache).GetAtAsync(T0 + Hour))!.Activation.Id.Should().Be(written.Id);
     }
