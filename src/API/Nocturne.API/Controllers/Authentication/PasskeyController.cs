@@ -281,30 +281,40 @@ public class PasskeyController : ControllerBase
 
         var tenantId = _tenantAccessor.TenantId;
 
+        PasskeyCredentialResult result;
         try
         {
-            var result = await _passkeyService.CompleteRegistrationAsync(
+            result = await _passkeyService.CompleteRegistrationAsync(
                 request.AttestationResponseJson, request.ChallengeToken, tenantId,
                 expectedSubjectId: subjectId.Value, request.Label);
-
-            // One spent recovery code buys one enrolment: the credential it authorized now exists,
-            // so the session that authorized it is over even though its token has time left.
-            Response.Cookies.Delete(RecoveryCookieName, RecoveryCookieOptions());
-
-            await using var db = await _dbContextFactory.CreateAsync();
-            await LoginCodeService.VoidRecoveryCodesAsync(db, subjectId.Value, HttpContext.RequestAborted);
-
-            return Ok(new PasskeyRegisterCompleteResponse
-            {
-                CredentialId = result.CredentialId,
-                SubjectId = result.SubjectId,
-            });
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Passkey registration completion failed");
             return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Bad Request");
         }
+
+        // One spent recovery code buys one enrolment: the credential it authorized now exists,
+        // so the session that authorized it is over even though its token has time left.
+        Response.Cookies.Delete(RecoveryCookieName, RecoveryCookieOptions());
+
+        // The passkey exists whatever happens here, so a failure is logged rather than reported:
+        // a code left outstanding is refused at redemption anyway, since the member can sign in.
+        try
+        {
+            await using var db = await _dbContextFactory.CreateAsync();
+            await LoginCodeService.VoidRecoveryCodesAsync(db, subjectId.Value, HttpContext.RequestAborted);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not void outstanding recovery codes for {SubjectId}", subjectId.Value);
+        }
+
+        return Ok(new PasskeyRegisterCompleteResponse
+        {
+            CredentialId = result.CredentialId,
+            SubjectId = result.SubjectId,
+        });
     }
 
     /// <summary>

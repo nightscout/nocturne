@@ -16,6 +16,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
@@ -588,6 +589,37 @@ public class PasskeyControllerTests : IDisposable
 
         await using var check = _db.CreateContext(_tenantId);
         (await check.LoginCodes.AsNoTracking().SingleAsync()).ConsumedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RegisterComplete_StillSucceedsWhenVoidingRecoveryCodesFails()
+    {
+        var subjectId = await SeedMemberAsync("orphan");
+        GiveRecoverySession(subjectId, "passkey:manage");
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId));
+        var failingContexts = new Mock<INocturneDbContextFactory>();
+        failingContexts
+            .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("database unavailable"));
+        var controller = new PasskeyController(
+            _passkeyService.Object, _totpService.Object, _recoveryCodeService.Object, _jwtService.Object,
+            _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
+            _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(failingContexts.Object),
+            failingContexts.Object, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
+        {
+            ControllerContext = _controller.ControllerContext,
+        };
+
+        var result = await controller.RegisterComplete(new PasskeyRegisterCompleteRequest
+        {
+            AttestationResponseJson = "{}",
+            ChallengeToken = "token",
+        });
+
+        result.Result.Should().BeOfType<OkObjectResult>("the passkey was saved");
     }
 
     private async Task SeedMembershipAsync(Guid subjectId, Guid tenantId)
