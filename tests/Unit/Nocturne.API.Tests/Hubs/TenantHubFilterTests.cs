@@ -9,6 +9,8 @@ using Moq;
 using Nocturne.API.Extensions;
 using Nocturne.API.Hubs;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Audit;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
@@ -17,16 +19,18 @@ using Xunit;
 namespace Nocturne.API.Tests.Hubs;
 
 /// <summary>
-/// Covers <see cref="TenantHubFilter"/>, which carries the tenant resolved on the upgrade handshake
-/// into each hub invocation. SignalR builds a fresh DI scope per invocation, so the scoped
-/// <see cref="ITenantAccessor"/> a service resolved from
-/// <see cref="HubInvocationContext.ServiceProvider"/> inside a method body sees is the invocation's,
-/// not the handshake request's.
+/// Covers <see cref="TenantHubFilter"/>, which sets the reader the upgrade request recorded on each
+/// hub invocation and lifetime scope. SignalR builds a fresh DI scope per invocation, and for long
+/// polling serves the connection from a copy of the upgrade request whose scope never ran the
+/// middleware, so neither scope knows the share, the categories or the clamp until this runs.
 /// </summary>
 [Trait("Category", "Unit")]
 public class TenantHubFilterTests
 {
     private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
+    private static readonly TenantContext TenantContext =
+        new(Tenant, "default", "Default", IsActive: true, IsDemo: false);
 
     private sealed class TestHttpContextFeature : IHttpContextFeature
     {
@@ -40,99 +44,47 @@ public class TenantHubFilterTests
         }
     }
 
-    /// <summary>
-    /// A connection whose handshake resolved <see cref="Tenant"/>, with a distinct
-    /// <see cref="ITenantAccessor"/> on the handshake scope and on the invocation scope.
-    /// </summary>
-    private static (HubCallerContext Caller, ITenantAccessor Handshake, IServiceProvider Invocation, ITenantAccessor InvocationAccessor)
-        CreateConnection(bool withTenant = true)
-    {
-        var handshakeAccessor = new HttpContextTenantAccessor();
-        var handshakeServices = new ServiceCollection()
-            .AddSingleton<ITenantAccessor>(handshakeAccessor)
-            .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
-            .BuildServiceProvider();
+    private static ServiceProvider FreshScope() => new ServiceCollection()
+        .AddSingleton<ITenantAccessor>(new HttpContextTenantAccessor())
+        .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
+        .AddSingleton<IAuditContext>(new AuditContext())
+        .BuildServiceProvider();
 
-        var httpContext = new DefaultHttpContext { RequestServices = handshakeServices };
+    /// <summary>
+    /// A connection whose upgrade request resolved <see cref="Tenant"/> (unless
+    /// <paramref name="withTenant"/> is false), was narrowed by <paramref name="arrange"/> as the
+    /// middleware would narrow it, and recorded its reader. With <paramref name="longPolling"/> the
+    /// connection is then served from a copy that keeps the items but has a fresh scope.
+    /// </summary>
+    private static HubCallerContext CreateConnection(
+        bool withTenant = true, Action<ICategoryReadContext>? arrange = null, bool longPolling = false)
+    {
+        var upgrade = new DefaultHttpContext { RequestServices = FreshScope() };
         if (withTenant)
         {
-            httpContext.SetTenantContext(
-                new TenantContext(Tenant, "default", "Default", IsActive: true, IsDemo: false));
+            upgrade.SetTenantContext(TenantContext);
+            upgrade.RequestServices.GetRequiredService<ITenantAccessor>().SetTenant(TenantContext);
+        }
+
+        arrange?.Invoke(upgrade.RequestServices.GetRequiredService<ICategoryReadContext>());
+        upgrade.RecordReader();
+
+        var served = upgrade;
+        if (longPolling)
+        {
+            served = new DefaultHttpContext { RequestServices = FreshScope() };
+            foreach (var item in upgrade.Items)
+                served.Items[item.Key] = item.Value;
         }
 
         var features = new FeatureCollection();
-        features.Set<IHttpContextFeature>(new TestHttpContextFeature { HttpContext = httpContext });
+        features.Set<IHttpContextFeature>(new TestHttpContextFeature { HttpContext = served });
 
         var caller = new Mock<HubCallerContext>();
         caller.SetupGet(c => c.ConnectionId).Returns("conn-1");
         caller.SetupGet(c => c.Features).Returns(features);
         caller.SetupGet(c => c.Items).Returns(new Dictionary<object, object?>());
-
-        var invocationAccessor = new HttpContextTenantAccessor();
-        var invocationServices = new ServiceCollection()
-            .AddSingleton<ITenantAccessor>(invocationAccessor)
-            .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
-            .BuildServiceProvider();
-
-        return (caller.Object, handshakeAccessor, invocationServices, invocationAccessor);
-    }
-
-    [Fact]
-    public async Task The_invocation_scopes_accessor_is_the_one_that_gets_the_tenant()
-    {
-        // A service a method body resolves from HubInvocationContext.ServiceProvider comes from the
-        // invocation scope. The hub's own constructor dependencies do not: the dispatcher activates
-        // the hub before the filter pipeline runs, so those latch Guid.Empty whatever this sets.
-        var (caller, handshake, invocationServices, invocationAccessor) = CreateConnection();
-
-        var invocation = new HubInvocationContext(
-            caller,
-            invocationServices,
-            hub: new StubHub(),
-            hubMethod: typeof(StubHub).GetMethod(nameof(StubHub.Method), BindingFlags.Public | BindingFlags.Instance)!,
-            hubMethodArguments: []);
-
-        var reached = false;
-        await new TenantHubFilter().InvokeMethodAsync(invocation, _ =>
-        {
-            reached = true;
-            invocationAccessor.TenantId.Should().Be(Tenant, "the tenant must be set before the method runs");
-            return ValueTask.FromResult<object?>(null);
-        });
-
-        reached.Should().BeTrue();
-        invocationAccessor.TenantId.Should().Be(Tenant);
-        handshake.IsResolved.Should().BeFalse(
-            "the handshake request's scope is not the one the invocation resolves services from");
-    }
-
-    [Fact]
-    public async Task Lifetime_events_populate_their_own_scope()
-    {
-        var (caller, _, invocationServices, invocationAccessor) = CreateConnection();
-        var lifetime = new HubLifetimeContext(caller, invocationServices, new StubHub());
-
-        await new TenantHubFilter().OnConnectedAsync(lifetime, _ => Task.CompletedTask);
-
-        invocationAccessor.TenantId.Should().Be(Tenant);
-    }
-
-    [Fact]
-    public async Task A_connection_with_no_resolved_tenant_leaves_the_accessor_unset()
-    {
-        var (caller, _, invocationServices, invocationAccessor) = CreateConnection(withTenant: false);
-
-        var invocation = new HubInvocationContext(
-            caller,
-            invocationServices,
-            hub: new StubHub(),
-            hubMethod: typeof(StubHub).GetMethod(nameof(StubHub.Method), BindingFlags.Public | BindingFlags.Instance)!,
-            hubMethodArguments: []);
-
-        await new TenantHubFilter().InvokeMethodAsync(
-            invocation, _ => ValueTask.FromResult<object?>(null));
-
-        invocationAccessor.IsResolved.Should().BeFalse();
+        return caller.Object;
     }
 
     private static HubInvocationContext Invocation(HubCallerContext caller, IServiceProvider services) => new(
@@ -142,79 +94,156 @@ public class TenantHubFilterTests
         hubMethod: typeof(StubHub).GetMethod(nameof(StubHub.Method), BindingFlags.Public | BindingFlags.Instance)!,
         hubMethodArguments: []);
 
-    private static ICategoryReadContext HandshakeReader(HubCallerContext caller) =>
-        caller.GetHttpContext()!.RequestServices.GetRequiredService<ICategoryReadContext>();
+    private static async Task<IServiceProvider> InvokeAsync(HubCallerContext caller)
+    {
+        var scope = FreshScope();
+        await new TenantHubFilter().InvokeMethodAsync(
+            Invocation(caller, scope), _ => ValueTask.FromResult<object?>(null));
+        return scope;
+    }
+
+    private static void Share(ICategoryReadContext reader, bool fullHistory)
+    {
+        reader.MarkShare();
+        reader.SetVisibleCategories("glucose.read");
+        reader.SetFullHistory(fullHistory);
+    }
 
     [Fact]
-    public async Task A_share_connection_invokes_as_the_share()
+    public async Task The_invocation_scope_gets_the_tenant_before_the_method_runs()
     {
-        var (caller, _, invocationServices, _) = CreateConnection();
-        var handshake = HandshakeReader(caller);
-        handshake.MarkShare();
-        handshake.SetVisibleCategories("glucose.read");
-        handshake.SetFullHistory(true);
+        var caller = CreateConnection();
+        var scope = FreshScope();
 
-        await new TenantHubFilter().InvokeMethodAsync(
-            Invocation(caller, invocationServices), _ => ValueTask.FromResult<object?>(null));
+        var reached = false;
+        await new TenantHubFilter().InvokeMethodAsync(Invocation(caller, scope), _ =>
+        {
+            reached = true;
+            scope.GetRequiredService<ITenantAccessor>().TenantId.Should().Be(Tenant);
+            return ValueTask.FromResult<object?>(null);
+        });
 
-        var invocation = invocationServices.GetRequiredService<ICategoryReadContext>();
+        reached.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Lifetime_events_populate_their_own_scope()
+    {
+        var caller = CreateConnection();
+        var scope = FreshScope();
+
+        await new TenantHubFilter().OnConnectedAsync(
+            new HubLifetimeContext(caller, scope, new StubHub()), _ => Task.CompletedTask);
+
+        scope.GetRequiredService<ITenantAccessor>().TenantId.Should().Be(Tenant);
+    }
+
+    [Fact]
+    public async Task A_connection_with_no_resolved_tenant_leaves_the_accessor_unset()
+    {
+        var scope = await InvokeAsync(CreateConnection(withTenant: false));
+
+        scope.GetRequiredService<ITenantAccessor>().IsResolved.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_connection_whose_request_recorded_no_reader_reads_as_no_one()
+    {
+        var upgrade = new DefaultHttpContext { RequestServices = FreshScope() };
+        upgrade.SetTenantContext(TenantContext);
+        var features = new FeatureCollection();
+        features.Set<IHttpContextFeature>(new TestHttpContextFeature { HttpContext = upgrade });
+        var caller = new Mock<HubCallerContext>();
+        caller.SetupGet(c => c.Features).Returns(features);
+        caller.SetupGet(c => c.Items).Returns(new Dictionary<object, object?>());
+
+        var scope = await InvokeAsync(caller.Object);
+
+        scope.GetRequiredService<ITenantAccessor>().IsResolved.Should().BeFalse(
+            "a tenant without the reader it was narrowed by would read as an unclamped non-share");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_share_connection_invokes_as_the_share(bool longPolling)
+    {
+        var scope = await InvokeAsync(CreateConnection(arrange: r => Share(r, fullHistory: true), longPolling: longPolling));
+
+        var invocation = scope.GetRequiredService<ICategoryReadContext>();
         invocation.IsShare.Should().BeTrue("a share connection's method must not read as a non-share");
         invocation.VisibleCategoriesCsv.Should().Be("glucose.read");
         invocation.FullHistory.Should().BeTrue();
         invocation.IsHistoryClamped.Should().BeFalse();
     }
 
-    [Fact]
-    public async Task A_share_without_full_history_invokes_clamped()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_share_without_full_history_invokes_clamped(bool longPolling)
     {
-        var (caller, _, invocationServices, _) = CreateConnection();
-        var handshake = HandshakeReader(caller);
-        handshake.MarkShare();
-        handshake.SetVisibleCategories("glucose.read");
+        var scope = await InvokeAsync(CreateConnection(arrange: r => Share(r, fullHistory: false), longPolling: longPolling));
 
-        await new TenantHubFilter().InvokeMethodAsync(
-            Invocation(caller, invocationServices), _ => ValueTask.FromResult<object?>(null));
-
-        invocationServices.GetRequiredService<ICategoryReadContext>().IsHistoryClamped.Should().BeTrue();
+        scope.GetRequiredService<ICategoryReadContext>().IsHistoryClamped.Should().BeTrue();
     }
 
-    [Fact]
-    public async Task A_clamped_connection_invokes_clamped()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_clamped_connection_invokes_clamped(bool longPolling)
     {
-        var (caller, _, invocationServices, _) = CreateConnection();
-        HandshakeReader(caller).ClampMemberHistory();
+        var scope = await InvokeAsync(CreateConnection(arrange: r => r.ClampMemberHistory(), longPolling: longPolling));
 
-        await new TenantHubFilter().InvokeMethodAsync(
-            Invocation(caller, invocationServices), _ => ValueTask.FromResult<object?>(null));
-
-        var invocation = invocationServices.GetRequiredService<ICategoryReadContext>();
+        var invocation = scope.GetRequiredService<ICategoryReadContext>();
         invocation.IsHistoryClamped.Should().BeTrue("the 24-hour clamp fails open in a scope that never hears of it");
         invocation.IsShare.Should().BeFalse();
     }
 
     [Fact]
+    public async Task A_long_polling_copy_of_the_upgrade_request_reads_as_the_connection_once_connected()
+    {
+        var caller = CreateConnection(arrange: r => Share(r, fullHistory: false), longPolling: true);
+        var copy = caller.GetHttpContext()!.RequestServices;
+
+        await new TenantHubFilter().OnConnectedAsync(
+            new HubLifetimeContext(caller, FreshScope(), new StubHub()), _ => Task.CompletedTask);
+
+        copy.GetRequiredService<ITenantAccessor>().TenantId.Should().Be(Tenant);
+        copy.GetRequiredService<ICategoryReadContext>().IsShare.Should().BeTrue(
+            "hub methods read tenant data through the upgrade request's scope");
+        copy.GetRequiredService<ICategoryReadContext>().IsHistoryClamped.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task An_in_band_clamp_reaches_the_next_invocation()
     {
-        var (caller, _, _, _) = CreateConnection();
+        var caller = CreateConnection();
         var filter = new TenantHubFilter();
-        var first = new ServiceCollection()
-            .AddSingleton<ITenantAccessor>(new HttpContextTenantAccessor())
-            .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
-            .BuildServiceProvider();
-        var second = new ServiceCollection()
-            .AddSingleton<ITenantAccessor>(new HttpContextTenantAccessor())
-            .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
-            .BuildServiceProvider();
 
-        await filter.InvokeMethodAsync(Invocation(caller, first), _ =>
+        await filter.InvokeMethodAsync(Invocation(caller, FreshScope()), _ =>
         {
             HubAuthorizationState.Grant(caller, new HubAuthorization(
                 Tenant, Scope.Normalize([Scope.GlucoseRead]),
                 HubCredentialKind.Subject, Guid.NewGuid(), HistoryClamped: true));
             return ValueTask.FromResult<object?>(null);
         });
-        await filter.InvokeMethodAsync(Invocation(caller, second), _ => ValueTask.FromResult<object?>(null));
+        var second = await InvokeAsync(caller);
 
         second.GetRequiredService<ICategoryReadContext>().IsHistoryClamped.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task The_invocation_scope_carries_the_upgrade_requests_audit_actor()
+    {
+        var caller = CreateConnection();
+        var subject = Guid.NewGuid();
+        caller.GetHttpContext()!.Items[AuditContext.HttpItemKey] =
+            new AuditContext { SubjectId = subject, AuthType = "Session", Endpoint = "GET /hubs/data" };
+
+        var scope = await InvokeAsync(caller);
+
+        var audit = scope.GetRequiredService<IAuditContext>();
+        audit.SubjectId.Should().Be(subject);
+        audit.Endpoint.Should().Be("GET /hubs/data");
     }
 }

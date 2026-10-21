@@ -97,7 +97,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
     private static DefaultHttpContext ContextFor(bool shareAccess)
     {
         var services = new ServiceCollection();
-        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         // The seeded subject is a member of the seeded tenant; the middleware's membership check
         // is orthogonal to the share gate under test, so it is satisfied rather than exercised.
         services.AddSingleton(Mock.Of<ITenantMemberService>(m =>

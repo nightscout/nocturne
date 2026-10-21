@@ -30,14 +30,15 @@ public class CompressionLowHistoryClampIntegrationTests : ApiIntegrationTestBase
         : base(fixture, output) { }
 
     /// <summary>
-    /// The night three days ago, with a compression low at 03:00 UTC. With no timezone in the settings
-    /// or the profile, detection reads the night in UTC.
+    /// The night three days ago, with a compression low at 03:00 UTC, read once so a test that spans
+    /// midnight UTC seeds and detects the same night. With no timezone in the settings or the profile,
+    /// detection reads the night in UTC.
     /// </summary>
-    private static DateOnly OldNight => DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-3));
+    private readonly DateOnly _oldNight = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-3));
 
     private async Task SeedOldNightAsync(HttpClient owner)
     {
-        var start = new DateTimeOffset(OldNight.AddDays(1).ToDateTime(new TimeOnly(1, 30)), TimeSpan.Zero)
+        var start = new DateTimeOffset(_oldNight.AddDays(1).ToDateTime(new TimeOnly(1, 30)), TimeSpan.Zero)
             .ToUnixTimeMilliseconds();
         var entries = Night.Select((sgv, i) => new Entry
         {
@@ -97,7 +98,7 @@ public class CompressionLowHistoryClampIntegrationTests : ApiIntegrationTestBase
         using var clamped = await CreateHistoryClampedClientAsync();
         await SeedOldNightAsync(owner);
 
-        (await DetectAsync(owner, OldNight)).Should().BeGreaterThan(0);
+        (await DetectAsync(owner, _oldNight)).Should().BeGreaterThan(0);
         var saved = await SuggestionsAsync(owner);
         saved.Should().NotBeEmpty();
 
@@ -114,11 +115,11 @@ public class CompressionLowHistoryClampIntegrationTests : ApiIntegrationTestBase
         using var clamped = await CreateHistoryClampedClientAsync();
         await SeedOldNightAsync(owner);
 
-        (await DetectAsync(clamped, OldNight)).Should().Be(0,
+        (await DetectAsync(clamped, _oldNight)).Should().Be(0,
             "detection runs as the caller, so it sees no reading of a night outside its 24 hours");
         (await SuggestionsAsync(owner)).Should().BeEmpty();
 
-        (await DetectAsync(owner, OldNight)).Should().BeGreaterThan(0,
+        (await DetectAsync(owner, _oldNight)).Should().BeGreaterThan(0,
             "the same night yields suggestions to a reader who may see it");
     }
 }

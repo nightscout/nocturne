@@ -2219,7 +2219,11 @@ public class DeduplicationService : IDeduplicationService
             StartedAt = DateTime.UtcNow
         };
 
-        var reader = TenantReader.Of(tenantContext, _categoryReadContext ?? new CategoryReadContext());
+        var reader = TenantReader.Of(
+            tenantContext,
+            _categoryReadContext ?? throw new InvalidOperationException(
+                "Cannot start a deduplication job without the caller's read context: the job would read "
+                + "past the caller's history clamp."));
 
         _runningJobs[jobId] = status;
         _jobTenants[jobId] = tenantContext.TenantId;

@@ -387,6 +387,7 @@ app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseMiddleware<TenantSetupMiddleware>();
 app.UseMiddleware<AuthenticationMiddleware>();
 app.UseMiddleware<MemberScopeMiddleware>();
+app.UseMiddleware<ReaderRecordingMiddleware>();
 app.UseMiddleware<AuditContextMiddleware>();
 
 // There is no app.UseAuthentication() call here, and adding one would be a security regression.

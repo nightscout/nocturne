@@ -53,7 +53,7 @@ public sealed class TenantReader
     }
 
     /// <summary>The reader of <paramref name="tenant"/> narrowed by <paramref name="readContext"/>.</summary>
-    public static TenantReader Of(TenantContext? tenant, ICategoryReadContext readContext) => new(
+    internal static TenantReader Of(TenantContext? tenant, ICategoryReadContext readContext) => new(
         tenant,
         readContext.IsShare,
         readContext.IsShare ? readContext.VisibleCategoriesCsv : null,
@@ -72,11 +72,24 @@ public sealed class TenantReader
         clamp ? new(Tenant, IsShare, VisibleCategoriesCsv, FullHistory, historyClamped: true) : this;
 
     /// <summary>
-    /// Sets this reader on a scope opened for it and not yet used, such as a SignalR invocation scope.
-    /// Only narrows: <see cref="ICategoryReadContext"/> has no way to lift a share mark or a clamp.
+    /// Whether <paramref name="scope"/> still reads as no one: no tenant resolved, not a share, not
+    /// clamped. Every scope starts so, until middleware or <see cref="CarryInto"/> narrows it.
     /// </summary>
+    public static bool ReadsAsNoOne(IServiceProvider scope) =>
+        scope.GetService<ITenantAccessor>()?.IsResolved != true
+        && scope.GetService<ICategoryReadContext>() is null or { IsShare: false, IsHistoryClamped: false };
+
+    /// <summary>
+    /// Sets this reader on a scope opened for it that still <see cref="ReadsAsNoOne"/>, such as a
+    /// SignalR invocation scope.
+    /// </summary>
+    /// <exception cref="InvalidOperationException"><paramref name="scope"/> already reads as someone:
+    /// setting the tenant there would move every context of that scope.</exception>
     public void CarryInto(IServiceProvider scope)
     {
+        if (!ReadsAsNoOne(scope))
+            throw new InvalidOperationException("A reader is carried only into a scope that reads as no one.");
+
         if (Tenant is not null)
             scope.GetRequiredService<ITenantAccessor>().SetTenant(Tenant);
 

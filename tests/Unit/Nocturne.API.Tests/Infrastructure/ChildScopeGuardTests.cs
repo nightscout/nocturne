@@ -10,15 +10,25 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// A DI scope opened in code reads as no one: not a share and not history-clamped, and the clamp fails
 /// open. Work done for a caller opens its scope with
 /// <see cref="TenantJobScope.OpenFor(IServiceProvider, TenantReader, string)"/>, which carries the
-/// caller's <see cref="TenantReader"/>; that is not checked here. Every other scope, raw
-/// (<c>CreateScope</c>, <c>CreateAsyncScope</c>) or from
-/// <see cref="TenantJobScope.Open(IServiceProvider, TenantContext?, string)"/>, is limited to the
-/// members listed here, each for the reason its group gives. An entry names the file and the member
-/// the call sits in, so a new method in a listed file is not covered by its neighbour.
+/// caller's <see cref="TenantReader"/>, and is not checked here. Every other scope is limited to the
+/// members listed here, each for the reason its group gives: a raw <c>CreateScope</c> or
+/// <c>CreateAsyncScope</c>, a <see cref="TenantJobScope.Open(IServiceProvider, TenantContext?, string)"/>,
+/// or a call to a helper that returns a scope it opened one of those ways, so a helper does not hide
+/// its callers. An entry names the file and the member the call sits in, so a new method in a listed
+/// file is not covered by its neighbour.
 /// </summary>
+/// <remarks>
+/// The match is syntactic. It follows a qualified or <c>global::</c> name, a <c>using</c> alias of
+/// <c>TenantJobScope</c> and a <c>using static</c> of it or of the scope extensions. It does not follow
+/// a delegate or a reflection call that names none of these.
+/// </remarks>
 [Trait("Category", "Unit")]
 public class ChildScopeGuardTests
 {
+    private const string JobScope = nameof(TenantJobScope);
+
+    private const string Seam = "src/Infrastructure/Nocturne.Infrastructure.Data/Services/TenantJobScope.cs";
+
     private static readonly string[] ScannedTrees = ["src"];
 
     private static readonly string[] RawScopeMethods = ["CreateScope", "CreateAsyncScope"];
@@ -38,6 +48,7 @@ public class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.CloseHysteresisWindowsAsync",
         "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.EvaluateAutoResolveAsync",
         "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.EvaluateWallClockRulesAsync",
+        "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.ProcessTenantSnoozesAsync",
         "src/API/Nocturne.API/Services/Alerts/RuleScopeClassBackfillService.cs: RuleScopeClassBackfillService.ExecuteAsync",
         "src/API/Nocturne.API/Services/Auth/AuthorizationSeedService.cs: AuthorizationSeedService.StartAsync",
         "src/API/Nocturne.API/Services/Auth/OAuthCodeCleanupService.cs: OAuthCodeCleanupService.CleanupExpiredCodesAsync",
@@ -55,6 +66,7 @@ public class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Compatibility/DiscrepancyMaintenanceService.cs: DiscrepancyMaintenanceService.PerformMaintenanceAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthWorker.cs: GoogleHealthWorker.ProcessRequestsAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthWorker.cs: GoogleHealthWorker.SyncTenantAsync",
+        "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthGrantHolders.cs: PostgresGoogleHealthGrantHolders.AdoptAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationStartupService.cs: MigrationStartupService.StartAsync",
         "src/API/Nocturne.API/Services/Monitoring/TrackerAlertRuleBackfillService.cs: TrackerAlertRuleBackfillService.ExecuteAsync",
         "src/API/Nocturne.API/Services/Notifications/NotificationResolutionService.cs: NotificationResolutionService.EvaluateAllTenantsAsync",
@@ -77,9 +89,12 @@ public class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Connectors/ConnectorCursorResetJobService.cs: ConnectorCursorResetJobService.StartResetAsync",
         "src/API/Nocturne.API/Services/Connectors/ConnectorCursorResetJobService.cs: ConnectorResetJob.PersistSnapshotAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.LockAsync",
+        "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.NotifyAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.OpenRequestListenerAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.ReadRequestsAsync",
+        "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.ReadCursorsAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.TenantScope",
+        "src/API/Nocturne.API/Services/Health/GoogleHealth/PostgresGoogleHealthCoordinatorStore.cs: PostgresGoogleHealthCoordinatorStore.WriteCursorAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.PersistSnapshotAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.FindRunAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetHistoryAsync",
@@ -97,6 +112,13 @@ public class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Connectors/ConnectorSyncService.cs: ConnectorSyncService.TriggerSyncAsync",
         "src/API/Nocturne.API/Services/Devices/SensorSessionInferenceRunner.cs: SensorSessionInferenceRunner.RunAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.CreateTenantScope",
+        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.ExecuteApiMigrationAsync",
+        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.ExecuteMongoMigrationAsync",
+        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.MigrateMongoDecomposedCollectionAsync",
+        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.MigratePagedCollectionAsync",
+        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.MigrateProfilesViaApiAsync",
+        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.TransformDeviceStatusAsync",
+        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.TransformProfileAsync",
         "src/API/Nocturne.API/Services/Seeding/SampleDataSeeder.cs: SampleDataSeeder.SeedInTenantScopeAsync",
     ];
 
@@ -121,45 +143,123 @@ public class ChildScopeGuardTests
     [InlineData("class C { async Task M(IServiceScopeFactory f) { await using var s = f.CreateAsyncScope(); } }", "C.M")]
     [InlineData("class C { void M(IServiceProvider? p) { using var s = p?.CreateScope(); } }", "C.M")]
     [InlineData("class C { void M() { var s = TenantJobScope.Open(p, t, \"a\"); } }", "C.M")]
+    [InlineData("class C { void M() { var s = Nocturne.Infrastructure.Data.Services.TenantJobScope.Open(p, t, \"a\"); } }", "C.M")]
+    [InlineData("class C { void M() { var s = global::Nocturne.Infrastructure.Data.Services.TenantJobScope.Open(p, t, \"a\"); } }", "C.M")]
+    [InlineData("using Jobs = Nocturne.Infrastructure.Data.Services.TenantJobScope; class C { void M() { var s = Jobs.Open(p, t, \"a\"); } }", "C.M")]
+    [InlineData("using static Nocturne.Infrastructure.Data.Services.TenantJobScope; class C { void M() { var s = Open(p, t, \"a\"); } }", "C.M")]
+    [InlineData("using static Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions; class C { void M() { using var s = CreateScope(p); } }", "C.M")]
+    [InlineData("class C { void M() { using var s = ServiceProviderServiceExtensions.CreateScope(p); } }", "C.M")]
     [InlineData("class C { void M() => Use(p.CreateScope); }", "C.M")]
     [InlineData("class C { void M() { Task.Run(async () => { await using var s = f.CreateAsyncScope(); }); } }", "C.M")]
     [InlineData("class O { class C { IServiceScope P => p.CreateScope(); } }", "O.C.P")]
+    [InlineData("class C { IServiceScope Helper() => p.CreateScope(); void M() { using var s = Helper(); } }", "C.Helper,C.M")]
+    [InlineData("class C { AsyncServiceScope Helper() => TenantJobScope.Open(p, t, \"a\"); void M() { using var s = this.Helper(); } }", "C.Helper,C.M")]
     [InlineData("class C { void M() { var s = TenantJobScope.OpenFor(p, r, \"a\"); } }", null)]
     [InlineData("class C { void M() { var s = File.Open(path); } }", null)]
+    [InlineData("class C { void M() { var s = Open(path); } }", null)]
     public void FindsTheOpeningMember(string source, string? expected)
     {
-        var members = OpeningMembers(CSharpSyntaxTree.ParseText(source));
+        var tree = CSharpSyntaxTree.ParseText(source);
+        var members = OpeningMembers(tree, ScopeHelpers([tree]));
 
         if (expected is null)
             members.Should().BeEmpty();
         else
-            members.Should().Equal(expected);
+            members.Should().Equal(expected.Split(','));
     }
 
     /// <summary>
-    /// The member around every mention by name of a raw scope method (a call, a conditional call or a
-    /// method group) and around every <c>TenantJobScope.Open</c>.
+    /// Names of methods outside the seam that return a scope opened by an opener in their body, found
+    /// to a fixed point so a helper over a helper is one too.
     /// </summary>
-    private static List<string> OpeningMembers(SyntaxTree syntax) =>
-        syntax.GetRoot()
-            .DescendantNodes()
-            .Where(node => node switch
+    private static HashSet<string> ScopeHelpers(IReadOnlyList<SyntaxTree> trees)
+    {
+        var helpers = new HashSet<string>(StringComparer.Ordinal);
+        bool grew;
+        do
+        {
+            grew = false;
+            foreach (var tree in trees)
             {
-                MemberAccessExpressionSyntax member =>
-                    RawScopeMethods.Contains(member.Name.Identifier.ValueText)
-                    || (member.Name.Identifier.ValueText == nameof(TenantJobScope.Open)
-                        && member.Expression is IdentifierNameSyntax { Identifier.ValueText: nameof(TenantJobScope) }),
-                MemberBindingExpressionSyntax binding => RawScopeMethods.Contains(binding.Name.Identifier.ValueText),
-                _ => false,
-            })
+                var file = FileNames.Of(tree.GetRoot());
+                foreach (var method in tree.GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>())
+                {
+                    if (method.ReturnType.ToString().Contains("ServiceScope", StringComparison.Ordinal)
+                        && OpeningNodes(method, file, helpers).Any())
+                    {
+                        grew |= helpers.Add(method.Identifier.ValueText);
+                    }
+                }
+            }
+        }
+        while (grew);
+
+        return helpers;
+    }
+
+    private static List<string> OpeningMembers(SyntaxTree tree, ISet<string> helpers) =>
+        OpeningNodes(tree.GetRoot(), FileNames.Of(tree.GetRoot()), helpers)
             .Select(EnclosingMember.Of)
             .Distinct()
             .ToList();
 
+    /// <summary>
+    /// Every mention by name of an opener in <paramref name="node"/>: a call, a conditional call or a
+    /// method group of a raw scope method or a helper, and every <c>TenantJobScope.Open</c> however it
+    /// is named.
+    /// </summary>
+    private static IEnumerable<SyntaxNode> OpeningNodes(SyntaxNode node, FileNames file, ISet<string> helpers) =>
+        node.DescendantNodes().Where(candidate => candidate switch
+        {
+            MemberAccessExpressionSyntax member =>
+                IsScopeMethod(member.Name.Identifier.ValueText, helpers)
+                || (member.Name.Identifier.ValueText == nameof(TenantJobScope.Open)
+                    && file.NamesJobScope(member.Expression)),
+            MemberBindingExpressionSyntax binding => IsScopeMethod(binding.Name.Identifier.ValueText, helpers),
+            IdentifierNameSyntax name when name.Parent is not (MemberAccessExpressionSyntax or MemberBindingExpressionSyntax
+                or QualifiedNameSyntax or AliasQualifiedNameSyntax or UsingDirectiveSyntax) =>
+                IsScopeMethod(name.Identifier.ValueText, helpers)
+                || (name.Identifier.ValueText == nameof(TenantJobScope.Open) && file.ImportsJobScope),
+            _ => false,
+        });
+
+    private static bool IsScopeMethod(string name, ISet<string> helpers) =>
+        RawScopeMethods.Contains(name) || helpers.Contains(name);
+
+    /// <summary>How one file can name <c>TenantJobScope</c>: by its name, an alias, or a <c>using static</c>.</summary>
+    private sealed record FileNames(IReadOnlySet<string> JobScopeNames, bool ImportsJobScope)
+    {
+        public static FileNames Of(SyntaxNode root)
+        {
+            var usings = root.DescendantNodes().OfType<UsingDirectiveSyntax>()
+                .Where(u => u.NamespaceOrType is { } target && RightmostName(target) == JobScope)
+                .ToList();
+
+            var names = usings.Where(u => u.Alias is not null)
+                .Select(u => u.Alias!.Name.Identifier.ValueText)
+                .Append(JobScope)
+                .ToHashSet(StringComparer.Ordinal);
+
+            return new FileNames(names, usings.Any(u => u.StaticKeyword.IsKind(SyntaxKind.StaticKeyword)));
+        }
+
+        public bool NamesJobScope(ExpressionSyntax expression) =>
+            RightmostName(expression) is { } name && JobScopeNames.Contains(name);
+
+        private static string? RightmostName(SyntaxNode node) => node switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText,
+            AliasQualifiedNameSyntax alias => alias.Name.Identifier.ValueText,
+            MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+            _ => null,
+        };
+    }
+
     private static List<string> Scan()
     {
         var root = RepositoryRoot();
-        var openers = new List<string>();
+        var sources = new List<(string File, SyntaxTree Tree)>();
 
         foreach (var tree in ScannedTrees)
         {
@@ -169,18 +269,16 @@ public class ChildScopeGuardTests
                     || path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
                     continue;
 
-                var text = File.ReadAllText(path);
-                if (!RawScopeMethods.Any(m => text.Contains(m, StringComparison.Ordinal))
-                    && !text.Contains(nameof(TenantJobScope), StringComparison.Ordinal))
-                    continue;
-
                 var file = Path.GetRelativePath(root, path).Replace('\\', '/');
-                openers.AddRange(OpeningMembers(CSharpSyntaxTree.ParseText(text))
-                    .Select(member => $"{file}: {member}"));
+                sources.Add((file, CSharpSyntaxTree.ParseText(File.ReadAllText(path))));
             }
         }
 
-        return openers;
+        var helpers = ScopeHelpers(sources.Where(s => s.File != Seam).Select(s => s.Tree).ToList());
+
+        return sources
+            .SelectMany(s => OpeningMembers(s.Tree, helpers).Select(member => $"{s.File}: {member}"))
+            .ToList();
     }
 
     private static string RepositoryRoot()

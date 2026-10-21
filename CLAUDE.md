@@ -299,11 +299,15 @@ system-attributed:
 - `OpenFor(provider, reader, actor)` for work done for a caller. `TenantReader.Of(scope)`
   captures the caller's tenant, share, CSV, full history and clamp as values, so it also
   survives a fire-and-forget job; `ForTenant` and `ClampedToDay` only narrow it. Compression-low
-  detection, the dedup job and `TenantOverviewService` go through it, and `TenantHubFilter`
-  carries the handshake's reader into each SignalR invocation scope with `CarryInto`.
+  detection, the dedup job and `TenantOverviewService` go through it. `CarryInto` sets a reader
+  only on a scope that still reads as no one. `ReaderRecordingMiddleware` records each request's
+  reader in `HttpContext.Items`, which survive the copy SignalR makes of a long-polling request;
+  `TenantHubFilter` sets that reader (`HubConnectionReader`, narrowed by an in-band clamp) on every
+  invocation scope and on the long-polling copy's scope.
 - `Open(provider, tenant, actor)` reads as no one, for hosted loops, startup and
   request-started work that returns nothing it read. `ChildScopeGuardTests` pins every member
-  that calls it or opens a raw `CreateScope`/`CreateAsyncScope`, grouped by reason.
+  that calls it, opens a raw `CreateScope`/`CreateAsyncScope`, or calls a helper returning such a
+  scope, grouped by reason.
 
 A request that works for other tenants does it in such a scope per tenant rather than moving
 its own accessor, since every context of the request would follow.

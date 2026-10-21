@@ -34,7 +34,7 @@ public abstract class TenantResolutionMiddlewareTestBase : IDisposable
         var services = new ServiceCollection();
         services.AddSingleton<IDbContextFactory<NocturneDbContext>>(new UnpinnedContexts(_db.Options));
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
-        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         services.AddScoped(sp => new TenantReadContext(
             sp.GetRequiredService<ITenantAccessor>(), sp.GetRequiredService<ICategoryReadContext>(), null));
         services.AddSingleton(sp => new RootServiceProvider(sp));
