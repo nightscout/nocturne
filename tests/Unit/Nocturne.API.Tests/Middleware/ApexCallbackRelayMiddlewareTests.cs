@@ -339,4 +339,23 @@ public class ApexCallbackRelayMiddlewareTests
         context.Response.Headers.Location.ToString()
             .Should().StartWith($"https://alice.nocturne.localhost:1612{GoogleHealthPlatformOptions.CallbackPath}?");
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(99999)]
+    public async Task Passes_through_when_the_request_port_is_out_of_range(int port)
+    {
+        var called = false;
+        var middleware = CreateMiddleware(_ => { called = true; return Task.CompletedTask; });
+        var context = NewContext();
+        context.Request.Scheme = "https";
+        context.Request.Host = new HostString($"nocturne.run:{port}");
+        context.Request.Path = GoogleHealthPlatformOptions.CallbackPath;
+        context.Request.QueryString = QueryString.Create(
+            "state", _googleHealthState.Protect("alice", DateTimeOffset.UtcNow.AddMinutes(10)));
+
+        await middleware.InvokeAsync(context);
+
+        called.Should().BeTrue();
+    }
 }

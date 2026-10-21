@@ -79,12 +79,13 @@ public partial class ApexCallbackRelayMiddleware(
         if (string.IsNullOrEmpty(tenantSlug) || !SlugPattern().IsMatch(tenantSlug))
             return null;
 
-        var tenantOrigin = new UriBuilder(context.Request.PublicScheme(), $"{tenantSlug}.{_baseHost}")
-        {
-            Port = context.Request.Host.Port ?? -1,
-        };
+        var port = context.Request.Host.Port ?? -1;
+        if (port is not (-1 or (>= 1 and <= 65535)))
+            return null;
+
+        var tenantOrigin = new UriBuilder(context.Request.PublicScheme(), $"{tenantSlug}.{_baseHost}", port);
         return Uri.TryCreate(tenantOrigin.ToString(), UriKind.Absolute, out var origin)
-            ? $"{origin.GetLeftPart(UriPartial.Authority)}{relay.Path}?{context.Request.QueryString.Value?.TrimStart('?')}"
+            ? $"{origin.GetLeftPart(UriPartial.Authority)}{relay.Path}?{context.Request.QueryString.Value![1..]}"
             : null;
     }
 

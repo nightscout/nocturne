@@ -1340,7 +1340,7 @@ public class GoogleHealthTests : IDisposable
     }
 
     [Fact]
-    public async Task A_different_google_account_is_revoked_even_when_the_callback_is_cancelled()
+    public async Task A_grant_the_cancelled_callback_never_stored_is_revoked()
     {
         var accounts = 0;
         using var cancellation = new CancellationTokenSource();
@@ -1367,10 +1367,10 @@ public class GoogleHealthTests : IDisposable
         await service.DisconnectAsync(Guid.NewGuid(), default);
         revoked.Clear();
 
-        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => ConnectAsync(service, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ConnectAsync(service, cancellation.Token));
 
-        Assert.Equal("account_mismatch", error.Message);
         Assert.Contains(revoked, body => body.Contains("token=refresh-2"));
+        Assert.DoesNotContain("refresh-2", store.Secrets.Values);
     }
 
     private static HttpResponseMessage Revoked(HttpRequestMessage request, List<string> revoked)
@@ -1558,12 +1558,17 @@ public class GoogleHealthTests : IDisposable
                 .ReturnsAsync(() => response!);
             configurations.Setup(value => value.GetSecretsAsync(
                     "GoogleHealth", It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => new Dictionary<string, string>(secrets, StringComparer.OrdinalIgnoreCase));
+                .Returns<string, CancellationToken>((_, ct) =>
+                {
+                    ct.ThrowIfCancellationRequested();
+                    return Task.FromResult(new Dictionary<string, string>(secrets, StringComparer.OrdinalIgnoreCase));
+                });
             configurations.Setup(value => value.SaveSecretsAsync(
                     "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, _) =>
+                .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, ct) =>
                 {
+                    ct.ThrowIfCancellationRequested();
                     secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
                     OnSave?.Invoke();
                 })
