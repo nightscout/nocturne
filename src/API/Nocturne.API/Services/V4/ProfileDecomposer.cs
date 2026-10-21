@@ -28,12 +28,14 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     private readonly ICarbRatioScheduleRepository _carbRatioScheduleRepo;
     private readonly ISensitivityScheduleRepository _sensitivityScheduleRepo;
     private readonly ITargetRangeScheduleRepository _targetRangeScheduleRepo;
+    private readonly RelativeTempBasalRates _relativeTempBasalRates;
 
     /// <param name="therapySettingsRepo">Repository for <see cref="V4Models.TherapySettings"/> records.</param>
     /// <param name="basalScheduleRepo">Repository for <see cref="V4Models.BasalSchedule"/> records.</param>
     /// <param name="carbRatioScheduleRepo">Repository for <see cref="V4Models.CarbRatioSchedule"/> records.</param>
     /// <param name="sensitivityScheduleRepo">Repository for <see cref="V4Models.SensitivitySchedule"/> records.</param>
     /// <param name="targetRangeScheduleRepo">Repository for <see cref="V4Models.TargetRangeSchedule"/> records.</param>
+    /// <param name="relativeTempBasalRates">Resolves percent temp basals the new schedules now cover.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public ProfileDecomposer(
         ITherapySettingsRepository therapySettingsRepo,
@@ -41,6 +43,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         ICarbRatioScheduleRepository carbRatioScheduleRepo,
         ISensitivityScheduleRepository sensitivityScheduleRepo,
         ITargetRangeScheduleRepository targetRangeScheduleRepo,
+        RelativeTempBasalRates relativeTempBasalRates,
         ILogger<ProfileDecomposer> logger)
         : base(logger)
     {
@@ -49,6 +52,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         _carbRatioScheduleRepo = carbRatioScheduleRepo;
         _sensitivityScheduleRepo = sensitivityScheduleRepo;
         _targetRangeScheduleRepo = targetRangeScheduleRepo;
+        _relativeTempBasalRates = relativeTempBasalRates;
     }
 
     /// <inheritdoc />
@@ -139,6 +143,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         Record(result, await _basalScheduleRepo.BulkUpsertByLegacyIdAsync(
             groups.Select(g => MapToBasalSchedule(g.Entry.Profile, g.Entry.Data, g.Entry.StoreName, g.Entry.LegacyId, g.CorrelationId)).ToList(),
             origin, ct: ct));
+        await _relativeTempBasalRates.ResolvePendingAsync(groups.Select(g => g.Entry.StoreName), ct);
         Record(result, await _carbRatioScheduleRepo.BulkUpsertByLegacyIdAsync(
             groups.Select(g => MapToCarbRatioSchedule(g.Entry.Profile, g.Entry.Data, g.Entry.StoreName, g.Entry.LegacyId, g.CorrelationId)).ToList(),
             origin, ct: ct));

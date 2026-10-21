@@ -501,7 +501,7 @@ public class SummaryServiceTests
         var start = DateTimeOffset.UtcNow.AddMinutes(-40).ToUnixTimeMilliseconds();
         var temps = new List<Treatment>
         {
-            new() { EventType = "Temp Basal", Mills = start, Duration = 30, Percent = -50, Rate = 0.4 },
+            new() { EventType = "Temp Basal", Mills = start, Duration = 30, Percent = -50, DeliveredRate = 0.4 },
         };
 
         var result = _service.ProcessTempBasals(profile, temps, start - 1);

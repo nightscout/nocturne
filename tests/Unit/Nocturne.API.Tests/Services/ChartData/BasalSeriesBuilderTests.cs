@@ -151,6 +151,47 @@ public class BasalSeriesBuilderTests
         result[1].Rate.Should().BeApproximately(1.2, 0.001);
     }
 
+    [Fact]
+    public async Task BuildAsync_RelativeTempOfUnknownRate_CancelsThePreviousTempAndShowsTheSchedule()
+    {
+        var startTime = TestMills;
+        var endTime = TestMills + 60 * 60 * 1000;
+        TempBasal Temp(int fromMinutes, int toMinutes, double? rate, double? percent) => new()
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startTime + fromMinutes * 60_000L).UtcDateTime,
+            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startTime + toMinutes * 60_000L).UtcDateTime,
+            Rate = rate,
+            Percent = percent,
+            Origin = TempBasalOrigin.Manual,
+        };
+        var therapySettings = new Mock<ITherapySettingsResolver>();
+        therapySettings.Setup(s => s.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var timeline = new TherapyTimeline([
+            new TherapySegment(startTime, endTime + 1,
+                new TherapySnapshot(
+                    dia: 3.0,
+                    peakMinutes: TherapySnapshot.DefaultPeakMinutes,
+                    carbsPerHour: TherapySnapshot.DefaultCarbsPerHour,
+                    timezone: null,
+                    ccpPercentage: null,
+                    ccpTimeshiftMs: 0,
+                    sensitivityEntries: null,
+                    carbRatioEntries: null,
+                    basalEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 1.2 }]))
+        ]);
+        var builder = new BasalSeriesBuilder(therapySettings.Object, NullLogger<BasalSeriesBuilder>.Instance);
+
+        var result = await builder.BuildAsync(
+            [Temp(0, 30, 0.4, null), Temp(10, 40, null, -50)], startTime, endTime, 1.0, timeline, CancellationToken.None);
+
+        result[0].Timestamp.Should().Be(startTime);
+        result[0].Rate.Should().BeApproximately(0.4, 0.001);
+        result[1].Timestamp.Should().Be(startTime + 10 * 60_000L);
+        result[1].Rate.Should().BeApproximately(1.2, 0.001);
+        result[1].Origin.Should().Be(BasalDeliveryOrigin.Inferred);
+        result.Should().NotContain(p => p.Timestamp > startTime && p.Rate < 1.2 - 0.001);
+    }
+
     /// <summary>
     /// Injection (MDI) therapy produces no TempBasal records and often no therapy
     /// profile either. The builder used to fall back to a flat 1 U/hr band, which

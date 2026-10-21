@@ -121,7 +121,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
             _profileDecomposerMock.Object,
             _activeProfileResolverMock.Object,
             _insulinRepoMock.Object,
-            new RelativeTempBasalRates(_basalRateResolverMock.Object),
+            TempBasalTestDeps.Rates(_basalRateResolverMock.Object),
             Mock.Of<IAuditContext>(),
             NullLogger<TreatmentDecomposer>.Instance);
     }

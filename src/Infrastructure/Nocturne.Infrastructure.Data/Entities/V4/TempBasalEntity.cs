@@ -116,6 +116,10 @@ public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Tim
     [Column("percent")]
     public double? Percent { get; set; }
 
+    /// <summary>See <see cref="Core.Models.V4.TempBasal.RateFromSchedule"/>.</summary>
+    [Column("rate_from_schedule")]
+    public bool RateFromSchedule { get; set; }
+
     /// <summary>
     /// Origin of this temp basal (stored as string: Algorithm, Scheduled, Manual, Suspended, Inferred)
     /// </summary>

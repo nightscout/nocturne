@@ -184,10 +184,10 @@ public class SummaryService : ISummaryService
 
         var profileBasals = profileData.Basal;
         // NIGHTSCOUT-COMPAT: Nightscout reads only absolute here and reports a percent temp as 0 U/h, a
-        // suspension. A percent temp is served with the rate it resolved to, and one whose rate is
-        // unknown is left out so the profile basal shows through.
+        // suspension. A percent temp reports the rate it delivers, and one whose rate is unknown is
+        // left out so the profile basal shows through.
         var temps = tempBasals
-            .Where(temp => temp.Percent is null || temp.Absolute is not null || temp.Rate is not null)
+            .Where(temp => temp.Percent is null || (temp.Absolute ?? temp.DeliveredRate) is not null)
             .Select(temp => new SummaryTempBasal
             {
                 Start =
@@ -195,7 +195,7 @@ public class SummaryService : ISummaryService
                         ? createdAt.ToUnixTimeMilliseconds()
                         : temp.Mills,
                 Duration = temp.Duration.HasValue ? (int)(temp.Duration.Value * 60 * 1000) : 0,
-                Absolute = temp.Absolute ?? temp.Rate ?? 0,
+                Absolute = temp.Absolute ?? temp.DeliveredRate ?? 0,
             })
             .ToList();
 

@@ -76,7 +76,7 @@ public class TreatmentDecomposerTests : IDisposable
             _profileDecomposerMock.Object,
             _activeProfileResolverMock.Object,
             _insulinRepoMock.Object,
-            new RelativeTempBasalRates(_basalRateResolverMock.Object),
+            TempBasalTestDeps.Rates(_basalRateResolverMock.Object),
             Mock.Of<IAuditContext>(),
             NullLogger<TreatmentDecomposer>.Instance);
     }
@@ -523,6 +523,7 @@ public class TreatmentDecomposerTests : IDisposable
         tempBasal.Percent.Should().Be(percent);
         tempBasal.ScheduledRate.Should().Be(0.8);
         tempBasal.Rate.Should().BeApproximately(expectedRate, 1e-9);
+        tempBasal.RateFromSchedule.Should().BeTrue();
         _basalRateResolverMock.Verify(r => r.FindBasalRateAsync(1700000000000, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -539,6 +540,7 @@ public class TreatmentDecomposerTests : IDisposable
 
         tempBasal.Percent.Should().Be(-30);
         tempBasal.Rate.Should().Be(0.7);
+        tempBasal.RateFromSchedule.Should().BeFalse();
         tempBasal.ScheduledRate.Should().BeApproximately(1.0, 1e-9);
         _basalRateResolverMock.Verify(
             r => r.FindBasalRateAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -636,11 +638,76 @@ public class TreatmentDecomposerTests : IDisposable
 
         served.Percent.Should().Be(-50);
         served.Absolute.Should().BeNull();
-        served.Rate.Should().BeApproximately(0.4, 1e-9);
+        served.Rate.Should().BeNull("Nightscout reads back only the percent it was sent");
+        served.DeliveredRate.Should().BeApproximately(0.4, 1e-9);
 
         var edited = TreatmentDecomposer.MapToTempBasal(served, correlationId: null);
         edited.Percent.Should().Be(-50);
-        edited.Rate.Should().BeApproximately(0.4, 1e-9);
+        edited.Rate.Should().BeNull();
+    }
+
+    private async Task<V4Models.TempBasal> EditStoredTempBasalAsync(V4Models.TempBasal stored, double newPercent)
+    {
+        var edit = Nocturne.Infrastructure.Data.Mappers.TempBasalToTreatmentMapper.ToTreatment(stored);
+        edit.Id = stored.LegacyId;
+        edit.Percent = newPercent;
+        _tempBasalRepoMock
+            .Setup(r => r.GetByLegacyIdAsync(stored.LegacyId!, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(stored);
+        V4Models.TempBasal? written = null;
+        _tempBasalRepoMock
+            .Setup(r => r.UpdateAsync(stored.Id, It.IsAny<V4Models.TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((Guid _, V4Models.TempBasal tb, WriteOrigin _, CancellationToken _) => written = tb)
+            .ReturnsAsync((Guid _, V4Models.TempBasal tb, WriteOrigin _, CancellationToken _) => tb);
+
+        await _decomposer.DecomposeAsync(edit, WriteOrigin.Live);
+        return written!;
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_EditingTheReadBackOfAResolvedPercentTemp_ResolvesTheNewPercent()
+    {
+        GivenScheduledBasal(0.8);
+        var stored = await DecomposeTempBasalAsync(new Treatment
+        {
+            Id = "careportal-percent-temp", EventType = "Temp Basal", Mills = 1700000000000, Duration = 30, Percent = -50,
+        });
+
+        var written = await EditStoredTempBasalAsync(stored, -20);
+
+        written.Percent.Should().Be(-20);
+        written.Rate.Should().BeApproximately(0.64, 1e-9);
+        written.ScheduledRate.Should().Be(0.8);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_EditingThePercentOfAnUploadedRate_DropsTheEchoedRate()
+    {
+        GivenScheduledBasal(0.8);
+        var stored = TreatmentDecomposer.MapToTempBasal(AapsPercentTemp(), correlationId: null);
+
+        var written = await EditStoredTempBasalAsync(stored, -10);
+
+        written.Percent.Should().Be(-10);
+        written.Rate.Should().BeApproximately(0.72, 1e-9);
+        written.RateFromSchedule.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// <see cref="Treatment.Absolute"/> stopped reading through <c>rate</c> beside a percent; the ids
+    /// and fingerprints of identifier-less uploads already stored are computed as they were.
+    /// </summary>
+    [Fact]
+    public void HashInputs_OfAPercentTempWithRate_AreThoseItWasStoredUnder()
+    {
+        var upload = AapsPercentTemp();
+        upload.Id = null;
+        var asBefore = AapsPercentTemp();
+        asBefore.Id = null;
+        asBefore.Absolute = asBefore.Rate;
+
+        TreatmentDecomposer.ComputeSyntheticId(upload).Should().Be(TreatmentDecomposer.ComputeSyntheticId(asBefore));
+        TreatmentDecomposer.UpstreamFingerprint(upload).Should().Be(TreatmentDecomposer.UpstreamFingerprint(asBefore));
     }
 
     #endregion

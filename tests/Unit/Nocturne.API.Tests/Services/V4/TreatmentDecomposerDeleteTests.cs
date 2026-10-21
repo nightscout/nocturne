@@ -515,6 +515,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
             new CarbRatioScheduleRepository(factory, _userAuditContext, NullLogger<CarbRatioScheduleRepository>.Instance),
             new SensitivityScheduleRepository(factory, _userAuditContext, NullLogger<SensitivityScheduleRepository>.Instance),
             new TargetRangeScheduleRepository(factory, _userAuditContext, NullLogger<TargetRangeScheduleRepository>.Instance),
+            TempBasalTestDeps.Unscheduled(),
             NullLogger<ProfileDecomposer>.Instance);
         await profiles.DecomposeAsync(ProfileDocument("ps-1", storeName), WriteOrigin.Live);
         await profiles.DecomposeAsync(ProfileDocument("ps-2", storeName), WriteOrigin.Live);
@@ -556,6 +557,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
             new CarbRatioScheduleRepository(factory, _userAuditContext, NullLogger<CarbRatioScheduleRepository>.Instance),
             new SensitivityScheduleRepository(factory, _userAuditContext, NullLogger<SensitivityScheduleRepository>.Instance),
             new TargetRangeScheduleRepository(factory, _userAuditContext, NullLogger<TargetRangeScheduleRepository>.Instance),
+            TempBasalTestDeps.Unscheduled(),
             NullLogger<ProfileDecomposer>.Instance);
         await profiles.DecomposeAsync(ProfileDocument(switchId, storeName), WriteOrigin.Live);
         await profiles.DecomposeAsync(ProfileDocument("document-1", "Default"), WriteOrigin.Live);

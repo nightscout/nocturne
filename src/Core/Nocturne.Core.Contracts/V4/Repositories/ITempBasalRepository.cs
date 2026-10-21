@@ -41,6 +41,13 @@ public interface ITempBasalRepository
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>
+    /// Temp basals set by <see cref="TempBasal.Percent"/> whose rate is still unknown, oldest first,
+    /// starting after <paramref name="after"/> (start, id) when given.
+    /// </summary>
+    Task<IReadOnlyList<TempBasal>> GetUnresolvedRelativeAsync(
+        (DateTime Start, Guid Id)? after, int limit, CancellationToken ct = default);
+
+    /// <summary>
     /// Idempotently reconciles a source's temp basals within a date range: soft-deletes only the
     /// rows this source no longer reports (their legacy id is absent from
     /// <paramref name="keepLegacyIds"/>), leaving still-reported rows untouched.

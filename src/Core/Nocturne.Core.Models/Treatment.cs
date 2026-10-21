@@ -267,6 +267,14 @@ public class Treatment : ProcessableDocumentBase
         set => _absolute = value;
     }
 
+    /// <summary>
+    /// The U/h a temp basal delivers as Nocturne stores it, including a rate it resolved from
+    /// <see cref="Percent"/>; null when unknown. Not served: a temp basal reads back with only the
+    /// rate fields its upload carried.
+    /// </summary>
+    [JsonIgnore]
+    public double? DeliveredRate { get; set; }
+
     [JsonPropertyName("notes")]
     [Sanitizable]
     public string? Notes { get; set; }

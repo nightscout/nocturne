@@ -170,6 +170,19 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<TempBasal>> GetUnresolvedRelativeAsync(
+        (DateTime Start, Guid Id)? after, int limit, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var query = ctx.TempBasals.AsNoTracking().Where(t => t.Percent != null && t.Rate == null);
+        if (after is ({ } start, { } id))
+            query = query.Where(t => t.Timestamp > start || (t.Timestamp == start && t.Id.CompareTo(id) > 0));
+
+        var entities = await query.OrderBy(t => t.Timestamp).ThenBy(t => t.Id).Take(limit).ToListAsync(ct);
+        return entities.Select(TempBasalMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<TempBasal?> GetActiveAtAsync(DateTime at, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);

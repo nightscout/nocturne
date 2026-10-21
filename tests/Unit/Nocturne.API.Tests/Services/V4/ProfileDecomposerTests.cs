@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
@@ -290,6 +291,7 @@ public class ProfileDecomposerTests
                 Mock<ICarbRatioScheduleRepository, CarbRatioSchedule>(null, [], onUpsert),
                 Mock<ISensitivityScheduleRepository, SensitivitySchedule>(null, [], onUpsert),
                 Mock<ITargetRangeScheduleRepository, TargetRangeSchedule>(null, [], onUpsert),
+                TempBasalTestDeps.Unscheduled(),
                 NullLogger<ProfileDecomposer>.Instance);
         }
 

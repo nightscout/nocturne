@@ -248,6 +248,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
                 new CarbRatioScheduleRepository(factory, _auditContext, NullLogger<CarbRatioScheduleRepository>.Instance),
                 new SensitivityScheduleRepository(factory, _auditContext, NullLogger<SensitivityScheduleRepository>.Instance),
                 new TargetRangeScheduleRepository(factory, _auditContext, NullLogger<TargetRangeScheduleRepository>.Instance),
+                TempBasalTestDeps.Unscheduled(),
                 NullLogger<ProfileDecomposer>.Instance);
             await profiles.DecomposeAsync(ProfileDocument("ps-1", storeName), WriteOrigin.Live);
             await profiles.DecomposeAsync(ProfileDocument("ps-2", storeName), WriteOrigin.Live);

@@ -322,6 +322,23 @@ public class TempBasalToTreatmentMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public void ToTreatment_RelativeTempWithRateFromSchedule_ServesOnlyPercent()
+    {
+        var tempBasal = CreateTempBasal(TempBasalOrigin.Manual, 0.4);
+        tempBasal.ScheduledRate = 0.8;
+        tempBasal.Percent = -50;
+        tempBasal.RateFromSchedule = true;
+
+        var result = TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        result.Percent.Should().Be(-50);
+        result.Rate.Should().BeNull("the upload carried no rate");
+        result.Absolute.Should().BeNull();
+        result.DeliveredRate.Should().Be(0.4);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public void ToTreatment_RelativeTempOfUnknownRate_ServesOnlyPercent()
     {
         var tempBasal = CreateTempBasal(TempBasalOrigin.Manual, 0);

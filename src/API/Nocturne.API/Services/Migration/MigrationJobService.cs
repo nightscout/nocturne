@@ -834,6 +834,7 @@ internal class MigrationJob
 
         var collectionsToMigrate = allCollections
             .Where(c => _request.Collections.Count == 0 || _request.Collections.Contains(c.name))
+            .OrderBy(c => ImportRank(c.name))
             .ToList();
 
         // Fetch counts upfront so we can show real X / Y progress
@@ -1542,6 +1543,18 @@ internal class MigrationJob
         _logger.LogInformation("Migrated {Count} food items via API", totalMigrated);
     }
 
+    /// <summary>
+    /// Where a collection falls in the import: subjects first, then profiles ahead of everything
+    /// else, so a percent temp basal resolves against the schedule it ran on as it is written
+    /// (<see cref="V4.RelativeTempBasalRates"/>). The rest keep their listed order.
+    /// </summary>
+    internal static int ImportRank(string collection) => collection switch
+    {
+        "subjects" => 0,
+        "profile" => 1,
+        _ => 2,
+    };
+
     private async Task ExecuteMongoMigrationAsync(CancellationToken ct)
     {
         _currentOperation = "Connecting to MongoDB";
@@ -1558,11 +1571,12 @@ internal class MigrationJob
 
         // Filter to requested collections
         var collectionsToMigrate =
-            _request.Collections.Count > 0
-                ? collectionList.Where(c => _request.Collections.Contains(c)).ToList()
+            (_request.Collections.Count > 0
+                ? collectionList.Where(c => _request.Collections.Contains(c))
                 : collectionList
-                    .Where(c => c is "entries" or "treatments" or "devicestatus" or "profile" or "food" or "activity")
-                    .ToList();
+                    .Where(c => c is "entries" or "treatments" or "devicestatus" or "profile" or "food" or "activity"))
+            .OrderBy(ImportRank)
+            .ToList();
 
         var totalCollections = collectionsToMigrate.Count;
         var processedCollections = 0;

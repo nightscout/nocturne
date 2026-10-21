@@ -23,6 +23,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 table: "temp_basals",
                 type: "double precision",
                 nullable: true);
+
+            migrationBuilder.AddColumn<bool>(
+                name: "rate_from_schedule",
+                table: "temp_basals",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
         }
 
         /// <inheritdoc />
@@ -32,12 +39,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 name: "percent",
                 table: "temp_basals");
 
+            migrationBuilder.DropColumn(
+                name: "rate_from_schedule",
+                table: "temp_basals");
+
+            // No backfill: a null rate is unknown, and 0 would read as a suspension. Restoring NOT NULL
+            // fails while any row still holds one.
             migrationBuilder.AlterColumn<double>(
                 name: "rate",
                 table: "temp_basals",
                 type: "double precision",
                 nullable: false,
-                defaultValue: 0.0,
                 oldClrType: typeof(double),
                 oldType: "double precision",
                 oldNullable: true);

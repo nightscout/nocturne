@@ -8627,6 +8627,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("rate");
 
+                    b.Property<bool>("RateFromSchedule")
+                        .HasColumnType("boolean")
+                        .HasColumnName("rate_from_schedule");
+
                     b.Property<double?>("ScheduledRate")
                         .HasColumnType("double precision")
                         .HasColumnName("scheduled_rate");

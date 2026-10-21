@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -43,6 +44,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     private readonly ISensitivityScheduleRepository _sensitivityRepo;
     private readonly ITargetRangeScheduleRepository _targetRangeRepo;
     private readonly IProfileProjectionService _projectionService;
+    private readonly RelativeTempBasalRates _relativeTempBasalRates;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ProfileController"/>.
@@ -53,13 +55,15 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// <param name="sensitivityRepo">Repository for insulin sensitivity schedule records.</param>
     /// <param name="targetRangeRepo">Repository for target glucose range schedule records.</param>
     /// <param name="projectionService">Service for reading legacy profile projections from V4 data.</param>
+    /// <param name="relativeTempBasalRates">Resolves percent temp basals a written basal schedule now covers.</param>
     public ProfileController(
         ITherapySettingsRepository therapyRepo,
         IBasalScheduleRepository basalRepo,
         ICarbRatioScheduleRepository carbRatioRepo,
         ISensitivityScheduleRepository sensitivityRepo,
         ITargetRangeScheduleRepository targetRangeRepo,
-        IProfileProjectionService projectionService
+        IProfileProjectionService projectionService,
+        RelativeTempBasalRates relativeTempBasalRates
     )
     {
         _therapyRepo = therapyRepo;
@@ -68,6 +72,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
         _sensitivityRepo = sensitivityRepo;
         _targetRangeRepo = targetRangeRepo;
         _projectionService = projectionService;
+        _relativeTempBasalRates = relativeTempBasalRates;
     }
 
     #region Summary
@@ -442,6 +447,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
         var created = await _basalRepo.CreateAsync(model, WriteOrigin.Live, ct);
+        await _relativeTempBasalRates.ResolvePendingAsync([created.ProfileName], ct);
         return CreatedAtAction(nameof(GetBasalScheduleById), new { id = created.Id }, created);
     }
 
@@ -467,6 +473,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
         try
         {
             var updated = await _basalRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
+            await _relativeTempBasalRates.ResolvePendingAsync([updated.ProfileName], ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)

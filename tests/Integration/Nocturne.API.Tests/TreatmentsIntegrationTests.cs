@@ -797,6 +797,99 @@ public class TreatmentsIntegrationTests : ApiIntegrationTestBase
         tempBasal.Rate.Should().BeApproximately(0.4, 1e-9);
     }
 
+    private static object FlatProfile(double basal, DateTime startDate) => new
+    {
+        defaultProfile = "Default",
+        store = new Dictionary<string, object>
+        {
+            ["Default"] = new
+            {
+                dia = 4,
+                carbratio = new[] { new { time = "00:00", value = 10, timeAsSeconds = 0 } },
+                sens = new[] { new { time = "00:00", value = 50, timeAsSeconds = 0 } },
+                basal = new[] { new { time = "00:00", value = basal, timeAsSeconds = 0 } },
+                target_low = new[] { new { time = "00:00", value = 80, timeAsSeconds = 0 } },
+                target_high = new[] { new { time = "00:00", value = 120, timeAsSeconds = 0 } },
+                units = "mg/dl",
+                timezone = "UTC",
+            },
+        },
+        startDate = startDate.ToString("o"),
+    };
+
+    private Task<V4Models.TempBasal> StoredTempBasalAtAsync(string createdAt)
+    {
+        var at = DateTimeOffset.Parse(createdAt).UtcDateTime;
+        return WithTenantScopeAsync(async sp => (await sp.GetRequiredService<ITempBasalRepository>().GetAsync(
+            from: at.AddSeconds(-1), to: at.AddSeconds(1), device: null, source: null, limit: 10, offset: 0,
+            descending: true, ct: default)).Single());
+    }
+
+    /// <summary>
+    /// A Nightscout import lands treatments a profile may only later cover; a percent temp stored
+    /// before any schedule was in force at its start resolves when one that covers it is written.
+    /// </summary>
+    [Fact]
+    public async Task PercentTempBasalUploadedBeforeItsSchedule_ResolvesWhenTheProfileArrives()
+    {
+        var client = CreateAuthenticatedClient();
+        var createdAt = DateTimeOffset.UtcNow.AddDays(-30).AddMilliseconds(Random.Shared.Next(1, 60_000))
+            .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+
+        (await client.PostAsJsonAsync("/api/v1/treatments", new
+        {
+            eventType = "Temp Basal", duration = 30, percent = -50, created_at = createdAt, enteredBy = "careportal",
+        })).EnsureSuccessStatusCode();
+
+        var unresolved = await StoredTempBasalAtAsync(createdAt);
+        unresolved.Rate.Should().BeNull("no schedule is in force 30 days ago yet");
+
+        (await client.PostAsJsonAsync("/api/v1/profile", FlatProfile(1.0, DateTime.UtcNow.AddDays(-40))))
+            .EnsureSuccessStatusCode();
+
+        var resolved = await StoredTempBasalAtAsync(createdAt);
+        resolved.Rate.Should().BeApproximately(0.5, 1e-9);
+        resolved.ScheduledRate.Should().Be(1.0);
+        resolved.RateFromSchedule.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// A Nightscout import decomposes treatments a page at a time, a percent temp possibly ahead of
+    /// the profile switch it ran under; it resolves against the switch, percentage included, once the
+    /// page has written it. Runs the real activation resolver and profile version cache.
+    /// </summary>
+    [Fact]
+    public async Task PercentTempBasalAheadOfItsProfileSwitchInOneBatch_ResolvesAgainstTheSwitch()
+    {
+        var client = CreateAuthenticatedClient();
+        var switchAt = DateTimeOffset.UtcNow.AddDays(-9).AddMilliseconds(Random.Shared.Next(1, 60_000));
+        var createdAt = switchAt.AddMinutes(1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        (await client.PostAsJsonAsync("/api/v1/profile", FlatProfile(1.0, DateTime.UtcNow.AddDays(-10))))
+            .EnsureSuccessStatusCode();
+
+        var page = new List<Treatment>
+        {
+            new()
+            {
+                Id = ObjectIdFor(createdAt), EventType = "Temp Basal", Duration = 30, Percent = -50,
+                Created_at = createdAt, EnteredBy = "careportal",
+            },
+            new()
+            {
+                Id = ObjectIdFor(switchAt.ToString("o")), EventType = "Profile Switch", Profile = "Default",
+                Percentage = 150, Duration = 60, Created_at = switchAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                EnteredBy = "careportal",
+            },
+        };
+        await WithTenantScopeAsync(sp => sp.GetRequiredService<ITreatmentDecomposer>()
+            .DecomposeBatchAsync(page, WriteOrigin.Backfill, CancellationToken.None));
+
+        (await StoredTempBasalAtAsync(createdAt)).Rate.Should().BeApproximately(0.75, 1e-9);
+    }
+
+    private static string ObjectIdFor(string seed) =>
+        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(seed)))[..24];
+
     /// <summary>
     /// AAPS sends a percent temp with its own conversion as <c>rate</c>, profile switch percentage
     /// included; that rate is what the pump delivered, and it reads back as sent.

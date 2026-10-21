@@ -115,6 +115,13 @@ public class TempBasal : IV4Record, IDeviceAttributed
     public double? Percent { get; set; }
 
     /// <summary>
+    /// Whether Nocturne resolved <see cref="Rate"/> from <see cref="Percent"/> against the schedule,
+    /// rather than the uploader sending it. A resolved rate is not served back as the upload's
+    /// <c>rate</c>, and is resolved again when the percent changes.
+    /// </summary>
+    public bool RateFromSchedule { get; set; }
+
+    /// <summary>
     /// The rate <paramref name="percent"/> sets over <paramref name="scheduledRate"/>, as Nightscout's
     /// <c>getTempBasal</c> computes it: <c>basal * (100 + percent) / 100</c>.
     /// </summary>
