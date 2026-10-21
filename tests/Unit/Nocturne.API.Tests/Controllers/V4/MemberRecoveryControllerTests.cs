@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -49,14 +50,16 @@ public sealed class MemberRecoveryControllerTests : IDisposable
             .ReturnsAsync([Scope.GlucoseRead]);
         _loginCodes
             .Setup(l => l.IssueAsync(
-                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new LoginCode("issued", DateTime.UtcNow.AddMinutes(5)));
+                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<LoginCodePurpose>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new LoginCode("issued", DateTime.UtcNow.AddHours(24)));
 
+        var contexts = _context.AsFactory();
         _controller = new MemberRecoveryController(
-            _context.AsFactory(),
+            contexts,
             MockTenantAccessor.Create(_tenantId).Object,
             _roles.Object,
+            new TenantMemberService(contexts),
             _recoveryCodes.Object,
             _loginCodes.Object)
         {
@@ -83,17 +86,27 @@ public sealed class MemberRecoveryControllerTests : IDisposable
 
     private void NoCodeIssued() =>
         _loginCodes.Verify(l => l.IssueAsync(
-            It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(),
-            It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<LoginCodePurpose>(),
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+    private void GiveOrphanAnotherTenant()
+    {
+        var elsewhere = Guid.CreateVersion7();
+        _context.Tenants.Add(new TenantEntity { Id = elsewhere, Slug = "elsewhere", DisplayName = "Elsewhere", IsActive = true });
+        _context.TenantMembers.Add(new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = elsewhere, SubjectId = _orphanId });
+        _context.SaveChanges();
+    }
 
     [Fact]
-    public async Task An_administrator_gets_a_code_bound_to_the_locked_out_member()
+    public async Task An_administrator_gets_a_recovery_code_bound_to_the_locked_out_member()
     {
         var result = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<LoginCode>();
         _loginCodes.Verify(l => l.IssueAsync(
-            It.IsAny<NocturneDbContext>(), _orphanId, It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<NocturneDbContext>(), _orphanId, LoginCodePurpose.Recovery,
+            It.IsAny<string?>(), It.IsAny<string?>(),
             It.Is<AuthAuditActor>(a => a.SubjectId == _adminId), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -107,9 +120,32 @@ public sealed class MemberRecoveryControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task A_member_holding_recovery_codes_is_pointed_at_them()
+    public async Task A_member_holding_recovery_codes_can_still_be_given_one_in_case_they_lost_them()
     {
         _recoveryCodes.Setup(r => r.GetRemainingCountAsync(_orphanId)).ReturnsAsync(3);
+
+        var result = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task A_member_of_another_tenant_is_left_to_the_operator()
+    {
+        GiveOrphanAnotherTenant();
+
+        var result = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        NoCodeIssued();
+    }
+
+    [Fact]
+    public async Task A_platform_admin_is_left_to_the_operator()
+    {
+        var orphan = await _context.Subjects.FindAsync(_orphanId);
+        orphan!.IsPlatformAdmin = true;
+        await _context.SaveChangesAsync();
 
         var result = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
 
@@ -152,13 +188,14 @@ public sealed class MemberRecoveryControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task The_locked_out_members_are_listed_with_whether_they_hold_recovery_codes()
+    public async Task The_locked_out_members_are_listed_with_who_can_recover_them()
     {
         _recoveryCodes.Setup(r => r.GetRemainingCountAsync(_orphanId)).ReturnsAsync(2);
+        GiveOrphanAnotherTenant();
 
         var result = await _controller.GetLockedOutMembers(CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeEquivalentTo(
-            new[] { new LockedOutMember(_orphanId, "Orphan", "orphan", HasRecoveryCodes: true) });
+            new[] { new LockedOutMember(_orphanId, "Orphan", "orphan", HasRecoveryCodes: true, OperatorOnly: true) });
     }
 }

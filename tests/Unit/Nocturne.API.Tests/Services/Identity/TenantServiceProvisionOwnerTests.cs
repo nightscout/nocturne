@@ -82,6 +82,21 @@ public sealed class TenantServiceProvisionOwnerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_credential_naming_an_existing_subject_is_refused_and_creates_nothing()
+    {
+        var existing = await SeedSubjectAsync("someone@example.com");
+
+        var act = () => Provisioner().ProvisionWithOwnerAsync(
+            "alpha", "Alpha", "alpha-owner", "owner@example.com",
+            Passkey(existing), oidcIdentity: null);
+
+        await act.Should().ThrowAsync<ProvisionConflictException>();
+        await using var db = _db.CreateContext();
+        (await db.Tenants.AnyAsync(t => t.Slug == "alpha")).Should().BeFalse();
+        (await db.PasskeyCredentials.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task An_already_linked_oidc_identity_names_the_owner_even_with_a_different_email()
     {
         var linked = await SeedSubjectAsync("owner@gmail.com");

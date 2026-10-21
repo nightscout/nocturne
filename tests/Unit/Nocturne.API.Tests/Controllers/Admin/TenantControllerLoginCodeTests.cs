@@ -187,6 +187,34 @@ public class TenantControllerLoginCodeTests : IDisposable
         remaining.Should().HaveCount(1);
     }
 
+    [Fact]
+    public async Task IssueRecoveryCode_MintsALongerLivedCodeThatOnlyRecoveryRedeems()
+    {
+        var result = await _controller.IssueRecoveryCode(
+            _tenantId, _memberSubjectId, _db.ContextFactory.AsNocturneFactory(), _loginCodeService,
+            CancellationToken.None);
+        var issued = result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<LoginCode>().Subject;
+
+        issued.ExpiresAt.Should().BeCloseTo(DateTime.UtcNow.AddHours(24), TimeSpan.FromMinutes(1));
+        var stored = await _tenantContext.LoginCodes.AsNoTracking().SingleAsync();
+        stored.Purpose.Should().Be(LoginCodePurpose.Recovery);
+
+        (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, LoginCodePurpose.Login, null, null))
+            .Should().BeNull("a recovery code is not a sign-in");
+        (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, LoginCodePurpose.Recovery, null, null))
+            .Should().Be(_memberSubjectId);
+    }
+
+    [Fact]
+    public async Task A_login_code_does_not_redeem_as_a_recovery_code()
+    {
+        var issued = await IssueAsync(_memberSubjectId);
+
+        (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, LoginCodePurpose.Recovery, null, null))
+            .Should().BeNull();
+        (await _tenantContext.LoginCodes.AsNoTracking().SingleAsync()).ConsumedAt.Should().BeNull();
+    }
+
     private TenantDetailDto TenantDetail(bool isActive) => new(
         _tenantId, "acme", "Acme", isActive, DateTime.UtcNow,
         [

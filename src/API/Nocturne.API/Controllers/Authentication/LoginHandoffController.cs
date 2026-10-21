@@ -10,6 +10,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.Authentication;
@@ -69,7 +70,7 @@ public class LoginHandoffController : ControllerBase
         var userAgent = Request.Headers.UserAgent.ToString();
 
         var subjectId = await _loginCodeService.RedeemAsync(
-            db, request.Code, ipAddress, userAgent, ct);
+            db, request.Code, LoginCodePurpose.Login, ipAddress, userAgent, ct);
 
         if (subjectId is null)
         {

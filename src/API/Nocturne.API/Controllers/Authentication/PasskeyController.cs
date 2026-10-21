@@ -310,11 +310,13 @@ public class PasskeyController : ControllerBase
     /// <see cref="RegisterOptions"/>, nothing else.
     /// </summary>
     /// <remarks>
-    /// The code is the whole proof. It is single-use, bound to one subject on one tenant, and only
-    /// someone with authority over that member can mint it: a member administrator
+    /// The code is the whole proof. It is single-use, bound to one subject on one tenant, minted
+    /// for <see cref="LoginCodePurpose.Recovery"/>, and only someone with authority over that
+    /// member can mint it: a member administrator
     /// (<see cref="V4.Identity.MemberRecoveryController.IssueRecoveryCode"/>) or the operator
-    /// (<see cref="V4.PlatformAdmin.TenantController.IssueLoginCode"/>), which is how a tenant whose
-    /// only owner is locked out gets back in. Unknown, spent, expired and other-tenant codes fail alike.
+    /// (<see cref="V4.PlatformAdmin.TenantController.IssueRecoveryCode"/>), which is how a tenant
+    /// whose only owner is locked out gets back in. Unknown, spent, expired, other-tenant and
+    /// login codes fail alike.
     /// </remarks>
     [HttpPost("recovery-mode/redeem")]
     [AllowAnonymous]
@@ -333,7 +335,7 @@ public class PasskeyController : ControllerBase
 
         await using var db = await _dbContextFactory.CreateAsync();
         var subjectId = await loginCodeService.RedeemAsync(
-            db, request.Code.Trim(),
+            db, request.Code.Trim(), LoginCodePurpose.Recovery,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
             HttpContext.RequestAborted);
@@ -349,6 +351,9 @@ public class PasskeyController : ControllerBase
                 title: "Bad Request");
         }
 
+        // Whoever held the member's own recovery codes, the member's way back in is now this
+        // enrolment, so codes they may have lost stop working.
+        await _recoveryCodeService.InvalidateAllAsync(subject.Id);
         StartRecoverySession(subject);
 
         return Ok(new RecoveryModeRedeemResponse { Username = subject.Username ?? subject.Name });

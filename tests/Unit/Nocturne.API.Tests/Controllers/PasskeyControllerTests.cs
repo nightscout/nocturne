@@ -438,7 +438,7 @@ public class PasskeyControllerTests : IDisposable
         var loginCodes = new Mock<ILoginCodeService>();
         loginCodes
             .Setup(s => s.RedeemAsync(
-                It.IsAny<NocturneDbContext>(), "issued-code",
+                It.IsAny<NocturneDbContext>(), "issued-code", LoginCodePurpose.Recovery,
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(subjectId);
         return loginCodes;
@@ -468,6 +468,8 @@ public class PasskeyControllerTests : IDisposable
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         ((RecoveryModeRedeemResponse)ok.Value!).Username.Should().Be("orphan");
+        _recoveryCodeService.Verify(r => r.InvalidateAllAsync(orphanId), Times.Once,
+            "recovery codes the member may have lost stop working once someone else restores access");
         RecoveryCookieSet().Should().StartWith(".Nocturne.RecoverySession=recovery-token");
         _jwtService.Verify(s => s.GenerateAccessToken(
             It.Is<SubjectInfo>(i => i.Id == orphanId),
@@ -488,6 +490,7 @@ public class PasskeyControllerTests : IDisposable
 
         Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
         RecoveryCookieSet().Should().BeNull();
+        _recoveryCodeService.Verify(r => r.InvalidateAllAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     [Fact]

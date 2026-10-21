@@ -9,6 +9,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -42,9 +43,13 @@ public class MemberRecoveryController : ControllerBase
         AuthType.LegacyJwt,
     };
 
+    private const string OperatorOnlyDetail =
+        "This account is an instance administrator or also belongs to another space, so only the operator can issue its recovery code.";
+
     private readonly INocturneDbContextFactory _contexts;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantRoleService _tenantRoleService;
+    private readonly ITenantMemberService _tenantMemberService;
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly ILoginCodeService _loginCodeService;
 
@@ -52,12 +57,14 @@ public class MemberRecoveryController : ControllerBase
         INocturneDbContextFactory contexts,
         ITenantAccessor tenantAccessor,
         ITenantRoleService tenantRoleService,
+        ITenantMemberService tenantMemberService,
         IRecoveryCodeService recoveryCodeService,
         ILoginCodeService loginCodeService)
     {
         _contexts = contexts;
         _tenantAccessor = tenantAccessor;
         _tenantRoleService = tenantRoleService;
+        _tenantMemberService = tenantMemberService;
         _recoveryCodeService = recoveryCodeService;
         _loginCodeService = loginCodeService;
     }
@@ -77,7 +84,7 @@ public class MemberRecoveryController : ControllerBase
         await using var db = await _contexts.CreateAsync(ct);
         var subjects = await db.OrphanedSubjectsOf(_tenantAccessor.TenantId)
             .OrderBy(s => s.Name)
-            .Select(s => new { s.Id, s.Name, s.Username })
+            .Select(s => new { s.Id, s.Name, s.Username, s.IsPlatformAdmin })
             .ToListAsync(ct);
 
         var members = new List<LockedOutMember>(subjects.Count);
@@ -85,7 +92,8 @@ public class MemberRecoveryController : ControllerBase
         {
             members.Add(new LockedOutMember(
                 s.Id, s.Name, s.Username,
-                await _recoveryCodeService.GetRemainingCountAsync(s.Id) > 0));
+                HasRecoveryCodes: await _recoveryCodeService.GetRemainingCountAsync(s.Id) > 0,
+                OperatorOnly: await IsOperatorOnlyAsync(s.Id, s.IsPlatformAdmin, ct)));
         }
 
         return Ok(members);
@@ -93,13 +101,18 @@ public class MemberRecoveryController : ControllerBase
 
     /// <summary>
     /// Issues a single-use recovery code for a member who cannot sign in. The plaintext is returned
-    /// once; the member redeems it within <see cref="LoginCodeService.Lifetime"/>.
+    /// once; the member redeems it within <see cref="LoginCodeService.LifetimeOf"/> for
+    /// <see cref="LoginCodePurpose.Recovery"/>.
     /// </summary>
     /// <remarks>
     /// The code lets its holder put a passkey on the member's account, so the caller must be signed
     /// in as themselves, hold every permission the member holds, and not be confined to less
-    /// history than the member sees. A member who still has recovery codes is refused: those are
-    /// their own way back in, and nobody else needs to hold one for them.
+    /// history than the member sees. That ceiling is this tenant's while the account is global, so
+    /// an account with standing anywhere else is refused here and left to the operator.
+    /// <para>
+    /// A member who still holds recovery codes may have lost them, so those do not block issuance;
+    /// redeeming this code cancels them (<see cref="PasskeyController.RecoveryModeRedeem"/>).
+    /// </para>
     /// </remarks>
     [HttpPost("{subjectId:guid}/code")]
     [RemoteCommand(Invalidates = ["GetLockedOutMembers"])]
@@ -121,10 +134,13 @@ public class MemberRecoveryController : ControllerBase
         var member = await db.TenantMembers
             .Where(m => m.TenantId == tenantId && m.SubjectId == subjectId
                 && db.OrphanedSubjectsOf(tenantId).Any(s => s.Id == subjectId))
-            .Select(m => new { m.Id, m.LimitTo24Hours })
+            .Select(m => new { m.Id, m.LimitTo24Hours, m.Subject!.IsPlatformAdmin })
             .FirstOrDefaultAsync(ct);
         if (member is null)
             return NotFound();
+
+        if (await IsOperatorOnlyAsync(subjectId, member.IsPlatformAdmin, ct))
+            return Problem(detail: OperatorOnlyDetail, statusCode: 409, title: "Conflict");
 
         var memberPermissions = await _tenantRoleService.GetEffectivePermissionsAsync(member.Id, ct);
         if (Scope.ValidateGrant(memberPermissions, HttpContext.GetGrantedScopes()) is not null)
@@ -133,14 +149,8 @@ public class MemberRecoveryController : ControllerBase
         if (!member.LimitTo24Hours && HttpContext.IsCallerHistoryClamped())
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
-        if (await _recoveryCodeService.GetRemainingCountAsync(subjectId) > 0)
-            return Problem(
-                detail: "This member still has recovery codes. They can sign in with one of those.",
-                statusCode: 409,
-                title: "Conflict");
-
         var issued = await _loginCodeService.IssueAsync(
-            db, subjectId,
+            db, subjectId, LoginCodePurpose.Recovery,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
             AuthAuditActor.From(auth),
@@ -148,10 +158,21 @@ public class MemberRecoveryController : ControllerBase
 
         return Ok(issued);
     }
+
+    /// <summary>
+    /// Whether the account reaches beyond this tenant: an instance administrator, or a member of
+    /// any other tenant.
+    /// </summary>
+    private async Task<bool> IsOperatorOnlyAsync(Guid subjectId, bool isPlatformAdmin, CancellationToken ct) =>
+        isPlatformAdmin
+        || (await _tenantMemberService.GetTenantIdsForSubjectAsync(subjectId, ct))
+            .Any(t => t != _tenantAccessor.TenantId);
 }
 
 /// <param name="SubjectId">The member's subject.</param>
 /// <param name="Name">Display name.</param>
 /// <param name="Username">Sign-in name, when the member has one.</param>
 /// <param name="HasRecoveryCodes">Whether the member can still sign in with a recovery code of their own.</param>
-public record LockedOutMember(Guid SubjectId, string Name, string? Username, bool HasRecoveryCodes);
+/// <param name="OperatorOnly">Whether only the operator can issue this member's recovery code.</param>
+public record LockedOutMember(
+    Guid SubjectId, string Name, string? Username, bool HasRecoveryCodes, bool OperatorOnly);

@@ -120,6 +120,15 @@ public class RecoveryCodeService : IRecoveryCodeService
     }
 
     /// <inheritdoc />
+    public async Task InvalidateAllAsync(Guid subjectId)
+    {
+        await using var db = await _contexts.CreateAsync();
+        await db.RecoveryCodes
+            .Where(r => r.SubjectId == subjectId && r.UsedAt == null && r.InvalidatedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.InvalidatedAt, DateTime.UtcNow));
+    }
+
+    /// <inheritdoc />
     public async Task<int> GetRemainingCountAsync(Guid subjectId)
     {
         await using var db = await _contexts.CreateAsync();

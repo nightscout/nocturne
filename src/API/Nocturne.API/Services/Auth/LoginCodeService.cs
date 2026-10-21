@@ -8,8 +8,9 @@ using Nocturne.Infrastructure.Data.Entities;
 namespace Nocturne.API.Services.Auth;
 
 /// <summary>
-/// Mints and redeems the single-use codes that let a platform administrator hand a browser a
-/// tenant session without a second credential ceremony.
+/// Mints and redeems single-use codes bound to one member of one tenant: a login code hands a
+/// browser a tenant session without a second credential ceremony, and a recovery code lets a member
+/// with no sign-in method left enrol a passkey (<see cref="LoginCodePurpose"/>).
 /// </summary>
 /// <remarks>
 /// Callers pass the <see cref="NocturneDbContext"/> the operation runs on: issuance pins one to
@@ -27,6 +28,7 @@ public interface ILoginCodeService
     Task<LoginCode> IssueAsync(
         NocturneDbContext dbContext,
         Guid subjectId,
+        LoginCodePurpose purpose,
         string? ipAddress,
         string? userAgent,
         AuthAuditActor actor,
@@ -34,13 +36,14 @@ public interface ILoginCodeService
 
     /// <summary>
     /// Redeems <paramref name="code"/> and returns the member it was minted for, or
-    /// <see langword="null"/> when it is unknown, expired, already consumed, or belongs to
-    /// another tenant. Redemption is a single atomic claim, so two concurrent callers cannot
-    /// both succeed.
+    /// <see langword="null"/> when it is unknown, expired, already consumed, minted for another
+    /// purpose, or belongs to another tenant. Redemption is a single atomic claim, so two
+    /// concurrent callers cannot both succeed.
     /// </summary>
     Task<Guid?> RedeemAsync(
         NocturneDbContext dbContext,
         string code,
+        LoginCodePurpose purpose,
         string? ipAddress,
         string? userAgent,
         CancellationToken ct = default);
@@ -52,7 +55,15 @@ public sealed record LoginCode(string Code, DateTime ExpiresAt);
 /// <inheritdoc cref="ILoginCodeService"/>
 public class LoginCodeService : ILoginCodeService
 {
-    public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(5);
+    /// <summary>
+    /// How long a code stays redeemable. A login code is handed straight to a browser; a recovery
+    /// code is delivered to the member out of band, so it has to survive the delivery.
+    /// </summary>
+    public static TimeSpan LifetimeOf(LoginCodePurpose purpose) => purpose switch
+    {
+        LoginCodePurpose.Recovery => TimeSpan.FromHours(24),
+        _ => TimeSpan.FromMinutes(5),
+    };
 
     private readonly IJwtService _jwtService;
     private readonly IAuthAuditService _auditService;
@@ -67,6 +78,7 @@ public class LoginCodeService : ILoginCodeService
     public async Task<LoginCode> IssueAsync(
         NocturneDbContext dbContext,
         Guid subjectId,
+        LoginCodePurpose purpose,
         string? ipAddress,
         string? userAgent,
         AuthAuditActor actor,
@@ -84,7 +96,8 @@ public class LoginCodeService : ILoginCodeService
             Id = Guid.CreateVersion7(),
             SubjectId = subjectId,
             CodeHash = HashUtils.Sha256Hex(code),
-            ExpiresAt = now.Add(Lifetime),
+            Purpose = purpose,
+            ExpiresAt = now.Add(LifetimeOf(purpose)),
         };
 
         dbContext.LoginCodes.Add(entity);
@@ -104,6 +117,7 @@ public class LoginCodeService : ILoginCodeService
     public async Task<Guid?> RedeemAsync(
         NocturneDbContext dbContext,
         string code,
+        LoginCodePurpose purpose,
         string? ipAddress,
         string? userAgent,
         CancellationToken ct = default)
@@ -115,7 +129,7 @@ public class LoginCodeService : ILoginCodeService
         // state is not a concurrency token, so a read-then-write would let two simultaneous
         // exchanges both see consumed_at IS NULL and both mint a session.
         var claimed = await dbContext.LoginCodes
-            .Where(c => c.CodeHash == codeHash && c.ConsumedAt == null && c.ExpiresAt > now)
+            .Where(c => c.CodeHash == codeHash && c.Purpose == purpose && c.ConsumedAt == null && c.ExpiresAt > now)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.ConsumedAt, now), ct);
 
         var subjectId = claimed == 0
@@ -130,7 +144,10 @@ public class LoginCodeService : ILoginCodeService
             subjectId, success: subjectId is not null,
             ipAddress: ipAddress,
             userAgent: userAgent,
-            detailsJson: JsonSerializer.Serialize(new { method = "login_code" }),
+            detailsJson: JsonSerializer.Serialize(new
+            {
+                method = purpose == LoginCodePurpose.Recovery ? "recovery_code_link" : "login_code",
+            }),
             tenantId: dbContext.TenantIdOrNull);
 
         return subjectId;

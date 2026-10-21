@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
@@ -147,6 +148,7 @@ public class TenantController : ControllerBase
     [RemoteCommand(Invalidates = ["GetAll"])]
     [ProducesResponseType(typeof(ProvisionResult), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Provision(
         [FromBody] ProvisionRequest request, CancellationToken ct)
     {
@@ -155,16 +157,23 @@ public class TenantController : ControllerBase
         if (request.Credential is not null && request.OidcIdentity is not null)
             return Problem(detail: "Provide either Credential or OidcIdentity, not both", statusCode: 400, title: "Bad Request");
 
-        var result = await _tenantService.ProvisionWithOwnerAsync(
-            request.Slug,
-            request.DisplayName,
-            request.OwnerUsername,
-            request.OwnerEmail,
-            request.Credential,
-            request.OidcIdentity,
-            ct);
+        try
+        {
+            var result = await _tenantService.ProvisionWithOwnerAsync(
+                request.Slug,
+                request.DisplayName,
+                request.OwnerUsername,
+                request.OwnerEmail,
+                request.Credential,
+                request.OidcIdentity,
+                ct);
 
-        return StatusCode(StatusCodes.Status201Created, result);
+            return StatusCode(StatusCodes.Status201Created, result);
+        }
+        catch (ProvisionConflictException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: 409, title: "Conflict");
+        }
     }
 
     // ── Credential management (admin proxy for account portal) ──────────
@@ -276,10 +285,39 @@ public class TenantController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> IssueLoginCode(
+    public Task<IActionResult> IssueLoginCode(
         Guid id, Guid subjectId,
         [FromServices] INocturneDbContextFactory dbContextFactory,
         [FromServices] ILoginCodeService loginCodeService,
+        CancellationToken ct) =>
+        IssueCodeAsync(id, subjectId, LoginCodePurpose.Login, dbContextFactory, loginCodeService, ct);
+
+    /// <summary>
+    /// Mints a single-use recovery code that lets a member enrol a passkey at
+    /// <c>POST /api/auth/passkey/recovery-mode/redeem</c> on the tenant's host.
+    /// </summary>
+    /// <remarks>
+    /// The operator's way to recover a member nobody on the tenant may recover: the only owner, a
+    /// platform admin, or a member of another tenant
+    /// (<see cref="Identity.MemberRecoveryController.IssueRecoveryCode"/>).
+    /// </remarks>
+    [HttpPost("{id:guid}/members/{subjectId:guid}/recovery-code")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(LoginCode), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public Task<IActionResult> IssueRecoveryCode(
+        Guid id, Guid subjectId,
+        [FromServices] INocturneDbContextFactory dbContextFactory,
+        [FromServices] ILoginCodeService loginCodeService,
+        CancellationToken ct) =>
+        IssueCodeAsync(id, subjectId, LoginCodePurpose.Recovery, dbContextFactory, loginCodeService, ct);
+
+    private async Task<IActionResult> IssueCodeAsync(
+        Guid id, Guid subjectId, LoginCodePurpose purpose,
+        INocturneDbContextFactory dbContextFactory,
+        ILoginCodeService loginCodeService,
         CancellationToken ct)
     {
         if (!await IsCallerTenantOwnerAsync(id, ct))
@@ -295,7 +333,7 @@ public class TenantController : ControllerBase
         await using var dbContext = await dbContextFactory.CreateForTenantAsync(id, ct);
 
         var issued = await loginCodeService.IssueAsync(
-            dbContext, subjectId,
+            dbContext, subjectId, purpose,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
             AuthAuditActor.From(HttpContext.GetAuthContext()),

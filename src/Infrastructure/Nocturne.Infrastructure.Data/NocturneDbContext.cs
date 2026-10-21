@@ -2333,6 +2333,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .HasForeignKey(e => e.SubjectId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.Property(e => e.Purpose).HasConversion<string>();
+
             entity.HasIndex(e => e.CodeHash).IsUnique();
             entity.HasIndex(e => e.ExpiresAt);
         });

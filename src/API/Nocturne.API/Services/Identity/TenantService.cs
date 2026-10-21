@@ -498,9 +498,16 @@ public partial class TenantService : ITenantService
                 : await context.Subjects.FirstOrDefaultAsync(s => s.Id == existingIdentity.SubjectId, token);
             if (subject is null)
             {
+                var ownerId = credential?.SubjectId ?? oidcIdentity?.SubjectId ?? Guid.CreateVersion7();
+                if (await context.Subjects.AnyAsync(s => s.Id == ownerId, token))
+                {
+                    throw new ProvisionConflictException(
+                        $"Subject {ownerId} already exists; a provisioned owner is always a new subject.");
+                }
+
                 subject = new SubjectEntity
                 {
-                    Id = credential?.SubjectId ?? oidcIdentity?.SubjectId ?? Guid.CreateVersion7(),
+                    Id = ownerId,
                     Name = ownerUsername,
                     Username = ownerUsername.ToLowerInvariant(),
                     Email = ownerEmail,
