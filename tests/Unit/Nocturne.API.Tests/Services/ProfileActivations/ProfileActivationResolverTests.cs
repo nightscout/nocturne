@@ -46,6 +46,11 @@ public sealed class ProfileActivationResolverTests : IDisposable
 
         _therapy.Setup(r => r.GetByProfileNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         _therapy.Setup(r => r.GetDefaultsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        _therapy.Setup(r => r.GetStoreIndexAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+        [
+            new ProfileStoreRow("document", true, "Default", At(-24 * Hour), false),
+            new ProfileStoreRow("document", true, "Rhys", At(-24 * Hour), false),
+        ]);
         _therapy.Setup(r => r.GetByProfileNameAsync("Rhys", It.IsAny<CancellationToken>()))
             .ReturnsAsync([new TherapySettings { ProfileName = "Rhys", Timestamp = At(-24 * Hour) }]);
         _basal.Setup(r => r.GetByProfileNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
@@ -97,14 +102,14 @@ public sealed class ProfileActivationResolverTests : IDisposable
     private ProfileActivationResolver Resolver(Nocturne.API.Services.Caching.ITenantCache? cache = null)
     {
         cache ??= TestTenantCache.Create(_cache);
-        return new ProfileActivationResolver(_repository.Object, _therapy.Object, new ProfileVersionCache(cache), cache);
+        return new ProfileActivationResolver(_repository.Object, new ProfileStoreTimelineSource(_therapy.Object), cache);
     }
 
     private BasalRateResolver BasalRates(IProfileActivationResolver resolver) => new(
         _basal.Object,
         _therapy.Object,
         Mock.Of<IPatientRecordRepository>(),
-        new ActiveProfileResolver(resolver, _repository.Object, _therapy.Object),
+        new ActiveProfileResolver(resolver, _repository.Object, new ProfileStoreTimelineSource(_therapy.Object)),
         new ProfileVersionCache(TestTenantCache.Create(_cache)),
         NullLogger<BasalRateResolver>.Instance);
 
@@ -195,13 +200,32 @@ public sealed class ProfileActivationResolverTests : IDisposable
     [Fact]
     public async Task NoActivationReadsTheTenantsDefaultStore_WhateverItIsNamed()
     {
-        _therapy.Setup(r => r.GetDefaultsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new TherapySettings { ProfileName = "Rhys", IsDefault = true, Timestamp = At(-24 * Hour) }]);
+        _therapy.Setup(r => r.GetStoreIndexAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ProfileStoreRow("document", true, "Loop Profile", At(-24 * Hour), true)]);
+        _basal.Setup(r => r.GetByProfileNameAsync("Loop Profile", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Basal("Loop Profile", 0.75)]);
         Store(Hour, "Weekend");
 
-        (await BasalRates(Resolver()).GetBasalRateAsync(T0)).Should().Be(1.0);
+        (await BasalRates(Resolver()).GetBasalRateAsync(T0)).Should().Be(0.75);
         var batch = await BasalRates(Resolver()).BuildResolverAsync(T0, T0 + 2 * Hour);
-        batch(T0).Should().Be(1.0, "the time before the activation is the default store's");
+        batch(T0).Should().Be(0.75, "the time before the activation is the default store's");
+        batch(T0 + Hour + Hour / 2).Should().Be(0.75, "the store holds no Weekend, so the activation reads the default");
+    }
+
+    [Fact]
+    public async Task AStoreTheDocumentInForceDroppedIsReadFromTheBaseSnapshotScaled()
+    {
+        _therapy.Setup(r => r.GetStoreIndexAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+        [
+            new ProfileStoreRow("older", true, "Rhys", At(-48 * Hour), false),
+            new ProfileStoreRow("newer", true, "Default", At(-24 * Hour), true),
+        ]);
+        Store(0, "Rhys", percentage: 200, snapshot: Snapshot(0.7));
+
+        var active = (await Resolver().GetAtAsync(T0 + Hour))!;
+        active.Source.Should().Be(ProfileScheduleSource.BaseSnapshot,
+            "Nightscout reads a switch's own profile when the document in force does not hold its store");
+        (await BasalRates(Resolver()).GetBasalRateAsync(T0 + Hour)).Should().BeApproximately(1.4, 1e-9);
     }
 
     [Fact]
@@ -368,7 +392,7 @@ public sealed class ProfileActivationResolverTests : IDisposable
         effective.RequestedActivationId = requested.Id;
         _repository.Setup(r => r.GetByIdAsync(requested.Id, It.IsAny<CancellationToken>())).ReturnsAsync(requested);
 
-        var insulin = await new ActiveProfileResolver(Resolver(), _repository.Object, _therapy.Object).GetActiveInsulinContextAsync(T0 + 2 * Hour);
+        var insulin = await new ActiveProfileResolver(Resolver(), _repository.Object, new ProfileStoreTimelineSource(_therapy.Object)).GetActiveInsulinContextAsync(T0 + 2 * Hour);
 
         insulin!.InsulinName.Should().Be("Fiasp");
     }

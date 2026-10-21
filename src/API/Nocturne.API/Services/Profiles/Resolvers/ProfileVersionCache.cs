@@ -29,15 +29,24 @@ internal sealed class ProfileVersionCache
         string profileName,
         DateTime timestamp,
         CancellationToken ct)
-        where TRecord : class, IV4Record, IProfileScoped
-    {
-        var versions = await _cache.GetOrCreateLocalAsync(
+        where TRecord : class, IV4Record, IProfileScoped =>
+        ActiveAt(await GetVersionsAsync(repo, profileName, ct), timestamp);
+
+    /// <summary>Every stored version of <paramref name="profileName"/>, newest first.</summary>
+    public Task<TRecord[]> GetVersionsAsync<TRecord>(
+        IProfileScopedRepository<TRecord> repo,
+        string profileName,
+        CancellationToken ct)
+        where TRecord : class, IV4Record, IProfileScoped =>
+        _cache.GetOrCreateLocalAsync(
             $"profile-versions:{typeof(TRecord).Name}:{profileName}",
             async () => (await repo.GetByProfileNameAsync(profileName, ct))
                 .OrderByDescending(v => v.Timestamp)
                 .ToArray(),
             Ttl);
 
-        return versions.FirstOrDefault(v => v.Timestamp <= timestamp);
-    }
+    /// <summary>The newest of <paramref name="newestFirst"/> at-or-before <paramref name="timestamp"/>.</summary>
+    public static TRecord? ActiveAt<TRecord>(TRecord[] newestFirst, DateTime timestamp)
+        where TRecord : class, IV4Record =>
+        newestFirst.FirstOrDefault(v => v.Timestamp <= timestamp);
 }

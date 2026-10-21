@@ -17,10 +17,11 @@ namespace Nocturne.API.Services.Profiles.Resolvers;
 /// <remarks>
 /// Sub-divides each activation's stretch at every <see cref="BasalSchedule"/> version boundary so
 /// mid-window schedule edits are reflected (matching the per-instant behavior of <see cref="IBasalRateResolver"/>).
-/// An activation that carries its own schedules is one assignment. Gaps in activation coverage are
-/// filled with the default store (<see cref="IActiveProfileResolver.GetDefaultProfileNameAsync"/>), also sub-divided by schedule version. When neither named profile spans nor any default schedule rows exist, an
-/// assignment with no entries is emitted: <see cref="BasalCalculator"/> renders that as a constant
-/// 1.0 U/hr fallback, identical to <c>BasalRateResolver</c>'s point fallback.
+/// An activation that carries its own schedules is one assignment. Every other stretch reads the store
+/// <see cref="IActiveProfileResolver.GetProfileSpansForRangeAsync"/> names for it, sub-divided by schedule
+/// version. When that store has no schedule rows, an assignment with no entries is emitted:
+/// <see cref="BasalCalculator"/> renders that as a constant 1.0 U/hr fallback, identical to
+/// <c>BasalRateResolver</c>'s point fallback.
 ///
 /// Per-window assemble cache (5s TTL) in <see cref="ITenantCache"/> absorbs the multi-period dashboard
 /// pattern where 1d/3d/7d/30d/90d are requested back-to-back.
@@ -80,21 +81,12 @@ internal sealed class BasalSegmentService : IBasalSegmentService
     {
         var toUtc = DateTimeOffset.FromUnixTimeMilliseconds(window.EndMills).UtcDateTime;
 
-        var spans = await _activeProfileResolver.GetActiveProfileSpansForRangeAsync(
+        var spans = await _activeProfileResolver.GetProfileSpansForRangeAsync(
             window.StartMills, window.EndMills, ct);
-
-        var defaultProfile = await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
-        var spanProfileNames = spans
-            .Select(s => s.ProfileName)
-            .Distinct()
-            .ToList();
-        var profileNames = spanProfileNames.Contains(defaultProfile)
-            ? spanProfileNames
-            : spanProfileNames.Append(defaultProfile).ToList();
 
         // For each profile name, load schedule-version history and timezone.
         var byProfile = new Dictionary<string, ProfileResources>(StringComparer.Ordinal);
-        foreach (var name in profileNames)
+        foreach (var name in spans.Select(s => s.ProfileName).Distinct(StringComparer.Ordinal))
         {
             var schedules = (await _scheduleRepo.GetByProfileNameAsync(name, ct))
                 .Where(s => s.Timestamp <= toUtc)
@@ -105,37 +97,23 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         }
 
         var result = new List<ScheduleAssignment>();
-        long cursor = window.StartMills;
         foreach (var span in spans)
         {
-            var spanStart = Math.Max(Math.Max(span.StartMills, window.StartMills), cursor);
-            var spanEnd = Math.Min(span.EndMills ?? window.EndMills, window.EndMills);
-            if (spanEnd <= spanStart) continue;
-
-            // Gap before this span → default.
-            if (cursor < spanStart)
-                result.AddRange(BuildAssignmentsForRange(cursor, spanStart, defaultProfile, byProfile, percentage: 100, timeshiftMs: 0));
-
             var (percentage, timeshiftMs) = span.Adjustment is { } adjustment
                 ? (adjustment.Percentage, adjustment.TimeshiftMs)
                 : (100, 0L);
+            var spanEnd = span.EndMills ?? window.EndMills;
             if (span.Schedules is { } snapshot)
             {
                 result.Add(new ScheduleAssignment(
-                    spanStart, spanEnd, span.ProfileName, snapshot.Basal ?? [], percentage, timeshiftMs,
+                    span.StartMills, spanEnd, span.ProfileName, snapshot.Basal ?? [], percentage, timeshiftMs,
                     snapshot.Timezone ?? byProfile.GetValueOrDefault(span.ProfileName)?.TimeZoneId));
             }
             else
             {
-                result.AddRange(BuildAssignmentsForRange(spanStart, spanEnd, span.ProfileName, byProfile, percentage, timeshiftMs));
+                result.AddRange(BuildAssignmentsForRange(span.StartMills, spanEnd, span.ProfileName, byProfile, percentage, timeshiftMs));
             }
-
-            cursor = spanEnd;
         }
-
-        // Trailing gap → default.
-        if (cursor < window.EndMills)
-            result.AddRange(BuildAssignmentsForRange(cursor, window.EndMills, defaultProfile, byProfile, percentage: 100, timeshiftMs: 0));
 
         return result;
     }

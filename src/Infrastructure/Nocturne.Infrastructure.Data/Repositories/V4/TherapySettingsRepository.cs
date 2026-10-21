@@ -132,6 +132,16 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<ProfileStoreRow>> GetStoreIndexAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await DocumentRows(ctx)
+            .Select(d => new ProfileStoreRow(
+                d.DocumentId, d.Row.LegacyId != null, d.Row.ProfileName, d.Row.Timestamp, d.Row.IsDefault))
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
     public async Task<TherapySettings?> GetNewestDocumentRowAsync(CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);

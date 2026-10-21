@@ -367,8 +367,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         decimal glucoseMgdl, DateTime at, string? tenantTimeZoneId, CancellationToken ct)
     {
         var atMills = new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
-        var profileName = await _deps.ActiveProfileResolver.GetActiveProfileNameAsync(atMills, ct)
-            ?? await _deps.ActiveProfileResolver.GetDefaultProfileNameAsync(ct);
+        var profileName = await _deps.ActiveProfileResolver.GetProfileNameAsync(atMills, ct);
         var schedule = await _deps.TargetRangeSchedules.GetActiveAtAsync(profileName, at, ct);
 
         // No schedule at all — fall back to the consensus in-range band and clinical bucket defaults.

@@ -21,7 +21,7 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
 
     public BasalSegmentServiceCacheTests() =>
         _activeProfile
-            .Setup(a => a.GetActiveProfileSpansForRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(a => a.GetProfileSpansForRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
     public void Dispose() => _cache.Dispose();
@@ -41,7 +41,7 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
 
     private void VerifySpanReads(int times) =>
         _activeProfile.Verify(
-            a => a.GetActiveProfileSpansForRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()),
+            a => a.GetProfileSpansForRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()),
             Times.Exactly(times));
 
     [Fact]

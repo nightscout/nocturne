@@ -50,9 +50,7 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
             && (snapshot.Insulin?.Dia ?? snapshot.Dia) is > 0 and var snapshotDia)
             return snapshotDia;
 
-        var profileName = specProfile
-            ?? await _activeProfileResolver.GetActiveProfileNameAsync(timeMills, ct)
-            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
+        var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(timeMills, ct);
 
         var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
         var settings = await GetCachedSettingsAsync(profileName, timestamp, ct);
@@ -79,9 +77,7 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
             && await _activeProfileResolver.GetActiveSchedulesAsync(timeMills, ct) is { CarbsHr: > 0 } snapshot)
             return snapshot.CarbsHr!.Value;
 
-        var profileName = specProfile
-            ?? await _activeProfileResolver.GetActiveProfileNameAsync(timeMills, ct)
-            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
+        var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(timeMills, ct);
 
         var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
         var settings = await GetCachedSettingsAsync(profileName, timestamp, ct);
@@ -105,16 +101,15 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
             && await _activeProfileResolver.GetActiveSchedulesAsync(nowMills, ct) is { Timezone: { Length: > 0 } snapshotTimezone })
             return snapshotTimezone;
 
-        var profileName = specProfile
-            ?? await _activeProfileResolver.GetActiveProfileNameAsync(nowMills, ct)
-            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
+        var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(nowMills, ct);
         var settings = await GetCachedSettingsAsync(profileName, DateTime.UtcNow, ct);
         return settings?.Timezone;
     }
 
     public async Task<string?> GetUnitsAsync(string? specProfile = null, CancellationToken ct = default)
     {
-        var profileName = specProfile ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
+        var profileName = specProfile
+            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct);
         var settings = await GetCachedSettingsAsync(profileName, DateTime.UtcNow, ct);
         return settings?.Units;
     }

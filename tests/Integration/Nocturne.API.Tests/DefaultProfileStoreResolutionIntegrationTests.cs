@@ -1,19 +1,22 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models.Basal;
+using Nocturne.Infrastructure.Cache.Abstractions;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace Nocturne.API.Tests.Integration;
 
 /// <summary>
-/// With no profile switch in force, every therapy resolver reads the store the newest profile
-/// document names as its <c>defaultProfile</c>, as Nightscout's <c>store[defaultProfile]</c> does,
-/// whatever that store is called, on real PostgreSQL.
+/// Every therapy resolver reads the store in force at the time asked: the one a profile switch names
+/// when the profile document in force then holds it, else that document's default store, as
+/// Nightscout's <c>profileFromTime</c> and <c>activeProfileToTime</c> do, whatever the store is
+/// called, on real PostgreSQL.
 /// </summary>
 [Trait("Category", "Integration")]
 public class DefaultProfileStoreResolutionIntegrationTests : ApiIntegrationTestBase
@@ -21,19 +24,33 @@ public class DefaultProfileStoreResolutionIntegrationTests : ApiIntegrationTestB
     public DefaultProfileStoreResolutionIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
         : base(fixture, output) { }
 
+    /// <remarks>
+    /// The resolvers' tenant caches outlive the rows each test truncates, and these tests reuse store
+    /// names, so each starts with them empty.
+    /// </remarks>
+    public override async Task InitializeAsync()
+    {
+        await base.InitializeAsync();
+        (Fixture.Services.GetRequiredService<IMemoryCache>() as MemoryCache)?.Compact(1.0);
+        await Fixture.Services.GetRequiredService<ICacheService>().RemoveByPatternAsync($"{Fixture.TenantId:D}:*");
+    }
+
     private sealed record Store(double Sens, double CarbRatio, double Basal, double Low, double High, double Dia, double CarbsHr);
 
     private static readonly Store Day = new(40, 8, 0.65, 100, 110, 5.5, 25);
     private static readonly Store Night = new(70, 12, 0.3, 120, 130, 4.5, 35);
+    private static readonly Store Old = new(45, 9, 0.75, 95, 105, 6, 28);
 
     private readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
 
-    private static object StoreData(Store s) => new
+    private static object StoreData(Store s) => StoreData(s, "mg/dl");
+
+    private static object StoreData(Store s, string units) => new
     {
         dia = s.Dia,
         carbs_hr = s.CarbsHr,
         timezone = "UTC",
-        units = "mg/dl",
+        units,
         basal = new[] { new { time = "00:00", value = s.Basal } },
         carbratio = new[] { new { time = "00:00", value = s.CarbRatio } },
         sens = new[] { new { time = "00:00", value = s.Sens } },
@@ -41,14 +58,31 @@ public class DefaultProfileStoreResolutionIntegrationTests : ApiIntegrationTestB
         target_high = new[] { new { time = "00:00", value = s.High } },
     };
 
-    private static object Document(string id, string defaultProfile, DateTimeOffset startDate, Dictionary<string, Store> stores) => new
+    private static object Document(string id, string defaultProfile, DateTimeOffset startDate, Dictionary<string, Store> stores) =>
+        RawDocument(id, defaultProfile, startDate, stores.ToDictionary(s => s.Key, s => StoreData(s.Value)));
+
+    private static object RawDocument(string id, string defaultProfile, DateTimeOffset startDate, Dictionary<string, object> stores) => new
     {
         _id = id,
         defaultProfile,
         startDate = startDate.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
         mills = startDate.ToUnixTimeMilliseconds(),
-        store = stores.ToDictionary(s => s.Key, s => StoreData(s.Value)),
+        store = stores,
     };
+
+    private static async Task SwitchAsync(HttpClient client, string profile, DateTimeOffset at, int minutes) =>
+        (await client.PostAsJsonAsync("/api/v1/treatments", new[]
+        {
+            new
+            {
+                eventType = "Profile Switch",
+                profile,
+                duration = minutes,
+                created_at = at.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                mills = at.ToUnixTimeMilliseconds(),
+                enteredBy = "careportal",
+            },
+        })).StatusCode.Should().Be(HttpStatusCode.OK);
 
     private async Task<HttpClient> SeedAsync(params object[] documents)
     {
@@ -176,5 +210,100 @@ public class DefaultProfileStoreResolutionIntegrationTests : ApiIntegrationTestB
         acrossTheEnd.After.Should().Be(Night.Basal);
         acrossTheEnd.segments.Select(s => (s.ProfileName, s.UnitsPerHour)).Distinct()
             .Should().Equal(("Day", Day.Basal), ("Night", Night.Basal));
+    }
+
+    [Fact]
+    public async Task ADefaultStoreFirstUploadedInsideTheWindow_LeavesTheEarlierTimeOnTheStoreInForceThen()
+    {
+        var uploaded = Now.AddHours(-2);
+        await SeedAsync(
+            Document("5f8d0c1e8a7b4c3d9e5f187b", "Default", Now.AddDays(-3), new() { ["Default"] = Old }),
+            Document("5f8d0c1e8a7b4c3d9e5f187c", "Loop Profile", uploaded, new() { ["Loop Profile"] = Day }));
+
+        var before = Now.AddHours(-4).ToUnixTimeMilliseconds();
+        var after = Now.AddHours(-1).ToUnixTimeMilliseconds();
+        ShouldBe(await ResolveAtAsync(before), Old, "Default");
+        ShouldBe(await ResolveAtAsync(after), Day, "Loop Profile");
+
+        var range = await WithTenantScopeAsync(async services =>
+        {
+            var from = Now.AddHours(-24).ToUnixTimeMilliseconds();
+            var to = Now.ToUnixTimeMilliseconds();
+            var batch = await services.GetRequiredService<IBasalRateResolver>().BuildResolverAsync(from, to);
+            var timeline = await services.GetRequiredService<ITherapyTimelineResolver>().BuildAsync(from, to + 1);
+            var segments = new List<BasalSegment>();
+            await foreach (var segment in services.GetRequiredService<IBasalSegmentService>().GetSegmentsAsync(from, to))
+                segments.Add(segment);
+            return (batch, timeline, segments);
+        });
+
+        range.batch(before).Should().Be(Old.Basal);
+        range.batch(after).Should().Be(Day.Basal);
+        foreach (var (at, store) in new[] { (before, Old), (after, Day) })
+        {
+            var snapshot = range.timeline.SnapshotAt(at);
+            snapshot.SensitivityAt(at).Should().Be(store.Sens);
+            snapshot.CarbRatioAt(at).Should().Be(store.CarbRatio);
+            snapshot.BasalRateAt(at).Should().Be(store.Basal);
+            snapshot.Dia.Should().Be(store.Dia);
+        }
+        range.segments.Select(s => (s.ProfileName, s.UnitsPerHour)).Distinct()
+            .Should().Equal(("Default", Old.Basal), ("Loop Profile", Day.Basal));
+    }
+
+    [Fact]
+    public async Task ASwitchToAStoreThatDoesNotExist_ReadsTheDefaultStore()
+    {
+        var client = await SeedAsync(Document(
+            "5f8d0c1e8a7b4c3d9e5f187d", "Loop Profile", Now.AddDays(-2), new() { ["Loop Profile"] = Day }));
+        await SwitchAsync(client, "Default", Now.AddHours(-3), 120);
+
+        ShouldBe(await ResolveAtAsync(Now.AddHours(-2).ToUnixTimeMilliseconds()), Day, "Loop Profile");
+    }
+
+    [Fact]
+    public async Task ASwitchToAStoreTheDocumentInForceDropped_ReadsTheDefaultStore()
+    {
+        var client = await SeedAsync(
+            Document("5f8d0c1e8a7b4c3d9e5f187e", "Default", Now.AddDays(-3), new() { ["Default"] = Old }),
+            Document("5f8d0c1e8a7b4c3d9e5f187f", "Renamed", Now.AddDays(-1), new() { ["Renamed"] = Day }));
+        await SwitchAsync(client, "Default", Now.AddHours(-3), 120);
+
+        ShouldBe(await ResolveAtAsync(Now.AddHours(-2).ToUnixTimeMilliseconds()), Day, "Renamed");
+    }
+
+    [Fact]
+    public async Task DeletingTheNewestDocument_LeavesTheNextNewestDocumentsStoreAsTheDefault()
+    {
+        var client = await SeedAsync(
+            Document("5f8d0c1e8a7b4c3d9e5f1880", "Loop Profile", Now.AddDays(-3), new() { ["Loop Profile"] = Day }),
+            Document("5f8d0c1e8a7b4c3d9e5f1881", "Other", Now.AddDays(-1), new() { ["Other"] = Night }));
+        (await client.DeleteAsync("/api/v1/profile/5f8d0c1e8a7b4c3d9e5f1881")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        ShouldBe(await ResolveAtAsync(Now.AddHours(-1).ToUnixTimeMilliseconds()), Day, "Loop Profile");
+    }
+
+    [Fact]
+    public async Task AnMmolDefaultStoreNamedOtherThanDefault_IsReadInMgdl()
+    {
+        var mmol = new
+        {
+            dia = 6.0,
+            carbs_hr = 28,
+            timezone = "UTC",
+            units = "mmol",
+            basal = new[] { new { time = "00:00", value = 0.75 } },
+            carbratio = new[] { new { time = "00:00", value = 9.0 } },
+            sens = new[] { new { time = "00:00", value = 2.5 } },
+            target_low = new[] { new { time = "00:00", value = 5.5 } },
+            target_high = new[] { new { time = "00:00", value = 6.5 } },
+        };
+        await SeedAsync(RawDocument(
+            "5f8d0c1e8a7b4c3d9e5f1882", "Mmol Profile", Now.AddDays(-2), new Dictionary<string, object> { ["Mmol Profile"] = mmol }));
+
+        var at = Now.AddHours(-1).ToUnixTimeMilliseconds();
+        ShouldBe(await ResolveAtAsync(at), new Store(45, 9, 0.75, 99, 117, 6, 28), "Mmol Profile");
+        (await WithTenantScopeAsync(services => services.GetRequiredService<ITherapySettingsResolver>().GetUnitsAsync()))
+            .Should().Be("mmol");
     }
 }

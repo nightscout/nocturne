@@ -123,7 +123,7 @@ public class BasalRateResolverTests : IDisposable
         private void SetupSpans(params ProfileSpan[] spans)
         {
             _activeProfileResolver
-                .Setup(r => r.GetActiveProfileSpansForRangeAsync(
+                .Setup(r => r.GetProfileSpansForRangeAsync(
                     It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(spans.ToList());
         }
@@ -204,7 +204,7 @@ public class BasalRateResolverTests : IDisposable
                 rateAt(MidnightMills + i * 300_000L);
 
             _activeProfileResolver.Verify(
-                r => r.GetActiveProfileSpansForRangeAsync(
+                r => r.GetProfileSpansForRangeAsync(
                     It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()),
                 Times.Once);
         }
@@ -218,12 +218,32 @@ public class BasalRateResolverTests : IDisposable
             // "Default" is NOT set up — returns null → DefaultBasalRate fallback
 
             var spanStart = MidnightMills + 3_600_000;
-            SetupSpans(new ProfileSpan("Profile2", spanStart, null, null));
+            SetupSpans(
+                new ProfileSpan("Default", MidnightMills, spanStart, null),
+                new ProfileSpan("Profile2", spanStart, EndOfDayMills, null));
 
             var rateAt = await _sut.BuildResolverAsync(MidnightMills, EndOfDayMills);
 
             rateAt(spanStart).Should().Be(2.0);      // exactly at start — Profile2 active
-            rateAt(spanStart - 1).Should().Be(1.0);  // one ms before — no span, Default schedule null → DefaultBasalRate
+            rateAt(spanStart - 1).Should().Be(1.0);  // one ms before — Default, whose schedule is null → DefaultBasalRate
+        }
+
+        [Fact]
+        public async Task AScheduleVersionInsideTheRange_AppliesFromItsOwnStart()
+        {
+            var noonMills = MidnightMills + 43_200_000;
+            var older = MakeSchedule((0, 0.8));
+            older.Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(MidnightMills).UtcDateTime.AddDays(-1);
+            var newer = MakeSchedule((0, 1.4));
+            newer.Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(noonMills).UtcDateTime;
+            _repo.Setup(r => r.GetByProfileNameAsync("Default", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new[] { newer, older });
+            SetupSpans(new ProfileSpan("Default", MidnightMills, EndOfDayMills, null));
+
+            var rateAt = await _sut.BuildResolverAsync(MidnightMills, EndOfDayMills);
+
+            rateAt(MidnightMills + 3_600_000).Should().Be(0.8);
+            rateAt(noonMills + 3_600_000).Should().Be(1.4);
         }
     }
 
