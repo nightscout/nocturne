@@ -249,6 +249,24 @@ public class ProfileProjectionServiceTests
 
     #region Profile Assembly
 
+    /// <summary>
+    /// A row decomposed before <c>startDate</c> led may record one its versions do not start at; the
+    /// document serves their start, so a client saving it back does not move them.
+    /// </summary>
+    [Fact]
+    public async Task ServesTheVersionsStart_WhenTheRecordedStartDateDisagrees()
+    {
+        var correlationId = Guid.NewGuid();
+        var settings = CreateTherapySettings(correlationId: correlationId, startDate: "2025-01-15T00:00:00.000Z");
+
+        SetupGetLatest(settings);
+        SetupCorrelationLookups(correlationId);
+
+        var result = await _sut.GetCurrentProfileAsync();
+
+        result!.StartDate.Should().Be("2025-06-01T12:00:00.000Z");
+    }
+
     [Fact]
     public async Task AssemblesScalarFieldsFromTherapySettings()
     {
@@ -264,6 +282,7 @@ public class ProfileProjectionServiceTests
             enteredBy: "Loop",
             isExternallyManaged: true,
             startDate: "2025-01-15T00:00:00.000Z");
+        settings.Timestamp = new DateTime(2025, 1, 15, 0, 0, 0, DateTimeKind.Utc);
 
         SetupGetLatest(settings);
         SetupCorrelationLookups(correlationId);

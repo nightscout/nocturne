@@ -245,7 +245,9 @@ public class ProfileProjectionService : IProfileProjectionService
     /// The document names the tenant's <see cref="TherapySettings.IsDefault"/> row's store when it holds
     /// that row, as <see cref="Resolvers.ProfileStoreTimeline"/> reads it; else its recorded
     /// <see cref="TherapySettings.DocumentDefaultProfile"/>; else, for a row decomposed before that was
-    /// recorded, its newest store. It reads its document-level fields off its first store's row.
+    /// recorded, its newest store. It reads its document-level fields off its first store's row. Its
+    /// <c>startDate</c> is the stored one only where its versions start there (a row decomposed before
+    /// <c>startDate</c> led may record another), so a client that saves it back does not move them.
     /// </remarks>
     private async Task<Profile> AssembleDocumentAsync(IReadOnlyList<TherapySettings> rows, CancellationToken ct)
     {
@@ -271,7 +273,9 @@ public class ProfileProjectionService : IProfileProjectionService
             DefaultProfile = head.IsDefault
                 ? head.ProfileName
                 : rows.Select(r => r.DocumentDefaultProfile).FirstOrDefault(d => d is not null) ?? head.ProfileName,
-            StartDate = head.StartDate ?? head.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            StartDate = UploaderTimestamp.ParseUtcDateTime(head.StartDate) == head.Timestamp
+                ? head.StartDate
+                : head.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             Mills = head.Mills,
             CreatedAt = head.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             SrvModified = srvModified,

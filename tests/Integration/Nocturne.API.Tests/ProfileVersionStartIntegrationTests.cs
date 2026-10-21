@@ -207,6 +207,26 @@ public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
         });
 
     /// <summary>
+    /// A v1 document with no time of its own is stamped with <c>created_at</c> on arrival, as
+    /// Nightscout's create stamps it, and starts then rather than at the epoch.
+    /// </summary>
+    [Fact]
+    public async Task AMinimalV1Profile_StartsWhenItArrives()
+    {
+        var store = StoreName();
+        var before = DateTime.UtcNow.AddSeconds(-1);
+
+        var response = await CreateAuthenticatedClient().PostAsJsonAsync(
+            "/api/v1/profile", new { defaultProfile = store, store = Store(store, 1.0) });
+
+        response.IsSuccessStatusCode.Should().BeTrue(await response.Content.ReadAsStringAsync());
+        var echoed = (await response.Content.ReadFromJsonAsync<JsonElement>())[0];
+        echoed.GetProperty("created_at").GetString().Should().NotBeNullOrEmpty();
+        var (start, _) = await SettingsAsync(store);
+        start.Should().BeOnOrAfter(before).And.BeOnOrBefore(DateTime.UtcNow.AddSeconds(1));
+    }
+
+    /// <summary>
     /// A percent temp uploaded without a rate resolves against the version its time falls in.
     /// </summary>
     [Fact]

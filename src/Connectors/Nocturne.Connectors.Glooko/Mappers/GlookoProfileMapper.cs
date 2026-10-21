@@ -149,7 +149,7 @@ public class GlookoProfileMapper
         return DateTime.TryParse(
             timestamp,
             CultureInfo.InvariantCulture,
-            DateTimeStyles.RoundtripKind,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
             out var parsed) ? parsed : null;
     }
 

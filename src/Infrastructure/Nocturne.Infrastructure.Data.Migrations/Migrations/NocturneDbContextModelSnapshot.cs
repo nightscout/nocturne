@@ -9724,6 +9724,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("Subject");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.PendingTenantJobEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ReadAccessLogEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)

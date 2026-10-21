@@ -23,9 +23,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
     /// </para>
     /// <para>
     /// Every upload at the epoch claimed the default, so it sits on the last document uploaded. For a
-    /// tenant it moved rows for, the default goes to the store the newest document names
-    /// (<c>document_default_profile</c>), or to none when that names none of its stores, as the
-    /// decomposer settles it; a newest document that recorded no name keeps the flag where it is.
+    /// tenant it moved rows for whose default is not on the newest document (newest by start, then
+    /// document id), the default goes to that document's store of the same name, which keeps a name a
+    /// user chose through V4 as <c>ProfileStoreTimeline</c> reads it; failing that, to the store the
+    /// document names (<c>document_default_profile</c>), or to none when that names none of its
+    /// stores, as the decomposer settles it; failing both, it stays where it is.
     /// </para>
     /// <para>
     /// The percent temp basal rates resolved against the moved versions, and the tenant's cached
@@ -50,6 +52,12 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_pending_tenant_jobs", x => new { x.tenant_id, x.job });
+                    table.ForeignKey(
+                        name: "FK_pending_tenant_jobs_tenants_tenant_id",
+                        column: x => x.tenant_id,
+                        principalTable: "tenants",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.Sql(RepairSql);
@@ -75,6 +83,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 newest_document text;
                 newest_default text;
                 current_document text;
+                current_name text;
                 target uuid;
                 n_rows int;
                 n_stores int;
@@ -155,42 +164,57 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         VALUES (t.id, 'profile-versions-moved', now())
                         ON CONFLICT DO NOTHING;
 
-                        SELECT CASE
+                        SELECT d.document INTO newest_document
+                        FROM (SELECT CASE
                                    WHEN ts.legacy_id IS NULL THEN ts.id::text
                                    WHEN strpos(ts.legacy_id, ':') > 0 THEN split_part(ts.legacy_id, ':', 1)
                                    ELSE ts.legacy_id
-                               END
-                        INTO newest_document
-                        FROM therapy_settings ts
-                        WHERE ts.tenant_id = t.id AND ts.deleted_at IS NULL AND strpos(ts.profile_name, '@@@@@') = 0
-                        ORDER BY ts.timestamp DESC, ts.id DESC
+                               END AS document, ts.timestamp
+                              FROM therapy_settings ts
+                              WHERE ts.tenant_id = t.id AND ts.deleted_at IS NULL AND strpos(ts.profile_name, '@@@@@') = 0) d
+                        ORDER BY d.timestamp DESC, d.document COLLATE "C" DESC
                         LIMIT 1;
 
                         SELECT CASE
                                    WHEN ts.legacy_id IS NULL THEN ts.id::text
                                    WHEN strpos(ts.legacy_id, ':') > 0 THEN split_part(ts.legacy_id, ':', 1)
                                    ELSE ts.legacy_id
-                               END
-                        INTO current_document
+                               END, ts.profile_name
+                        INTO current_document, current_name
                         FROM therapy_settings ts
                         WHERE ts.tenant_id = t.id AND ts.deleted_at IS NULL AND ts.is_default
                         LIMIT 1;
 
                         IF current_document IS DISTINCT FROM newest_document THEN
-                            SELECT max(ts.document_default_profile) INTO newest_default
-                            FROM therapy_settings ts
-                            WHERE ts.tenant_id = t.id AND ts.deleted_at IS NULL
-                              AND left(ts.legacy_id, length(newest_document) + 1) = newest_document || ':';
-
-                            IF newest_default IS NULL THEN
-                                RAISE NOTICE 'tenant %: default profile left on document %: the newest document % records no default store',
-                                    t.id, coalesce(current_document, 'none'), newest_document;
-                            ELSE
+                            target := NULL;
+                            newest_default := NULL;
+                            IF current_name IS NOT NULL THEN
                                 SELECT ts.id INTO target
                                 FROM therapy_settings ts
                                 WHERE ts.tenant_id = t.id AND ts.deleted_at IS NULL
-                                  AND ts.legacy_id = newest_document || ':' || newest_default;
+                                  AND ts.legacy_id = newest_document || ':' || current_name;
+                            END IF;
 
+                            IF target IS NOT NULL THEN
+                                newest_default := current_name;
+                            ELSE
+                                SELECT max(ts.document_default_profile) INTO newest_default
+                                FROM therapy_settings ts
+                                WHERE ts.tenant_id = t.id AND ts.deleted_at IS NULL
+                                  AND left(ts.legacy_id, length(newest_document) + 1) = newest_document || ':';
+
+                                IF newest_default IS NOT NULL THEN
+                                    SELECT ts.id INTO target
+                                    FROM therapy_settings ts
+                                    WHERE ts.tenant_id = t.id AND ts.deleted_at IS NULL
+                                      AND ts.legacy_id = newest_document || ':' || newest_default;
+                                END IF;
+                            END IF;
+
+                            IF newest_default IS NULL THEN
+                                RAISE NOTICE 'tenant %: default profile left on document %: the newest document % holds no store of its name and records no default store',
+                                    t.id, coalesce(current_document, 'none'), newest_document;
+                            ELSE
                                 UPDATE therapy_settings
                                 SET is_default = (target IS NOT NULL AND id = target), sys_updated_at = now()
                                 WHERE tenant_id = t.id

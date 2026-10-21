@@ -1485,6 +1485,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<PendingTenantJobEntity>()
             .HasKey(j => new { j.TenantId, j.Job });
 
+        modelBuilder
+            .Entity<PendingTenantJobEntity>()
+            .HasOne<TenantEntity>()
+            .WithMany()
+            .HasForeignKey(j => j.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // A canonical id is minted per group, so it alone narrows a lookup to that group's few links;
         // leading with record_type, or adding is_primary, only made the index bigger.
         modelBuilder

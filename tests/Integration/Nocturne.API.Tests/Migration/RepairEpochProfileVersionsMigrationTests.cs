@@ -22,6 +22,7 @@ public sealed class RepairEpochProfileVersionsFixture : IAsyncLifetime
     internal static readonly Guid TenantB = Guid.Parse("b2222222-2222-7222-8222-222222222377");
     internal static readonly Guid TenantC = Guid.Parse("c3333333-3333-7333-8333-333333332377");
     internal static readonly Guid TenantD = Guid.Parse("d4444444-4444-7444-8444-444444442377");
+    internal static readonly Guid TenantE = Guid.Parse("e5555555-5555-7555-8555-555555552377");
 
     internal static readonly DateTime Seeded = new(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
 
@@ -74,7 +75,8 @@ public sealed class RepairEpochProfileVersionsFixture : IAsyncLifetime
               ('{TenantA}', 'tenant-a', 'Tenant A', true, now(), now()),
               ('{TenantB}', 'tenant-b', 'Tenant B', true, now(), now()),
               ('{TenantC}', 'tenant-c', 'Tenant C', false, now(), now()),
-              ('{TenantD}', 'tenant-d', 'Tenant D', true, now(), now());
+              ('{TenantD}', 'tenant-d', 'Tenant D', true, now(), now()),
+              ('{TenantE}', 'tenant-e', 'Tenant E', true, now(), now());
             """);
 
         foreach (var store in RepairEpochProfileVersionsTests.Stores)
@@ -168,6 +170,7 @@ public class RepairEpochProfileVersionsTests : IClassFixture<RepairEpochProfileV
     private static readonly Guid TenantB = RepairEpochProfileVersionsFixture.TenantB;
     private static readonly Guid TenantC = RepairEpochProfileVersionsFixture.TenantC;
     private static readonly Guid TenantD = RepairEpochProfileVersionsFixture.TenantD;
+    private static readonly Guid TenantE = RepairEpochProfileVersionsFixture.TenantE;
     private static readonly DateTime September = new(2025, 9, 1, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime Epoch = DateTime.UnixEpoch;
     private static readonly DateTime Seeded = RepairEpochProfileVersionsFixture.Seeded;
@@ -197,6 +200,14 @@ public class RepairEpochProfileVersionsTests : IClassFixture<RepairEpochProfileV
             DocumentDefault: "Night"),
         new("newest document's other store", TenantC, "Day", "new:Day", "2025-10-10T00:00:00.000Z", Epoch,
             DocumentDefault: "Night"),
+        new("older document's store a user made the default", TenantE, "Exercise", "older:Exercise",
+            "2025-09-01T00:00:00.000Z", September, IsDefault: true, DocumentDefault: "Default"),
+        new("older document's named default", TenantE, "Default", "older:Default",
+            "2025-09-01T00:00:00.000Z", September, DocumentDefault: "Default"),
+        new("newest document's store of the user's name", TenantE, "Exercise", "newer:Exercise",
+            "2025-10-10T00:00:00.000Z", Epoch, DocumentDefault: "Default"),
+        new("newest document's named default", TenantE, "Default", "newer:Default",
+            "2025-10-10T00:00:00.000Z", Epoch, DocumentDefault: "Default"),
         new("tenant with nothing at the epoch", TenantD, "Default", "docA:Default", "2025-10-06T00:00:00.000Z", September,
             IsDefault: true, DocumentDefault: "Default"),
     ];
@@ -267,6 +278,15 @@ public class RepairEpochProfileVersionsTests : IClassFixture<RepairEpochProfileV
     }
 
     [Fact]
+    public void ADefaultAUserChose_MovesToTheNewestDocumentsStoreOfThatName()
+    {
+        _fixture.DefaultAfterUp[SettingsOf("newest document's store of the user's name")].Should().BeTrue();
+        _fixture.DefaultAfterUp[SettingsOf("newest document's named default")].Should().BeFalse();
+        _fixture.DefaultAfterUp[SettingsOf("older document's store a user made the default")].Should().BeFalse();
+        _fixture.DefaultAfterUp[SettingsOf("older document's named default")].Should().BeFalse();
+    }
+
+    [Fact]
     public void ADefaultInATenantItMovedNothingFor_StaysWhereItIs() =>
         _fixture.DefaultAfterUp[SettingsOf("tenant with nothing at the epoch")].Should().BeTrue();
 
@@ -277,6 +297,7 @@ public class RepairEpochProfileVersionsTests : IClassFixture<RepairEpochProfileV
             (TenantA, "profile-versions-moved"),
             (TenantB, "profile-versions-moved"),
             (TenantC, "profile-versions-moved"),
+            (TenantE, "profile-versions-moved"),
         });
 
     [Fact]
