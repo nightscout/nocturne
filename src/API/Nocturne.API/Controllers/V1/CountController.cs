@@ -202,7 +202,9 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _deviceStatusProjection.CountAsync(find, cancellationToken);
+            var count = await _deviceStatusProjection.CountMatchingAsync(
+                DeviceStatusProjectionService.ParseFind(LegacyFindDateWindow.Apply(find, _timeProvider.GetUtcNow())),
+                cancellationToken);
 
             _logger.LogDebug("Found {Count} device status entries matching criteria", count);
             return LegacyCountResult.For(count);
@@ -348,8 +350,10 @@ public class CountController : ControllerBase
                         cancellationToken);
                     break;
                 case "devicestatus":
-                    count = await _deviceStatusProjection.CountAsync(
-                        LegacyFindQueryString.Resolve(HttpContext?.Request, find), cancellationToken);
+                    count = await _deviceStatusProjection.CountMatchingAsync(
+                        DeviceStatusProjectionService.ParseFind(LegacyFindDateWindow.Apply(
+                            LegacyFindQueryString.Resolve(HttpContext?.Request, find), _timeProvider.GetUtcNow())),
+                        cancellationToken);
                     break;
                 case "profile":
                     count = await _profileProjectionService.CountProfilesAsync(find, cancellationToken);

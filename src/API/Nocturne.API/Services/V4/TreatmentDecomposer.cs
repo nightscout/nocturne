@@ -372,6 +372,18 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         return UpstreamFingerprintScope.Open(cleared);
     }
 
+    /// <summary>The tables a treatment decomposes into that carry its legacy id.</summary>
+    private StoredCorrelationLookup[] TreatmentTables =>
+    [
+        _bolusRepository.GetCorrelationIdsByLegacyIdAsync,
+        _carbIntakeRepository.GetCorrelationIdsByLegacyIdAsync,
+        _bgCheckRepository.GetCorrelationIdsByLegacyIdAsync,
+        _noteRepository.GetCorrelationIdsByLegacyIdAsync,
+        _bolusCalculationRepository.GetCorrelationIdsByLegacyIdAsync,
+        _deviceEventRepository.GetCorrelationIdsByLegacyIdAsync,
+        _tempBasalRepository.GetCorrelationIdsByLegacyIdAsync,
+    ];
+
     /// <inheritdoc />
     public async Task<V4Models.DecompositionResult> DecomposeAsync(Treatment treatment, WriteOrigin origin, CancellationToken ct = default)
     {
@@ -380,7 +392,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
         var result = new V4Models.DecompositionResult
         {
-            CorrelationId = Guid.CreateVersion7()
+            CorrelationId = CorrelationIdFor(
+                treatment.Id, await GetStoredCorrelationIdsAsync([treatment.Id], TreatmentTables, ct))
         };
 
         var c = ClassifyTreatment(treatment);
@@ -1351,6 +1364,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
         var pumpSuspendResumeTreatments = new List<(Treatment Treatment, DeviceEventType EventType)>();
         var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
+        var correlationIds = await GetStoredCorrelationIdsAsync(treatments.Select(t => t.Id), TreatmentTables, ct);
 
         await DeferLastSeenAsync(_deviceService, async () =>
         {
@@ -1358,7 +1372,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             {
                 NormalizeIdentity(treatment);
 
-                var correlationId = Guid.CreateVersion7();
+                var correlationId = CorrelationIdFor(treatment.Id, correlationIds);
                 var c = ClassifyTreatment(treatment);
                 if (c.ProducesNothing)
                 {
