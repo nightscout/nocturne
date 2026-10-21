@@ -323,6 +323,33 @@ public class ProfileDecomposerTests
         repos.SetDefaultCalls.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// Migration <c>RepairRawMmolProfiles</c> converts the schedules written before the decomposer
+    /// converted mmol stores; the write path must not store them raw again (#2355).
+    /// </summary>
+    [Theory]
+    [InlineData("mmol", "mg/dL")]
+    [InlineData(null, "mmol")]
+    [InlineData("mmol/L", "mmol")]
+    public async Task DecomposeAsync_StoresAMmolStoresTargetsAndIsfInMgdl(string? storeUnits, string documentUnits)
+    {
+        var repos = new Repositories();
+        var profile = BuildProfile();
+        profile.Units = documentUnits;
+        var store = profile.Store["Default"];
+        store.Units = storeUnits;
+        store.Sens = [new TimeValue { Time = "00:00", Value = 3.5 }];
+        store.TargetLow = [new TimeValue { Time = "00:00", Value = 5.0 }];
+        store.TargetHigh = [new TimeValue { Time = "00:00", Value = 5.5 }];
+
+        await repos.Decomposer.DecomposeAsync(profile, WriteOrigin.Live);
+
+        repos.Written.OfType<SensitivitySchedule>().Single().Entries.Single().Value.Should().Be(63);
+        var target = repos.Written.OfType<TargetRangeSchedule>().Single().Entries.Single();
+        target.Low.Should().Be(90);
+        target.High.Should().Be(99);
+    }
+
     [Fact]
     public async Task DecomposeBatchAsync_WithNoStoreEntries_WritesNothing()
     {
