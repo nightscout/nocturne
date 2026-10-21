@@ -271,38 +271,7 @@ public class EntryServiceTests
 
     #endregion
 
-    #region AdvancedFilter — Pure Delegation (No Caching)
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Trait("Category", "Parity")]
-    public async Task GetEntriesWithAdvancedFilterAsync_WithFullParameterSet_PassesAllParams()
-    {
-        // Arrange
-        var type = "sgv";
-        var findQuery = "{\"sgv\":{\"$gte\":100}}";
-        var dateString = "2022-01-01T12:00:00.000Z";
-        var expectedEntries = new List<Entry> { new() { Id = "1" } };
-
-        _store
-            .Setup(x => x.QueryAsync(
-                It.Is<EntryQuery>(q =>
-                    q.Type == type &&
-                    q.Find == findQuery &&
-                    q.Count == 20 &&
-                    q.Skip == 10 &&
-                    q.DateString == dateString &&
-                    q.ReverseResults == true),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedEntries);
-
-        // Act
-        var result = await _sut.GetEntriesWithAdvancedFilterAsync(
-            type, 20, 10, findQuery, dateString, true, CancellationToken.None);
-
-        // Assert
-        Assert.Single(result);
-    }
+    #region QueryEntriesAsync — Pure Delegation (No Caching)
 
     [Fact]
     [Trait("Category", "Unit")]
@@ -337,6 +306,7 @@ public class EntryServiceTests
 
         // Assert
         Assert.Single(result);
+        _cache.VerifyNoOtherCalls();
     }
 
     #endregion

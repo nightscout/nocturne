@@ -140,29 +140,6 @@ public class EntryService : IEntryService
         _store.GetModifiedSinceAsync(cursorMills, limit, cancellationToken);
 
     /// <inheritdoc />
-    public async Task<IEnumerable<Entry>> GetEntriesWithAdvancedFilterAsync(
-        string? type,
-        int count,
-        int skip,
-        string? findQuery,
-        string? dateString,
-        bool reverseResults,
-        CancellationToken cancellationToken = default)
-    {
-        var query = new EntryQuery
-        {
-            Type = type,
-            Find = findQuery,
-            Count = count,
-            Skip = skip,
-            DateString = dateString,
-            ReverseResults = reverseResults
-        };
-
-        return await _store.QueryAsync(query, cancellationToken);
-    }
-
-    /// <inheritdoc />
     public async Task<IEnumerable<Entry>> QueryEntriesAsync(
         EntryQuery query, CancellationToken cancellationToken = default) =>
         await _store.QueryAsync(query, cancellationToken);

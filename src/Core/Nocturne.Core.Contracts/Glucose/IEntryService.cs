@@ -150,25 +150,6 @@ public interface IEntryService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get entries with advanced filtering capabilities including type, date, and sorting
-    /// </summary>
-    /// <param name="type">Entry type filter (e.g., "sgv", "mbg", "cal")</param>
-    /// <param name="count">Maximum number of entries to return</param>
-    /// <param name="skip">Number of entries to skip for pagination</param>
-    /// <param name="findQuery">MongoDB query filter</param>
-    /// <param name="reverseResults">Whether to reverse the result order</param>
-    /// <returns>Collection of entries matching the filter</returns>
-    Task<IEnumerable<Entry>> GetEntriesWithAdvancedFilterAsync(
-        string? type,
-        int count,
-        int skip,
-        string? findQuery,
-        string? dateString,
-        bool reverseResults,
-        CancellationToken cancellationToken = default
-    );
-
     /// <summary>Entries matching <paramref name="query"/>, in the order it asks for.</summary>
     Task<IEnumerable<Entry>> QueryEntriesAsync(EntryQuery query, CancellationToken cancellationToken = default);
 }

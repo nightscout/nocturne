@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.API.Controllers.V1;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Legacy;
@@ -199,9 +200,8 @@ public class TimeQueryFindTests
         string? captured = null;
         var entries = new Mock<IEntryService>();
         entries
-            .Setup(e => e.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Callback<string?, int, int, string?, string?, bool, CancellationToken>((_, _, _, find, _, _, _) => captured = find)
+            .Setup(e => e.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<EntryQuery, CancellationToken>((query, _) => captured = query.Find)
             .ReturnsAsync([]);
         var controller = Build(
             "?token=x&secret=y&_=1&count=5&find[sgv][$gte]=120", entryService: entries.Object);
@@ -230,9 +230,8 @@ public class TimeQueryFindTests
             });
         var entries = new Mock<IEntryService>();
         entries
-            .Setup(e => e.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Callback<string?, int, int, string?, string?, bool, CancellationToken>((_, _, _, find, _, _, _) => captured = find)
+            .Setup(e => e.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<EntryQuery, CancellationToken>((query, _) => captured = query.Find)
             .ReturnsAsync([]);
         var controller = Build("?token=x", braces.Object, entries.Object);
 
@@ -341,11 +340,10 @@ public class TimeQueryFindTests
     {
         var entries = new Mock<IEntryService>();
         entries
-            .Setup(e => e.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string? _, int _, int _, string? find, string? _, bool _, CancellationToken _) =>
+            .Setup(e => e.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((EntryQuery query, CancellationToken _) =>
             {
-                var parsed = FindQuery.Parse(find);
+                var parsed = FindQuery.Parse(query.Find);
                 return Entries.Where(parsed.Matches).ToList().AsEnumerable();
             });
         return entries.Object;
