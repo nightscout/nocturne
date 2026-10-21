@@ -109,24 +109,28 @@ public sealed class RepairRawMmolProfilesFixture : IAsyncLifetime
         var deleted = store.Deleted ? $"'{Seeded:O}'" : "NULL";
         var targetUpdated = store.TargetUpdated ?? Seeded;
         var isfUpdated = store.IsfUpdated ?? Seeded;
-        var isfTimestamp = store.IsfTimestamp ?? Seeded;
+        var timestamp = store.Timestamp ?? Seeded;
+        var isfTimestamp = store.IsfTimestamp ?? timestamp;
         if (store.Owner)
         {
             await Execute(conn, $"""
                 INSERT INTO therapy_settings
                   (id, tenant_id, timestamp, profile_name, units, dia, carbs_hr, delay, per_gi_values, is_default,
                    is_externally_managed, legacy_id, correlation_id, sys_created_at, sys_updated_at, deleted_at)
-                VALUES ('{Guid.CreateVersion7()}', '{store.Tenant}', '{Seeded:O}', '{store.Name}', '{store.Units}', 5, 20, 20,
+                VALUES ('{Guid.CreateVersion7()}', '{store.Tenant}', '{timestamp:O}', '{store.Name}', '{store.Units}', 5, 20, 20,
                    false, false, false, {Key(store.LegacyId)}, {correlation}, '{Seeded:O}', '{Seeded:O}', {deleted});
                 """);
         }
-        await Execute(conn, $"""
-            INSERT INTO target_range_schedules
-              (id, tenant_id, timestamp, profile_name, entries_json, legacy_id, correlation_id, sys_created_at, sys_updated_at, deleted_at)
-            VALUES ('{store.TargetId}', '{store.Tenant}', '{Seeded:O}', '{store.Name}', '{store.Targets}'::jsonb,
-               {Key(store.LegacyId)}, {correlation}, '{Seeded:O}', '{targetUpdated:O}', {deleted});
-            """);
-        Rows.Add((store.TargetId, store.Tenant, "target_range_schedules", store.Targets, targetUpdated));
+        if (store.Targets is not null)
+        {
+            await Execute(conn, $"""
+                INSERT INTO target_range_schedules
+                  (id, tenant_id, timestamp, profile_name, entries_json, legacy_id, correlation_id, sys_created_at, sys_updated_at, deleted_at)
+                VALUES ('{store.TargetId}', '{store.Tenant}', '{timestamp:O}', '{store.Name}', '{store.Targets}'::jsonb,
+                   {Key(store.LegacyId)}, {correlation}, '{Seeded:O}', '{targetUpdated:O}', {deleted});
+                """);
+            Rows.Add((store.TargetId, store.Tenant, "target_range_schedules", store.Targets, targetUpdated));
+        }
         if (store.Sensitivity is null)
             return;
         await Execute(conn, $"""
@@ -173,13 +177,13 @@ public class RepairRawMmolProfilesTests : IClassFixture<RepairRawMmolProfilesFix
     public RepairRawMmolProfilesTests(RepairRawMmolProfilesFixture fixture) => _fixture = fixture;
 
     /// <summary>
-    /// A target schedule and, unless <paramref name="Sensitivity"/> is null, an ISF schedule under the same
-    /// keys, with a therapy settings row as their owner when <paramref name="Owner"/>.
+    /// A target schedule and an ISF schedule under the same keys, each unless null, with a therapy settings
+    /// row as their owner when <paramref name="Owner"/>.
     /// </summary>
     internal sealed record Store(
         string Key, Guid Tenant, string Name, string Units, string? LegacyId, Guid? Correlation,
-        string Targets, string? Sensitivity, DateTime? IsfUpdated = null, bool Deleted = false,
-        DateTime? IsfTimestamp = null, DateTime? TargetUpdated = null, bool Owner = true)
+        string? Targets, string? Sensitivity, DateTime? IsfUpdated = null, bool Deleted = false,
+        DateTime? IsfTimestamp = null, DateTime? TargetUpdated = null, bool Owner = true, DateTime? Timestamp = null)
     {
         public Guid TargetId { get; } = Guid.CreateVersion7();
         public Guid SensitivityId { get; } = Guid.CreateVersion7();
@@ -256,6 +260,16 @@ public class RepairRawMmolProfilesTests : IClassFixture<RepairRawMmolProfilesFix
         new("raw beside repeat-converted, raw row", TenantA, "Repeated", "mmol", "docA:Repeated", Repeated, RawTargets, RawIsf),
         new("raw beside repeat-converted, converted row", TenantA, "Repeated", "mmol", null, Repeated, OnceTargets, OnceIsf,
             Owner: false),
+
+        new("older store beside a newer orphan raw isf", TenantA, "Orphaned", "mmol", "d1:Orphaned", null, RawTargets, RawIsf),
+        new("newer orphan raw isf", TenantA, "Orphaned", "mmol", "d2:Orphaned", null, null, V(3.0),
+            Owner: false, Timestamp: Seeded.AddDays(1)),
+        new("older raw store", TenantA, "Superseded", "mmol", "d1:Superseded", null, RawTargets, RawIsf),
+        new("newer raw store", TenantA, "Superseded", "mmol", "d2:Superseded", null, RawTargets, RawIsf,
+            Timestamp: Seeded.AddDays(1)),
+        new("raw store beside a newer mg/dL isf", TenantA, "Switched", "mmol", "d1:Switched", null, RawTargets, RawIsf),
+        new("newer mg/dL store with isf 15", TenantA, "Switched", "mg/dl", "d2:Switched", null, CorrectTargets, V(15),
+            Timestamp: Seeded.AddDays(1)),
     ];
 
     internal static readonly Activation[] Activations =
@@ -303,7 +317,8 @@ public class RepairRawMmolProfilesTests : IClassFixture<RepairRawMmolProfilesFix
 
     private void ShouldBeLeftWhole(Store store)
     {
-        ShouldBeUntouched(store.TargetId);
+        if (store.Targets is not null)
+            ShouldBeUntouched(store.TargetId);
         if (store.Sensitivity is not null)
             ShouldBeUntouched(store.SensitivityId);
     }
@@ -316,6 +331,9 @@ public class RepairRawMmolProfilesTests : IClassFixture<RepairRawMmolProfilesFix
     [InlineData("raw by correlation")]
     [InlineData("other tenant, raw")]
     [InlineData("isf 59 s after its targets")]
+    [InlineData("older raw store")]
+    [InlineData("newer raw store")]
+    [InlineData("raw store beside a newer mg/dL isf")]
     public void ARawStore_HasItsTargetsAndIsfConverted(string key)
     {
         var store = StoreOf(key);
@@ -420,6 +438,30 @@ public class RepairRawMmolProfilesTests : IClassFixture<RepairRawMmolProfilesFix
         IsfAfter(converted).Should().Equal(63, 58);
         ShouldBeLeftWhole(StoreOf("raw beside repeat-converted, raw row"));
         ShouldBeReportedLeft(StoreOf("raw beside repeat-converted, raw row").TargetId);
+    }
+
+    /// <summary>
+    /// The resolvers read a profile name's newest targets beside its newest ISF, whatever document each came
+    /// from, so the older store's converted targets would be read beside the orphan's ISF of 3.0 mg/dL/U.
+    /// </summary>
+    [Fact]
+    public void AStoreBesideANewerRawIsfOfItsProfileNameThatStaysRaw_IsLeftWholeAndBothAreReported()
+    {
+        var older = StoreOf("older store beside a newer orphan raw isf");
+        var orphan = StoreOf("newer orphan raw isf");
+        ShouldBeLeftWhole(older);
+        ShouldBeUntouched(orphan.SensitivityId);
+        ShouldBeReportedLeft(older.TargetId);
+        _fixture.Notices.Should().Contain(n =>
+            n.Contains("still holding an ISF at 0.5 to 22.2") && n.Contains(orphan.SensitivityId.ToString()));
+    }
+
+    [Fact]
+    public void ACorrectMmolIsfOf9To22_IsNotReportedAsLeftOver()
+    {
+        var store = StoreOf("isf 0.5");
+        _fixture.Notices.Should().NotContain(n =>
+            n.Contains("still holding an ISF") && n.Contains(store.SensitivityId.ToString()));
     }
 
     [Theory]
