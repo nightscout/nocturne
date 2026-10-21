@@ -68,10 +68,15 @@ public interface IDataSourceService
     /// This is a destructive operation that cannot be undone.
     /// </summary>
     /// <param name="dataSourceId">The data source ID to delete</param>
+    /// <param name="allowReimport">
+    /// Leave the source free to send its records again, including those of earlier deletes. Otherwise
+    /// a resync skips every deleted record.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result containing number of entries and treatments deleted</returns>
     Task<DataSourceDeleteResult> DeleteDataSourceDataAsync(
         string dataSourceId,
+        bool allowReimport = false,
         CancellationToken cancellationToken = default
     );
 
@@ -88,10 +93,15 @@ public interface IDataSourceService
     /// This is a destructive operation that cannot be undone.
     /// </summary>
     /// <param name="connectorId">The connector ID (e.g., "dexcom", "glooko")</param>
+    /// <param name="allowReimport">
+    /// As for <see cref="DeleteDataSourceDataAsync"/>; a connector that was enabled is enabled again, so
+    /// its next sync re-imports the history. Otherwise the connector is left disabled.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result of the delete operation</returns>
     Task<DataSourceDeleteResult> DeleteConnectorDataAsync(
         string connectorId,
+        bool allowReimport = false,
         CancellationToken cancellationToken = default
     );
 

@@ -76,6 +76,7 @@
     { value: "Update", label: "Update" },
     { value: "Delete", label: "Delete" },
     { value: "bulk_delete", label: "Bulk delete" },
+    { value: "allow_reimport", label: "Allow re-import" },
     { value: "Restore", label: "Restore" },
   ];
 
@@ -123,12 +124,19 @@
 
   function formatAction(action: string | undefined): string {
     if (!action) return "—";
-    return action.toLowerCase() === "bulk_delete" ? "Bulk delete" : action;
+    switch (action.toLowerCase()) {
+      case "bulk_delete":
+        return "Bulk delete";
+      case "allow_reimport":
+        return "Allow re-import";
+      default:
+        return action;
+    }
   }
 
   /**
-   * A bulk_delete row describes a set of records rather than one, so it carries a count and the key
-   * the delete was scoped to instead of a field-level diff.
+   * A bulk_delete or allow_reimport row describes a set of records rather than one, so it carries a
+   * count and the key the operation was scoped to instead of a field-level diff.
    */
   function parseBulkDeleteSummary(
     changes: string | undefined
@@ -533,11 +541,13 @@
                       <span class="ml-2 font-mono text-xs">{row.original.entityId}</span>
                     </div>
                   {/if}
-                  {#if row.original.action?.toLowerCase() === "bulk_delete"}
+                  {#if row.original.action?.toLowerCase() === "bulk_delete" || row.original.action?.toLowerCase() === "allow_reimport"}
                     {@const summary = parseBulkDeleteSummary(row.original.changes)}
                     {#if summary}
                       <div>
-                        <span class="font-medium text-muted-foreground">Records deleted:</span>
+                        <span class="font-medium text-muted-foreground">
+                          {row.original.action?.toLowerCase() === "bulk_delete" ? "Records deleted:" : "Records released for re-import:"}
+                        </span>
                         <span class="ml-2">{summary.count}</span>
                       </div>
                       <div>
