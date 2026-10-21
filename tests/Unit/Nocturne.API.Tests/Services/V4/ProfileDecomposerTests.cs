@@ -291,7 +291,7 @@ public class ProfileDecomposerTests
                 Mock<ICarbRatioScheduleRepository, CarbRatioSchedule>(null, [], onUpsert),
                 Mock<ISensitivityScheduleRepository, SensitivitySchedule>(null, [], onUpsert),
                 Mock<ITargetRangeScheduleRepository, TargetRangeSchedule>(null, [], onUpsert),
-                TempBasalTestDeps.Unscheduled(),
+                TempBasalTestDeps.NoReresolution(),
                 NullLogger<ProfileDecomposer>.Instance);
         }
 

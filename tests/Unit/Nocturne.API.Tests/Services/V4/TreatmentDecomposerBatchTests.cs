@@ -82,6 +82,9 @@ public class TreatmentDecomposerBatchTests : IDisposable
         _tempBasalRepoMock
             .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<V4Models.TempBasal> records, WriteOrigin origin, CancellationToken _) => [.. records]);
+        _tempBasalRepoMock
+            .Setup(x => x.GetRelativeByLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
         // StateSpanService returns a new StateSpan
         _stateSpanServiceMock

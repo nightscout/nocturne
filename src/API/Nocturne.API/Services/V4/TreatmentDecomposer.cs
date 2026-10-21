@@ -1661,6 +1661,15 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 batchInsulinTimeline[treatment.Mills] = icfg;
         }
 
+        var echoedRates = tempBasalList
+            .Where(t => t is { Percent: not null, Rate: not null, LegacyId: not null })
+            .Select(t => t.LegacyId!)
+            .ToList();
+        var storedRelative = (echoedRates.Count == 0 ? [] : await _tempBasalRepository.GetRelativeByLegacyIdsAsync(echoedRates, ct))
+            .GroupBy(t => t.LegacyId!, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        foreach (var tb in tempBasalList)
+            RelativeTempBasalRates.ForgetEchoedRate(tb, tb.LegacyId is { } legacyId ? storedRelative.GetValueOrDefault(legacyId) : null);
         await _relativeTempBasalRates.ResolveAsync(tempBasalList, ct);
 
         // Resolve insulin context for each temp basal

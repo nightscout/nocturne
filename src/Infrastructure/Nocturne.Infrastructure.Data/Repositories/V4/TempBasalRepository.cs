@@ -170,15 +170,52 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<TempBasal>> GetUnresolvedRelativeAsync(
-        (DateTime Start, Guid Id)? after, int limit, CancellationToken ct = default)
+    public async Task<IReadOnlyList<TempBasal>> GetScheduleDerivedAsync(
+        DateTime? from, DateTime? to, (DateTime Start, Guid Id)? after, int limit, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.TempBasals.AsNoTracking().Where(t => t.Percent != null && t.Rate == null);
+        var query = ctx.TempBasals.AsNoTracking()
+            .Where(t => t.Percent != null && (t.Rate == null || t.RateFromSchedule));
+        if (from is { } begin)
+            query = query.Where(t => t.Timestamp >= begin);
+        if (to is { } end)
+            query = query.Where(t => t.Timestamp < end);
         if (after is ({ } start, { } id))
             query = query.Where(t => t.Timestamp > start || (t.Timestamp == start && t.Id.CompareTo(id) > 0));
 
         var entities = await query.OrderBy(t => t.Timestamp).ThenBy(t => t.Id).Take(limit).ToListAsync(ct);
+        return entities.Select(TempBasalMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SetScheduleDerivedRateAsync(
+        Guid id, double percent, double? rate, double? scheduledRate, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var fromSchedule = rate is not null;
+        var stamp = DateTime.UtcNow;
+        var updated = await ctx.TempBasals
+            .Where(t => t.Id == id && t.DeletedAt == null && t.Percent == percent
+                && (t.Rate == null || t.RateFromSchedule))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(t => t.Rate, rate)
+                .SetProperty(t => t.ScheduledRate, scheduledRate)
+                .SetProperty(t => t.RateFromSchedule, fromSchedule)
+                .SetProperty(t => t.SysUpdatedAt, stamp), ct);
+        return updated > 0;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<TempBasal>> GetRelativeByLegacyIdsAsync(
+        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+    {
+        if (legacyIds.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.TempBasals.AsNoTracking()
+            .Where(t => t.Percent != null && t.LegacyId != null && legacyIds.Contains(t.LegacyId))
+            .ToListAsync(ct);
         return entities.Select(TempBasalMapper.ToDomainModel).ToList();
     }
 

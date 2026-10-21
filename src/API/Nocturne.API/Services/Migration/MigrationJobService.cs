@@ -1065,12 +1065,18 @@ internal class MigrationJob
                 NightscoutMessages.ForStatus(response.StatusCode, label, read),
                 response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden
                     ? MigrationFailureCause.ApiSecretRejected
-                    : MigrationFailureCause.Status);
+                    : MigrationFailureCause.Status)
+            {
+                StatusCode = response.StatusCode,
+            };
         }
     }
 
     private const string SubjectsNeedAdminSecretMessage =
         "Skipped: listing the people and devices that can sign in needs an admin API secret.";
+
+    private const string NoProfileEndpointMessage =
+        "Skipped: this Nightscout has no profile to hand over.";
 
     private const string PartialAccessMessage =
         "Nightscout refused to hand this over. The API secret was accepted for other data, so it "
@@ -1418,8 +1424,18 @@ internal class MigrationJob
         var totalFailed = 0L;
         var tally = new DecompositionTally();
 
-        var documents = await ReadPageFromSourceAsync<System.Text.Json.JsonElement>(
-            httpClient, "api/v1/profile.json", collectionName, ct);
+        System.Text.Json.JsonElement[] documents;
+        try
+        {
+            documents = await ReadPageFromSourceAsync<System.Text.Json.JsonElement>(
+                httpClient, "api/v1/profile.json", collectionName, ct);
+        }
+        catch (MigrationSourceException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _logger.LogInformation("Skipping profile migration: the source has no profile endpoint");
+            RecordCollectionSkipped(collectionName, NoProfileEndpointMessage);
+            return;
+        }
         var (profiles, newlyFailed) = ParseDocuments<Profile>(documents, collectionName, 1, []);
         totalFailed += newlyFailed;
 
@@ -1544,14 +1560,15 @@ internal class MigrationJob
     }
 
     /// <summary>
-    /// Where a collection falls in the import: subjects first, then profiles ahead of everything
-    /// else, so a percent temp basal resolves against the schedule it ran on as it is written
-    /// (<see cref="V4.RelativeTempBasalRates"/>). The rest keep their listed order.
+    /// Where a collection falls in the import: subjects first, then entries and treatments, then the
+    /// rest in their listed order, the Mongo listing included. The profile lands after the
+    /// treatments, so its write re-resolves every percent temp basal they hold
+    /// (<see cref="V4.TempBasalRateReresolver"/>).
     /// </summary>
     internal static int ImportRank(string collection) => collection switch
     {
         "subjects" => 0,
-        "profile" => 1,
+        "entries" or "treatments" => 1,
         _ => 2,
     };
 

@@ -352,7 +352,6 @@ public class MigrationFailureReportingTests
     {
         var handler = new RoutedNightscout(path => path switch
         {
-            "/api/v1/profile.json" => Json(HttpStatusCode.OK, "[]"),
             "/api/v1/entries.json" => Json(HttpStatusCode.OK, """[{"date":1770000000000}]"""),
             "/api/v1/treatments.json" => throw new HttpRequestException("Connection timed out."),
             _ => Json(HttpStatusCode.NotFound),
@@ -362,15 +361,31 @@ public class MigrationFailureReportingTests
         var status = await MigrationJobHarness.RunAsync(
             provider, "entries", "treatments", "profile", "food", "activity");
 
-        // Profiles import first (MigrationJob.ImportRank), so they are in before the host dies
         status.State.Should().Be(MigrationJobState.Completed);
         status.ErrorMessage.Should().StartWith(
-            "2 of 5 collections imported, 1 failed, 2 not attempted.");
+            "1 of 5 collections imported, 1 failed, 3 not attempted.");
         status.ErrorMessage.Should().Contain(UnreachableMessage);
 
         // The connection failed once; saying so once is the point of abandoning the rest.
         Regex.Matches(status.ErrorMessage!, Regex.Escape(UnreachableMessage)).Should().ContainSingle();
         status.CollectionProgress["profile"].FailureReason.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_source_with_no_profile_endpoint_skips_the_profile_step()
+    {
+        var handler = new RoutedNightscout(path => path switch
+        {
+            "/api/v1/entries.json" => Json(HttpStatusCode.OK, """[{"date":1770000000000}]"""),
+            _ => Json(HttpStatusCode.NotFound),
+        });
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "entries", "profile");
+
+        status.State.Should().Be(MigrationJobState.Completed);
+        status.CollectionProgress["profile"].FailureReason.Should().BeNull();
+        status.CollectionProgress["profile"].SkippedReason.Should().Be("Skipped: this Nightscout has no profile to hand over.");
     }
 
     [Fact]
@@ -418,7 +433,6 @@ public class MigrationFailureReportingTests
     {
         var handler = new RoutedNightscout(path => path switch
         {
-            "/api/v1/profile.json" => Json(HttpStatusCode.OK, "[]"),
             "/api/v1/entries.json" => Json(HttpStatusCode.OK, """[{"date":1770000000000}]"""),
             "/api/v1/treatments.json" => Json(HttpStatusCode.Unauthorized),
             _ => Json(HttpStatusCode.NotFound),

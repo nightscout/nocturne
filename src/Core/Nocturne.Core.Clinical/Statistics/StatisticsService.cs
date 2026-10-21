@@ -2292,13 +2292,13 @@ public class StatisticsService : IStatisticsService
     /// Calculate the insulin delivered (units) for a single TempBasal record.
     /// When <paramref name="effectiveEndMills"/> is provided (from
     /// <see cref="ClipOverlappingTempBasals"/>), it overrides the record's declared end.
-    /// Otherwise falls back to <c>EndMills ?? StartMills + 5 min</c>.
+    /// Otherwise falls back to <c>EndMills ?? StartMills + 5 min</c>. Null when the rate is unknown.
     /// </summary>
-    internal static double GetTempBasalInsulin(TempBasal tb, long? effectiveEndMills = null)
+    internal static double? GetTempBasalInsulin(TempBasal tb, long? effectiveEndMills = null)
     {
         var endMills = effectiveEndMills ?? tb.EndMills ?? tb.StartMills + (5 * 60 * 1000);
         var durationHours = (endMills - tb.StartMills) / (1000.0 * 60 * 60);
-        return (tb.Rate ?? 0) * durationHours;
+        return tb.Rate * durationHours;
     }
 
     /// <summary>
@@ -2326,8 +2326,7 @@ public class StatisticsService : IStatisticsService
         var tempBasalCount = 0;
         foreach (var (tb, effectiveEndMills) in ClipOverlappingTempBasals(tempBasals))
         {
-            var insulin = GetTempBasalInsulin(tb, effectiveEndMills);
-            if (insulin <= 0)
+            if (GetTempBasalInsulin(tb, effectiveEndMills) is not { } insulin || insulin <= 0)
                 continue;
             tempBasalInsulin += insulin;
             tempBasalCount++;
@@ -2429,8 +2428,7 @@ public class StatisticsService : IStatisticsService
         // Process TempBasals — clip overlapping records (loop systems write every ~5 min with longer declared duration)
         foreach (var (tb, effectiveEndMills) in ClipOverlappingTempBasals(tempBasals))
         {
-            var basalInsulin = GetTempBasalInsulin(tb, effectiveEndMills);
-            if (basalInsulin <= 0)
+            if (GetTempBasalInsulin(tb, effectiveEndMills) is not { } basalInsulin || basalInsulin <= 0)
                 continue;
 
             Accumulate(tb.StartMills, basalInsulin, 0);
@@ -2546,7 +2544,7 @@ public class StatisticsService : IStatisticsService
             if (tb.Rate is not { } rate)
                 continue;
             allRates.Add(rate);
-            totalDelivered += GetTempBasalInsulin(tb, effectiveEndMills);
+            totalDelivered += GetTempBasalInsulin(tb, effectiveEndMills) ?? 0;
 
             DistributeAcrossHourOfDay(tb.StartMills, effectiveEndMills, rate, tz, hourlyRates);
 

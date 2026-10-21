@@ -41,11 +41,26 @@ public interface ITempBasalRepository
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Temp basals set by <see cref="TempBasal.Percent"/> whose rate is still unknown, oldest first,
-    /// starting after <paramref name="after"/> (start, id) when given.
+    /// Temp basals set by <see cref="TempBasal.Percent"/> whose rate follows the schedule (resolved
+    /// from it, or still unknown), starting in [<paramref name="from"/>, <paramref name="to"/>) with a
+    /// null bound open, oldest
+    /// first and after <paramref name="after"/> (start, id) when given. Uploaded rates are not read.
     /// </summary>
-    Task<IReadOnlyList<TempBasal>> GetUnresolvedRelativeAsync(
-        (DateTime Start, Guid Id)? after, int limit, CancellationToken ct = default);
+    Task<IReadOnlyList<TempBasal>> GetScheduleDerivedAsync(
+        DateTime? from, DateTime? to, (DateTime Start, Guid Id)? after, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Sets the schedule-derived rate of one temp basal, only while it is live, still has
+    /// <paramref name="percent"/> and still has a schedule-derived or unknown rate, so a concurrent
+    /// edit, upload or delete is never overwritten. A null <paramref name="rate"/> leaves it unknown.
+    /// </summary>
+    /// <returns>Whether the row was updated.</returns>
+    Task<bool> SetScheduleDerivedRateAsync(
+        Guid id, double percent, double? rate, double? scheduledRate, CancellationToken ct = default);
+
+    /// <summary>The live temp basals set by <see cref="TempBasal.Percent"/> under these legacy ids.</summary>
+    Task<IReadOnlyList<TempBasal>> GetRelativeByLegacyIdsAsync(
+        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
 
     /// <summary>
     /// Idempotently reconciles a source's temp basals within a date range: soft-deletes only the

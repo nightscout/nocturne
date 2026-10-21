@@ -9,7 +9,7 @@ namespace Nocturne.API.Services.Profiles.Resolvers;
 /// <see cref="ITenantCache"/> and picks the version active at the asked time from the cached list,
 /// so the answer never depends on which time was looked up first.
 /// </summary>
-public sealed class ProfileVersionCache
+internal sealed class ProfileVersionCache
 {
     private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(5);
 
