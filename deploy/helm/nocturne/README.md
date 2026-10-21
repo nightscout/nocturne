@@ -2,7 +2,7 @@
 
 Helm chart for deploying [Nocturne](https://github.com/nightscout/nocturne) on Kubernetes.
 
-> **Status:** alpha (v0.1.x). External Postgres only; opinionated single-replica defaults; many production-grade toggles are not yet implemented. See [Roadmap](#roadmap) below.
+> **Status:** alpha (v0.1.x). Opinionated defaults; the API always runs as [one pod](#single-api-process); many production-grade toggles are not yet implemented. See [Roadmap](#roadmap) below.
 
 ## Install
 
@@ -163,7 +163,7 @@ The full set of configurable values is in [`values.yaml`](./values.yaml). Highli
 | `externalDatabase.{app,migrator,web}Secret.existingSecret` | Secret with each role's password under key `password` (override with `existingSecretKey`). |
 | `bootstrap.enabled` | If true, runs `bootstrap-roles.sql` as a Helm pre-install hook against your Postgres using `bootstrap.adminSecret`. |
 | `ingress.enabled` / `.host` / `.className` / `.tls` | Single-host ingress fronting the web service. Optional `ingress.api.externalPath` exposes the API on the same host. |
-| `api.replicaCount` / `web.replicaCount` | Replica counts (default 1 each). HPA support not yet wired. |
+| `web.replicaCount` / `web.pdb` | Web replicas (default 1) and an optional PodDisruptionBudget. See [Web replicas](#web-replicas). The API has no replica setting: see [Single API process](#single-api-process). |
 | `{api,web,bootstrap}.image.digest` | Pin the image to an immutable content digest (see "Image pinning" below). |
 
 ### Image pinning
@@ -177,6 +177,18 @@ api:
 ```
 
 When `digest` is set, `tag` is ignored and the rendered image reference is `<registry>/<repository>@<digest>`. Get the current `:latest` digest from the Packages UI (`https://github.com/orgs/nightscout/packages/container/nocturne%2Fnocturne-api/<version>?tag=latest`) or `docker buildx imagetools inspect`.
+
+## Single API process
+
+The API runs as exactly one pod per release ([#2279](https://github.com/nightscout/nocturne/issues/2279)). Its background services (connector syncs, alert sweeps, job runners) and several guards are in-process: per-tenant connector and migration runs are serialised by an in-memory lock, startup marks every background job still recorded as running as Interrupted, and tenant and data caches are evicted only in the process that made the write. A second API pod would duplicate every scheduled sync, interrupt the other pod's jobs, and serve stale tenant state.
+
+The chart therefore pins `replicas: 1` with no autoscaler or PodDisruptionBudget, and fails the render if `api.replicaCount` is set to anything but 1 or `api.autoscaling` or `api.pdb` is enabled. Upgrades use the `Recreate` strategy, because a rolling update briefly runs the old and new pods together, which is the same overlap. The cost is downtime on every upgrade or restart: the API is unavailable from the old pod stopping until the new one passes its readiness probe, including any database migrations it runs on startup.
+
+Running more than one API process would need: background work split out to a single worker (or elected per job), the connector and migration run guard moved to a Postgres lock, job recovery that only reclaims jobs whose owner is gone, cross-process cache eviction, and a SignalR backplane.
+
+### Web replicas
+
+The web pods hold no state another pod needs, so `web.replicaCount` may be raised. The realtime bridge falls back to Socket.IO long-polling when WebSockets are blocked, and a polling session must reach the same pod on every request, so above one replica configure cookie-based session affinity on your ingress controller (the Kubernetes Service's `sessionAffinity` does not apply, because ingress controllers route to pod endpoints directly). Without it, WebSocket clients are unaffected and polling clients fail to connect. Raise Postgres `max_connections` by 10 per extra web replica.
 
 ## Observability
 
@@ -233,7 +245,7 @@ Add custom attributes via `observability.otlp.resourceAttributes` (a map merged 
 The chart is intentionally minimal in v0. Planned for v1:
 
 - [x] README + NOTES.txt
-- [x] HPA, PodDisruptionBudget toggles
+- [x] PodDisruptionBudget toggle (web)
 - [x] CI: `helm lint` + `kubeconform` + SHA256 drift check on `bootstrap-roles.sql`
 - [x] OTLP observability env wiring
 - [x] Bundled-Postgres quickstart via Bitnami `postgresql` subchart with auto-bootstrap
