@@ -39,10 +39,9 @@ public class PerOperationContextGuardTests
         "src/API/Nocturne.API/Controllers/V4/Identity/MyPermissionsController.cs: MyPermissionsController.BuildAsync",
         "src/API/Nocturne.API/Extensions/HttpContextExtensions.cs: HttpContextExtensions.IsCallerHistoryClamped",
         "src/API/Nocturne.API/Services/Identity/AuthorizationService.cs: AuthorizationService.CreateSubjectAsync",
-        "src/API/Nocturne.API/Services/BackgroundServices/CompressionLowDetectionService.cs: CompressionLowDetectionService.DetectForNightAsync",
-        "src/Infrastructure/Nocturne.Infrastructure.Data/Services/DeduplicationService.cs: DeduplicationService.StartDeduplicationJobAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/ReaderCachePartition.cs: ReaderCachePartition.Current",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/TenantReadContext.cs: TenantReadContext.HistoryClamped",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Services/TenantReader.cs: TenantReader.Of",
     ];
 
     private static readonly IReadOnlyList<(string Path, SyntaxTree Tree)> Sources = Load();

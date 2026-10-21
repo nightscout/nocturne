@@ -2504,9 +2504,9 @@ public class TreatmentDecomposerTests : IDisposable
         // Act
         var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
-        // Assert — DeviceEvent + Note (because Notes is non-empty)
+        // Assert — the device event keeps its notes itself, with no Note beside it
         result.CreatedRecords.OfType<V4Models.DeviceEvent>().Should().HaveCount(1);
-        result.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
+        result.CreatedRecords.OfType<V4Models.Note>().Should().BeEmpty();
         var deviceEvent = result.CreatedRecords.OfType<V4Models.DeviceEvent>().Single();
         deviceEvent.LegacyId.Should().Be(treatment.Id);
         deviceEvent.Mills.Should().Be(1700000000000);
@@ -2516,10 +2516,6 @@ public class TreatmentDecomposerTests : IDisposable
         deviceEvent.DataSource.Should().Be("manual");
         deviceEvent.UtcOffset.Should().Be(-300);
         deviceEvent.CorrelationId.Should().Be(result.CorrelationId);
-
-        var note = result.CreatedRecords.OfType<V4Models.Note>().Single();
-        note.Text.Should().Be("Test device event");
-        note.CorrelationId.Should().Be(result.CorrelationId);
     }
 
     [Fact]
@@ -2534,11 +2530,9 @@ public class TreatmentDecomposerTests : IDisposable
             Notes = "Right arm"
         };
 
-        // Act - first call creates DeviceEvent + Note (because Notes is non-empty)
+        // Act - first call creates the DeviceEvent, which keeps its notes itself
         var firstResult = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
-        firstResult.CreatedRecords.Should().HaveCount(2);
-        firstResult.CreatedRecords.OfType<V4Models.DeviceEvent>().Should().HaveCount(1);
-        firstResult.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
+        firstResult.CreatedRecords.Should().ContainSingle().Which.Should().BeOfType<V4Models.DeviceEvent>();
         firstResult.UpdatedRecords.Should().BeEmpty();
 
         // Modify notes
@@ -2547,9 +2541,9 @@ public class TreatmentDecomposerTests : IDisposable
         // Act - second call should update both
         var secondResult = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
-        // Assert — both DeviceEvent and Note updated
+        // Assert — the DeviceEvent updated
         secondResult.CreatedRecords.Should().BeEmpty();
-        secondResult.UpdatedRecords.Should().HaveCount(2);
+        secondResult.UpdatedRecords.Should().ContainSingle();
 
         var updated = secondResult.UpdatedRecords.OfType<V4Models.DeviceEvent>().Single();
         updated.LegacyId.Should().Be("idempotent-site-change");
@@ -2609,12 +2603,12 @@ public class TreatmentDecomposerTests : IDisposable
         // Act
         var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
-        // Assert — DeviceEvent + Note + StateSpan
+        // Assert — DeviceEvent + StateSpan; the device event keeps its notes itself
         var deviceEvent = result.CreatedRecords.OfType<V4Models.DeviceEvent>().Single();
         deviceEvent.EventType.Should().Be(DeviceEventType.PumpSuspend);
         deviceEvent.LegacyId.Should().Be("pump-suspend-1");
 
-        result.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
+        result.CreatedRecords.OfType<V4Models.Note>().Should().BeEmpty();
 
         _stateSpanServiceMock.Verify(
             s => s.UpsertStateSpanAsync(

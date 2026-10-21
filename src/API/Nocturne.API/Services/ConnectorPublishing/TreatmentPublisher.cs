@@ -232,7 +232,8 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
         var minMills = scheduledRecords.Min(r => r.StartMills);
         var maxMills = scheduledRecords.Max(r => r.StartMills);
 
-        var resolve = await _basalRateResolver.BuildResolverAsync(minMills, maxMills, cancellationToken);
+        // The range is half-open, and the last record's own start has to fall inside it.
+        var resolve = await _basalRateResolver.BuildResolverAsync(minMills, maxMills + 1, cancellationToken);
 
         var reclassified = 0;
         foreach (var record in scheduledRecords)

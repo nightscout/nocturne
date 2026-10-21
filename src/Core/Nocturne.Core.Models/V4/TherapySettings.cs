@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using NJsonSchema.Annotations;
 
 namespace Nocturne.Core.Models.V4;
@@ -126,6 +127,14 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     /// write carrying a stale read of the flag cannot leave a second default.
     /// </remarks>
     public bool IsDefault { get; set; }
+
+    /// <summary>
+    /// The <c>defaultProfile</c> of the legacy profile document this row was decomposed from, shared
+    /// by every row of that document; null for a row written on its own, or decomposed before it was
+    /// recorded. Only decomposing the document writes it, so it is not part of the V4 API.
+    /// </summary>
+    [JsonIgnore]
+    public string? DocumentDefaultProfile { get; set; }
 
     /// <summary>
     /// Who entered this profile (e.g., "Loop", "Trio")

@@ -9,6 +9,7 @@ using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
+using Nocturne.API.Tests.Services.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -38,7 +39,7 @@ public class SensorContextEnricherTests
     private readonly Mock<IStateSpanService> _stateSpanService = new();
     private readonly Mock<IAlertRepository> _alertRepository = new();
     private readonly Mock<ITargetRangeScheduleRepository> _targetRangeScheduleRepository = new();
-    private readonly Mock<IActiveProfileResolver> _activeProfileResolver = new();
+    private readonly Mock<IActiveProfileResolver> _activeProfileResolver = ActiveProfileResolverMock.WithDefault();
     private readonly Mock<IProfileActivationResolver> _profileActivations = new();
     private readonly Mock<ITherapySettingsResolver> _therapySettingsResolver = new();
     private readonly Mock<ISleepService> _sleepService = new();
