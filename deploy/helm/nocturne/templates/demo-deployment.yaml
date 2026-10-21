@@ -7,7 +7,11 @@ metadata:
     {{- include "nocturne.labels" . | nindent 4 }}
     app.kubernetes.io/component: demo
 spec:
+  # A single data generator: never run two, even during an upgrade.
   replicas: 1
+  strategy:
+    type: Recreate
+    rollingUpdate: null
   selector:
     matchLabels: {{- include "nocturne.demo.selectorLabels" . | nindent 6 }}
   template:

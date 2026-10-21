@@ -34,7 +34,7 @@ web:
     repository: nightscout/nocturne/nocturne-web
     tag: ""              # defaults to .Chart.AppVersion
     digest: ""           # see api.image.digest for semantics
-  # Above 1, the ingress must pin each client to one pod (cookie affinity): see the README, "Web replicas".
+  # Above 1, the ingress must pin each client to one pod (session affinity): see the README, "Web replicas".
   replicaCount: 1
   containerPort: 5173    # Dockerfile.web ENV PORT=5173
   service:
@@ -46,7 +46,7 @@ web:
   tolerations: []
   affinity: {}
   pdb:
-    enabled: false
+    enabled: false       # needs replicaCount >= 2
     minAvailable: 1
     maxUnavailable: 0    # 0 disables; set when minAvailable is unset
 

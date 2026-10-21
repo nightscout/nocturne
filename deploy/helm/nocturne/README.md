@@ -163,7 +163,7 @@ The full set of configurable values is in [`values.yaml`](./values.yaml). Highli
 | `externalDatabase.{app,migrator,web}Secret.existingSecret` | Secret with each role's password under key `password` (override with `existingSecretKey`). |
 | `bootstrap.enabled` | If true, runs `bootstrap-roles.sql` as a Helm pre-install hook against your Postgres using `bootstrap.adminSecret`. |
 | `ingress.enabled` / `.host` / `.className` / `.tls` | Single-host ingress fronting the web service. Optional `ingress.api.externalPath` exposes the API on the same host. |
-| `web.replicaCount` / `web.pdb` | Web replicas (default 1) and an optional PodDisruptionBudget. See [Web replicas](#web-replicas). The API has no replica setting: see [Single API process](#single-api-process). |
+| `web.replicaCount` / `web.pdb` | Web replicas (default 1) and an optional PodDisruptionBudget (needs 2 or more replicas). See [Web replicas](#web-replicas). The API has no replica setting: see [Single API process](#single-api-process). |
 | `{api,web,bootstrap}.image.digest` | Pin the image to an immutable content digest (see "Image pinning" below). |
 
 ### Image pinning
@@ -182,13 +182,17 @@ When `digest` is set, `tag` is ignored and the rendered image reference is `<reg
 
 The API runs as exactly one pod per release ([#2279](https://github.com/nightscout/nocturne/issues/2279)). Its background services (connector syncs, alert sweeps, job runners) and several guards are in-process: per-tenant connector and migration runs are serialised by an in-memory lock, startup marks every background job still recorded as running as Interrupted, and tenant and data caches are evicted only in the process that made the write. A second API pod would duplicate every scheduled sync, interrupt the other pod's jobs, and serve stale tenant state.
 
-The chart therefore pins `replicas: 1` with no autoscaler or PodDisruptionBudget, and fails the render if `api.replicaCount` is set to anything but 1 or `api.autoscaling` or `api.pdb` is enabled. Upgrades use the `Recreate` strategy, because a rolling update briefly runs the old and new pods together, which is the same overlap. The cost is downtime on every upgrade or restart: the API is unavailable from the old pod stopping until the new one passes its readiness probe, including any database migrations it runs on startup.
+The chart therefore pins `replicas: 1` with no autoscaler or PodDisruptionBudget, and fails the render if `api.replicaCount` is set to anything but 1 or `api.autoscaling` or `api.pdb` is enabled. Upgrades use the `Recreate` strategy, because a rolling update briefly runs the old and new pods together, which is the same overlap. The cost is downtime on every upgrade or restart: the API is unavailable from the old pod stopping until the new one passes its readiness probe, including any database migrations it runs before it starts listening. A startup probe allows those migrations up to an hour, their command timeout, before liveness checks begin.
+
+`Recreate` covers rollouts only. When a pod is evicted or its node drained or deleted, Kubernetes starts the replacement while the old pod is still shutting down, so the two can overlap for up to the termination grace period (longer if a node is lost without the old pod being confirmed dead). The overlap is short and rare, but the duplicate work described above can happen inside it.
 
 Running more than one API process would need: background work split out to a single worker (or elected per job), the connector and migration run guard moved to a Postgres lock, job recovery that only reclaims jobs whose owner is gone, cross-process cache eviction, and a SignalR backplane.
 
 ### Web replicas
 
-The web pods hold no state another pod needs, so `web.replicaCount` may be raised. The realtime bridge falls back to Socket.IO long-polling when WebSockets are blocked, and a polling session must reach the same pod on every request, so above one replica configure cookie-based session affinity on your ingress controller (the Kubernetes Service's `sessionAffinity` does not apply, because ingress controllers route to pod endpoints directly). Without it, WebSocket clients are unaffected and polling clients fail to connect. Raise Postgres `max_connections` by 10 per extra web replica.
+The web pods hold no state another pod needs, so `web.replicaCount` may be raised, with one catch. The realtime bridge in each web pod is a Socket.IO server, and every request of a Socket.IO long-polling session must reach the pod that opened it. That includes the handshake of any client that starts on polling before upgrading to WebSocket (the Socket.IO default, and legacy Nightscout clients such as LoopFollow on Engine.IO v3), not only clients whose WebSocket is blocked. Above one replica, configure session affinity on your ingress controller: cookie affinity covers browsers and other clients that keep cookies, and source-IP affinity covers clients that do not. The Kubernetes Service's `sessionAffinity` does not help, because ingress controllers route to pod endpoints directly. Without affinity, clients that connect straight over WebSocket are unaffected and polling sessions fail.
+
+`web.pdb` keeps pods available through voluntary disruptions such as node drains, and needs `web.replicaCount` of at least 2: with one pod, a budget that keeps one available would block every drain, so the chart refuses to render it. Raise Postgres `max_connections` by 10 per extra web replica.
 
 ## Observability
 
