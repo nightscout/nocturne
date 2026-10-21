@@ -443,6 +443,11 @@
         predictionData={miniPredictionData}
         showPredictions={effectiveShowPredictions && predictionEnabled.current}
         {isZoomed}
+        thresholds={engine.thresholds}
+        lineColorMode={chartLineColorMode.current}
+        lineColor={chartLineColor.current}
+        areaMode={chartAreaMode.current}
+        areaOpacity={chartAreaOpacity.current}
         padding={{
           left: chartPadding.left,
           right: chartPadding.right,

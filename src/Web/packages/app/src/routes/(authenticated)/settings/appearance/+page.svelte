@@ -26,6 +26,7 @@
     regionFormat,
     regionFormatLabel,
     REGION_FORMATS,
+    type AreaMode,
     type ColorScheme,
     type RegionFormat,
   } from "$lib/stores/appearance-store.svelte";
@@ -702,8 +703,8 @@
                   </span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="threshold">Threshold bands</SelectItem>
                   <SelectItem value="continuous">Continuous gradient</SelectItem>
+                  <SelectItem value="threshold">Threshold bands</SelectItem>
                   <SelectItem value="single">Single color</SelectItem>
                 </SelectContent>
               </Select>
@@ -755,8 +756,8 @@
                     </span>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="threshold">Threshold bands</SelectItem>
                     <SelectItem value="continuous">Continuous gradient</SelectItem>
+                    <SelectItem value="threshold">Threshold bands</SelectItem>
                     <SelectItem value="single">Single color</SelectItem>
                   </SelectContent>
                 </Select>
@@ -783,24 +784,36 @@
               value={chartAreaMode.current}
               onValueChange={(value: string) => {
                 // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- value is constrained to the area fill options by the sibling SelectItems
-                chartAreaMode.current = value as "off" | "baseline" | "deviation";
+                chartAreaMode.current = value as AreaMode;
               }}
             >
               <SelectTrigger>
                 <span>
                   {chartAreaMode.current === "off"
                     ? "Off"
-                    : chartAreaMode.current === "baseline"
-                      ? "Baseline"
-                      : "Deviation"}
+                    : chartAreaMode.current === "full"
+                      ? "Full"
+                      : chartAreaMode.current === "baseline"
+                        ? "Fade (Trio style)"
+                        : "Outside target only"}
                 </span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="off">Off</SelectItem>
-                <SelectItem value="baseline">Baseline</SelectItem>
-                <SelectItem value="deviation">Deviation</SelectItem>
+                <SelectItem value="full">Full</SelectItem>
+                <SelectItem value="baseline">Fade (Trio style)</SelectItem>
+                <SelectItem value="deviation">Outside target only</SelectItem>
               </SelectContent>
             </Select>
+            <p class="text-sm text-muted-foreground">
+              {chartAreaMode.current === "off"
+                ? "No fill under the glucose line."
+                : chartAreaMode.current === "full"
+                  ? "Fills from the glucose line to the bottom of the chart at one opacity."
+                  : chartAreaMode.current === "baseline"
+                    ? "Fills from the glucose line to the bottom of the chart, fading out toward the bottom."
+                    : "Fills only between the glucose line and the target range when it is out of range."}
+            </p>
           </div>
         </div>
 

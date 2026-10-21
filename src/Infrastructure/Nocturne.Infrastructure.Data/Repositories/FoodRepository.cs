@@ -51,19 +51,46 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        // Try to find by original ID first (MongoDB ObjectId)
-        var entity = await _context.Foods.AsNoTracking().FirstOrDefaultAsync(
-            f => f.OriginalId == id,
-            cancellationToken
-        );
-
-        // If not found by original ID, try by GUID
-        if (entity == null && Guid.TryParse(id, out var guid))
-        {
-            entity = await _context.Foods.AsNoTracking().FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
-        }
+        var entity = await FindEntityAsync(_context.Foods.AsNoTracking(), id, cancellationToken);
 
         return entity != null ? FoodMapper.ToDomainModel(entity) : null;
+    }
+
+    /// <summary>
+    /// The food <paramref name="id"/> names: its legacy ObjectId, its own UUID, or the id v3 serves
+    /// for it (<see cref="MongoObjectId.Coerce"/>), which is the UUID's 24-hex prefix, or a hash of a
+    /// legacy ObjectId stored in uppercase.
+    /// </summary>
+    private static async Task<FoodEntity?> FindEntityAsync(
+        IQueryable<FoodEntity> foods,
+        string id,
+        CancellationToken cancellationToken
+    )
+    {
+        var entity = await foods.FirstOrDefaultAsync(f => f.OriginalId == id, cancellationToken);
+
+        if (entity == null && Guid.TryParse(id, out var guid))
+            entity = await foods.FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
+
+        if (entity != null || !MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+            return entity;
+
+        entity = await foods
+            .Where(f => f.Id >= low && f.Id <= high)
+            .OrderBy(f => f.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (entity != null)
+            return entity;
+
+        var hashed = (await foods
+                .Where(f => f.OriginalId != null && f.OriginalId != f.OriginalId.ToLower())
+                .Select(f => new { f.Id, f.OriginalId })
+                .ToListAsync(cancellationToken))
+            .FirstOrDefault(f => MongoObjectId.Coerce(f.OriginalId) == id);
+
+        return hashed == null
+            ? null
+            : await foods.FirstOrDefaultAsync(f => f.Id == hashed.Id, cancellationToken);
     }
 
     /// <summary>
@@ -268,17 +295,7 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        // Try to find by original ID first (MongoDB ObjectId)
-        var entity = await _context.Foods.FirstOrDefaultAsync(
-            f => f.OriginalId == id,
-            cancellationToken
-        );
-
-        // If not found by original ID, try by GUID
-        if (entity == null && Guid.TryParse(id, out var guid))
-        {
-            entity = await _context.Foods.FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
-        }
+        var entity = await FindEntityAsync(_context.Foods, id, cancellationToken);
 
         if (entity == null)
         {
@@ -302,17 +319,7 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        // Try to find by original ID first (MongoDB ObjectId)
-        var entity = await _context.Foods.FirstOrDefaultAsync(
-            f => f.OriginalId == id,
-            cancellationToken
-        );
-
-        // If not found by original ID, try by GUID
-        if (entity == null && Guid.TryParse(id, out var guid))
-        {
-            entity = await _context.Foods.FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
-        }
+        var entity = await FindEntityAsync(_context.Foods, id, cancellationToken);
 
         if (entity == null)
         {

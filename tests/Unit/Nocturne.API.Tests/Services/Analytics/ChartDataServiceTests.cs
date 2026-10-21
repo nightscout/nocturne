@@ -1460,6 +1460,85 @@ public class ChartDataServiceTests
 
     #endregion
 
+    #region LastPumpSyncMills Tests
+
+    public class LastPumpSyncMillsTests
+    {
+        private const long Minute = 60 * 1000;
+        private const long Now = TestMills + 10 * 60 * Minute;
+
+        private static TempBasal Basal(long startMills, long? endMills) =>
+            new()
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime,
+                EndTimestamp = endMills.HasValue
+                    ? DateTimeOffset.FromUnixTimeMilliseconds(endMills.Value).UtcDateTime
+                    : null,
+                Rate = 1.0,
+                Origin = TempBasalOrigin.Algorithm,
+            };
+
+        private static PumpSnapshot Pump(long uploadedMills, string? clock) =>
+            new()
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(uploadedMills).UtcDateTime,
+                Clock = clock,
+            };
+
+        private static string Iso(long mills) =>
+            DateTimeOffset.FromUnixTimeMilliseconds(mills).ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
+
+        [Fact]
+        public void APumpOnItsScheduledBasalDatesFromItsLastStatusNotItsLastTempBasal()
+        {
+            var lastTemp = Basal(Now - 120 * Minute, Now - 90 * Minute);
+            var status = Pump(Now - 2 * Minute, Iso(Now - 3 * Minute));
+
+            ChartDataService.LastPumpSyncMills([lastTemp], status).Should().Be(Now - 3 * Minute);
+        }
+
+        [Fact]
+        public void APumpClockWithAnOffsetIsReadAsTheInstantItNames()
+        {
+            var status = Pump(Now, "2023-11-14T22:13:20+10:00");
+
+            ChartDataService.LastPumpSyncMills([], status)
+                .Should().Be(DateTimeOffset.Parse("2023-11-14T12:13:20Z").ToUnixTimeMilliseconds());
+        }
+
+        [Fact]
+        public void AStatusWithoutAPumpClockDatesFromItsUpload()
+        {
+            ChartDataService.LastPumpSyncMills([], Pump(Now - Minute, null)).Should().Be(Now - Minute);
+        }
+
+        [Fact]
+        public void APumpThatStoppedReportingDatesFromItsLastClock()
+        {
+            var running = Basal(Now - 200 * Minute, Now - 170 * Minute);
+            var status = Pump(Now - 2 * Minute, Iso(Now - 180 * Minute));
+
+            ChartDataService.LastPumpSyncMills([running], status).Should().Be(Now - 170 * Minute);
+        }
+
+        [Fact]
+        public void WithoutPumpStatusTheNewestTempBasalEndDatesIt()
+        {
+            var earlier = Basal(Now - 60 * Minute, Now - 30 * Minute);
+            var open = Basal(Now - 20 * Minute, null);
+
+            ChartDataService.LastPumpSyncMills([earlier, open], null).Should().Be(Now - 20 * Minute);
+        }
+
+        [Fact]
+        public void NothingToDateItFrom_IsNull()
+        {
+            ChartDataService.LastPumpSyncMills([], null).Should().BeNull();
+        }
+    }
+
+    #endregion
+
     #region SelectDisplayTempBasals Tests
 
     public class SelectDisplayTempBasalsTests

@@ -364,7 +364,7 @@ public sealed class SessionCookieExtensionsTests
 
         // The registered redirect_uri is the apex callback. A login begun on any other host —
         // a tenant subdomain, or a reserved dashboard slug that has no slug in its state for
-        // OidcCallbackRedirectMiddleware to bounce back to — must present this cookie there.
+        // ApexCallbackRelayMiddleware to bounce back to — must present this cookie there.
         Written(cookies(), ".Nocturne.OidcState").Should()
             .Contain("domain=.nocturne.run")
             .And.Contain("httponly")

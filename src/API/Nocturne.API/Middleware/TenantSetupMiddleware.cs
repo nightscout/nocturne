@@ -13,24 +13,13 @@ namespace Nocturne.API.Middleware;
 /// endpoints through so setup/recovery flows can complete. Trusted instance-key
 /// service requests also bypass the gate (see <see cref="IInstanceKeyValidator"/>)
 /// so automation can configure a tenant before a human owner registers a passkey.
-///
-/// Runs after TenantResolutionMiddleware. When no tenant is resolved
-/// (e.g. tenantless cross-tenant paths, or zero-tenant setup), the
-/// middleware passes through.
+/// When no tenant is resolved (e.g. tenantless cross-tenant paths, or zero-tenant setup),
+/// the middleware passes through.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Pipeline order (position 4 of 6 custom middleware):
-/// <see cref="JsonExtensionMiddleware"/>,
-/// <see cref="OidcCallbackRedirectMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
-/// <b>TenantSetupMiddleware</b>, <see cref="AuthenticationMiddleware"/>,
-/// <see cref="MemberScopeMiddleware"/>.
-/// </para>
-/// <para>
-/// Endpoints decorated with <see cref="AllowDuringSetupAttribute"/> bypass both the
-/// setup check and the recovery check. Depends on <see cref="ITenantAccessor"/> to
-/// determine whether a tenant has been resolved.
-/// </para>
+/// Must run after <see cref="Multitenancy.TenantResolutionMiddleware"/>, which supplies the tenant,
+/// and after <c>UseRouting</c>, which supplies the endpoint whose
+/// <see cref="AllowDuringSetupAttribute"/> bypasses both the setup and the recovery check.
 /// </remarks>
 /// <seealso cref="AllowDuringSetupAttribute"/>
 /// <seealso cref="Multitenancy.TenantResolutionMiddleware"/>

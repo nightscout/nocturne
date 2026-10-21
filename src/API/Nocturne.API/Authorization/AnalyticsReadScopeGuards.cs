@@ -86,6 +86,11 @@ internal static class ChartDataReadScopeGuard
             data.PumpModeSpans = [];
         }
 
+        // Read off both the basal delivery spans and the pump status, so it needs both scopes.
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead)
+            || !AnalyticsReadScopes.Allows(grantedScopes, Scope.DevicesRead))
+            data.LastPumpSyncMills = null;
+
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TherapyRead))
             data.ProfileSpans = [];
 

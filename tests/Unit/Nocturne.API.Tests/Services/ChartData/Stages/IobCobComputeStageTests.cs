@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
 using Nocturne.API.Tests.TestDoubles;
@@ -16,6 +17,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
+using Nocturne.API.Tests.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.ChartData.Stages;
 
@@ -68,17 +70,15 @@ public class IobCobComputeStageTests
             .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
                 new TherapyTimeline(new[] { new TherapySegment(from, to, defaultSnapshot) }));
 
-        _stage = CreateStage(new CategoryReadContext());
+        _stage = CreateStage(TestTenantCache.Create(_cache));
     }
 
-    private IobCobComputeStage CreateStage(ICategoryReadContext categoryReadContext) => new(
+    private IobCobComputeStage CreateStage(ITenantCache cache) => new(
         _mockIobCalculator.Object,
         _mockCobCalculator.Object,
         _mockBasalSeriesBuilder.Object,
         _mockTherapyTimelineResolver.Object,
-        _cache,
-        MockTenantAccessor.Create().Object,
-        categoryReadContext,
+        cache,
         NullLogger<IobCobComputeStage>.Instance
     );
 
@@ -276,7 +276,7 @@ public class IobCobComputeStageTests
 
         var stage = new IobCobComputeStage(
             realIob, realCob, basalSeriesBuilder.Object, timelineResolver.Object,
-            _cache, MockTenantAccessor.Create().Object, new CategoryReadContext(), NullLogger<IobCobComputeStage>.Instance);
+            TestTenantCache.Create(_cache), NullLogger<IobCobComputeStage>.Instance);
 
         var context = new ChartDataContext
         {
@@ -470,12 +470,12 @@ public class IobCobComputeStageTests
     }
 
     /// <summary>
-    /// The key fingerprints the treatments, not the therapy timeline, and a share computes with the
-    /// profile tables hidden from it.
+    /// A share computes with the profile tables hidden from it, so its series must never meet the
+    /// owner's.
     /// </summary>
     [Theory]
-    [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
-    public async Task ExecuteAsync_BypassingCaller_NeitherReadsNorWritesTheCachedSeries(string caller)
+    [MemberData(nameof(NarrowedReaders.All), MemberType = typeof(NarrowedReaders))]
+    public async Task ExecuteAsync_NarrowedReader_NeverSharesTheOwnersCachedSeries(string reader)
     {
         var context = new ChartDataContext
         {
@@ -494,19 +494,101 @@ public class IobCobComputeStageTests
         void IobIs(double iob) => _mockIobCalculator
             .Setup(s => s.FromBoluses(It.IsAny<List<Bolus>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
             .Returns(new IobResult { Iob = iob });
-        var bypassing = CreateStage(CacheBypassingCallers.Context(caller));
+        var narrowed = CreateStage(NarrowedReaders.Cache(reader, _cache));
 
         IobIs(2.0);
         await _stage.ExecuteAsync(context, CancellationToken.None);
 
         IobIs(7.0);
-        var bypassed = await bypassing.ExecuteAsync(context, CancellationToken.None);
+        var narrowedResult = await narrowed.ExecuteAsync(context, CancellationToken.None);
 
         IobIs(9.0);
         var owner = await _stage.ExecuteAsync(context, CancellationToken.None);
 
-        bypassed.IobSeries.Should().ContainSingle().Which.Value.Should().Be(7.0, "the owner's cached series is not served");
-        owner.IobSeries.Should().ContainSingle().Which.Value.Should().Be(2.0, "the bypassing series is not written over it");
+        narrowedResult.IobSeries.Should().ContainSingle().Which.Value.Should().Be(7.0, "the owner's cached series is not served");
+        owner.IobSeries.Should().ContainSingle().Which.Value.Should().Be(2.0, "the narrowed series is not written over it");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ProfileChange_InvalidatesCachedSeries()
+    {
+        var dia = 3.0;
+        _mockTherapyTimelineResolver
+            .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
+                new TherapyTimeline([new TherapySegment(from, to, new TherapySnapshot(
+                    dia, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour,
+                    null, null, 0, null, null, null))]));
+        _mockIobCalculator
+            .Setup(s => s.FromBoluses(It.IsAny<List<Bolus>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
+            .Returns((List<Bolus> _, TherapySnapshot snapshot, long _) => new IobResult { Iob = snapshot.Dia });
+        var context = new ChartDataContext
+        {
+            StartTime = TestMills,
+            EndTime = TestMills,
+            IntervalMinutes = 5,
+            DefaultBasalRate = 1.0,
+            BolusList = [new Bolus
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(TestMills - 5 * 60 * 1000).UtcDateTime,
+                Insulin = 3.0,
+            }],
+            CarbIntakeList = [],
+            TempBasalList = [],
+        };
+
+        var first = await _stage.ExecuteAsync(context, CancellationToken.None);
+        dia = 5.0;
+        var second = await _stage.ExecuteAsync(context, CancellationToken.None);
+
+        first.IobSeries.Should().ContainSingle().Which.Value.Should().Be(3.0);
+        second.IobSeries.Should().ContainSingle().Which.Value.Should().Be(5.0);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_BasalScheduleEditBetweenTicks_InvalidatesCachedSeries()
+    {
+        // TestMills is 22:13:20 UTC and the temp basal starts at 22:11:20. The edit adds a 2 U/h
+        // block from 22:10 to 22:13, which changes the rate at the temp basal's start but not at
+        // the only tick.
+        var basal = new List<ScheduleEntry> { new() { TimeAsSeconds = 0, Value = 1.0 } };
+        _mockTherapyTimelineResolver
+            .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
+                new TherapyTimeline([new TherapySegment(from, to, new TherapySnapshot(
+                    3.0, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour,
+                    null, null, 0, null, null, basal.ToList()))]));
+        _mockIobCalculator
+            .Setup(s => s.FromTempBasals(It.IsAny<List<TempBasal>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
+            .Returns((List<TempBasal> tempBasals, TherapySnapshot snapshot, long _) =>
+                new IobResult { BasalIob = snapshot.BasalRateAt(tempBasals[0].StartMills) });
+        var context = new ChartDataContext
+        {
+            StartTime = TestMills,
+            EndTime = TestMills,
+            IntervalMinutes = 5,
+            DefaultBasalRate = 1.0,
+            BolusList = [],
+            CarbIntakeList = [],
+            TempBasalList = [new TempBasal
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(TestMills - 2 * 60 * 1000).UtcDateTime,
+                Rate = 0.5,
+                Origin = TempBasalOrigin.Algorithm,
+            }],
+        };
+
+        var first = await _stage.ExecuteAsync(context, CancellationToken.None);
+        basal =
+        [
+            new() { TimeAsSeconds = 0, Value = 1.0 },
+            new() { TimeAsSeconds = 22 * 3600 + 10 * 60, Value = 2.0 },
+            new() { TimeAsSeconds = 22 * 3600 + 13 * 60, Value = 1.0 },
+        ];
+        var second = await _stage.ExecuteAsync(context, CancellationToken.None);
+
+        first.IobSeries.Should().ContainSingle().Which.Value.Should().Be(1.0);
+        second.IobSeries.Should().ContainSingle().Which.Value.Should().Be(2.0);
     }
 
     [Fact]

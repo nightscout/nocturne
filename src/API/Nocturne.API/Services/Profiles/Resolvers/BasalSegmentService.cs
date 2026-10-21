@@ -1,12 +1,11 @@
 using System.Runtime.CompilerServices;
-using Microsoft.Extensions.Caching.Memory;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
@@ -23,7 +22,7 @@ namespace Nocturne.API.Services.Profiles.Resolvers;
 /// assignment with no entries is emitted: <see cref="BasalCalculator"/> renders that as a constant
 /// 1.0 U/hr fallback, identical to <c>BasalRateResolver</c>'s point fallback.
 ///
-/// Per-window assemble cache (5s TTL) keyed by tenant + window absorbs the multi-period dashboard
+/// Per-window assemble cache (5s TTL) in <see cref="ITenantCache"/> absorbs the multi-period dashboard
 /// pattern where 1d/3d/7d/30d/90d are requested back-to-back.
 /// </remarks>
 internal sealed class BasalSegmentService : IBasalSegmentService
@@ -31,9 +30,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
     private readonly IStateSpanService _stateSpanService;
     private readonly IBasalScheduleRepository _scheduleRepo;
     private readonly ITherapySettingsRepository _therapyRepo;
-    private readonly ITenantAccessor _tenantAccessor;
-    private readonly IMemoryCache _cache;
-    private readonly ICategoryReadContext _categoryReadContext;
+    private readonly ITenantCache _cache;
 
     private const string DefaultProfileName = "Default";
     private const int CacheTtlSeconds = 5;
@@ -42,16 +39,12 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         IStateSpanService stateSpanService,
         IBasalScheduleRepository scheduleRepo,
         ITherapySettingsRepository therapyRepo,
-        ITenantAccessor tenantAccessor,
-        IMemoryCache cache,
-        ICategoryReadContext categoryReadContext)
+        ITenantCache cache)
     {
         _stateSpanService = stateSpanService;
         _scheduleRepo = scheduleRepo;
         _therapyRepo = therapyRepo;
-        _tenantAccessor = tenantAccessor;
         _cache = cache;
-        _categoryReadContext = categoryReadContext;
     }
 
     public async IAsyncEnumerable<BasalSegment> GetSegmentsAsync(
@@ -72,24 +65,14 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         }
     }
 
-    /// <remarks>
-    /// A request that <see cref="ICategoryReadContext.BypassesTenantCaches"/> neither reads nor writes
-    /// the cache.
-    /// </remarks>
     private async Task<IReadOnlyList<ScheduleAssignment>> GetAssignmentsAsync(
         BasalWindow window,
         CancellationToken ct)
     {
-        if (_categoryReadContext.BypassesTenantCaches)
-            return await BuildAssignmentsAsync(window, ct);
-
-        var cacheKey = $"BasalAssignments:{_tenantAccessor.TenantId}:{window.StartMills}:{window.EndMills}";
-        if (_cache.TryGetValue(cacheKey, out IReadOnlyList<ScheduleAssignment>? cached) && cached is not null)
-            return cached;
-
-        var assignments = await BuildAssignmentsAsync(window, ct);
-        _cache.Set(cacheKey, assignments, TimeSpan.FromSeconds(CacheTtlSeconds));
-        return assignments;
+        return await _cache.GetOrCreateLocalAsync(
+            $"basal-assignments:{window.StartMills}:{window.EndMills}",
+            () => BuildAssignmentsAsync(window, ct),
+            TimeSpan.FromSeconds(CacheTtlSeconds));
     }
 
     private async Task<IReadOnlyList<ScheduleAssignment>> BuildAssignmentsAsync(

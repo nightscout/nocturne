@@ -18,6 +18,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -244,7 +245,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             delegateToStateSpan = true;
         }
-        else if (string.Equals(eventType, "Profile Switch", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, "Profile Switch", StringComparison.OrdinalIgnoreCase)
+              || EffectiveProfileSwitch.Is(treatment))
         {
             isProfileSwitch = true;
             delegateToStateSpan = true;
@@ -623,7 +625,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 State = PumpModeState.Suspended.ToString(),
                 StartTimestamp = timestamp,
                 EndTimestamp = null,
-                Source = treatment.DataSource ?? treatment.EnteredBy ?? "nightscout",
+                Source = SpanSource(treatment),
                 OriginalId = $"pump-suspended-tx:{treatment.Id}",
             };
 
@@ -708,25 +710,29 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
     private async Task DecomposeProfileSwitchAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
+        var isEffective = EffectiveProfileSwitch.Is(treatment);
         var stateSpan = new StateSpan
         {
             Category = StateSpanCategory.Profile,
             State = ProfileState.Active.ToString(),
             StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
-            EndTimestamp = treatment.Duration is > 0
+            EndTimestamp = !isEffective && treatment.Duration is > 0
                 ? DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills + (long)(treatment.Duration.Value * 60 * 1000)).UtcDateTime
                 : null,
-            Source = treatment.DataSource ?? treatment.EnteredBy ?? "nightscout",
+            Source = SpanSource(treatment),
             OriginalId = treatment.Id,
-            Metadata = BuildProfileMetadata(treatment)
+            Metadata = isEffective ? BuildEffectiveProfileMetadata(treatment) : BuildProfileMetadata(treatment)
         };
 
         if (!await UpsertTreatmentSpanAsync(stateSpan, result, ct))
             return;
         Logger.LogDebug("Delegated ProfileSwitch treatment {LegacyId} to IStateSpanService", SanitizeForLog(treatment.Id));
 
-        // If the treatment carries inline profile JSON, decompose it into V4 schedule records
-        if (!string.IsNullOrEmpty(treatment.ProfileJson))
+        await EndAtEffectiveProfileSwitchAsync(treatment.Id, isEffective, ct);
+
+        // An effective switch's profileJson is the switch's profile with its percentage and timeshift
+        // applied, and stays on the span; a snapshot of it would duplicate the switch's own.
+        if (!isEffective && !string.IsNullOrEmpty(treatment.ProfileJson))
         {
             try
             {
@@ -772,7 +778,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             EndTimestamp = treatment.Duration is > 0
                 ? DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills + (long)(treatment.Duration.Value * 60 * 1000)).UtcDateTime
                 : null,
-            Source = treatment.DataSource ?? treatment.EnteredBy ?? "nightscout",
+            Source = SpanSource(treatment),
             OriginalId = treatment.Id,
             Metadata = BuildOverrideMetadata(treatment)
         };
@@ -796,7 +802,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             EndTimestamp = !isCancelled && treatment.Duration is > 0
                 ? DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills + (long)(treatment.Duration.Value * 60 * 1000)).UtcDateTime
                 : null,
-            Source = treatment.DataSource ?? treatment.EnteredBy ?? "nightscout",
+            Source = SpanSource(treatment),
             OriginalId = treatment.Id,
             Metadata = BuildTemporaryTargetMetadata(treatment)
         };
@@ -831,6 +837,86 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         result.CreatedRecords.Add(await _stateSpanService.UpsertStateSpanAsync(stateSpan, ct));
         return true;
     }
+
+    /// <summary>
+    /// Ends the Profile spans of one source that an effective profile switch of that source took
+    /// over (see <see cref="EffectiveProfileSwitch"/>): for an effective switch, every span still
+    /// running at its start; for any other span with an end, itself at the first effective switch
+    /// that started inside it. An open span needs neither, since writing the later span supersedes it.
+    /// </summary>
+    /// <param name="originalId">The treatment id the span just written was upserted on.</param>
+    private async Task EndAtEffectiveProfileSwitchAsync(string? originalId, bool isEffective, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(originalId))
+            return;
+
+        var category = nameof(StateSpanCategory.Profile);
+        var profileSpans = _dbContext.StateSpans.Where(s => s.Category == category);
+        if (await profileSpans.AsNoTracking().FirstOrDefaultAsync(s => s.OriginalId == originalId, ct) is not { } written)
+            return;
+
+        var ofSource = profileSpans.Where(s => s.Source == written.Source && s.Id != written.Id);
+        List<StateSpanEntity> ended;
+
+        if (isEffective)
+        {
+            ended = await ofSource
+                .Where(s => s.StartTimestamp < written.StartTimestamp && s.EndTimestamp > written.StartTimestamp)
+                .ToListAsync(ct);
+            foreach (var span in ended)
+                EndAt(span, written.StartTimestamp, written.Id);
+        }
+        else if (written.EndTimestamp is { } end)
+        {
+            var later = await ofSource.AsNoTracking()
+                .Where(s => s.StartTimestamp > written.StartTimestamp && s.StartTimestamp < end)
+                .OrderBy(s => s.StartTimestamp)
+                .ToListAsync(ct);
+            if (later.FirstOrDefault(s => EffectiveProfileSwitch.IsSpan(StateSpanMapper.ToDomainModel(s).Metadata))
+                is not { } effective)
+                return;
+
+            ended = [await _dbContext.StateSpans.SingleAsync(s => s.Id == written.Id, ct)];
+            EndAt(ended[0], effective.StartTimestamp, effective.Id);
+        }
+        else
+        {
+            return;
+        }
+
+        if (ended.Count == 0)
+            return;
+
+        await _dbContext.SaveChangesAsync(ct);
+        foreach (var span in ended)
+            _dbContext.Entry(span).State = EntityState.Detached;
+
+        // The end a switch was uploaded with is kept, as the duration it is served with.
+        static void EndAt(StateSpanEntity span, DateTime at, Guid by)
+        {
+            var metadata = StateSpanMapper.ToDomainModel(span).Metadata ?? [];
+            if (span.EndTimestamp is { } uploadedEnd
+                && !metadata.ContainsKey(LegacyTreatmentTables.UploadedDurationKey))
+            {
+                metadata[LegacyTreatmentTables.UploadedDurationKey] = (uploadedEnd - span.StartTimestamp).TotalMinutes;
+                span.MetadataJson = JsonSerializer.Serialize(metadata);
+            }
+
+            span.EndTimestamp = at;
+            span.SupersededById = by;
+            span.UpdatedAt = DateTime.UtcNow;
+        }
+    }
+
+    /// <summary>
+    /// Who wrote a treatment's span: its data source, else its uploader, else the <c>app</c> a v3
+    /// upload names (AAPS sends no <c>enteredBy</c> there).
+    /// </summary>
+    private static string SpanSource(Treatment treatment) =>
+        treatment.DataSource
+        ?? treatment.EnteredBy
+        ?? UploadedString(treatment, "app")
+        ?? "nightscout";
 
     #endregion
 
@@ -1071,24 +1157,17 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// Returns true if the treatment was uploaded by AAPS (AndroidAPS).
     /// AAPS sets "app": "AAPS" on all treatment uploads (NSAndroidClientImpl.kt:296).
     /// </summary>
-    internal static bool IsAapsUpload(Treatment treatment)
-    {
-        if (treatment.AdditionalProperties is null)
-            return false;
+    internal static bool IsAapsUpload(Treatment treatment) =>
+        string.Equals(UploadedString(treatment, "app"), "AAPS", StringComparison.OrdinalIgnoreCase);
 
-        if (!treatment.AdditionalProperties.TryGetValue("app", out var appValue))
-            return false;
-
-        // System.Text.Json deserializes unknown properties as JsonElement
-        var appString = appValue switch
+    /// <summary>An uploaded field the treatment has no property for, when it is a string.</summary>
+    private static string? UploadedString(Treatment treatment, string key) =>
+        treatment.AdditionalProperties?.GetValueOrDefault(key) switch
         {
             string s => s,
-            System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.String } je => je.GetString(),
+            JsonElement { ValueKind: JsonValueKind.String } je => je.GetString(),
             _ => null
         };
-
-        return string.Equals(appString, "AAPS", StringComparison.OrdinalIgnoreCase);
-    }
 
     private static bool IsLoopUpload(Treatment treatment) =>
         treatment.EnteredBy?.StartsWith("loop://", StringComparison.OrdinalIgnoreCase) == true;
@@ -1218,8 +1297,33 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         if (!string.IsNullOrEmpty(treatment.Reason))
             metadata["reason"] = treatment.Reason;
 
-        AddServedTreatmentFields(metadata, treatment);
+        // AAPS names the switch after its customization ("Rhys (110%)"); the profile it customizes
+        // is the one its schedules are stored under.
+        if (!string.IsNullOrEmpty(treatment.OriginalProfileName))
+            metadata[EffectiveProfileSwitch.OriginalProfileNameKey] = treatment.OriginalProfileName;
 
+        if (treatment.OriginalDuration is { } originalDuration)
+            metadata[EffectiveProfileSwitch.OriginalDurationKey] = originalDuration;
+
+        if (treatment.Duration is { } duration)
+            metadata[LegacyTreatmentTables.UploadedDurationKey] = duration;
+
+        AddServedTreatmentFields(metadata, treatment);
+        AddInsulinContext(metadata, treatment);
+
+        return metadata.Count > 0 ? metadata : null;
+    }
+
+    private static Dictionary<string, object> BuildEffectiveProfileMetadata(Treatment treatment)
+    {
+        var metadata = EffectiveProfileSwitch.Metadata(treatment);
+        AddServedTreatmentFields(metadata, treatment);
+        AddInsulinContext(metadata, treatment);
+        return metadata;
+    }
+
+    private static void AddInsulinContext(Dictionary<string, object> metadata, Treatment treatment)
+    {
         var icfg = ExtractAapsIcfg(treatment);
         if (icfg is not null)
         {
@@ -1229,8 +1333,6 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             metadata["insulinConcentration"] = icfg.Concentration.ToString();
             metadata["insulinCurve"] = icfg.Curve;
         }
-
-        return metadata.Count > 0 ? metadata : null;
     }
 
     private const string TemporaryTargetEventType = "Temporary Target";

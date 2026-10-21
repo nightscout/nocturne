@@ -1,13 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.API.Services.Caching;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -32,12 +31,10 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// The DIA value is read from the loaded profile.
 /// </para>
 /// <para>
-/// Results are cached in <see cref="Microsoft.Extensions.Caching.Memory.IMemoryCache"/> for
-/// one minute. The cache key is a 64-bit SHA-256 prefix of the treatment fingerprint (mills,
-/// insulin, carbs, temp basal rate) combined with the tenant ID, rounded time boundaries,
-/// and interval. The tenant ID component prevents cross-tenant cache leakage. The key does not carry
-/// the therapy timeline the series is computed with, so a request that
-/// <see cref="ICategoryReadContext.BypassesTenantCaches"/> neither reads nor writes it.
+/// Results are cached in the local tier of <see cref="ITenantCache"/> for one minute. The cache
+/// key is a 64-bit SHA-256 prefix of every input the series depends on (treatments, temp basals,
+/// APS snapshots and the contents of every therapy segment) combined with the rounded time
+/// boundaries and interval.
 /// </para>
 /// <para>
 /// Basal series construction is delegated to <see cref="IBasalSeriesBuilder"/>, which uses
@@ -58,16 +55,11 @@ internal sealed class IobCobComputeStage(
     ICobCalculator cobCalculator,
     IBasalSeriesBuilder basalSeriesBuilder,
     ITherapyTimelineResolver therapyTimelineResolver,
-    IMemoryCache cache,
-    ITenantAccessor tenantAccessor,
-    ICategoryReadContext categoryReadContext,
+    ITenantCache cache,
     ILogger<IobCobComputeStage> logger
 ) : IChartDataStage
 {
     private static readonly TimeSpan IobCobCacheExpiration = TimeSpan.FromMinutes(1);
-
-    private string TenantCacheId => tenantAccessor.Context?.TenantId.ToString()
-        ?? throw new InvalidOperationException("Tenant context is not resolved");
 
     public async Task<ChartDataContext> ExecuteAsync(ChartDataContext context, CancellationToken cancellationToken)
     {
@@ -124,14 +116,11 @@ internal sealed class IobCobComputeStage(
     )
     {
 
-        var useCache = !categoryReadContext.BypassesTenantCaches;
-        var cacheKey = useCache
-            ? GenerateIobCobCacheKey(boluses, carbIntakes, startTime, endTime, intervalMinutes, tempBasals, apsSnapshots)
-            : null;
+        // Generate cache key based on data hash and time range
+        var cacheKey = GenerateIobCobCacheKey(boluses, carbIntakes, startTime, endTime, intervalMinutes, timeline, tempBasals, apsSnapshots);
 
         if (
-            cacheKey is not null
-            && cache.TryGetValue(
+            cache.TryGetLocal(
                 cacheKey,
                 out (
                     List<TimeSeriesPoint> iob,
@@ -295,23 +284,27 @@ internal sealed class IobCobComputeStage(
         }
 
         var result = (iobSeries, cobSeries, maxIob, maxCob);
-        if (cacheKey is not null)
-            cache.Set(cacheKey, result, IobCobCacheExpiration);
+        cache.SetLocal(cacheKey, result, IobCobCacheExpiration);
 
         return result;
     }
 
     /// <summary>
-    /// Generate a cache key for IOB/COB calculations based on data fingerprint and time range.
-    /// Uses SHA256 of individual bolus/carb intake mills and values for collision resistance.
-    /// Includes tenant ID to prevent cross-tenant cache leakage.
+    /// Generate a cache key for IOB/COB calculations from a SHA-256 fingerprint of every input the
+    /// series depends on and the rounded time range.
     /// </summary>
-    private string GenerateIobCobCacheKey(
+    /// <remarks>
+    /// The therapy part covers each segment's whole snapshot and the boundaries between segments,
+    /// not the values at the ticks: the calculation also reads the snapshot between ticks, e.g. DIA
+    /// at the window end and the scheduled basal rate at a temp basal's start.
+    /// </remarks>
+    private static string GenerateIobCobCacheKey(
         List<Bolus> boluses,
         List<CarbIntake> carbIntakes,
         long startTime,
         long endTime,
         int intervalMinutes,
+        TherapyTimeline timeline,
         List<TempBasal>? tempBasals = null,
         IReadOnlyList<ApsIobCobPoint>? apsSnapshots = null
     )
@@ -362,11 +355,19 @@ internal sealed class IobCobComputeStage(
             }
         }
 
+        var segments = timeline.Segments;
+        for (var i = 0; i < segments.Count; i++)
+        {
+            if (i > 0)
+                sb.Append('@').Append(segments[i].StartMills).Append(':');
+            segments[i].Snapshot.AppendFingerprint(sb);
+        }
+
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString())))[
             ..16
         ]; // First 16 hex chars (64 bits) is sufficient
 
-        return $"iobcob:{TenantCacheId}:{hash}:{roundedStart}:{roundedEnd}:{intervalMinutes}";
+        return $"iobcob:{hash}:{roundedStart}:{roundedEnd}:{intervalMinutes}";
     }
 
 }

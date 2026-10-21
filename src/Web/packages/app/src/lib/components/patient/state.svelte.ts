@@ -1,11 +1,13 @@
 import * as patientRemote from "$api/generated/patientRecords.generated.remote";
 import { getCatalog as getInsulinCatalog } from "$api/generated/insulinCatalogs.generated.remote";
+import { getCatalog as getDeviceCatalog } from "$api/generated/deviceCatalogs.generated.remote";
 import { getBodyWeights, create as createBodyWeight } from "$api/generated/bodyWeights.generated.remote";
 import {
   type PatientDevice,
   type PatientInsulin,
   type InsulinFormulation,
   type DiscoveredSource,
+  type DeviceCatalogEntry,
   DiabetesType,
 } from "$api";
 import { FormGuard, describeSubmitError } from "$lib/forms";
@@ -134,6 +136,7 @@ export class ClinicalState {
 export class DeviceListState {
   readonly #devices = patientRemote.getDevices();
   readonly #discovered = patientRemote.getDiscoveredSources();
+  readonly #catalog = getDeviceCatalog();
   readonly createForm = patientRemote.createDevice;
   readonly updateForm = patientRemote.updateDevice;
 
@@ -142,6 +145,11 @@ export class DeviceListState {
   /** Distinct (dataSource, device) combinations seen recently in unattributed readings. */
   get discoveredSources(): DiscoveredSource[] {
     return this.#discovered.current ?? [];
+  }
+
+  /** Known models, without the catalog's placeholder "custom" entries. */
+  get catalog(): DeviceCatalogEntry[] {
+    return (this.#catalog.current ?? []).filter((e) => !e.id?.startsWith("custom-"));
   }
 
   remove = async (id: string): Promise<void> => {

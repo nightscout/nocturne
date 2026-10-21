@@ -37,30 +37,63 @@ public class GoogleHealthConnectorConfigurationTests
     }
 
     [Theory]
-    [InlineData("http://example.com/settings/connectors/google-health/callback")]
-    [InlineData("https://example.com/other")]
-    [InlineData("https://example.com/settings/connectors/google-health/callback?query=1")]
-    public void Rejects_invalid_callback_urls(string callbackUrl)
-    {
-        var configuration = ValidConfiguration();
-        configuration.CallbackUrl = callbackUrl;
-
-        configuration.Invoking(value => value.Validate()).Should().Throw<ArgumentException>();
-    }
+    [InlineData("https://nocturne.example/api/v4/google-health/oauth/callback", true)]
+    [InlineData("http://localhost:1612/api/v4/google-health/oauth/callback", true)]
+    [InlineData("http://nocturne.example/api/v4/google-health/oauth/callback", false)]
+    [InlineData("http://127.0.0.1/api/v4/google-health/oauth/callback", false)]
+    [InlineData("https://nocturne.example/settings/connectors/google-health/callback", false)]
+    [InlineData("https://nocturne.example/api/v4/google-health/oauth/callback?x=1", false)]
+    [InlineData("https://user@nocturne.example/api/v4/google-health/oauth/callback", false)]
+    [InlineData("", false)]
+    public void Redirect_uri_must_be_the_api_callback_over_https_or_loopback(string redirectUri, bool valid) =>
+        GoogleHealthPlatformOptions.IsValidRedirectUri(redirectUri).Should().Be(valid);
 
     [Theory]
-    [InlineData("http://localhost/settings/connectors/google-health/callback", true)]
-    [InlineData("http://127.0.0.1/settings/connectors/google-health/callback", false)]
-    [InlineData("http://example.com/settings/connectors/google-health/callback", false)]
-    public void Allows_http_only_for_the_localhost_development_callback(string callbackUrl, bool valid)
+    [InlineData("client.apps.googleusercontent.com", "secret", true)]
+    [InlineData("client.example.com", "secret", false)]
+    [InlineData("client.apps.googleusercontent.com", " ", false)]
+    [InlineData("", "", false)]
+    public void Platform_is_configured_only_with_a_google_client_id_and_secret(
+        string clientId, string clientSecret, bool configured)
     {
-        var configuration = ValidConfiguration();
-        configuration.CallbackUrl = callbackUrl;
+        var options = new GoogleHealthPlatformOptions
+        {
+            ClientId = clientId,
+            ClientSecret = clientSecret,
+            RedirectUri = "https://nocturne.example" + GoogleHealthPlatformOptions.CallbackPath
+        };
 
-        if (valid)
-            configuration.Invoking(value => value.Validate()).Should().NotThrow();
-        else
-            configuration.Invoking(value => value.Validate()).Should().Throw<ArgumentException>();
+        options.IsConfigured.Should().Be(configured);
+    }
+
+    [Fact]
+    public void Platform_is_not_configured_without_a_redirect_uri()
+    {
+        var options = new GoogleHealthPlatformOptions
+        {
+            ClientId = "client.apps.googleusercontent.com",
+            ClientSecret = "secret"
+        };
+
+        options.IsConfigured.Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_tenants_stored_client_is_read_only_as_the_session_stamp()
+    {
+        using var json = JsonDocument.Parse("""
+            {
+              "clientId": "tenant.apps.googleusercontent.com",
+              "callbackUrl": "https://tenant.example/settings/connectors/google-health/callback"
+            }
+            """);
+        var configuration = ValidConfiguration();
+
+        ConnectorConfigurationBinder.ApplyJsonToConfig(json, configuration);
+        ConnectorConfigurationBinder.ApplySecretsToConfig(
+            new Dictionary<string, string> { ["clientSecret"] = "tenant-secret" }, configuration);
+
+        configuration.SessionClientId.Should().Be("tenant.apps.googleusercontent.com");
     }
 
     [Fact]
@@ -121,10 +154,5 @@ public class GoogleHealthConnectorConfigurationTests
         configuration.Invoking(value => value.Validate()).Should().Throw<ArgumentException>();
     }
 
-    private static GoogleHealthConnectorConfiguration ValidConfiguration() => new()
-    {
-        ClientId = "client.apps.googleusercontent.com",
-        ClientSecret = "secret",
-        CallbackUrl = "https://example.com/settings/connectors/google-health/callback"
-    };
+    private static GoogleHealthConnectorConfiguration ValidConfiguration() => new();
 }

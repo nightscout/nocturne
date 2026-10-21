@@ -33,6 +33,7 @@ internal sealed class DashboardChartDataAssembler : IChartDataAssembler
             ActivitySpans = context.ActivitySpans,
             TempBasalSpans = context.TempBasalSpans,
             BasalDeliverySpans = context.BasalDeliverySpans,
+            LastPumpSyncMills = context.LastPumpSyncMills,
             SystemEventMarkers = context.SystemEventMarkers,
             TrackerMarkers = context.TrackerMarkers,
             HeartRateSeries = context.HeartRateSeries,

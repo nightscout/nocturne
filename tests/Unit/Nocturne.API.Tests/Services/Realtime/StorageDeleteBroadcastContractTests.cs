@@ -21,7 +21,7 @@ using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Extensions;
-using Nocturne.Infrastructure.Cache.Abstractions;
+using Nocturne.API.Services.Caching;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Mocks;
@@ -142,10 +142,9 @@ public class StorageDeleteBroadcastContractTests
 
     private static WriteSideEffectsService CreateSideEffects(BroadcastCapture capture) =>
         new(
-            Mock.Of<ICacheService>(),
+            Mock.Of<ITenantCache>(),
             capture.Broadcast,
             Mock.Of<IDecompositionPipeline>(),
-            MockTenantAccessor.Create().Object,
             Enumerable.Empty<ICollectionEffectDescriptor>(),
             NullLogger<WriteSideEffectsService>.Instance
         );

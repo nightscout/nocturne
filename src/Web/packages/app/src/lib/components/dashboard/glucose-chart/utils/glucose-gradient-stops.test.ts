@@ -19,6 +19,8 @@ const {
 	continuousLineStops,
 	fillStopsFromLineStops,
 	singleColorFillStops,
+	solidFillStopsFromLineStops,
+	solidSingleColorFillStops,
 	areaY0Accessor
 } = await import('./glucose-gradient-stops');
 
@@ -80,11 +82,18 @@ describe('continuousLineStops', () => {
 		expect(stops[0][1]).toMatch(/^oklch\(/);
 	});
 
-	it('offsets descend (low mgdl is at the bottom of the chart)', () => {
+	it('offsets ascend, so SVG does not clamp every stop onto the first', () => {
 		const stops = continuousLineStops(axisScale, chartHeight);
-		// GLUCOSE_SPECTRUM_ANCHORS starts at the low end (→ bottom → high offset)
-		// and ends at the high end (→ top → low offset)
-		expect(stops[0][0]).toBeGreaterThan(stops[stops.length - 1][0]);
+		for (let i = 1; i < stops.length; i++) {
+			expect(stops[i][0]).toBeGreaterThan(stops[i - 1][0]);
+		}
+	});
+
+	it('puts the high end of the spectrum at the top of the chart', () => {
+		const stops = continuousLineStops(axisScale, chartHeight);
+		// axisScale(320) = 80 → offset 0.2; axisScale(40) = 360 → offset 0.9
+		expect(stops[0][0]).toBeCloseTo(0.2);
+		expect(stops[stops.length - 1][0]).toBeCloseTo(0.9);
 	});
 });
 
@@ -110,6 +119,30 @@ describe('fillStopsFromLineStops', () => {
 	});
 });
 
+describe('solidFillStopsFromLineStops', () => {
+	it('applies the same opacity at every offset', () => {
+		const fill = solidFillStopsFromLineStops(
+			[
+				[0, 'var(--a)'],
+				[1, 'var(--b)']
+			],
+			0.4
+		);
+		expect(fill).toEqual([
+			[0, 'color-mix(in lch, var(--a) 40%, transparent)'],
+			[1, 'color-mix(in lch, var(--b) 40%, transparent)']
+		]);
+	});
+});
+
+describe('solidSingleColorFillStops', () => {
+	it('emits a flat two-stop fill', () => {
+		const stops = solidSingleColorFillStops('var(--c)', 0.5);
+		expect(stops[0][1]).toBe(stops[1][1]);
+		expect(stops[0][1]).toBe('color-mix(in lch, var(--c) 50%, transparent)');
+	});
+});
+
 describe('singleColorFillStops', () => {
 	it('emits 2-stop fade', () => {
 		const stops = singleColorFillStops('var(--glucose-in-range)', 0.5);
@@ -120,8 +153,9 @@ describe('singleColorFillStops', () => {
 });
 
 describe('areaY0Accessor', () => {
-	it('returns undefined for baseline (let layerchart default to 0)', () => {
+	it('returns undefined for baseline and full (let layerchart default to 0)', () => {
 		expect(areaY0Accessor('baseline', thresholds)).toBeUndefined();
+		expect(areaY0Accessor('full', thresholds)).toBeUndefined();
 	});
 
 	it('clamps to [low, high] for deviation', () => {

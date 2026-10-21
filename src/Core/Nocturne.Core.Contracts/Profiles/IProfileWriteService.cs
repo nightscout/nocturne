@@ -20,8 +20,10 @@ public interface IProfileWriteService
     );
 
     /// <summary>
-    /// Replace the profile document <paramref name="id"/> with <paramref name="profile"/>, inserting it
-    /// when none is stored, through <see cref="V4.IProfileDecomposer.ReplaceDocumentAsync"/>.
+    /// Replace the profile document <paramref name="id"/> resolves to through
+    /// <see cref="IProfileProjectionService.ResolveDocumentIdAsync"/> with <paramref name="profile"/>,
+    /// inserting it under <paramref name="id"/> when none is stored, through
+    /// <see cref="V4.IProfileDecomposer.ReplaceDocumentAsync"/>.
     /// </summary>
     /// <param name="id">Profile ID to update</param>
     /// <param name="profile">Updated profile data</param>
@@ -35,7 +37,8 @@ public interface IProfileWriteService
 
     /// <summary>
     /// Delete a profile with side-effects (cache invalidation, V4 decomposition, event broadcast),
-    /// resolving <paramref name="id"/> through <see cref="V4.IProfileDecomposer.DeleteDocumentAsync"/>.
+    /// resolving <paramref name="id"/> through <see cref="IProfileProjectionService.ResolveDocumentIdAsync"/>
+    /// and deleting through <see cref="V4.IProfileDecomposer.DeleteDocumentAsync"/>.
     /// </summary>
     /// <param name="id">Profile ID to delete</param>
     /// <param name="cancellationToken">Cancellation token</param>

@@ -6,7 +6,6 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Models.OAuth;
 using Nocturne.API.Multitenancy;
-using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -22,7 +21,7 @@ namespace Nocturne.API.Controllers;
 /// </summary>
 /// <remarks>
 /// Most of these endpoints exist only to pull types into the generated client that no other endpoint
-/// reaches — WebSocket event envelopes, connector configuration shapes, OAuth scope lists — and
+/// reaches — WebSocket event envelopes, OAuth scope lists — and
 /// answer with a constant, usually an enum's values. Two serve real data: widget definitions return
 /// the widget catalogue, and multitenancy answers from configuration and the resolved tenant.
 ///
@@ -140,25 +139,6 @@ public class MetadataController : ControllerBase
             new StatisticsTypesMetadata
             {
                 Description = "Statistics types for insulin delivery reports",
-            }
-        );
-    }
-
-    /// <summary>
-    /// Get connector property keys metadata
-    /// This endpoint exposes all available connector property keys for type-safe usage in frontend clients
-    /// </summary>
-    /// <returns>Connector property keys metadata</returns>
-    [HttpGet("connector-property-keys")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(ConnectorPropertyKeysMetadata), 200)]
-    public ActionResult<ConnectorPropertyKeysMetadata> GetConnectorPropertyKeys()
-    {
-        return Ok(
-            new ConnectorPropertyKeysMetadata
-            {
-                AvailableKeys = Enum.GetValues<ConnectorPropertyKey>(),
-                Description = "Available connector configuration property keys",
             }
         );
     }
@@ -450,22 +430,6 @@ public class StatisticsTypesMetadata
     /// Sample insulin delivery statistics (for type generation)
     /// </summary>
     public InsulinDeliveryStatistics? SampleInsulinDelivery { get; set; }
-}
-
-/// <summary>
-/// Metadata about connector property keys for NSwag generation
-/// </summary>
-public class ConnectorPropertyKeysMetadata
-{
-    /// <summary>
-    /// Array of all available connector property keys
-    /// </summary>
-    public ConnectorPropertyKey[] AvailableKeys { get; set; } = [];
-
-    /// <summary>
-    /// Description of the connector property keys
-    /// </summary>
-    public string Description { get; set; } = string.Empty;
 }
 
 /// <summary>

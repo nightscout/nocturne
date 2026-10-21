@@ -107,6 +107,11 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
         ],
     },
     {
+        id: "data-sources",
+        title: "Data Sources",
+        items: [{ href: "/docs/data-sources/google-health", label: "Google Health" }],
+    },
+    {
         id: "configuration",
         title: "Configuration",
         items: [{ href: "/docs/configuration", label: "Configuration Guide" }],

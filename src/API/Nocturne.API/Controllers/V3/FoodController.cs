@@ -106,7 +106,12 @@ public class FoodController : BaseV3Controller<Food>
             );
 
             // CreateV3CollectionResponse returns the properly formatted IActionResult
-            return (ActionResult)CreateV3CollectionResponse(foodList, parameters, totalCount);
+            return (ActionResult)CreateV3CollectionResponse(
+                foodList.Select(f => ToV3Document(f, f.Id)).ToList(),
+                parameters,
+                totalCount,
+                lastModified
+            );
         }
         catch (V3ParameterOutOfToleranceException ex)
         {
@@ -158,7 +163,7 @@ public class FoodController : BaseV3Controller<Food>
 
         SetHistoryCursorHeaders(page.CursorMills ?? lastModified);
 
-        return CreateV3SuccessResponse(page.Records);
+        return CreateV3SuccessResponse(page.Records.Select(f => ToV3Document(f, f.Id)).ToList());
     }
 
     /// <summary>
@@ -216,10 +221,13 @@ public class FoodController : BaseV3Controller<Food>
     /// </summary>
     private object? GetFieldValue(Food food, string fieldName)
     {
+        if (fieldName.Equals("_id", StringComparison.OrdinalIgnoreCase)
+            || fieldName.Equals("identifier", StringComparison.OrdinalIgnoreCase))
+            return MongoObjectId.Coerce(food.Id);
+
         // Map lowercase field names to property names
         var propertyMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["_id"] = "Id",
             ["type"] = "Type",
             ["category"] = "Category",
             ["subcategory"] = "Subcategory",
@@ -297,7 +305,8 @@ public class FoodController : BaseV3Controller<Food>
         }
 
         var parameters = ParseV3QueryParameters(); // Apply field selection if specified
-        var result = ApplyFieldSelection(new[] { food }, parameters.Fields).FirstOrDefault();
+        var result = ApplyFieldSelection(new[] { ToV3Document(food, food.Id) }, parameters.Fields)
+            .FirstOrDefault();
 
         _logger.LogDebug("Successfully returned food with ID {Id}", id);
 

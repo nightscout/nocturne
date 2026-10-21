@@ -1,12 +1,15 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Health;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Xunit;
@@ -25,6 +28,7 @@ public class PatientRecordControllerTests
     private readonly Mock<ISensorSessionInferenceRunner> _sessionInference = new();
     private readonly Mock<ISensorSessionInferenceService> _inference = new();
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
+    private readonly Mock<IDeviceTrackerProvisioner> _trackerProvisioner = new();
     private readonly PatientRecordController _controller;
 
     private static readonly TenantContext Tenant = new(Guid.NewGuid(), "sleepy", "Sleepy", true, IsDemo: false);
@@ -46,8 +50,12 @@ public class PatientRecordControllerTests
             _sensorGlucoseRepo.Object,
             _reattribution.Object,
             _sessionInference.Object,
+            _trackerProvisioner.Object,
             _tenantAccessor.Object,
-            NullLogger<PatientRecordController>.Instance);
+            NullLogger<PatientRecordController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
 
         _tenantAccessor.Setup(t => t.Context).Returns(Tenant);
         _sessionInference
@@ -161,6 +169,31 @@ public class PatientRecordControllerTests
         await _controller.CreateDevice(new PatientDevice { DeviceCategory = DeviceCategory.InsulinPump, Manufacturer = "Tandem", Model = "t:slim X2" });
 
         _sessionInference.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task CreateDevice_ProvisionsTheDevicesTrackersForTheCaller()
+    {
+        GivenCreateEchoes();
+        var subjectId = Guid.NewGuid();
+        _controller.HttpContext.Items[AuthContextKeys.AuthContext] =
+            new AuthContext { IsAuthenticated = true, SubjectId = subjectId };
+        var pump = new PatientDevice { DeviceCategory = DeviceCategory.InsulinPump, CatalogId = "omnipod-dash" };
+
+        await _controller.CreateDevice(pump);
+
+        _trackerProvisioner.Verify(
+            p => p.ProvisionAsync(pump, subjectId.ToString(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateDevice_WithoutASubject_ProvisionsNoTrackers()
+    {
+        GivenCreateEchoes();
+
+        await _controller.CreateDevice(new PatientDevice { DeviceCategory = DeviceCategory.InsulinPump, CatalogId = "omnipod-dash" });
+
+        _trackerProvisioner.VerifyNoOtherCalls();
     }
 
     /// <summary>The device is already saved, so the request still succeeds.</summary>
