@@ -118,11 +118,8 @@ public sealed class GoogleHealthSessionStore(
         }
     }
 
-    /// <remarks>
-    /// <paramref name="ct"/> is honoured only until the refresh token is stored, so a throw means it
-    /// was not.
-    /// </remarks>
-    public async Task SaveAsync(GoogleHealthTokenSession session, string accountKey, Guid subject, CancellationToken ct)
+    /// <summary>Stores the refresh token, its grant and the account it belongs to.</summary>
+    public async Task StoreAsync(GoogleHealthTokenSession session, string accountKey, Guid subject, CancellationToken ct)
     {
         var secrets = await configurations.GetSecretsAsync(ConnectorName, ct);
         secrets.Remove(LegacyClientSecretKey);
@@ -131,6 +128,14 @@ public sealed class GoogleHealthSessionStore(
         secrets[GrantedScopesKey] = string.Join(' ', session.Scopes.Distinct(StringComparer.Ordinal));
         secrets[AccountKey] = accountKey;
         await configurations.SaveSecretsAsync(ConnectorName, secrets, subject.ToString(), ct);
+    }
+
+    /// <summary>
+    /// Enables the connector and caches the access token of a session <see cref="StoreAsync"/> has
+    /// stored. Not cancellable: the stored session is already live.
+    /// </summary>
+    public async Task ActivateAsync(GoogleHealthTokenSession session, Guid subject)
+    {
         await SetEnabledAsync(true, subject.ToString(), CancellationToken.None);
         await oauth.StoreSessionAsync(session);
     }

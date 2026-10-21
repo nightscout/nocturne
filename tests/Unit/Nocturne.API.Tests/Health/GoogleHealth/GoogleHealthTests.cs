@@ -1342,27 +1342,13 @@ public class GoogleHealthTests : IDisposable
     [Fact]
     public async Task A_grant_the_cancelled_callback_never_stored_is_revoked()
     {
-        var accounts = 0;
         using var cancellation = new CancellationTokenSource();
         var revoked = new List<string>();
         var store = new TestConnectorStore();
-        var handler = new AsyncHandler((request, ct) =>
+        var service = Service(store, Google(revoked, lookup => $"account-{lookup}", lookup =>
         {
-            ct.ThrowIfCancellationRequested();
-            switch (request.RequestUri!.AbsolutePath)
-            {
-                case "/token":
-                    return Task.FromResult(Json($$"""{"access_token":"access","refresh_token":"refresh-{{accounts + 1}}","expires_in":3600,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""));
-                case "/v1/userinfo":
-                    if (++accounts == 2) cancellation.Cancel();
-                    return Task.FromResult(Json($$"""{"sub":"account-{{accounts}}"}"""));
-                case "/revoke":
-                    return Task.FromResult(Revoked(request, revoked));
-                default:
-                    return Task.FromResult(Json("{}"));
-            }
-        });
-        var service = Service(store, handler, Guid.NewGuid());
+            if (lookup == 2) cancellation.Cancel();
+        }), Guid.NewGuid());
         await ConnectAsync(service);
         await service.DisconnectAsync(Guid.NewGuid(), default);
         revoked.Clear();
@@ -1371,6 +1357,47 @@ public class GoogleHealthTests : IDisposable
 
         Assert.Contains(revoked, body => body.Contains("token=refresh-2"));
         Assert.DoesNotContain("refresh-2", store.Secrets.Values);
+    }
+
+    [Fact]
+    public async Task A_stored_grant_is_not_revoked_when_enabling_the_connector_fails()
+    {
+        var revoked = new List<string>();
+        var store = new TestConnectorStore();
+        var service = Service(store, Google(revoked, _ => "account", _ => store.FailConfigurationSaves = true), Guid.NewGuid());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ConnectAsync(service));
+
+        Assert.Empty(revoked);
+        Assert.Equal("refresh-1", store.Secrets["refreshToken"]);
+    }
+
+    /// <summary>
+    /// Google's token, userinfo and revoke endpoints. Each exchange issues the next
+    /// <c>refresh-N</c>; <paramref name="onAccountLookup"/> runs before the Nth userinfo answer.
+    /// </summary>
+    private static AsyncHandler Google(
+        List<string> revoked, Func<int, string> accountFor, Action<int>? onAccountLookup = null)
+    {
+        var exchanges = 0;
+        var lookups = 0;
+        return new AsyncHandler((request, ct) =>
+        {
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(request.RequestUri!.AbsolutePath switch
+            {
+                "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh-{{++exchanges}}","expires_in":3600,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
+                "/v1/userinfo" => UserInfo(++lookups),
+                "/revoke" => Revoked(request, revoked),
+                _ => Json("{}")
+            });
+        });
+
+        HttpResponseMessage UserInfo(int lookup)
+        {
+            onAccountLookup?.Invoke(lookup);
+            return Json($$"""{"sub":"{{accountFor(lookup)}}"}""");
+        }
     }
 
     private static HttpResponseMessage Revoked(HttpRequestMessage request, List<string> revoked)
@@ -1522,6 +1549,7 @@ public class GoogleHealthTests : IDisposable
         private ConnectorConfigurationResponse? response;
         public bool? IsActive => response?.IsActive;
         public Action? OnSave { get; set; }
+        public bool FailConfigurationSaves { get; set; }
 
         private ConnectorSyncCursor? runtimeCursor;
         public IConnectorSyncCursorStore Cursors { get; }
@@ -1544,6 +1572,7 @@ public class GoogleHealthTests : IDisposable
                     It.IsAny<CancellationToken>()))
                 .Callback<string, JsonDocument, string?, CancellationToken>((_, document, _, _) =>
                 {
+                    if (FailConfigurationSaves) throw new InvalidOperationException("configuration store unavailable");
                     configuration?.Dispose();
                     configuration = JsonDocument.Parse(document.RootElement.GetRawText());
                     response ??= new ConnectorConfigurationResponse
