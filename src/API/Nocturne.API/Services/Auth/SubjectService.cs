@@ -65,10 +65,13 @@ public class SubjectService : ISubjectService
         string oidcSubjectId,
         string issuer,
         string? email = null,
+        bool emailVerified = false,
         string? name = null,
         IEnumerable<string>? defaultRoles = null
     )
     {
+        var verifiedEmail = emailVerified && !string.IsNullOrEmpty(email) ? email : null;
+
         await using var db = await _contexts.CreateAsync();
         // Try to find existing subject via the join table
         var identity = await db.SubjectOidcIdentities
@@ -81,10 +84,9 @@ public class SubjectService : ISubjectService
         {
             var entity = identity.Subject;
 
-            // Update email/name if provided
-            if (!string.IsNullOrEmpty(email) && entity.Email != email)
+            if (verifiedEmail is not null && entity.Email != verifiedEmail)
             {
-                entity.Email = email;
+                entity.Email = verifiedEmail;
             }
 
             if (!string.IsNullOrEmpty(name) && entity.Name != name)
@@ -110,7 +112,7 @@ public class SubjectService : ISubjectService
         {
             Id = Guid.CreateVersion7(),
             Name = name ?? email ?? oidcSubjectId,
-            Email = email,
+            Email = verifiedEmail,
             IsActive = true,
         };
 

@@ -267,7 +267,7 @@ public class SubjectServiceOidcIdentityTests : IDisposable
         var providerId = await SeedProviderAsync();
 
         var subject = await _service.FindOrCreateFromOidcAsync(
-            providerId, "new-ext", "https://issuer.example", "new@x", "New User");
+            providerId, "new-ext", "https://issuer.example", "new@x", emailVerified: true, "New User");
 
         subject.Should().NotBeNull();
         var sRow = await _db.Subjects.AsNoTracking().SingleAsync(s => s.Id == subject.Id);
@@ -305,11 +305,42 @@ public class SubjectServiceOidcIdentityTests : IDisposable
         await SeedIdentityAsync(subjectId, providerId, "ext-1");
 
         await _service.FindOrCreateFromOidcAsync(
-            providerId, "ext-1", "https://issuer.example", "new@e", "New Name");
+            providerId, "ext-1", "https://issuer.example", "new@e", emailVerified: true, "New Name");
 
         var sRow = await _db.Subjects.AsNoTracking().SingleAsync(s => s.Id == subjectId);
         sRow.Email.Should().Be("new@e");
         sRow.Name.Should().Be("New Name");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task FindOrCreateFromOidcAsync_OnFind_KeepsTheSubjectEmailWhenTheProviderEmailIsUnverified()
+    {
+        var subjectId = await SeedSubjectAsync("alice");
+        var providerId = await SeedProviderAsync();
+        await SeedIdentityAsync(subjectId, providerId, "ext-1");
+        var before = (await _db.Subjects.AsNoTracking().SingleAsync(s => s.Id == subjectId)).Email;
+
+        await _service.FindOrCreateFromOidcAsync(
+            providerId, "ext-1", "https://issuer.example", "someone-else@e", emailVerified: false);
+
+        var sRow = await _db.Subjects.AsNoTracking().SingleAsync(s => s.Id == subjectId);
+        sRow.Email.Should().Be(before);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task FindOrCreateFromOidcAsync_OnCreate_RecordsAnUnverifiedEmailOnlyOnTheIdentity()
+    {
+        var providerId = await SeedProviderAsync();
+
+        var subject = await _service.FindOrCreateFromOidcAsync(
+            providerId, "new-ext", "https://issuer.example", "unverified@x", emailVerified: false, "New User");
+
+        var sRow = await _db.Subjects.AsNoTracking().SingleAsync(s => s.Id == subject.Id);
+        sRow.Email.Should().BeNull();
+        var iRow = await _db.SubjectOidcIdentities.AsNoTracking().SingleAsync();
+        iRow.Email.Should().Be("unverified@x");
     }
 
     // -- UpdateOidcIdentityLastUsedAsync -----------------------------------------

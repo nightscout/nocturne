@@ -248,7 +248,7 @@ public class OidcAuthService : IOidcAuthService
             }
             else
             {
-                idTokenClaims = ParseIdToken(providerTokens.IdToken);
+                idTokenClaims = ParseIdToken(providerTokens.IdToken, provider, DateTimeOffset.UtcNow);
 
                 // Required, not conditional: every state this service issues carries a nonce, so
                 // an absent one means the ID token cannot be bound to this authorization request.
@@ -316,6 +316,7 @@ public class OidcAuthService : IOidcAuthService
             idTokenClaims.Sub,
             provider.IssuerUrl,
             idTokenClaims.Email,
+            idTokenClaims.EmailVerified == true,
             idTokenClaims.Name ?? idTokenClaims.PreferredUsername,
             provider.DefaultRoles
         );
@@ -935,18 +936,20 @@ public class OidcAuthService : IOidcAuthService
         return tokens ?? throw new InvalidOperationException("Empty token response");
     }
 
+    /// <summary>How far past its <c>exp</c> an ID token is still accepted, for clock drift.</summary>
+    private static readonly TimeSpan IdTokenClockSkew = TimeSpan.FromMinutes(2);
+
     /// <summary>
-    /// Parses the payload claims from a JWT ID token without validating the signature.
+    /// Decodes the ID token from a token-endpoint response and checks that <paramref name="provider"/>
+    /// issued it, for this client, and that it has not expired.
     /// </summary>
     /// <remarks>
-    /// Full signature validation is performed by the OIDC token handler when the token is
-    /// subsequently used. This method is intentionally minimal — it only decodes the Base64url
-    /// payload and deserialises the JSON claims.
+    /// The signature is not checked. The token came over TLS straight from the provider's token
+    /// endpoint, which OpenID Connect Core 3.1.3.7 accepts in place of a signature check; the claims
+    /// still have to name this provider and this client.
     /// </remarks>
-    /// <param name="idToken">The raw JWT ID token string.</param>
-    /// <returns>Deserialised <see cref="OidcIdTokenClaims"/> from the token payload.</returns>
-    /// <exception cref="InvalidOperationException">Thrown for malformed token format or empty claims.</exception>
-    private static OidcIdTokenClaims ParseIdToken(string idToken)
+    /// <exception cref="InvalidOperationException">The token is malformed or fails a check.</exception>
+    internal static OidcIdTokenClaims ParseIdToken(string idToken, OidcProvider provider, DateTimeOffset now)
     {
         var parts = idToken.Split('.');
         if (parts.Length != 3)
@@ -954,17 +957,41 @@ public class OidcAuthService : IOidcAuthService
             throw new InvalidOperationException("Invalid ID token format");
         }
 
-        var payload = parts[1];
-
-        var json = Encoding.UTF8.GetString(Base64Url.Decode(payload));
+        var json = Encoding.UTF8.GetString(Base64Url.Decode(parts[1]));
 
         var claims = JsonSerializer.Deserialize<OidcIdTokenClaims>(
             json,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-        );
+        ) ?? throw new InvalidOperationException("Invalid ID token claims");
 
-        return claims ?? throw new InvalidOperationException("Invalid ID token claims");
+        if (claims.Iss is null || claims.Iss.TrimEnd('/') != provider.IssuerUrl.TrimEnd('/'))
+        {
+            throw new InvalidOperationException("ID token was not issued by the provider");
+        }
+
+        if (!NamesAudience(claims.Aud, provider.ClientId))
+        {
+            throw new InvalidOperationException("ID token was not issued for this client");
+        }
+
+        if (claims.Exp is not { } exp || DateTimeOffset.FromUnixTimeSeconds(exp) + IdTokenClockSkew <= now)
+        {
+            throw new InvalidOperationException("ID token has expired");
+        }
+
+        return claims;
     }
+
+    /// <summary>
+    /// Whether an <c>aud</c> claim, a string or an array of strings, names <paramref name="clientId"/>.
+    /// </summary>
+    private static bool NamesAudience(JsonElement? aud, string clientId) => aud switch
+    {
+        { ValueKind: JsonValueKind.String } single => single.GetString() == clientId,
+        { ValueKind: JsonValueKind.Array } many => many.EnumerateArray()
+            .Any(a => a.ValueKind == JsonValueKind.String && a.GetString() == clientId),
+        _ => false,
+    };
 
     private const string SubClaim = "sub";
     private const string EmailClaim = "email";
@@ -1254,6 +1281,8 @@ public class OidcAuthService : IOidcAuthService
     internal class OidcIdTokenClaims
     {
         public string Sub { get; set; } = string.Empty;
+        public string? Iss { get; set; }
+        public JsonElement? Aud { get; set; }
         public string? Email { get; set; }
         public bool? EmailVerified { get; set; }
         public string? Name { get; set; }

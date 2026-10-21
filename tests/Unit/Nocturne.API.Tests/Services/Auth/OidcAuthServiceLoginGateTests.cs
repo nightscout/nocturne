@@ -83,7 +83,7 @@ public class OidcAuthServiceLoginGateTests
         _subjectService
             .Setup(s => s.FindOrCreateFromOidcAsync(
                 It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>()))
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>()))
             .ReturnsAsync(subject);
         return subject;
     }

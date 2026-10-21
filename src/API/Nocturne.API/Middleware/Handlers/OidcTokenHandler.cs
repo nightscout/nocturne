@@ -270,6 +270,9 @@ public class OidcTokenHandler : IAuthHandler
         var oidcSubjectId =
             claims.FindFirst("sub")?.Value ?? claims.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var email = claims.FindFirst("email")?.Value ?? claims.FindFirst(ClaimTypes.Email)?.Value;
+        // email_verified speaks for the standard email claim only, so a remapped email is unverified.
+        var emailVerified = string.Equals(
+            claims.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
         var name =
             claims.FindFirst("name")?.Value
             ?? claims.FindFirst("preferred_username")?.Value
@@ -289,6 +292,7 @@ public class OidcTokenHandler : IAuthHandler
                     {
                         case "email":
                             email = claimValue;
+                            emailVerified &= mapping.Key == "email";
                             break;
                         case "name":
                             name = claimValue;
@@ -309,6 +313,7 @@ public class OidcTokenHandler : IAuthHandler
             oidcSubjectId,
             provider.IssuerUrl,
             email,
+            emailVerified,
             name,
             provider.DefaultRoles
         );

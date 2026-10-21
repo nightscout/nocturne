@@ -16,7 +16,12 @@ public interface ISubjectService
 
     /// <param name="oidcSubjectId">OIDC subject identifier (sub claim)</param>
     /// <param name="issuer">OIDC issuer URL</param>
-    /// <param name="email">Email from OIDC claims</param>
+    /// <param name="email">
+    /// Email from OIDC claims. Always recorded on the identity link; it becomes the subject's email
+    /// only when <paramref name="emailVerified"/> is true, because the subject's email is matched
+    /// on elsewhere and a provider can assert any address it has not verified.
+    /// </param>
+    /// <param name="emailVerified">Whether the provider asserted <paramref name="email"/> as verified.</param>
     /// <param name="name">Name from OIDC claims</param>
     /// <param name="defaultRoles">Default roles to assign if creating</param>
     /// <returns>Found or created subject</returns>
@@ -25,6 +30,7 @@ public interface ISubjectService
         string oidcSubjectId,
         string issuer,
         string? email = null,
+        bool emailVerified = false,
         string? name = null,
         IEnumerable<string>? defaultRoles = null);
 
