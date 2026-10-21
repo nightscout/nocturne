@@ -1010,7 +1010,6 @@ public static class ServiceRegistrationExtensions
         services.AddHostedService<AlertRuleConditionAuditService>();
 
         // Delivery providers
-        services.AddScoped<Nocturne.API.Services.Alerts.Providers.WebPushProvider>();
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.InAppProvider>();
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.WebhookProvider>();
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.ChatBotProvider>();

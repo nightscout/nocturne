@@ -3,8 +3,17 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushSync } from "svelte";
 import { AlertRuleSeverity, ChannelStatus, ChannelType } from "$api-clients";
-import type { ChannelStatusResponse, DeviceCapabilityCatalog } from "$api-clients";
+import type {
+	ChannelStatusResponse,
+	DeviceCapabilityCatalog,
+	InAppRecipientResponse,
+} from "$api-clients";
 import type { ChannelDef } from "./types";
+import { page as pageState } from "$app/state";
+
+const ME = "0199a1b2-0000-7000-8000-000000000001";
+const ALEX = "0199a1b2-0000-7000-8000-00000000000a";
+const SAM = "0199a1b2-0000-7000-8000-00000000000b";
 
 // Mock the generated remote queries before importing the component. The
 // component reads `.current` and `.error` reactively; `catalogCurrent` stays
@@ -44,6 +53,17 @@ vi.mock("$api/generated/clientDevices.generated.remote", () => ({
 			return catalogError;
 		},
 	}),
+}));
+
+let recipientsCurrent: InAppRecipientResponse[] | undefined;
+const getInAppRecipients = vi.fn(() => ({
+	get current() {
+		return recipientsCurrent;
+	},
+}));
+
+vi.mock("$api/generated/alertRules.generated.remote", () => ({
+	getInAppRecipients: () => getInAppRecipients(),
 }));
 
 import ChannelsSection from "./ChannelsSection.svelte";
@@ -95,6 +115,91 @@ describe("ChannelsSection", () => {
 		catalogError = undefined;
 		statusCurrent = loadedStatuses();
 		statusError = undefined;
+		recipientsCurrent = [
+			{ subjectId: ME, name: "Jo", canReceive: true },
+			{ subjectId: ALEX, name: "Alex", canReceive: true },
+			{ subjectId: SAM, name: "Sam", canReceive: true },
+		];
+		pageState.data = {
+			effectivePermissions: ["alerts.readwrite"],
+			user: { subjectId: ME },
+		} as unknown as typeof pageState.data;
+	});
+
+	function inApp(over: Partial<ChannelDef> = {}): ChannelDef {
+		return { _uid: "in-app", channelType: ChannelType.InApp, destination: "", destinationLabel: "", ...over };
+	}
+
+	it("shows the member an in-app channel is sent to", async () => {
+		const channels = $state<ChannelDef[]>([inApp({ destination: SAM })]);
+		render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning });
+
+		await expect.element(page.getByTestId("in-app-recipient-trigger")).toHaveTextContent("Sam");
+	});
+
+	it("sends a new in-app channel to whoever saves the rule", async () => {
+		const channels = $state<ChannelDef[]>([inApp()]);
+		render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning });
+
+		await expect.element(page.getByTestId("in-app-recipient-trigger")).toHaveTextContent("Me");
+	});
+
+	it("shows a channel routed to the caller as Me and lists the caller once", async () => {
+		const channels = $state<ChannelDef[]>([inApp({ destination: ME })]);
+		render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning });
+
+		await expect.element(page.getByTestId("in-app-recipient-trigger")).toHaveTextContent("Me");
+		await page.getByTestId("in-app-recipient-trigger").click();
+		await expect.element(page.getByRole("option", { name: "Alex" })).toBeVisible();
+		expect(page.getByRole("option", { name: "Jo" }).elements()).toHaveLength(0);
+	});
+
+	it("warns that a channel whose recipient cannot receive goes to the saver", async () => {
+		const departed = "0199a1b2-0000-7000-8000-00000000000c";
+		const channels = $state<ChannelDef[]>([
+			inApp({ destination: departed, recipient: { subjectId: departed, canReceive: false } }),
+		]);
+		render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning });
+
+		await expect
+			.element(page.getByTestId("in-app-recipient-trigger"))
+			.toHaveTextContent("Unavailable member");
+		await expect
+			.element(page.getByText(/can no longer receive alerts on this site/i))
+			.toBeVisible();
+	});
+
+	it("warns about a stored channel that names no one instead of showing Me", async () => {
+		const channels = $state<ChannelDef[]>([
+			inApp({ destination: "", recipient: { subjectId: undefined, canReceive: false } }),
+		]);
+		render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning });
+
+		await expect
+			.element(page.getByTestId("in-app-recipient-trigger"))
+			.toHaveTextContent("No recipient");
+		await expect.element(page.getByText(/has no recipient/i)).toBeVisible();
+	});
+
+	it("routes an in-app channel to the member picked", async () => {
+		const channels = $state<ChannelDef[]>([inApp()]);
+		render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning });
+
+		await page.getByTestId("in-app-recipient-trigger").click();
+		await page.getByRole("option", { name: "Alex" }).click();
+
+		expect(channels[0].destination).toBe(ALEX);
+	});
+
+	it("does not ask for recipients without an in-app channel or the right to edit", async () => {
+		const noInApp = $state<ChannelDef[]>([]);
+		render(ChannelsSection, { channels: noInApp, severity: AlertRuleSeverity.Warning });
+		expect(getInAppRecipients).not.toHaveBeenCalled();
+
+		pageState.data = { effectivePermissions: ["alerts.read"] } as unknown as typeof pageState.data;
+		const readOnly = $state<ChannelDef[]>([inApp()]);
+		render(ChannelsSection, { channels: readOnly, severity: AlertRuleSeverity.Warning });
+		expect(getInAppRecipients).not.toHaveBeenCalled();
 	});
 
 	it("disables every option until the channel-status query resolves", async () => {

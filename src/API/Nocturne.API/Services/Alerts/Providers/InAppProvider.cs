@@ -39,14 +39,19 @@ internal sealed class InAppProvider(
         new NotificationActionDto { ActionId = DismissActionId, Label = "Dismiss" },
     };
 
-    public async Task SendAsync(string userId, AlertPayload payload, CancellationToken ct)
+    /// <summary>
+    /// Creates the notification for the subject <paramref name="destination"/> names. False when it
+    /// names no subject: nothing is created, so there is no one the alert reached.
+    /// </summary>
+    public async Task<bool> SendAsync(string destination, AlertPayload payload, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(userId))
+        if (!Guid.TryParse(destination, out var subjectId))
         {
-            logger.LogWarning("InApp delivery skipped — no destination userId for instance {InstanceId}",
-                payload.InstanceId);
-            return;
+            logger.LogWarning("InApp delivery for instance {InstanceId} names no subject", payload.InstanceId);
+            return false;
         }
+
+        var userId = subjectId.ToString();
 
         var subtitle = BuildSubtitle(payload);
         var urgency = MapSeverity(payload);
@@ -67,6 +72,7 @@ internal sealed class InAppProvider(
             logger.LogDebug(
                 "InApp notification created for instance {InstanceId} (user {UserId}, urgency {Urgency})",
                 payload.InstanceId, userId, urgency);
+            return true;
         }
         catch (Exception ex)
         {
