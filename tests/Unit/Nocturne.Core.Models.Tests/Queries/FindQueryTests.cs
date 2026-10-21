@@ -720,4 +720,221 @@ public class FindQueryTests
     }
 
     #endregion
+
+    #region Conditions it cannot evaluate
+
+    [Theory]
+    [InlineData("""{"device":"rig","created_at":{}}""")]
+    [InlineData("""{"device":"rig","created_at":{"$options":"i"}}""")]
+    [InlineData("""{"device":"rig","$or":[]}""")]
+    [InlineData("""{"device":"rig","$and":{"device":"rig"}}""")]
+    [InlineData("""{"device":"rig","$or":[1]}""")]
+    [InlineData("""{"device":"rig","$nor":[{"device":"x"}]}""")]
+    [InlineData("""{"device":"rig","pump":{"$size":1}}""")]
+    public void AnOperandOrOperatorItCannotRead_MatchesNothingAndIsInexact(string find)
+    {
+        var query = FindQuery.Parse(find);
+
+        query.Matches(Doc("""{"device":"rig","created_at":"2024-01-15T00:00:00.000Z","pump":{}}""")).Should().BeFalse();
+        query.HasFieldFiltersExcept("device").Should().BeTrue();
+        query.HasInexactCondition.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("find[created_at][$gte]=yesterday")]
+    [InlineData("find[created_at][$gte]=")]
+    [InlineData("find[created_at]=")]
+    [InlineData("find[date][$in]=1|2")]
+    [InlineData("find[created_at][$regex]=^2024")]
+    [InlineData("""{"created_at":{"$gte":true}}""")]
+    [InlineData("""{"created_at":{"$gte":1e300}}""")]
+    [InlineData("find[pump][$where]=1")]
+    public void ATimeConditionThatIsNotAnInstantOrAnUnknownOperator_IsInexact(string find)
+    {
+        FindQuery.Parse(find).HasInexactCondition.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("find[created_at][$gte]=2024-01-15T00:00:00Z&find[device][$ne]=x&find[loop][$exists]=true")]
+    [InlineData("find[_id][$in]=a&find[_id][$in]=b&find[created_at][$exists]=false")]
+    [InlineData("""{"created_at":{"$gte":1705276800000,"$ne":1705320000000},"$or":[{}]}""")]
+    public void ConditionsItEvaluatesAsNightscoutDoes_AreExact(string find)
+    {
+        FindQuery.Parse(find).HasInexactCondition.Should().BeFalse();
+    }
+
+    #endregion
+
+    #region Options and exists
+
+    [Theory]
+    [InlineData("find[device][$options]=i&find[created_at][$lte]=2026-10-02T00:00:00Z")]
+    [InlineData("find[device]=rig&find[device][$options]=i")]
+    [InlineData("find[device][$regex]=rig&find[uploader][$options]=i")]
+    [InlineData("find[$or][0][device][$options]=i&find[$or][1][device]=rig")]
+    [InlineData("""{"device":{"$eq":"rig","$options":"i"}}""")]
+    [InlineData("""{"device":{"$regex":"rig","$options":1},"pump":{"$options":"i"}}""")]
+    public void AnOptionsWithoutARegex_IsNeverDroppedAndMatchesNothing(string find)
+    {
+        var query = FindQuery.Parse(find);
+
+        query.HasInexactCondition.Should().BeTrue();
+        query.Matches(Doc("""{"device":"rig","created_at":"2026-10-01T00:00:00.000Z","uploader":"rig"}""")).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("find[device][$regex]=RIG&find[device][$options]=i")]
+    [InlineData("""{"device":{"$regex":"RIG","$options":"i"}}""")]
+    public void AnOptionsBesideItsRegex_IsExact(string find)
+    {
+        var query = FindQuery.Parse(find);
+
+        query.HasInexactCondition.Should().BeFalse();
+        query.Matches(Doc("""{"device":"rig"}""")).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("find[loop][$exists]=yes")]
+    [InlineData("find[loop][$exists]=")]
+    [InlineData("find[loop][$exists]=2")]
+    [InlineData("""{"loop":{"$exists":"yes"}}""")]
+    [InlineData("""{"loop":{"$exists":{}}}""")]
+    public void AnExistsThatIsNotABoolean_IsInexactAndMatchesNothing(string find)
+    {
+        var query = FindQuery.Parse(find);
+
+        query.HasInexactCondition.Should().BeTrue();
+        query.Matches(Doc("""{"loop":{}}""")).Should().BeFalse();
+        query.Matches(Doc("""{"pump":{}}""")).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("find[loop][$exists]=true", true)]
+    [InlineData("find[loop][$exists]=TRUE", true)]
+    [InlineData("find[loop][$exists]=1", true)]
+    [InlineData("find[loop][$exists]=false", false)]
+    [InlineData("find[loop][$exists]=0", false)]
+    [InlineData("""{"loop":{"$exists":true}}""", true)]
+    [InlineData("""{"loop":{"$exists":0}}""", false)]
+    public void ABooleanExists_IsExact(string find, bool present)
+    {
+        var query = FindQuery.Parse(find);
+
+        query.HasInexactCondition.Should().BeFalse();
+        query.Matches(Doc("""{"loop":{}}""")).Should().Be(present);
+        query.Matches(Doc("""{"pump":{}}""")).Should().Be(!present);
+    }
+
+    #endregion
+
+    #region Field lookups
+
+    [Theory]
+    [InlineData("find[_id]=a", "a")]
+    [InlineData("find[_id][$in]=a&find[_id][$in]=b", "a,b")]
+    [InlineData("find[_id][$in]=a&find[_id][$in]=b&find[_id]=b", "b")]
+    [InlineData("""{"_id":{"$in":["a","b"]}}""", "a,b")]
+    [InlineData("find[_id]=a&find[_id]=b", "")]
+    public void GetEqualityValues_IntersectsEveryEqualityAndInOnTheField(string find, string expected)
+    {
+        FindQuery.Parse(find).GetEqualityValues("_id")
+            .Should().Equal(expected.Split(',', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Theory]
+    [InlineData("find[_id][$ne]=a")]
+    [InlineData("find[_id]=a&find[_id][$regex]=a")]
+    [InlineData("find[$or][0][_id]=a&find[$or][1][device]=x")]
+    [InlineData("find[_ID]=a")]
+    [InlineData("find[device]=x")]
+    public void GetEqualityValues_IsNullWhenTheFieldIsNotConstrainedToAValueSet(string find)
+    {
+        FindQuery.Parse(find).GetEqualityValues("_id").Should().BeNull();
+    }
+
+    [Fact]
+    public void AnOrdinalLookup_IgnoresACaseVariantOfTheField()
+    {
+        var query = FindQuery.Parse("find[Device]=rig");
+
+        query.GetEqualityValue("device").Should().Be("rig");
+        query.GetEqualityValue("device", StringComparison.Ordinal).Should().BeNull();
+        query.HasFieldFiltersExcept("device").Should().BeFalse();
+        query.HasFieldFiltersExcept("device", StringComparison.Ordinal).Should().BeTrue();
+    }
+
+    [Fact]
+    public void MatchesAs_ReadsTheFieldAsTheGivenValue()
+    {
+        var query = FindQuery.Parse("find[_id]=abc-123&find[device]=rig");
+        var document = new { _id = "5f8d0c1e8a7b4c3d9e5f0001", device = "rig" };
+
+        query.Matches(document).Should().BeFalse();
+        query.MatchesAs(document, "_id", "abc-123").Should().BeTrue();
+        query.MatchesAs(document, "_id", "other").Should().BeFalse();
+    }
+
+    #endregion
+
+    #region Sub-millisecond and decoded offsets
+
+    [Theory]
+    [InlineData("$gte", 1001L, null)]
+    [InlineData("$gt", 1001L, null)]
+    [InlineData("$lte", null, 1000L)]
+    [InlineData("$lt", null, 1000L)]
+    [InlineData("$eq", 1001L, 1000L)]
+    public void ASubMillisecondBound_RoundsInwardToWholeMilliseconds(string op, long? from, long? to)
+    {
+        var query = FindQuery.Parse($"find[created_at][{op}]=1970-01-01T00:00:01.0005Z");
+
+        query.FromMills.Should().Be(from);
+        query.ToMills.Should().Be(to);
+    }
+
+    [Theory]
+    [InlineData("$gte", false)]
+    [InlineData("$gt", false)]
+    [InlineData("$lte", true)]
+    [InlineData("$lt", true)]
+    [InlineData("$eq", false)]
+    [InlineData("$ne", true)]
+    public void ASubMillisecondOperand_ComparesAgainstTheDocumentsWholeMillisecond(string op, bool expected)
+    {
+        var query = FindQuery.Parse($"find[created_at][{op}]=1970-01-01T00:00:01.0005Z");
+
+        query.Matches(Doc("""{"created_at":"1970-01-01T00:00:01.000Z"}""")).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("find[created_at][$gte]=2024-01-15T10:00:00 10:00")]
+    [InlineData("find[created_at][$gte]=2024-01-15T10:00:00+10:00")]
+    [InlineData("find[created_at][$gte]=2024-01-15T10:00:00%2B10:00")]
+    public void AnOffsetWhosePlusWasDecodedToASpace_IsRepaired(string find)
+    {
+        FindQuery.Parse(find).FromMills.Should().Be(1705276800000);
+    }
+
+    [Fact]
+    public void AStrictBoundAtTheEndOfTheRange_DoesNotWrapAround()
+    {
+        var query = FindQuery.Parse($$$"""{"date":{"$gt":{{{long.MaxValue}}}},"mills":{"$lt":{{{long.MinValue}}}}}""");
+
+        query.FromMills.Should().Be(long.MaxValue);
+        query.ToMills.Should().Be(long.MinValue);
+    }
+
+    [Fact]
+    public void BoundFields_LeaveABoundOnAnotherTimeFieldResidual()
+    {
+        var query = FindQuery.Parse(
+            "find[timestamp][$gte]=2024-01-15T00:00:00Z&find[created_at][$lte]=2024-01-16T00:00:00Z",
+            bareRegexFields: null, new HashSet<string> { "created_at" });
+
+        query.FromMills.Should().BeNull();
+        query.ToMills.Should().Be(1705363200000);
+        query.HasFieldFilters.Should().BeTrue();
+    }
+
+    #endregion
 }

@@ -1,3 +1,4 @@
+using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -277,9 +278,9 @@ public class ProfileProjectionService : IProfileProjectionService
             DelayLow = settings.DelayLow,
             Basal = MapScheduleEntries(basal.Result?.Entries),
             CarbRatio = MapScheduleEntries(carbRatio.Result?.Entries),
-            Sens = MapScheduleEntries(sensitivity.Result?.Entries),
-            TargetLow = MapTargetLow(targetRange.Result?.Entries),
-            TargetHigh = MapTargetHigh(targetRange.Result?.Entries),
+            Sens = MapScheduleEntries(sensitivity.Result?.Entries, settings.Units),
+            TargetLow = MapTargetLow(targetRange.Result?.Entries, settings.Units),
+            TargetHigh = MapTargetHigh(targetRange.Result?.Entries, settings.Units),
         };
 
         return new Profile
@@ -336,7 +337,12 @@ public class ProfileProjectionService : IProfileProjectionService
         return candidate is not null && candidate.ProfileName == settings.ProfileName ? candidate : null;
     }
 
-    private static List<TimeValue> MapScheduleEntries(List<ScheduleEntry>? entries)
+    /// <param name="glucoseUnits">
+    /// The profile's glucose units, for the one schedule (ISF) whose values are mg/dL per unit in V4 but
+    /// display units in the legacy document. Left <c>null</c> for basal and carb ratio, which are not
+    /// glucose-unit-dependent.
+    /// </param>
+    private static List<TimeValue> MapScheduleEntries(List<ScheduleEntry>? entries, string? glucoseUnits = null)
     {
         if (entries is null or { Count: 0 })
             return [];
@@ -344,12 +350,12 @@ public class ProfileProjectionService : IProfileProjectionService
         return entries.Select(e => new TimeValue
         {
             Time = e.Time,
-            Value = e.Value,
+            Value = ProfileDecomposer.FromMgdl(e.Value, glucoseUnits),
             TimeAsSeconds = e.TimeAsSeconds,
         }).ToList();
     }
 
-    private static List<TimeValue> MapTargetLow(List<TargetRangeEntry>? entries)
+    private static List<TimeValue> MapTargetLow(List<TargetRangeEntry>? entries, string? glucoseUnits)
     {
         if (entries is null or { Count: 0 })
             return [];
@@ -357,12 +363,12 @@ public class ProfileProjectionService : IProfileProjectionService
         return entries.Select(e => new TimeValue
         {
             Time = e.Time,
-            Value = e.Low,
+            Value = ProfileDecomposer.FromMgdl(e.Low, glucoseUnits),
             TimeAsSeconds = e.TimeAsSeconds,
         }).ToList();
     }
 
-    private static List<TimeValue> MapTargetHigh(List<TargetRangeEntry>? entries)
+    private static List<TimeValue> MapTargetHigh(List<TargetRangeEntry>? entries, string? glucoseUnits)
     {
         if (entries is null or { Count: 0 })
             return [];
@@ -370,7 +376,7 @@ public class ProfileProjectionService : IProfileProjectionService
         return entries.Select(e => new TimeValue
         {
             Time = e.Time,
-            Value = e.High,
+            Value = ProfileDecomposer.FromMgdl(e.High, glucoseUnits),
             TimeAsSeconds = e.TimeAsSeconds,
         }).ToList();
     }

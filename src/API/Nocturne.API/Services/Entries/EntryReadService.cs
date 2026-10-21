@@ -1,3 +1,4 @@
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Entries;
@@ -113,32 +114,22 @@ public class EntryReadService : IEntryStore
     /// <summary>
     /// Serves a find query with field filters (type $ne, sgv/device/direction conditions, …) by
     /// matching the projected legacy shape. Paging cannot be pushed down past an in-memory
-    /// filter, so the fetch window grows geometrically until the page fills or is exhausted.
+    /// filter, so it reads through <see cref="FindFilteredFetch"/>.
     /// </summary>
     private async Task<IReadOnlyList<Entry>> QueryFilteredAsync(
         FindQuery find, string? type, DateTime? from, DateTime? to, string? source, bool excludeDemo,
         int count, int skip, bool descending, CancellationToken ct)
     {
-        var needed = (long)count + skip;
-        var fetchLimit = (int)Math.Min(Math.Max(needed * 4, 100), MaxFilterFetch);
+        var (matching, truncated) = await FindFilteredFetch.MatchWindowAsync(
+            limit => QueryByTypeAsync(type, from, to, source, excludeDemo, limit, 0, descending, ct),
+            find.Matches, (long)count + skip, MaxFilterFetch);
 
-        while (true)
-        {
-            var page = await QueryByTypeAsync(type, from, to, source, excludeDemo, fetchLimit, 0, descending, ct);
-            var matching = page.Where(find.Matches).ToList();
-            var exhausted = page.Count < fetchLimit || fetchLimit >= MaxFilterFetch;
-            if (matching.Count >= needed || exhausted)
-            {
-                if (matching.Count < needed && page.Count >= fetchLimit)
-                    _logger.LogWarning(
-                        "Find-filtered entry query hit the {MaxFetch}-row window; older matches are not returned",
-                        MaxFilterFetch);
+        if (truncated)
+            _logger.LogWarning(
+                "Find-filtered entry query hit the {MaxFetch}-row window; older matches are not returned",
+                MaxFilterFetch);
 
-                return matching.Skip(skip).Take(count).ToList();
-            }
-
-            fetchLimit = (int)Math.Min((long)fetchLimit * 4, MaxFilterFetch);
-        }
+        return matching.Skip(skip).Take(count).ToList();
     }
 
     /// <inheritdoc />
