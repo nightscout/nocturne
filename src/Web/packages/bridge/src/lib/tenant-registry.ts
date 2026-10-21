@@ -20,7 +20,8 @@ export interface TenantConnection {
 
 export interface TenantRegistryOptions<C extends TenantConnection> {
   discover: () => Promise<TenantDirectory>;
-  createConnection: (slug: string) => C;
+  /** Opens a relay for the tenant `id` reached at `slug`; the relay must refuse any other tenant the slug comes to name. */
+  createConnection: (slug: string, id: string) => C;
   /** The least time between the starts of two discoveries, which bounds what a burst of misses costs the API. */
   refreshIntervalMs: number;
   /** Called once a slug's tenant is gone, deactivated or replaced, before any new connection for it opens. */
@@ -158,7 +159,7 @@ export default class TenantRegistry<C extends TenantConnection> {
 
     for (const [slug, id] of wanted) {
       if (this.bySlug.has(slug)) continue;
-      const connection = this.options.createConnection(slug);
+      const connection = this.options.createConnection(slug, id);
       this.bySlug.set(slug, { id, connection });
       logger.info(`Opening the relay for tenant ${slug}`);
       connection.connect().catch((error: unknown) => {

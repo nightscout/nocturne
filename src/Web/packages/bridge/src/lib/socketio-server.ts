@@ -228,8 +228,21 @@ function queryValue(value: string | string[] | undefined): string | undefined {
   return single || undefined;
 }
 
-function isApexHost(host: string, baseDomain: string): boolean {
-  return host.split(':')[0] === baseDomain.split(':')[0];
+const APEX = Symbol('apex');
+
+/** The subdomain slug a host names, `APEX` for the apex domain, or null for a foreign host. */
+function hostTenant(host: string | undefined, baseDomain: string): string | typeof APEX | null {
+  if (!host) return null;
+
+  const hostname = host.split(':')[0];
+  const baseDomainHost = baseDomain.split(':')[0];
+
+  if (hostname.endsWith(`.${baseDomainHost}`)) {
+    const slug = hostname.slice(0, -(baseDomainHost.length + 1));
+    return slug || null;
+  }
+
+  return hostname === baseDomainHost ? APEX : null;
 }
 
 /** Resolve the tenant slug a host belongs to. A subdomain resolves to its slug;
@@ -241,21 +254,8 @@ export function resolveTenantSlug(
   baseDomain: string,
   apexTenantSlug: string | null,
 ): string | null {
-  if (!host) return null;
-
-  const hostname = host.split(':')[0];
-  const baseDomainHost = baseDomain.split(':')[0];
-
-  if (hostname.endsWith(`.${baseDomainHost}`)) {
-    const slug = hostname.slice(0, -(baseDomainHost.length + 1));
-    return slug || null;
-  }
-
-  if (hostname === baseDomainHost) {
-    return apexTenantSlug;
-  }
-
-  return null;
+  const tenant = hostTenant(host, baseDomain);
+  return tenant === APEX ? apexTenantSlug : tenant;
 }
 
 class SocketIOServer {
@@ -874,19 +874,24 @@ class SocketIOServer {
   onApexUnresolved: () => Promise<void> = async () => {};
 
   private async resolveTenant(host: string | undefined): Promise<string | null> {
-    const slug = resolveTenantSlug(host, this.baseDomain, this.apexTenantSlug);
-    if (slug || !host || !isApexHost(host, this.baseDomain)) return slug;
-    await this.onApexUnresolved();
-    return resolveTenantSlug(host, this.baseDomain, this.apexTenantSlug);
+    const tenant = hostTenant(host, this.baseDomain);
+    if (tenant !== APEX) return tenant;
+    if (this.apexTenantSlug === null) await this.onApexUnresolved();
+    return this.apexTenantSlug;
   }
 
-  /** Closes every socket bound to a tenant, in every namespace. */
+  /** Takes every socket bound to a tenant out of its rooms at once, then closes its transport, in
+   *  every namespace. A transport may finish closing only once its buffer drains. A client reconnects
+   *  from a closed transport and goes through its handshake again, where a browser fetches a fresh
+   *  ticket; a server-side disconnect would leave it closed for good. */
   disconnectTenant(tenantSlug: string): void {
     for (const nsp of [this.io?.of('/'), this.storageNsp, this.alarmNsp]) {
       for (const socket of nsp?.sockets.values() ?? []) {
-        if (socket.data.tenantSlug === tenantSlug || socket.data.pendingTenantSlug === tenantSlug) {
-          socket.disconnect(true);
+        if (socket.data.tenantSlug !== tenantSlug && socket.data.pendingTenantSlug !== tenantSlug) continue;
+        for (const room of [...socket.rooms]) {
+          if (room !== socket.id) socket.leave(room);
         }
+        socket.conn.close();
       }
     }
   }
