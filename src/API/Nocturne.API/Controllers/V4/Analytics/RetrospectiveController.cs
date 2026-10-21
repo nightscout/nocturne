@@ -235,10 +235,8 @@ public class RetrospectiveController : ControllerBase
         var fetchFrom = dayStart.UtcDateTime.AddHours(-8);
         var fetchTo = dayEnd.UtcDateTime;
         // Get entries for the day
-        var entries = await _entryService.GetEntriesAsync(
-            $"find[date][$gte]={startMills}&find[date][$lte]={endMills}",
-            count: 5000,
-            skip: 0,
+        var entries = await _entryService.QueryEntriesAsync(
+            new EntryQuery { Count = 5000, Find = $"find[date][$gte]={startMills}&find[date][$lte]={endMills}" },
             cancellationToken
         );
         var entryList = entries?.ToList() ?? new List<Entry>();
