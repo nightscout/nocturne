@@ -42,11 +42,13 @@ public sealed class ChatIdentityService(
         => directory.GetDefaultAsync(platform, platformUserId, ct);
 
     /// <summary>Consumes a pending link token and creates a directory entry linking the chat platform user to the tenant.</summary>
+    /// <exception cref="ChatLinkTokenRejectedException">The token cannot be claimed for this tenant.</exception>
+    /// <exception cref="ChatAccountLinkedToAnotherMemberException"><see cref="ChatIdentityDirectoryService.CreateLinkAsync"/></exception>
     public async Task<ChatIdentityDirectoryEntry> ClaimPendingLinkAsync(
         Guid tenantId, Guid userId, string token, CancellationToken ct)
     {
         var pending = await pendingLinks.TryConsumeAsync(token, ct)
-            ?? throw new InvalidOperationException("Token expired or already used");
+            ?? throw new ChatLinkTokenRejectedException("Token expired or already used");
 
         await using var db = await contextFactory.CreatePlatformAsync(ct);
         var tenant = await db.Tenants.AsNoTracking()
@@ -57,7 +59,7 @@ public sealed class ChatIdentityService(
         if (pending.TenantSlug is not null &&
             !string.Equals(pending.TenantSlug, tenant.Slug, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Token does not belong to this tenant");
+            throw new ChatLinkTokenRejectedException("Token does not belong to this tenant");
         }
 
         var entry = await directory.CreateLinkAsync(

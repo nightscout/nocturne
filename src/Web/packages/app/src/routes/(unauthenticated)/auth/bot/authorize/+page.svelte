@@ -8,7 +8,7 @@
 	import { getBotAuthorizeContext, buildTenantRedirectUrl } from "../bot.remote";
 	import { getPending, claimLink } from "$lib/api/generated/chatIdentities.generated.remote";
 	import { retainQuery } from "$lib/api/retain-query.svelte";
-	import { describeSubmitError } from "$lib/forms/submit-error";
+	import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
 
 	// Read state token from URL
 	const stateToken = $derived(page.url.searchParams.get("state") ?? "");
@@ -78,7 +78,13 @@
 			await claimLink({ token: stateToken });
 			goto(resolve("/auth/bot/authorize/done"));
 		} catch (err) {
-			claimError = describeSubmitError(err, "Failed to link account. Please try again.");
+			const status = errorStatus(err);
+			claimError =
+				status === 409
+					? "This chat account is already linked to another member."
+					: status === 400
+						? "This link is expired or invalid. Please run /connect in your chat app again."
+						: describeSubmitError(err, "Failed to link account. Please try again.");
 			isClaiming = false;
 		}
 	}

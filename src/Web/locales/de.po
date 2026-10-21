@@ -15124,6 +15124,7 @@ msgid "Missing state token."
 msgstr "Fehlendes State-Token."
 
 #: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
+#: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
 msgid "This link is expired or invalid. Please run /connect in your chat app again."
 msgstr "Dieser Link ist abgelaufen oder ungültig. Bitte führe /connect in deiner Chat-App erneut aus."
 
@@ -27398,4 +27399,16 @@ msgstr ""
 
 #: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
 msgid "<0/> Link account"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
+msgid "This chat account is already linked to another member."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "This Discord account is already linked to another member."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "This link is expired or invalid. Please try again from Settings."
 msgstr ""
