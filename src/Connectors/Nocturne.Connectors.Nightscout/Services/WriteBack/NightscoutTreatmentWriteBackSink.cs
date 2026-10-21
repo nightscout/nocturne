@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
@@ -18,6 +19,8 @@ public class NightscoutTreatmentWriteBackSink(
     : NightscoutWriteBackSink<Treatment>(httpClient, configLoader, circuitBreaker, logger)
 {
     protected override string Endpoint => "/api/v1/treatments";
+
+    protected override JsonSerializerOptions SerializerOptions => TreatmentWriteBackJson.Options;
 
     protected override bool ShouldSkip(Treatment item)
         => item.DataSource == DataSources.NightscoutConnector;
