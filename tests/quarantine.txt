@@ -5,7 +5,6 @@
 #
 # <FullyQualifiedName (no theory arguments)> | <bug>
 Nocturne.API.Tests.Integration.Auth.TokenRevocationIntegrationTests.Introspect_ValidToken_ReturnsActive | /api/oauth/introspect names its fields tokenType/clientId; RFC 7662 has token_type/client_id
-Nocturne.API.Tests.Integration.NotificationsIntegrationTests.GetNotifications_SortsByUrgencyThenTime | active notifications sort by urgency as text (Warn before Urgent), not by severity
 Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntriesByType_ReturnsSameShape | entries lose delta and rssi on write: EntryDecomposer does not copy delta (or filtered/unfiltered), and rssi has no V4 field
 Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntriesCurrent_WithData_ReturnsSameShape | entries lose delta and rssi on write: EntryDecomposer does not copy delta (or filtered/unfiltered), and rssi has no V4 field
 Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_TopLevelTypeParam_IsIgnored_ReturnsSameShape | entries lose delta and rssi on write: EntryDecomposer does not copy delta (or filtered/unfiltered), and rssi has no V4 field

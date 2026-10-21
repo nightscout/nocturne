@@ -39,11 +39,16 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         CancellationToken cancellationToken = default
     )
     {
+        // Urgency is stored as its name, so ordering by the column would sort alphabetically.
         await using var db = await _contexts.CreateAsync(cancellationToken);
         return await db
             .InAppNotifications
             .Where(n => n.UserId == userId && !n.IsArchived)
-            .OrderByDescending(n => n.Urgency)
+            .OrderByDescending(n =>
+                n.Urgency == NotificationUrgency.Urgent ? 3
+                : n.Urgency == NotificationUrgency.Hazard ? 2
+                : n.Urgency == NotificationUrgency.Warn ? 1
+                : 0)
             .ThenByDescending(n => n.CreatedAt)
             .ToListAsync(cancellationToken);
     }
