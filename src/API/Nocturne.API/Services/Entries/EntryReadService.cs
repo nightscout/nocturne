@@ -370,6 +370,7 @@ public class EntryReadService : IEntryStore
         long cursorMills, int limit, CancellationToken ct = default)
     {
         var (source, excludeDemo) = ResolveDemoFilter();
+        using var horizon = HistoryHorizon.Share();
         long? pageCursor = null;
         var cursor = cursorMills;
 
