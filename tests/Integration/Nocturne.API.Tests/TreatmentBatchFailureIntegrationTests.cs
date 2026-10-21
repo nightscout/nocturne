@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.API.Helpers;
-using Nocturne.API.Multitenancy;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -54,18 +54,43 @@ public class TreatmentBatchFailureIntegrationTests(ApiIntegrationTestFixture fix
         var stored = await db.Set<NoteEntity>().Select(n => n.Text).ToListAsync();
         stored.Should().BeEquivalentTo(["first", longNote]);
 
-        var rejected = await AuthenticatedClient.GetFromJsonAsync<JsonElement>("/api/v4/rejected-uploads");
-        var rows = rejected.GetProperty("data").EnumerateArray().ToList();
+        var rows = await RejectedUploadsAsync();
         rows.Should().ContainSingle();
         rows[0].GetProperty("recordType").GetString().Should().Be("treatment");
+        rows[0].GetProperty("occurrences").GetInt32().Should().Be(1);
         rows[0].GetProperty("reason").GetString().Should().StartWith("A text value is longer than Nocturne can store");
         JsonDocument.Parse(rows[0].GetProperty("payload").GetString()!).RootElement
             .GetProperty("notes").GetString().Should().Be("second");
 
-        (await AuthenticatedClient.DeleteAsync("/api/v4/rejected-uploads")).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await AuthenticatedClient.GetFromJsonAsync<JsonElement>("/api/v4/rejected-uploads"))
-            .GetProperty("data").EnumerateArray().Should().BeEmpty();
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", batch)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var resent = await RejectedUploadsAsync();
+        resent.Should().ContainSingle().Which.GetProperty("occurrences").GetInt32().Should().Be(2);
+
+        var clear = await AuthenticatedClient.PostAsJsonAsync(
+            "/api/v4/rejected-uploads/clear", new { ids = new[] { resent[0].GetProperty("id").GetGuid() } });
+        clear.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await RejectedUploadsAsync()).Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task A_refused_treatment_with_text_jsonb_cannot_hold_is_still_kept()
+    {
+        const string body = """
+            [{"_id":"a-very-long-id-that-cannot-be-stored-a-very-long-id-that-cannot-be-stored-a-very-long-id-that-cannot-be-stored-a-very-long-id-that-cannot-be-stored-a-very-long-id-that-cannot-be-stored-a-very-long-id-that-cannot-be-stored-a-very-long-id-that-cannot-be-stored-xx","eventType":"Note","notes":"lone \ud800 and nul \u0000","created_at":"2026-09-30T01:00:00.000Z"}]
+            """;
+
+        var response = await AuthenticatedClient.PostAsync(
+            "/api/v1/treatments", new StringContent(body, System.Text.Encoding.UTF8, "application/json"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var kept = (await RejectedUploadsAsync()).Should().ContainSingle().Subject;
+        JsonDocument.Parse(kept.GetProperty("payload").GetString()!).RootElement
+            .GetProperty("notes").GetString().Should().Be("lone \uFFFD and nul \uFFFD");
+    }
+
+    private async Task<List<JsonElement>> RejectedUploadsAsync() =>
+        (await AuthenticatedClient.GetFromJsonAsync<JsonElement>("/api/v4/rejected-uploads"))
+            .GetProperty("data").EnumerateArray().ToList();
 
     [Fact]
     public async Task A_batch_stopped_by_a_store_failure_keeps_what_it_stored_before_it()

@@ -1,5 +1,8 @@
 using System.Runtime.ExceptionServices;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Treatments;
@@ -199,6 +202,19 @@ public class TreatmentService : ITreatmentService
         return created;
     }
 
+    /// <summary>
+    /// Keeps an update the store refused for its data as a rejected upload, as a create's refusal
+    /// is kept, and returns what tells the caller it was refused.
+    /// </summary>
+    private async Task<TreatmentRefusedException> RefuseAsync(Treatment treatment, string reason, Exception ex)
+    {
+        var refusal = $"{reason}; parts of the treatment may be stored";
+        _logger.LogRefused(nameof(Treatment), reason, treatment.DataSource ?? "api", ex);
+        if (_rejected is not null)
+            await _rejected.RecordTreatmentsAsync([new BulkWriteRejection<Treatment>(0, treatment, refusal)], CancellationToken.None);
+        return new TreatmentRefusedException(refusal, ex);
+    }
+
     private Task RecordRejectedAsync(BulkWrite<Treatment> written) =>
         _rejected is not null && written.Rejected.Count > 0
             ? _rejected.RecordTreatmentsAsync(written.Rejected, CancellationToken.None)
@@ -215,6 +231,14 @@ public class TreatmentService : ITreatmentService
         {
             updated = await _store.UpdateAsync(id, treatment, cancellationToken);
             completed = true;
+        }
+        catch (DbUpdateException ex) when (StoreRefusal.ReasonFor(ex) is { } reason)
+        {
+            throw await RefuseAsync(treatment, reason, ex);
+        }
+        catch (TreatmentMappingException ex)
+        {
+            throw await RefuseAsync(treatment, ex.Message, ex);
         }
         finally
         {

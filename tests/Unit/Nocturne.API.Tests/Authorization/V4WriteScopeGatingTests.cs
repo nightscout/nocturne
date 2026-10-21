@@ -188,6 +188,7 @@ public class V4WriteScopeGatingTests
             // the class.
             ["CompatibilityController"] = NotDataCategory.SuperuserAttribute,
             ["ServicesController"] = NotDataCategory.TenantSettingsScope,
+            ["RejectedUploadsController"] = NotDataCategory.TenantSettingsScope,
 
             ["ChatIdentityDirectoryController"] = NotDataCategory.InstanceKey,
 
@@ -332,8 +333,6 @@ public class V4WriteScopeGatingTests
             ["BasalInjectionController"] = Scope.TreatmentsReadWrite,
             ["BolusCalculationController"] = Scope.TreatmentsReadWrite,
             ["NoteController"] = Scope.TreatmentsReadWrite,
-            // rejected_uploads holds refused treatments as received.
-            ["RejectedUploadsController"] = Scope.TreatmentsReadWrite,
 
             // devices: device_events sits under devices.read, matching the sibling snapshot
             // controllers (ApsSnapshotController's bulk write requires devices.readwrite).

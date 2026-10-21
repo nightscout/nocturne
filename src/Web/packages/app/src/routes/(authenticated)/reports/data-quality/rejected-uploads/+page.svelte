@@ -10,17 +10,25 @@
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { formatDateTime, formatNumber } from "$lib/utils/formatting";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Download from "@lucide/svelte/icons/download";
   import FileWarning from "@lucide/svelte/icons/file-warning";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import type { RejectedUpload } from "$lib/api";
 
-  const resource = contextResource(() => getRejectedUploads({ limit: 1000 }), {
-    errorTitle: "Error Loading Rejected Uploads",
-  });
+  const pageSize = 25;
+  let offset = $state(0);
+
+  const resource = contextResource(
+    () => getRejectedUploads({ limit: pageSize, offset }),
+    { errorTitle: "Error Loading Rejected Uploads" }
+  );
 
   const rows = $derived<RejectedUpload[]>(resource.current?.data ?? []);
   const total = $derived(resource.current?.pagination?.total ?? 0);
+  const hasPrevious = $derived(offset > 0);
+  const hasNext = $derived(offset + rows.length < total);
 
   let showClearConfirm = $state(false);
   let clearing = $state(false);
@@ -39,18 +47,25 @@
     return typeof value === "string" ? value : JSON.stringify(value, null, 2);
   }
 
+  function shortened(row: RejectedUpload): boolean {
+    return (row.payloadBytes ?? 0) > (row.payload?.length ?? 0);
+  }
+
   function source(row: RejectedUpload): string {
     return [row.app, row.device, row.origin].filter(Boolean).join(" · ");
   }
 
   function exportJson() {
     const records = rows.map((row) => ({
-      receivedAt: row.receivedAt,
+      firstSeenAt: row.firstSeenAt,
+      lastSeenAt: row.lastSeenAt,
+      occurrences: row.occurrences,
       recordType: row.recordType,
       origin: row.origin,
       app: row.app,
       device: row.device,
       reason: row.reason,
+      receivedBytes: row.payloadBytes,
       record: parsed(row.payload),
     }));
     const blob = new Blob([JSON.stringify(records, null, 2)], {
@@ -67,8 +82,9 @@
   async function handleClear() {
     clearing = true;
     try {
-      await clearRejectedUploads();
+      await clearRejectedUploads({ ids: rows.map((row) => row.id!) });
       showClearConfirm = false;
+      offset = 0;
     } finally {
       clearing = false;
     }
@@ -97,8 +113,9 @@
         <h1 class="text-xl font-semibold">Rejected Uploads</h1>
         <p class="text-sm text-muted-foreground">
           Records an uploader sent that Nocturne answered but could not store, because a value
-          in them could not be stored as sent. The uploader treats them as saved and does not
-          send them again, so they are kept here as received.
+          in them could not be stored as sent. Most uploaders treat them as saved, so they are
+          not in your data. Each is listed once, with how many times it was sent. Long text in
+          a record is shortened here.
         </p>
       </div>
     </div>
@@ -106,11 +123,11 @@
       <div class="flex shrink-0 gap-2">
         <Button variant="outline" onclick={exportJson}>
           <Download class="mr-2 size-4" aria-hidden="true" />
-          Export JSON
+          Export this page
         </Button>
         <Button variant="outline" onclick={() => (showClearConfirm = true)}>
           <Trash2 class="mr-2 size-4" aria-hidden="true" />
-          Clear
+          Clear this page
         </Button>
       </div>
     {/if}
@@ -121,18 +138,13 @@
       <p class="text-sm text-muted-foreground">No rejected uploads.</p>
     {:else}
       <p class="text-sm text-muted-foreground tabular-nums">
-        {#if total === 1}
-          1 rejected upload.
-        {:else if total > rows.length}
-          {formatNumber(total)} rejected uploads; the newest {formatNumber(rows.length)} are shown.
-        {:else}
-          {formatNumber(total)} rejected uploads.
-        {/if}
+        {formatNumber(offset + 1)}–{formatNumber(offset + rows.length)} of {formatNumber(total)}
       </p>
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <Table.Head>Received</Table.Head>
+            <Table.Head>Last sent</Table.Head>
+            <Table.Head>Times sent</Table.Head>
             <Table.Head>From</Table.Head>
             <Table.Head>Reason</Table.Head>
             <Table.Head>Record</Table.Head>
@@ -142,8 +154,14 @@
           {#each rows as row (row.id)}
             <Table.Row class="align-top">
               <Table.Cell class="whitespace-nowrap tabular-nums">
-                {formatDateTime(row.receivedAt)}
+                {formatDateTime(row.lastSeenAt)}
+                {#if (row.occurrences ?? 1) > 1}
+                  <div class="text-xs text-muted-foreground">
+                    First {formatDateTime(row.firstSeenAt)}
+                  </div>
+                {/if}
               </Table.Cell>
+              <Table.Cell class="tabular-nums">{formatNumber(row.occurrences ?? 1)}</Table.Cell>
               <Table.Cell>{source(row)}</Table.Cell>
               <Table.Cell>{row.reason}</Table.Cell>
               <Table.Cell>
@@ -151,6 +169,11 @@
                   <summary class="cursor-pointer text-sm text-muted-foreground">
                     {row.recordType}
                   </summary>
+                  {#if shortened(row)}
+                    <p class="mt-2 text-xs text-muted-foreground">
+                      Shortened from {formatNumber(row.payloadBytes ?? 0)} bytes.
+                    </p>
+                  {/if}
                   <pre class="mt-2 max-w-md overflow-x-auto rounded bg-muted p-2 text-xs">{prettyPayload(row.payload)}</pre>
                 </details>
               </Table.Cell>
@@ -158,6 +181,28 @@
           {/each}
         </Table.Body>
       </Table.Root>
+      {#if hasPrevious || hasNext}
+        <div class="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!hasPrevious}
+            onclick={() => (offset = Math.max(0, offset - pageSize))}
+          >
+            <ChevronLeft class="mr-1 size-4" aria-hidden="true" />
+            Newer
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!hasNext}
+            onclick={() => (offset += pageSize)}
+          >
+            Older
+            <ChevronRight class="ml-1 size-4" aria-hidden="true" />
+          </Button>
+        </div>
+      {/if}
     {/if}
   {/if}
 </div>
@@ -171,7 +216,8 @@
   onConfirm={handleClear}
 >
   {#snippet description()}
-    Remove all {formatNumber(total)} rejected uploads? Export them first to keep a copy. The
-    records are not in your data and cannot be recovered once cleared.
+    Remove the {formatNumber(rows.length)} rejected uploads on this page? Export them first to
+    keep a copy. They are not in your data and cannot be recovered once cleared. Uploads not on
+    this page are kept.
   {/snippet}
 </ConfirmDialog>

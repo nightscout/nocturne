@@ -32,12 +32,16 @@ public static class TreatmentEcho
 
         var echo = new List<Treatment>(written);
         foreach (var refused in written.Rejected.OrderBy(r => r.Index))
-        {
-            refused.Record.AdditionalProperties ??= [];
-            refused.Record.AdditionalProperties[RefusalMember] = refused.Reason;
-            echo.Insert(refused.Index, refused.Record);
-        }
+            echo.Insert(refused.Index, Refused(refused.Record, refused.Reason));
 
         return [.. echo];
+    }
+
+    /// <summary><paramref name="treatment"/> as submitted, carrying <see cref="RefusalMember"/>.</summary>
+    public static Treatment Refused(Treatment treatment, string reason)
+    {
+        treatment.AdditionalProperties ??= [];
+        treatment.AdditionalProperties[RefusalMember] = reason;
+        return treatment;
     }
 }

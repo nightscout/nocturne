@@ -865,7 +865,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// <summary>
     /// Runs one MapTo* step, so a field value it cannot read surfaces as a
     /// <see cref="TreatmentMappingException"/>, apart from the failures of the lookups and writes
-    /// around it.
+    /// around it. An <see cref="ArgumentNullException"/> is a mapping bug, not the client's data,
+    /// and is left as it is.
     /// </summary>
     private static T Mapped<T>(Func<T> map)
     {
@@ -873,7 +874,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             return map();
         }
-        catch (ArgumentException ex) { throw new TreatmentMappingException(ex); }
+        catch (ArgumentException ex) when (ex is not ArgumentNullException) { throw new TreatmentMappingException(ex); }
         catch (FormatException ex) { throw new TreatmentMappingException(ex); }
         catch (OverflowException ex) { throw new TreatmentMappingException(ex); }
     }

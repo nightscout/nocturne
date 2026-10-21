@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20261021135845_WidenTreatmentNotesToText")]
-    partial class WidenTreatmentNotesToText
+    [Migration("20261021164527_AddRejectedUploadsAndWidenTreatmentNotes")]
+    partial class AddRejectedUploadsAndWidenTreatmentNotes
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -3748,6 +3748,82 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_refresh_tokens_token_hash");
 
                     b.ToTable("refresh_tokens");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.RejectedUploadEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("App")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("app");
+
+                    b.Property<string>("Device")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("device");
+
+                    b.Property<DateTime>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<string>("Identity")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("identity");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<int>("Occurrences")
+                        .HasColumnType("integer")
+                        .HasColumnName("occurrences");
+
+                    b.Property<string>("Origin")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("origin");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.Property<int>("PayloadBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("payload_bytes");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("RecordType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("record_type");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "LastSeenAt")
+                        .HasDatabaseName("ix_rejected_uploads_tenant_last_seen_at");
+
+                    b.HasIndex("TenantId", "RecordType", "Identity")
+                        .IsUnique()
+                        .HasDatabaseName("ux_rejected_uploads_tenant_record_identity");
+
+                    b.ToTable("rejected_uploads");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.RoleEntity", b =>
@@ -7493,6 +7569,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "SysUpdatedAt", "Id")
                         .HasDatabaseName("ix_notes_tenant_history");
 
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_notes_tenant_legacy_id_any")
+                        .HasDatabaseName("ix_notes_tenant_legacy_id_any");
+
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_notes_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_notes_tenant_legacy_id_user_deleted")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
@@ -8776,6 +8855,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("dia");
 
+                    b.Property<string>("DocumentDefaultProfile")
+                        .HasColumnType("text")
+                        .HasColumnName("document_default_profile");
+
                     b.Property<string>("EnteredBy")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
@@ -9636,6 +9719,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Subject");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.RejectedUploadEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.SettingsEntity", b =>

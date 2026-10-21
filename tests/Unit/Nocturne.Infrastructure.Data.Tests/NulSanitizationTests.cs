@@ -147,6 +147,19 @@ public class NulSanitizationTests : IDisposable
     }
 
     [Fact]
+    public async Task AnUnpairedSurrogate_IsReplacedSoTheRowCanBeStored()
+    {
+        await using (var ctx = _db.CreateContext())
+        {
+            ctx.MeterGlucose.Add(NewReading(device: "a\uD800b\uDC00c\U0001F600"));
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var verify = _db.CreateContext();
+        (await verify.MeterGlucose.SingleAsync()).Device.Should().Be("a\uFFFDb\uFFFDc\U0001F600");
+    }
+
+    [Fact]
     public async Task AFitToColumnValue_IsCutToItsColumn()
     {
         await using (var ctx = _db.CreateContext())

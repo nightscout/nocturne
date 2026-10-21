@@ -10,6 +10,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -203,7 +204,7 @@ public class TreatmentsController : ControllerBase
         List<Treatment>? treatmentsToCreate;
         try
         {
-            treatmentsToCreate = NightscoutJsonBody.ReadObjects<Treatment>(treatments);
+            treatmentsToCreate = ReadTreatments(treatments);
         }
         catch (JsonException ex)
         {
@@ -459,6 +460,22 @@ public class TreatmentsController : ControllerBase
     )
     {
         var prepared = PrepareTreatments([treatment]).Single();
+        try
+        {
+            return await SavePreparedAsync(prepared, cancellationToken);
+        }
+        catch (TreatmentRefusedException ex)
+        {
+            // NIGHTSCOUT-COMPAT: as for a refused create, see TreatmentEcho.
+            return Ok(TreatmentEcho.Refused(prepared, ex.Message));
+        }
+    }
+
+    private async Task<ActionResult<Treatment>> SavePreparedAsync(
+        Treatment prepared,
+        CancellationToken cancellationToken
+    )
+    {
         var keys = new[] { prepared.Id, prepared.SyncIdentifier }
             .OfType<string>()
             .Where(key => !string.IsNullOrWhiteSpace(key))
@@ -515,6 +532,24 @@ public class TreatmentsController : ControllerBase
     {
         _logger.LogDebug("Refused save of treatment {Id}: the user deleted it", id);
         return Ok(Array.Empty<Treatment>());
+    }
+
+    /// <summary>
+    /// The submitted treatments. A string escaping an unpaired surrogate, which Nightscout's JSON.parse
+    /// accepts and System.Text.Json cannot read, is read with the escape replaced by U+FFFD rather
+    /// than answered as invalid JSON, which an uploader would resend forever.
+    /// </summary>
+    private static List<Treatment>? ReadTreatments(JsonElement body)
+    {
+        try
+        {
+            return NightscoutJsonBody.ReadObjects<Treatment>(body);
+        }
+        catch (JsonException ex) when (ex.InnerException is InvalidOperationException)
+        {
+            using var repaired = JsonDocument.Parse(StorableText.RepairJsonEscapes(body.GetRawText()));
+            return NightscoutJsonBody.ReadObjects<Treatment>(repaired.RootElement.Clone());
+        }
     }
 
     private List<Treatment> PrepareTreatments(List<Treatment> treatments)

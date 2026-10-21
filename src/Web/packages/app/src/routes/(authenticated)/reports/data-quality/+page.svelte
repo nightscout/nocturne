@@ -148,6 +148,7 @@
 						<ChevronRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/link:translate-x-0.5" aria-hidden="true" />
 					</a>
 				</li>
+				{#if rejectedUploads.current}
 				<li>
 					<a
 						href={resolve("/reports/data-quality/rejected-uploads")}
@@ -165,6 +166,7 @@
 						<ChevronRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/link:translate-x-0.5" aria-hidden="true" />
 					</a>
 				</li>
+				{/if}
 			</ul>
 		</section>
 

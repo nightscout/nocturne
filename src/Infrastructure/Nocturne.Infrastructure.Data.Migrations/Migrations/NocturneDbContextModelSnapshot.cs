@@ -3764,6 +3764,24 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("device");
 
+                    b.Property<DateTime>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<string>("Identity")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("identity");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<int>("Occurrences")
+                        .HasColumnType("integer")
+                        .HasColumnName("occurrences");
+
                     b.Property<string>("Origin")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
@@ -3774,14 +3792,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("payload");
 
+                    b.Property<int>("PayloadBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("payload_bytes");
+
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("reason");
-
-                    b.Property<DateTime>("ReceivedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("received_at");
 
                     b.Property<string>("RecordType")
                         .IsRequired()
@@ -3795,8 +3813,12 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "ReceivedAt")
-                        .HasDatabaseName("ix_rejected_uploads_tenant_received_at");
+                    b.HasIndex("TenantId", "LastSeenAt")
+                        .HasDatabaseName("ix_rejected_uploads_tenant_last_seen_at");
+
+                    b.HasIndex("TenantId", "RecordType", "Identity")
+                        .IsUnique()
+                        .HasDatabaseName("ux_rejected_uploads_tenant_record_identity");
 
                     b.ToTable("rejected_uploads");
                 });

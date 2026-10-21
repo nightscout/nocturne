@@ -190,7 +190,7 @@ describe("ConnectorDetailsDialog", () => {
       success: true,
       message: "",
       errors: [],
-      itemsSynced: { Treatments: 40 },
+      itemsSynced: { Boluses: 40 },
       itemsRefused: 2,
     });
 

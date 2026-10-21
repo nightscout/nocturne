@@ -1758,8 +1758,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         // DeviceClockObservations: an observation is keyed by what was observed and when — the same
         // evidence re-gathered on a later sync must upsert into the same row, not accumulate.
         modelBuilder.Entity<RejectedUploadEntity>()
-            .HasIndex(e => new { e.TenantId, e.ReceivedAt })
-            .HasDatabaseName("ix_rejected_uploads_tenant_received_at");
+            .HasIndex(e => new { e.TenantId, e.RecordType, e.Identity })
+            .HasDatabaseName("ux_rejected_uploads_tenant_record_identity")
+            .IsUnique();
+        modelBuilder.Entity<RejectedUploadEntity>()
+            .HasIndex(e => new { e.TenantId, e.LastSeenAt })
+            .HasDatabaseName("ix_rejected_uploads_tenant_last_seen_at");
 
         modelBuilder.Entity<DeviceClockObservationEntity>()
             .HasIndex(e => new { e.TenantId, e.Connector, e.Source, e.ObservedAt })
@@ -2908,8 +2912,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// uploaders — which Mongo and JSON both accept; Postgres rejects the raw byte in a text column
     /// (22021) and the escape sequence in a jsonb one (22P05), failing the whole insert batch the
     /// row happens to land in. Runs in the SaveChanges walk, before any interceptor sees the entry,
-    /// so audit snapshots record what is actually persisted. A <see cref="FitToColumnAttribute"/>
-    /// column is cut to its length in the same pass.
+    /// so audit snapshots record what is actually persisted. Unpaired surrogates become U+FFFD in
+    /// the same pass (<see cref="StorableText"/>), and a <see cref="FitToColumnAttribute"/> column is
+    /// cut to its length.
     /// </summary>
     private static void StripNulCharacters(
         EntityEntry entry, bool isAdded, bool isRelational, Action<EntityEntry, string, int> onTruncated)
@@ -2940,7 +2945,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 continue;
             }
 
-            var stripped = value.Contains('\0') ? value.Replace("\0", string.Empty) : value;
+            var stripped = StorableText.ReplaceUnpairedSurrogates(
+                value.Contains('\0') ? value.Replace("\0", string.Empty) : value);
             if (isJsonb && stripped.Contains(@"\u0000", StringComparison.Ordinal))
             {
                 stripped = JsonNulEscape.Replace(stripped, "$1");
