@@ -29,19 +29,20 @@ namespace Nocturne.Infrastructure.Data.Migrations
     /// with the whole profile; converting them beside an ISF left raw would let that ISF through, 18 times
     /// too strong. So a raw target schedule is converted only with every ISF schedule of its store, and is
     /// left raw, and reported, when the store has no ISF schedule, any one fails the rules, or another
-    /// ISF schedule of the same profile name, at or after the targets' <c>timestamp</c>, still holds a
-    /// value from 0.5 to 22.2 and is not converted here: the resolvers pair the newest targets and the
-    /// newest ISF of a profile name independently, so they would read the converted targets beside it.
-    /// An ISF schedule is only exempt when a mg/dL owner claims it. An ISF schedule two raw target
-    /// schedules share leaves both when either is left. A profile-activation snapshot takes the same
+    /// ISF schedule of the same profile name may still be raw (<see cref="MaybeRawIsf"/>) and is not
+    /// converted here. The resolvers pair a profile name's targets and ISF by time independently, and
+    /// fall back to the newest version before the first, so any such ISF, older or newer, could be read
+    /// beside the converted targets. An ISF schedule two raw target schedules share leaves both when
+    /// either is left, and every store whose conversion rests on another's ISF is converted in the same
+    /// block. A profile-activation snapshot takes the same
     /// rules with its own targets and ISF; no known path built one raw, as migration
     /// <c>AddProfileActivations</c> and <c>ProfileActivationSnapshots</c> both convert.
     /// </para>
     /// <para>
     /// Every value becomes <c>round(v * 18.0182)</c>, the decomposer's conversion, which lands above the
-    /// target bound, so a second run selects nothing. The target schedules that share ISF schedules are
-    /// converted with those ISF schedules in one block, so a value PostgreSQL cannot read leaves them all
-    /// raw with a notice rather than failing the migration. Soft-deleted rows are not touched, converted
+    /// target bound, so a second run selects nothing. A block that cannot read a value, or updates fewer
+    /// rows than it chose, rolls back and leaves its group raw with a notice rather than failing the
+    /// migration. Soft-deleted rows are not touched, converted
     /// rows take a new <c>sys_updated_at</c> for v3 history clients, and notices list every store left
     /// and every row still raw afterwards. FORCE ROW LEVEL SECURITY binds the migrator, hence the
     /// per-tenant GUC.
@@ -112,6 +113,21 @@ namespace Nocturne.Infrastructure.Data.Migrations
                   AND {SameStore("ts", alias)})
             """;
 
+        /// <summary>
+        /// A live ISF schedule that may still be raw: a value at 0.5 to 22.2, no mg/dL owner without a mmol
+        /// one, and a store with no live target schedule or one still holding a raw-band target. A correct
+        /// ISF of 9 to 22 mg/dL/U sits beside converted targets and is not one.
+        /// </summary>
+        private static string MaybeRawIsf(string si) => $"""
+            ({AnyRaw($"{si}.entries_json", RawIsf)}
+             AND NOT ({MgdlOwner(si)} AND NOT {MmolOwner(si)})
+             AND (NOT EXISTS (SELECT 1 FROM target_range_schedules x
+                              WHERE x.tenant_id = t.id AND x.deleted_at IS NULL AND {SameStore("x", si)})
+                  OR EXISTS (SELECT 1 FROM target_range_schedules x
+                             WHERE x.tenant_id = t.id AND x.deleted_at IS NULL AND {SameStore("x", si)}
+                               AND {AnyRaw("x.entries_json", AnyRawTarget)})))
+            """;
+
         private static readonly string RepairSql = $$"""
             DO $$
             DECLARE
@@ -138,6 +154,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 n_isf int;
                 n_snapshots int;
                 n_left int;
+                n_rows int;
             BEGIN
                 FOR t IN SELECT id FROM tenants LOOP
                     PERFORM set_config('app.current_tenant_id', t.id::text, true);
@@ -172,12 +189,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                       ON si.tenant_id = t.id
                      AND si.deleted_at IS NULL
                      AND si.profile_name = tr.profile_name
-                     AND si.timestamp >= tr.timestamp
                     WHERE tr.tenant_id = t.id
                       AND tr.id = ANY(cand)
                       AND NOT EXISTS (SELECT 1 FROM unnest(pair_t, pair_s) p(tr_id, si_id) WHERE p.tr_id = tr.id AND p.si_id = si.id)
-                      AND {{AnyRaw("si.entries_json", RawIsf)}}
-                      AND NOT {{MgdlOwner("si")}};
+                      AND {{MaybeRawIsf("si")}};
 
                     bad := ARRAY(
                         SELECT c FROM unnest(cand) c
@@ -199,7 +214,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     FOREACH rid IN ARRAY bad LOOP
                         n_left := n_left + 1;
-                        RAISE NOTICE 'tenant %: target_range_schedules % left in mmol with its store: its ISF schedules (%) must all be from its batch at 0.5 to 22.2, and no other ISF of its profile name at or after it may stay at 0.5 to 22.2 (%)',
+                        RAISE NOTICE 'tenant %: target_range_schedules % left in mmol with its store: its ISF schedules (%) must all be from its batch at 0.5 to 22.2, and no other ISF of its profile name may stay at 0.5 to 22.2 beside raw targets or none (%)',
                             t.id, rid,
                             COALESCE((SELECT string_agg(DISTINCT p.si_id::text, ', ') FROM unnest(pair_t, pair_s) p(tr_id, si_id) WHERE p.tr_id = rid), 'none'),
                             COALESCE((SELECT string_agg(DISTINCT b.si_id::text, ', ') FROM unnest(blk_t, blk_s) b(tr_id, si_id) WHERE b.tr_id = rid), 'none');
@@ -210,8 +225,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         comp := ARRAY[todo[1]];
                         LOOP
                             comp_isf := ARRAY(SELECT DISTINCT p.si_id FROM unnest(pair_t, pair_s) p(tr_id, si_id) WHERE p.tr_id = ANY(comp));
-                            more := ARRAY(SELECT DISTINCT p.tr_id FROM unnest(pair_t, pair_s) p(tr_id, si_id)
-                                          WHERE p.si_id = ANY(comp_isf) AND NOT p.tr_id = ANY(comp));
+                            more := ARRAY(
+                                SELECT p.tr_id FROM unnest(pair_t, pair_s) p(tr_id, si_id)
+                                WHERE (p.si_id = ANY(comp_isf)
+                                       OR p.si_id IN (SELECT b.si_id FROM unnest(blk_t, blk_s) b(tr_id, si_id) WHERE b.tr_id = ANY(comp)))
+                                  AND p.tr_id = ANY(todo) AND NOT p.tr_id = ANY(comp)
+                                UNION
+                                SELECT b.tr_id FROM unnest(blk_t, blk_s) b(tr_id, si_id)
+                                WHERE b.si_id = ANY(comp_isf) AND b.tr_id = ANY(todo) AND NOT b.tr_id = ANY(comp));
                             EXIT WHEN cardinality(more) = 0;
                             comp := comp || more;
                         END LOOP;
@@ -221,9 +242,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
                             UPDATE target_range_schedules
                             SET entries_json = {{Converted("entries_json", TargetFields)}}, sys_updated_at = now()
                             WHERE tenant_id = t.id AND id = ANY(comp);
+                            GET DIAGNOSTICS n_rows = ROW_COUNT;
+                            IF n_rows <> cardinality(comp) THEN
+                                RAISE EXCEPTION 'converted % of % target range schedules', n_rows, cardinality(comp) USING ERRCODE = 'data_exception';
+                            END IF;
                             UPDATE sensitivity_schedules
                             SET entries_json = {{Converted("entries_json", IsfFields)}}, sys_updated_at = now()
                             WHERE tenant_id = t.id AND id = ANY(comp_isf);
+                            GET DIAGNOSTICS n_rows = ROW_COUNT;
+                            IF n_rows <> cardinality(comp_isf) THEN
+                                RAISE EXCEPTION 'converted % of % sensitivity schedules', n_rows, cardinality(comp_isf) USING ERRCODE = 'data_exception';
+                            END IF;
                             converted := true;
                         EXCEPTION WHEN data_exception THEN
                             converted := false;
@@ -260,6 +289,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                                     '{Sensitivity}', {{Converted("snap->'Sensitivity'", IsfFields)}}),
                                 sys_updated_at = now()
                             WHERE id = rid AND tenant_id = t.id;
+                            GET DIAGNOSTICS n_rows = ROW_COUNT;
+                            IF n_rows <> 1 THEN
+                                RAISE EXCEPTION 'converted % activation snapshots', n_rows USING ERRCODE = 'data_exception';
+                            END IF;
                             converted := true;
                         EXCEPTION WHEN data_exception THEN
                             converted := false;
@@ -281,7 +314,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     FROM target_range_schedules tr
                     WHERE tr.tenant_id = t.id
                       AND tr.deleted_at IS NULL
-                      AND NOT {{MgdlOwner("tr")}}
+                      AND NOT ({{MgdlOwner("tr")}} AND NOT {{MmolOwner("tr")}})
                       AND {{AnyRaw("tr.entries_json", AnyRawTarget)}};
                     IF left_over IS NOT NULL THEN
                         RAISE NOTICE 'tenant %: target_range_schedules without a mg/dL owner still holding a target at or under 22.2: %', t.id, left_over;
@@ -291,13 +324,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     FROM sensitivity_schedules si
                     WHERE si.tenant_id = t.id
                       AND si.deleted_at IS NULL
-                      AND NOT {{MgdlOwner("si")}}
-                      AND {{AnyRaw("si.entries_json", RawIsf)}}
-                      AND (NOT EXISTS (SELECT 1 FROM target_range_schedules tr
-                                       WHERE tr.tenant_id = t.id AND tr.deleted_at IS NULL AND {{SameStore("tr", "si")}})
-                           OR EXISTS (SELECT 1 FROM target_range_schedules tr
-                                      WHERE tr.tenant_id = t.id AND tr.deleted_at IS NULL AND {{SameStore("tr", "si")}}
-                                        AND {{AnyRaw("tr.entries_json", AnyRawTarget)}}));
+                      AND {{MaybeRawIsf("si")}};
                     IF left_over IS NOT NULL THEN
                         RAISE NOTICE 'tenant %: sensitivity_schedules without a mg/dL owner still holding an ISF at 0.5 to 22.2 beside raw targets or none: %', t.id, left_over;
                     END IF;

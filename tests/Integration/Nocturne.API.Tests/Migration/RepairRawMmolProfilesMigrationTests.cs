@@ -267,6 +267,12 @@ public class RepairRawMmolProfilesTests : IClassFixture<RepairRawMmolProfilesFix
         new("older raw store", TenantA, "Superseded", "mmol", "d1:Superseded", null, RawTargets, RawIsf),
         new("newer raw store", TenantA, "Superseded", "mmol", "d2:Superseded", null, RawTargets, RawIsf,
             Timestamp: Seeded.AddDays(1)),
+        new("store beside an older orphan raw isf", TenantA, "Fallback", "mmol", "d1:Fallback", null, RawTargets, RawIsf),
+        new("older orphan raw isf", TenantA, "Fallback", "mmol", "d0:Fallback", null, null, V(3.0),
+            Owner: false, Timestamp: Seeded.AddDays(-1)),
+        new("raw store beside a newer converted isf", TenantA, "Corrected", "mmol", "d1:Corrected", null, RawTargets, RawIsf),
+        new("newer converted mmol store with isf 15", TenantA, "Corrected", "mmol", "d2:Corrected", null, CorrectTargets, V(15),
+            Timestamp: Seeded.AddDays(1)),
         new("raw store beside a newer mg/dL isf", TenantA, "Switched", "mmol", "d1:Switched", null, RawTargets, RawIsf),
         new("newer mg/dL store with isf 15", TenantA, "Switched", "mg/dl", "d2:Switched", null, CorrectTargets, V(15),
             Timestamp: Seeded.AddDays(1)),
@@ -334,6 +340,7 @@ public class RepairRawMmolProfilesTests : IClassFixture<RepairRawMmolProfilesFix
     [InlineData("older raw store")]
     [InlineData("newer raw store")]
     [InlineData("raw store beside a newer mg/dL isf")]
+    [InlineData("raw store beside a newer converted isf")]
     public void ARawStore_HasItsTargetsAndIsfConverted(string key)
     {
         var store = StoreOf(key);
@@ -454,6 +461,26 @@ public class RepairRawMmolProfilesTests : IClassFixture<RepairRawMmolProfilesFix
         ShouldBeReportedLeft(older.TargetId);
         _fixture.Notices.Should().Contain(n =>
             n.Contains("still holding an ISF at 0.5 to 22.2") && n.Contains(orphan.SensitivityId.ToString()));
+    }
+
+    /// <summary>
+    /// A time before every version resolves to the newest one, so the store's converted targets would be
+    /// read before it beside the older orphan's ISF of 3.0 mg/dL/U.
+    /// </summary>
+    [Fact]
+    public void AStoreBesideAnOlderRawIsfOfItsProfileNameThatStaysRaw_IsLeftWhole()
+    {
+        ShouldBeLeftWhole(StoreOf("store beside an older orphan raw isf"));
+        ShouldBeUntouched(StoreOf("older orphan raw isf").SensitivityId);
+        ShouldBeReportedLeft(StoreOf("store beside an older orphan raw isf").TargetId);
+    }
+
+    [Fact]
+    public void ACorrectIsfOfTheProfileName_IsNeitherABlockerNorReported()
+    {
+        var correct = StoreOf("newer converted mmol store with isf 15");
+        ShouldBeUntouched(correct.SensitivityId);
+        _fixture.Notices.Should().NotContain(n => n.Contains(correct.SensitivityId.ToString()));
     }
 
     [Fact]
