@@ -35,57 +35,63 @@ public partial class ApexCallbackRelayMiddleware(
     ILogger<ApexCallbackRelayMiddleware> logger,
     IOptions<BaseDomainOptions> config)
 {
-    private static readonly Dictionary<string, Func<IServiceProvider, string, string?>> Callbacks =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["/api/auth/oidc/callback"] = ReadOidcSlug,
-            ["/api/auth/oidc/link/callback"] = ReadOidcSlug,
-            [GoogleHealthPlatformOptions.CallbackPath] = (services, state) =>
-                services.GetRequiredService<GoogleHealthOAuthState>().TryReadTenantSlug(state),
-        };
+    private static readonly Dictionary<string, Relay> Callbacks = new Relay[]
+    {
+        new("/api/auth/oidc/callback", ReadOidcSlug),
+        new("/api/auth/oidc/link/callback", ReadOidcSlug),
+        new(GoogleHealthPlatformOptions.CallbackPath, (services, state) =>
+            services.GetRequiredService<GoogleHealthOAuthState>().TryReadTenantSlug(state)),
+    }.ToDictionary(r => r.Path, StringComparer.OrdinalIgnoreCase);
 
-    private readonly BaseDomainOptions _config = config.Value;
+    private readonly string? _baseHost = config.Value.SplitHostPort().Host;
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var redirectUrl = string.IsNullOrEmpty(_config.BaseDomain) ||
-                          !Callbacks.TryGetValue(context.Request.Path.Value ?? "", out var readSlug)
-            ? null
-            : TenantRedirect(context, readSlug);
-
-        if (redirectUrl is null)
+        if (_baseHost is null ||
+            !Callbacks.TryGetValue(context.Request.Path.Value ?? "", out var relay) ||
+            TenantRedirect(context, relay) is not { } redirectUrl)
         {
             await next(context);
             return;
         }
 
-        logger.LogInformation("Relaying apex callback {Path} to its tenant subdomain", context.Request.Path);
+        logger.LogInformation("Relaying apex callback {Path} to its tenant subdomain", relay.Path);
         context.Response.Redirect(redirectUrl);
     }
 
-    private string? TenantRedirect(HttpContext context, Func<IServiceProvider, string, string?> readSlug)
+    /// <remarks>
+    /// Only the slug and the port come from the request, and each is validated into a form that
+    /// cannot leave this deployment: the slug against <see cref="SlugPattern"/> as a label under the
+    /// configured base host, the port as a number. The port is the request's rather than the
+    /// configured one because a TLS proxy can front the apex on a port of its own (the e2e stack).
+    /// The query is forwarded after a literal <c>?</c>, so it cannot reach the authority.
+    /// </remarks>
+    private string? TenantRedirect(HttpContext context, Relay relay)
     {
-        var baseDomainHost = _config.BaseDomain.Split(':')[0];
-        if (context.Request.Host.Host.EndsWith($".{baseDomainHost}", StringComparison.OrdinalIgnoreCase))
+        if (context.Request.Host.Host.EndsWith($".{_baseHost}", StringComparison.OrdinalIgnoreCase))
             return null;
 
         var state = context.Request.Query["state"].FirstOrDefault();
         if (string.IsNullOrEmpty(state))
             return null;
 
-        var tenantSlug = readSlug(context.RequestServices, state);
+        var tenantSlug = relay.ReadSlug(context.RequestServices, state);
         if (string.IsNullOrEmpty(tenantSlug) || !SlugPattern().IsMatch(tenantSlug))
             return null;
 
-        // The tenant host answers on whatever port the browser reached the apex on.
-        var tenantHost = context.Request.Host.Port is { } port
-            ? new HostString($"{tenantSlug}.{baseDomainHost}", port)
-            : new HostString($"{tenantSlug}.{baseDomainHost}");
-        return $"{context.Request.PublicScheme()}://{tenantHost}{context.Request.Path}{context.Request.QueryString}";
+        var tenantOrigin = new UriBuilder(context.Request.PublicScheme(), $"{tenantSlug}.{_baseHost}")
+        {
+            Port = context.Request.Host.Port ?? -1,
+        };
+        return Uri.TryCreate(tenantOrigin.ToString(), UriKind.Absolute, out var origin)
+            ? $"{origin.GetLeftPart(UriPartial.Authority)}{relay.Path}?{context.Request.QueryString.Value?.TrimStart('?')}"
+            : null;
     }
 
     private static string? ReadOidcSlug(IServiceProvider services, string state) =>
         services.GetRequiredService<IOidcAuthService>().TryReadTenantSlug(state);
+
+    private sealed record Relay(string Path, Func<IServiceProvider, string, string?> ReadSlug);
 
     [System.Text.RegularExpressions.GeneratedRegex(@"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$")]
     private static partial System.Text.RegularExpressions.Regex SlugPattern();
