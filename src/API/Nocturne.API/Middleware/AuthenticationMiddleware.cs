@@ -24,8 +24,8 @@ namespace Nocturne.API.Middleware;
 /// <c>HttpContext.Items[AuthContextKeys.PermissionTrie]</c> with a <see cref="PermissionTrie"/>,
 /// and <c>HttpContext.Items[AuthContextKeys.GrantedScopes]</c> with normalized OAuth scopes.
 /// Must run after <see cref="Multitenancy.TenantResolutionMiddleware"/>, which resolves the
-/// <see cref="TenantContext"/> it authenticates against, and after <c>UseRouting</c>, whose matched
-/// endpoint and route values <see cref="InviteTokenAuthorizedAttribute"/> is read from. For
+/// <see cref="TenantContext"/> it authenticates against, and after <c>UseRouting</c>, which supplies the
+/// endpoint carrying <see cref="InviteTokenAuthorizedAttribute"/> and the route value holding the invite token. For
 /// unauthenticated requests with a resolved tenant, delegates to
 /// <see cref="PublicAccessCacheService"/> for public/read-only access.
 /// </para>
