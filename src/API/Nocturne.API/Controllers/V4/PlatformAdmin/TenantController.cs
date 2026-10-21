@@ -290,7 +290,7 @@ public class TenantController : ControllerBase
         [FromServices] INocturneDbContextFactory dbContextFactory,
         [FromServices] ILoginCodeService loginCodeService,
         CancellationToken ct) =>
-        IssueCodeAsync(id, subjectId, LoginCodePurpose.Login, dbContextFactory, loginCodeService, ct);
+        IssueCodeAsync(id, subjectId, LoginCodePurpose.Login, dbContextFactory, loginCodeService, null, ct);
 
     /// <summary>
     /// Mints a single-use recovery code that lets a member enrol a passkey at
@@ -311,13 +311,17 @@ public class TenantController : ControllerBase
         Guid id, Guid subjectId,
         [FromServices] INocturneDbContextFactory dbContextFactory,
         [FromServices] ILoginCodeService loginCodeService,
+        [FromServices] MemberRecoveryEligibility eligibility,
         CancellationToken ct) =>
-        IssueCodeAsync(id, subjectId, LoginCodePurpose.Recovery, dbContextFactory, loginCodeService, ct);
+        IssueCodeAsync(
+            id, subjectId, LoginCodePurpose.OperatorRecovery, dbContextFactory, loginCodeService, eligibility, ct);
 
+    /// <param name="eligibility">For a recovery code: refuses a member who can still sign in.</param>
     private async Task<IActionResult> IssueCodeAsync(
         Guid id, Guid subjectId, LoginCodePurpose purpose,
         INocturneDbContextFactory dbContextFactory,
         ILoginCodeService loginCodeService,
+        MemberRecoveryEligibility? eligibility,
         CancellationToken ct)
     {
         if (!await IsCallerTenantOwnerAsync(id, ct))
@@ -331,6 +335,10 @@ public class TenantController : ControllerBase
             return Problem(detail: "Tenant is not active", statusCode: 409, title: "Conflict");
 
         await using var dbContext = await dbContextFactory.CreateForTenantAsync(id, ct);
+
+        if (eligibility is not null
+            && await eligibility.CheckAsync(dbContext, id, subjectId, ct) == RecoveryEligibility.NotLockedOut)
+            return Problem(detail: "This member can still sign in", statusCode: 409, title: "Conflict");
 
         var issued = await loginCodeService.IssueAsync(
             dbContext, subjectId, purpose,

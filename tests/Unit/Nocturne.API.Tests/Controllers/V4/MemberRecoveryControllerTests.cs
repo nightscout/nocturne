@@ -59,7 +59,7 @@ public sealed class MemberRecoveryControllerTests : IDisposable
             contexts,
             MockTenantAccessor.Create(_tenantId).Object,
             _roles.Object,
-            new TenantMemberService(contexts),
+            new MemberRecoveryEligibility(new TenantMemberService(contexts)),
             _recoveryCodes.Object,
             _loginCodes.Object)
         {

@@ -64,7 +64,15 @@ public enum LoginCodePurpose
 
     /// <summary>
     /// One passkey enrolment for a member with no sign-in method left, at
-    /// <c>POST /api/auth/passkey/recovery-mode/redeem</c>.
+    /// <c>POST /api/auth/passkey/recovery-mode/redeem</c>, issued by one of the tenant's member
+    /// administrators. Redeemable only while the member is still one a member administrator may
+    /// recover.
     /// </summary>
     Recovery,
+
+    /// <summary>
+    /// As <see cref="Recovery"/>, issued by the operator, who may also recover an instance
+    /// administrator or a member of several tenants.
+    /// </summary>
+    OperatorRecovery,
 }

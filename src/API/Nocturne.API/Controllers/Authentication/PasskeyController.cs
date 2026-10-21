@@ -291,6 +291,9 @@ public class PasskeyController : ControllerBase
             // so the session that authorized it is over even though its token has time left.
             Response.Cookies.Delete(RecoveryCookieName, RecoveryCookieOptions());
 
+            await using var db = await _dbContextFactory.CreateAsync();
+            await LoginCodeService.VoidRecoveryCodesAsync(db, subjectId.Value, HttpContext.RequestAborted);
+
             return Ok(new PasskeyRegisterCompleteResponse
             {
                 CredentialId = result.CredentialId,
@@ -315,8 +318,10 @@ public class PasskeyController : ControllerBase
     /// member can mint it: a member administrator
     /// (<see cref="V4.Identity.MemberRecoveryController.IssueRecoveryCode"/>) or the operator
     /// (<see cref="V4.PlatformAdmin.TenantController.IssueRecoveryCode"/>), which is how a tenant
-    /// whose only owner is locked out gets back in. Unknown, spent, expired, other-tenant and
-    /// login codes fail alike.
+    /// whose only owner is locked out gets back in. The code is a bearer link that outlives the
+    /// moment it was minted, so the member must still be one its issuer may recover
+    /// (<see cref="MemberRecoveryEligibility.AllowsRedemption"/>). Unknown, spent, expired,
+    /// other-tenant, login and no-longer-applicable codes fail alike.
     /// </remarks>
     [HttpPost("recovery-mode/redeem")]
     [AllowAnonymous]
@@ -326,7 +331,8 @@ public class PasskeyController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<RecoveryModeRedeemResponse>> RecoveryModeRedeem(
         [FromBody] RecoveryModeRedeemRequest request,
-        [FromServices] ILoginCodeService loginCodeService)
+        [FromServices] ILoginCodeService loginCodeService,
+        [FromServices] MemberRecoveryEligibility eligibility)
     {
         if (string.IsNullOrWhiteSpace(request.Code))
         {
@@ -334,15 +340,18 @@ public class PasskeyController : ControllerBase
         }
 
         await using var db = await _dbContextFactory.CreateAsync();
-        var subjectId = await loginCodeService.RedeemAsync(
-            db, request.Code.Trim(), LoginCodePurpose.Recovery,
+        var redeemed = await loginCodeService.RedeemAsync(
+            db, request.Code.Trim(), LoginCodeService.RecoveryPurposes,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
             HttpContext.RequestAborted);
 
-        var subject = subjectId is null
-            ? null
-            : await db.Subjects.AsNoTracking().FirstOrDefaultAsync(s => s.Id == subjectId && s.IsActive);
+        var subject = redeemed is not null
+            && MemberRecoveryEligibility.AllowsRedemption(
+                await eligibility.CheckAsync(db, _tenantAccessor.TenantId, redeemed.SubjectId, HttpContext.RequestAborted),
+                redeemed.Purpose)
+            ? await db.Subjects.AsNoTracking().FirstOrDefaultAsync(s => s.Id == redeemed.SubjectId)
+            : null;
         if (subject is null)
         {
             return Problem(

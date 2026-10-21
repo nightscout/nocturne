@@ -49,7 +49,7 @@ public class MemberRecoveryController : ControllerBase
     private readonly INocturneDbContextFactory _contexts;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantRoleService _tenantRoleService;
-    private readonly ITenantMemberService _tenantMemberService;
+    private readonly MemberRecoveryEligibility _eligibility;
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly ILoginCodeService _loginCodeService;
 
@@ -57,14 +57,14 @@ public class MemberRecoveryController : ControllerBase
         INocturneDbContextFactory contexts,
         ITenantAccessor tenantAccessor,
         ITenantRoleService tenantRoleService,
-        ITenantMemberService tenantMemberService,
+        MemberRecoveryEligibility eligibility,
         IRecoveryCodeService recoveryCodeService,
         ILoginCodeService loginCodeService)
     {
         _contexts = contexts;
         _tenantAccessor = tenantAccessor;
         _tenantRoleService = tenantRoleService;
-        _tenantMemberService = tenantMemberService;
+        _eligibility = eligibility;
         _recoveryCodeService = recoveryCodeService;
         _loginCodeService = loginCodeService;
     }
@@ -93,7 +93,8 @@ public class MemberRecoveryController : ControllerBase
             members.Add(new LockedOutMember(
                 s.Id, s.Name, s.Username,
                 HasRecoveryCodes: await _recoveryCodeService.GetRemainingCountAsync(s.Id) > 0,
-                OperatorOnly: await IsOperatorOnlyAsync(s.Id, s.IsPlatformAdmin, ct)));
+                OperatorOnly: await _eligibility.IsOperatorOnlyAsync(
+                    _tenantAccessor.TenantId, s.Id, s.IsPlatformAdmin, ct)));
         }
 
         return Ok(members);
@@ -107,8 +108,7 @@ public class MemberRecoveryController : ControllerBase
     /// <remarks>
     /// The code lets its holder put a passkey on the member's account, so the caller must be signed
     /// in as themselves, hold every permission the member holds, and not be confined to less
-    /// history than the member sees. That ceiling is this tenant's while the account is global, so
-    /// an account with standing anywhere else is refused here and left to the operator.
+    /// history than the member sees. Who is eligible at all is <see cref="MemberRecoveryEligibility"/>.
     /// <para>
     /// A member who still holds recovery codes may have lost them, so those do not block issuance;
     /// redeeming this code cancels them (<see cref="PasskeyController.RecoveryModeRedeem"/>).
@@ -131,16 +131,18 @@ public class MemberRecoveryController : ControllerBase
         var tenantId = _tenantAccessor.TenantId;
         await using var db = await _contexts.CreateAsync(ct);
 
-        var member = await db.TenantMembers
-            .Where(m => m.TenantId == tenantId && m.SubjectId == subjectId
-                && db.OrphanedSubjectsOf(tenantId).Any(s => s.Id == subjectId))
-            .Select(m => new { m.Id, m.LimitTo24Hours, m.Subject!.IsPlatformAdmin })
-            .FirstOrDefaultAsync(ct);
-        if (member is null)
-            return NotFound();
+        switch (await _eligibility.CheckAsync(db, tenantId, subjectId, ct))
+        {
+            case RecoveryEligibility.NotLockedOut:
+                return NotFound();
+            case RecoveryEligibility.OperatorOnly:
+                return Problem(detail: OperatorOnlyDetail, statusCode: 409, title: "Conflict");
+        }
 
-        if (await IsOperatorOnlyAsync(subjectId, member.IsPlatformAdmin, ct))
-            return Problem(detail: OperatorOnlyDetail, statusCode: 409, title: "Conflict");
+        var member = await db.TenantMembers
+            .Where(m => m.TenantId == tenantId && m.SubjectId == subjectId)
+            .Select(m => new { m.Id, m.LimitTo24Hours })
+            .FirstAsync(ct);
 
         var memberPermissions = await _tenantRoleService.GetEffectivePermissionsAsync(member.Id, ct);
         if (Scope.ValidateGrant(memberPermissions, HttpContext.GetGrantedScopes()) is not null)
@@ -159,14 +161,6 @@ public class MemberRecoveryController : ControllerBase
         return Ok(issued);
     }
 
-    /// <summary>
-    /// Whether the account reaches beyond this tenant: an instance administrator, or a member of
-    /// any other tenant.
-    /// </summary>
-    private async Task<bool> IsOperatorOnlyAsync(Guid subjectId, bool isPlatformAdmin, CancellationToken ct) =>
-        isPlatformAdmin
-        || (await _tenantMemberService.GetTenantIdsForSubjectAsync(subjectId, ct))
-            .Any(t => t != _tenantAccessor.TenantId);
 }
 
 /// <param name="SubjectId">The member's subject.</param>

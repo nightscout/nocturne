@@ -433,16 +433,25 @@ public class PasskeyControllerTests : IDisposable
 
     #region Recovery-mode enrolment
 
-    private Mock<ILoginCodeService> LoginCodesRedeeming(Guid? subjectId)
+    private Mock<ILoginCodeService> LoginCodesRedeeming(
+        Guid? subjectId, LoginCodePurpose purpose = LoginCodePurpose.Recovery)
     {
         var loginCodes = new Mock<ILoginCodeService>();
         loginCodes
             .Setup(s => s.RedeemAsync(
-                It.IsAny<NocturneDbContext>(), "issued-code", LoginCodePurpose.Recovery,
+                It.IsAny<NocturneDbContext>(), "issued-code",
+                It.Is<IReadOnlyCollection<LoginCodePurpose>>(p => p.SequenceEqual(LoginCodeService.RecoveryPurposes)),
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(subjectId);
+            .ReturnsAsync(subjectId is { } id ? new RedeemedLoginCode(id, purpose) : null);
         return loginCodes;
     }
+
+    private MemberRecoveryEligibility Eligibility() =>
+        new(new TenantMemberService(new SharedSqliteFactory(_db.Options).AsNocturneFactory()));
+
+    private Task<ActionResult<RecoveryModeRedeemResponse>> RedeemAsync(
+        Mock<ILoginCodeService> loginCodes, string code = "issued-code") =>
+        _controller.RecoveryModeRedeem(new RecoveryModeRedeemRequest { Code = code }, loginCodes.Object, Eligibility());
 
     private void StubRecoveryTokenMinting() =>
         _jwtService
@@ -463,8 +472,7 @@ public class PasskeyControllerTests : IDisposable
         var orphanId = await SeedMemberAsync("orphan");
         StubRecoveryTokenMinting();
 
-        var result = await _controller.RecoveryModeRedeem(
-            new RecoveryModeRedeemRequest { Code = "issued-code" }, LoginCodesRedeeming(orphanId).Object);
+        var result = await RedeemAsync(LoginCodesRedeeming(orphanId));
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         ((RecoveryModeRedeemResponse)ok.Value!).Username.Should().Be("orphan");
@@ -485,8 +493,7 @@ public class PasskeyControllerTests : IDisposable
     {
         await SeedMemberAsync("orphan");
 
-        var result = await _controller.RecoveryModeRedeem(
-            new RecoveryModeRedeemRequest { Code = "issued-code" }, LoginCodesRedeeming(null).Object);
+        var result = await RedeemAsync(LoginCodesRedeeming(null));
 
         Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
         RecoveryCookieSet().Should().BeNull();
@@ -494,12 +501,111 @@ public class PasskeyControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task RecoveryModeRedeem_ForAMemberWhoHasSinceEnrolledAPasskey_IsRefused()
+    {
+        await SeedMemberAsync("rhys", withPasskey: true);
+        var memberId = await SeedMemberAsync("orphan");
+        _dbContext.PasskeyCredentials.Add(new PasskeyCredentialEntity
+        {
+            Id = Guid.CreateVersion7(), SubjectId = memberId, CredentialId = [7, 7], PublicKey = [1],
+            CreatedAt = DateTime.UtcNow,
+        });
+        await _dbContext.SaveChangesAsync();
+        StubRecoveryTokenMinting();
+
+        var result = await RedeemAsync(LoginCodesRedeeming(memberId));
+
+        Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        RecoveryCookieSet().Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RecoveryModeRedeem_AnAdministratorCode_ForAMemberWhoHasBecomeOperatorOnly_IsRefused()
+    {
+        await SeedMemberAsync("rhys", withPasskey: true);
+        var orphanId = await SeedMemberAsync("orphan");
+        await SeedMembershipAsync(orphanId, Guid.CreateVersion7());
+        StubRecoveryTokenMinting();
+
+        var result = await RedeemAsync(LoginCodesRedeeming(orphanId, LoginCodePurpose.Recovery));
+
+        Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        RecoveryCookieSet().Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RecoveryModeRedeem_AnOperatorCode_RecoversAnOperatorOnlyMember()
+    {
+        await SeedMemberAsync("rhys", withPasskey: true);
+        var orphanId = await SeedMemberAsync("orphan");
+        await SeedMembershipAsync(orphanId, Guid.CreateVersion7());
+        StubRecoveryTokenMinting();
+
+        var result = await RedeemAsync(LoginCodesRedeeming(orphanId, LoginCodePurpose.OperatorRecovery));
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task RegisterComplete_VoidsTheSubjectsOutstandingRecoveryCodes()
+    {
+        var subjectId = await SeedMemberAsync("orphan");
+        await using (var tenantDb = _db.CreateContext(_tenantId))
+        {
+            tenantDb.LoginCodes.Add(new LoginCodeEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = subjectId,
+                CodeHash = "outstanding", Purpose = LoginCodePurpose.Recovery,
+                ExpiresAt = DateTime.UtcNow.AddHours(1),
+            });
+            await tenantDb.SaveChangesAsync();
+        }
+        GiveRecoverySession(subjectId, "passkey:manage");
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId));
+
+        // Login codes are tenant-scoped, so this needs contexts on the request's tenant, as the
+        // request pipeline hands out.
+        var tenantContexts = new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId);
+        var controller = new PasskeyController(
+            _passkeyService.Object, _totpService.Object, _recoveryCodeService.Object, _jwtService.Object,
+            _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
+            _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(tenantContexts),
+            tenantContexts, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
+        {
+            ControllerContext = _controller.ControllerContext,
+        };
+
+        var result = await controller.RegisterComplete(new PasskeyRegisterCompleteRequest
+        {
+            AttestationResponseJson = "{}",
+            ChallengeToken = "token",
+        });
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+
+        await using var check = _db.CreateContext(_tenantId);
+        (await check.LoginCodes.AsNoTracking().SingleAsync()).ConsumedAt.Should().NotBeNull();
+    }
+
+    private async Task SeedMembershipAsync(Guid subjectId, Guid tenantId)
+    {
+        await EnsureTenantAsync(tenantId);
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = subjectId,
+        });
+        await _dbContext.SaveChangesAsync();
+    }
+
+    [Fact]
     public async Task RecoveryModeRedeem_WithoutACode_IsRefusedBeforeAnyRedemption()
     {
         var loginCodes = LoginCodesRedeeming(Guid.CreateVersion7());
 
-        var result = await _controller.RecoveryModeRedeem(
-            new RecoveryModeRedeemRequest { Code = " " }, loginCodes.Object);
+        var result = await RedeemAsync(loginCodes, " ");
 
         Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
         loginCodes.VerifyNoOtherCalls();
