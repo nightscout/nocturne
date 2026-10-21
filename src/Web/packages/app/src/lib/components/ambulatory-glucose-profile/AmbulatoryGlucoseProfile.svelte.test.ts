@@ -65,14 +65,12 @@ describe("AmbulatoryGlucoseProfile", () => {
 			.toBeVisible();
 	});
 
-	// layerchart's AreaChart uses $effect.pre internally (SeriesState) which
-	// throws effect_orphan in vitest-browser-svelte. Skip until layerchart
-	// provides a test-friendly build or we add a wrapper stub.
-	it.skip("renders chart when data is provided", async () => {
+	it("renders chart when data is provided", async () => {
 		const stats = makeStats([0, 6, 12, 18]);
 
 		render(AmbulatoryGlucoseProfile, { averagedStats: stats });
 
+		await expect.element(page.getByTestId("agp-chart")).toBeVisible();
 		await expect
 			.element(page.getByText("No pattern data"))
 			.not.toBeInTheDocument();

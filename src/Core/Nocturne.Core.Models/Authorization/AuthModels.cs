@@ -103,6 +103,11 @@ public class AuthContext
     public Guid? TokenId { get; set; }
 
     /// <summary>
+    /// The OAuth client an access token was issued to; null for every other credential.
+    /// </summary>
+    public string? ClientId { get; set; }
+
+    /// <summary>
     /// Raw token string (for legacy compatibility)
     /// </summary>
     public string? RawToken { get; set; }

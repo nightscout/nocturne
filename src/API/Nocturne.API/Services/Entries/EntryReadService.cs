@@ -166,6 +166,9 @@ public class EntryReadService : IEntryStore
                 "Find-filtered entry query hit the {MaxFetch}-row window; matches beyond it are not returned",
                 MaxFilterFetch);
 
+        if (find.HasAbandonedRegex)
+            _logger.LogWarning("A find $regex ran out of its time budget; entry matches may be incomplete");
+
         return matching.Skip(skip).Take(count).ToList();
     }
 

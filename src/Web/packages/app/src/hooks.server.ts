@@ -2,6 +2,7 @@ import { isInternalOnlyApiPath } from "$lib/server/internal-only-api-paths";
 import { type Handle } from "@sveltejs/kit";
 import { randomUUID } from "$lib/utils";
 import { isRecord, nonEmptyString } from "$lib/utils/type-guards";
+import { applySecurityHeaders, parseFrameAncestors } from "$lib/server/security-headers";
 import type { HandleServerError } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import { env as publicEnv } from "$env/dynamic/public";
@@ -33,6 +34,7 @@ import * as main from '../../../locales/main.loader.server.svelte.js'
 import * as js from '../../../locales/js.loader.server.js'
 import { locales } from '../../../locales/data.js'
 import supportedLocales from '../../../supportedLocales.json';
+import { renderColorScheme } from "$lib/server/color-scheme-html";
 import { LANGUAGE_COOKIE_NAME } from "$lib/stores/appearance-store.svelte";
 
 // Await so no request can render before catalogs are registered: a lookup
@@ -531,16 +533,21 @@ const requestContextHandle: Handle = async ({ event, resolve }) => {
   return response;
 };
 
-// Public share host: keep the token-bearing URL out of Referer headers and search indexes on
-// every response (SSR page, /api proxy, realtime ticket), not just the page document.
-const shareHostSecurityHandle: Handle = async ({ event, resolve }) => {
+// Wraps every response (SSR page, /api proxy, realtime ticket), not just the page document.
+const securityHeadersHandle: Handle = async ({ event, resolve }) => {
   const response = await resolve(event);
-  if (event.locals.isShareHost) {
-    response.headers.set("Referrer-Policy", "no-referrer");
-    response.headers.set("X-Robots-Tag", "noindex, nofollow");
-  }
+  applySecurityHeaders(response.headers, {
+    isShareHost: event.locals.isShareHost,
+    pathname: event.url.pathname,
+    frameAncestors: parseFrameAncestors(env.ALLOWED_FRAME_ANCESTORS),
+  });
   return response;
 };
+
+const colorSchemeHandle: Handle = ({ event, resolve }) =>
+  resolve(event, {
+    transformPageChunk: ({ html }) => renderColorScheme(html, event.cookies),
+  });
 
 /**
  * Liveness probe for the Aspire health check. Answers before any auth or
@@ -562,4 +569,4 @@ const healthHandle: Handle = async ({ event, resolve }) => {
 // none of the locals they set and the API authenticates it and answers its setup/recovery state
 // itself, so running them first cost every browser /api call three serial API round-trips, and let
 // a session refresh in authHandle rotate the refresh token the proxy then forwarded stale.
-export const handle: Handle = sequence(healthHandle, requestContextHandle, shareHostSecurityHandle, proxyHandle, resetBitsId, statusProbeHandle, authHandle, readinessHandle, apiClientHandle, locale);
+export const handle: Handle = sequence(healthHandle, requestContextHandle, securityHeadersHandle, proxyHandle, resetBitsId, colorSchemeHandle, statusProbeHandle, authHandle, readinessHandle, apiClientHandle, locale);

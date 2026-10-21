@@ -3041,6 +3041,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_polled_at");
 
+                    b.Property<DateTime?>("RedeemedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("redeemed_at");
+
                     b.PrimitiveCollection<List<string>>("Scopes")
                         .IsRequired()
                         .HasColumnType("text[]")
@@ -3231,6 +3235,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
+
+                    b.Property<int>("GraceRedemptions")
+                        .HasColumnType("integer")
+                        .HasColumnName("grace_redemptions");
 
                     b.Property<Guid>("GrantId")
                         .HasColumnType("uuid")

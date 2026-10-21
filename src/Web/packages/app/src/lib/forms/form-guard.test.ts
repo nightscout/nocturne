@@ -507,26 +507,6 @@ describe("FormGuard", () => {
     });
   });
 
-  describe("touched via dirty", () => {
-    // touched is set by a Svelte $effect that watches `this.dirty`.
-    // In Node vitest, $effect callbacks don't execute because there is no
-    // Svelte runtime. This behavior is covered by browser-mode component
-    // tests instead. We verify the precondition: touched starts false and
-    // is not set synchronously even when dirty is true.
-    it.skip("touched becomes true when dirty (requires Svelte runtime)", () => {
-      const guard = new FormGuard({
-        form: createMockForm(),
-        schema,
-        el: () => null,
-        initial: () => ({ name: "Alice", age: 30 }),
-        values: () => ({ name: "Bob", age: 30 }),
-      });
-
-      // Would be true if $effect ran
-      expect(guard.touched).toBe(true);
-    });
-  });
-
   describe("submitted", () => {
     it("starts as false", () => {
       const guard = new FormGuard({

@@ -7,6 +7,7 @@ import type { MigrationJobInfo } from "$api";
 let history: MigrationJobInfo[] = [];
 
 const remote = vi.hoisted(() => ({
+  historyCalls: 0,
   statusCalls: 0,
   statusError: undefined as Error | undefined,
   historyGate: undefined as Promise<void> | undefined,
@@ -24,7 +25,10 @@ vi.mock("$api/generated/migrations.generated.remote", () => {
     getPendingConfig: () => ({ run: () => Promise.resolve({ hasPendingConfig: false }) }),
     getSources: () => ({ run: () => Promise.resolve([]) }),
     getHistory: () => ({
-      run: () => (remote.historyGate ? remote.historyGate.then(() => history) : Promise.resolve(history)),
+      run: () => {
+        remote.historyCalls += 1;
+        return remote.historyGate ? remote.historyGate.then(() => history) : Promise.resolve(history);
+      },
     }),
     getStatus: () => ({
       run: () => {
@@ -107,6 +111,7 @@ describe("settings/migration history", () => {
 
 describe("settings/migration running job", () => {
   beforeEach(() => {
+    remote.historyCalls = 0;
     remote.statusCalls = 0;
     remote.statusError = undefined;
     remote.historyGate = undefined;
@@ -181,7 +186,7 @@ describe("settings/migration running job", () => {
     });
 
     const { unmount } = render(MigrationPage, {});
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await vi.waitFor(() => expect(remote.historyCalls).toBe(1));
     unmount();
     release();
     await new Promise((resolve) => setTimeout(resolve, 2500));

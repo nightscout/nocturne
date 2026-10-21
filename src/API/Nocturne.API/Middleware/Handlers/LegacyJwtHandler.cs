@@ -91,6 +91,7 @@ public class LegacyJwtHandler : IAuthHandler
             Permissions = claims.Permissions,
             Roles = claims.Roles,
             RawToken = token,
+            TokenId = claims.GrantId,
             ExpiresAt = claims.ExpiresAt,
         };
 

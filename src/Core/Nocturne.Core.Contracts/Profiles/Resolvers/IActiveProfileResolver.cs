@@ -10,9 +10,15 @@ public interface IActiveProfileResolver
 {
     /// <summary>
     /// Returns the name of the stored profile active at the given time, or null if no profile
-    /// activation applies (callers should fall back to "Default").
+    /// activation applies, when <see cref="GetDefaultProfileNameAsync"/> is the one in force.
     /// </summary>
     Task<string?> GetActiveProfileNameAsync(long timeMills, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the name of the stored profile in force when no profile activation applies: the
+    /// tenant's default store, or "Default" when it has none.
+    /// </summary>
+    Task<string> GetDefaultProfileNameAsync(CancellationToken ct = default);
 
     /// <summary>
     /// Returns the percentage and timeshift to apply to the active profile's schedules at the given

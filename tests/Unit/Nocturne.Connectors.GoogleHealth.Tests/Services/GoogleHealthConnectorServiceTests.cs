@@ -95,6 +95,15 @@ public class GoogleHealthConnectorServiceTests
         public override DateTimeOffset GetUtcNow() => initial.AddSeconds(Reads++);
     }
 
+    /// <summary>A sub-second instant mid-month, so a test's day and month arithmetic and the live
+    /// window's minute rounding read the same clock as the service.</summary>
+    private static readonly DateTimeOffset Now = new(2026, 10, 21, 4, 24, 59, 999, TimeSpan.Zero);
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
     private sealed class TestTimeProvider : TimeProvider
     {
         private long ticks;
@@ -290,14 +299,14 @@ public class GoogleHealthConnectorServiceTests
             "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
             var path when path.Contains("/weight/") => CaptureRange(request, requestedFrom.Add),
             _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
-        });
+        }, new FixedTimeProvider(Now));
         fixture.StoredConfiguration = JsonSerializer.Serialize(new { importFrom = (string?)null, lastSyncedTo = watermark });
 
         var result = await fixture.Service.SyncDataAsync(fixture.Configuration(), CancellationToken.None);
 
         Assert.True(result.Success);
         Assert.Equal(new DateTimeOffset(2026, 9, 10, 9, 55, 0, TimeSpan.Zero), requestedFrom[0]);
-        var today = DateTimeOffset.UtcNow.Date;
+        var today = Now.UtcDateTime.Date;
         var monthStart = new DateTime(today.AddDays(-1).Year, today.AddDays(-1).Month, 1);
         Assert.Equal(today.AddDays(-7) > monthStart ? today.AddDays(-7) : monthStart, requestedFrom[1].UtcDateTime.Date);
     }
@@ -417,7 +426,7 @@ public class GoogleHealthConnectorServiceTests
             "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
             var path when path.Contains("/weight/") => CaptureRange(request, requestedFrom.Add),
             _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
-        });
+        }, new FixedTimeProvider(Now));
         var config = fixture.Configuration();
         config.ImportFrom = "2000-01-01T00:00:00.0000000+00:00";
         config.HistoryDays = 7;
@@ -425,7 +434,7 @@ public class GoogleHealthConnectorServiceTests
         var result = await fixture.Service.SyncDataAsync(config, CancellationToken.None);
 
         Assert.True(result.Success);
-        var today = DateTimeOffset.UtcNow.Date;
+        var today = Now.UtcDateTime.Date;
         Assert.Equal(today, requestedFrom[0].UtcDateTime.Date);
         var firstMonth = new DateTime(today.AddDays(-1).Year, today.AddDays(-1).Month, 1);
         Assert.Equal(firstMonth, requestedFrom[1].UtcDateTime.Date);
@@ -433,7 +442,7 @@ public class GoogleHealthConnectorServiceTests
         var repeated = await fixture.Service.SyncDataAsync(config, CancellationToken.None);
 
         Assert.True(repeated.Success);
-        Assert.InRange(requestedFrom[2], DateTimeOffset.UtcNow.AddMinutes(-6), DateTimeOffset.UtcNow);
+        Assert.InRange(requestedFrom[2], Now.AddMinutes(-6), Now);
         Assert.Equal(firstMonth.AddMonths(-1), requestedFrom[3].UtcDateTime.Date);
     }
 
@@ -448,9 +457,9 @@ public class GoogleHealthConnectorServiceTests
             ? Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}""")
             : ++reads == (failHistorical ? 2 : 1)
                 ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
-                : Json("""{"dataPoints":[]}"""));
+                : Json("""{"dataPoints":[]}"""), new FixedTimeProvider(Now));
         var config = fixture.Configuration();
-        if (noHistory) config.ImportFrom = DateTimeOffset.UtcNow.Date.ToString("O");
+        if (noHistory) config.ImportFrom = Now.UtcDateTime.Date.ToString("O");
 
         var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
 
@@ -473,11 +482,11 @@ public class GoogleHealthConnectorServiceTests
                 new HttpResponseMessage(HttpStatusCode.ServiceUnavailable),
             var path when path.Contains("/weight/") => CaptureRange(request, retryRanges.Add),
             _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
-        });
+        }, new FixedTimeProvider(Now));
         var config = fixture.Configuration();
         config.HistoryDays = 7;
 
-        var today = DateTimeOffset.UtcNow.Date;
+        var today = Now.UtcDateTime.Date;
         var monthStart = new DateTime(today.AddDays(-1).Year, today.AddDays(-1).Month, 1);
         var windowFrom = today.AddDays(-7) > monthStart ? today.AddDays(-7) : monthStart;
         var retryDays = Math.Max(1, (int)Math.Ceiling((today - windowFrom).TotalDays / 2));
@@ -496,7 +505,7 @@ public class GoogleHealthConnectorServiceTests
         var retried = await fixture.Service.SyncDataAsync(config, CancellationToken.None);
 
         Assert.True(retried.Success);
-        Assert.InRange(retryRanges[0], DateTimeOffset.UtcNow.AddMinutes(-6), DateTimeOffset.UtcNow);
+        Assert.InRange(retryRanges[0], Now.AddMinutes(-6), Now);
         Assert.Equal(today.AddDays(-retryDays), retryRanges[1].UtcDateTime.Date);
     }
 

@@ -440,4 +440,32 @@ public class ProfileDecomposerTests
 
         ProfileDecomposer.FromMgdl(stored, "mmol").Should().Be(mmol);
     }
+
+    [Fact]
+    public void EveryOneDecimalMmolValue_SurvivesRepeatedReadAndReupload()
+    {
+        var drifted = new List<double>();
+        for (var tenths = 1; tenths <= 500; tenths++)
+        {
+            var uploaded = tenths / 10.0;
+            var value = uploaded;
+            for (var cycle = 0; cycle < 3; cycle++)
+            {
+                var sens = ProfileDecomposer.ConvertSensitivityValues(
+                    [new TimeValue { Time = "00:00", Value = value }], "mmol")[0].Value;
+                var target = ProfileDecomposer.MergeTargets(
+                    [new TimeValue { Time = "00:00", Value = value }],
+                    [new TimeValue { Time = "00:00", Value = value }],
+                    "mmol/L")[0];
+
+                sens.Should().Be(target.Low).And.Be(target.High);
+                value = ProfileDecomposer.FromMgdl(sens, "mmol");
+            }
+
+            if (value != uploaded)
+                drifted.Add(uploaded);
+        }
+
+        drifted.Should().BeEmpty();
+    }
 }

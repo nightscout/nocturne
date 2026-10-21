@@ -581,7 +581,6 @@ public static class ConnectorTimeouts
     /// <summary>
     /// WebSocket reconnection and shutdown timing constants.
     /// </summary>
-    /// <seealso cref="WebSocketEvents"/>
     public static class WebSocket
     {
         /// <summary>

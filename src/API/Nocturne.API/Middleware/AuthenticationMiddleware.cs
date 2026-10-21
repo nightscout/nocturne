@@ -104,24 +104,9 @@ public class AuthenticationMiddleware
             }
             context.SetPermissionTrie(permissionTrie);
 
-            // Resolve OAuth scopes from either explicit scopes (OAuth tokens) or
-            // translated from legacy permissions (api-secret, access tokens, etc.)
-            IReadOnlySet<string> grantedScopes;
-            if (authContext.IsAuthenticated && authContext.Scopes.Count > 0)
-            {
-                // OAuth token path: scopes came directly from the token claims
-                grantedScopes = Scope.Normalize(authContext.Scopes);
-            }
-            else if (authContext.IsAuthenticated && authContext.Permissions.Count > 0)
-            {
-                // Legacy path: translate Shiro-style permissions to scopes
-                grantedScopes = ScopeTranslator.FromPermissions(authContext.Permissions);
-            }
-            else
-            {
-                grantedScopes = new HashSet<string>();
-            }
-            context.SetGrantedScopes(grantedScopes);
+            context.SetGrantedScopes(authContext.IsAuthenticated
+                ? CredentialScopes(authContext)
+                : new HashSet<string>());
 
             // Also set the legacy AuthenticationContext for backward compatibility
             context.SetLegacyAuthContext(MapToLegacyContext(authContext));
@@ -298,6 +283,15 @@ public class AuthenticationMiddleware
 
         await _next(context);
     }
+
+    /// <summary>
+    /// The scopes a credential carries of its own, before <see cref="MemberScopeMiddleware"/>
+    /// intersects them with a membership: its OAuth scopes, else its legacy permissions translated.
+    /// </summary>
+    internal static IReadOnlySet<string> CredentialScopes(AuthContext authContext) =>
+        authContext.Scopes.Count > 0
+            ? Scope.Normalize(authContext.Scopes)
+            : ScopeTranslator.FromPermissions(authContext.Permissions);
 
     /// <summary>
     /// Run through the <see cref="IAuthHandler"/> chain to authenticate the request.

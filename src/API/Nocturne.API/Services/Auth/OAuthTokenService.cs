@@ -22,9 +22,23 @@ public class OAuthTokenService : IOAuthTokenService
     private readonly ISubjectService _subjectService;
     private readonly IOAuthGrantService _grantService;
     private readonly IOAuthTokenRevocationCache _revocationCache;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<OAuthTokenService> _logger;
 
     private static readonly TimeSpan AuthorizationCodeLifetime = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// How long a rotated refresh token stays redeemable. A client that sends parallel requests,
+    /// each refreshing on its 401 with the same token, must not lose its grant to its own race, so
+    /// within this window a rotated token may mint up to <see cref="MaxGraceRedemptions"/> sibling
+    /// successors (Okta's grace period, Auth0's reuse interval). A sibling starts a chain the
+    /// rotation link does not record, so the cap bounds how far a copied token can fork. Any other
+    /// presentation of a rotated token is reuse and revokes the grant.
+    /// </summary>
+    private static readonly TimeSpan RefreshReuseGrace = TimeSpan.FromSeconds(10);
+
+    /// <inheritdoc cref="RefreshReuseGrace"/>
+    private const int MaxGraceRedemptions = 1;
 
     /// <summary>
     /// Initializes a new instance of <see cref="OAuthTokenService"/>.
@@ -40,6 +54,7 @@ public class OAuthTokenService : IOAuthTokenService
         ISubjectService subjectService,
         IOAuthGrantService grantService,
         IOAuthTokenRevocationCache revocationCache,
+        TimeProvider timeProvider,
         ILogger<OAuthTokenService> logger
     )
     {
@@ -48,8 +63,11 @@ public class OAuthTokenService : IOAuthTokenService
         _subjectService = subjectService;
         _grantService = grantService;
         _revocationCache = revocationCache;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
+
+    private DateTime UtcNow => _timeProvider.GetUtcNow().UtcDateTime;
 
     /// <inheritdoc />
     public async Task<string> GenerateAuthorizationCodeAsync(
@@ -74,7 +92,7 @@ public class OAuthTokenService : IOAuthTokenService
             Scopes = scopes.ToList(),
             RedirectUri = redirectUri,
             CodeChallenge = codeChallenge,
-            ExpiresAt = DateTime.UtcNow.Add(AuthorizationCodeLifetime),
+            ExpiresAt = UtcNow.Add(AuthorizationCodeLifetime),
             LimitTo24Hours = limitTo24Hours,
         };
 
@@ -102,7 +120,7 @@ public class OAuthTokenService : IOAuthTokenService
     {
         await using var db = await _contexts.CreateAsync(ct);
         var codeHash = _jwtService.HashRefreshToken(code);
-        var now = DateTime.UtcNow;
+        var now = UtcNow;
 
         // Claim the code before anything else. Redemption state is not a concurrency token and the
         // unique index is on the hash, so a read-then-write check let two simultaneous exchanges
@@ -212,6 +230,7 @@ public class OAuthTokenService : IOAuthTokenService
         var tokenHash = _jwtService.HashRefreshToken(refreshToken);
 
         var oauthToken = await db.OAuthRefreshTokens
+            .AsNoTracking()
             .Include(t => t.Grant)
                 .ThenInclude(g => g!.Client)
             .FirstOrDefaultAsync(t => t.TokenHash == tokenHash, ct);
@@ -221,24 +240,12 @@ public class OAuthTokenService : IOAuthTokenService
             return OAuthTokenResult.Fail("invalid_grant", "Refresh token is invalid.");
         }
 
-        // Token reuse detection: if the token was already revoked but has a replacement,
-        // this is a potential token theft — revoke the entire grant
-        if (oauthToken.IsRevoked)
+        if (oauthToken.IsRevoked && !IsRotatedWithinGrace(oauthToken))
         {
-            if (oauthToken.ReplacedById != null && oauthToken.Grant != null)
-            {
-                _logger.LogWarning(
-                    "Refresh token reuse detected for grant {GrantId}. Revoking entire grant.",
-                    oauthToken.GrantId
-                );
-                await _grantService.RevokeGrantAsync(oauthToken.GrantId, ct);
-            }
-
-            return OAuthTokenResult.Fail("invalid_grant", "Refresh token has been revoked.");
+            return await RefuseRevokedAsync(oauthToken, ct);
         }
 
-        // Check expiry
-        if (oauthToken.IsExpired)
+        if (UtcNow >= oauthToken.ExpiresAt)
         {
             return OAuthTokenResult.Fail("invalid_grant", "Refresh token has expired.");
         }
@@ -255,25 +262,55 @@ public class OAuthTokenService : IOAuthTokenService
             return OAuthTokenResult.Fail("invalid_grant", "Client ID does not match.");
         }
 
-        // Rotate: revoke old token, create new one
-        oauthToken.RevokedAt = DateTime.UtcNow;
+        if (oauthToken.IsRevoked && !await TryRedeemWithinGraceAsync(db, oauthToken, ct))
+        {
+            return RevokedTokenFailure();
+        }
 
         var newRefreshToken = _jwtService.GenerateRefreshToken();
-        var newTokenHash = _jwtService.HashRefreshToken(newRefreshToken);
-
         var newTokenEntity = new Infrastructure.Data.Entities.OAuthRefreshTokenEntity
         {
             TenantId = oauthToken.Grant.TenantId,
             GrantId = oauthToken.GrantId,
-            TokenHash = newTokenHash,
-            ExpiresAt = DateTime.UtcNow.AddDays(90),
+            TokenHash = _jwtService.HashRefreshToken(newRefreshToken),
+            ExpiresAt = UtcNow.AddDays(90),
         };
 
         db.OAuthRefreshTokens.Add(newTokenEntity);
-
-        // Set the rotation chain link (UUID v7 assigns Id at Add() time, so it's available before save)
-        oauthToken.ReplacedById = newTokenEntity.Id;
         await db.SaveChangesAsync(ct);
+
+        // A live token is claimed with one conditional statement, so exactly one caller rotates it.
+        // The successor exists first so the claim links it in the same statement: a reader never
+        // sees the token revoked without its replacement, which is what tells a rotation from a
+        // revocation.
+        if (!oauthToken.IsRevoked)
+        {
+            var claimed = await db.OAuthRefreshTokens
+                .Where(t => t.Id == oauthToken.Id && t.RevokedAt == null)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(t => t.RevokedAt, UtcNow)
+                    .SetProperty(t => t.ReplacedById, newTokenEntity.Id), ct);
+
+            if (claimed == 0)
+            {
+                var winner = await db.OAuthRefreshTokens
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(t => t.Id == oauthToken.Id, ct);
+
+                var refusal = winner is null ? RevokedTokenFailure()
+                    : !IsRotatedWithinGrace(winner) ? await RefuseRevokedAsync(winner, ct)
+                    : await TryRedeemWithinGraceAsync(db, winner, ct) ? null
+                    : RevokedTokenFailure();
+
+                if (refusal is not null)
+                {
+                    await db.OAuthRefreshTokens
+                        .Where(t => t.Id == newTokenEntity.Id)
+                        .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, UtcNow), ct);
+                    return refusal;
+                }
+            }
+        }
 
         // Update grant last used
         await _grantService.UpdateLastUsedAsync(oauthToken.GrantId, null, null, ct);
@@ -311,6 +348,72 @@ public class OAuthTokenService : IOAuthTokenService
         var scopeStr = string.Join(" ", grant.Scopes);
 
         return OAuthTokenResult.Ok(accessToken, newRefreshToken, expiresIn, scopeStr);
+    }
+
+    private static OAuthTokenResult RevokedTokenFailure() =>
+        OAuthTokenResult.Fail("invalid_grant", "Refresh token has been revoked.");
+
+    /// <summary>
+    /// Whether <paramref name="token"/> was rotated, not revoked, within <see cref="RefreshReuseGrace"/>.
+    /// </summary>
+    private bool IsRotatedWithinGrace(Infrastructure.Data.Entities.OAuthRefreshTokenEntity token) =>
+        token.ReplacedById != null && token.RevokedAt >= UtcNow - RefreshReuseGrace;
+
+    /// <summary>
+    /// Refuses a revoked token presented outside <see cref="RefreshReuseGrace"/>. A rotated one is
+    /// reuse and revokes the grant; one revoked without rotation is simply refused.
+    /// </summary>
+    private async Task<OAuthTokenResult> RefuseRevokedAsync(
+        Infrastructure.Data.Entities.OAuthRefreshTokenEntity token, CancellationToken ct)
+    {
+        if (token.ReplacedById != null)
+        {
+            await RevokeGrantOnRefreshReuseAsync(token.GrantId, ct);
+        }
+
+        return RevokedTokenFailure();
+    }
+
+    /// <summary>
+    /// Claims one of a rotated token's <see cref="MaxGraceRedemptions"/>. Past the cap the
+    /// presentation is reuse and revokes the grant. A successor signed out by revocation is not
+    /// undone, so the token is refused without a claim.
+    /// </summary>
+    private async Task<bool> TryRedeemWithinGraceAsync(
+        NocturneDbContext db, Infrastructure.Data.Entities.OAuthRefreshTokenEntity token, CancellationToken ct)
+    {
+        var successorSignedOut = await db.OAuthRefreshTokens.AnyAsync(
+            t => t.Id == token.ReplacedById && t.RevokedAt != null && t.ReplacedById == null, ct);
+        if (successorSignedOut)
+        {
+            return false;
+        }
+
+        var claimed = await db.OAuthRefreshTokens
+            .Where(t => t.Id == token.Id && t.GraceRedemptions < MaxGraceRedemptions)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.GraceRedemptions, t => t.GraceRedemptions + 1), ct);
+
+        if (claimed == 0)
+        {
+            await RevokeGrantOnRefreshReuseAsync(token.GrantId, ct);
+            return false;
+        }
+
+        _logger.LogWarning(
+            "Rotated refresh token {TokenId} redeemed inside the reuse grace window for grant {GrantId}",
+            token.Id, token.GrantId);
+        return true;
+    }
+
+    /// <summary>
+    /// Revokes the grant behind a reused refresh token. Revoking the grant also revokes every
+    /// refresh token it issued.
+    /// </summary>
+    private async Task RevokeGrantOnRefreshReuseAsync(Guid grantId, CancellationToken ct)
+    {
+        _logger.LogWarning(
+            "Refresh token reuse detected for grant {GrantId}. Revoking entire grant.", grantId);
+        await _grantService.RevokeGrantAsync(grantId, ct);
     }
 
     /// <inheritdoc />
@@ -352,7 +455,7 @@ public class OAuthTokenService : IOAuthTokenService
             return false;
         }
 
-        refreshToken.RevokedAt = DateTime.UtcNow;
+        refreshToken.RevokedAt = UtcNow;
         await db.SaveChangesAsync(ct);
         _logger.LogInformation(
             "OAuthAudit: {Event} token_id={TokenId} grant_id={GrantId}",
@@ -384,7 +487,7 @@ public class OAuthTokenService : IOAuthTokenService
             return false;
         }
 
-        var remainingLifetime = claims.ExpiresAt - DateTimeOffset.UtcNow;
+        var remainingLifetime = claims.ExpiresAt - _timeProvider.GetUtcNow();
         await _revocationCache.RevokeAsync(claims.JwtId, remainingLifetime, ct);
 
         _logger.LogInformation(
@@ -418,10 +521,16 @@ public class OAuthTokenService : IOAuthTokenService
             return OAuthTokenResult.Fail("invalid_grant", "Client ID does not match.");
         }
 
-        if (entity.IsExpired)
+        if (UtcNow >= entity.ExpiresAt)
         {
             _logger.LogWarning("Device code exchange failed: code expired");
             return OAuthTokenResult.Fail("expired_token", "The device code has expired.");
+        }
+
+        if (entity.RedeemedAt != null)
+        {
+            await RevokeGrantOnDeviceCodeReplayAsync(entity.GrantId, ct);
+            return OAuthTokenResult.Fail("invalid_grant", "Device code is invalid.");
         }
 
         if (entity.IsDenied)
@@ -432,10 +541,10 @@ public class OAuthTokenService : IOAuthTokenService
 
         // Slow-down check per RFC 8628 Section 3.5
         if (entity.LastPolledAt != null
-            && (DateTime.UtcNow - entity.LastPolledAt.Value).TotalSeconds < entity.Interval)
+            && (UtcNow - entity.LastPolledAt.Value).TotalSeconds < entity.Interval)
         {
             entity.Interval += 5;
-            entity.LastPolledAt = DateTime.UtcNow;
+            entity.LastPolledAt = UtcNow;
             await db.SaveChangesAsync(ct);
 
             _logger.LogDebug(
@@ -447,12 +556,24 @@ public class OAuthTokenService : IOAuthTokenService
         }
 
         // Update last polled timestamp
-        entity.LastPolledAt = DateTime.UtcNow;
+        entity.LastPolledAt = UtcNow;
         await db.SaveChangesAsync(ct);
 
         if (!entity.IsApproved || entity.GrantId == null)
         {
             return OAuthTokenResult.Fail("authorization_pending", "The authorization request is still pending.");
+        }
+
+        // Same single-statement claim as the authorization code: two polls racing past the approval
+        // check must not both mint a token pair.
+        var claimed = await db.OAuthDeviceCodes
+            .Where(d => d.Id == entity.Id && d.RedeemedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.RedeemedAt, UtcNow), ct);
+
+        if (claimed == 0)
+        {
+            await RevokeGrantOnDeviceCodeReplayAsync(entity.GrantId, ct);
+            return OAuthTokenResult.Fail("invalid_grant", "Device code is invalid.");
         }
 
         // Load the grant with client info
@@ -504,6 +625,19 @@ public class OAuthTokenService : IOAuthTokenService
     }
 
     /// <summary>
+    /// Revokes the grant issued from a device code that was presented again after it was
+    /// exchanged, for the reason <see cref="RevokeGrantOnCodeReplayAsync"/> gives.
+    /// </summary>
+    private async Task RevokeGrantOnDeviceCodeReplayAsync(Guid? grantId, CancellationToken ct)
+    {
+        _logger.LogWarning("Device code replay detected for grant {GrantId}", grantId);
+        if (grantId != null)
+        {
+            await _grantService.RevokeGrantAsync(grantId.Value, ct);
+        }
+    }
+
+    /// <summary>
     /// Mint an access + refresh token pair for a grant.
     /// </summary>
     private async Task<OAuthTokenResult> MintTokenPairAsync(
@@ -548,7 +682,7 @@ public class OAuthTokenService : IOAuthTokenService
             TenantId = grant.TenantId,
             GrantId = grant.Id,
             TokenHash = tokenHash,
-            ExpiresAt = DateTime.UtcNow.AddDays(90),
+            ExpiresAt = UtcNow.AddDays(90),
         };
 
         db.OAuthRefreshTokens.Add(refreshTokenEntity);

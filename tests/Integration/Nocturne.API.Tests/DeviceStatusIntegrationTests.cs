@@ -349,8 +349,11 @@ public class DeviceStatusIntegrationTests : ApiIntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    private static int _timeSlot;
+
+    /// <summary>A time no other call in this run returns, ten minutes from the last.</summary>
     private static DateTime UniqueTime() =>
-        new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(Random.Shared.Next(0, 50_000) * 10);
+        new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(Interlocked.Increment(ref _timeSlot) * 10);
 
     private static string Iso(DateTime at) => at.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 

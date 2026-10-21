@@ -40,13 +40,11 @@ public static class ServiceNames
     /// <summary>
     /// Hub name for real-time CGM data and treatment updates via SignalR.
     /// </summary>
-    /// <seealso cref="WebSocketEvents"/>
     public const string DataHub = "data";
 
     /// <summary>
     /// Hub name for alarm and notification delivery via SignalR.
     /// </summary>
-    /// <seealso cref="WebSocketEvents"/>
     public const string NotificationHub = "notification";
 
     // ========================================================================

@@ -18,7 +18,7 @@ namespace Nocturne.API.Services.Profiles.Resolvers;
 /// Sub-divides each activation's stretch at every <see cref="BasalSchedule"/> version boundary so
 /// mid-window schedule edits are reflected (matching the per-instant behavior of <see cref="IBasalRateResolver"/>).
 /// An activation that carries its own schedules is one assignment. Gaps in activation coverage are
-/// filled with the implicit "Default" profile, also sub-divided by schedule version. When neither named profile spans nor any default schedule rows exist, an
+/// filled with the default store (<see cref="IActiveProfileResolver.GetDefaultProfileNameAsync"/>), also sub-divided by schedule version. When neither named profile spans nor any default schedule rows exist, an
 /// assignment with no entries is emitted: <see cref="BasalCalculator"/> renders that as a constant
 /// 1.0 U/hr fallback, identical to <c>BasalRateResolver</c>'s point fallback.
 ///
@@ -32,7 +32,6 @@ internal sealed class BasalSegmentService : IBasalSegmentService
     private readonly ITherapySettingsRepository _therapyRepo;
     private readonly ITenantCache _cache;
 
-    private const string DefaultProfileName = "Default";
     private const int CacheTtlSeconds = 5;
 
     public BasalSegmentService(
@@ -84,13 +83,14 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         var spans = await _activeProfileResolver.GetActiveProfileSpansForRangeAsync(
             window.StartMills, window.EndMills, ct);
 
+        var defaultProfile = await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
         var spanProfileNames = spans
             .Select(s => s.ProfileName)
             .Distinct()
             .ToList();
-        var profileNames = spanProfileNames.Contains(DefaultProfileName)
+        var profileNames = spanProfileNames.Contains(defaultProfile)
             ? spanProfileNames
-            : spanProfileNames.Append(DefaultProfileName).ToList();
+            : spanProfileNames.Append(defaultProfile).ToList();
 
         // For each profile name, load schedule-version history and timezone.
         var byProfile = new Dictionary<string, ProfileResources>(StringComparer.Ordinal);
@@ -114,7 +114,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
 
             // Gap before this span → default.
             if (cursor < spanStart)
-                result.AddRange(BuildAssignmentsForRange(cursor, spanStart, DefaultProfileName, byProfile, percentage: 100, timeshiftMs: 0));
+                result.AddRange(BuildAssignmentsForRange(cursor, spanStart, defaultProfile, byProfile, percentage: 100, timeshiftMs: 0));
 
             var (percentage, timeshiftMs) = span.Adjustment is { } adjustment
                 ? (adjustment.Percentage, adjustment.TimeshiftMs)
@@ -135,7 +135,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
 
         // Trailing gap → default.
         if (cursor < window.EndMills)
-            result.AddRange(BuildAssignmentsForRange(cursor, window.EndMills, DefaultProfileName, byProfile, percentage: 100, timeshiftMs: 0));
+            result.AddRange(BuildAssignmentsForRange(cursor, window.EndMills, defaultProfile, byProfile, percentage: 100, timeshiftMs: 0));
 
         return result;
     }

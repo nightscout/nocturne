@@ -57,6 +57,30 @@ public class InstanceKeyDigestTests
         Assert.Null(InstanceKeyDigest.ResolveFingerprint(new ConfigurationBuilder().Build()));
     }
 
+    [Fact]
+    public void RequireKey_AKeyOfTheMinimumLength_IsReturned()
+    {
+        var key = new string('k', InstanceKeyDigest.MinimumLength);
+
+        Assert.Equal(key, InstanceKeyDigest.RequireKey(ConfigFor(key)));
+    }
+
+    [Fact]
+    public void RequireKey_AShorterKey_IsRefused()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => InstanceKeyDigest.RequireKey(ConfigFor(new string('k', InstanceKeyDigest.MinimumLength - 1))));
+
+        Assert.Contains("at least 32", ex.Message);
+    }
+
+    [Fact]
+    public void RequireKey_NoKeyConfigured_IsRefused()
+    {
+        Assert.Throws<InvalidOperationException>(
+            () => InstanceKeyDigest.RequireKey(new ConfigurationBuilder().Build()));
+    }
+
     private static IConfiguration ConfigFor(string instanceKey) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>

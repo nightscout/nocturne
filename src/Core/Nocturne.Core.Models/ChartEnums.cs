@@ -81,7 +81,6 @@ public enum DeviceEventType
 /// Replaces magic string comparisons with a proper enum.
 /// </summary>
 /// <seealso cref="Treatment"/>
-/// <seealso cref="TreatmentEventType"/>
 [JsonConverter(typeof(JsonStringEnumConverter<BolusType>))]
 public enum BolusType
 {

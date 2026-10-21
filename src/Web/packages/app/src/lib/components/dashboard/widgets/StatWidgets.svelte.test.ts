@@ -107,7 +107,10 @@ describe("stat widgets", () => {
       const { container, unmount } = render(DailySummaryWidget);
       const skeletonHeight = cellHeight(container);
 
-      const now = Date.now();
+      // Midday on the store's own clock: readings minutes before a wall-clock "now" fall on
+      // yesterday when the run is in the first minutes after midnight.
+      const now = new Date(2026, 9, 21, 12, 0).getTime();
+      store.nowMinute = now;
       store.entries = [
         { mills: now - 600_000, sgv: 110 },
         { mills: now - 300_000, sgv: 150 },

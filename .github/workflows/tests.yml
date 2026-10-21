@@ -93,6 +93,9 @@ jobs:
     timeout-minutes: 20
     env:
       BUILD_TESTS: ${{ needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.crates == 'true' }}
+      # A pull request may not add or keep a package with a moderate-or-worse advisory (see
+      # Directory.Packages.props); a push to main only warns, like the release builds.
+      NuGetAuditAsErrors: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-dotnet

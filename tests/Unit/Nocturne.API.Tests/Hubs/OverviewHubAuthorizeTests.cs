@@ -78,6 +78,7 @@ public class OverviewHubAuthorizeTests
         callerContext.SetupGet(c => c.ConnectionId).Returns(ConnectionId);
         callerContext.SetupGet(c => c.Features).Returns(features);
         callerContext.SetupGet(c => c.ConnectionAborted).Returns(CancellationToken.None);
+        callerContext.SetupGet(c => c.Items).Returns(new Dictionary<object, object?>());
 
         var groups = new Mock<IGroupManager>();
 
@@ -132,6 +133,30 @@ public class OverviewHubAuthorizeTests
                 It.Is<IReadOnlySet<string>>(s => s.SetEquals(grantedScopes)),
                 It.IsAny<AuthType>(), It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task Authorize_records_the_tenants_it_admitted_the_connection_to_for_re_checking()
+    {
+        var (hub, _, overview, _, _, _, httpContext) = CreateHub();
+        httpContext.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true,
+            SubjectId = Subject,
+            AuthType = AuthType.SessionCookie,
+        };
+        httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string> { Scope.GlucoseRead };
+        overview
+            .Setup(o => o.GetGlucoseReadTenantsAsync(Subject, It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { Tenant(TenantA), Tenant(TenantB) });
+
+        await hub.Authorize(new OverviewAuthorizeRequest());
+
+        var grant = HubAuthorizationState.Overview(hub.Context);
+        grant.Should().NotBeNull();
+        grant!.SubjectId.Should().Be(Subject);
+        grant.AuthType.Should().Be(AuthType.SessionCookie);
+        grant.TenantIds.Should().BeEquivalentTo(new[] { TenantA, TenantB });
     }
 
     [Fact]
