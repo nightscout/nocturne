@@ -40,8 +40,8 @@ importers:
         specifier: 7.0.0-dev.20260513.1
         version: 7.0.0-dev.20260513.1
       openapi-remote-codegen:
-        specifier: 0.8.0
-        version: 0.8.0(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.1.2(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))
+        specifier: 0.8.1
+        version: 0.8.1(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.1.2(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))
       prettier:
         specifier: ^3.7.2
         version: 3.7.2
@@ -5644,8 +5644,8 @@ packages:
   one-time@1.0.0:
     resolution: {integrity: sha512-5DXOiRKwuSEcQ/l0kGCF6Q3jcADFv5tSmRaJck/OqkVFcOzutB134KRSfF0xDrL39MNnqxbHBbUUcjZIhTgb2g==}
 
-  openapi-remote-codegen@0.8.0:
-    resolution: {integrity: sha512-6AEVBAJ/lD7+9bCdGrLuDB3Ok7yNwAoQxMhTYmkcv1hA8heBfqtgNm46jFLCgrMS4iQHEakc9Xysl0Ul1qyQTg==}
+  openapi-remote-codegen@0.8.1:
+    resolution: {integrity: sha512-Z7ZoGr9l20LSDlKNEqB5OY81Mk/Lhwf+AqeOEfoqhLT9suiKh0az8fOkwQnvVrNuUyUM53ITNh5Msgu48uPAUA==}
     hasBin: true
     peerDependencies:
       '@sveltejs/kit': '>=2'
@@ -12395,7 +12395,7 @@ snapshots:
     dependencies:
       fn.name: 1.1.0
 
-  openapi-remote-codegen@0.8.0(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.1.2(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0))):
+  openapi-remote-codegen@0.8.1(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.1.2(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0))):
     dependencies:
       '@sveltejs/kit': 2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.1.2(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0))
       openapi-types: 12.1.3
