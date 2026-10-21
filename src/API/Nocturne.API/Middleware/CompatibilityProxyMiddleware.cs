@@ -14,8 +14,7 @@ namespace Nocturne.API.Middleware;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Runs after <c>UseAuthorization</c>, so only requests the pipeline admits are mirrored to
-/// Nightscout. Controlled by <see cref="CompatibilityProxyConfiguration.Enabled"/>.
+/// Controlled by <see cref="CompatibilityProxyConfiguration.Enabled"/>.
 /// </para>
 /// <para>
 /// Uses <see cref="IRequestCloningService"/> to snapshot the request before the pipeline
