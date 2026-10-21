@@ -272,19 +272,32 @@ public class ChatIdentityControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task ClaimLink_reports_a_pre_existing_co_members_row_as_not_owned()
+    public async Task ClaimLink_answers_conflict_when_the_chat_account_is_linked_to_a_co_member()
     {
-        InsertLink(_tenantId, _coMemberSubjectId, "oliver", isDefault: true);
+        var coMemberLink = InsertLink(_tenantId, _coMemberSubjectId, "oliver", isDefault: true);
+        var token = InsertPendingToken(CallerChatUser);
+
+        var result = await CreateController().ClaimLink(
+            new ClaimChatIdentityLinkRequest { Token = token }, CancellationToken.None);
+
+        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        problem.Value.Should().BeOfType<ProblemDetails>();
+        (await Reload(coMemberLink)).NocturneUserId.Should().Be(_coMemberSubjectId);
+    }
+
+    [Fact]
+    public async Task ClaimLink_returns_the_callers_existing_link_again()
+    {
+        var existing = InsertLink(_tenantId, _callerSubjectId, "lily", isDefault: true);
         var token = InsertPendingToken(CallerChatUser);
 
         var result = await CreateController().ClaimLink(
             new ClaimChatIdentityLinkRequest { Token = token }, CancellationToken.None);
 
         var link = OkLink(result);
-        link.NocturneUserId.Should().Be(_coMemberSubjectId,
-            "a chat account already linked to this tenant keeps the link it has");
-        link.IsOwnedByCaller.Should().BeFalse(
-            "the by-id endpoints refuse this row, so the settings page must not offer them");
+        link.Id.Should().Be(existing);
+        link.IsOwnedByCaller.Should().BeTrue();
     }
 
     [Fact]

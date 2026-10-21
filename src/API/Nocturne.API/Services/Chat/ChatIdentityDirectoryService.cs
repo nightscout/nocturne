@@ -99,8 +99,12 @@ public sealed class ChatIdentityDirectoryService(
     /// <summary>
     /// Creates a directory link between a chat platform user and a tenant, auto-suffixing the label
     /// if it collides. Returns the existing entry when one already links this platform user to this
-    /// tenant — the pre-check ignores <c>IsActive</c> to match the unique index, which does too.
+    /// tenant for <paramref name="nocturneUserId"/> — the pre-check ignores <c>IsActive</c> to match
+    /// the unique index, which does too.
     /// </summary>
+    /// <exception cref="ChatAccountLinkedToAnotherMemberException">
+    /// The tenant's one link for this platform user belongs to another subject.
+    /// </exception>
     public async Task<ChatIdentityDirectoryEntry> CreateLinkAsync(
         string platform, string platformUserId, Guid tenantId, Guid nocturneUserId,
         string suggestedLabel, string suggestedDisplayName, CancellationToken ct)
@@ -115,7 +119,9 @@ public sealed class ChatIdentityDirectoryService(
                                           && d.TenantId == tenantId, ct);
             if (existing is not null)
             {
-                return existing;
+                return existing.NocturneUserId == nocturneUserId
+                    ? existing
+                    : throw new ChatAccountLinkedToAnotherMemberException();
             }
 
             var existingLabels = await db.ChatIdentityDirectory
@@ -150,9 +156,9 @@ public sealed class ChatIdentityDirectoryService(
                 // same platform user can take the label (ux_directory_user_label), the tenant slot
                 // (ux_directory_user_tenant) or the default flag (ux_directory_user_one_default) in
                 // between. Every one of those resolves the same way: re-read on a fresh context and
-                // try again — a taken label moves to the next suffix, a taken tenant slot returns
-                // the winner's row, a taken default flag leaves IsDefault false. Anything else the
-                // database rejects is deterministic, and the filter above lets it straight out.
+                // try again — a taken label moves to the next suffix, a taken tenant slot is the
+                // pre-check's to answer, a taken default flag leaves IsDefault false. Anything else
+                // the database rejects is deterministic, and the filter above lets it straight out.
                 logger.LogWarning(ex,
                     "Chat identity directory insert for {Platform}:{PlatformUserId} -> tenant {TenantId} was rejected on attempt {Attempt}; retrying with a fresh read",
                     platform, platformUserId, tenantId, attempt);

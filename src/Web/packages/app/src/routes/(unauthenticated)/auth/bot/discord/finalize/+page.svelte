@@ -4,7 +4,7 @@
 	import { resolve } from "$app/paths";
 	import Loader2 from "@lucide/svelte/icons/loader-circle";
 	import { claimLink } from "$lib/api/generated/chatIdentities.generated.remote";
-	import { describeSubmitError } from "$lib/forms/submit-error";
+	import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
 
 	// Read token from URL
 	const token = $derived(page.url.searchParams.get("token") ?? "");
@@ -41,10 +41,13 @@
 			console.error("Failed to claim OAuth2 link:", err);
 			result = {
 				success: false,
-				message: describeSubmitError(
-					err,
-					"We couldn't complete the Discord link. The token may have expired. Please try again from Settings."
-				),
+				message:
+					errorStatus(err) === 409
+						? "This Discord account is already linked to another member."
+						: describeSubmitError(
+								err,
+								"We couldn't complete the Discord link. The token may have expired. Please try again from Settings."
+							),
 			};
 		} finally {
 			loading = false;

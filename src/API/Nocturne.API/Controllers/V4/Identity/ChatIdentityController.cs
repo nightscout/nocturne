@@ -107,19 +107,27 @@ public class ChatIdentityController : ControllerBase
 
     /// <summary>Claim a pending link token after /connect slash command auth.</summary>
     /// <remarks>
-    /// A token carries no subject, and a chat account already linked to this tenant keeps the
-    /// link it has, so the row this returns may belong to another subject and predate the claim.
+    /// Answers 409 when this tenant's link for the chat account belongs to another member; see
+    /// <see cref="ChatAccountLinkedToAnotherMemberException"/>.
     /// </remarks>
     [HttpPost("links/claim")]
     [RemoteCommand(Invalidates = ["GetLinks"])]
     [ProducesResponseType(typeof(ChatIdentityLinkResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ChatIdentityLinkResponse>> ClaimLink(
         [FromBody] ClaimChatIdentityLinkRequest body, CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
         var userId = GetUserIdOrThrow();
-        var entry = await _service.ClaimPendingLinkAsync(tenantId, userId, body.Token, ct);
-        return Ok(MapResponse(entry, ownedByCaller: entry.NocturneUserId == userId));
+        try
+        {
+            var entry = await _service.ClaimPendingLinkAsync(tenantId, userId, body.Token, ct);
+            return Ok(MapResponse(entry, ownedByCaller: entry.NocturneUserId == userId));
+        }
+        catch (ChatAccountLinkedToAnotherMemberException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Conflict");
+        }
     }
 
     /// <inheritdoc cref="ChatIdentityService.SetDefaultAsync"/>
