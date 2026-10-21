@@ -39,8 +39,8 @@ public class ShareDataCategoriesGuardTests
         "dedup_reconcile_state",
 
         // Time-series whose member clamp is not yet decided.
-        "alert_deliveries", "alert_excursion_mutes", "compression_low_suggestions", "discrepancy_analyses",
-        "discrepancy_details", "linked_records",
+        "alert_deliveries", "alert_excursion_mutes", "discrepancy_analyses", "discrepancy_details",
+        "linked_records",
     };
 
     private static readonly Lazy<IReadOnlySet<string>> TenantScopedTables = new(() =>

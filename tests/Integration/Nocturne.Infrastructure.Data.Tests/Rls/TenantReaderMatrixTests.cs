@@ -184,6 +184,96 @@ public class TenantReaderMatrixTests : IAsyncLifetime
             "a root-resolved factory has no tenant, whatever any scope resolved");
     }
 
+    [Fact]
+    public async Task AScopeOpenedForAClampedMember_KeepsTheClamp()
+    {
+        var counts = await ReadInScopeOpenedForAsync(
+            s => s.GetRequiredService<ICategoryReadContext>().ClampMemberHistory());
+
+        counts.Should().Be(ReaderCounts.Clamped);
+    }
+
+    [Fact]
+    public async Task AScopeOpenedForAClampedShare_StaysNarrowedAsTheShare()
+    {
+        var counts = await ReadInScopeOpenedForAsync(
+            s => TenantReaderData.MarkShare(s, StepsAndFood, fullHistory: false));
+
+        counts.Should().Be(new ReaderCounts(Steps: 1, Foods: 1, Notes: 0, Spans: 0));
+    }
+
+    [Fact]
+    public async Task AScopeOpenedForAFullHistoryShare_SeesOnlyItsCategories()
+    {
+        var counts = await ReadInScopeOpenedForAsync(
+            s => TenantReaderData.MarkShare(s, StepsAndFood, fullHistory: true));
+
+        counts.Should().Be(new ReaderCounts(Steps: 2, Foods: 1, Notes: 0, Spans: 0));
+    }
+
+    [Fact]
+    public async Task AScopeOpenedForAShareWithNoCsv_SeesNothing()
+    {
+        var counts = await ReadInScopeOpenedForAsync(
+            s => TenantReaderData.MarkShare(s, csv: null, fullHistory: true));
+
+        counts.Should().Be(ReaderCounts.Nothing);
+    }
+
+    [Fact]
+    public async Task AScopeOpenedForAClampedMember_OnAnotherTenant_KeepsTheClamp()
+    {
+        await using var request = _provider.CreateAsyncScope();
+        TenantReaderData.Resolve(request.ServiceProvider, Guid.NewGuid());
+        request.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
+        var reader = TenantReader.Of(request.ServiceProvider)
+            .ForTenant(new TenantContext(_tenant, "reader", "Reader", true, false));
+
+        await using var job = TenantJobScope.OpenFor(_provider, reader, "test");
+        await using var context = await job.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+
+        (await TenantReaderData.CountAsync(context, _tenant)).Should().Be(ReaderCounts.Clamped);
+    }
+
+    [Fact]
+    public async Task AJobScope_ReadsAsNoOne_WhateverScopeOpenedIt()
+    {
+        await using var request = _provider.CreateAsyncScope();
+        request.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
+
+        await using var job = TenantJobScope.Open(
+            request.ServiceProvider, new TenantContext(_tenant, "reader", "Reader", true, false), "test");
+        await using var context = await job.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+
+        (await TenantReaderData.CountAsync(context, _tenant)).Should().Be(ReaderCounts.Owner,
+            "which is why ChildScopeGuardTests limits who may open one");
+    }
+
+    [Fact]
+    public void AReader_IsNotCapturedFromTheRoot()
+    {
+        var singletonsProvider = _provider.GetRequiredService<IServiceProvider>();
+
+        var act = () => TenantReader.Of(singletonsProvider);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*root provider*");
+    }
+
+    /// <summary>
+    /// Reads <see cref="_tenant"/> in a scope <see cref="TenantJobScope.OpenFor(IServiceProvider, TenantReader, string)"/>
+    /// opens for a request scope resolved to it and shaped by <paramref name="arrange"/>.
+    /// </summary>
+    private async Task<ReaderCounts> ReadInScopeOpenedForAsync(Action<IServiceProvider> arrange)
+    {
+        await using var request = _provider.CreateAsyncScope();
+        TenantReaderData.Resolve(request.ServiceProvider, _tenant);
+        arrange(request.ServiceProvider);
+
+        await using var job = TenantJobScope.OpenFor(_provider, TenantReader.Of(request.ServiceProvider), "test");
+        await using var context = await job.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+        return await TenantReaderData.CountAsync(context, _tenant);
+    }
+
     /// <summary>
     /// Reads <see cref="_tenant"/> through a context the scope's factory creates, the scope resolved
     /// to it first and then shaped by <paramref name="arrange"/>.

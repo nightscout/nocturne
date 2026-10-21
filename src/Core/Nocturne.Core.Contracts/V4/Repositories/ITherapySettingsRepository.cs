@@ -42,6 +42,12 @@ public interface ITherapySettingsRepository : IProfileScopedRepository<TherapySe
     Task<IReadOnlyList<TherapySettings>> GetDefaultsAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// Every live row decomposed from a profile document, as the stores it names and when, leaving out
+    /// profile-switch snapshots (see <see cref="TherapySettings.ProfileSwitchStoreMarker"/>).
+    /// </summary>
+    Task<IReadOnlyList<ProfileStoreRow>> GetStoreIndexAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// The newest row decomposed from a profile document, leaving out profile-switch snapshots
     /// (see <see cref="TherapySettings.ProfileSwitchStoreMarker"/>).
     /// </summary>
@@ -83,3 +89,15 @@ public interface ITherapySettingsRepository : IProfileScopedRepository<TherapySe
     /// <param name="id">The therapy settings row to flag, or <c>null</c> for none.</param>
     Task SetDefaultAsync(Guid? id, CancellationToken ct = default);
 }
+
+/// <summary>One store of a stored profile document, as <see cref="ITherapySettingsRepository.GetStoreIndexAsync"/> lists it.</summary>
+/// <param name="DocumentId">The document's <c>_id</c>, as <see cref="TherapySettings.DocumentIdOf"/> computes it.</param>
+/// <param name="FromDocument">
+/// Whether the row came from a legacy profile document, which carries all of its stores, rather than
+/// being written on its own through the V4 API.
+/// </param>
+/// <param name="IsDefault">See <see cref="TherapySettings.IsDefault"/>.</param>
+/// <param name="DocumentDefault">See <see cref="TherapySettings.DocumentDefaultProfile"/>.</param>
+public sealed record ProfileStoreRow(
+    string DocumentId, bool FromDocument, string ProfileName, DateTime Timestamp, bool IsDefault,
+    string? DocumentDefault = null);

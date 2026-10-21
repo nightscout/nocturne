@@ -103,23 +103,24 @@ public class ShareRlsPolicyTests
     }
 
     [Fact]
-    public void BuildPolicySql_MillisecondRecencyColumn_ComparesWithTheWindowStartInMilliseconds()
+    public void BuildPolicySql_UnixMillisRecencyColumn_ComparesWithTheWindowStartInMilliseconds()
     {
-        var sql = ShareRlsPolicy.BuildPolicySql("body_weights", null, "mills", recencyIsUnixMillis: true);
+        var sql = ShareRlsPolicy.BuildPolicySql(
+            "compression_low_suggestions", null, "end_mills", recencyIsUnixMillis: true);
 
         sql.Should().Contain(
             "USING (current_setting('app.is_share', true) IS DISTINCT FROM 'true'" +
-            " AND (\"mills\" >= (extract(epoch from now() - interval '24 hours') * 1000)::bigint" +
+            " AND (\"end_mills\" >= (extract(epoch from now() - interval '24 hours') * 1000)::bigint" +
             " OR NOT ((current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'" +
             " AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true')" +
             " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true')));");
     }
 
     [Fact]
-    public void BuildPolicySql_MillisecondsWithoutARecencyColumn_Throws()
+    public void BuildPolicySql_UnixMillisWithoutARecencyColumn_Throws()
     {
         var act = () => ShareRlsPolicy.BuildPolicySql(
-            "alert_instances", null, spanEndColumn: "resolved_at", recencyIsUnixMillis: true);
+            "state_spans", null, spanEndColumn: "end_timestamp", recencyIsUnixMillis: true);
         act.Should().Throw<ArgumentException>();
     }
 

@@ -237,6 +237,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             LoopSettings = profile.LoopSettings,
             IsAPNSProduction = profile.IsAPNSProduction,
             IsDefault = isDefault,
+            DocumentDefaultProfile = profile.DefaultProfile,
             EnteredBy = profile.EnteredBy,
             IsExternallyManaged = profile.IsExternallyManaged,
             StartDate = profile.StartDate,

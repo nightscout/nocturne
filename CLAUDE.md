@@ -292,10 +292,26 @@ keeps contexts and the raw factory out of constructors and scope lookups outside
 Infrastructure, and `ServiceProviderValidationTests` builds the real API registrations with
 `ValidateOnBuild` and `ValidateScopes`, which `Program.cs` enables only in Development.
 
-Background work opens its scope with `TenantJobScope.Open(provider, tenant, actor)`
-(`Nocturne.API.Multitenancy`): the tenant (or none) set on the scope's `ITenantAccessor` and
-the audit actor system-attributed. Everything the scope resolves or creates follows it. A
-request that works for other tenants does it in such a scope per tenant rather than moving
+A scope opened in code reads as no one: not a share and not clamped, and the clamp fails
+open. `TenantJobScope` (Infrastructure.Data) opens a job's scope with the audit actor
+system-attributed:
+
+- `OpenFor(provider, reader, actor)` for work done for a caller. `TenantReader.Of(scope)`
+  captures the caller's tenant, share, CSV, full history and clamp as values, so it also
+  survives a fire-and-forget job; `ClampedToDay` only narrows it, and `ForTenant` swaps only the
+  tenant, for a caller that has checked the reader may see it. Compression-low detection, the dedup
+  job and `TenantOverviewService` go through it. `CarryInto` sets a reader only on a scope that
+  still reads as no one. On `/hubs` requests `ReaderRecordingMiddleware` records the reader in
+  `HttpContext.Items`, which survive the copy SignalR makes of a long-polling request;
+  `TenantHubFilter` sets that reader (`HubConnectionReader`, narrowed by an in-band clamp) and the
+  connection's audit actor (`HubConnectionActor`, the in-band credential once one is granted) on
+  every invocation scope and on the long-polling copy's scope.
+- `Open(provider, tenant, actor)` reads as no one, for hosted loops, startup and
+  request-started work that returns nothing it read. `ChildScopeGuardTests` pins every member
+  that calls it, opens a raw `CreateScope`/`CreateAsyncScope`, or calls a helper returning such a
+  scope, grouped by reason.
+
+A request that works for other tenants does it in such a scope per tenant rather than moving
 its own accessor, since every context of the request would follow.
 
 The GUCs are written when a connection opens, so a connection held open keeps the state it
@@ -321,8 +337,9 @@ and by history window:
 `foods`, carry just the category gate, and a table with no governing scope carries
 only the `is_share` test, so it is hidden from shares and never clamped for members,
 unless `ShareDataCategories.HiddenRecencyColumns` gives it a recency column
-(`notes`, `body_weights`, `lab_hba1c_results`, ...; a Unix-millisecond column is listed in
-`UnixMillisRecencyTables`): then it is hidden from shares and clamped for members. A hidden table of
+(`notes`, `lab_hba1c_results`, ...; `compression_low_suggestions`, `body_weights` and
+`system_events` by Unix-millisecond columns listed in `UnixMillisRecencyTables`): then it is
+hidden from shares and clamped for members. A hidden table of
 spans in `ShareDataCategories.HiddenSpanEndColumns` (`state_spans`, `sleep_sessions`,
 `alert_instances`, `tracker_instances`, `in_app_notifications`, ...) is clamped by
 overlap instead, `("end_timestamp" IS NULL OR "end_timestamp" >= now() - interval
@@ -406,8 +423,8 @@ Design notes:
   in `full` may contain is stated on `ITenantCache`. The one exception is
   `StatusService`'s `status:system` key, which varies by whether the caller is
   authenticated rather than by the rows it can read. A read that fans out in a fresh DI
-  scope (`TenantOverviewService`) carries the caller's clamp into that scope's
-  `ICategoryReadContext` and reads through it.
+  scope (`TenantOverviewService`) opens it with `TenantJobScope.OpenFor`, so the scope's
+  partition is the caller's.
 
 ## Testing
 

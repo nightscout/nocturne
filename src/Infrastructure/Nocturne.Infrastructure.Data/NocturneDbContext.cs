@@ -758,6 +758,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
         }
 
+        // The legacy treatment read stamps a record with the Note beside it, deleted or not, on every
+        // page it serves, and both legacy-id indexes above skip a system-deleted Note.
+        modelBuilder.Entity<NoteEntity>()
+            .HasIndex([nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId)], "ix_notes_tenant_legacy_id_any")
+            .HasDatabaseName("ix_notes_tenant_legacy_id_any");
+
         // Matches HistoryPage's (sys_updated_at, id) order under the tenant filter, so a poll reads
         // its page off the index instead of sorting the tenant's whole table. Not partial on
         // deleted_at: a history read returns soft-deleted rows too (HistoryPage.IncludingDeleted).

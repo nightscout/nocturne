@@ -69,6 +69,18 @@ public class DeduplicationJobTenantScopeTests : IDisposable
     }
 
     [Fact]
+    public async Task StartDeduplicationJobAsync_ThrowsWithoutTheCallersReadContext()
+    {
+        var service = CreateService(
+            new Mock<IServiceScopeFactory>().Object, new StubTenantAccessor(TestTenant), withReadContext: false);
+
+        var act = async () => await service.StartDeduplicationJobAsync();
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*read context*");
+    }
+
+    [Fact]
     public async Task StartDeduplicationJobAsync_PinsTheCapturedTenantBeforeResolvingTheScopedService()
     {
         var calls = new List<string>();
@@ -166,11 +178,13 @@ public class DeduplicationJobTenantScopeTests : IDisposable
         return await service.StartDeduplicationJobAsync();
     }
 
-    private DeduplicationService CreateService(IServiceScopeFactory scopeFactory, ITenantAccessor? tenantAccessor)
+    private DeduplicationService CreateService(
+        IServiceScopeFactory scopeFactory, ITenantAccessor? tenantAccessor, bool withReadContext = true)
     {
         var context = _db.CreateContext();
         return new DeduplicationService(
-            context.AsFactory(), scopeFactory, NullLogger<DeduplicationService>.Instance, tenantAccessor);
+            context.AsFactory(), scopeFactory, NullLogger<DeduplicationService>.Instance, tenantAccessor,
+            withReadContext ? new CategoryReadContext() : null);
     }
 
     /// <summary>

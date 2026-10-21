@@ -95,12 +95,15 @@ public static class ShareDataCategories
     /// <summary>
     /// Recency column per table that no scope governs, so it stays hidden from every share, but whose
     /// rows a history-clamped member still reads only the last 24 hours of. <c>notes</c> holds the
-    /// Note and Announcement treatments the legacy treatment reads serve.
+    /// Note and Announcement treatments the legacy treatment reads serve;
+    /// <c>compression_low_suggestions</c> holds glucose-derived regions (nadir, drop rate) of past
+    /// nights.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> HiddenRecencyColumns =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["notes"] = "timestamp",
+            ["compression_low_suggestions"] = "end_mills",
             ["body_weights"] = "mills",
             ["lab_hba1c_results"] = "measured_at",
             ["system_events"] = "mills",
@@ -112,7 +115,7 @@ public static class ShareDataCategories
     /// compares it with the window's start in milliseconds.
     /// </summary>
     public static readonly IReadOnlySet<string> UnixMillisRecencyTables =
-        new HashSet<string>(StringComparer.Ordinal) { "body_weights", "system_events" };
+        new HashSet<string>(StringComparer.Ordinal) { "compression_low_suggestions", "body_weights", "system_events" };
 
     /// <summary>
     /// End column per hidden table of spans, which a history-clamped member reads by overlap with the
@@ -179,14 +182,14 @@ public static class ShareDataCategories
         RecencyColumns.TryGetValue(table, out var column) ? column
         : HiddenRecencyColumns.GetValueOrDefault(table);
 
+    /// <summary>Whether the <see cref="RecencyColumnFor"/> column of <paramref name="table"/> holds Unix milliseconds.</summary>
+    public static bool RecencyIsUnixMillis(string table) => UnixMillisRecencyTables.Contains(table);
+
     /// <summary>
     /// Returns the end column a span table is clamped by overlap on, or <c>null</c> when the table is
     /// not a clamped span table. See <see cref="HiddenSpanEndColumns"/>.
     /// </summary>
     public static string? SpanEndColumnFor(string table) => HiddenSpanEndColumns.GetValueOrDefault(table);
-
-    /// <summary>Whether the <see cref="RecencyColumnFor"/> column of <paramref name="table"/> holds Unix milliseconds.</summary>
-    public static bool RecencyIsUnixMillis(string table) => UnixMillisRecencyTables.Contains(table);
 
     /// <summary>
     /// Returns the parent a table is clamped through, or <c>null</c> when it is not. See
