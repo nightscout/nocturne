@@ -48,7 +48,7 @@ public class TreatmentReadServiceCountTests
         _bolusRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(10);
         _carbIntakeRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(5);
         _bgCheckRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(3);
-        _noteRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(2);
+        _projection.Setup(p => p.CountNotesServedApartAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(2);
         _deviceEventRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(4);
         _tempBasalRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(8);
         _bolusCalcRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(1);
@@ -69,7 +69,7 @@ public class TreatmentReadServiceCountTests
         _bolusRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(5);
         _carbIntakeRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
         _bgCheckRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
-        _noteRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        _projection.Setup(p => p.CountNotesServedApartAsync(It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
         _deviceEventRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
         _tempBasalRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
         _bolusCalcRepo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);

@@ -131,6 +131,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             page = ExtendToMillisecondAsync(page, ordered);
 
         page = await WithLiveMealPartnersAsync(db, page, ct);
+        page = await WithNoteHoldersAsync(db, page, ct);
 
         var treatments = await AssembleAsync(db, page, ct);
 
@@ -203,6 +204,51 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         return [.. page, .. partners];
     }
 
+    /// <summary>
+    /// Adds to <paramref name="page"/> the live records that serve a Note in it as their own notes,
+    /// stamped no older than that Note, which <see cref="AssembleAsync"/> then leaves out. Editing
+    /// only a treatment's notes moves the Note's row alone, so without this the client never sees
+    /// the change. Stamped at or below the page's newest row, the added rows leave its cursor where
+    /// it was.
+    /// </summary>
+    private async Task<List<FetchedRecord>> WithNoteHoldersAsync(
+        NocturneDbContext db,
+        List<FetchedRecord> page, CancellationToken ct)
+    {
+        var noteStamps = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+        foreach (var row in page)
+        {
+            if (row.Record is not Note { LegacyId: { } key })
+                continue;
+            if (!noteStamps.TryGetValue(key, out var stamp) || row.Modified > stamp)
+                noteStamps[key] = row.Modified;
+        }
+
+        if (noteStamps.Count == 0)
+            return page;
+
+        var holders = new List<FetchedRecord>();
+        foreach (var table in LegacyTreatmentTables.All.Where(t => t.RecordType != nameof(Note)))
+            holders.AddRange(await FetchSafe(table, t => t.LiveByTreatmentKeyAsync(db, noteStamps.Keys, ct)));
+
+        if (holders.Count == 0)
+            return page;
+
+        var stampOf = holders.ToDictionary(
+            RecordId, row => noteStamps[LegacyTreatmentTables.ServedKey(row.Record)!]);
+        var held = page
+            .Select(row => stampOf.TryGetValue(RecordId(row), out var stamp) && stamp > row.Modified
+                ? row with { Modified = stamp }
+                : row)
+            .ToList();
+        var seen = held.Select(RecordId).ToHashSet();
+        held.AddRange(holders
+            .Where(row => seen.Add(RecordId(row)))
+            .Select(row => row with { Modified = stampOf[RecordId(row)] }));
+
+        return held;
+    }
+
     private static Guid RecordId(FetchedRecord row) => row.Id;
 
     /// <inheritdoc />
@@ -273,26 +319,21 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         count += await FetchSafe(
             activations, _ => LegacyProfileActivationTable.InWindow(db, from, to).LongCountAsync(ct), 0L);
 
-        var notes = db.Notes.AsNoTracking().ExcludeNonPrimary(db, RecordType.Note);
-        if (from is { } lower)
+        return count;
+    }
+
+    /// <inheritdoc />
+    public async Task<long> CountNotesServedApartAsync(
+        long? fromMills, long? toMills, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        var notes = LegacyTreatmentTables.NotesServedApart(db).AsNoTracking().ExcludeNonPrimary(db, RecordType.Note);
+        if (MillsToDateTime(fromMills) is { } lower)
             notes = notes.Where(n => n.Timestamp >= lower);
-        if (to is { } upper)
+        if (MillsToDateTime(toMills) is { } upper)
             notes = notes.Where(n => n.Timestamp <= upper);
 
-        foreach (var table in LegacyTreatmentTables.StateSpanTables)
-        {
-            var keys = table.Rows(db).Select(s => s.OriginalId);
-            count -= await FetchSafe(
-                table, _ => notes.Where(n => n.LegacyId != null && keys.Contains(n.LegacyId)).LongCountAsync(ct), 0L);
-        }
-
-        var activationKeys = LegacyProfileActivationTable.Rows(db).Select(a => a.LegacyId);
-        count -= await FetchSafe(
-            activations,
-            _ => notes.Where(n => n.LegacyId != null && activationKeys.Contains(n.LegacyId)).LongCountAsync(ct),
-            0L);
-
-        return count;
+        return await notes.LongCountAsync(ct);
     }
 
     private static IQueryable<StateSpanEntity> MatchingId(IQueryable<StateSpanEntity> rows, string id)
@@ -334,8 +375,9 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     }
 
     /// <summary>
-    /// Assembles a page, serving the Note a span's treatment wrote beside it before
-    /// <see cref="LegacyTreatmentTables.NotesKey"/> was kept on the span as part of the span.
+    /// Assembles a page, serving the Note a record's treatment wrote beside it as part of that
+    /// record (<see cref="LegacyTreatmentTables.NotesServedWithAnotherRecord"/>). A deleted Note goes
+    /// with a record of its treatment on the page too, which carries the delete.
     /// </summary>
     private async Task<List<Treatment>> AssembleAsync(
         NocturneDbContext db,
@@ -351,38 +393,34 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             .ToList();
         if (noteKeys.Count > 0)
         {
-            var onSpans = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var table in LegacyTreatmentTables.StateSpanTables)
+            var onPage = rows
+                .Select(r => LegacyTreatmentTables.ServedKey(r.Record))
+                .OfType<string>()
+                .ToHashSet(StringComparer.Ordinal);
+            var live = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var table in LegacyTreatmentTables.All.Where(t => t.RecordType != nameof(Note)))
             {
-                onSpans.UnionWith(await FetchSafe(
-                    table,
-                    _ => table.Rows(db)
-                        .Where(s => noteKeys.Contains(s.OriginalId!))
-                        .Select(s => s.OriginalId!)
-                        .ToListAsync(ct),
-                    new List<string>()));
+                live.UnionWith((await FetchSafe(table, t => t.LiveByTreatmentKeyAsync(db, noteKeys, ct)))
+                    .Select(r => LegacyTreatmentTables.ServedKey(r.Record))
+                    .OfType<string>());
             }
-            onSpans.UnionWith(await FetchSafe(
-                LegacyTreatmentTables.ProfileActivationTable,
-                _ => LegacyProfileActivationTable.Rows(db)
-                    .Where(a => noteKeys.Contains(a.LegacyId!))
-                    .Select(a => a.LegacyId!)
-                    .ToListAsync(ct),
-                new List<string>()));
-            if (onSpans.Count > 0)
-                rows = rows.Where(r => r.Record is not Note { LegacyId: { } key } || !onSpans.Contains(key)).ToList();
+
+            rows = rows
+                .Where(r => r.Record is not Note { LegacyId: { } key }
+                    || !(live.Contains(key) || (r.Deleted && onPage.Contains(key))))
+                .ToList();
         }
 
-        var spanKeys = rows
+        var keys = rows
             .Select(r => LegacyTreatmentTables.ServedKey(r.Record))
             .OfType<string>()
             .Distinct()
             .ToList();
-        Dictionary<string, string>? spanNotes = null;
-        if (spanKeys.Count > 0)
+        Dictionary<string, string>? notes = null;
+        if (keys.Count > 0)
         {
-            spanNotes = (await db.Notes.AsNoTracking()
-                    .Where(n => n.LegacyId != null && spanKeys.Contains(n.LegacyId))
+            notes = (await db.Notes.AsNoTracking()
+                    .Where(n => n.LegacyId != null && keys.Contains(n.LegacyId))
                     .OrderBy(n => n.Id)
                     .Select(n => new { Key = n.LegacyId!, n.Text })
                     .ToListAsync(ct))
@@ -390,7 +428,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
                 .ToDictionary(g => g.Key, g => g.First().Text, StringComparer.Ordinal);
         }
 
-        return LegacyTreatmentTables.Assemble(rows, await LoadCarbFoodsAsync(rows, ct), spanNotes);
+        return LegacyTreatmentTables.Assemble(rows, await LoadCarbFoodsAsync(rows, ct), notes);
     }
 
     private async Task<CarbFoodIndex> LoadCarbFoodsAsync(

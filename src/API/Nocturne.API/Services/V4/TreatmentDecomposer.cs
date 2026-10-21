@@ -287,18 +287,19 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         }
         else if (string.Equals(eventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase)
               || string.Equals(eventType, "SMB", StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "Automatic Bolus", StringComparison.OrdinalIgnoreCase))
-        {
-            produceBolus = true;
-        }
-        else if (string.Equals(eventType, "Bolus", StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, "Automatic Bolus", StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, "Bolus", StringComparison.OrdinalIgnoreCase)
               || string.Equals(eventType, "External Insulin", StringComparison.OrdinalIgnoreCase))
         {
-            produceBolus = true;
+            // As with a meal half, a dose type carrying only carbs is a carb intake, and a Carb
+            // Correction carrying only insulin is a bolus, so neither drops what it was uploaded with.
+            produceBolus = hasInsulin || !hasCarbs;
+            produceCarbIntake = hasCarbs;
         }
         else if (string.Equals(eventType, "Carb Correction", StringComparison.OrdinalIgnoreCase))
         {
-            produceCarbIntake = true;
+            produceBolus = hasInsulin;
+            produceCarbIntake = hasCarbs || !hasInsulin;
         }
         else if (string.Equals(eventType, "BG Check", StringComparison.OrdinalIgnoreCase))
         {
@@ -314,7 +315,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         {
             produceNote = true;
         }
-        else if (string.Equals(eventType, "Bolus Wizard", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, BolusWizardEventType, StringComparison.OrdinalIgnoreCase))
         {
             produceBolusCalc = true;
             // Also produce a Bolus if insulin was delivered
@@ -900,7 +901,9 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         return new V4Models.Bolus
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+            AdditionalProperties = WithUploadedEventType(
+                TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                treatment, TreatmentTypes.CorrectionBolus),
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
             Insulin = treatment.Insulin ?? 0,
             Programmed = treatment.Programmed,
@@ -926,7 +929,9 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         return new V4Models.CarbIntake
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+            AdditionalProperties = WithUploadedEventType(
+                TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                treatment, TreatmentTypes.CarbCorrection),
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
             Carbs = treatment.Carbs ?? 0,
             Device = treatment.EnteredBy,
@@ -938,6 +943,18 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             AbsorptionTime = treatment.AbsorptionTime,
         };
     }
+
+    /// <summary>
+    /// <see cref="TreatmentUploadedEventType.AddTo"/>, except for a Bolus Wizard: its
+    /// <see cref="V4Models.BolusCalculation"/> is the record served under that event type.
+    /// </summary>
+    private static Dictionary<string, object?>? WithUploadedEventType(
+        Dictionary<string, object?>? record, Treatment treatment, string servedWithout) =>
+        string.Equals(treatment.EventType?.Trim(), BolusWizardEventType, StringComparison.OrdinalIgnoreCase)
+            ? record
+            : TreatmentUploadedEventType.AddTo(record, treatment, servedWithout);
+
+    private const string BolusWizardEventType = "Bolus Wizard";
 
     internal static V4Models.BGCheck MapToBGCheck(Treatment treatment, Guid? correlationId)
     {
@@ -2230,9 +2247,9 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         // delete that left them would leave them served.
         var total = await db.ExecuteInTransactionAsync(async token =>
         {
-            // A Note written beside a served span is served as part of it, so it is not counted apart.
+            // A Note written beside another record is served as part of it, so it is not counted apart.
             long deleted = -await ByTimeRange(
-                    LegacyTreatmentTables.NotesWrittenBesideServedStateSpans(db), from, to)
+                    LegacyTreatmentTables.NotesServedWithAnotherRecord(db), from, to)
                 .LongCountAsync(token);
             foreach (var table in DecomposedTables)
                 deleted += await table.SoftDeleteInRangeAsync(db, from, to, scope, token);

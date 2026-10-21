@@ -334,7 +334,7 @@ public class TreatmentReadService : ITreatmentStore
         var bolusCount = await _bolusRepo.CountAsync(from, to, ct);
         var carbCount = await _carbIntakeRepo.CountAsync(from, to, ct);
         var bgCheckCount = await _bgCheckRepo.CountAsync(from, to, ct);
-        var noteCount = await _noteRepo.CountAsync(from, to, ct);
+        var noteCount = await _projection.CountNotesServedApartAsync(fromMills, toMills, ct);
         var deviceEventCount = await _deviceEventRepo.CountAsync(from, to, ct);
         var tempBasalCount = await _tempBasalRepo.CountAsync(from, to, ct);
         var bolusCalcCount = await _bolusCalcRepo.CountAsync(from, to, ct);
@@ -392,8 +392,8 @@ public class TreatmentReadService : ITreatmentStore
 
     /// <summary>
     /// The stored record a client-sent treatment id names, or none and the id to look a state span up
-    /// by. A Note a served span's or activation's treatment wrote beside it, before notes were kept on
-    /// the span, is served as that span or activation, so it resolves to it.
+    /// by. A Note a treatment wrote beside another record is served as part of that record, so it
+    /// resolves to it; see <see cref="Nocturne.API.Services.V4.LegacyTreatmentTables.NotesServedWithAnotherRecord"/>.
     /// </summary>
     private async Task<(StoredRecord? Stored, string SpanId)> ResolveAsync(string id, CancellationToken ct)
     {
@@ -403,8 +403,8 @@ public class TreatmentReadService : ITreatmentStore
         if (stored.Record is not Note { LegacyId: { Length: > 0 } legacyId })
             return (stored, id);
 
-        if (await FindServedActivationAsync(new RecordKey.LegacyId(legacyId), ct) is { } activation)
-            return (activation, id);
+        if (await FindServingRecordAsync(new RecordKey.LegacyId(legacyId), ct) is { } holder)
+            return (holder, id);
 
         return await _projection.GetStateSpanTreatmentIdAsync(legacyId, ct) == legacyId
             ? (null, legacyId)
@@ -428,20 +428,23 @@ public class TreatmentReadService : ITreatmentStore
     {
         foreach (var key in RecordKeysFor(id))
         {
-            var stored = await FindAsync(_tempBasalRepo, key, ct)
-                ?? await FindAsync(_bolusRepo, key, ct)
-                ?? await FindAsync(_carbIntakeRepo, key, ct)
-                ?? await FindAsync(_bgCheckRepo, key, ct)
-                ?? await FindAsync(_deviceEventRepo, key, ct)
-                ?? await FindAsync(_bolusCalcRepo, key, ct)
-                ?? await FindServedActivationAsync(key, ct)
-                ?? await FindAsync(_noteRepo, key, ct);
+            var stored = await FindServingRecordAsync(key, ct) ?? await FindAsync(_noteRepo, key, ct);
             if (stored is not null)
                 return stored;
         }
 
         return null;
     }
+
+    /// <summary>The stored record a key names, the Notes left out.</summary>
+    private async Task<StoredRecord?> FindServingRecordAsync(RecordKey key, CancellationToken ct) =>
+        await FindAsync(_tempBasalRepo, key, ct)
+            ?? await FindAsync(_bolusRepo, key, ct)
+            ?? await FindAsync(_carbIntakeRepo, key, ct)
+            ?? await FindAsync(_bgCheckRepo, key, ct)
+            ?? await FindAsync(_deviceEventRepo, key, ct)
+            ?? await FindAsync(_bolusCalcRepo, key, ct)
+            ?? await FindServedActivationAsync(key, ct);
 
     /// <summary>
     /// A UUID is a record's own id or a client's legacy id. A 24-hex id is a client's legacy id, the

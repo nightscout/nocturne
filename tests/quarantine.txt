@@ -38,10 +38,6 @@ Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.PostProfile_WithMult
 Nocturne.API.Tests.Integration.Parity.V1.TimeQueryParityTests.GetTimesEchoWithPrefix_ReturnsSameShape | times/echo omits req.query.find
 Nocturne.API.Tests.Integration.Parity.V1.TimeQueryParityTests.GetTimesEchoWithRegex_ReturnsSameShape | times/echo omits req.query.find
 Nocturne.API.Tests.Integration.Parity.V1.TimeQueryParityTests.GetTimesEcho_ReturnsSameShape | times/echo omits req.query.find
-Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_WithCount_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
-Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_WithData_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
-Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_WithEventTypeFilter_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
-Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_WithFindFilter_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
 Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.PostTreatment_TempBasal_ReturnsSameShape | a temp basal loses percent
 Nocturne.API.Tests.Integration.Parity.V2.DDataParityTests.GetDDataAt_IsoDateString_ReturnsSameShape | ddata/at sgv order and rssi differ, and the frame omits upstream entries, dbstats sizes and a null lastProfileFromSwitch, and adds page
 Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_Empty_ReturnsSameShape | v2 properties omit buckets/upbat/pump and differ on sage/cage/bwp
@@ -85,15 +81,9 @@ Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithLimit_Ret
 Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithSkip_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
 Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithSortAsc_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
 Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithSortDesc_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_Filter_EventType_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
-Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_Filter_In_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
-Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_Filter_Insulin_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
+Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_Filter_EventType_ReturnsSameShape | two identifier-less treatments with the same created_at and eventType are stored apart; Nightscout replaces the first (#1902)
+Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_Filter_Insulin_ReturnsSameShape | two identifier-less treatments with the same created_at and eventType are stored apart; Nightscout replaces the first (#1902)
 Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_InvalidLimit_ReturnsSameShape | v3 search with an out-of-tolerance limit answers 500; Nightscout 400
-Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithData_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
-Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithFields_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
-Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithLimit_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
-Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithSkip_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
-Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithSort_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
 Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_ReturnsSameShape | v3 /version lacks the {status, result} envelope
 Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_WithData_ReturnsSameShape | v3 /version lacks the {status, result} envelope
 Nocturne.API.Tests.Integration.V4.BasalInjectionIntegrationTests.POST_with_same_SyncIdentifier_after_soft_delete_creates_new_row | a soft-deleted basal injection still holds its sync identifier (409 on re-POST)

@@ -342,7 +342,7 @@ public partial class V3HistoryDeletionIntegrationTests : ApiIntegrationTestBase
         var (next, _) = await HistoryAsync("treatments", cursor);
         var survivor = next.Should().ContainSingle(doc => IdOf(doc) == meal).Subject;
         survivor.TryGetProperty("isValid", out _).Should().BeFalse();
-        survivor.GetProperty("eventType").GetString().Should().Be("Correction Bolus");
+        survivor.GetProperty("eventType").GetString().Should().Be("Meal Bolus", "a record keeps the event type it was uploaded under");
         Number(survivor, "carbs").Should().BeNull();
         Number(survivor, "insulin").Should().Be(3.3);
     }
@@ -359,7 +359,7 @@ public partial class V3HistoryDeletionIntegrationTests : ApiIntegrationTestBase
             .Which.GetProperty("isValid").GetBoolean().Should().BeFalse();
         var carbs = next.Should().ContainSingle(doc => Number(doc, "carbs") == 44).Subject;
         IdOf(carbs).Should().NotBe(meal);
-        carbs.GetProperty("eventType").GetString().Should().Be("Carb Correction");
+        carbs.GetProperty("eventType").GetString().Should().Be("Meal Bolus", "a record keeps the event type it was uploaded under");
         carbs.TryGetProperty("isValid", out _).Should().BeFalse();
     }
 
