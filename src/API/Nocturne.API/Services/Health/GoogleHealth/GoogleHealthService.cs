@@ -242,9 +242,10 @@ public sealed class GoogleHealthService(
             var token = await oauth.ExchangeAuthorizationCodeAsync(
                 callback.Code, flow.Verifier, requestedScopes, ct);
             var stored = false;
+            string? account = null;
             try
             {
-                var account = await oauth.AccountKeyAsync(token.AccessToken!, ct);
+                account = await oauth.AccountKeyAsync(token.AccessToken!, ct);
                 if (await sessions.AccountKeyAsync(ct) is { } priorAccount && priorAccount != account)
                     throw new GoogleHealthException("account_mismatch");
 
@@ -255,7 +256,8 @@ public sealed class GoogleHealthService(
             {
                 // StartAsync refuses while a refresh token is stored, so this grant is not one the
                 // tenant still relies on, and unrevoked it would stay live at Google.
-                if (!stored && !await sessions.TryRevokeAsync(token.RefreshToken, CancellationToken.None))
+                if (!stored && await sessions.RevokeAsync(token.RefreshToken, account, CancellationToken.None)
+                        == GoogleHealthRevocation.Failed)
                     logger.LogWarning("Google Health could not revoke an unstored grant for tenant {TenantId}", TenantId);
             }
             await sessions.ActivateAsync(token, subject);
@@ -298,11 +300,12 @@ public sealed class GoogleHealthService(
         if ((await coordinator.DisconnectRequestAsync(TenantId, CancellationToken.None))?.RequestId != request) return;
         await coordinator.CompleteAsync(TenantId);
         var refreshToken = (await configurationLoader.LoadForTenantAsync(CancellationToken.None)).RefreshToken;
+        var account = await sessions.AccountKeyAsync(CancellationToken.None);
         await ClearFlowAsync(CancellationToken.None);
         await sessions.ClearAsync(removeAccount: false, subject, revoke: false, CancellationToken.None);
         await ForgetInventoryAsync(CancellationToken.None);
         var revokeFailed = !string.IsNullOrWhiteSpace(refreshToken) &&
-            !await sessions.TryRevokeAsync(refreshToken, CancellationToken.None);
+            await sessions.RevokeAsync(refreshToken, account, CancellationToken.None) == GoogleHealthRevocation.Failed;
         await connectorConfigurations.UpdateHealthStateAsync(
             ConnectorName,
             lastErrorMessage: revokeFailed ? "revoke_in_google" : string.Empty,

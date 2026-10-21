@@ -4,6 +4,8 @@ using Microsoft.Extensions.Options;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.Connectors.GoogleHealth.Services;
 
@@ -15,6 +17,8 @@ namespace Nocturne.Connectors.GoogleHealth.Services;
 public sealed class GoogleHealthSessionStore(
     IConnectorConfigurationService configurations,
     GoogleHealthAuthTokenProvider oauth,
+    IGoogleHealthGrantHolders holders,
+    ITenantAccessor tenants,
     IOptions<GoogleHealthPlatformOptions> platform,
     TimeSpan? revokeTimeout = null)
 {
@@ -118,10 +122,22 @@ public sealed class GoogleHealthSessionStore(
         }
     }
 
+    /// <summary>
+    /// The account a tenant's stored secrets hold a refresh token for, or null when they hold no
+    /// token or do not name the account.
+    /// </summary>
+    public static string? HeldAccount(IReadOnlyDictionary<string, string> secrets) =>
+        !string.IsNullOrWhiteSpace(secrets.GetValueOrDefault(RefreshTokenKey)) &&
+        secrets.GetValueOrDefault(AccountKey) is { Length: > 0 } account
+            ? account
+            : null;
+
     /// <summary>Once this returns, the grant is stored and must not be revoked by a later failure.</summary>
+    /// <remarks>The account is held before the token is saved, so no stored token is ever unheld.</remarks>
     public async Task StoreAsync(GoogleHealthTokenSession session, string accountKey, Guid subject, CancellationToken ct)
     {
         var secrets = await configurations.GetSecretsAsync(ConnectorName, ct);
+        await holders.HoldAsync(TenantId, accountKey, ct);
         secrets.Remove(LegacyClientSecretKey);
         secrets[SessionClientIdKey] = platform.Value.ClientId;
         secrets[RefreshTokenKey] = session.RefreshToken;
@@ -144,28 +160,37 @@ public sealed class GoogleHealthSessionStore(
     /// Also forget which Google account was connected, which is what lets a different account
     /// connect afterwards.
     /// </param>
-    /// <param name="revoke">Also revoke the stored refresh token (<see cref="TryRevokeAsync"/>).</param>
+    /// <param name="revoke">Also revoke the stored refresh token (<see cref="RevokeAsync"/>).</param>
     public async Task ClearAsync(bool removeAccount, Guid? subject, bool revoke, CancellationToken ct)
     {
         oauth.InvalidateToken();
         await SetEnabledAsync(false, subject?.ToString(), ct);
         var secrets = await configurations.GetSecretsAsync(ConnectorName, ct);
         if (revoke && secrets.GetValueOrDefault(RefreshTokenKey) is { Length: > 0 } refreshToken)
-            await TryRevokeAsync(refreshToken, ct);
+            await RevokeAsync(refreshToken, secrets.GetValueOrDefault(AccountKey), ct);
         secrets.Remove(RefreshTokenKey);
         secrets.Remove(GrantedScopesKey);
         secrets.Remove(SessionClientIdKey);
         secrets.Remove(LegacyClientSecretKey);
         if (removeAccount) secrets.Remove(AccountKey);
         await configurations.SaveSecretsAsync(ConnectorName, secrets, subject?.ToString(), ct);
+        await holders.ReleaseAsync(TenantId, ct);
     }
 
     /// <summary>
-    /// Asks Google to revoke <paramref name="refreshToken"/>, giving up after the revoke timeout.
-    /// Revocation needs no client credentials.
+    /// Asks Google to revoke <paramref name="refreshToken"/>'s grant, unless another tenant may
+    /// hold a token for the same account (<see cref="IGoogleHealthGrantHolders"/>) or the account
+    /// is unknown. Gives up after the revoke timeout; revocation needs no client credentials.
     /// </summary>
-    /// <returns>Whether Google confirmed the revocation.</returns>
-    public async Task<bool> TryRevokeAsync(string refreshToken, CancellationToken ct)
+    public async Task<GoogleHealthRevocation> RevokeAsync(string refreshToken, string? accountKey, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(accountKey) ||
+            await holders.MayBeHeldByAnotherTenantAsync(TenantId, accountKey, ct))
+            return GoogleHealthRevocation.Retained;
+        return await TryRevokeAsync(refreshToken, ct) ? GoogleHealthRevocation.Revoked : GoogleHealthRevocation.Failed;
+    }
+
+    private async Task<bool> TryRevokeAsync(string refreshToken, CancellationToken ct)
     {
         try
         {
@@ -183,6 +208,10 @@ public sealed class GoogleHealthSessionStore(
         }
     }
 
+    private Guid TenantId => tenants.IsResolved
+        ? tenants.TenantId
+        : throw new InvalidOperationException("Google Health sessions require a resolved tenant context");
+
     public async Task<string?> AccountKeyAsync(CancellationToken ct) =>
         (await configurations.GetSecretsAsync(ConnectorName, ct)).GetValueOrDefault(AccountKey);
 
@@ -195,4 +224,13 @@ public sealed class GoogleHealthSessionStore(
         using var document = JsonDocument.Parse(configuration.ToJsonString(Json));
         await configurations.SaveConfigurationAsync(ConnectorName, document, modifiedBy, ct);
     }
+}
+
+public enum GoogleHealthRevocation
+{
+    Revoked,
+    /// <summary>Google did not confirm the revocation in time.</summary>
+    Failed,
+    /// <summary>Not revoked: another tenant may still rely on the grant, or its account is unknown.</summary>
+    Retained
 }
