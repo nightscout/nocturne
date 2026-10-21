@@ -408,7 +408,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ vars.HA_INTEGRATION_APP_ID }}
+          app-id: ${{ secrets.HA_INTEGRATION_APP_ID }}
           private-key: ${{ secrets.HA_INTEGRATION_APP_PRIVATE_KEY }}
           owner: ryceg
           repositories: nocturne-homeassistant
