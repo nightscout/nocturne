@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Profiles;
 
@@ -100,6 +101,7 @@ public class ProfileProjectionService : IProfileProjectionService
         long cursorMills, int limit, CancellationToken ct = default)
     {
         var cursor = cursorMills;
+        using var committed = HistoryHorizon.Share();
 
         while (true)
         {
@@ -146,7 +148,11 @@ public class ProfileProjectionService : IProfileProjectionService
                     profile.IsValid = false;
                 }
 
-                if (profile.SrvModified > cursor && (horizon is null || profile.SrvModified <= horizon))
+                // A document is assembled from its live rows, which the history reads did not cut.
+                if (profile.SrvModified is { } modified
+                    && modified > cursor
+                    && (horizon is null || modified <= horizon)
+                    && committed.Admits(modified))
                     stamped[document.Key] = profile;
             }
 

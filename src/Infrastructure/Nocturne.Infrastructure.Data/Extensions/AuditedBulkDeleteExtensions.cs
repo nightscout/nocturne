@@ -154,7 +154,7 @@ public static class AuditedBulkDeleteExtensions
         var (deleted, _) = await context.ExecuteInTransactionAsync(
             async token =>
             {
-                var deletedAt = NocturneDbContext.UtcNowAtStoredPrecision();
+                var deletedAt = await HistoryHorizon.StampAsync(context, token);
                 var rows = await ScopeAsync(context, query, duplicates, token);
                 var deleted = await SoftDeleteRowsAsync(context, rows, auditContext, deletedAt, duplicates, token);
                 await WriteBulkDeleteSummaryAsync<T>(context, deleted.Count, scope, auditContext, token);
@@ -202,7 +202,7 @@ public static class AuditedBulkDeleteExtensions
     {
         var (result, _) = await context.ExecuteInTransactionAsync(async token =>
         {
-            var deletedAt = NocturneDbContext.UtcNowAtStoredPrecision();
+            var deletedAt = await HistoryHorizon.StampAsync(context, token);
             var rows = await ScopeAsync(context, query, duplicates, token);
             // One row past the cap is all it takes to know the match set exceeds it.
             var records = await rows.Take(BroadcastMaterializationCap + 1).ToListAsync(token);
@@ -237,9 +237,9 @@ public static class AuditedBulkDeleteExtensions
     }
 
     /// <summary>
-    /// Whether a soft delete whose commit reported failure landed: its rows carry its stamp, taken at
-    /// <see cref="NocturneDbContext.UtcNowAtStoredPrecision"/> so that it compares equal to the stored one. With
-    /// nothing deleted there is nothing to report, and the work runs again.
+    /// Whether a soft delete whose commit reported failure landed: its rows carry its stamp, taken by
+    /// <see cref="HistoryHorizon.StampAsync"/> at the precision it is stored at, so that it compares
+    /// equal to the stored one. With nothing deleted there is nothing to report, and the work runs again.
     /// </summary>
     private static async Task<bool> SoftDeleteLandedAsync<T>(
         NocturneDbContext context, int count, DateTime deletedAt, CancellationToken ct)

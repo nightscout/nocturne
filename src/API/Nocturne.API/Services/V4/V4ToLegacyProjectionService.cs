@@ -103,6 +103,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         long lastModifiedMills, int limit, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
+        using var horizon = HistoryHorizon.Share();
         var perTable = new List<(ILegacyTreatmentTable Table, int Order, IReadOnlyList<FetchedRecord> Rows)>();
         foreach (var table in LegacyTreatmentTables.All)
         {
