@@ -116,10 +116,18 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
             .FirstOrDefault();
     }
 
+    /// <remarks>
+    /// The profile an AAPS switch customizes, where it names one: AAPS names the switch itself after
+    /// the customization (<c>"Rhys (110%)"</c>), which no stored profile is called, and the
+    /// customization is applied from the span's percentage and timeshift.
+    /// </remarks>
     private static string? ExtractProfileName(StateSpan? span)
     {
         if (span?.Metadata is null)
             return null;
+
+        if (span.Metadata.TryGetValue("originalProfileName", out var original) && ConvertToString(original) is { Length: > 0 } name)
+            return name;
 
         if (span.Metadata.TryGetValue("profileName", out var value))
             return ConvertToString(value);

@@ -112,6 +112,23 @@ public class ActiveProfileResolverTests : IDisposable
         }
 
         [Fact]
+        public async Task AapsCustomizedSwitch_ReturnsTheProfileItCustomizes()
+        {
+            var span = MakeProfileSpan(
+                startMills: NoonMills - 3_600_000,
+                endMills: null,
+                profileName: "Rhys (110%)",
+                percentage: 110);
+            span.Metadata!["originalProfileName"] = "Rhys";
+
+            SetupSpans(span);
+
+            var result = await _sut.GetActiveProfileNameAsync(NoonMills);
+
+            result.Should().Be("Rhys");
+        }
+
+        [Fact]
         public async Task ExpiredProfileSwitch_ReturnsNull()
         {
             var span = MakeProfileSpan(
