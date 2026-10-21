@@ -8,8 +8,12 @@ using Moq;
 using Nocturne.API.Controllers.V1;
 using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
@@ -182,7 +186,16 @@ public class AlexaControllerTests
     [InlineData("HelpIntent")]
     public async Task OpenSessionResponse_KeepsShouldEndSessionFalseOnTheNightscoutWire(string kind)
     {
-        var service = new AlexaService(Mock.Of<IEntryStore>(), Mock.Of<ILogger<AlexaService>>());
+        var service = new AlexaService(
+            Mock.Of<IEntryStore>(),
+            Mock.Of<IPropertiesService>(),
+            Mock.Of<IDDataService>(),
+            new HttpContextAccessor(),
+            Mock.Of<IShareAppearanceReader>(),
+            Mock.Of<ITenantAccessor>(),
+            TimeProvider.System,
+            Mock.Of<ILogger<AlexaService>>()
+        );
         var response = kind == "LaunchRequest"
             ? await service.HandleLaunchRequestAsync("en")
             : await service.HandleIntentRequestAsync(
