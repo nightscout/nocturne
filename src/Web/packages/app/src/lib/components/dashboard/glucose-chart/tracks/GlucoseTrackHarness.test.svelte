@@ -13,7 +13,7 @@
     glucoseData?: GlucosePoint[];
     showAxis?: boolean;
     showPoints?: boolean;
-    areaMode?: "off" | "baseline" | "deviation";
+    areaMode?: "off" | "full" | "baseline" | "deviation";
     lineColorMode?: "single" | "threshold" | "continuous";
     lineColor?: string;
     pointColorMode?: "single" | "threshold" | "continuous";
