@@ -660,8 +660,28 @@ export function getVibrationPattern(soundId: string): number[] {
 // ============================================================================
 
 const CUSTOM_SOUNDS_STORAGE_KEY = 'nocturne-custom-alarm-sounds';
-const MAX_CUSTOM_SOUND_SIZE_MB = 5;
-const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/mp4', 'audio/aac'];
+export const MAX_CUSTOM_SOUND_SIZE_MB = 5;
+const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/webm', 'audio/mp4', 'audio/aac'];
+
+export type CustomSoundRejection = 'unsupported-type' | 'too-large' | 'undecodable' | 'timed-out';
+
+/** A custom sound the browser will not store; callers word {@link reason} for the person. */
+export class CustomSoundRejectedError extends Error {
+  constructor(readonly reason: CustomSoundRejection) {
+    super(`Custom sound rejected: ${reason}`);
+    this.name = 'CustomSoundRejectedError';
+  }
+}
+
+/** @throws {CustomSoundRejectedError} when the file's type or size is not accepted. */
+export function assertAcceptableCustomSound(file: File): void {
+  if (!ALLOWED_AUDIO_TYPES.includes(file.type)) {
+    throw new CustomSoundRejectedError('unsupported-type');
+  }
+  if (file.size > MAX_CUSTOM_SOUND_SIZE_MB * 1024 * 1024) {
+    throw new CustomSoundRejectedError('too-large');
+  }
+}
 
 export interface CustomAlarmSound {
   id: string;
@@ -790,16 +810,7 @@ async function saveToIndexedDB(sounds: CustomAlarmSound[]): Promise<void> {
  * Upload a custom alarm sound from a File
  */
 export async function uploadCustomSound(file: File, name?: string): Promise<CustomAlarmSound> {
-  // Validate file type
-  if (!ALLOWED_AUDIO_TYPES.includes(file.type)) {
-    throw new Error(`Invalid file type: ${file.type}. Allowed types: MP3, WAV, OGG, WebM, M4A, AAC`);
-  }
-
-  // Validate file size
-  const sizeMB = file.size / (1024 * 1024);
-  if (sizeMB > MAX_CUSTOM_SOUND_SIZE_MB) {
-    throw new Error(`File too large: ${sizeMB.toFixed(1)}MB. Maximum size: ${MAX_CUSTOM_SOUND_SIZE_MB}MB`);
-  }
+  assertAcceptableCustomSound(file);
 
   // Read file as data URL
   const dataUrl = await readFileAsDataUrl(file);
@@ -891,13 +902,13 @@ async function validateAudioFile(dataUrl: string): Promise<void> {
     };
 
     audio.onerror = () => {
-      reject(new Error('Could not decode audio file. Please ensure it is a valid audio file.'));
+      reject(new CustomSoundRejectedError('undecodable'));
     };
 
     // Set a timeout in case the file never loads
     const timeout = setTimeout(() => {
       audio.src = '';
-      reject(new Error('Audio file validation timed out.'));
+      reject(new CustomSoundRejectedError('timed-out'));
     }, 10000);
 
     audio.oncanplaythrough = () => {

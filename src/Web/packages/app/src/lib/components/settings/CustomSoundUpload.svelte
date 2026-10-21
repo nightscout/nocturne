@@ -6,7 +6,10 @@
     getCustomSounds,
     previewAlarmSound,
     stopPreview,
+    CustomSoundRejectedError,
+    MAX_CUSTOM_SOUND_SIZE_MB,
     type CustomAlarmSound,
+    type CustomSoundRejection,
   } from "$lib/audio/alarm-sounds";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -77,6 +80,19 @@
     }
   }
 
+  function describeRejection(reason: CustomSoundRejection): string {
+    switch (reason) {
+      case "unsupported-type":
+        return "Choose an MP3, WAV, OGG, FLAC, WebM, M4A or AAC file";
+      case "too-large":
+        return `The file is larger than ${MAX_CUSTOM_SOUND_SIZE_MB} MB`;
+      case "undecodable":
+        return "This file could not be played. Check that it is a valid audio file.";
+      case "timed-out":
+        return "The audio file took too long to load";
+    }
+  }
+
   async function handleUpload() {
     if (!selectedFile) return;
 
@@ -99,7 +115,12 @@
       // Select the newly uploaded sound
       onSoundSelected?.(sound.id);
     } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to upload sound";
+      error =
+        err instanceof CustomSoundRejectedError
+          ? describeRejection(err.reason)
+          : err instanceof Error
+            ? err.message
+            : "Failed to upload sound";
     } finally {
       isUploading = false;
     }
@@ -150,7 +171,7 @@
     <div>
       <Label size="lg">Custom Sounds</Label>
       <p class="text-sm text-muted-foreground">
-        Upload your own alarm sounds (MP3, WAV, OGG, up to 5MB)
+        Upload your own alarm sounds (MP3, WAV, OGG, FLAC, WebM, M4A or AAC, up to {MAX_CUSTOM_SOUND_SIZE_MB} MB)
       </p>
     </div>
 
