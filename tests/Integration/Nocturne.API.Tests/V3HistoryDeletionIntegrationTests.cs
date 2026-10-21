@@ -342,7 +342,7 @@ public partial class V3HistoryDeletionIntegrationTests : ApiIntegrationTestBase
         var (next, _) = await HistoryAsync("treatments", cursor);
         var survivor = next.Should().ContainSingle(doc => IdOf(doc) == meal).Subject;
         survivor.TryGetProperty("isValid", out _).Should().BeFalse();
-        survivor.GetProperty("eventType").GetString().Should().Be("Correction Bolus");
+        survivor.GetProperty("eventType").GetString().Should().Be("Meal Bolus", "a record keeps the event type it was uploaded under");
         Number(survivor, "carbs").Should().BeNull();
         Number(survivor, "insulin").Should().Be(3.3);
     }
@@ -359,7 +359,7 @@ public partial class V3HistoryDeletionIntegrationTests : ApiIntegrationTestBase
             .Which.GetProperty("isValid").GetBoolean().Should().BeFalse();
         var carbs = next.Should().ContainSingle(doc => Number(doc, "carbs") == 44).Subject;
         IdOf(carbs).Should().NotBe(meal);
-        carbs.GetProperty("eventType").GetString().Should().Be("Carb Correction");
+        carbs.GetProperty("eventType").GetString().Should().Be("Meal Bolus", "a record keeps the event type it was uploaded under");
         carbs.TryGetProperty("isValid", out _).Should().BeFalse();
     }
 
@@ -401,6 +401,33 @@ public partial class V3HistoryDeletionIntegrationTests : ApiIntegrationTestBase
         var lastModified = await AuthenticatedClient.GetFromJsonAsync<JsonElement>("/api/v3/lastModified");
         lastModified.GetProperty("result").GetProperty("collections").GetProperty("treatments").GetInt64()
             .Should().BeGreaterThanOrEqualTo(tombstone.GetProperty("srvModified").GetInt64());
+    }
+
+    [Fact]
+    public async Task NotesEditedAlone_MoveTheTreatmentsETagAndAreResentByHistory()
+    {
+        await CreateAsync("treatments", new
+        {
+            eventType = "Correction Bolus", insulin = 1.7, notes = "before", date = Date,
+            app = "it", device = "it-v3", utcOffset = 0,
+        });
+        var (synced, cursor) = await HistoryAsync("treatments", 0);
+        var id = IdOf(synced.Single(doc => !IsTombstone(doc) && Number(doc, "insulin") == 1.7));
+        var before = (await AuthenticatedClient.GetAsync($"/api/v3/treatments/{id}")).Headers.ETag;
+        await Task.Delay(5);
+
+        var patched = await AuthenticatedClient.PatchAsJsonAsync($"/api/v3/treatments/{id}", new { notes = "after" });
+        patched.IsSuccessStatusCode.Should().BeTrue(await patched.Content.ReadAsStringAsync());
+
+        var read = await AuthenticatedClient.GetAsync($"/api/v3/treatments/{id}");
+        read.Headers.ETag.Should().NotBe(before);
+        var body = await read.Content.ReadFromJsonAsync<JsonElement>();
+        (body.TryGetProperty("result", out var result) ? result : body).GetProperty("notes")
+            .GetString().Should().Be("after");
+
+        var (next, _) = await HistoryAsync("treatments", cursor);
+        next.Should().ContainSingle(doc => IdOf(doc) == id && !IsTombstone(doc))
+            .Which.GetProperty("notes").GetString().Should().Be("after");
     }
 
     /// <summary>
