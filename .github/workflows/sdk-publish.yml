@@ -397,6 +397,31 @@ jobs:
           packages-dir: sdk/python/out/dist/
           skip-existing: true
 
+  # Opens the nocturne-py bump PR in the Home Assistant integration (its sdk-bump.yml).
+  notify-home-assistant:
+    needs: [generate-spec, publish-python]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Get integration repo token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.HA_INTEGRATION_APP_ID }}
+          private-key: ${{ secrets.HA_INTEGRATION_APP_PRIVATE_KEY }}
+          owner: ryceg
+          repositories: nocturne-homeassistant
+
+      - name: Dispatch sdk-published
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SDK_VERSION: ${{ needs.generate-spec.outputs.sdk_version }}
+        run: |
+          gh api repos/ryceg/nocturne-homeassistant/dispatches \
+            -f event_type=sdk-published \
+            -f "client_payload[version]=$SDK_VERSION"
+
   publish-java:
     needs: generate-spec
     runs-on: ubuntu-latest
