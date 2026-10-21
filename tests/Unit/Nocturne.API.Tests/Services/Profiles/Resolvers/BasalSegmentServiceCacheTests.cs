@@ -1,9 +1,10 @@
 using Microsoft.Extensions.Caching.Memory;
 using Moq;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Xunit;
@@ -17,23 +18,17 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
     private const long To = From + 3_600_000;
 
     private readonly Mock<IStateSpanService> _stateSpans = new();
-    private readonly Mock<ITenantAccessor> _tenant = new();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
-
-    public BasalSegmentServiceCacheTests() =>
-        _tenant.Setup(t => t.TenantId).Returns(Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
 
     public void Dispose() => _cache.Dispose();
 
-    private BasalSegmentService Service(ICategoryReadContext categoryReadContext) => new(
+    private BasalSegmentService Service(ITenantCache cache) => new(
         _stateSpans.Object,
         Mock.Of<IBasalScheduleRepository>(),
         Mock.Of<ITherapySettingsRepository>(),
-        _tenant.Object,
-        _cache,
-        categoryReadContext);
+        cache);
 
-    private BasalSegmentService OwnerService() => Service(Mock.Of<ICategoryReadContext>());
+    private BasalSegmentService Service() => Service(TestTenantCache.Create(_cache));
 
     private static async Task DrainAsync(BasalSegmentService service)
     {
@@ -56,9 +51,9 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
             Times.Exactly(times));
 
     [Fact]
-    public async Task An_owner_request_reuses_the_cached_window()
+    public async Task A_repeated_window_is_served_from_the_cache()
     {
-        var service = OwnerService();
+        var service = Service();
 
         await DrainAsync(service);
         await DrainAsync(service);
@@ -67,16 +62,16 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
     }
 
     [Theory]
-    [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
-    public async Task A_bypassing_request_neither_reads_nor_writes_the_cache(string caller)
+    [MemberData(nameof(NarrowedReaders.All), MemberType = typeof(NarrowedReaders))]
+    public async Task A_narrowed_reader_never_reads_the_owners_cached_window(string reader)
     {
-        var bypassing = Service(CacheBypassingCallers.Context(caller));
-        var owner = OwnerService();
+        var owner = Service();
+        var narrowed = Service(NarrowedReaders.Cache(reader, _cache));
 
-        await DrainAsync(bypassing);
         await DrainAsync(owner);
-        await DrainAsync(bypassing);
+        await DrainAsync(narrowed);
+        await DrainAsync(owner);
 
-        VerifySpanReads(3);
+        VerifySpanReads(2);
     }
 }

@@ -112,6 +112,31 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
         return await FindGoverningRowAsync(ctx, dataSource, syncIdentifier, ct) is { DeletedAt: not null };
     }
 
+    /// <inheritdoc cref="ISyncKeyedRepository{T}.GetUpsertTargetTimestampsAsync" />
+    public async Task<IReadOnlyList<DateTime>> GetUpsertTargetTimestampsAsync(
+        IReadOnlyCollection<TModel> records, CancellationToken ct = default)
+    {
+        var keys = records
+            .Select(ToEntity)
+            .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
+            .Select(e => (DataSource: e.DataSource!, SyncIdentifier: e.SyncIdentifier!))
+            .ToHashSet();
+        if (keys.Count == 0)
+            return [];
+
+        var sources = keys.Select(k => k.DataSource).Distinct().ToList();
+        var syncIds = keys.Select(k => k.SyncIdentifier).Distinct().ToList();
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        // Over-fetches by a Cartesian amount, as SplitUpsertsAsync does, on the same index.
+        var rows = await ctx.Set<TEntity>().AsNoTracking()
+            .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
+            .Select(e => new { e.DataSource, e.SyncIdentifier, e.Timestamp })
+            .ToListAsync(ct);
+
+        return [.. rows.Where(r => keys.Contains((r.DataSource!, r.SyncIdentifier!))).Select(r => r.Timestamp)];
+    }
+
     /// <summary>
     /// The row that decides a write on the sync key, tracked so a matched live row can be updated
     /// in place. Reads past the soft-delete query filter, which would hide the tombstone holding

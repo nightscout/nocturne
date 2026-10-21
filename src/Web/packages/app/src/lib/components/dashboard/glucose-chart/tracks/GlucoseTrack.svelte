@@ -17,29 +17,25 @@
     getGlucoseColorContinuous,
   } from "$lib/utils/chart-colors";
   import {
-    thresholdLineStops,
-    continuousLineStops,
-    fillStopsFromLineStops,
-    singleColorFillStops,
+    lineStopsFor,
+    fillStopsFor,
     areaY0Accessor,
+    type AreaMode,
+    type LineColorMode,
   } from "../utils/glucose-gradient-stops";
-
-  type LineColorMode = "single" | "threshold" | "continuous";
-  type AreaMode = "off" | "baseline" | "deviation";
 
   /**
    * GlucoseTrack renders the glucose line/area/points layer of a chart.
    *
    * Customisation is composable across four feature axes:
-   *   - `lineColorMode` (default `"threshold"`): line strokes by glucose
-   *     bucket (very-low/low/in-range/high/very-high) unless overridden to
-   *     `"single"` (flat `lineColor`) or `"continuous"` (oklch spectrum).
-   *     The threshold default applies to every consumer that doesn't pass
-   *     the prop explicitly; callers wanting the previous in-range green
-   *     line must opt in via `lineColorMode="single"`.
+   *   - `lineColorMode` (default `"continuous"`): line strokes along the
+   *     oklch glucose spectrum unless overridden to `"threshold"` (one colour
+   *     per bucket: very-low/low/in-range/high/very-high) or `"single"`
+   *     (flat `lineColor`).
    *   - `areaMode` (default `"off"`): adds a filled area below the line
-   *     extending to the chart bottom (`"baseline"`) or only where the
-   *     line deviates outside `[low, high]` (`"deviation"`).
+   *     extending to the chart bottom, at flat opacity (`"full"`) or fading
+   *     out toward the bottom (`"baseline"`), or only where the line
+   *     deviates outside `[low, high]` (`"deviation"`).
    *   - Points (`showPoints` / `pointColorMode` / `pointColor`): mirror
    *     the line by default, but can diverge. Passing `pointColor` alone
    *     (without `pointColorMode`) implicitly switches points to
@@ -62,7 +58,7 @@
     showAxis = true,
     showPoints,
     areaMode = "off",
-    lineColorMode = "threshold",
+    lineColorMode = "continuous",
     lineColor = "var(--glucose-in-range)",
     pointColorMode,
     pointColor,
@@ -90,19 +86,13 @@
     areaMode === "off" ? undefined : areaY0Accessor(areaMode, thresholds),
   );
 
-  const lineStops = $derived.by(() => {
-    if (lineColorMode === "single") return undefined;
-    if (lineColorMode === "threshold")
-      return thresholdLineStops(thresholds, glucoseAxisScale, chartCtx.height);
-    return continuousLineStops(glucoseAxisScale, chartCtx.height);
-  });
+  const lineStops = $derived(
+    lineStopsFor(lineColorMode, thresholds, glucoseAxisScale, chartCtx.height),
+  );
 
-  const fillStops = $derived.by(() => {
-    if (areaMode === "off") return undefined;
-    if (lineColorMode === "single")
-      return singleColorFillStops(lineColor, areaOpacity);
-    return lineStops ? fillStopsFromLineStops(lineStops, areaOpacity) : undefined;
-  });
+  const fillStops = $derived(
+    fillStopsFor(areaMode, lineStops, lineColor, areaOpacity),
+  );
 
   function pointFill(sgv: number): string {
     if (effectivePointMode === "single") return effectivePointColor;
@@ -140,7 +130,13 @@
       curve={curveMonotoneX}
     />
   {:else}
-    <LinearGradient stops={fillStops} units="userSpaceOnUse" vertical>
+    <LinearGradient
+      stops={fillStops}
+      units="userSpaceOnUse"
+      vertical
+      y1="0"
+      y2={String(chartCtx.height)}
+    >
       {#snippet children({ gradient: fillGrad })}
         <Area
           data={glucoseData}
@@ -160,7 +156,15 @@
   {#if lineColorMode === "single"}
     {@render splineOrArea(lineColor)}
   {:else}
-    <LinearGradient stops={lineStops} units="userSpaceOnUse" vertical>
+    <!-- A percentage extent resolves against the whole SVG, padding included,
+         so pin it to the plot area the stops were computed against. -->
+    <LinearGradient
+      stops={lineStops}
+      units="userSpaceOnUse"
+      vertical
+      y1="0"
+      y2={String(chartCtx.height)}
+    >
       {#snippet children({ gradient: strokeGrad })}
         {@render splineOrArea(strokeGrad)}
       {/snippet}

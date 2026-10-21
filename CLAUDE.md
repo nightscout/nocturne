@@ -374,16 +374,18 @@ Design notes:
   cache; headers a controller writes by hand are outside what it checks. Hand-set
   `Cache-Control` headers follow the same rule: a tenant data read is never `public`
   (V3 reads send `private, max-age=60`, pinned by `V3CacheControlTests`).
-- **PHI cache invariant.** The same holds for the tenant-keyed application caches of
-  time-series data and of values derived from it (`EntryCacheAdapter`,
-  `TreatmentCacheAdapter`, the multi-period statistics, the eHbA1c timeline, IOB/COB, the
-  active-profile and basal-assignment resolvers): their keys carry the tenant, not the
-  history window or the share's categories, so a history-clamped request or any share
-  (`ICategoryReadContext.BypassesTenantCaches`) neither reads nor writes them. A
-  full-history share still differs from the owner: every table no granted scope governs
-  is hidden from it. Do not key them by clamp or share instead. A read that fans out
-  in a fresh DI scope (`TenantOverviewService`) carries the caller's clamp into that
-  scope's `ICategoryReadContext`.
+- **PHI cache invariant.** The same holds for application caches. Every cross-request
+  cache of data read under RLS goes through `ITenantCache`, which keys it
+  `tenant:partition:demo:key`. The partition (`IReaderCachePartition`) names the readers
+  who see exactly the same rows: owners and unclamped members share `full`, each
+  full-history share's category set is its own partition, and a history-clamped reader
+  has none, so it neither reads nor writes. No cache reads the clamp or builds a tenant
+  key itself, and invalidation clears a key family across every partition. What a value
+  in `full` may contain is stated on `ITenantCache`. The one exception is
+  `StatusService`'s `status:system` key, which varies by whether the caller is
+  authenticated rather than by the rows it can read. A read that fans out in a fresh DI
+  scope (`TenantOverviewService`) carries the caller's clamp into that scope's
+  `ICategoryReadContext` and reads through it.
 
 ## Testing
 

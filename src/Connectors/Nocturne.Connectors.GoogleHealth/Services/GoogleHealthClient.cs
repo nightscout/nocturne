@@ -25,6 +25,9 @@ public sealed class GoogleHealthException(
     public string? DataType { get; } = dataType;
     public string? ProviderReason { get; } = providerReason;
     public int? ProviderStatus { get; } = providerStatus;
+
+    /// <summary>The stored session can never work again; only a new sign-in recovers.</summary>
+    public bool RequiresReconnect => Message is "reconnect_required" or "client_changed";
 }
 
 public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClient>? logger = null)
@@ -38,31 +41,31 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
     public const string SleepScope = "https://www.googleapis.com/auth/googlehealth.sleep.readonly";
     public static readonly GoogleHealthCapability[] Capabilities =
     [
-        new() { DataType = "steps", DisplayName = "Steps", Category = "Activity", Unit = "count", RequiredScope = ActivityScope, Supported = true, Destination = "step-counts" },
-        new() { DataType = "heart-rate", DisplayName = "Heart rate", Category = "Vitals", Unit = "bpm", RequiredScope = MetricsScope, Supported = true, Destination = "heart-rates" },
-        new() { DataType = "weight", DisplayName = "Weight", Category = "Body measurement", Unit = "kg", RequiredScope = MetricsScope, Supported = true, Destination = "body-weights" },
-        new() { DataType = "sleep", DisplayName = "Sleep sessions and stages", Category = "Sleep", Unit = "session", RequiredScope = SleepScope, Supported = true, Destination = "sleep-sessions" },
-        new() { DataType = "active-energy-burned", DisplayName = "Active energy burned", Category = "Activity", Unit = "kcal", RequiredScope = ActivityScope },
-        new() { DataType = "total-calories", DisplayName = "Total calories", Category = "Activity", Unit = "kcal", RequiredScope = ActivityScope },
-        new() { DataType = "distance", DisplayName = "Distance", Category = "Activity", Unit = "m", RequiredScope = ActivityScope },
-        new() { DataType = "floors", DisplayName = "Floors", Category = "Activity", Unit = "count", RequiredScope = ActivityScope },
-        new() { DataType = "exercise", DisplayName = "Workouts", Category = "Activity", Unit = "session", RequiredScope = ActivityScope },
-        new() { DataType = "body-fat", DisplayName = "Body fat", Category = "Body measurement", Unit = "percent", RequiredScope = MetricsScope },
-        new() { DataType = "height", DisplayName = "Height", Category = "Body measurement", Unit = "m", RequiredScope = MetricsScope },
-        new() { DataType = "nutrition-log", DisplayName = "Nutrition log", Category = "Nutrition", Unit = "meal", RequiredScope = NutritionScope },
-        new() { DataType = "hydration-log", DisplayName = "Hydration", Category = "Nutrition", Unit = "mL", RequiredScope = NutritionScope },
-        new() { DataType = "blood-glucose", DisplayName = "Blood glucose", Category = "Vitals", Unit = "mg/dL", RequiredScope = MetricsScope },
-        new() { DataType = "oxygen-saturation", DisplayName = "Oxygen saturation", Category = "Vitals", Unit = "percent", RequiredScope = MetricsScope },
-        new() { DataType = "heart-rate-variability", DisplayName = "Heart rate variability", Category = "Vitals", Unit = "ms", RequiredScope = MetricsScope },
-        new() { DataType = "daily-resting-heart-rate", DisplayName = "Resting heart rate", Category = "Vitals", Unit = "bpm", RequiredScope = MetricsScope },
-        new() { DataType = "daily-oxygen-saturation", DisplayName = "Daily oxygen saturation", Category = "Vitals", Unit = "percent", RequiredScope = MetricsScope },
-        new() { DataType = "daily-respiratory-rate", DisplayName = "Daily respiratory rate", Category = "Vitals", Unit = "breaths/min", RequiredScope = MetricsScope },
-        new() { DataType = "respiratory-rate-sleep-summary", DisplayName = "Sleep respiratory rate", Category = "Vitals", Unit = "breaths/min", RequiredScope = MetricsScope },
-        new() { DataType = "core-body-temperature", DisplayName = "Core body temperature", Category = "Vitals", Unit = "C", RequiredScope = MetricsScope },
-        new() { DataType = "menstrual-period", DisplayName = "Menstrual period", Category = "Cycle tracking", Unit = "interval", UnavailableReason = "readonly_scope_unavailable" },
-        new() { DataType = "ovulation-test", DisplayName = "Ovulation test", Category = "Cycle tracking", Unit = "result", UnavailableReason = "readonly_scope_unavailable" },
-        new() { DataType = "cervical-mucus", DisplayName = "Cervical mucus", Category = "Cycle tracking", Unit = "observation", UnavailableReason = "readable_type_unavailable" },
-        new() { DataType = "sexual-activity", DisplayName = "Sexual activity", Category = "Cycle tracking", Unit = "observation", UnavailableReason = "readable_type_unavailable" }
+        new() { DataType = "steps", Category = GoogleHealthCategoryKind.Activity, Supported = true, Destination = "step-counts" },
+        new() { DataType = "heart-rate", Category = GoogleHealthCategoryKind.Vitals, Supported = true, Destination = "heart-rates" },
+        new() { DataType = "weight", Category = GoogleHealthCategoryKind.BodyMeasurement, Supported = true, Destination = "body-weights" },
+        new() { DataType = "sleep", Category = GoogleHealthCategoryKind.Sleep, Supported = true, Destination = "sleep-sessions" },
+        new() { DataType = "active-energy-burned", Category = GoogleHealthCategoryKind.Activity },
+        new() { DataType = "total-calories", Category = GoogleHealthCategoryKind.Activity },
+        new() { DataType = "distance", Category = GoogleHealthCategoryKind.Activity },
+        new() { DataType = "floors", Category = GoogleHealthCategoryKind.Activity },
+        new() { DataType = "exercise", Category = GoogleHealthCategoryKind.Activity },
+        new() { DataType = "body-fat", Category = GoogleHealthCategoryKind.BodyMeasurement },
+        new() { DataType = "height", Category = GoogleHealthCategoryKind.BodyMeasurement },
+        new() { DataType = "nutrition-log", Category = GoogleHealthCategoryKind.Nutrition },
+        new() { DataType = "hydration-log", Category = GoogleHealthCategoryKind.Nutrition },
+        new() { DataType = "blood-glucose", Category = GoogleHealthCategoryKind.Vitals },
+        new() { DataType = "oxygen-saturation", Category = GoogleHealthCategoryKind.Vitals },
+        new() { DataType = "heart-rate-variability", Category = GoogleHealthCategoryKind.Vitals },
+        new() { DataType = "daily-resting-heart-rate", Category = GoogleHealthCategoryKind.Vitals },
+        new() { DataType = "daily-oxygen-saturation", Category = GoogleHealthCategoryKind.Vitals },
+        new() { DataType = "daily-respiratory-rate", Category = GoogleHealthCategoryKind.Vitals },
+        new() { DataType = "respiratory-rate-sleep-summary", Category = GoogleHealthCategoryKind.Vitals },
+        new() { DataType = "core-body-temperature", Category = GoogleHealthCategoryKind.Vitals },
+        new() { DataType = "menstrual-period", Category = GoogleHealthCategoryKind.CycleTracking, UnavailableReason = GoogleHealthTypeState.NoReadonlyScope },
+        new() { DataType = "ovulation-test", Category = GoogleHealthCategoryKind.CycleTracking, UnavailableReason = GoogleHealthTypeState.NoReadonlyScope },
+        new() { DataType = "cervical-mucus", Category = GoogleHealthCategoryKind.CycleTracking, UnavailableReason = GoogleHealthTypeState.NotReadable },
+        new() { DataType = "sexual-activity", Category = GoogleHealthCategoryKind.CycleTracking, UnavailableReason = GoogleHealthTypeState.NotReadable }
     ];
     public static string[] SupportedTypes => Capabilities.Where(c => c.Supported).Select(c => c.DataType).ToArray();
     public static bool TryGetDataType(SyncDataType type, out string dataType) =>
@@ -98,114 +101,67 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
     private static string FormatFilterTime(DateTimeOffset time) =>
         time.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
 
+    private static string TimeField(string type) => type switch
+    {
+        "steps" or "distance" => $"{type.Replace('-', '_')}.interval.start_time",
+        "sleep" => "sleep.interval.end_time",
+        _ => $"{type.Replace('-', '_')}.sample_time.physical_time"
+    };
+
     public async Task<int> CountAsync(string token, string type, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
     {
-        var field = type switch
-        {
-            "steps" or "distance" => $"{type.Replace('-', '_')}.interval.start_time",
-            "sleep" => "sleep.interval.end_time",
-            _ => $"{type.Replace('-', '_')}.sample_time.physical_time"
-        };
-        var filter = $"{field} >= \"{FormatFilterTime(from)}\" AND {field} < \"{FormatFilterTime(to)}\"";
-        var pageSize = type == "sleep" ? 25 : 10000;
-        var root = $"https://health.googleapis.com/v4/users/me/dataTypes/{type}/dataPoints:reconcile?pageSize={pageSize}&filter={Uri.EscapeDataString(filter)}";
         var count = 0;
-        var pageToken = "";
-        var seen = new HashSet<string>();
-        for (var page = 0; page < MaximumHistoryPages; page++)
-        {
-            ct.ThrowIfCancellationRequested();
-            var url = pageToken.Length == 0 ? root : root + "&pageToken=" + Uri.EscapeDataString(pageToken);
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            using var response = await http.SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode)
-                throw await ErrorAsync(response, response.StatusCode switch
-                {
-                    System.Net.HttpStatusCode.Unauthorized => "access_token_rejected",
-                    System.Net.HttpStatusCode.Forbidden => "permission_denied",
-                    System.Net.HttpStatusCode.BadRequest => "invalid_google_request",
-                    System.Net.HttpStatusCode.NotFound => "google_resource_not_found",
-                    _ => "google_unavailable"
-                }, type, ct);
-            try
-            {
-                using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-                if (json.RootElement.TryGetProperty("dataPoints", out var data))
-                    count += data.GetArrayLength();
-                pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
-            }
-            catch (Exception ex) when (ex is JsonException or InvalidOperationException)
-            {
-                throw new GoogleHealthException("invalid_google_response", stage: "inventory", dataType: type);
-            }
-            if (pageToken.Length == 0) return count;
-            if (!seen.Add(pageToken)) throw new GoogleHealthException("pagination_failed", stage: "inventory", dataType: type);
-        }
-        throw new GoogleHealthException("history_too_large", stage: "inventory", dataType: type);
+        await foreach (var (_, points) in PagesAsync(token, type, from, to, "inventory", ct))
+            count += points.Length;
+        return count;
     }
 
     public async IAsyncEnumerable<IReadOnlyCollection<SleepSession>> ReadSleepPagesAsync(
         string token, DateTimeOffset from, DateTimeOffset to, [EnumeratorCancellation] CancellationToken ct,
         Func<int, Task>? onPageRead = null)
     {
-        var filter = $"sleep.interval.end_time >= \"{FormatFilterTime(from)}\" AND sleep.interval.end_time < \"{FormatFilterTime(to)}\"";
-        var root = $"https://health.googleapis.com/v4/users/me/dataTypes/sleep/dataPoints:reconcile?pageSize=25&filter={Uri.EscapeDataString(filter)}";
-        var seen = new HashSet<string>();
-        var pageToken = "";
-        for (var page = 0; page < MaximumHistoryPages; page++)
+        await foreach (var (page, points) in PagesAsync(token, "sleep", from, to, "data_read", ct))
         {
-            ct.ThrowIfCancellationRequested();
-            var url = pageToken.Length == 0 ? root : root + "&pageToken=" + Uri.EscapeDataString(pageToken);
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            using var response = await http.SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode)
-                throw await ErrorAsync(response, response.StatusCode switch
-                {
-                    System.Net.HttpStatusCode.Unauthorized => "access_token_rejected",
-                    System.Net.HttpStatusCode.Forbidden => "permission_denied",
-                    System.Net.HttpStatusCode.BadRequest => "invalid_google_request",
-                    System.Net.HttpStatusCode.NotFound => "google_resource_not_found",
-                    _ => "google_unavailable"
-                }, "sleep", ct);
-            var sessions = new List<SleepSession>();
-            try
-            {
-                using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-                if (json.RootElement.TryGetProperty("dataPoints", out var data))
-                    foreach (var item in data.EnumerateArray())
-                    {
-                        var session = ParseSleep(item);
-                        if (session.EndMills < from.ToUnixTimeMilliseconds() || session.EndMills >= to.ToUnixTimeMilliseconds())
-                            continue;
-                        sessions.Add(session);
-                    }
-                pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
-                if (onPageRead is not null) await onPageRead(page + 1);
-            }
-            catch (GoogleHealthException) { throw; }
-            catch (Exception ex) when (ex is JsonException or InvalidOperationException)
-            {
-                throw new GoogleHealthException("invalid_google_response", stage: "data_read", dataType: "sleep");
-            }
+            var sessions = points.Select(ParseSleep)
+                .Where(session => session.EndMills >= from.ToUnixTimeMilliseconds() &&
+                                  session.EndMills < to.ToUnixTimeMilliseconds())
+                .ToArray();
+            if (onPageRead is not null) await onPageRead(page);
             yield return sessions;
-            if (pageToken.Length == 0) yield break;
-            if (!seen.Add(pageToken)) throw new GoogleHealthException("pagination_failed", stage: "data_read", dataType: "sleep");
         }
-        throw new GoogleHealthException("history_too_large", stage: "data_read", dataType: "sleep");
     }
 
     public async IAsyncEnumerable<IReadOnlyCollection<GoogleHealthReading>> ReadPagesAsync(
         string token, string type, DateTimeOffset from, DateTimeOffset to, [EnumeratorCancellation] CancellationToken ct,
         Func<int, Task>? onPageRead = null)
     {
-        var field = type == "steps" ? "steps.interval.start_time" : $"{type.Replace('-', '_')}.sample_time.physical_time";
+        await foreach (var (page, points) in PagesAsync(token, type, from, to, "data_read", ct))
+        {
+            var readings = points.Select(point => Parse(type, point))
+                .Where(reading => reading.Mills >= from.ToUnixTimeMilliseconds() &&
+                                  reading.Mills < to.ToUnixTimeMilliseconds())
+                .ToArray();
+            if (onPageRead is not null) await onPageRead(page);
+            yield return readings;
+        }
+    }
+
+    /// <summary>
+    /// Every page of <paramref name="type"/>'s data points in the window, numbered from one. Stops
+    /// at a repeated page token or <see cref="MaximumHistoryPages"/> rather than trusting Google
+    /// to end the listing.
+    /// </summary>
+    private async IAsyncEnumerable<(int Page, JsonElement[] Points)> PagesAsync(
+        string token, string type, DateTimeOffset from, DateTimeOffset to, string stage,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        var field = TimeField(type);
         var filter = $"{field} >= \"{FormatFilterTime(from)}\" AND {field} < \"{FormatFilterTime(to)}\"";
-        var root = $"https://health.googleapis.com/v4/users/me/dataTypes/{type}/dataPoints:reconcile?pageSize=10000&filter={Uri.EscapeDataString(filter)}";
+        var pageSize = type == "sleep" ? 25 : 10000;
+        var root = $"https://health.googleapis.com/v4/users/me/dataTypes/{type}/dataPoints:reconcile?pageSize={pageSize}&filter={Uri.EscapeDataString(filter)}";
         var seen = new HashSet<string>();
         var pageToken = "";
-        for (var page = 0; page < MaximumHistoryPages; page++)
+        for (var page = 1; page <= MaximumHistoryPages; page++)
         {
             ct.ThrowIfCancellationRequested();
             var url = pageToken.Length == 0 ? root : root + "&pageToken=" + Uri.EscapeDataString(pageToken);
@@ -221,34 +177,24 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
                     System.Net.HttpStatusCode.NotFound => "google_resource_not_found",
                     _ => "google_unavailable"
                 }, type, ct);
-            var points = new List<GoogleHealthReading>();
+            JsonElement[] points;
             try
             {
                 using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-                if (json.RootElement.TryGetProperty("dataPoints", out var data))
-                    foreach (var item in data.EnumerateArray())
-                    {
-                        var point = Parse(type, item);
-                        if (point.Mills < from.ToUnixTimeMilliseconds() || point.Mills >= to.ToUnixTimeMilliseconds())
-                            continue;
-                        points.Add(point);
-                    }
+                points = json.RootElement.TryGetProperty("dataPoints", out var data)
+                    ? data.EnumerateArray().Select(point => point.Clone()).ToArray()
+                    : [];
                 pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
-                if (onPageRead is not null) await onPageRead(page + 1);
-            }
-            catch (GoogleHealthException)
-            {
-                throw;
             }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException)
             {
-                throw new GoogleHealthException("invalid_google_response", stage: "data_read", dataType: type);
+                throw new GoogleHealthException("invalid_google_response", stage: stage, dataType: type);
             }
-            yield return points;
+            yield return (page, points);
             if (pageToken.Length == 0) yield break;
-            if (!seen.Add(pageToken)) throw new GoogleHealthException("pagination_failed", stage: "data_read", dataType: type);
+            if (!seen.Add(pageToken)) throw new GoogleHealthException("pagination_failed", stage: stage, dataType: type);
         }
-        throw new GoogleHealthException("history_too_large", stage: "data_read", dataType: type);
+        throw new GoogleHealthException("history_too_large", stage: stage, dataType: type);
     }
 
     private async Task<GoogleHealthException> ErrorAsync(

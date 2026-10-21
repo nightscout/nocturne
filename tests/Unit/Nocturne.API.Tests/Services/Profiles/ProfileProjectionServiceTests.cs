@@ -131,6 +131,8 @@ public class ProfileProjectionServiceTests
     {
         _therapyRepo.Setup(r => r.GetByLegacyIdAsync("missing", default))
             .ReturnsAsync((TherapySettings?)null);
+        _therapyRepo.Setup(r => r.GetDocumentRowsAsync("missing", default))
+            .ReturnsAsync([]);
 
         var result = await _sut.GetProfileByIdAsync("missing");
 

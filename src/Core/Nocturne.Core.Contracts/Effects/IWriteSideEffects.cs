@@ -90,11 +90,8 @@ public interface IWriteSideEffects
 /// </summary>
 public sealed record WriteEffectOptions
 {
-    /// <summary>Exact cache keys to remove after a write. Evaluated eagerly.</summary>
-    public IReadOnlyList<string> CacheKeysToRemove { get; init; } = [];
-
-    /// <summary>Cache key patterns to remove via wildcard match after a write.</summary>
-    public IReadOnlyList<string> CachePatternsToClear { get; init; } = [];
+    /// <summary>Tenant cache key families to clear, in every partition, after a write.</summary>
+    public IReadOnlyList<string> CacheFamiliesToClear { get; init; } = [];
 
     /// <summary>Whether to run IDecompositionPipeline after create/update.</summary>
     public bool DecomposeToV4 { get; init; }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
@@ -33,6 +34,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 [Route("api/v4/glucose/sensor")]
 [RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]
+[ClearsTenantCache(TenantCacheFamily.Entries, TenantCacheFamily.Statistics, TenantCacheFamily.EHbA1c)]
 public class SensorGlucoseController(
     ISensorGlucoseRepository repo,
     IGlucoseProcessingResolver glucoseResolver,

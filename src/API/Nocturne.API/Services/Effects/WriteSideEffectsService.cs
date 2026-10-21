@@ -1,14 +1,14 @@
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Cache.Abstractions;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Services.Effects;
 
 /// <summary>
 /// Coordinates the three write side effects that must run after any collection mutation:
-/// distributed cache invalidation, <see cref="ISignalRBroadcastService"/> real-time broadcasting,
+/// <see cref="ITenantCache"/> invalidation, <see cref="ISignalRBroadcastService"/> real-time broadcasting,
 /// and V4 decomposition via <see cref="IDecompositionPipeline"/>.
 /// </summary>
 /// <remarks>
@@ -23,27 +23,24 @@ namespace Nocturne.API.Services.Effects;
 /// <seealso cref="ICollectionEffectDescriptor"/>
 public class WriteSideEffectsService : IWriteSideEffects
 {
-    private readonly ICacheService _cache;
+    private readonly ITenantCache _cache;
     private readonly ISignalRBroadcastService _broadcast;
     private readonly IDecompositionPipeline _pipeline;
-    private readonly ITenantAccessor _tenantAccessor;
     private readonly IReadOnlyDictionary<string, ICollectionEffectDescriptor> _descriptors;
     private readonly ILogger<WriteSideEffectsService> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="WriteSideEffectsService"/>.
     /// </summary>
-    /// <param name="cache">The distributed cache for key/pattern-based invalidation.</param>
+    /// <param name="cache">The tenant cache whose key families a write clears.</param>
     /// <param name="broadcast">The SignalR broadcast service for real-time storage event delivery.</param>
     /// <param name="pipeline">The V4 decomposition pipeline for projecting legacy records into typed V4 tables.</param>
-    /// <param name="tenantAccessor">Provides the current tenant context for scoping cache keys.</param>
-    /// <param name="descriptors">Collection-level effect descriptors that define which cache keys to clear and whether to decompose.</param>
+    /// <param name="descriptors">Collection-level effect descriptors that define whether to decompose and broadcast.</param>
     /// <param name="logger">The logger instance.</param>
     public WriteSideEffectsService(
-        ICacheService cache,
+        ITenantCache cache,
         ISignalRBroadcastService broadcast,
         IDecompositionPipeline pipeline,
-        ITenantAccessor tenantAccessor,
         IEnumerable<ICollectionEffectDescriptor> descriptors,
         ILogger<WriteSideEffectsService> logger
     )
@@ -51,7 +48,6 @@ public class WriteSideEffectsService : IWriteSideEffects
         _cache = cache;
         _broadcast = broadcast;
         _pipeline = pipeline;
-        _tenantAccessor = tenantAccessor;
         _descriptors = descriptors.ToDictionary(
             d => d.CollectionName,
             StringComparer.OrdinalIgnoreCase
@@ -77,11 +73,8 @@ public class WriteSideEffectsService : IWriteSideEffects
         if (!_descriptors.TryGetValue(collectionName, out var descriptor))
             return new WriteEffectOptions();
 
-        var tenantId = _tenantAccessor.Context?.TenantId.ToString() ?? "";
         return new WriteEffectOptions
         {
-            CacheKeysToRemove = descriptor.GetCacheKeysToRemove(tenantId),
-            CachePatternsToClear = descriptor.GetCachePatternsToClear(tenantId),
             DecomposeToV4 = descriptor.DecomposeToV4,
             BroadcastDataUpdate = descriptor.BroadcastDataUpdateOnCreate,
         };
@@ -262,23 +255,18 @@ public class WriteSideEffectsService : IWriteSideEffects
     }
 
     /// <summary>
-    /// Removes explicit cache keys and clears cache entries matching configured patterns.
+    /// Clears the configured tenant cache key families.
     /// Exceptions are caught and logged as warnings — cache failures must not abort the write path.
     /// </summary>
-    /// <param name="options">The effect options containing keys and patterns to invalidate.</param>
+    /// <param name="options">The effect options naming the families to clear.</param>
     /// <param name="ct">Cancellation token.</param>
     private async Task InvalidateCacheAsync(WriteEffectOptions options, CancellationToken ct)
     {
         try
         {
-            foreach (var key in options.CacheKeysToRemove)
+            foreach (var family in options.CacheFamiliesToClear)
             {
-                await _cache.RemoveAsync(key, ct);
-            }
-
-            foreach (var pattern in options.CachePatternsToClear)
-            {
-                await _cache.RemoveByPatternAsync(pattern, ct);
+                await _cache.RemoveFamilyAsync(family, ct);
             }
         }
         catch (Exception ex)

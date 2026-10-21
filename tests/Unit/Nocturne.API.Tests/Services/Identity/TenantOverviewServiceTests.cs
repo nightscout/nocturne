@@ -14,6 +14,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
@@ -409,8 +410,10 @@ public class TenantOverviewServiceTests
         var ownerTenant = SeedMembership(options, subjectId, "owner", rolePermissions: null,
             directPermissions: [Scope.FullAccess], limitTo24Hours: true, lastReadingAt: oldReading);
 
-        var (service, clampSeen) = NewClampObservingService(options);
+        var (service, clampSeen, contextClampSeen) = NewClampObservingService(options);
         var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie);
+
+        contextClampSeen.Should().Equal(clampSeen, "the alert and threshold reads run under the same clamp as the glucose read");
 
         clampSeen[clampedTenant].Should().BeTrue("the glucose read must run under the membership's clamp");
         clampSeen[fullTenant].Should().BeFalse();
@@ -430,7 +433,7 @@ public class TenantOverviewServiceTests
         var tenantId = SeedMembership(options, subjectId, "full", [Scope.GlucoseRead]);
         var ownerTenant = SeedMembership(options, subjectId, "owner", [Scope.FullAccess]);
 
-        var (service, clampSeen) = NewClampObservingService(options);
+        var (service, clampSeen, _) = NewClampObservingService(options);
         await service.GetOverviewAsync(
             subjectId, FullTokenScopes, AuthType.OAuthAccessToken, credentialLimitTo24Hours: true);
 
@@ -442,11 +445,17 @@ public class TenantOverviewServiceTests
     /// A service whose per-tenant scopes carry a real <see cref="ICategoryReadContext"/>, recording
     /// whether it was history-clamped when that tenant's latest glucose was read.
     /// </summary>
-    private static (TenantOverviewService Service, Dictionary<Guid, bool> ClampSeen) NewClampObservingService(
-        DbContextOptions<NocturneDbContext> options)
+    private static (TenantOverviewService Service, Dictionary<Guid, bool> ClampSeen, Dictionary<Guid, bool> ContextClampSeen)
+        NewClampObservingService(DbContextOptions<NocturneDbContext> options)
     {
         var clampSeen = new Dictionary<Guid, bool>();
+        var contextClampSeen = new Dictionary<Guid, bool>();
         var services = new ServiceCollection();
+        services.AddScoped<INocturneDbContextFactory>(sp => new ScopeContextFactory(
+            options,
+            () => sp.GetRequiredService<ITenantAccessor>().TenantId,
+            sp.GetRequiredService<ICategoryReadContext>(),
+            contextClampSeen));
         services.AddScoped<ICategoryReadContext, Nocturne.Infrastructure.Data.Services.CategoryReadContext>();
         services.AddScoped<ITenantAccessor>(_ => new RecordingTenantAccessor());
         services.AddScoped(sp =>
@@ -470,7 +479,7 @@ public class TenantOverviewServiceTests
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
             NullLogger<TenantOverviewService>.Instance);
-        return (service, clampSeen);
+        return (service, clampSeen, contextClampSeen);
     }
 
     private sealed class RecordingTenantAccessor : ITenantAccessor
@@ -588,6 +597,7 @@ public class TenantOverviewServiceTests
         var services = new ServiceCollection();
         services.AddScoped(_ => canonical.Object);
         services.AddScoped(_ => accessor.Object);
+        services.AddScoped<INocturneDbContextFactory>(_ => new ScopeContextFactory(options, () => current!.TenantId));
         var provider = services.BuildServiceProvider();
 
         return new TenantOverviewService(
@@ -596,6 +606,25 @@ public class TenantOverviewServiceTests
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
             NullLogger<TenantOverviewService>.Instance);
+    }
+
+    /// <summary>
+    /// The per-tenant scope's context factory, pinned to that scope's tenant and recording the
+    /// scope's clamp when a context is taken.
+    /// </summary>
+    private sealed class ScopeContextFactory(
+        DbContextOptions<NocturneDbContext> options,
+        Func<Guid> tenantId,
+        ICategoryReadContext? category = null,
+        Dictionary<Guid, bool>? clampSeen = null) : SingleReaderDbContextFactory
+    {
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
+        {
+            var context = new NocturneDbContext(options) { TenantId = tenantId() };
+            if (clampSeen is not null)
+                clampSeen[context.TenantId] = category?.IsHistoryClamped == true;
+            return ValueTask.FromResult(context);
+        }
     }
 
     private sealed class InMemoryContextFactory(DbContextOptions<NocturneDbContext> options)

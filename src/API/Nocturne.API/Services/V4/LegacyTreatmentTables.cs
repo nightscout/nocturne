@@ -413,16 +413,20 @@ internal static class LegacyTreatmentTables
                 && EF.Functions.JsonExists(s.MetadataJson!, StateSpanMetadataExtensions.UtcOffsetKey),
             // A later switch ends an open switch by supersession; the upload was permanent, and a
             // non-zero duration would read as a temporary switch.
-            (s, metadata) => new Treatment
-            {
-                EventType = TreatmentTypes.ProfileSwitch,
-                Duration = s.SupersededById != null ? 0 : DurationMinutes(s),
-                Profile = metadata.TryReadString("profileName"),
-                ProfileJson = metadata.TryReadString("profileJson"),
-                Percentage = (double?)metadata.TryReadDecimal("percentage"),
-                Timeshift = (double?)metadata.TryReadDecimal("timeshift"),
-                Reason = metadata.TryReadString("reason"),
-            }),
+            (s, metadata) => EffectiveProfileSwitch.IsSpan(metadata)
+                ? EffectiveProfileSwitch.Project(metadata)
+                : new Treatment
+                {
+                    EventType = TreatmentTypes.ProfileSwitch,
+                    Duration = UploadedDuration(metadata) ?? (s.SupersededById != null ? 0 : DurationMinutes(s)),
+                    Profile = metadata.TryReadString("profileName"),
+                    ProfileJson = metadata.TryReadString("profileJson"),
+                    Percentage = (double?)metadata.TryReadDecimal("percentage"),
+                    Timeshift = (double?)metadata.TryReadDecimal("timeshift"),
+                    Reason = metadata.TryReadString("reason"),
+                    OriginalProfileName = metadata.TryReadString(EffectiveProfileSwitch.OriginalProfileNameKey),
+                    OriginalDuration = (int?)metadata.TryReadDecimal(EffectiveProfileSwitch.OriginalDurationKey),
+                }),
     ];
 
     /// <summary>The treatment ids of every state span <see cref="StateSpanTables"/> serves.</summary>

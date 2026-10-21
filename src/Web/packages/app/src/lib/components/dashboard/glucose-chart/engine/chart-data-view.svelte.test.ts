@@ -124,19 +124,23 @@ describe("createStaticChartEngine", () => {
     expect(engine.scheduledBasalData.map((p) => p.rate)).toEqual([0.8, 1.2]);
   });
 
-  it("marks basal stale from its last delivery to the end of the window", () => {
-    const lastEnd = TO - STALE_THRESHOLD_MS - 10 * MINUTE;
-    const engine = engineFor({
-      basalDeliverySpans: [
-        { startMills: at(0), endMills: at(30), rate: 1 },
-        { startMills: at(30), endMills: lastEnd, rate: 1 },
-      ],
-    });
+  it("marks basal stale from the last pump sync to the end of the window", () => {
+    const lastSync = TO - STALE_THRESHOLD_MS - 10 * MINUTE;
+    const engine = engineFor({ lastPumpSyncMills: lastSync });
 
-    expect(engine.staleBasalData?.start.getTime()).toBe(lastEnd);
+    expect(engine.staleBasalData?.start.getTime()).toBe(lastSync);
     expect(engine.finders.isStaleBasalTime(new Date(TO))).toBe(true);
     expect(engine.finders.isStaleBasalTime(date(10))).toBe(false);
     expect(engineFor({}).finders.isStaleBasalTime(date(10))).toBe(false);
+  });
+
+  it("does not mark basal stale while the pump keeps syncing on its scheduled basal", () => {
+    const engine = engineFor({
+      basalDeliverySpans: [{ startMills: at(0), endMills: at(30), rate: 1 }],
+      lastPumpSyncMills: TO - 2 * MINUTE,
+    });
+
+    expect(engine.staleBasalData).toBeNull();
   });
 
   it("reads the pump mode of the latest span when none is active now", () => {

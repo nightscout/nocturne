@@ -5,7 +5,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Cache.Abstractions;
+using Nocturne.API.Services.Caching;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 using Nocturne.API.Services.Realtime;
@@ -15,7 +15,7 @@ namespace Nocturne.API.Tests.Services.Effects;
 [Trait("Category", "Unit")]
 public class WriteSideEffectsServiceTests
 {
-    private readonly Mock<ICacheService> _mockCache;
+    private readonly Mock<ITenantCache> _mockCache;
     private readonly Mock<ISignalRBroadcastService> _mockBroadcast;
     private readonly Mock<IDecompositionPipeline> _mockPipeline;
     private readonly Mock<ILogger<WriteSideEffectsService>> _mockLogger;
@@ -23,7 +23,7 @@ public class WriteSideEffectsServiceTests
 
     public WriteSideEffectsServiceTests()
     {
-        _mockCache = new Mock<ICacheService>();
+        _mockCache = new Mock<ITenantCache>();
         _mockBroadcast = new Mock<ISignalRBroadcastService>();
         _mockPipeline = new Mock<IDecompositionPipeline>();
         _mockLogger = new Mock<ILogger<WriteSideEffectsService>>();
@@ -32,7 +32,6 @@ public class WriteSideEffectsServiceTests
             _mockCache.Object,
             _mockBroadcast.Object,
             _mockPipeline.Object,
-            MockTenantAccessor.Create().Object,
             Enumerable.Empty<ICollectionEffectDescriptor>(),
             _mockLogger.Object
         );
@@ -52,19 +51,15 @@ public class WriteSideEffectsServiceTests
     }
 
     [Fact]
-    public async Task OnCreatedAsync_WithCacheKeys_InvalidatesCache()
+    public async Task OnCreatedAsync_WithCacheFamilies_ClearsEachFamily()
     {
-        var options = new WriteEffectOptions
-        {
-            CacheKeysToRemove = ["entries:current:abc"],
-            CachePatternsToClear = ["entries:recent:abc:*"]
-        };
+        var options = new WriteEffectOptions { CacheFamiliesToClear = ["entries", "treatments"] };
         var entries = new List<Entry> { new() { Id = "1" } };
 
         await _service.OnCreatedAsync("entries", entries, options);
 
-        _mockCache.Verify(c => c.RemoveAsync("entries:current:abc", It.IsAny<CancellationToken>()), Times.Once);
-        _mockCache.Verify(c => c.RemoveByPatternAsync("entries:recent:abc:*", It.IsAny<CancellationToken>()), Times.Once);
+        _mockCache.Verify(c => c.RemoveFamilyAsync("entries", It.IsAny<CancellationToken>()), Times.Once);
+        _mockCache.Verify(c => c.RemoveFamilyAsync("treatments", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -167,10 +162,10 @@ public class WriteSideEffectsServiceTests
     public async Task CacheFailure_DoesNotPreventBroadcast()
     {
         _mockCache
-            .Setup(c => c.RemoveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(c => c.RemoveFamilyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Cache down"));
 
-        var options = new WriteEffectOptions { CacheKeysToRemove = ["key"] };
+        var options = new WriteEffectOptions { CacheFamiliesToClear = ["family"] };
         var entries = new List<Entry> { new() { Id = "1" } };
 
         await _service.OnCreatedAsync("entries", entries, options);

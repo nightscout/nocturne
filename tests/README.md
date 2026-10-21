@@ -101,9 +101,12 @@ To add a vendor, write a module exporting a `Vendor` and list it in `server.ts`.
 
 Google Health (`vendors/google-health.ts`) validates authorization-code PKCE, client credentials,
 redirect URIs and one-use codes, serves account identity, refresh/revocation and two pages of
-steps, heart rate, weight and sleep. The browser spec intercepts only Google's external consent
-navigation; the real web callback, API, encrypted credential store, worker and PostgreSQL handle
-the rest. API specs reject incorrect/replayed state and preserve a user-deleted sleep session on
+steps, heart rate, weight and sleep. The stack configures one instance client
+(`GOOGLE_HEALTH_CLIENT_ID`/`_SECRET`) whose redirect URI is the apex of the TLS proxy, so every
+tenant shares it; each consent picks a fake Google account named after the tenant
+(`mock_account`), which keeps tenants' data apart. The browser spec intercepts only Google's
+external consent navigation; the apex callback, its relay to the tenant host, the web callback,
+API, encrypted credential store, worker and PostgreSQL handle the rest. API specs reject incorrect/replayed state and preserve a user-deleted sleep session on
 repeat import. A delayed-vendor browser regression disconnects during inventory scanning,
 reloads while revocation is pending, and verifies one request stops the scan, preserves imported
 records and completes local disconnection despite a slow Google revocation response. Opening
@@ -113,8 +116,8 @@ Only `e2e/docker-compose.yml` sets `NOCTURNE_GOOGLE_HEALTH_MOCK=true`; the fixed
 transport also requires dev-only endpoints to be enabled. Production defaults keep Google's
 HTTPS destinations unchanged.
 The Google browser spec uses the test-only Caddy TLS proxy on port 1635 (`E2E_WEB_TLS_PORT`),
-with Chromium accepting its internal CA. This preserves the HTTPS callback requirement for
-tenant hosts; other browser specs retain their HTTP origin. The upgrade stack uses port 1645.
+with Chromium accepting its internal CA. It serves the apex as well as tenant hosts, so the
+HTTPS redirect URI and the relay to the tenant host run as they do in production; other browser specs retain their HTTP origin. The upgrade stack uses port 1645.
 
 **Migration upgrade.** `pnpm e2e:upgrade` starts the latest release
 (`ghcr.io/nightscout/nocturne/nocturne-api:latest`; override with `E2E_PREVIOUS_API_IMAGE`) on a

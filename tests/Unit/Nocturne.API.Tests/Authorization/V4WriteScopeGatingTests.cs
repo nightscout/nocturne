@@ -569,7 +569,7 @@ public class V4WriteScopeGatingTests
                 if (IsGateExempt(controller, action))
                     continue;
 
-                var attributes = action.GetCustomAttributes(inherit: true);
+                var attributes = AppliedAttributes(controller, action);
                 var gated = attributes.Any(a => a is RequireDeclaredWriteScopeAttribute
                                                      or RequireScopeAttribute
                                                      or RequirePermissionAttribute);
@@ -599,7 +599,7 @@ public class V4WriteScopeGatingTests
 
         violations.Should().BeEmpty(
             "every write action under " + V4Namespace + " must carry [RequireDeclaredWriteScope] "
-            + "(base CRUD actions and their overrides), an explicit [RequireScope], or an entry in "
+            + "(base CRUD actions and their overrides), a [RequireScope] on it or its controller, or an entry in "
             + "GateExemptWriteActions stating why. Unprotected: " + string.Join("; ", violations));
 
         readSatisfiable.Should().BeEmpty(
@@ -930,15 +930,15 @@ public class V4WriteScopeGatingTests
     }
 
     /// <summary>
-    /// Runs the filters an action actually declares (authorization filters first, as MVC does), so
-    /// the assertion covers both which gate is present and the scope it names.
+    /// Runs the filters that apply to an action, its controller's and its own (authorization filters
+    /// first, as MVC does), so the assertion covers both which gate is present and the scope it names.
     /// </summary>
     private static IActionResult? EvaluateAction(
         Type controller, string actionName, bool authenticated, params string[] grantedScopes)
     {
         var action = controller.GetMethod(actionName, BindingFlags.Public | BindingFlags.Instance)
             ?? throw new InvalidOperationException($"{controller.Name} has no action named {actionName}");
-        var filters = action.GetCustomAttributes(inherit: true);
+        var filters = AppliedAttributes(controller, action);
 
         var actionContext = new ActionContext(
             NewHttpContext(authenticated, grantedScopes), new RouteData(), new ActionDescriptor());
@@ -976,10 +976,21 @@ public class V4WriteScopeGatingTests
         return httpContext;
     }
 
+    /// <summary>The attributes MVC applies to an action: its controller's, then its own.</summary>
+    private static object[] AppliedAttributes(Type controller, MethodInfo action) =>
+        [.. controller.GetCustomAttributes(inherit: true), .. action.GetCustomAttributes(inherit: true)];
+
     /// <summary>The scopes an action's gate requires: the controller's declaration, or the explicit list.</summary>
+    /// <remarks>
+    /// The action's own gate when it has one: a controller-wide read gate alongside it still leaves
+    /// the action requiring the write scope. Without one, the controller's gate is the action's.
+    /// </remarks>
     private static IEnumerable<string> RequiredScopes(Type controller, MethodInfo action)
     {
-        var attributes = action.GetCustomAttributes(inherit: true);
+        var own = action.GetCustomAttributes(inherit: true);
+        var attributes = own.Any(a => a is RequireDeclaredWriteScopeAttribute or RequireScopeAttribute)
+            ? own
+            : controller.GetCustomAttributes(inherit: true);
 
         if (attributes.Any(a => a is RequireDeclaredWriteScopeAttribute)
             && ScopeDeclarationInstance(controller) is IWriteScopedController declared)

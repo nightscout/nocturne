@@ -16,6 +16,7 @@ namespace Nocturne.API.Services.Profiles;
 public class ProfileWriteService : IProfileWriteService
 {
     private readonly IProfileDecomposer _decomposer;
+    private readonly IProfileProjectionService _projection;
     private readonly ITherapySettingsRepository _therapySettings;
     private readonly IWriteSideEffects _sideEffects;
     private readonly IDataEventSink<Profile> _events;
@@ -24,6 +25,7 @@ public class ProfileWriteService : IProfileWriteService
 
     public ProfileWriteService(
         IProfileDecomposer decomposer,
+        IProfileProjectionService projection,
         ITherapySettingsRepository therapySettings,
         IWriteSideEffects sideEffects,
         IDataEventSink<Profile> events,
@@ -31,6 +33,7 @@ public class ProfileWriteService : IProfileWriteService
     )
     {
         _decomposer = decomposer;
+        _projection = projection;
         _therapySettings = therapySettings;
         _sideEffects = sideEffects;
         _events = events;
@@ -74,7 +77,7 @@ public class ProfileWriteService : IProfileWriteService
         CancellationToken cancellationToken = default
     )
     {
-        profile.Id = id;
+        profile.Id = await _projection.ResolveDocumentIdAsync(id, cancellationToken) ?? id;
 
         if (!await _decomposer.ReplaceDocumentAsync(profile, WriteOrigin.Live, cancellationToken))
             return null;
@@ -96,7 +99,8 @@ public class ProfileWriteService : IProfileWriteService
         CancellationToken cancellationToken = default
     )
     {
-        var deleted = await _decomposer.DeleteDocumentAsync(id, WriteOrigin.Live, cancellationToken) > 0;
+        var documentId = await _projection.ResolveDocumentIdAsync(id, cancellationToken) ?? id;
+        var deleted = await _decomposer.DeleteDocumentAsync(documentId, WriteOrigin.Live, cancellationToken) > 0;
 
         if (deleted)
             await OnDeletedAsync(cancellationToken);
