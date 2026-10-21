@@ -11,8 +11,12 @@ using Xunit;
 
 namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
 
-public class GoogleHealthSessionStoreTests
+public class GoogleHealthSessionStoreTests : IDisposable
 {
+    private readonly List<HttpClient> _httpClients = [];
+
+    public void Dispose() => _httpClients.ForEach(client => client.Dispose());
+
     private Dictionary<string, string> secrets = new()
     {
         ["refreshToken"] = "refresh",
@@ -82,8 +86,10 @@ public class GoogleHealthSessionStoreTests
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(accessor => accessor.IsResolved).Returns(true);
         tenant.SetupGet(accessor => accessor.TenantId).Returns(Guid.NewGuid());
+        var http = new HttpClient(handler ?? new ThrowingHandler());
+        _httpClients.Add(http);
         var oauth = new GoogleHealthAuthTokenProvider(
-            new HttpClient(handler ?? new ThrowingHandler()),
+            http,
             new ConnectorTokenCache(),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
             tenant.Object,
@@ -96,10 +102,10 @@ public class GoogleHealthSessionStoreTests
     public async Task Clearing_a_former_clients_session_revokes_its_token()
     {
         var revoked = new List<string>();
-        var store = Store(out _, new RecordingHandler((request, _) =>
+        var store = Store(out _, new RecordingHandler(async (request, ct) =>
         {
-            revoked.Add(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
-            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("{}") });
+            revoked.Add(await request.Content!.ReadAsStringAsync(ct));
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("{}") };
         }));
 
         await store.ClearAsync(removeAccount: false, Guid.NewGuid(), revoke: true, default);

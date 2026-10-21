@@ -46,19 +46,24 @@ public sealed class GoogleHealthAuthTokenProvider(
     public async Task DiscardStaleCacheAsync(GoogleHealthConnectorConfiguration configuration)
     {
         var cached = await _tokenCache.GetAsync(ConnectorName, TenantId);
-        if (cached is null) return;
+        if (cached is not null && !IsForStoredGrant(cached, configuration))
+            InvalidateToken();
+    }
+
+    private static bool IsForStoredGrant(ConnectorSession cached, GoogleHealthConnectorConfiguration configuration)
+    {
+        GoogleHealthTokenSession session;
         try
         {
-            var session = FromCache(cached);
-            if (session.RefreshToken == configuration.RefreshToken &&
-                session.Scopes.Order(StringComparer.Ordinal)
-                    .SequenceEqual(configuration.ParsedGrantedScopes().Order(StringComparer.Ordinal)))
-                return;
+            session = FromCache(cached);
         }
         catch (GoogleHealthException)
         {
+            return false;
         }
-        InvalidateToken();
+        return session.RefreshToken == configuration.RefreshToken &&
+               session.Scopes.Order(StringComparer.Ordinal)
+                   .SequenceEqual(configuration.ParsedGrantedScopes().Order(StringComparer.Ordinal));
     }
 
     public async Task StoreSessionAsync(GoogleHealthTokenSession session)

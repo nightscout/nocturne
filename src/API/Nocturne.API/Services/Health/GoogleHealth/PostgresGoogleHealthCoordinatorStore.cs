@@ -102,7 +102,7 @@ public sealed class PostgresGoogleHealthCoordinatorStore(IServiceScopeFactory sc
         using var scope = TenantScope(tenantId);
         var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         await db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_notify({RequestChannel}, {tenantId.ToString()})", ct);
+            $"SELECT pg_notify({RequestChannel}, {tenantId}::text)", ct);
     }
 
     public async IAsyncEnumerable<Guid> ReadRequestsAsync([EnumeratorCancellation] CancellationToken ct)
@@ -131,10 +131,12 @@ public sealed class PostgresGoogleHealthCoordinatorStore(IServiceScopeFactory sc
                         // every 15 minutes; normal dispatch is driven by durable queue notifications.
                         using var scope = scopes.CreateScope();
                         var tenants = await scope.ServiceProvider.GetRequiredService<ITenantService>().GetAllAsync(ct);
-                        foreach (var tenant in tenants.Where(tenant => tenant.IsActive))
-                            if (await ReadProgressAsync(tenant.Id, ct) is { WorkerOwned: true } ||
-                                await ReadDisconnectAsync(tenant.Id, ct) is not null)
-                                yield return tenant.Id;
+                        var pending = tenants.Where(tenant => tenant.IsActive).ToAsyncEnumerable()
+                            .Where(async (tenant, token) =>
+                                await ReadProgressAsync(tenant.Id, token) is { WorkerOwned: true } ||
+                                await ReadDisconnectAsync(tenant.Id, token) is not null);
+                        await foreach (var tenant in pending.WithCancellation(ct))
+                            yield return tenant.Id;
                         recoverAt = DateTimeOffset.UtcNow.AddMinutes(15);
                     }
                     while (requests.Reader.TryRead(out var tenant))
