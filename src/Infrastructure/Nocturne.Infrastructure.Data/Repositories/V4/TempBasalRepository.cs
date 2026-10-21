@@ -188,14 +188,21 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
     }
 
     /// <inheritdoc />
+    public async Task<bool> HasScheduleDerivedAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await ctx.TempBasals.AnyAsync(t => t.Percent != null && (t.Rate == null || t.RateFromSchedule), ct);
+    }
+
+    /// <inheritdoc />
     public async Task<bool> SetScheduleDerivedRateAsync(
-        Guid id, double percent, double? rate, double? scheduledRate, CancellationToken ct = default)
+        Guid id, double percent, double? readRate, double? rate, double? scheduledRate, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var fromSchedule = rate is not null;
         var stamp = DateTime.UtcNow;
         var updated = await ctx.TempBasals
-            .Where(t => t.Id == id && t.DeletedAt == null && t.Percent == percent
+            .Where(t => t.Id == id && t.DeletedAt == null && t.Percent == percent && t.Rate == readRate
                 && (t.Rate == null || t.RateFromSchedule))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(t => t.Rate, rate)

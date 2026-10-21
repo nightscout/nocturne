@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -8,41 +9,61 @@ namespace Nocturne.API.Services.V4;
 
 /// <summary>
 /// Re-resolves the schedule-derived rates of percent temp basals (resolved from the schedule, or
-/// still unknown) in the span a schedule or profile activation write changes. Uploaded rates are
+/// still unknown) in the span a schedule, profile or activation change governs. Uploaded rates are
 /// never touched.
 /// </summary>
 public interface ITempBasalRateReresolver
 {
-    /// <param name="versions">The basal schedule versions written, by profile name and start.</param>
+    /// <param name="versions">
+    /// The basal schedule versions written, moved or deleted, by profile name and start (a moved
+    /// version once at each start).
+    /// </param>
     Task AfterSchedulesWrittenAsync(
         IReadOnlyCollection<(string ProfileName, DateTime Start)> versions, CancellationToken ct);
 
     /// <param name="spans">The activations written or removed, with the end they ran to, if any.</param>
     Task AfterActivationsChangedAsync(
         IReadOnlyCollection<(string ProfileName, DateTime Start, DateTime? End)> spans, CancellationToken ct);
+
+    /// <summary>
+    /// For a change whose span is not worth working out (the default store, a store's timezone, the
+    /// patient's timezone, a source's activations removed): every schedule-derived rate, at any time.
+    /// </summary>
+    /// <param name="profileNames">The profiles whose cached versions the change made stale.</param>
+    Task AfterProfilesChangedAsync(IReadOnlyCollection<string> profileNames, CancellationToken ct);
 }
 
 /// <summary>
 /// The rate Nightscout gives a percent temp is read against the schedule in force when it is read,
-/// so a schedule-derived rate here follows every later write that changes that schedule: a new
-/// version, a profile document, or an activation, including one an import lands after the temp.
+/// so a schedule-derived rate here follows every later change to that schedule: a version, a
+/// profile document, the default store, a timezone or an activation, including one an import lands
+/// after the temp.
 /// </summary>
 /// <remarks>
-/// Runs after the write has committed and never fails it: an error is logged and the rates are
-/// left as they were. It reads in a scope of its own, as the writer's reader, so no resolver memo of
-/// the writing scope answers for the schedule just written; the version cache is reloaded for it. A window runs
-/// from a written version or activation to the next one's start, or to now; a written version that
-/// is its profile's newest also covers the time before the first, which reads the newest
-/// (<see cref="Profiles.Resolvers.ProfileVersionCache.ActiveAt{TRecord}"/>). A profile document can
-/// also move the default store from its start, and each of its stores gets a window from that start,
-/// so the default's change is covered too. Each row
-/// is written by a conditional update (<see cref="ITempBasalRepository.SetScheduleDerivedRateAsync"/>)
-/// so a concurrent edit, upload or delete of it stands.
+/// Runs after the write has committed and never fails it: an error is logged and the rates are left
+/// as they were. It is a system-derived recompute in a job scope of its own that reads as no one, so
+/// a history-clamped writer still moves older rates, and no resolver memo of the writing scope
+/// answers for the change; the version cache is reloaded for the profiles named. A tenant with no
+/// schedule-derived percent temps costs one indexed probe.
+/// <para>
+/// A version's window runs to the next version of its profile; the newest also covers the time
+/// before the first, which reads the newest (<see cref="ProfileVersionCache.ActiveAt{TRecord}"/>),
+/// and with no version left every time is covered. A document's stores each get a window from its
+/// start, which covers the per-time default store moving there. An activation with no end is
+/// open-ended: a permanent one applies again after a temporary one ends
+/// (<see cref="ProfileActivations.ProfileActivationSelection"/>).
+/// </para>
+/// <para>
+/// Each row is written by a conditional update (<see cref="ITempBasalRepository.SetScheduleDerivedRateAsync"/>)
+/// so a concurrent edit, upload, delete or overlapping re-resolution of it stands.
+/// </para>
 /// </remarks>
 internal sealed class TempBasalRateReresolver(
     IServiceProvider scope,
     ILogger<TempBasalRateReresolver> logger) : ITempBasalRateReresolver
 {
+    public const string AuditEndpoint = "temp-basal-rates";
+
     private const int PageSize = 500;
 
     private sealed record Window(DateTime? From, DateTime? To);
@@ -57,21 +78,30 @@ internal sealed class TempBasalRateReresolver(
         IReadOnlyCollection<(string ProfileName, DateTime Start, DateTime? End)> spans, CancellationToken ct) =>
         spans.Count == 0
             ? Task.CompletedTask
-            : RunAsync(spans.Select(s => s.ProfileName), (sp, token) => ActivationWindowsAsync(sp, spans, token), ct);
+            : RunAsync(
+                spans.Select(s => s.ProfileName),
+                (_, _) => Task.FromResult(spans.Select(s => new Window(s.Start, s.End)).ToList()),
+                ct);
+
+    public Task AfterProfilesChangedAsync(IReadOnlyCollection<string> profileNames, CancellationToken ct) =>
+        RunAsync(profileNames, (_, _) => Task.FromResult(new List<Window> { new(null, null) }), ct);
 
     private async Task RunAsync(
         IEnumerable<string> profileNames,
         Func<IServiceProvider, CancellationToken, Task<List<Window>>> windowsOf,
         CancellationToken ct)
     {
-        var reader = TenantReader.Of(scope);
-        if (reader.Tenant is null)
+        if (scope.GetRequiredService<ITenantAccessor>() is not { IsResolved: true, Context: { } tenant })
             return;
 
         try
         {
-            await using var job = TenantJobScope.OpenFor(scope, reader, "temp-basal-rates");
+            await using var job = TenantJobScope.Open(scope, tenant, AuditEndpoint);
             var services = job.ServiceProvider;
+
+            var tempBasals = services.GetRequiredService<ITempBasalRepository>();
+            if (!await tempBasals.HasScheduleDerivedAsync(ct))
+                return;
 
             var versions = services.GetRequiredService<ProfileVersionCache>();
             var basalSchedules = services.GetRequiredService<IBasalScheduleRepository>();
@@ -83,7 +113,6 @@ internal sealed class TempBasalRateReresolver(
             }
 
             var rates = services.GetRequiredService<RelativeTempBasalRates>();
-            var tempBasals = services.GetRequiredService<ITempBasalRepository>();
             var changed = 0;
             foreach (var window in Merge(await windowsOf(services, ct)))
                 changed += await ReresolveAsync(window, rates, tempBasals, ct);
@@ -97,7 +126,7 @@ internal sealed class TempBasalRateReresolver(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Could not re-resolve the percent temp basal rates a schedule write changed");
+            logger.LogWarning(ex, "Could not re-resolve the percent temp basal rates a schedule change governs");
         }
     }
 
@@ -116,7 +145,7 @@ internal sealed class TempBasalRateReresolver(
                 if (rate == tempBasal.Rate && scheduled == tempBasal.ScheduledRate)
                     continue;
 
-                if (await tempBasals.SetScheduleDerivedRateAsync(tempBasal.Id, percent, rate, scheduled, ct))
+                if (await tempBasals.SetScheduleDerivedRateAsync(tempBasal.Id, percent, tempBasal.Rate, rate, scheduled, ct))
                     changed++;
             }
 
@@ -142,27 +171,13 @@ internal sealed class TempBasalRateReresolver(
             foreach (var (_, start) in group)
             {
                 var next = starts.Where(s => s > start).Select(s => (DateTime?)s).FirstOrDefault();
+                if (next is null)
+                {
+                    windows.Add(starts.Count > 0 ? new Window(null, starts[0]) : new Window(null, null));
+                }
+
                 windows.Add(new Window(start, next));
-                if (next is null && starts.Count > 0)
-                    windows.Add(new Window(null, starts[0]));
             }
-        }
-
-        return windows;
-    }
-
-    private static async Task<List<Window>> ActivationWindowsAsync(
-        IServiceProvider services,
-        IReadOnlyCollection<(string ProfileName, DateTime Start, DateTime? End)> spans,
-        CancellationToken ct)
-    {
-        var activations = services.GetRequiredService<IProfileActivationRepository>();
-        var windows = new List<Window>();
-        foreach (var (_, start, end) in spans)
-        {
-            var to = end
-                ?? (await activations.GetStartingAfterAsync(start, 1, ct)).Select(a => (DateTime?)a.StartTimestamp).FirstOrDefault();
-            windows.Add(new Window(start, to));
         }
 
         return windows;

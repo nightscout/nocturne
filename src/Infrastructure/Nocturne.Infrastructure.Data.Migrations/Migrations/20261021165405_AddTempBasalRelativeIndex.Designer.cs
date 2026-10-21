@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20261021162338_AddTempBasalRelativeIndex")]
+    [Migration("20261021165405_AddTempBasalRelativeIndex")]
     partial class AddTempBasalRelativeIndex
     {
         /// <inheritdoc />

@@ -37,6 +37,7 @@ public class TempBasalRateReresolverTests
             .Setup(r => r.GetScheduleDerivedAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<(DateTime, Guid)?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
+        _tempBasals.Setup(r => r.HasScheduleDerivedAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
     }
 
     private TempBasalRateReresolver Reresolver(IProfileActivationRepository? activations = null)
@@ -83,15 +84,15 @@ public class TempBasalRateReresolverTests
             .Setup(r => r.FindBasalRateAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1.0);
         _tempBasals
-            .Setup(r => r.SetScheduleDerivedRateAsync(It.IsAny<Guid>(), -50, 0.5, 1.0, It.IsAny<CancellationToken>()))
+            .Setup(r => r.SetScheduleDerivedRateAsync(It.IsAny<Guid>(), -50, It.IsAny<double?>(), 0.5, 1.0, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         await Reresolver().AfterSchedulesWrittenAsync([("Day", VersionStart)], CancellationToken.None);
 
-        _tempBasals.Verify(r => r.SetScheduleDerivedRateAsync(stale.Id, -50, 0.5, 1.0, It.IsAny<CancellationToken>()), Times.Once);
-        _tempBasals.Verify(r => r.SetScheduleDerivedRateAsync(unknown.Id, -50, 0.5, 1.0, It.IsAny<CancellationToken>()), Times.Once);
+        _tempBasals.Verify(r => r.SetScheduleDerivedRateAsync(stale.Id, -50, 0.4, 0.5, 1.0, It.IsAny<CancellationToken>()), Times.Once);
+        _tempBasals.Verify(r => r.SetScheduleDerivedRateAsync(unknown.Id, -50, null, 0.5, 1.0, It.IsAny<CancellationToken>()), Times.Once);
         _tempBasals.Verify(r => r.SetScheduleDerivedRateAsync(current.Id, It.IsAny<double>(), It.IsAny<double?>(),
-            It.IsAny<double?>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<double?>(), It.IsAny<double?>(), It.IsAny<CancellationToken>()), Times.Never);
         _cache.Verify(c => c.RemoveFamilyAsync(TenantCacheFamily.Treatments, It.IsAny<CancellationToken>()), Times.Once);
         _cache.Verify(c => c.RemoveFamilyAsync(TenantCacheFamily.Statistics, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -119,18 +120,63 @@ public class TempBasalRateReresolverTests
     }
 
     [Fact]
-    public async Task AnActivationWithNoEnd_RunsToTheNextActivationsStart()
+    public async Task AnActivationWithNoEnd_IsOpenEnded()
     {
         var start = VersionStart.AddDays(1);
-        var nextStart = start.AddHours(3);
-        var activations = new Mock<IProfileActivationRepository>();
-        activations
-            .Setup(r => r.GetStartingAfterAsync(start, 1, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new ProfileActivation { StartTimestamp = nextStart }]);
-        var reresolver = Reresolver(activations.Object);
 
-        await reresolver.AfterActivationsChangedAsync([("Day", start, null)], CancellationToken.None);
+        await Reresolver().AfterActivationsChangedAsync([("Day", start, null)], CancellationToken.None);
 
-        _tempBasals.Verify(r => r.GetScheduleDerivedAsync(start, nextStart, null, It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
+        _tempBasals.Verify(r => r.GetScheduleDerivedAsync(start, null, null, It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// A permanent activation P applies again after a temporary one T ends, so writing P re-resolves
+    /// the temps after T as well, not only those before T starts.
+    /// </summary>
+    [Fact]
+    public async Task APermanentActivationWrittenBeforeATemporaryOne_CoversTheTimeAfterItEnds()
+    {
+        var permanentStart = VersionStart.AddDays(1);
+        var temporaryStart = permanentStart.AddHours(2);
+        var afterTemporary = temporaryStart.AddHours(3);
+        var tempAfter = Derived(afterTemporary, 0.4);
+        _tempBasals
+            .Setup(r => r.GetScheduleDerivedAsync(permanentStart, null, null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([tempAfter]);
+        _basalRates
+            .Setup(r => r.FindBasalRateAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1.5);
+        _tempBasals
+            .Setup(r => r.SetScheduleDerivedRateAsync(tempAfter.Id, -50, 0.4, 0.75, 1.5, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        await Reresolver().AfterActivationsChangedAsync(
+            [("Day", permanentStart, null), ("Day", temporaryStart, temporaryStart.AddHours(1))], CancellationToken.None);
+
+        _tempBasals.Verify(r => r.SetScheduleDerivedRateAsync(tempAfter.Id, -50, 0.4, 0.75, 1.5, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ATenantWithNoScheduleDerivedRates_ReadsNoVersionsOrWindows()
+    {
+        _tempBasals.Setup(r => r.HasScheduleDerivedAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        await Reresolver().AfterSchedulesWrittenAsync([("Day", VersionStart)], CancellationToken.None);
+
+        _basalSchedules.Verify(r => r.GetByProfileNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _tempBasals.Verify(r => r.GetScheduleDerivedAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+            It.IsAny<(DateTime, Guid)?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeletingTheLastVersion_CoversEveryTime()
+    {
+        _basalSchedules
+            .Setup(r => r.GetByProfileNameAsync("Gone", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        await Reresolver().AfterSchedulesWrittenAsync([("Gone", VersionStart)], CancellationToken.None);
+
+        _tempBasals.Verify(r => r.GetScheduleDerivedAsync(null, null, null, It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

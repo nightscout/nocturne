@@ -98,6 +98,16 @@ public sealed class ProfileActivationWriter
         _cache.RemoveFamilyAsync(TenantCacheFamily.ProfileActivations, ct);
 
     /// <summary>
+    /// Clears the cache and re-resolves every schedule-derived temp basal rate, after activations
+    /// were removed in bulk without being read.
+    /// </summary>
+    public async Task AfterBulkRemovalAsync(CancellationToken ct)
+    {
+        await InvalidateAsync(ct);
+        await _tempBasalRates.AfterProfilesChangedAsync([], ct);
+    }
+
+    /// <summary>
     /// Each live activation of the families of <paramref name="removed"/> that one of them ended or
     /// confirmed, settled oldest first as if written again with only the end it brings with it.
     /// </summary>

@@ -207,6 +207,43 @@ public class PercentTempBasalIntegrationTests : ApiIntegrationTestBase
     }
 
     /// <summary>
+    /// A permanent switch applies again once a temporary one ends, so importing the permanent one
+    /// after the temporary one moves a temp that runs after the temporary one ended.
+    /// </summary>
+    [Fact]
+    public async Task APermanentSwitchImportedAfterATemporaryOne_ReachesPastItsEnd()
+    {
+        var store = StoreName();
+        await PostAsync("/api/v1/profile", FlatProfile(store, 1.0, DaysAgo(10)));
+        var permanentAt = DaysAgo(8);
+        var temporaryAt = permanentAt.AddHours(1);
+        var createdAt = At(temporaryAt.AddMinutes(90));
+
+        Task Import(Treatment treatment) => WithTenantScopeAsync(sp => sp.GetRequiredService<ITreatmentDecomposer>()
+            .DecomposeBatchAsync([treatment], WriteOrigin.Backfill, CancellationToken.None));
+
+        await Import(new Treatment
+        {
+            Id = ObjectIdFor(At(temporaryAt)), EventType = "Profile Switch", Profile = store, Percentage = 50,
+            Duration = 60, Created_at = At(temporaryAt), EnteredBy = "careportal",
+        });
+        await Import(new Treatment
+        {
+            Id = ObjectIdFor(createdAt), EventType = "Temp Basal", Duration = 30, Percent = -50,
+            Created_at = createdAt, EnteredBy = "careportal",
+        });
+        (await StoredAtAsync(createdAt)).Rate.Should().BeApproximately(0.5, 1e-9);
+
+        await Import(new Treatment
+        {
+            Id = ObjectIdFor(At(permanentAt)), EventType = "Profile Switch", Profile = store, Percentage = 150,
+            Duration = 0, Created_at = At(permanentAt), EnteredBy = "careportal",
+        });
+
+        (await StoredAtAsync(createdAt)).Rate.Should().BeApproximately(0.75, 1e-9);
+    }
+
+    /// <summary>
     /// The conditional write never lands on a row that changed under it: a new percent, an uploaded
     /// rate or a delete stands.
     /// </summary>
@@ -221,14 +258,16 @@ public class PercentTempBasalIntegrationTests : ApiIntegrationTestBase
         var resolved = await StoredAtAsync(resolvedAt);
         var uploaded = await StoredAtAsync(uploadedAt);
 
-        var (stalePercent, uploadedRate) = await WithTenantScopeAsync(async sp =>
+        var (stalePercent, staleRate, uploadedRate) = await WithTenantScopeAsync(async sp =>
         {
             var repo = sp.GetRequiredService<ITempBasalRepository>();
-            return (await repo.SetScheduleDerivedRateAsync(resolved.Id, -20, 0.8, 1.0, default),
-                await repo.SetScheduleDerivedRateAsync(uploaded.Id, -30, 0.9, 1.0, default));
+            return (await repo.SetScheduleDerivedRateAsync(resolved.Id, -20, resolved.Rate, 0.8, 1.0, default),
+                await repo.SetScheduleDerivedRateAsync(resolved.Id, -50, 0.45, 0.9, 1.8, default),
+                await repo.SetScheduleDerivedRateAsync(uploaded.Id, -30, uploaded.Rate, 0.9, 1.0, default));
         });
 
         stalePercent.Should().BeFalse("the row no longer has the percent the rate was resolved for");
+        staleRate.Should().BeFalse("an overlapping re-resolution already moved the rate it read");
         uploadedRate.Should().BeFalse("an uploaded rate is never overwritten");
         (await StoredAtAsync(resolvedAt)).Rate.Should().BeApproximately(0.5, 1e-9);
         (await StoredAtAsync(uploadedAt)).Rate.Should().Be(0.7);

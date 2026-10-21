@@ -186,6 +186,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             return NotFound();
 
         await _therapyRepo.SetDefaultAsync(target.Id, ct);
+        await _tempBasalRates.AfterProfilesChangedAsync([profileName], ct);
 
         return NoContent();
     }
@@ -331,6 +332,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             await _therapyRepo.SetDefaultAsync(created.Id, ct);
             created.IsDefault = true;
         }
+        await _tempBasalRates.AfterProfilesChangedAsync([created.ProfileName], ct);
         return CreatedAtAction(nameof(GetTherapySettingsById), new { id = created.Id }, created);
     }
 
@@ -373,6 +375,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             await _therapyRepo.SetDefaultAsync(id, ct);
             updated.IsDefault = true;
         }
+        await _tempBasalRates.AfterProfilesChangedAsync([updated.ProfileName], ct);
         return Ok(updated);
     }
 
@@ -386,15 +389,18 @@ public class ProfileController : ControllerBase, IWriteScopedController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteTherapySettings(Guid id, CancellationToken ct = default)
     {
+        var stored = await _therapyRepo.GetByIdAsync(id, ct);
         try
         {
             await _therapyRepo.DeleteAsync(id, WriteOrigin.Live, ct);
-            return NoContent();
         }
         catch (KeyNotFoundException)
         {
             return NotFound();
         }
+
+        await _tempBasalRates.AfterProfilesChangedAsync(stored is null ? [] : [stored.ProfileName], ct);
+        return NoContent();
     }
 
     #endregion
@@ -471,6 +477,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     {
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        var stored = await _basalRepo.GetByIdAsync(id, ct);
         BasalSchedule updated;
         try
         {
@@ -481,7 +488,11 @@ public class ProfileController : ControllerBase, IWriteScopedController
             return NotFound();
         }
 
-        await _tempBasalRates.AfterSchedulesWrittenAsync([(updated.ProfileName, updated.Timestamp)], ct);
+        await _tempBasalRates.AfterSchedulesWrittenAsync(
+            stored is null
+                ? [(updated.ProfileName, updated.Timestamp)]
+                : [(stored.ProfileName, stored.Timestamp), (updated.ProfileName, updated.Timestamp)],
+            ct);
         return Ok(updated);
     }
 
@@ -495,15 +506,19 @@ public class ProfileController : ControllerBase, IWriteScopedController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteBasalSchedule(Guid id, CancellationToken ct = default)
     {
+        var stored = await _basalRepo.GetByIdAsync(id, ct);
         try
         {
             await _basalRepo.DeleteAsync(id, WriteOrigin.Live, ct);
-            return NoContent();
         }
         catch (KeyNotFoundException)
         {
             return NotFound();
         }
+
+        if (stored is not null)
+            await _tempBasalRates.AfterSchedulesWrittenAsync([(stored.ProfileName, stored.Timestamp)], ct);
+        return NoContent();
     }
 
     #endregion
