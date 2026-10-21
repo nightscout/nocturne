@@ -324,7 +324,8 @@ public static class HubAuthorizationState
 /// <remarks>
 /// The hubs are <c>[AllowAnonymous]</c> because in-band authentication requires the connection to be
 /// accepted before the credential arrives, and <see cref="TenantAwareHub.OnConnectedAsync"/> accepts
-/// any connection whose tenant resolves and is active. Authorization therefore has to happen at the
+/// any connection whose tenant resolves, is active and is the one it names in
+/// <see cref="TenantAwareHub.ExpectedTenantHeader"/>, if it names one. Authorization therefore has to happen at the
 /// method boundary. It lives in a filter rather than in each method so a method added later is
 /// denied unless it explicitly opts out with <see cref="HubAuthenticationMethodAttribute"/>.
 /// <para>

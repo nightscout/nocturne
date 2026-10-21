@@ -45,4 +45,7 @@
              the in-memory tracker/timer fakes) used by the engine-seam corpus tests. -->
         <ProjectReference Include="..\..\Parity\Nocturne.Alerts.ParityCorpus.Generator\Nocturne.Alerts.ParityCorpus.Generator.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\Nocturne.Connectors.Nightscout.Tests\TestSupport\PreBolusSplittingNightscout.cs" Link="TestSupport\PreBolusSplittingNightscout.cs" />
+    </ItemGroup>
 </Project>

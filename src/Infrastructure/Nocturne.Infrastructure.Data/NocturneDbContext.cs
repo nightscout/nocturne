@@ -402,6 +402,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TenantDemoConfigEntity> TenantDemoConfigs => Set<TenantDemoConfigEntity>();
 
+    public DbSet<GoogleHealthGrantHolderEntity> GoogleHealthGrantHolders => Set<GoogleHealthGrantHolderEntity>();
+
     /// <summary>
     /// Configure the database model and relationships
     /// </summary>
@@ -1903,6 +1905,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             b.HasOne<SubjectEntity>()
                 .WithMany()
                 .HasForeignKey(e => e.NocturneUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GoogleHealthGrantHolderEntity>(b =>
+        {
+            b.HasIndex(e => e.AccountKey).HasDatabaseName("ix_google_health_grant_holders_account_key");
+            b.HasOne<TenantEntity>()
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
