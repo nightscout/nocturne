@@ -21,7 +21,7 @@ namespace Nocturne.API.Controllers;
 /// </summary>
 /// <remarks>
 /// Most of these endpoints exist only to pull types into the generated client that no other endpoint
-/// reaches — WebSocket event envelopes, connector configuration shapes, OAuth scope lists — and
+/// reaches — WebSocket event envelopes, OAuth scope lists — and
 /// answer with a constant, usually an enum's values. Two serve real data: widget definitions return
 /// the widget catalogue, and multitenancy answers from configuration and the resolved tenant.
 ///
