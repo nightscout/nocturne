@@ -70,6 +70,7 @@ public static class ServiceCollectionExtensions
         }
 
         // Register interceptors as singletons so caches are shared across all DbContext instances.
+        services.TryAddSingleton(new HistoryCommitMargin(TimeSpan.FromMilliseconds(config.HistoryCommitMarginMilliseconds)));
         services.TryAddSingleton<TenantConnectionInterceptor>();
         services.TryAddSingleton<MutationAuditInterceptor>();
 

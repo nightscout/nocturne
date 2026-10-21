@@ -43,7 +43,7 @@ public static class HistoryPage
         CancellationToken ct)
     {
         var from = DateTimeOffset.FromUnixTimeMilliseconds(cursorMills + 1).UtcDateTime;
-        var horizon = await HistoryHorizon.GetAsync(context, ct);
+        var horizon = await HistoryHorizon.GetAsync(context, logger, ct);
         var page = await source
             .Where(InRange(stamp, from, horizon))
             .OrderBy(stamp)

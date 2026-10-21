@@ -75,6 +75,8 @@ services:
       BASE_DOMAIN: *base-domain
       WEB_URL: http://web:5173
       DemoService__Enabled: "false"
+      # Specs read v3 history the moment they write; production keeps the default commit margin.
+      PostgreSql__HistoryCommitMarginMilliseconds: "0"
       NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS: "true"
       NOCTURNE_GOOGLE_HEALTH_MOCK: "true"
       NOCTURNE_EVERSENSE_MOCK: "true"

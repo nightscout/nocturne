@@ -46,7 +46,8 @@ public class V4GoldenFixture : IAsyncLifetime
         // own scope to a user without leaking that attribution into the next test.
         services.AddScoped<TestAuditContext>();
         services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<TestAuditContext>());
-        services.AddPostgreSqlInfrastructure(AppConnectionString, configuration: null);
+        services.AddPostgreSqlInfrastructure(
+            AppConnectionString, configuration: null, configure: c => c.HistoryCommitMarginMilliseconds = 0);
         // Capturing broadcaster: the V4 repos resolve IV4RecordBroadcaster<T> via the open generic, so
         // the real chokepoint fires into BroadcastCapture (additive — existing goldens ignore it).
         services.AddSingleton<BroadcastCapture>();

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
@@ -13,10 +14,13 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
 {
     private readonly INocturneDbContextFactory _contextFactory;
+    private readonly ILogger<DeviceStatusGroupRepository> _logger;
 
-    public DeviceStatusGroupRepository(INocturneDbContextFactory contextFactory)
+    public DeviceStatusGroupRepository(
+        INocturneDbContextFactory contextFactory, ILogger<DeviceStatusGroupRepository> logger)
     {
         _contextFactory = contextFactory;
+        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -82,7 +86,7 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var rows = Rows.IncludingDeleted(ctx);
         var since = DateTimeOffset.FromUnixTimeMilliseconds(cursorMills + 1).UtcDateTime;
-        var horizon = await HistoryHorizon.GetAsync(ctx, ct) ?? DateTime.MaxValue;
+        var horizon = await HistoryHorizon.GetAsync(ctx, _logger, ct) ?? DateTime.MaxValue;
 
         // A status's rows are written together, so a quarter more rows than the page usually settles
         // it in one read; the doubling covers a batch that wrote one table before the next.

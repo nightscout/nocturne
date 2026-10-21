@@ -1,8 +1,12 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
@@ -72,6 +76,179 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         var written = await CreateAsync(scope, T0, "xdrip");
 
         (await history.GetModifiedSinceAsync(0, 100)).Select(h => h.Record.Id).Should().Contain(written.Id);
+    }
+
+    /// <remarks>
+    /// The delete waits on an advisory lock inside the read that precedes its first write, so it
+    /// holds no transaction id of its own unless it claimed one with its stamp, and no other session
+    /// of the runtime role holds one.
+    /// </remarks>
+    [Fact]
+    public async Task A_delete_held_between_its_stamp_and_its_first_write_holds_history_back()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await fixture.BeginTenantScopeAsync(tenant);
+        var history = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+        var doomed = new List<Guid>();
+        for (var i = 0; i < 3; i++)
+            doomed.Add((await CreateAsync(scope, T0.AddMinutes(5 * i), "dexcom-connector")).Id);
+        var cursor = HistoryCursor(await history.GetModifiedSinceAsync(0, 100), 0);
+
+        await using var held = await HoldAdvisoryLockAsync();
+        var delete = StalledDeleteAsync(scope, tenant);
+        await PostgresLockWaits.UntilBlockedAsync(fixture.AppConnectionString, delete);
+
+        var live = await CreateAsync(scope, T0.AddMinutes(20), "xdrip");
+        var duringDelete = await history.GetModifiedSinceAsync(cursor, 100);
+        cursor = HistoryCursor(duringDelete, cursor);
+
+        await held.DisposeAsync();
+        (await delete.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(3);
+
+        var delivered = duringDelete.Concat(await history.GetModifiedSinceAsync(cursor, 100)).ToList();
+        delivered.Where(h => h.Deleted).Select(h => h.Record.Id).Should().BeEquivalentTo(doomed);
+        delivered.Where(h => !h.Deleted).Select(h => h.Record.Id).Should().Contain(live.Id);
+    }
+
+    [Fact]
+    public async Task A_stalled_delete_holds_back_its_own_tenants_history_and_no_other()
+    {
+        var other = Guid.NewGuid();
+        using (await fixture.BeginTenantScopeAsync(other)) { }
+        var tenant = Guid.NewGuid();
+        using var scope = await fixture.BeginTenantScopeAsync(tenant);
+        await CreateAsync(scope, T0, "dexcom-connector");
+
+        await using var held = await HoldAdvisoryLockAsync();
+        var delete = StalledDeleteAsync(scope, tenant);
+        await PostgresLockWaits.UntilBlockedAsync(fixture.AppConnectionString, delete);
+        DateTime deleteStart, own, others;
+        try
+        {
+            deleteStart = await WaitingTransactionStartAsync();
+            own = await HorizonForAsync(scope, tenant);
+            others = await HorizonForAsync(scope, other);
+        }
+        finally
+        {
+            await held.DisposeAsync();
+            await delete.WaitAsync(TimeSpan.FromSeconds(30));
+        }
+
+        own.Should().BeOnOrBefore(deleteStart);
+        others.Should().BeAfter(deleteStart);
+    }
+
+    [Fact]
+    public async Task A_runtime_role_writer_is_waited_for_and_a_migrator_writer_is_not()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await fixture.BeginTenantScopeAsync(tenant);
+
+        await using (var app = await OpenWriterAsync(fixture.AppConnectionString))
+            (await HorizonForAsync(scope, tenant)).Should().BeOnOrBefore(app.Started);
+
+        await using var migrator = await OpenWriterAsync(fixture.MigratorConnectionString);
+        (await HorizonForAsync(scope, tenant)).Should().BeAfter(migrator.Started);
+    }
+
+    [Fact]
+    public async Task The_commit_margin_keeps_the_horizon_that_far_behind_the_database_clock()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await fixture.BeginTenantScopeAsync(tenant);
+        await using var ctx = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+            .CreateForTenantAsync(tenant);
+
+        var horizon = await HistoryHorizon.ReadAsync(ctx, TimeSpan.FromSeconds(2), NullLogger.Instance, CancellationToken.None);
+        var clock = await ctx.Database.SqlQueryRaw<DateTime>("SELECT clock_timestamp() AS \"Value\"").SingleAsync();
+
+        horizon.Should().NotBeNull();
+        horizon!.Value.Should().BeOnOrBefore(clock.AddSeconds(-2));
+    }
+
+    private Task<int> StalledDeleteAsync(IServiceScope scope, Guid tenant) => Task.Run(async () =>
+    {
+        await using var ctx = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+            .CreateForTenantAsync(tenant);
+        var rows = ctx.SensorGlucose.FromSqlRaw(
+            $"SELECT * FROM sensor_glucose WHERE (SELECT count(*) FROM (SELECT pg_advisory_xact_lock_shared({StallKey})) l) = 1");
+        return await ctx.AuditedSoftDeleteAsync(rows.Where(e => e.DataSource == "dexcom-connector"), null, "test");
+    });
+
+    private const int StallKey = 1834;
+
+    private async Task<AdvisoryLock> HoldAdvisoryLockAsync()
+    {
+        var connection = new NpgsqlConnection(fixture.AppConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand($"SELECT pg_advisory_lock({StallKey})", connection);
+        await command.ExecuteNonQueryAsync();
+        return new AdvisoryLock(connection);
+    }
+
+    /// <summary>A session-level lock, released before its connection goes back to the pool.</summary>
+    private sealed class AdvisoryLock(NpgsqlConnection connection) : IAsyncDisposable
+    {
+        private bool _released;
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_released)
+                return;
+            _released = true;
+            await using (var unlock = new NpgsqlCommand($"SELECT pg_advisory_unlock({StallKey})", connection))
+                await unlock.ExecuteNonQueryAsync();
+            await connection.DisposeAsync();
+        }
+    }
+
+    /// <summary>The start of the transaction waiting on a lock, then a pause on the database clock past it.</summary>
+    private async Task<DateTime> WaitingTransactionStartAsync()
+    {
+        await using var connection = new NpgsqlConnection(fixture.AppConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+            SELECT xact_start FROM pg_stat_activity
+            WHERE datname = current_database() AND wait_event_type = 'Lock'
+            """, connection);
+        var start = (DateTime)(await command.ExecuteScalarAsync())!;
+        await using var pause = new NpgsqlCommand("SELECT pg_sleep(0.005)", connection);
+        await pause.ExecuteNonQueryAsync();
+        return start;
+    }
+
+    private static async Task<DateTime> HorizonForAsync(IServiceScope scope, Guid tenant)
+    {
+        await using var ctx = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+            .CreateForTenantAsync(tenant);
+        return (await HistoryHorizon.ReadAsync(ctx, TimeSpan.Zero, NullLogger.Instance, CancellationToken.None))!.Value;
+    }
+
+    private sealed class OpenWriter(NpgsqlConnection connection, NpgsqlTransaction transaction, DateTime started) : IAsyncDisposable
+    {
+        public DateTime Started { get; } = started;
+
+        public async ValueTask DisposeAsync()
+        {
+            await transaction.DisposeAsync();
+            await connection.DisposeAsync();
+        }
+    }
+
+    /// <summary>A transaction holding an id, then a pause on the database clock past its start.</summary>
+    private static async Task<OpenWriter> OpenWriterAsync(string connectionString)
+    {
+        var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        var transaction = await connection.BeginTransactionAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT pg_current_xact_id(), transaction_timestamp(); SELECT pg_sleep(0.005);", connection, transaction);
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+        var started = reader.GetFieldValue<DateTime>(1);
+        await reader.DisposeAsync();
+        return new OpenWriter(connection, transaction, started);
     }
 
     private static Task<SensorGlucose> CreateAsync(IServiceScope scope, DateTime at, string source) =>

@@ -64,6 +64,12 @@ public class PostgreSqlConfiguration
     public int MaxPoolSize { get; set; } = 100;
 
     /// <summary>
+    /// How far v3 history stays behind its newest deliverable stamp, in milliseconds; see
+    /// <see cref="HistoryCommitMargin"/>.
+    /// </summary>
+    public int HistoryCommitMarginMilliseconds { get; set; } = (int)HistoryCommitMargin.Default.TotalMilliseconds;
+
+    /// <summary>
     /// Resolves the options the runtime pool is built from: the compiled-in defaults on this type,
     /// with the <see cref="SectionName"/> section bound over them and <paramref name="configure"/>
     /// applied last, for values the host only knows at startup. A <see langword="null"/>
