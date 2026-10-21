@@ -11,7 +11,7 @@ public enum ChannelDestinationMode
     /// member of the rule's tenant. Checked on save and again on delivery, because the in-app
     /// notification centre lists a notification only to the subject it names.
     /// </summary>
-    AccountRouted,
+    Member,
 
     /// <summary>The user types the destination and it is shape-checked on save.</summary>
     UserSupplied,

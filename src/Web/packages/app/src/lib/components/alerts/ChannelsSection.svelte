@@ -9,8 +9,14 @@
   import { getLinkedPlatforms } from "$api/generated/linkedPlatforms.generated.remote";
   import { getChannelStatuses } from "$api/generated/systems.generated.remote";
   import { getCapabilityCatalog } from "$api/generated/clientDevices.generated.remote";
+  import { getInAppRecipients } from "$api/generated/alertRules.generated.remote";
+  import * as Select from "$lib/components/ui/select";
   import { ChannelType, AlertRuleSeverity } from "$api-clients";
-  import type { ChannelStatusEntry, DeviceCapabilityCatalog } from "$api-clients";
+  import type {
+    ChannelStatusEntry,
+    DeviceCapabilityCatalog,
+    InAppRecipientResponse,
+  } from "$api-clients";
   import DeviceChannelEditor from "./DeviceChannelEditor.svelte";
   import { applyChannelDestination, type ChannelDef } from "./types";
   import {
@@ -101,6 +107,26 @@
     });
   }
 
+  // An in-app channel left without a recipient goes to whoever saves the rule.
+  const SAVER = "saver";
+
+  const recipientsQuery = getInAppRecipients();
+  const recipients = $derived<InAppRecipientResponse[]>(recipientsQuery.current ?? []);
+
+  function isDeparted(ch: ChannelDef): boolean {
+    if (!ch.destination) return false;
+    if (ch.recipient?.subjectId === ch.destination) return ch.recipient.isMember === false;
+    return recipientsQuery.current != null && !recipients.some((r) => r.subjectId === ch.destination);
+  }
+
+  function recipientLabel(ch: ChannelDef): string {
+    if (!ch.destination) return "Me";
+    const listed = recipients.find((r) => r.subjectId === ch.destination);
+    if (listed?.name) return listed.name;
+    if (isDeparted(ch)) return "Former member";
+    return ch.recipient?.name ?? "Member";
+  }
+
   function removeChannel(index: number): void {
     channels.splice(index, 1);
   }
@@ -159,6 +185,42 @@
             {severity}
             index={i}
           />
+        {:else if ch.channelType === ChannelType.InApp}
+          {@const departed = isDeparted(ch)}
+          <div class="space-y-1.5">
+            <Label size="sm" for="channel-recipient-{i}">Recipient</Label>
+            <Select.Root
+              type="single"
+              value={ch.destination || SAVER}
+              onValueChange={(v) => {
+                channels[i].destination = v === SAVER ? "" : v;
+              }}
+            >
+              <Select.Trigger
+                id="channel-recipient-{i}"
+                size="sm"
+                class="w-56"
+                data-testid="in-app-recipient-trigger"
+              >
+                {recipientLabel(ch)}
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value={SAVER} label="Me" />
+                {#each recipients as r (r.subjectId)}
+                  <Select.Item value={r.subjectId ?? ""} label={r.name ?? ""} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
+            {#if departed}
+              <p class="text-xs text-status-warning">
+                This person is no longer a member of this site. Saving the rule sends this channel to you.
+              </p>
+            {:else}
+              <p class="text-xs text-muted-foreground">
+                Shown in this person's Nocturne notification centre.
+              </p>
+            {/if}
+          </div>
         {:else}
           {#if opt && needsDestination(ch.channelType)}
             {@const error = destinationError(opt, ch.destination)}

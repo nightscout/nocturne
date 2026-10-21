@@ -361,13 +361,20 @@ internal sealed class AlertDeliveryService(
     }
 
     /// <summary>
-    /// Re-checked at delivery, not only on save: a tracker-synced channel names the tracker's
-    /// owner, who may since have left the site.
+    /// Why an in-app channel cannot reach its recipient, or null when it can. Re-checked at
+    /// delivery, not only on save: the member a channel names may since have left the site.
     /// </summary>
-    private async Task<bool> IsInAppRecipientAsync(string destination, CancellationToken ct)
+    private async Task<string?> InAppRecipientProblemAsync(string destination, CancellationToken ct)
     {
+        if (!Guid.TryParse(destination, out _))
+        {
+            return "In-app channel names no recipient";
+        }
+
         await using var db = await contextFactory.CreateAsync(ct);
-        return await InAppRecipients.ResolveAsync(db, tenantAccessor.TenantId, destination, ct) is not null;
+        return await InAppRecipients.ResolveAsync(db, tenantAccessor.TenantId, destination, ct) is null
+            ? "In-app recipient is not a member of this site"
+            : null;
     }
 
     private async Task DispatchToProviderAsync(
@@ -379,11 +386,12 @@ internal sealed class AlertDeliveryService(
                 var inAppProvider = serviceProvider.GetService<Providers.InAppProvider>();
                 if (inAppProvider is not null)
                 {
-                    if (await IsInAppRecipientAsync(delivery.Destination, ct)
-                        && await inAppProvider.SendAsync(delivery.Destination, payload, ct))
+                    if (await InAppRecipientProblemAsync(delivery.Destination, ct) is { } problem)
+                        await MarkFailedAsync(delivery.Id, problem, ct);
+                    else if (await inAppProvider.SendAsync(delivery.Destination, payload, ct))
                         await MarkDeliveredAsync(delivery.Id, null, null, ct);
                     else
-                        await MarkFailedAsync(delivery.Id, "In-app channel names no member of this site", ct);
+                        await MarkFailedAsync(delivery.Id, "In-app channel names no recipient", ct);
                 }
                 break;
 

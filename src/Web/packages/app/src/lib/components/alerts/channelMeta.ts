@@ -45,7 +45,6 @@ export const CHANNEL_META: ChannelMetaEntry[] = [
     label: "In-App",
     description: "Show alerts in the Nocturne notification centre",
     icon: BellRing,
-    destinationHelper: "Sent to the notification centre of the member who added it.",
   },
   {
     type: ChannelType.Webhook,

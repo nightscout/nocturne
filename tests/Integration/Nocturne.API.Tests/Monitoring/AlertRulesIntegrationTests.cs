@@ -1,8 +1,8 @@
 using System.Net;
-using Microsoft.EntityFrameworkCore;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Npgsql;
 using Xunit;

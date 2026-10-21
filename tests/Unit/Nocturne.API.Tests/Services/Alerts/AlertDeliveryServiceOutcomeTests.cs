@@ -153,7 +153,7 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
 
         delivery.Status.Should().Be("failed");
         delivery.DeliveredAt.Should().BeNull();
-        delivery.LastError.Should().NotBeNullOrWhiteSpace();
+        delivery.LastError.Should().Be("In-app channel names no recipient");
         _inApp.VerifyNoOtherCalls();
     }
 
@@ -174,6 +174,7 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
         var delivery = await DispatchOneAsync(Channel(ChannelType.InApp, Member.ToString()));
 
         delivery.Status.Should().Be("failed");
+        delivery.LastError.Should().Be("In-app recipient is not a member of this site");
         _inApp.VerifyNoOtherCalls();
     }
 

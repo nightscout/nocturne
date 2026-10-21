@@ -8,8 +8,9 @@ namespace Nocturne.Core.Models.Alerts;
 /// </summary>
 /// <remarks>
 /// Apart from an <c>in_app</c> channel's member check, the delivery path never inspects a
-/// destination: the bot service hands it to the platform adapter for the channel's type. A destination in the wrong shape therefore produces a
-/// channel that is accepted, stored, and silently never delivers.
+/// destination: the bot service hands it to the platform adapter for the channel's type. A
+/// destination in the wrong shape therefore produces a channel that is accepted, stored, and
+/// silently never delivers.
 /// </remarks>
 public static partial class ChannelDestinations
 {
@@ -21,7 +22,7 @@ public static partial class ChannelDestinations
     /// </summary>
     private static readonly Dictionary<ChannelType, ChannelDestinationMode> Modes = new()
     {
-        [ChannelType.InApp] = ChannelDestinationMode.AccountRouted,
+        [ChannelType.InApp] = ChannelDestinationMode.Member,
         [ChannelType.Webhook] = ChannelDestinationMode.UserSupplied,
         [ChannelType.DiscordDm] = ChannelDestinationMode.LinkedIdentity,
         [ChannelType.DiscordChannel] = ChannelDestinationMode.UserSupplied,
@@ -91,7 +92,7 @@ public static partial class ChannelDestinations
 
     /// <summary>Whether this channel type's destination is a member's subject id.</summary>
     public static bool RoutesToMember(ChannelType channelType) =>
-        ModeOf(channelType) == ChannelDestinationMode.AccountRouted;
+        ModeOf(channelType) == ChannelDestinationMode.Member;
 
     /// <summary>Whether this channel type's destination is filled in from the caller's linked chat identity.</summary>
     public static bool ResolvesFromLinkedIdentity(ChannelType channelType) =>

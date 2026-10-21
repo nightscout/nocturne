@@ -60,20 +60,46 @@ public class TrackerAlertRuleSyncServiceTests
 
     private NocturneDbContext Db() => new(_options) { TenantId = _tenantId };
 
+    private readonly Guid _definitionOwner = Guid.NewGuid();
+
+    private async Task AddMemberAsync(Guid subjectId, bool isSystemSubject = false, bool isOwner = false)
+    {
+        await using var db = Db();
+        if (await db.Subjects.AnyAsync(s => s.Id == subjectId))
+            return;
+        var membership = new TenantMemberEntity { Id = Guid.NewGuid(), TenantId = _tenantId, SubjectId = subjectId };
+        db.Subjects.Add(new SubjectEntity { Id = subjectId, Name = "Member", IsSystemSubject = isSystemSubject });
+        db.TenantMembers.Add(membership);
+        if (isOwner)
+        {
+            var role = new TenantRoleEntity { Id = Guid.NewGuid(), TenantId = _tenantId, Name = "Owner", Slug = "owner" };
+            db.TenantRoles.Add(role);
+            db.TenantMemberRoles.Add(new TenantMemberRoleEntity
+            {
+                Id = Guid.NewGuid(), TenantMemberId = membership.Id, TenantRoleId = role.Id,
+            });
+        }
+        await db.SaveChangesAsync();
+    }
+
     private async Task<TrackerDefinitionEntity> SeedDefinitionAsync(
         TrackerMode mode = TrackerMode.Duration,
         int? lifespanHours = 240,
         TrackerCategory category = TrackerCategory.Consumable,
         double? lowReservoirUnits = null,
         NotificationUrgency lowReservoirUrgency = NotificationUrgency.Warn,
+        string? userId = null,
         params TrackerNotificationThresholdEntity[] thresholds)
     {
+        if (userId is null)
+            await AddMemberAsync(_definitionOwner);
+
         await using var db = Db();
         var definition = new TrackerDefinitionEntity
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
-            UserId = "user-1",
+            UserId = userId ?? _definitionOwner.ToString(),
             Name = "Sensor",
             Mode = mode,
             LifespanHours = lifespanHours,
@@ -551,6 +577,23 @@ public class TrackerAlertRuleSyncServiceTests
             rule.Id.Should().Be(ruleId);
             rule.IsEnabled.Should().BeFalse();
         }
+    }
+
+    [Fact]
+    public async Task Sync_routes_a_definition_owned_by_the_device_account_to_the_tenants_owner()
+    {
+        var devices = Guid.NewGuid();
+        var owner = Guid.NewGuid();
+        await AddMemberAsync(devices, isSystemSubject: true);
+        await AddMemberAsync(owner, isOwner: true);
+        var definition = await SeedDefinitionAsync(userId: devices.ToString(), thresholds: [Threshold(1)]);
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await using var db = Db();
+        var rule = await db.AlertRules.Include(r => r.Channels).SingleAsync();
+        rule.Channels.Should().ContainSingle()
+            .Which.Destination.Should().Be(owner.ToString());
     }
 
     [Fact]

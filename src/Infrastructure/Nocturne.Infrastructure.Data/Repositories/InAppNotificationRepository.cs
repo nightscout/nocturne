@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -13,6 +14,29 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 public class InAppNotificationRepository : IInAppNotificationRepository
 {
     private readonly INocturneDbContextFactory _contexts;
+
+    /// <summary>
+    /// A notification's urgency as its position in <see cref="NotificationUrgency"/>, which is
+    /// declared least urgent first. The column holds the urgency's name, so ordering by it
+    /// directly would sort alphabetically.
+    /// </summary>
+    private static readonly Expression<Func<InAppNotificationEntity, int>> UrgencyRank = BuildUrgencyRank();
+
+    private static Expression<Func<InAppNotificationEntity, int>> BuildUrgencyRank()
+    {
+        var notification = Expression.Parameter(typeof(InAppNotificationEntity), "n");
+        var urgency = Expression.Property(notification, nameof(InAppNotificationEntity.Urgency));
+        Expression rank = Expression.Constant(-1);
+        foreach (var value in Enum.GetValues<NotificationUrgency>())
+        {
+            rank = Expression.Condition(
+                Expression.Equal(urgency, Expression.Constant(value)),
+                Expression.Constant((int)value),
+                rank);
+        }
+
+        return Expression.Lambda<Func<InAppNotificationEntity, int>>(rank, notification);
+    }
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -39,16 +63,11 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         CancellationToken cancellationToken = default
     )
     {
-        // Urgency is stored as its name, so ordering by the column would sort alphabetically.
         await using var db = await _contexts.CreateAsync(cancellationToken);
         return await db
             .InAppNotifications
             .Where(n => n.UserId == userId && !n.IsArchived)
-            .OrderByDescending(n =>
-                n.Urgency == NotificationUrgency.Urgent ? 3
-                : n.Urgency == NotificationUrgency.Hazard ? 2
-                : n.Urgency == NotificationUrgency.Warn ? 1
-                : 0)
+            .OrderByDescending(UrgencyRank)
             .ThenByDescending(n => n.CreatedAt)
             .ToListAsync(cancellationToken);
     }

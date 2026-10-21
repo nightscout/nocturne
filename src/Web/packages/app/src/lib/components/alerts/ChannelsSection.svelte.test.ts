@@ -3,7 +3,11 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushSync } from "svelte";
 import { AlertRuleSeverity, ChannelStatus, ChannelType } from "$api-clients";
-import type { ChannelStatusResponse, DeviceCapabilityCatalog } from "$api-clients";
+import type {
+	ChannelStatusResponse,
+	DeviceCapabilityCatalog,
+	InAppRecipientResponse,
+} from "$api-clients";
 import type { ChannelDef } from "./types";
 
 // Mock the generated remote queries before importing the component. The
@@ -42,6 +46,16 @@ vi.mock("$api/generated/clientDevices.generated.remote", () => ({
 		},
 		get error() {
 			return catalogError;
+		},
+	}),
+}));
+
+let recipientsCurrent: InAppRecipientResponse[] | undefined;
+
+vi.mock("$api/generated/alertRules.generated.remote", () => ({
+	getInAppRecipients: () => ({
+		get current() {
+			return recipientsCurrent;
 		},
 	}),
 }));
@@ -95,6 +109,66 @@ describe("ChannelsSection", () => {
 		catalogError = undefined;
 		statusCurrent = loadedStatuses();
 		statusError = undefined;
+		recipientsCurrent = [
+			{ subjectId: "0199a1b2-0000-7000-8000-00000000000a", name: "Alex", isMember: true },
+			{ subjectId: "0199a1b2-0000-7000-8000-00000000000b", name: "Sam", isMember: true },
+		];
+	});
+
+	it("shows the member an in-app channel is sent to", async () => {
+		const channels = $state<ChannelDef[]>([
+			{
+				_uid: "in-app",
+				channelType: ChannelType.InApp,
+				destination: "0199a1b2-0000-7000-8000-00000000000b",
+				destinationLabel: "",
+			},
+		]);
+		render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning });
+
+		await expect.element(page.getByTestId("in-app-recipient-trigger")).toHaveTextContent("Sam");
+	});
+
+	it("sends a new in-app channel to whoever saves the rule", async () => {
+		const channels = $state<ChannelDef[]>([
+			{ _uid: "in-app", channelType: ChannelType.InApp, destination: "", destinationLabel: "" },
+		]);
+		render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning });
+
+		await expect.element(page.getByTestId("in-app-recipient-trigger")).toHaveTextContent("Me");
+	});
+
+	it("warns that a former member's channel goes to the saver", async () => {
+		const departed = "0199a1b2-0000-7000-8000-00000000000c";
+		const channels = $state<ChannelDef[]>([
+			{
+				_uid: "in-app",
+				channelType: ChannelType.InApp,
+				destination: departed,
+				destinationLabel: "",
+				recipient: { subjectId: departed, isMember: false },
+			},
+		]);
+		render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning });
+
+		await expect
+			.element(page.getByTestId("in-app-recipient-trigger"))
+			.toHaveTextContent("Former member");
+		await expect
+			.element(page.getByText(/no longer a member of this site/i))
+			.toBeVisible();
+	});
+
+	it("routes an in-app channel to the member picked", async () => {
+		const channels = $state<ChannelDef[]>([
+			{ _uid: "in-app", channelType: ChannelType.InApp, destination: "", destinationLabel: "" },
+		]);
+		render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning });
+
+		await page.getByTestId("in-app-recipient-trigger").click();
+		await page.getByRole("option", { name: "Alex" }).click();
+
+		expect(channels[0].destination).toBe("0199a1b2-0000-7000-8000-00000000000a");
 	});
 
 	it("disables every option until the channel-status query resolves", async () => {
