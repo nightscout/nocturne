@@ -5,7 +5,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.API.Tests.GoldenFiles.V1;
 
-public class EntriesTextFormatTests : GoldenFileTestBase
+public class EntriesTextFormatTests : GoldenFileTestBase, IClassFixture<FixedClockGoldenFileWebAppFactory>
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
@@ -15,7 +15,7 @@ public class EntriesTextFormatTests : GoldenFileTestBase
 
     private const string CsvRow = "\"2024-03-26T12:00:00.000Z\",1711454400000,120,\"Flat\",\"xDrip-DexcomG6\"";
 
-    public EntriesTextFormatTests(GoldenFileWebAppFactory factory) : base(factory) { }
+    public EntriesTextFormatTests(FixedClockGoldenFileWebAppFactory factory) : base(factory) { }
 
     private Task SeedOne() =>
         SeedSensorGlucose(

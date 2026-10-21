@@ -214,7 +214,7 @@ public class ActivityController : ControllerBase
             var missingScope = ActivityWriteScopeGuard.FindMissingScope(
                 activityList, _activityDecomposer, HttpContext.GetGrantedScopes());
             if (missingScope is not null)
-                return ForbiddenForScope(missingScope);
+                return this.ForbiddenForScope(missingScope);
 
             // ActivityService handles document processing, routing, and broadcasting
             var result = await _activityService.CreateActivitiesAsync(
@@ -364,7 +364,7 @@ public class ActivityController : ControllerBase
         var missingScope = ActivityWriteScopeGuard.FindMissingScope(
             toCheck, _activityDecomposer, HttpContext.GetGrantedScopes());
         if (missingScope is not null)
-            return ForbiddenForScope(missingScope);
+            return this.ForbiddenForScope(missingScope);
 
         if (hasId
             && await _activityService.UpdateActivityAsync(
@@ -383,9 +383,4 @@ public class ActivityController : ControllerBase
                 new { error = "An error occurred while saving the activity" }
             );
     }
-
-    private ObjectResult ForbiddenForScope(string scope) => StatusCode(
-        StatusCodes.Status403Forbidden,
-        new { error = $"This operation requires the '{scope}' scope." }
-    );
 }
