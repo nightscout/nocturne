@@ -43,7 +43,6 @@
   import ClientDevices from "$lib/components/settings/ClientDevices.svelte";
   import ApiTokens from "$lib/components/settings/ApiTokens.svelte";
   import UploaderSetupDialog from "$lib/components/connectors/UploaderSetupDialog.svelte";
-  import { createUploaderTokenHandoff } from "./uploader-token-handoff";
   import ConnectorDetailsDialog from "$lib/components/connectors/ConnectorDetailsDialog.svelte";
   import ManualSyncDialog from "$lib/components/connectors/ManualSyncDialog.svelte";
   import UploaderAppsCard from "$lib/components/connectors/UploaderAppsCard.svelte";
@@ -144,11 +143,10 @@
     }
   });
 
-  // API token create dialog (triggered from uploader setup)
+  // API token create dialog, opened from the connection details card
   let apiTokenCreateOpen = $state(false);
   let apiTokenPrefillLabel = $state("");
   let apiTokenPrefillScopes = $state<string[]>([]);
-  const uploaderHandoff = createUploaderTokenHandoff();
 
   // Whether the user has already been told these lists are stale. The effect
   // below refreshes once per finished run, so a batch of them and the refresh
@@ -558,25 +556,13 @@
         bind:createOpen={apiTokenCreateOpen}
         prefillLabel={apiTokenPrefillLabel}
         prefillScopes={apiTokenPrefillScopes}
-        onCreateClose={() => {
-          if (uploaderHandoff.resumes()) showSetupDialog = true;
-        }}
       />
     </div>
   {/if}
 </div>
 
 <!-- Setup Instructions Dialog -->
-<UploaderSetupDialog
-  bind:open={showSetupDialog}
-  {selectedUploader}
-  onRequestApiKey={(label, scopes) => {
-    apiTokenPrefillLabel = label;
-    apiTokenPrefillScopes = scopes;
-    uploaderHandoff.handOff();
-    apiTokenCreateOpen = true;
-  }}
-/>
+<UploaderSetupDialog bind:open={showSetupDialog} {selectedUploader} />
 
 <!-- Data Source Management Dialog -->
 <DataSourceManageDialog

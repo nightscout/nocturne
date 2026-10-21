@@ -1,5 +1,5 @@
 import { render } from "vitest-browser-svelte";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { DirectGrantDto } from "$api";
 import {
@@ -42,38 +42,6 @@ beforeEach(() => {
   createImpl = () => Promise.resolve({ token: "noc_created" });
   revokeImpl = () => Promise.resolve({ success: true });
   listQuery = fakeRemoteQuery(() => Promise.resolve(grants));
-});
-
-async function openCreateDialog() {
-  const onCreateClose = vi.fn();
-
-  render(ApiTokens, { createOpen: true, onCreateClose });
-
-  await expect.element(page.getByText("Create API token")).toBeVisible();
-  expect(onCreateClose).not.toHaveBeenCalled();
-
-  return onCreateClose;
-}
-
-describe("ApiTokens", () => {
-  it("reports the create dialog closing from its own footer", async () => {
-    const onCreateClose = await openCreateDialog();
-
-    await page.getByRole("button", { name: "Cancel" }).click();
-
-    expect(onCreateClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("reports it closing when the dialog dismisses itself", async () => {
-    const onCreateClose = await openCreateDialog();
-
-    await userEvent.keyboard("{Escape}");
-
-    await expect
-      .element(page.getByText("Create API token"))
-      .not.toBeInTheDocument();
-    expect(onCreateClose).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe("ApiTokens history limit", () => {

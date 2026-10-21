@@ -34,12 +34,10 @@
     createOpen = $bindable(false),
     prefillLabel = "",
     prefillScopes = [],
-    onCreateClose,
   }: {
     createOpen?: boolean;
     prefillLabel?: string;
     prefillScopes?: string[];
-    onCreateClose?: () => void;
   } = $props();
 
   // ============================================================================
@@ -137,7 +135,6 @@
     newTokenLabel = "";
     newTokenScopes = [];
     newTokenLimitTo24Hours = false;
-    onCreateClose?.();
   }
 
   // ============================================================================
