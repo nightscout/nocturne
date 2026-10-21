@@ -41,6 +41,14 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
         TherapySettingsMapper.UpdateEntity(target, source);
 
     /// <summary>
+    /// Leaves out the snapshots of Profile Switch treatments
+    /// (<see cref="TherapySettings.ProfileSwitchStoreMarker"/>), which are not profiles. Nightscout
+    /// only ever builds them in memory (lib/profilefunctions.js) and never lists them.
+    /// </summary>
+    protected override IQueryable<TherapySettingsEntity> Listed(IQueryable<TherapySettingsEntity> rows) =>
+        rows.Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker));
+
+    /// <summary>
     /// Gets therapy settings by profile name.
     /// </summary>
     /// <param name="profileName">The name of the profile.</param>

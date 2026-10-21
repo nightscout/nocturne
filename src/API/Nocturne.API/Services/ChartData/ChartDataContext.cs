@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
@@ -118,6 +119,9 @@ public sealed record ChartDataContext
 
     public List<ChartStateSpanDto> PumpModeSpans { get; init; } = [];
     public List<ChartStateSpanDto> ProfileSpans { get; init; } = [];
+
+    /// <summary>The stretches of the window each profile activation applies over.</summary>
+    public IReadOnlyList<ResolvedProfileSegment> ProfileSegments { get; init; } = [];
     public List<ChartStateSpanDto> OverrideSpans { get; init; } = [];
     public List<ChartStateSpanDto> ActivitySpans { get; init; } = [];
     public List<ChartStateSpanDto> TempBasalSpans { get; init; } = [];

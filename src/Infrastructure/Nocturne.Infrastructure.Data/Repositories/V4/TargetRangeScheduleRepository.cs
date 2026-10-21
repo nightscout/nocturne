@@ -39,6 +39,10 @@ public class TargetRangeScheduleRepository : V4RepositoryBase<TargetRangeSchedul
     protected override void ApplyUpdate(TargetRangeScheduleEntity target, TargetRangeSchedule source) =>
         TargetRangeScheduleMapper.UpdateEntity(target, source);
 
+    /// <inheritdoc cref="TherapySettingsRepository.Listed"/>
+    protected override IQueryable<TargetRangeScheduleEntity> Listed(IQueryable<TargetRangeScheduleEntity> rows) =>
+        rows.Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker));
+
     /// <summary>
     /// Gets target range schedules by profile name.
     /// </summary>

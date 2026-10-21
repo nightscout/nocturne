@@ -33,6 +33,7 @@ namespace Nocturne.API.Tests.Services.Platform;
 /// Tests system status functionality with Nightscout compatibility and caching
 /// </summary>
 [Parity("api.status.test.js")]
+[Collection(ProcessEnvironmentCollection.Name)]
 public class StatusServiceTests
 {
     private readonly Mock<ICacheService> _mockCacheService;

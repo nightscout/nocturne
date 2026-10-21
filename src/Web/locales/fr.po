@@ -15399,9 +15399,8 @@ msgstr ""
 #~ msgid "Critical channels unreachable. Alerts may not deliver."
 #~ msgstr ""
 
-#: src/lib/components/alerts/DndNoticeStrip.svelte
-msgid "Do Not Disturb is on. Only critical rules will fire."
-msgstr ""
+#~ msgid "Do Not Disturb is on. Only critical rules will fire."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
 msgid "Failed to save DND settings"
@@ -20509,9 +20508,8 @@ msgstr ""
 msgid "Find <0>Nocturne</0> in the list and click it."
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 12 characters). Use the generator below for each secret field."
-msgstr ""
+#~ msgid "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 12 characters). Use the generator below for each secret field."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
@@ -27176,4 +27174,16 @@ msgstr ""
 
 #: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "Portion <0/>"
+msgstr ""
+
+#: src/lib/components/alerts/DndNoticeStrip.svelte
+msgid "Do Not Disturb is on. Only critical rules and rules allowed through Do Not Disturb will fire."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 32 characters). Use the generator below for each secret field."
+msgstr ""
+
+#: src/routes/(authenticated)/oauth/consent/+page.svelte
+msgid "Approving sends access to <0/>"
 msgstr ""

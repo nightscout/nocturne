@@ -16,7 +16,7 @@ public class SensitivityResolverTests : IDisposable
     private readonly Mock<ISensitivityScheduleRepository> _repo = new();
     private readonly Mock<ITherapySettingsRepository> _therapyRepo = new();
     private readonly Mock<IPatientRecordRepository> _patientRecordRepo = new();
-    private readonly Mock<IActiveProfileResolver> _activeProfileResolver = new();
+    private readonly Mock<IActiveProfileResolver> _activeProfileResolver = ActiveProfileResolverMock.WithDefault();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
     private readonly SensitivityResolver _sut;
 
@@ -31,6 +31,7 @@ public class SensitivityResolverTests : IDisposable
             _patientRecordRepo.Object,
             _activeProfileResolver.Object,
             new ProfileVersionCache(TestTenantCache.Create(_cache)),
+            Mock.Of<IProfileActivationResolver>(),
             NullLogger<SensitivityResolver>.Instance);
     }
 

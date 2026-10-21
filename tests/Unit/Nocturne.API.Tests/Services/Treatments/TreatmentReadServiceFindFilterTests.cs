@@ -34,6 +34,7 @@ public class TreatmentReadServiceFindFilterTests
             new Mock<INoteRepository>().Object,
             new Mock<IDeviceEventRepository>().Object,
             new Mock<IBolusCalculationRepository>().Object,
+            Mock.Of<IProfileActivationRepository>(),
             Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
     }

@@ -39,6 +39,10 @@ public class BasalScheduleRepository : V4RepositoryBase<BasalSchedule, BasalSche
     protected override void ApplyUpdate(BasalScheduleEntity target, BasalSchedule source) =>
         BasalScheduleMapper.UpdateEntity(target, source);
 
+    /// <inheritdoc cref="TherapySettingsRepository.Listed"/>
+    protected override IQueryable<BasalScheduleEntity> Listed(IQueryable<BasalScheduleEntity> rows) =>
+        rows.Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker));
+
     /// <summary>
     /// Gets basal schedules by profile name.
     /// </summary>

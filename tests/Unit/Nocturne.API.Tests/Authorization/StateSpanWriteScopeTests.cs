@@ -14,7 +14,7 @@ using Xunit;
 namespace Nocturne.API.Tests.Authorization;
 
 /// <summary>
-/// <c>state_spans</c> holds four data categories behind one table and the caller picks which by
+/// <c>state_spans</c> holds several data categories behind one table and the caller picks which by
 /// setting <see cref="StateSpan.Category"/> in the request body, so the write scope is resolved per
 /// record in the handler rather than by an attribute. These drive the real handlers, because the
 /// attribute sweep in <see cref="V4WriteScopeGatingTests"/> cannot see a gate that is a method call
@@ -28,7 +28,6 @@ public class StateSpanWriteScopeTests
     [Theory]
     [InlineData(StateSpanCategory.PumpMode, Scope.DevicesReadWrite)]
     [InlineData(StateSpanCategory.PumpConnectivity, Scope.DevicesReadWrite)]
-    [InlineData(StateSpanCategory.Profile, Scope.TherapyReadWrite)]
     [InlineData(StateSpanCategory.DataExclusion, Scope.GlucoseReadWrite)]
     [InlineData(StateSpanCategory.Override, Scope.TreatmentsReadWrite)]
     [InlineData(StateSpanCategory.Exercise, Scope.TreatmentsReadWrite)]
@@ -48,8 +47,34 @@ public class StateSpanWriteScopeTests
         // mapping happened to be first. RequiredWriteScope fails it closed to "*", and this makes
         // the omission visible instead of silently owner-only.
         Enum.GetValues<StateSpanCategory>()
+            .Where(c => c != StateSpanCategory.Profile)
             .Should().OnlyContain(c => StateSpanWriteScopeGuard.CategoryWriteScopes.ContainsKey(c));
+        StateSpanWriteScopeGuard.RequiredWriteScope(StateSpanCategory.Profile).Should().Be(Scope.FullAccess,
+            "no Profile span is written any more, so none is granted by a scope");
     }
+
+    [Fact]
+    public async Task AProfileSpanIsRefusedOnEveryWrite()
+    {
+        var rowId = Guid.NewGuid();
+        var service = new Mock<IStateSpanService>(MockBehavior.Strict);
+        service.Setup(s => s.ResolveDeletedAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, DeletedStateSpan> { [rowId] = new("p-1", StateSpanCategory.Profile) });
+        var controller = Build(service, [Scope.FullAccess]);
+
+        BadRequest((await controller.CreateStateSpan(
+            new CreateStateSpanRequest { Category = StateSpanCategory.Profile, StartMills = 1 })).Result);
+        BadRequest((await controller.UpdateStateSpan(
+            "s1", new UpdateStateSpanRequest { Category = StateSpanCategory.Profile })).Result);
+        BadRequest((await controller.RestoreStateSpan("p-1")).Result);
+        BadRequest((await controller.BulkRestoreStateSpans(["p-1"])).Result);
+        service.Verify(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    private static void BadRequest(object? result) =>
+        result.Should().BeOfType<ObjectResult>()
+            .Which.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Contain("/api/v4/profile/activations");
 
     [Fact]
     public void AnUnmappedCategory_FailsClosed()

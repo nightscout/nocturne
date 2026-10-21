@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
@@ -88,17 +89,17 @@ public class GlookoProfileMapper
     }
 
     /// <summary>
-    ///     Emits a Profile state_span per device per settings snapshot, derived from
-    ///     <c>BasalSettings.ActiveBasalProgram</c>. Consecutive snapshots produce abutting spans;
-    ///     the most recent snapshot's span is open-ended. Snapshots with a null/empty active program
-    ///     are skipped (the next snapshot's timestamp still closes the prior span).
+    ///     Emits an effective profile activation per device per settings snapshot, derived from
+    ///     <c>BasalSettings.ActiveBasalProgram</c>. Consecutive snapshots produce abutting activations;
+    ///     the most recent snapshot's is open-ended. Snapshots with a null/empty active program
+    ///     are skipped (the next snapshot's timestamp still ends the prior activation).
     /// </summary>
-    public List<StateSpan> TransformDeviceSettingsToStateSpans(GlookoV3DeviceSettingsResponse response)
+    public List<ProfileActivation> TransformDeviceSettingsToProfileActivations(GlookoV3DeviceSettingsResponse response)
     {
-        var stateSpans = new List<StateSpan>();
+        var activations = new List<ProfileActivation>();
 
         if (response.DeviceSettings?.Pumps == null)
-            return stateSpans;
+            return activations;
 
         foreach (var (deviceGuid, settingsSnapshots) in NonNullDevices(response.DeviceSettings.Pumps))
         {
@@ -119,29 +120,26 @@ public class GlookoProfileMapper
                 DateTime? endTimestamp = i < ordered.Count - 1 ? ordered[i + 1].Parsed : null;
                 var startMills = new DateTimeOffset(startTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
-                stateSpans.Add(new StateSpan
+                activations.Add(new ProfileActivation
                 {
-                    OriginalId = $"glooko_active_profile_{deviceGuid}_{startMills}",
-                    Category = StateSpanCategory.Profile,
-                    State = ProfileState.Active.ToString(),
+                    SyncIdentifier = $"glooko_active_profile_{deviceGuid}_{startMills}",
                     StartTimestamp = startTimestamp,
                     EndTimestamp = endTimestamp,
-                    Source = _connectorSource,
-                    Metadata = new Dictionary<string, object>
-                    {
-                        { "profileName", profileName }
-                    }
+                    Phase = ProfileActivationPhase.Effective,
+                    Origin = ProfileActivationOrigin.Connector,
+                    BaseProfileName = profileName,
+                    DataSource = _connectorSource,
                 });
             }
         }
 
         _logger.LogInformation(
-            "[{ConnectorSource}] Transformed {Count} profile state spans from device settings",
+            "[{ConnectorSource}] Transformed {Count} profile activations from device settings",
             _connectorSource,
-            stateSpans.Count
+            activations.Count
         );
 
-        return stateSpans;
+        return activations;
     }
 
     private static DateTime? TryParseTimestamp(string timestamp)

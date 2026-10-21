@@ -39,6 +39,10 @@ public class CarbRatioScheduleRepository : V4RepositoryBase<CarbRatioSchedule, C
     protected override void ApplyUpdate(CarbRatioScheduleEntity target, CarbRatioSchedule source) =>
         CarbRatioScheduleMapper.UpdateEntity(target, source);
 
+    /// <inheritdoc cref="TherapySettingsRepository.Listed"/>
+    protected override IQueryable<CarbRatioScheduleEntity> Listed(IQueryable<CarbRatioScheduleEntity> rows) =>
+        rows.Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker));
+
     /// <summary>
     /// Gets carbohydrate ratio schedules by profile name.
     /// </summary>

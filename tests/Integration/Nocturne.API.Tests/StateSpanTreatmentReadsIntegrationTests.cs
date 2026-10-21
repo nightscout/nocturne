@@ -690,7 +690,7 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
-    public async Task Connector_profile_spans_are_not_served_or_deleted_as_treatments()
+    public async Task Connector_profile_activations_are_not_served_or_deleted_as_treatments()
     {
         var client = CreateAuthenticatedClient();
         var start = DateTime.UtcNow.AddMinutes(-40);
@@ -701,9 +701,9 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         ];
         await WithScopeAsync(async sp =>
         {
-            var spans = sp.GetRequiredService<IStateSpanService>();
-            await spans.UpsertStateSpanAsync(ConnectorProfile(connectorIds[0], DataSources.GlookoConnector, start));
-            await spans.UpsertStateSpanAsync(ConnectorProfile(connectorIds[1], DataSources.MyLifeConnector, start.AddMinutes(5)));
+            var activations = sp.GetRequiredService<IProfileActivationRepository>();
+            await activations.UpsertAsync(ConnectorProfile(connectorIds[0], DataSources.GlookoConnector, start), WriteOrigin.Live);
+            await activations.UpsertAsync(ConnectorProfile(connectorIds[1], DataSources.MyLifeConnector, start.AddMinutes(5)), WriteOrigin.Live);
             return 0;
         });
         await PostAsync(client, Upload("Temporary Target", minutesAgo: 10));
@@ -727,19 +727,19 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
             (await delete.Content.ReadFromJsonAsync<JsonNode>())!["deletedCount"]!.GetValue<long>().Should().Be(0);
         }
 
-        var stored = await WithScopeAsync(async sp => (await sp.GetRequiredService<IStateSpanService>()
-            .GetStateSpansAsync(category: StateSpanCategory.Profile, count: 100)).ToList());
-        stored.Select(s => s.OriginalId).Should().Contain(connectorIds);
+        var stored = await WithScopeAsync(async sp => (await sp.GetRequiredService<IProfileActivationRepository>()
+            .GetOverlappingAsync(start.AddHours(-1), DateTime.UtcNow, 100)).ToList());
+        stored.Select(a => a.SyncIdentifier).Should().Contain(connectorIds);
     }
 
-    private static StateSpan ConnectorProfile(string originalId, string source, DateTime start) => new()
+    private static ProfileActivation ConnectorProfile(string syncIdentifier, string source, DateTime start) => new()
     {
-        OriginalId = originalId,
-        Category = StateSpanCategory.Profile,
-        State = ProfileState.Active.ToString(),
+        SyncIdentifier = syncIdentifier,
+        Phase = ProfileActivationPhase.Effective,
+        Origin = ProfileActivationOrigin.Connector,
         StartTimestamp = start,
-        Source = source,
-        Metadata = new Dictionary<string, object> { ["profileName"] = "Unknown" },
+        DataSource = source,
+        BaseProfileName = "Unknown",
     };
 
     private async Task<T> WithScopeAsync<T>(Func<IServiceProvider, Task<T>> action)
@@ -1028,19 +1028,22 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         var resolved = await WithHistoryClampedScopeAsync(async sp =>
         {
             var spans = await sp.GetRequiredService<IStateSpanService>().GetStateSpansAsync(count: 100);
+            var activations = await sp.GetRequiredService<IProfileActivationRepository>()
+                .GetOverlappingAsync(DateTime.UtcNow.AddDays(-30), DateTime.UtcNow, 100);
             var segments = new List<Nocturne.Core.Models.Basal.BasalSegment>();
             await foreach (var segment in sp.GetRequiredService<IBasalSegmentService>()
                 .GetSegmentsAsync(now - 3_600_000, now))
                 segments.Add(segment);
             return (
                 Spans: spans.ToList(),
+                Activations: activations.ToList(),
                 Profile: await sp.GetRequiredService<IActiveProfileResolver>().GetActiveProfileNameAsync(now),
                 CarbRatio: await sp.GetRequiredService<ICarbRatioResolver>().GetCarbRatioAsync(now),
                 Basal: await sp.GetRequiredService<IBasalRateResolver>().GetBasalRateAsync(now),
                 Segments: segments);
         });
 
-        resolved.Spans.Should().ContainSingle(s => s.Category == StateSpanCategory.Profile);
+        resolved.Activations.Should().ContainSingle("a switch still running is inside a clamped member's window however long ago it started");
         resolved.Spans.Should().NotContain(s => s.Category == StateSpanCategory.Override,
             "an override that ended two days ago is outside a clamped member's window");
         resolved.Profile.Should().Be("Weekend");

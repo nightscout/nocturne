@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -111,6 +112,8 @@ public class TreatmentDecomposerBatchTests : IDisposable
             _deviceEventRepoMock.Object,
             _bolusCalcRepoMock.Object,
             _stateSpanServiceMock.Object,
+            ProfileActivationTestDeps.Repository(_context),
+            ProfileActivationTestDeps.Writer(_context),
             _treatmentFoodServiceMock.Object,
             deviceService,
             Mock.Of<IPatientDeviceStamper>(),
@@ -479,23 +482,20 @@ public class TreatmentDecomposerBatchTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeBatchAsync_ProfileSwitch_DelegatesToStateSpanService()
+    public async Task DecomposeBatchAsync_ProfileSwitch_WritesAProfileActivation()
     {
-        // Arrange
         var treatments = new List<Treatment>
         {
             new() { Id = "ps-1", EventType = "Profile Switch", Mills = 1700000000000, Profile = "Default", Duration = 0 },
         };
 
-        // Act
         var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
 
-        // Assert — profile switch uses individual upsert, not bulk insert
+        result.CreatedRecords.OfType<V4Models.ProfileActivation>().Should().ContainSingle()
+            .Which.LegacyId.Should().Be("ps-1");
         _stateSpanServiceMock.Verify(
-            x => x.UpsertStateSpanAsync(
-                It.Is<StateSpan>(s => s.Category == StateSpanCategory.Profile),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
+            x => x.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 
         _tempBasalRepoMock.Verify(
             x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),

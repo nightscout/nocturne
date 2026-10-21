@@ -2,12 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware.Handlers;
@@ -136,7 +138,9 @@ public class ApiKeyHandler : IAuthHandler
 
     /// <remarks>
     /// Runs after the request may have ended, on a scope of its own opened on the grant's tenant: the
-    /// notification is tenant-scoped, and a fresh scope carries no tenant until one is set.
+    /// notification is tenant-scoped, and a fresh scope carries no tenant until one is set. A site
+    /// secret held by the device subject has no person behind it to read the nudge, so it goes to
+    /// the tenant's owner.
     /// </remarks>
     private async Task SendRotationNudgeAsync(
         IServiceScopeFactory scopeFactory, TenantContext tenant, OAuthGrantEntity grant)
@@ -146,8 +150,23 @@ public class ApiKeyHandler : IAuthHandler
             await using var scope = TenantJobScope.Open(scopeFactory, tenant, "api-key-handler");
             var notificationService = scope.ServiceProvider.GetRequiredService<IInAppNotificationService>();
 
+            string? recipient = grant.SubjectId.ToString();
+            await using (var db = await _dbContextFactory.CreateForTenantAsync(tenant.TenantId))
+            {
+                if (await db.FindDeviceSubjectOf(tenant.TenantId) == grant.SubjectId)
+                {
+                    recipient = await scope.ServiceProvider.GetRequiredService<ITenantOwnerResolver>()
+                        .GetOwnerSubjectIdAsync(tenant.TenantId);
+                }
+            }
+
+            if (recipient is null)
+            {
+                return;
+            }
+
             await notificationService.CreateNotificationAsync(
-                userId: grant.SubjectId.ToString(),
+                userId: recipient,
                 type: "api-key-rotation",
                 title: "Rotate your API key",
                 category: NotificationCategory.ActionRequired,

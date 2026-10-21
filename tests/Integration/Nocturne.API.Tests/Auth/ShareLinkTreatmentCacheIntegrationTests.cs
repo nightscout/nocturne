@@ -39,8 +39,9 @@ public class ShareLinkTreatmentCacheIntegrationTests : ApiIntegrationTestBase
 
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
-        var (_, accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, "Share Admin");
-        _admin = AuthTestHelpers.CreateBearerClient(Fixture, accessToken);
+        var (adminId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, "Share Admin");
+        _admin = AuthTestHelpers.CreateBearerClient(
+            Fixture, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, adminId));
     }
 
     public override async Task DisposeAsync()

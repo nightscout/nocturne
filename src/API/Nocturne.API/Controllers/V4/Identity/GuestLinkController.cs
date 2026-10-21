@@ -37,6 +37,7 @@ public class GuestLinkController : ControllerBase
     /// Create a new guest link for temporary read-only data sharing.
     /// </summary>
     [HttpPost]
+    [RequireInteractiveSession]
     [Authorize]
     [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetGuestLinks"])]

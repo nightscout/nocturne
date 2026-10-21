@@ -154,6 +154,9 @@ public class OverviewHub : Hub
                 tenantIds.Add(tenant.Id);
             }
 
+            HubAuthorizationState.GrantOverview(
+                Context, new OverviewGrant(subjectId, authType, tokenScopes, tenantIds));
+
             _logger.LogInformation(
                 "Client {ConnectionId} authorized for overview of {TenantCount} tenants",
                 Context.ConnectionId, tenantIds.Count);

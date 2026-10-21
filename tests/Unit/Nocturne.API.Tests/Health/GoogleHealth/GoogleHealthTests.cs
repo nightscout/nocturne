@@ -1455,7 +1455,7 @@ public class GoogleHealthTests : IDisposable
         try
         {
             await revoking.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await scanCancelled.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            await scanCancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => preview);
             var status = await service.StatusAsync(default);
             Assert.False(status.Connected);

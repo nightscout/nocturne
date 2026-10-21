@@ -39,9 +39,7 @@ public sealed class FindQuery
     /// </summary>
     private static readonly JsonSerializerOptions WireOptions = new(JsonSerializerDefaults.Web);
 
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
-
-    private static readonly Regex RegexLiteral = new("^/(.*)/([a-z]*)$", RegexOptions.None, RegexTimeout);
+    private static readonly Regex RegexLiteral = new("^/(.*)/([a-z]*)$", RegexOptions.NonBacktracking);
 
     /// <summary>
     /// Treatment fields on which legacy Nightscout reads a bare <c>/pattern/flags</c> value as a
@@ -125,14 +123,22 @@ public sealed class FindQuery
     /// <summary>
     /// <c>true</c> when a condition cannot be evaluated as legacy Nightscout evaluates it: a find key,
     /// operator, empty operand object, <c>$options</c> without a <c>$regex</c> or <c>$and</c>/<c>$or</c>
-    /// value the parser could not read, an <c>$exists</c> whose operand is not a boolean, or a
+    /// value the parser could not read, a <c>$regex</c> that does not compile (see
+    /// <see cref="BoundedRegex"/>), an <c>$exists</c> whose operand is not a boolean, or a
     /// condition on a time field whose operand is not an instant, which Nightscout refuses. A read may
     /// serve such a query; a delete must refuse it.
     /// </summary>
     public bool HasInexactCondition => EnumerateAll(_root).Any(cond =>
         !KnownOps.Contains(cond.Op)
+        || (cond.Op == "$regex" && !cond.Pattern.IsCompiled)
         || (cond.Op == "$exists" && TryReadExists(cond) is null)
         || (cond.Op != "$exists" && TimeFields.Contains(cond.Path) && !TryConvertToInstant(cond, out _, out _)));
+
+    /// <summary>
+    /// <c>true</c> when a <c>$regex</c> was abandoned mid-scan (see <see cref="BoundedRegex.Abandoned"/>),
+    /// so the rows matched so far may be fewer than the query asks for.
+    /// </summary>
+    public bool HasAbandonedRegex => EnumerateAll(_root).Any(cond => cond.Op == "$regex" && cond.Pattern.Abandoned);
 
     /// <summary>
     /// The presence an <c>$exists</c> asks for, or <c>null</c> for an operand that is not a boolean.
@@ -145,6 +151,13 @@ public sealed class FindQuery
         "false" or "0" => false,
         _ => null,
     };
+
+    /// <summary>
+    /// The field paths the query's conditions name, so a caller that can filter only some fields can
+    /// refuse the rest instead of dropping them.
+    /// </summary>
+    public IReadOnlySet<string> Fields =>
+        EnumerateAll(_root).Where(cond => cond.Op != UnsupportedOp).Select(cond => cond.Path).ToHashSet(StringComparer.Ordinal);
 
     private static IEnumerable<Condition> EnumerateAll(Group group) =>
         group.Children.SelectMany(child => child switch
@@ -438,7 +451,34 @@ public sealed class FindQuery
     /// A single field condition. <see cref="StringValue"/> carries the querystring-form operand;
     /// <see cref="JsonValue"/> the JSON-form operand (needed for typed arrays under $in/$nin).
     /// </summary>
-    private sealed record Condition(string Path, string Op, string StringValue, JsonElement? JsonValue, string? RegexOptions);
+    private sealed record Condition(string Path, string Op, string StringValue, JsonElement? JsonValue, string? RegexOptions)
+    {
+        private BoundedRegex? _pattern;
+
+        /// <summary>
+        /// The <c>$regex</c> operand, compiled on first use. A <c>with</c> copies it, so a condition is
+        /// only rewritten while parsing, before anything reads it.
+        /// </summary>
+        public BoundedRegex Pattern => _pattern ??= CompileRegex(StringValue, RegexOptions);
+    }
+
+    private static BoundedRegex CompileRegex(string pattern, string? flags)
+    {
+        var literal = RegexLiteral.Match(pattern);
+        if (literal.Success)
+        {
+            pattern = literal.Groups[1].Value;
+            flags = literal.Groups[2].Value;
+        }
+
+        var options = RegexOptions.None;
+        if (flags?.Contains('i') == true)
+            options |= RegexOptions.IgnoreCase;
+        if (flags?.Contains('m') == true)
+            options |= RegexOptions.Multiline;
+
+        return BoundedRegex.Create(pattern, options);
+    }
 
     private static Group ParseQueryString(string queryString, IReadOnlySet<string>? bareRegexFields)
     {
@@ -1031,34 +1071,6 @@ public sealed class FindQuery
             JsonValueKind.Number => field.GetRawText(),
             _ => null,
         };
-        if (input is null)
-            return false;
-
-        var pattern = cond.StringValue;
-        var flags = cond.RegexOptions ?? string.Empty;
-
-        // Accept the /pattern/flags literal form
-        var literal = RegexLiteral.Match(pattern);
-        if (literal.Success)
-        {
-            pattern = literal.Groups[1].Value;
-            flags = literal.Groups[2].Value;
-        }
-
-        var options = RegexOptions.None;
-        if (flags.Contains('i'))
-            options |= RegexOptions.IgnoreCase;
-        if (flags.Contains('m'))
-            options |= RegexOptions.Multiline;
-
-        try
-        {
-            return Regex.IsMatch(input, pattern, options, RegexTimeout);
-        }
-        catch (Exception ex) when (ex is ArgumentException or RegexMatchTimeoutException)
-        {
-            // Invalid pattern or timeout: no match, never an error (legacy behavior)
-            return false;
-        }
+        return input is not null && cond.Pattern.IsMatch(input);
     }
 }

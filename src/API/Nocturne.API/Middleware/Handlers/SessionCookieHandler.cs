@@ -196,12 +196,13 @@ public class SessionCookieHandler : IAuthHandler
     /// those, and
     /// <see cref="AuthType.SessionCookie"/> is treated as an unscoped credential, so accepting a
     /// grant here would let a holder move it into the session cookie and shed both its tenant pin
-    /// and its scope ceiling. Session tokens are minted only via the overload that cannot emit any
-    /// of these claims, so their absence is the session shape.
+    /// and its scope ceiling. <see cref="LegacyJwtHandler"/> applies the same test to a bearer JWT,
+    /// which resolves to the same unscoped type. Session tokens are minted only via the overload
+    /// that cannot emit any of these claims, so their absence is the session shape.
     /// The refresh-token cookie needs no equivalent check: it holds an opaque random string that
     /// is looked up server-side, and the access token it yields is re-minted here.
     /// </remarks>
-    private static bool IsGrantShaped(JwtClaims claims) =>
+    internal static bool IsGrantShaped(JwtClaims claims) =>
         claims.TenantId.HasValue
         || claims.Scopes is { Count: > 0 }
         || !string.IsNullOrEmpty(claims.ClientId)

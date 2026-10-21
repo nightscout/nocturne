@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.ProfileActivations;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Infrastructure.Data;
@@ -43,6 +44,8 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
     private readonly ITenantOwnerResolver _tenantOwnerResolver;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly INocturneDbContextFactory _contexts;
+    private readonly IProfileActivationRepository _profileActivations;
+    private readonly ProfileActivationWriter _profileActivationWriter;
 
     public MetadataPublisher(
         IProfileWriteService profileWriteService,
@@ -58,11 +61,15 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         ITenantOwnerResolver tenantOwnerResolver,
         ITenantAccessor tenantAccessor,
         INocturneDbContextFactory contexts,
+        IProfileActivationRepository profileActivations,
+        ProfileActivationWriter profileActivationWriter,
         IAuditContext auditContext,
         PublishSkipTally skips,
         ILogger<MetadataPublisher> logger)
         : base(auditContext, skips, logger)
     {
+        _profileActivations = profileActivations ?? throw new ArgumentNullException(nameof(profileActivations));
+        _profileActivationWriter = profileActivationWriter ?? throw new ArgumentNullException(nameof(profileActivationWriter));
         _profileWriteService = profileWriteService ?? throw new ArgumentNullException(nameof(profileWriteService));
         _foodService = foodService ?? throw new ArgumentNullException(nameof(foodService));
         _connectorFoodEntryService = connectorFoodEntryService ?? throw new ArgumentNullException(nameof(connectorFoodEntryService));
@@ -246,14 +253,25 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         return await held(db);
     }
 
+    /// <remarks>
+    /// A Profile span, as an instance before profile activations replays it, is published as the
+    /// effective activation it records (<see cref="PublishProfileActivationsAsync"/>).
+    /// </remarks>
     public async Task<bool> PublishStateSpansAsync(
         IEnumerable<StateSpan> stateSpans,
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
     {
+        var spans = stateSpans.ToList();
+        var profileSpans = spans.Where(s => s.Category == StateSpanCategory.Profile).ToList();
+        if (profileSpans.Count > 0
+            && !await PublishProfileActivationsAsync(
+                profileSpans.Select(ConnectorProfileActivations.FromSpan), source, origin, cancellationToken))
+            return false;
+
         try
         {
-            foreach (var span in stateSpans)
+            foreach (var span in spans.Where(s => s.Category != StateSpanCategory.Profile))
             {
                 // Source is the connector writing the row here, not one carried in the payload:
                 // NocturneRemote replays another instance's spans verbatim, and honouring their
@@ -274,6 +292,47 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to publish state spans for {Source}", source);
+            return false;
+        }
+    }
+
+    /// <remarks>
+    /// Each activation is written oldest first and settled against its neighbours, so one published
+    /// after an earlier sync's still-open activation ends it. One the user deleted stays deleted.
+    /// </remarks>
+    public async Task<bool> PublishProfileActivationsAsync(
+        IEnumerable<ProfileActivation> activations,
+        string source,
+        WriteOrigin origin, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            foreach (var activation in activations.OrderBy(a => a.StartTimestamp))
+            {
+                activation.DataSource = source;
+                activation.Phase = ProfileActivationPhase.Effective;
+                activation.Origin = ProfileActivationOrigin.Connector;
+                var stored = string.IsNullOrEmpty(activation.SyncIdentifier)
+                    ? null
+                    : await _profileActivations.FindBySyncIdentifierAsync(source, activation.SyncIdentifier, cancellationToken);
+
+                await _profileActivationWriter.WriteAsync(activation, stored, async settled =>
+                {
+                    try
+                    {
+                        return (await _profileActivations.UpsertAsync(settled, origin, cancellationToken)).Record;
+                    }
+                    catch (RecreationBlockedException)
+                    {
+                        return null;
+                    }
+                }, cancellationToken);
+            }
+            return true;
+        }
+        catch (DbUpdateException ex)
+        {
+            Logger.LogError(ex, "Failed to publish profile activations for {Source}", source);
             return false;
         }
     }

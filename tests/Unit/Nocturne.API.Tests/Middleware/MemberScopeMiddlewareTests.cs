@@ -540,12 +540,12 @@ public class MemberScopeMiddlewareTests
     }
 
     [Fact]
-    public async Task MigratedNightscoutGrant_OnOwnerMembership_KeepsEveryUploadScope()
+    public async Task MigratedNightscoutGrant_OnFullAccessMembership_KeepsEveryUploadScope()
     {
         // ConnectorConfigurationService seeds the migrated Nightscout secret with
-        // Normalize([health.readwrite]) against the subject who saved the connector secrets.
-        // That subject is a tenant member, so the grant is now intersected — the eight
-        // health.readwrite scopes every field uploader writes with must survive.
+        // Normalize([health.readwrite]) on the tenant's device subject, whose membership is full
+        // access. The grant is intersected with it, and the eight health.readwrite scopes every
+        // field uploader writes with must survive.
         var migratedGrantScopes = Scope.Normalize([Scope.HealthReadWrite]).ToList();
 
         var context = await ResolveAsync(OwnerPermissions, migratedGrantScopes, AuthType.ApiKey);
@@ -561,18 +561,10 @@ public class MemberScopeMiddlewareTests
     }
 
     [Fact]
-    public async Task ApiKey_WithNoMembershipRow_KeepsTheGrantScopesAndTrie()
+    public async Task ApiKey_WithNoMembershipRow_GetsNoPermissionTrie()
     {
-        // AuthenticationMiddleware exempts AuthType.ApiKey from the tenant-membership check, so an
-        // api-secret grant minted against a subject with no membership on this tenant (a platform
-        // admin who configured the connector, a member since removed) reaches the middleware with
-        // membership == null. It keeps the grant's own scopes rather than resolving to nothing.
-        //
-        // The trie is asserted alongside the scopes because they are separate carriers.
-        // ApiKeyHandler leaves AuthContext.Permissions empty, so the trie AuthenticationMiddleware
-        // builds is empty, and PolicyNames.HasPermissions — class-level on every V1/V2/V3
-        // controller — succeeds only on a non-empty trie. Scopes alone passing is not enough to
-        // keep the legacy uploader surface reachable.
+        // The trie is the carrier the legacy v1/v2/v3 surface authorizes on, so a grant whose
+        // subject holds no membership must not have one built from its own scopes.
         using var db = TestDbContextFactory.CreateSqlite();
 
         using (var seed = db.CreateContext())
@@ -583,15 +575,9 @@ public class MemberScopeMiddlewareTests
         var context = await ResolveAsync(
             db, Guid.CreateVersion7(), [Scope.TreatmentsReadWrite], AuthType.ApiKey);
 
-        var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().Contain(Scope.TreatmentsReadWrite);
-
         var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
-        permissionTrie!.Check("api:treatments:create").Should().BeTrue(
-            "HasPermissionsHandler succeeds only on a non-empty trie");
-        permissionTrie.Check("api:entries:create").Should().BeFalse(
-            "the grant carries treatments.readwrite only");
+        permissionTrie!.Check("api:treatments:create").Should().BeFalse();
     }
 
     [Theory]

@@ -133,10 +133,13 @@ public class EntriesIntegrationTests : ApiIntegrationTestBase
         fetched!.Length.Should().Be(2);
     }
 
+    /// <summary>
+    /// Nightscout's v1 entries list sorts and limits by <c>count</c> and has no offset
+    /// (<c>lib/server/entries.js</c> <c>list</c>), so <c>skip</c> pages over nothing; v3 search has one.
+    /// </summary>
     [Fact]
-    public async Task GetEntries_WithSkip_ShouldOffsetResults()
+    public async Task GetEntries_IgnoresSkip_AsNightscoutDoes()
     {
-        // Arrange
         using var client = CreateAuthenticatedClient();
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var entries = new[]
@@ -146,29 +149,13 @@ public class EntriesIntegrationTests : ApiIntegrationTestBase
             CreateTestEntry(sgv: 120, mills: now - 100000),
             CreateTestEntry(sgv: 130, mills: now),
         };
+        (await client.PostAsJsonAsync("/api/v1/entries", entries)).EnsureSuccessStatusCode();
 
-        await client.PostAsJsonAsync("/api/v1/entries", entries);
+        var firstPage = await client.GetFromJsonAsync<Entry[]>("/api/v1/entries?count=2&skip=0", JsonOptions);
+        var skipped = await client.GetFromJsonAsync<Entry[]>("/api/v1/entries?count=2&skip=2", JsonOptions);
 
-        // Act - get first page
-        var firstPage = await client.GetAsync("/api/v1/entries?count=2&skip=0");
-        var secondPage = await client.GetAsync("/api/v1/entries?count=2&skip=2");
-
-        // Assert
-        firstPage.StatusCode.Should().Be(HttpStatusCode.OK);
-        secondPage.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var firstEntries = await firstPage.Content.ReadFromJsonAsync<Entry[]>(JsonOptions);
-        var secondEntries = await secondPage.Content.ReadFromJsonAsync<Entry[]>(JsonOptions);
-
-        firstEntries.Should().NotBeNull();
-        secondEntries.Should().NotBeNull();
-        firstEntries!.Length.Should().Be(2);
-        secondEntries!.Length.Should().Be(2);
-
-        // Pages should contain different entries
-        var firstIds = firstEntries.Select(e => e.Id).ToHashSet();
-        var secondIds = secondEntries.Select(e => e.Id).ToHashSet();
-        firstIds.Intersect(secondIds).Should().BeEmpty("pages should not overlap");
+        firstPage!.Select(e => e.Sgv).Should().Equal(130, 120);
+        skipped!.Select(e => e.Sgv).Should().Equal(130, 120);
     }
 
     [Fact]

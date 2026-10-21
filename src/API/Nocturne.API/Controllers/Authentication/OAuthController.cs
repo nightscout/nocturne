@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
@@ -224,6 +225,7 @@ public class OAuthController : ControllerBase
     /// <param name="request">The consent form data including the approved scopes and PKCE code challenge.</param>
     /// <returns>Redirect to the client's <c>redirect_uri</c> with an authorization code, or an error redirect if the user denied access.</returns>
     [HttpPost("authorize")]
+    [RequireInteractiveSession]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> ApproveConsent([FromForm] ConsentApprovalRequest request)
@@ -280,26 +282,16 @@ public class OAuthController : ControllerBase
             });
         }
 
-        // A user cannot delegate more than they hold. Without this cap, approving a consent
-        // screen that asked for "*" issued a token with full access regardless of the
-        // approver's own permissions on the tenant — turning any authenticated member into a
-        // superuser by way of their own browser. The ceiling is the caller's resolved scopes on
-        // this tenant, which MemberScopeMiddleware has already narrowed to their membership.
-        var approverScopes = HttpContext.GetGrantedScopes();
-        if (!Scope.Satisfies(approverScopes, Scope.FullAccess))
+        // The ceiling is the approver's resolved scopes on this tenant, which MemberScopeMiddleware
+        // has already narrowed to their membership.
+        normalizedScopes = Scope.CapAt(normalizedScopes, HttpContext.GetGrantedScopes());
+        if (normalizedScopes.Count == 0)
         {
-            normalizedScopes = normalizedScopes
-                .Where(scope => Scope.Satisfies(approverScopes, scope))
-                .ToHashSet();
-
-            if (normalizedScopes.Count == 0)
+            return BadRequest(new OAuthError
             {
-                return BadRequest(new OAuthError
-                {
-                    Error = "invalid_scope",
-                    ErrorDescription = "None of the requested scopes are available to this account.",
-                });
-            }
+                Error = "invalid_scope",
+                ErrorDescription = "None of the requested scopes are available to this account.",
+            });
         }
 
         // Generate authorization code
@@ -551,6 +543,7 @@ public class OAuthController : ControllerBase
     /// <param name="request">Contains the <c>user_code</c> and the user's approval decision.</param>
     /// <returns><c>200 OK</c> with <c>approved: true/false</c>, or <c>400</c> if the code is invalid or already processed.</returns>
     [HttpPost("device-approve")]
+    [RequireInteractiveSession]
     [RemoteCommand]
     [EnableRateLimiting("oauth-device-approve")]
     [Consumes("application/x-www-form-urlencoded")]
@@ -576,7 +569,8 @@ public class OAuthController : ControllerBase
 
         var success = request.Approved
             ? await _deviceCodeService.ApproveDeviceCodeAsync(
-                request.UserCode, subjectId, HttpContext.IsCallerHistoryClamped())
+                request.UserCode, subjectId, HttpContext.GetGrantedScopes(),
+                HttpContext.IsCallerHistoryClamped())
             : await _deviceCodeService.DenyDeviceCodeAsync(request.UserCode);
 
         if (!success)
@@ -773,6 +767,7 @@ public class OAuthController : ControllerBase
     /// </summary>
     /// <returns>An <see cref="OAuthGrantListResponse"/> containing all non-revoked grants across authorization-code and device-code flows.</returns>
     [HttpGet("grants")]
+    [RequireInteractiveSession]
     [ProducesResponseType(typeof(OAuthGrantListResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<OAuthGrantListResponse>> GetGrants()
     {
@@ -793,6 +788,7 @@ public class OAuthController : ControllerBase
     /// <param name="grantId">The ID of the grant to revoke.</param>
     /// <returns><c>204 No Content</c> on success, or <c>404 Not Found</c> if the grant does not exist or belongs to another user.</returns>
     [HttpDelete("grants/{grantId}")]
+    [RequireInteractiveSession]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteGrant(Guid grantId)
@@ -822,6 +818,7 @@ public class OAuthController : ControllerBase
     /// <param name="request">Partial update request containing the new label and/or scopes.</param>
     /// <returns>The updated <see cref="OAuthGrantDto"/>, or <c>404</c> / <c>400</c> if the grant is not found or the scopes are invalid.</returns>
     [HttpPatch("grants/{grantId}")]
+    [RequireInteractiveSession]
     [Consumes("application/json")]
     [ProducesResponseType(typeof(OAuthGrantDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(OAuthError), StatusCodes.Status400BadRequest)]
@@ -834,6 +831,15 @@ public class OAuthController : ControllerBase
         if (!TryGetSubject(out var subjectId, out var subjectError))
         {
             return subjectError;
+        }
+
+        if (Scope.ValidateDelegation(request.Scopes, HttpContext.GetGrantedScopes()) is { } violation)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_scope",
+                ErrorDescription = violation.Description,
+            });
         }
 
         try
@@ -961,8 +967,9 @@ public class OAuthController : ControllerBase
     /// <summary>
     /// RFC 7591 Dynamic Client Registration. Allows third-party native apps
     /// (Trio, xDrip+, Loop, AAPS) to obtain a tenant-scoped <c>client_id</c> without
-    /// any out-of-band registration step. Idempotent on <c>(tenant, software_id)</c>:
-    /// re-registering with the same <c>software_id</c> returns the existing <c>client_id</c>.
+    /// any out-of-band registration step. Idempotent on <c>(tenant, software_id)</c> for a
+    /// registration whose redirect URIs the existing client already accepts; see
+    /// <see cref="OAuthClientService.RegisterClientAsync"/>.
     /// </summary>
     /// <param name="request">The client registration metadata including redirect URIs, scopes, and optional software ID.</param>
     /// <param name="redirectUriValidator">Injected validator that enforces RFC 8252 redirect URI policies.</param>

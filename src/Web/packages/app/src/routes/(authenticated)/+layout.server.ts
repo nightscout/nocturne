@@ -66,7 +66,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   // (it grants public read only under ShareAccess); this gate just avoids rendering the shell and
   // then bursting 401s on the bare host.
   // Security headers for the share host (Referrer-Policy, X-Robots-Tag) are applied for every
-  // response in hooks.server.ts (shareHostSecurityHandle).
+  // response in hooks.server.ts (securityHeadersHandle).
   const publicViewAllowed = locals.isShareHost && anonymousReadAccess;
 
   // Resolved above every redirect below, because none of them reaches anywhere a share host can

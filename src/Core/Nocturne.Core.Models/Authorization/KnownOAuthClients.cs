@@ -244,7 +244,9 @@ public class KnownClientEntry
     public string? LogoUri { get; set; }
 
     /// <summary>
-    /// Allowed redirect URIs to seed when the client registers via DCR.
+    /// The redirect URIs this app's seeded client accepts, and the only ones a dynamic registration
+    /// may submit and still receive this identity. Empty means only a registration with no redirect
+    /// URIs (device flow) is verified; an app with a per-install callback registers unverified.
     /// </summary>
     public List<string> RedirectUris { get; set; } = [];
 

@@ -136,6 +136,7 @@ public class TreatmentServiceBulkDeleteTests
             new Mock<INoteRepository>().Object,
             new Mock<IDeviceEventRepository>().Object,
             new Mock<IBolusCalculationRepository>().Object,
+            Mock.Of<IProfileActivationRepository>(),
             Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
         _store

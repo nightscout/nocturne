@@ -56,6 +56,15 @@ public interface IMetadataPublisher
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Upserts the active-program readings a connector reports as effective
+    /// <see cref="ProfileActivation"/>s, keyed by their <see cref="ProfileActivation.SyncIdentifier"/>.
+    /// </summary>
+    Task<bool> PublishProfileActivationsAsync(
+        IEnumerable<ProfileActivation> activations,
+        string source,
+        WriteOrigin origin, CancellationToken cancellationToken = default);
+
     Task<bool> PublishSystemEventsAsync(
         IEnumerable<SystemEvent> systemEvents,
         string source,

@@ -118,7 +118,8 @@ public class StatisticsTreatmentScopeIntegrationTests(ApiIntegrationTestFixture 
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
-        var (_, accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Statistics scope member");
+        var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Statistics scope member");
+        var accessToken = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subjectId);
 
         using var member = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, accessToken);
         var response = await member.PostAsJsonAsync("/api/auth/direct-grants", new { label = "statistics-scope", scopes });

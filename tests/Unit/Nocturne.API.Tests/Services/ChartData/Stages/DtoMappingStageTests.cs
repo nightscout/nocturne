@@ -211,6 +211,48 @@ public class DtoMappingStageTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ProfileStretches_CarryTheirActivationAndAKeyPerStretch()
+    {
+        var permanent = new ProfileActivation
+        {
+            Id = Guid.CreateVersion7(),
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(StartTime).UtcDateTime,
+            BaseProfileName = "Rhys",
+            Percentage = 110,
+            TimeshiftMs = 3_600_000,
+            Phase = ProfileActivationPhase.Effective,
+            Origin = ProfileActivationOrigin.Uploader,
+        };
+        var resolved = new Nocturne.Core.Contracts.Profiles.Resolvers.ResolvedProfileActivation(
+            permanent, "Rhys", Nocturne.Core.Contracts.Profiles.Resolvers.ProfileScheduleSource.ProfileStore, null, null);
+        _mockTreatmentFoodService
+            .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var result = await _stage.ExecuteAsync(new ChartDataContext
+        {
+            StartTime = StartTime,
+            EndTime = EndTime,
+            StateSpans = new Dictionary<StateSpanCategory, IEnumerable<StateSpan>>(),
+            ProfileSegments =
+            [
+                new(StartTime, StartTime + 3_600_000, resolved),
+                new(StartTime + 7_200_000, EndTime, resolved),
+            ],
+        }, CancellationToken.None);
+
+        result.ProfileSpans.Should().HaveCount(2);
+        result.ProfileSpans.Select(s => s.Id).Should().OnlyHaveUniqueItems();
+        result.ProfileSpans.Should().OnlyContain(s =>
+            s.Category == StateSpanCategory.Profile && s.Color == ChartColor.Profile && s.Metadata == null);
+        var activation = result.ProfileSpans[0].ProfileActivation!;
+        activation.BaseProfileName.Should().Be("Rhys");
+        activation.Percentage.Should().Be(110);
+        activation.TimeshiftHours.Should().Be(1);
+        activation.Phase.Should().Be(ProfileActivationPhase.Effective);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ActivityStateSpans_MapToStateSpanKindWithCategory()
     {
         // Arrange

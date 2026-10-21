@@ -49,11 +49,4 @@ public interface IFoodService
     /// </summary>
     /// <returns>True if deleted successfully, false otherwise</returns>
     Task<bool> DeleteFoodAsync(string id, CancellationToken cancellationToken = default);
-
-    /// <param name="find">Optional MongoDB query filter</param>
-    /// <returns>Number of records deleted</returns>
-    Task<long> DeleteMultipleFoodAsync(
-        string? find = null,
-        CancellationToken cancellationToken = default
-    );
 }

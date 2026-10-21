@@ -39,6 +39,7 @@ public class SensorContextEnricherTests
     private readonly Mock<IAlertRepository> _alertRepository = new();
     private readonly Mock<ITargetRangeScheduleRepository> _targetRangeScheduleRepository = new();
     private readonly Mock<IActiveProfileResolver> _activeProfileResolver = new();
+    private readonly Mock<IProfileActivationResolver> _profileActivations = new();
     private readonly Mock<ITherapySettingsResolver> _therapySettingsResolver = new();
     private readonly Mock<ISleepService> _sleepService = new();
     private readonly Mock<Nocturne.Infrastructure.Data.Abstractions.ITrackerRepository> _trackerRepository = new();
@@ -438,6 +439,55 @@ public class SensorContextEnricherTests
             It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Active")]
+    [InlineData("night")]
+    public async Task Profile_state_span_leaf_reads_the_active_profile_activation(string? state)
+    {
+        var enricher = BuildEnricher();
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var activation = new ProfileActivation
+        {
+            Id = Guid.NewGuid(),
+            StartTimestamp = now.AddMinutes(-40),
+            BaseProfileName = "Night",
+            Phase = ProfileActivationPhase.Requested,
+            Origin = ProfileActivationOrigin.Uploader,
+        };
+        _profileActivations.Setup(r => r.GetAtAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResolvedProfileActivation(
+                activation, "Night", ProfileScheduleSource.ProfileStore, null, null));
+        var stateJson = state is null ? "" : $",\"state\":\"{state}\"";
+        var rule = MakeRule(AlertConditionType.StateSpanActive,
+            $"{{\"category\":\"Profile\"{stateJson},\"is_active\":true}}");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.ActiveStateSpans.Should().ContainKey((StateSpanCategory.Profile, state));
+        enriched.ActiveStateSpans[(StateSpanCategory.Profile, state)].StartedAt.Should().Be(now.AddMinutes(-40));
+        _stateSpanService.Verify(s => s.GetActiveAtAsync(
+            StateSpanCategory.Profile, It.IsAny<string?>(),
+            It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Profile_state_span_leaf_naming_another_profile_is_not_active()
+    {
+        var enricher = BuildEnricher();
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        _profileActivations.Setup(r => r.GetAtAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResolvedProfileActivation(
+                new ProfileActivation { Id = Guid.NewGuid(), StartTimestamp = now.AddMinutes(-40), BaseProfileName = "Night" },
+                "Night", ProfileScheduleSource.ProfileStore, null, null));
+        var rule = MakeRule(AlertConditionType.StateSpanActive,
+            """{"category":"Profile","state":"Exercise","is_active":true}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.ActiveStateSpans.Should().NotContainKey((StateSpanCategory.Profile, "Exercise"));
+    }
+
     [Fact]
     public async Task OverrideActive_need_projects_metadata_correctly()
     {
@@ -517,6 +567,7 @@ public class SensorContextEnricherTests
             _stateSpanService.Object, _alertRepository.Object,
             _targetRangeScheduleRepository.Object,
             _activeProfileResolver.Object,
+            _profileActivations.Object,
             _therapySettingsResolver.Object,
             _sleepService.Object,
             _trackerRepository.Object,
@@ -794,6 +845,7 @@ public class SensorContextEnricherTests
             _alertRepository.Object,
             _targetRangeScheduleRepository.Object,
             _activeProfileResolver.Object,
+            _profileActivations.Object,
             _therapySettingsResolver.Object,
             _sleepService.Object,
             _trackerRepository.Object,

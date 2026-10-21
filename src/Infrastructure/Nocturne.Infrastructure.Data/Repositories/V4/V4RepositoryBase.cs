@@ -220,12 +220,18 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = InWindow(ctx.Set<TEntity>().AsNoTracking(), from, to, device);
+        var query = InWindow(Listed(ctx.Set<TEntity>().AsNoTracking()), from, to, device);
         if (source != null) query = query.Where(e => e.DataSource == source);
         query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
         return entities.Select(ToDomain);
     }
+
+    /// <summary>
+    /// The rows <see cref="GetAsync"/> and <see cref="CountAsync"/> list. A type whose table also
+    /// holds rows that are not records of their own narrows it.
+    /// </summary>
+    protected virtual IQueryable<TEntity> Listed(IQueryable<TEntity> rows) => rows;
 
     /// <summary>
     /// The time window and device filter of <see cref="GetAsync"/>, shared with the counts that must
@@ -673,7 +679,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     public virtual async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ApplyReadVisibility(ctx.Set<TEntity>().AsNoTracking().AsQueryable(), ctx);
+        var query = ApplyReadVisibility(Listed(ctx.Set<TEntity>().AsNoTracking()), ctx);
         if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
         if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
         return await query.CountAsync(ct);

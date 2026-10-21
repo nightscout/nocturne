@@ -16,6 +16,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -267,6 +268,22 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     }
 
     /// <summary>
+    /// The Nightscout API secret a save would adopt as a working api-secret credential, or null
+    /// when it adopts none. The key is the <c>ApiSecret</c> connector property in either casing.
+    /// </summary>
+    public static string? AdoptedSecret(string connectorName, IReadOnlyDictionary<string, string> secrets)
+    {
+        if (!connectorName.Equals("nightscout", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        if (!secrets.TryGetValue("ApiSecret", out var apiSecret)
+            && !secrets.TryGetValue("apiSecret", out apiSecret))
+            return null;
+
+        return string.IsNullOrWhiteSpace(apiSecret) ? null : apiSecret;
+    }
+
+    /// <summary>
     /// When a Nightscout connector's API secret is saved, creates a DirectGrant with the
     /// SHA-1 hash of the secret so that legacy uploaders authenticated via the old
     /// <c>api-secret</c> header continue to work without reconfiguration.
@@ -277,22 +294,14 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         Dictionary<string, string> secrets,
         CancellationToken ct)
     {
-        // Only applies to the Nightscout connector
-        if (!connectorName.Equals("nightscout", StringComparison.OrdinalIgnoreCase))
+        if (AdoptedSecret(connectorName, secrets) is not { } apiSecret)
             return;
 
-        // The secret key is "ApiSecret" (ConnectorPropertyKey enum name)
-        if (!secrets.TryGetValue("ApiSecret", out var apiSecret)
-            && !secrets.TryGetValue("apiSecret", out apiSecret))
-            return;
-
-        if (string.IsNullOrWhiteSpace(apiSecret))
-            return;
-
-        var subjectId = _auditContext.SubjectId;
-        if (subjectId == null)
+        // Adopting a credential is a person's decision, made by saving it from the connector page;
+        // a job that writes the connector's secrets on its own does not hand out a working key.
+        if (_auditContext.SubjectId is null)
         {
-            _logger.LogWarning("Cannot create legacy grant: no authenticated subject in audit context");
+            _logger.LogWarning("Not adopting the Nightscout API secret: no authenticated subject saved it");
             return;
         }
 
@@ -312,8 +321,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             return;
         }
 
+        // A site's secret, not the saver's: see DeviceSubjectFilter.
         var grant = OAuthGrantEntity.AdoptedLegacyCredential(
-            subjectId.Value,
+            await db.DeviceSubjectOf(db.TenantId, ct),
             "Nightscout (migrated)",
             [Scope.HealthReadWrite],
             legacySecretHash: sha1Hash);

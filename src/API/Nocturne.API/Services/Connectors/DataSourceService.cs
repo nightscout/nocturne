@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Demo;
+using Nocturne.API.Services.ProfileActivations;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
@@ -42,6 +43,7 @@ public class DataSourceService : IDataSourceService
     private readonly IAuditContext _auditContext;
     private readonly IConnectorConfigurationService _connectorConfiguration;
     private readonly ITreatmentDecomposer _treatmentDecomposer;
+    private readonly ProfileActivationWriter _profileActivationWriter;
     private readonly ILogger<DataSourceService> _logger;
 
     public DataSourceService(
@@ -52,10 +54,12 @@ public class DataSourceService : IDataSourceService
         IAuditContext auditContext,
         IConnectorConfigurationService connectorConfiguration,
         ITreatmentDecomposer treatmentDecomposer,
+        ProfileActivationWriter profileActivationWriter,
         ILogger<DataSourceService> logger
     )
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _profileActivationWriter = profileActivationWriter;
         _sensorGlucose = sensorGlucose;
         _meterGlucose = meterGlucose;
         _calibrations = calibrations;
@@ -968,7 +972,7 @@ public class DataSourceService : IDataSourceService
     /// Capability matrix (entity interfaces decide the path):
     /// <list type="bullet">
     /// <item>Glucose and the auditable+soft-deletable records (Bolus, CarbIntake, BolusCalculation,
-    ///   DeviceEvent, BGCheck, Note, ApsSnapshot, TempBasal, StateSpan) take the audited soft-delete path,
+    ///   DeviceEvent, BGCheck, Note, ApsSnapshot, TempBasal, StateSpan, ProfileActivation) take the audited soft-delete path,
     ///   which stamps the <c>deleted_by_user</c> flag the soft-delete dedup reads to block re-import
     ///   (<see cref="SoftDeleteDedupExtensions"/>).</item>
     /// </list>
@@ -1008,6 +1012,9 @@ public class DataSourceService : IDataSourceService
             source, WriteOrigin.Live, cancellationToken);
         var stateSpansDeleted = await db.AuditedSoftDeleteAsync(
             db.StateSpans.Where(s => s.Source == source), _auditContext, scope, cancellationToken);
+        stateSpansDeleted += await db.AuditedSoftDeleteAsync(
+            db.ProfileActivations.FromSource(source), _auditContext, scope, cancellationToken);
+        await _profileActivationWriter.InvalidateAsync(cancellationToken);
 
         if (allowReimport)
             await AllowSourceReimportAsync(db, source, scope, cancellationToken);
@@ -1046,6 +1053,7 @@ public class DataSourceService : IDataSourceService
         await db.AuditedAllowReimportAsync(db.Notes.FromSource(source), _auditContext, scope, ct);
         await db.AuditedAllowReimportAsync(db.ApsSnapshots.FromSource(source), _auditContext, scope, ct);
         await db.AuditedAllowReimportAsync(db.TempBasals.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.ProfileActivations.FromSource(source), _auditContext, scope, ct);
         await db.AuditedAllowReimportAsync(db.TherapySettings.FromSource(source), _auditContext, scope, ct);
         await db.AuditedAllowReimportAsync(db.BasalSchedules.FromSource(source), _auditContext, scope, ct);
         await db.AuditedAllowReimportAsync(db.CarbRatioSchedules.FromSource(source), _auditContext, scope, ct);

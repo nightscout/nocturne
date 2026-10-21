@@ -30,6 +30,7 @@ public class TreatmentReadService : ITreatmentStore
     private readonly INoteRepository _noteRepo;
     private readonly IDeviceEventRepository _deviceEventRepo;
     private readonly IBolusCalculationRepository _bolusCalcRepo;
+    private readonly IProfileActivationRepository _activationRepo;
     private readonly IStateSpanService _stateSpans;
     private readonly ILogger<TreatmentReadService> _logger;
 
@@ -44,6 +45,7 @@ public class TreatmentReadService : ITreatmentStore
         INoteRepository noteRepo,
         IDeviceEventRepository deviceEventRepo,
         IBolusCalculationRepository bolusCalcRepo,
+        IProfileActivationRepository activationRepo,
         IStateSpanService stateSpans,
         ILogger<TreatmentReadService> logger)
     {
@@ -57,6 +59,7 @@ public class TreatmentReadService : ITreatmentStore
         _noteRepo = noteRepo;
         _deviceEventRepo = deviceEventRepo;
         _bolusCalcRepo = bolusCalcRepo;
+        _activationRepo = activationRepo;
         _stateSpans = stateSpans;
         _logger = logger;
     }
@@ -149,6 +152,9 @@ public class TreatmentReadService : ITreatmentStore
                 "Find-filtered treatment query hit the {MaxFetch}-row window; matches beyond it are not returned",
                 MaxFilterFetch);
 
+        if (find.HasAbandonedRegex)
+            _logger.LogWarning("A find $regex ran out of its time budget; treatment matches may be incomplete");
+
         return OrderByTime(matching, descending)
             .Skip(skip)
             .Take(count)
@@ -171,6 +177,7 @@ public class TreatmentReadService : ITreatmentStore
             || await _bgCheckRepo.IsDeletedByUserAsync(id, ct)
             || await _deviceEventRepo.IsDeletedByUserAsync(id, ct)
             || await _bolusCalcRepo.IsDeletedByUserAsync(id, ct)
+            || await _activationRepo.IsDeletedByUserAsync(id, ct)
             || await _noteRepo.IsDeletedByUserAsync(id, ct)
             || await _projection.IsStateSpanDeletedByUserAsync(id, ct);
 
@@ -374,7 +381,7 @@ public class TreatmentReadService : ITreatmentStore
     /// Whether a state span the decomposer wrote is read back as the treatment, under the span's id.
     /// </summary>
     private static bool IsServedStateSpan(StateSpan span) =>
-        span is { OriginalId: not null, Category: StateSpanCategory.Override or StateSpanCategory.TemporaryTarget or StateSpanCategory.Profile };
+        span is { OriginalId: not null, Category: StateSpanCategory.Override or StateSpanCategory.TemporaryTarget };
 
     /// <summary>
     /// The record a decomposed treatment is read back under: a bolus heads a Meal Bolus, and a note
@@ -382,24 +389,36 @@ public class TreatmentReadService : ITreatmentStore
     /// </summary>
     private static readonly Type[] ServedRecordTypes =
     [
-        typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(DeviceEvent), typeof(BolusCalculation), typeof(Note),
+        typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(DeviceEvent), typeof(BolusCalculation),
+        typeof(ProfileActivation), typeof(Note),
     ];
 
     /// <summary>
     /// The stored record a client-sent treatment id names, or none and the id to look a state span up
-    /// by. A Note a served span's treatment wrote beside it, before notes were kept on the span, is
-    /// served as that span, so it resolves to the span's treatment id.
+    /// by. A Note a served span's or activation's treatment wrote beside it, before notes were kept on
+    /// the span, is served as that span or activation, so it resolves to it.
     /// </summary>
     private async Task<(StoredRecord? Stored, string SpanId)> ResolveAsync(string id, CancellationToken ct)
     {
         if (await FindStoredRecordAsync(id, ct) is not { } stored)
             return (null, id);
 
-        return stored.Record is Note { LegacyId: { Length: > 0 } legacyId }
-            && await _projection.GetStateSpanTreatmentIdAsync(legacyId, ct) == legacyId
-                ? (null, legacyId)
-                : (stored, id);
+        if (stored.Record is not Note { LegacyId: { Length: > 0 } legacyId })
+            return (stored, id);
+
+        if (await FindServedActivationAsync(new RecordKey.LegacyId(legacyId), ct) is { } activation)
+            return (activation, id);
+
+        return await _projection.GetStateSpanTreatmentIdAsync(legacyId, ct) == legacyId
+            ? (null, legacyId)
+            : (stored, id);
     }
+
+    /// <summary>A <see cref="ProfileActivation"/> served as a treatment: one decomposed from a treatment, so carrying its id.</summary>
+    private async Task<StoredRecord?> FindServedActivationAsync(RecordKey key, CancellationToken ct) =>
+        await FindAsync(_activationRepo, key, ct) is { Record.LegacyId: { Length: > 0 } } activation
+            ? activation
+            : null;
 
     /// <summary>
     /// Resolves a client-sent treatment id to the stored record it names. Each key is tried against
@@ -418,6 +437,7 @@ public class TreatmentReadService : ITreatmentStore
                 ?? await FindAsync(_bgCheckRepo, key, ct)
                 ?? await FindAsync(_deviceEventRepo, key, ct)
                 ?? await FindAsync(_bolusCalcRepo, key, ct)
+                ?? await FindServedActivationAsync(key, ct)
                 ?? await FindAsync(_noteRepo, key, ct);
             if (stored is not null)
                 return stored;

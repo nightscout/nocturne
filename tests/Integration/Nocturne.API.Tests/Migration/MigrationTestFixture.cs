@@ -24,6 +24,7 @@ public class MigrationTestFixture : IAsyncLifetime
     private readonly MongoDbContainer _mongoContainer;
     private WebApplication? _mockNightscoutApp;
     private string? _mockNightscoutUrl;
+    private TaskCompletionSource? _entriesGate;
 
     public const string DatabaseName = "nightscout_test";
     public const string TestApiSecret = "test-migration-secret-12345";
@@ -48,6 +49,26 @@ public class MigrationTestFixture : IAsyncLifetime
     /// Number of treatments loaded from fixtures
     /// </summary>
     public int TreatmentCount { get; private set; }
+
+    /// <summary>
+    /// Holds every request for entries until the returned handle is disposed, so a test can
+    /// observe an API migration while it is still running.
+    /// </summary>
+    public IDisposable HoldEntries()
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Volatile.Write(ref _entriesGate, gate);
+        return new EntriesHold(this, gate);
+    }
+
+    private sealed class EntriesHold(MigrationTestFixture fixture, TaskCompletionSource gate) : IDisposable
+    {
+        public void Dispose()
+        {
+            Interlocked.CompareExchange(ref fixture._entriesGate, null, gate);
+            gate.TrySetResult();
+        }
+    }
 
     public MigrationTestFixture()
     {
@@ -163,8 +184,10 @@ public class MigrationTestFixture : IAsyncLifetime
             apiEnabled = true
         }));
 
-        _mockNightscoutApp.MapGet("/api/v1/entries.json", (HttpContext ctx) =>
+        _mockNightscoutApp.MapGet("/api/v1/entries.json", async (HttpContext ctx) =>
         {
+            if (Volatile.Read(ref _entriesGate) is { } gate)
+                await gate.Task.WaitAsync(ctx.RequestAborted);
             return Results.Content(entriesApiJson, "application/json");
         });
 

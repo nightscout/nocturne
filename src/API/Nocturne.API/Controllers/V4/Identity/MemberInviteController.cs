@@ -64,6 +64,7 @@ public class MemberInviteController : ControllerBase
 
     /// <inheritdoc cref="IMemberInviteService.CreateInviteAsync"/>
     [HttpPost]
+    [RequireInteractiveSession]
     [RemoteCommand(Invalidates = ["ListInvites"])]
     [ProducesResponseType(typeof(MemberInviteResult), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

@@ -246,6 +246,23 @@ public class OAuthGrantServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task UpdateGrantAsync_ToNoScopes_IsRefusedAndLeavesTheGrant()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db, scopes: new List<string> { "glucose.read" });
+
+        var service = CreateService(db);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => service.UpdateGrantAsync(grantId, _ownerSubjectId, scopes: []));
+
+        var grant = await db.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grantId);
+        Assert.Equal(["glucose.read"], grant.Scopes);
+    }
+
+    [Fact]
     public async Task UpdateGrantAsync_EvictsTheCachedGuestSession()
     {
         using var db = CreateDbContext();

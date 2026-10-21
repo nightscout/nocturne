@@ -107,11 +107,9 @@ public class MemberScopeMiddleware
 
         // Remaining handlers require a SubjectId for membership lookup. The development-mode
         // auto-authentication in AuthenticationMiddleware mints an AuthType.ApiKey context with no
-        // subject, Permissions=["*"] and no Scopes. It used to hit the ApiKey branch above, where
-        // normalizing an empty Scopes list produced no scopes and an empty trie; it now returns
-        // here instead and keeps the wildcard trie AuthenticationMiddleware built from those
-        // Permissions. That widening is the intended behaviour of dev auto-auth, and the path is
-        // unreachable outside Development.
+        // subject, Permissions=["*"] and no Scopes, and keeps the wildcard trie
+        // AuthenticationMiddleware built from those Permissions. That is the intended behaviour of
+        // dev auto-auth, and the path is unreachable outside Development.
         if (authContext.SubjectId is null)
         {
             return;
@@ -129,30 +127,10 @@ public class MemberScopeMiddleware
                          && tm.TenantId == tenantId)
             .FirstOrDefaultAsync();
 
+        // AuthenticationMiddleware has already reduced a non-member to anonymous, or to the
+        // scopeless identity an invite route keeps; neither gains anything here.
         if (membership == null)
         {
-            // Let the existing AuthenticationMiddleware membership check handle this.
-            // AuthType.ApiKey is the one credential that reaches here with no membership row:
-            // AuthenticationMiddleware exempts it from that check, so an api-secret grant whose
-            // subject is not a member of the tenant keeps the grant's own scopes. The grant row is
-            // matched on TenantId, so those scopes are still confined to this tenant.
-            //
-            // The trie is a separate carrier from GrantedScopes and must be rebuilt here.
-            // ApiKeyHandler sets Scopes and leaves Permissions empty, so the trie
-            // AuthenticationMiddleware built is empty, and PolicyNames.HasPermissions — carried at
-            // class level by every V1/V2/V3 controller — succeeds only on a non-empty trie.
-            //
-            // Gated on ApiKey rather than written unconditionally: every other credential type is
-            // rejected by AuthenticationMiddleware's membership check before reaching this, so
-            // today the gate is a no-op. It is here so that adding a type to that check's exemption
-            // list cannot silently hand the new type grant-scoped access plus a matching trie.
-            if (authContext.AuthType is AuthType.ApiKey)
-            {
-                var grantTrie = new PermissionTrie();
-                grantTrie.Add(ScopeTranslator.ToPermissions(context.GetGrantedScopes()));
-                context.SetPermissionTrie(grantTrie);
-            }
-
             return;
         }
 
@@ -180,8 +158,7 @@ public class MemberScopeMiddleware
             authContext.SubjectId, authContext.TenantId, effectivePermissions.Count, membership.LimitTo24Hours);
 
         // Fire-and-forget LastUsedAt update (debounced: only if > 5 min since last update).
-        // Skipped for AuthType.ApiKey, which reaches this branch only now that api-secret
-        // credentials resolve through membership. These columns back the "Last active" line on the
+        // Skipped for AuthType.ApiKey. These columns back the "Last active" line on the
         // member card, which reports when the person was last active and from where; an uploader
         // polling on their key is not the member logging in, and attributing it would overwrite
         // that with the uploader's IP and user-agent. The grant row has its own LastUsedAt,

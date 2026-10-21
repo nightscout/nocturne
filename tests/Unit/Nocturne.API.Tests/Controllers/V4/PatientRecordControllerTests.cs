@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Health;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -28,6 +29,7 @@ public class PatientRecordControllerTests
     private readonly Mock<ISensorSessionInferenceRunner> _sessionInference = new();
     private readonly Mock<ISensorSessionInferenceService> _inference = new();
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
+    private readonly Mock<ITenantCache> _tenantCache = new();
     private readonly Mock<IDeviceTrackerProvisioner> _trackerProvisioner = new();
     private readonly PatientRecordController _controller;
 
@@ -52,6 +54,7 @@ public class PatientRecordControllerTests
             _sessionInference.Object,
             _trackerProvisioner.Object,
             _tenantAccessor.Object,
+            _tenantCache.Object,
             NullLogger<PatientRecordController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
@@ -90,6 +93,42 @@ public class PatientRecordControllerTests
         _sessionInference.Verify(r => r.RunAsync(
             Tenant, It.IsAny<Func<ISensorSessionInferenceService, CancellationToken, Task>>(), It.IsAny<CancellationToken>()), Times.Once);
         _inference.Verify(i => i.InferHistoryAsync(device, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private void GivenStoredRecord(string? timezone) =>
+        _recordRepo.Setup(x => x.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new PatientRecord { Timezone = timezone });
+
+    private void GivenUpdateEchoes() =>
+        _recordRepo
+            .Setup(x => x.UpdateAsync(It.IsAny<PatientRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PatientRecord m, WriteOrigin _, CancellationToken _) => m);
+
+    [Theory]
+    [InlineData("Australia/Sydney", "Europe/London")]
+    [InlineData(null, "Europe/London")]
+    [InlineData("Australia/Sydney", null)]
+    public async Task UpdatePatientRecord_ChangingTheTimezone_ClearsTheWholeEHbA1cFamily(string? stored, string? edited)
+    {
+        GivenStoredRecord(stored);
+        GivenUpdateEchoes();
+
+        await _controller.UpdatePatientRecord(new PatientRecord { Timezone = edited });
+
+        _tenantCache.Verify(c => c.RemoveFamilyAsync(TenantCacheFamily.EHbA1c, It.IsAny<CancellationToken>()), Times.Once);
+        _tenantCache.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData("Australia/Sydney")]
+    [InlineData(null)]
+    public async Task UpdatePatientRecord_KeepingTheTimezone_ClearsNothing(string? timezone)
+    {
+        GivenStoredRecord(timezone);
+        GivenUpdateEchoes();
+
+        await _controller.UpdatePatientRecord(new PatientRecord { Timezone = timezone });
+
+        _tenantCache.VerifyNoOtherCalls();
     }
 
     private void GivenStored(PatientDevice device) =>

@@ -60,7 +60,12 @@ describe("createStaticChartEngine", () => {
   it("clips spans to the window and drops those outside it", () => {
     const engine = engineFor({
       profileSpans: [
-        { startMills: at(-60), endMills: at(30), state: "fallback", metadata: { profileName: "Weekday" } },
+        {
+          startMills: at(-60),
+          endMills: at(30),
+          state: "fallback",
+          profileActivation: { baseProfileName: "Weekday", percentage: 110, timeshiftHours: 1 },
+        },
         { startMills: at(30), state: "Weekend" },
         { startMills: at(-120), endMills: at(-60), state: "Gone" },
       ],
@@ -72,7 +77,7 @@ describe("createStaticChartEngine", () => {
 
     const [weekday, weekend] = engine.displayProfileSpans;
     expect(engine.displayProfileSpans).toHaveLength(2);
-    expect(weekday).toMatchObject({ profileName: "Weekday" });
+    expect(weekday).toMatchObject({ profileName: "Weekday 110% +1h" });
     expect(weekday.displayStart.getTime()).toBe(FROM);
     expect(weekend).toMatchObject({ profileName: "Weekend" });
     expect(weekend.displayEnd.getTime()).toBe(TO);

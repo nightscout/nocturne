@@ -662,6 +662,16 @@ public static class Scope
 
         return null;
     }
+
+    /// <summary>
+    /// The part of a client's request an approver can delegate. Unlike
+    /// <see cref="ValidateDelegation"/> this narrows instead of refusing: the scope list on a consent
+    /// is the client's ask, not the approver's, and approving it grants what the approver holds.
+    /// </summary>
+    /// <param name="requested">The normalized scopes the client asked for.</param>
+    /// <param name="approverScopes">The approving caller's resolved scopes.</param>
+    public static HashSet<string> CapAt(IEnumerable<string> requested, IReadOnlySet<string> approverScopes) =>
+        requested.Where(scope => Satisfies(approverScopes, scope)).ToHashSet(StringComparer.Ordinal);
 }
 
 /// <summary>

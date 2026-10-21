@@ -280,6 +280,82 @@ public class RlsShareCategoryTests
             "state_spans has no governing scope, so no share sees it, running or not");
     }
 
+    /// <summary>
+    /// Profile activations are clamped by overlap as spans are: a permanent switch still running from
+    /// three days ago is what a clamped member's profile resolves to.
+    /// </summary>
+    [Fact]
+    public async Task NonShare_HistoryClamped_SeesProfileActivationsOverlappingTheLast24Hours()
+    {
+        var tenant = Guid.NewGuid();
+        await SeedProfileActivationsAsync(tenant);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+        await SetShareContextAsync(conn, tenant, isShare: false, visibleCategories: string.Empty,
+            historyClamped: "true");
+        (await ProfileActivationNamesAsync(conn, tenant)).Should().BeEquivalentTo(
+            new[] { "running-since-3-days", "ended-1-hour-ago" });
+
+        await SetShareContextAsync(conn, tenant, isShare: false, visibleCategories: string.Empty,
+            historyClamped: "false");
+        (await ProfileActivationNamesAsync(conn, tenant)).Should().HaveCount(3);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Share_SeesNoProfileActivations(bool fullHistory)
+    {
+        var tenant = Guid.NewGuid();
+        await SeedProfileActivationsAsync(tenant);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+        await SetShareContextAsync(conn, tenant, isShare: true,
+            visibleCategories: "glucose.read,treatments.read,stepcount.read,devices.read", fullHistory: fullHistory);
+
+        (await ProfileActivationNamesAsync(conn, tenant)).Should().BeEmpty(
+            "profile_activations has no governing scope, so no share sees it");
+    }
+
+    [Fact]
+    public async Task ProfileActivations_AreIsolatedPerTenant()
+    {
+        var tenant = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        await SeedProfileActivationsAsync(tenant);
+        await SeedProfileActivationsAsync(other);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+        await SetShareContextAsync(conn, tenant, isShare: false, visibleCategories: string.Empty);
+        (await ProfileActivationNamesAsync(conn, other)).Should().BeEmpty("one tenant never reads another's activations");
+        (await ProfileActivationNamesAsync(conn, tenant)).Should().HaveCount(3);
+    }
+
+    private async Task SeedProfileActivationsAsync(Guid tenantId)
+    {
+        await using var conn = await _fx.OpenMigratorConnectionAsync();
+        await InsertTenantAsync(conn, tenantId);
+        await SetCurrentTenantAsync(conn, tenantId);
+        await ExecuteAsync(conn,
+            "INSERT INTO profile_activations (id, tenant_id, start_timestamp, end_timestamp, phase, origin, base_profile_name, percentage, timeshift_ms, snapshot_is_customized) VALUES " +
+            "(gen_random_uuid(), @tid, now() - interval '3 days', NULL, 'Requested', 'User', 'running-since-3-days', 100, 0, false), " +
+            "(gen_random_uuid(), @tid, now() - interval '4 days', now() - interval '2 days', 'Requested', 'User', 'ended-2-days-ago', 100, 0, false), " +
+            "(gen_random_uuid(), @tid, now() - interval '30 hours', now() - interval '1 hour', 'Effective', 'Connector', 'ended-1-hour-ago', 100, 0, false)",
+            tenantId);
+    }
+
+    private static async Task<List<string>> ProfileActivationNamesAsync(NpgsqlConnection conn, Guid tenantId)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT base_profile_name FROM profile_activations WHERE tenant_id = @tid";
+        AddParam(cmd, "@tid", tenantId);
+        var names = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            names.Add(reader.GetString(0));
+        return names;
+    }
+
     private async Task SeedStateSpansAsync(Guid tenantId)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();

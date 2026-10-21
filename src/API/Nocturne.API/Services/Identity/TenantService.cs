@@ -37,6 +37,7 @@ public partial class TenantService : ITenantService
     private readonly OperatorConfiguration _config;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITenantRoleService _roleService;
+    private readonly GrantRevocationService _grantRevocation;
     private readonly ILogger<TenantService> _logger;
 
     private static readonly HashSet<string> ReservedSlugs =
@@ -82,6 +83,7 @@ public partial class TenantService : ITenantService
         IOptions<OperatorConfiguration> config,
         IHttpClientFactory httpClientFactory,
         ITenantRoleService roleService,
+        GrantRevocationService grantRevocation,
         ILogger<TenantService> logger)
     {
         _factory = factory;
@@ -89,6 +91,7 @@ public partial class TenantService : ITenantService
         _config = config.Value;
         _httpClientFactory = httpClientFactory;
         _roleService = roleService;
+        _grantRevocation = grantRevocation;
         _logger = logger;
     }
 
@@ -350,9 +353,15 @@ public partial class TenantService : ITenantService
             .Where(d => d.TenantId == tenantId && d.NocturneUserId == subjectId)
             .ToListAsync(ct);
 
+        // Grants carry no membership join either; left live, every one would work again the moment
+        // the subject is re-added. The revocation's save commits the removal with them.
+        var grants = await context.OAuthGrants
+            .Where(g => g.TenantId == tenantId && g.SubjectId == subjectId && g.RevokedAt == null)
+            .ToListAsync(ct);
+
         context.TenantMembers.Remove(member);
         context.ChatIdentityDirectory.RemoveRange(chatLinks);
-        await context.SaveChangesAsync(ct);
+        await _grantRevocation.RevokeAllAsync(context, grants, ct);
 
         return new MemberRemovalResult(true);
     }

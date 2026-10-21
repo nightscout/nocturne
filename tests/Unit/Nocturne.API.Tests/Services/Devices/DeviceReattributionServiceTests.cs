@@ -21,6 +21,7 @@ public class DeviceReattributionServiceTests
     private readonly Mock<ITempBasalRepository> _tempBasals = new();
     private readonly Mock<IBasalInjectionRepository> _basalInjections = new();
     private readonly Mock<IDeviceEventRepository> _deviceEvents = new();
+    private readonly Mock<IProfileActivationRepository> _profileActivations = new();
     private readonly Mock<IPatientDeviceStamper> _stamper = new();
     private readonly DeviceReattributionService _service;
 
@@ -34,8 +35,12 @@ public class DeviceReattributionServiceTests
     {
         _service = new DeviceReattributionService(
             _sensorGlucose.Object, _meterGlucose.Object, _boluses.Object, _tempBasals.Object,
-            _basalInjections.Object, _deviceEvents.Object, _stamper.Object,
+            _basalInjections.Object, _deviceEvents.Object, _profileActivations.Object, _stamper.Object,
             NullLogger<DeviceReattributionService>.Instance);
+
+        _profileActivations.Setup(r => r.GetUnattributedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
         _stamper.Setup(s => s.StampAsync(
                 It.IsAny<IReadOnlyList<IDeviceAttributed>>(), It.IsAny<IReadOnlyList<DeviceCategory>>(),
@@ -74,6 +79,7 @@ public class DeviceReattributionServiceTests
         Setup(_boluses, new Bolus { Id = Guid.NewGuid(), Timestamp = DateTime.UtcNow, Insulin = 1 });
         Setup(_tempBasals, new TempBasal { Id = Guid.NewGuid(), StartTimestamp = DateTime.UtcNow, Rate = 1 });
         Setup(_basalInjections, new BasalInjection { Id = Guid.NewGuid(), Timestamp = DateTime.UtcNow, Units = 20 });
+        Setup(_profileActivations, new ProfileActivation { Id = Guid.NewGuid(), Timestamp = DateTime.UtcNow });
 
         var deviceEvent = new DeviceEvent { Id = Guid.NewGuid(), Timestamp = DateTime.UtcNow, EventType = DeviceEventType.SiteChange };
         _deviceEvents.Setup(r => r.GetUnattributedAsync(
@@ -135,6 +141,7 @@ public class DeviceReattributionServiceTests
         var result = await _service.ReattributeForDeviceAsync(device);
 
         result.Should().Be(2, "sensor glucose and sensor device events are the CGM's streams");
+        VerifyNotRead<IProfileActivationRepository, ProfileActivation>(_profileActivations);
         VerifyNotRead<IBolusRepository, Bolus>(_boluses);
         VerifyNotRead<ITempBasalRepository, TempBasal>(_tempBasals);
         VerifyNotRead<IBasalInjectionRepository, BasalInjection>(_basalInjections);
@@ -154,7 +161,7 @@ public class DeviceReattributionServiceTests
 
         var result = await _service.ReattributeForDeviceAsync(device);
 
-        result.Should().Be(3, "boluses, temp basals and pump device events are the pump's streams");
+        result.Should().Be(4, "boluses, temp basals, profile activations and pump device events are the pump's streams");
         VerifyNotRead<ISensorGlucoseRepository, SensorGlucose>(_sensorGlucose);
         VerifyNotRead<IMeterGlucoseRepository, MeterGlucose>(_meterGlucose);
         VerifyNotRead<IBasalInjectionRepository, BasalInjection>(_basalInjections);

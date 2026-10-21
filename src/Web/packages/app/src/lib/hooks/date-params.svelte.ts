@@ -100,42 +100,22 @@ export function useDateParams(defaultDays = 7) {
 
     if (isDefault && currentDays !== defaultDays && !currentFrom && !currentTo) {
       // This is a default that differs from this report's needs - adjust
-      const endDate = today(getLocalTimeZone());
-      const startDate = endDate.subtract({ days: defaultDays - 1 });
+      const range = defaultRange(defaultDays);
 
       // Use untrack to prevent this write from creating a dependency cycle
       untrack(() => {
-        params.days = defaultDays;
-        params.from = startDate.toString();
-        params.to = endDate.toString();
-        params.isDefault = true;
+        params.update({ ...range, isDefault: true });
         initialized = true;
-
-        // Update memoized input
-        memoizedInput = {
-          days: defaultDays,
-          from: startDate.toString(),
-          to: endDate.toString(),
-        };
+        memoizedInput = range;
       });
     } else if (!currentDays && !currentFrom && !currentTo) {
       // No params at all - initialize with defaults
-      const endDate = today(getLocalTimeZone());
-      const startDate = endDate.subtract({ days: defaultDays - 1 });
+      const range = defaultRange(defaultDays);
 
       untrack(() => {
-        params.days = defaultDays;
-        params.from = startDate.toString();
-        params.to = endDate.toString();
-        params.isDefault = true;
+        params.update({ ...range, isDefault: true });
         initialized = true;
-
-        // Update memoized input
-        memoizedInput = {
-          days: defaultDays,
-          from: startDate.toString(),
-          to: endDate.toString(),
-        };
+        memoizedInput = range;
       });
     } else {
       // Params already set - just mark as initialized and sync memoized input
@@ -186,14 +166,7 @@ export function useDateParams(defaultDays = 7) {
    * be preserved when navigating between reports.
    */
   function setDayRange(daysCount: number) {
-    const endDate = today(getLocalTimeZone());
-    const startDate = endDate.subtract({ days: daysCount - 1 });
-
-    // Use direct property assignment for reliable URL updates
-    params.days = daysCount;
-    params.from = startDate.toString();
-    params.to = endDate.toString();
-    params.isDefault = false;
+    params.update({ ...defaultRange(daysCount), isDefault: false });
   }
 
   /**
@@ -201,12 +174,7 @@ export function useDateParams(defaultDays = 7) {
    * Marks as NOT default so it's preserved when navigating to other reports.
    */
   function setCustomRange(from: string, to: string) {
-    // Clear days first by setting directly, then update with full values
-    // This ensures the URL properly reflects the custom range without the days param
-    params.days = null;
-    params.from = from;
-    params.to = to;
-    params.isDefault = false;
+    params.update({ days: null, from, to, isDefault: false });
   }
 
   /**
@@ -214,13 +182,7 @@ export function useDateParams(defaultDays = 7) {
    * This marks as default again so it can be auto-adjusted when navigating to other reports.
    */
   function reset() {
-    const endDate = today(getLocalTimeZone());
-    const startDate = endDate.subtract({ days: reportDefaultDays - 1 });
-
-    params.days = reportDefaultDays;
-    params.from = startDate.toString();
-    params.to = endDate.toString();
-    params.isDefault = true;
+    params.update({ ...defaultRange(reportDefaultDays), isDefault: true });
   }
 
   /**
@@ -323,23 +285,15 @@ export function useDateParams(defaultDays = 7) {
      */
     _setDefaultDayRange(daysCount: number) {
       reportDefaultDays = daysCount;
-      const endDate = today(getLocalTimeZone());
-      const startDate = endDate.subtract({ days: daysCount - 1 });
-      params.days = daysCount;
-      params.from = startDate.toString();
-      params.to = endDate.toString();
-      params.isDefault = true;
+      const range = defaultRange(daysCount);
+      params.update({ ...range, isDefault: true });
       // A report has now seeded a full default range, so the params are
       // initialized. Mark the flag so the layout's seeding $effect.pre (which
       // would otherwise re-seed the layout's own default and clobber this) is
       // a no-op when it runs after this synchronous call during init.
       initialized = true;
       // Sync memoizedInput immediately so queries react without waiting for effects
-      memoizedInput = {
-        days: daysCount,
-        from: startDate.toString(),
-        to: endDate.toString(),
-      };
+      memoizedInput = range;
     },
 
     /**
@@ -461,8 +415,7 @@ export function requireDateParamsContext(reportDefaultDays?: number): ReportsPar
     if (reportDefaultDays === undefined) return;
     if (params.isDefault && params.days !== reportDefaultDays) {
       // The user hasn't made a custom selection (isDefault=true), so we can adjust
-      // to this report's preferred default range using direct property assignment
-      // (which triggers runed's reactive proxy correctly)
+      // to this report's preferred default range.
       params._setDefaultDayRange(reportDefaultDays);
     } else {
       // No adjustment needed, but Reset still has to know this report's default.

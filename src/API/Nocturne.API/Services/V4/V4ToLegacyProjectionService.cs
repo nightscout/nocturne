@@ -22,7 +22,8 @@ namespace Nocturne.API.Services.V4;
 /// The write side (legacy record → V4 typed record) is handled by <see cref="DecompositionPipeline"/>.
 /// Projection covers: <see cref="Bolus"/> and <see cref="CarbIntake"/> → <see cref="Treatment"/>,
 /// <see cref="DeviceEvent"/> → <see cref="Treatment"/> using the legacy event-type map, and the
-/// <see cref="StateSpan"/>s a legacy treatment was decomposed into back into that treatment.
+/// <see cref="StateSpan"/>s and <see cref="ProfileActivation"/>s a legacy treatment was decomposed
+/// into back into that treatment.
 /// <para>
 /// Every treatment read projects records of both provenances, since treatments have no legacy table
 /// left to supplement. See <see cref="LegacyTreatmentRange.NativeOnly"/>.
@@ -268,6 +269,10 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
                 table, _ => table.InWindow(db, from, to).LongCountAsync(ct), 0L);
         }
 
+        var activations = LegacyTreatmentTables.ProfileActivationTable;
+        count += await FetchSafe(
+            activations, _ => LegacyProfileActivationTable.InWindow(db, from, to).LongCountAsync(ct), 0L);
+
         var notes = db.Notes.AsNoTracking().ExcludeNonPrimary(db, RecordType.Note);
         if (from is { } lower)
             notes = notes.Where(n => n.Timestamp >= lower);
@@ -280,6 +285,12 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             count -= await FetchSafe(
                 table, _ => notes.Where(n => n.LegacyId != null && keys.Contains(n.LegacyId)).LongCountAsync(ct), 0L);
         }
+
+        var activationKeys = LegacyProfileActivationTable.Rows(db).Select(a => a.LegacyId);
+        count -= await FetchSafe(
+            activations,
+            _ => notes.Where(n => n.LegacyId != null && activationKeys.Contains(n.LegacyId)).LongCountAsync(ct),
+            0L);
 
         return count;
     }
@@ -351,14 +362,19 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
                         .ToListAsync(ct),
                     new List<string>()));
             }
+            onSpans.UnionWith(await FetchSafe(
+                LegacyTreatmentTables.ProfileActivationTable,
+                _ => LegacyProfileActivationTable.Rows(db)
+                    .Where(a => noteKeys.Contains(a.LegacyId!))
+                    .Select(a => a.LegacyId!)
+                    .ToListAsync(ct),
+                new List<string>()));
             if (onSpans.Count > 0)
                 rows = rows.Where(r => r.Record is not Note { LegacyId: { } key } || !onSpans.Contains(key)).ToList();
         }
 
         var spanKeys = rows
-            .Select(r => r.Record)
-            .OfType<StateSpanEntity>()
-            .Select(s => s.OriginalId)
+            .Select(r => LegacyTreatmentTables.ServedKey(r.Record))
             .OfType<string>()
             .Distinct()
             .ToList();

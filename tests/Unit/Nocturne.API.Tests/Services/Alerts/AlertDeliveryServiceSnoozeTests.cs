@@ -71,6 +71,7 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
         services.AddSingleton<DeviceActionProvider>();
         services.AddSingleton<ChatBotProvider>();
         services.AddSingleton<HomeAssistantProvider>();
+        services.AddSingleton<HomeAssistantConnections>();
 
         var provider = services.BuildServiceProvider();
         _providers.Add(provider);

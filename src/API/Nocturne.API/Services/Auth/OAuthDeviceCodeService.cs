@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
@@ -182,6 +183,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     public async Task<bool> ApproveDeviceCodeAsync(
         string userCode,
         Guid subjectId,
+        IReadOnlySet<string> approverScopes,
         bool limitTo24Hours = false,
         CancellationToken ct = default
     )
@@ -237,11 +239,19 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return false;
         }
 
-        // Create a grant linking the user to the client with the requested scopes
+        var scopes = Scope.CapAt(entity.Scopes, approverScopes);
+        if (scopes.Count == 0)
+        {
+            _logger.LogWarning(
+                "Cannot approve device code {UserCode}: the approver holds none of the requested scopes",
+                normalized);
+            return false;
+        }
+
         var grant = await _grantService.CreateOrUpdateGrantAsync(
             client.Id,
             subjectId,
-            entity.Scopes,
+            scopes,
             limitTo24Hours: limitTo24Hours,
             ct: ct
         );

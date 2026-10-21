@@ -404,4 +404,52 @@ public class FoodControllerTests
         // Assert
         result.Should().BeOfType<NotFoundResult>();
     }
+
+    [Fact]
+    public async Task DeleteFoodByFilter_WithNoFind_Returns400AndDeletesNothing()
+    {
+        var result = await _controller.DeleteFoodByFilter(CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        _mockFoodRepository.Verify(
+            x => x.BulkDeleteFoodAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
+    }
+
+    [Fact]
+    public async Task DeleteFoodByFilter_WithAFind_PassesTheQueryStringAndReturnsEmptyObject()
+    {
+        _controller.HttpContext.Request.QueryString = new QueryString("?find[name]=Milk");
+        _mockFoodRepository
+            .Setup(x => x.BulkDeleteFoodAsync("find[name]=Milk", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var result = await _controller.DeleteFoodByFilter(CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        _mockFoodRepository.Verify(
+            x => x.BulkDeleteFoodAsync("find[name]=Milk", It.IsAny<CancellationToken>()),
+            Times.Once
+        );
+    }
+
+    [Theory]
+    [InlineData("?find[colour]=red")]
+    [InlineData("?find[name]=apple&find[colour]=red")]
+    [InlineData("?find[name][$bogus]=apple")]
+    [InlineData("?find[name][$exists]=maybe")]
+    public async Task DeleteFoodByFilter_WithAFindItCannotApply_Returns400AndDeletesNothing(string queryString)
+    {
+        _controller.HttpContext.Request.QueryString = new QueryString(queryString);
+
+        var result = await _controller.DeleteFoodByFilter(CancellationToken.None);
+
+        var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        badRequest.Value.Should().BeOfType<string>().Which.Should().NotContain("(Parameter");
+        _mockFoodRepository.Verify(
+            x => x.BulkDeleteFoodAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
+    }
 }

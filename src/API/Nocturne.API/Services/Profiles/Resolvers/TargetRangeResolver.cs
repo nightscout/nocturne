@@ -56,27 +56,13 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
     private async Task<(double Low, double High)> ResolveRangeAsync(
         long timeMills, string? specProfile, CancellationToken ct)
     {
-        var profileName = specProfile
-            ?? await _activeProfileResolver.GetActiveProfileNameAsync(timeMills, ct)
-            ?? "Default";
-
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
-
-        var schedule = await GetCachedScheduleAsync(profileName, timestamp, ct);
+        var schedule = await ActiveSchedule.ResolveAsync(
+            timeMills, specProfile, _activeProfileResolver, _repo, _versions,
+            s => s.Entries, s => s.Targets, _therapyRepo, _patientRecordRepo, ct);
         if (schedule is null)
             return (DefaultLow, DefaultHigh);
 
-        var adjustment = await _activeProfileResolver.GetCircadianAdjustmentAsync(timeMills, ct);
-        var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
-
-        var secondsFromMidnight = await ScheduleTimeHelper.GetSecondsFromMidnightAsync(
-            shiftedMills, profileName, timestamp, _therapyRepo, _patientRecordRepo, ct);
-
-        var range = ScheduleResolution.FindRangeAtTime(schedule.Entries, secondsFromMidnight);
+        var range = ScheduleResolution.FindRangeAtTime(schedule.Entries, schedule.SecondsFromMidnight);
         return range ?? (DefaultLow, DefaultHigh);
     }
-
-    private Task<Core.Models.V4.TargetRangeSchedule?> GetCachedScheduleAsync(
-        string profileName, DateTime timestamp, CancellationToken ct) =>
-        _versions.GetActiveAtAsync(_repo, profileName, timestamp, ct);
 }

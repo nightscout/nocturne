@@ -43,6 +43,21 @@ public static class ScheduleTimeHelper
     }
 
     /// <summary>
+    /// <see cref="GetSecondsFromMidnightAsync(long, string, DateTime, ITherapySettingsRepository, IPatientRecordRepository, CancellationToken)"/>
+    /// for schedules that carry their own timezone, which stands in for the per-profile one.
+    /// </summary>
+    public static async Task<int> GetSecondsFromMidnightAsync(
+        long timeMills,
+        string? scheduleTimezone,
+        IPatientRecordRepository patientRecordRepo,
+        CancellationToken ct)
+    {
+        var patient = await patientRecordRepo.GetAsync(ct);
+        var timezone = string.IsNullOrEmpty(patient?.Timezone) ? scheduleTimezone : patient.Timezone;
+        return GetSecondsFromMidnight(timeMills, TimeZoneHelper.GetTimeZoneInfoFromId(timezone));
+    }
+
+    /// <summary>
     /// Converts Unix milliseconds to seconds-from-midnight in the given timezone. Synchronous
     /// core of <see cref="GetSecondsFromMidnightAsync"/> for callers that have already resolved
     /// the tenant timezone (e.g. per-reading loops).

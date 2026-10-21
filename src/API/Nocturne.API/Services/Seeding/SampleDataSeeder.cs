@@ -772,16 +772,28 @@ public class SampleDataSeeder
     }
 
     /// <summary>
-    /// State spans for the window: pump mode with manual/exercise windows, the
-    /// active profile, workout overrides and temporary targets, illness runs,
-    /// and the travel span. Spans carrying our data source are wiped and
-    /// rebuilt (idempotent re-seed).
+    /// State spans for the window: pump mode with manual/exercise windows, workout
+    /// overrides and temporary targets, illness runs, and the travel span; and the
+    /// seeded therapy profile's activation over the whole window. Rows carrying our
+    /// data source are wiped and rebuilt (idempotent re-seed).
     /// </summary>
     private async Task<int> SeedStateSpansAsync(
         NocturneDbContext db,
         DateTime localToday, int days, string dataSource, CancellationToken ct)
     {
         await db.StateSpans.PurgeAsync(s => s.Source == dataSource, ct);
+        await db.ProfileActivations.PurgeAsync(a => a.DataSource == dataSource, ct);
+
+        db.ProfileActivations.Add(new ProfileActivationEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = db.TenantId,
+            Timestamp = localToday.AddDays(-days).ToUniversalTime(),
+            Phase = nameof(Nocturne.Core.Models.V4.ProfileActivationPhase.Requested),
+            Origin = nameof(Nocturne.Core.Models.V4.ProfileActivationOrigin.User),
+            BaseProfileName = DemoTherapyProfile.ProfileName,
+            DataSource = dataSource,
+        });
 
         var spans = DemoLifestyleSeeds.BuildSpans(localToday, days);
         foreach (var seed in spans)

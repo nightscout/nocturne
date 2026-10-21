@@ -1,12 +1,12 @@
 using FluentAssertions;
 using Nocturne.Connectors.MyLife.Mappers;
 using Nocturne.Connectors.MyLife.Models;
-using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.Connectors.MyLife.Tests.Mappers;
 
-public class MyLifePumpSettingsMapperStateSpanTests
+public class MyLifePumpSettingsMapperActivationTests
 {
     private const string ConnectorSource = "mylife-connector";
 
@@ -32,29 +32,28 @@ public class MyLifePumpSettingsMapperStateSpanTests
     }
 
     [Fact]
-    public void MapToStateSpans_SingleReadoutWithProgram_EmitsOpenEndedSpan()
+    public void MapToProfileActivations_SingleReadoutWithProgram_EmitsOpenEndedActivation()
     {
         var readouts = new[]
         {
             Readout("r1", Ticks(2026, 4, 1, 10), "Morning"),
         };
 
-        var spans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource);
+        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource);
 
         spans.Should().HaveCount(1);
         var span = spans[0];
-        span.Category.Should().Be(StateSpanCategory.Profile);
-        span.State.Should().Be(ProfileState.Active.ToString());
-        span.Source.Should().Be(ConnectorSource);
+        span.Phase.Should().Be(ProfileActivationPhase.Effective);
+        span.Origin.Should().Be(ProfileActivationOrigin.Connector);
+        span.DataSource.Should().Be(ConnectorSource);
         span.StartTimestamp.Should().Be(new DateTime(2026, 4, 1, 10, 0, 0, DateTimeKind.Utc));
         span.EndTimestamp.Should().BeNull();
-        span.Metadata.Should().ContainKey("profileName")
-            .WhoseValue.Should().Be("Morning");
-        span.OriginalId.Should().NotBeNullOrWhiteSpace();
+        span.BaseProfileName.Should().Be("Morning");
+        span.SyncIdentifier.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
-    public void MapToStateSpans_MultipleReadouts_EmitsAbuttingSpansWithLastOpenEnded()
+    public void MapToProfileActivations_MultipleReadouts_EmitsAbuttingActivationsWithLastOpenEnded()
     {
         var readouts = new[]
         {
@@ -63,7 +62,7 @@ public class MyLifePumpSettingsMapperStateSpanTests
             Readout("r3", Ticks(2026, 4, 3, 10), "A"),
         };
 
-        var spans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource)
+        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource)
             .OrderBy(s => s.StartTimestamp)
             .ToList();
 
@@ -71,19 +70,19 @@ public class MyLifePumpSettingsMapperStateSpanTests
 
         spans[0].StartTimestamp.Should().Be(new DateTime(2026, 4, 1, 10, 0, 0, DateTimeKind.Utc));
         spans[0].EndTimestamp.Should().Be(new DateTime(2026, 4, 2, 10, 0, 0, DateTimeKind.Utc));
-        spans[0].Metadata!["profileName"].Should().Be("A");
+        spans[0].BaseProfileName.Should().Be("A");
 
         spans[1].StartTimestamp.Should().Be(new DateTime(2026, 4, 2, 10, 0, 0, DateTimeKind.Utc));
         spans[1].EndTimestamp.Should().Be(new DateTime(2026, 4, 3, 10, 0, 0, DateTimeKind.Utc));
-        spans[1].Metadata!["profileName"].Should().Be("B");
+        spans[1].BaseProfileName.Should().Be("B");
 
         spans[2].StartTimestamp.Should().Be(new DateTime(2026, 4, 3, 10, 0, 0, DateTimeKind.Utc));
         spans[2].EndTimestamp.Should().BeNull();
-        spans[2].Metadata!["profileName"].Should().Be("A");
+        spans[2].BaseProfileName.Should().Be("A");
     }
 
     [Fact]
-    public void MapToStateSpans_ReadoutsArrivingOutOfOrder_AreSortedChronologically()
+    public void MapToProfileActivations_ReadoutsArrivingOutOfOrder_AreSortedChronologically()
     {
         var readouts = new[]
         {
@@ -92,7 +91,7 @@ public class MyLifePumpSettingsMapperStateSpanTests
             Readout("r2", Ticks(2026, 4, 2, 10), "B"),
         };
 
-        var spans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource)
+        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource)
             .OrderBy(s => s.StartTimestamp)
             .ToList();
 
@@ -103,7 +102,7 @@ public class MyLifePumpSettingsMapperStateSpanTests
     }
 
     [Fact]
-    public void MapToStateSpans_NullOrEmptyActiveBasalProgram_SkipsSpan()
+    public void MapToProfileActivations_NullOrEmptyActiveBasalProgram_SkipsActivation()
     {
         var readouts = new[]
         {
@@ -112,17 +111,17 @@ public class MyLifePumpSettingsMapperStateSpanTests
             Readout("r3", Ticks(2026, 4, 3, 10), ""),
         };
 
-        var spans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource);
+        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource);
 
         spans.Should().HaveCount(1);
-        spans[0].Metadata!["profileName"].Should().Be("A");
+        spans[0].BaseProfileName.Should().Be("A");
         spans[0].EndTimestamp.Should().Be(
             new DateTime(2026, 4, 2, 10, 0, 0, DateTimeKind.Utc),
             because: "the next readout's timestamp closes the prior span even when its program is null");
     }
 
     [Fact]
-    public void MapToStateSpans_MultipleDevices_EmitsIndependentSpansPerDevice()
+    public void MapToProfileActivations_MultipleDevices_EmitsIndependentActivationsPerDevice()
     {
         var readouts = new[]
         {
@@ -131,24 +130,24 @@ public class MyLifePumpSettingsMapperStateSpanTests
             Readout("r3", Ticks(2026, 4, 1, 10), "X", deviceSerialNumber: "SN-2"),
         };
 
-        var spans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource);
+        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource);
 
         spans.Should().HaveCount(3);
 
-        var sn1 = spans.Where(s => s.OriginalId!.Contains("SN-1"))
+        var sn1 = spans.Where(s => s.SyncIdentifier!.Contains("SN-1"))
             .OrderBy(s => s.StartTimestamp).ToList();
         sn1.Should().HaveCount(2);
         sn1[0].EndTimestamp.Should().Be(sn1[1].StartTimestamp);
         sn1[1].EndTimestamp.Should().BeNull();
 
-        var sn2 = spans.Where(s => s.OriginalId!.Contains("SN-2")).ToList();
+        var sn2 = spans.Where(s => s.SyncIdentifier!.Contains("SN-2")).ToList();
         sn2.Should().HaveCount(1);
-        sn2[0].Metadata!["profileName"].Should().Be("X");
+        sn2[0].BaseProfileName.Should().Be("X");
         sn2[0].EndTimestamp.Should().BeNull();
     }
 
     [Fact]
-    public void MapToStateSpans_OriginalIdsAreStableAcrossRuns()
+    public void MapToProfileActivations_SyncIdentifiersAreStableAcrossRuns()
     {
         var readouts = new[]
         {
@@ -156,19 +155,19 @@ public class MyLifePumpSettingsMapperStateSpanTests
             Readout("r2", Ticks(2026, 4, 2, 10), "B"),
         };
 
-        var first = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource)
-            .Select(s => s.OriginalId).OrderBy(id => id).ToList();
-        var second = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource)
-            .Select(s => s.OriginalId).OrderBy(id => id).ToList();
+        var first = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource)
+            .Select(s => s.SyncIdentifier).OrderBy(id => id).ToList();
+        var second = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource)
+            .Select(s => s.SyncIdentifier).OrderBy(id => id).ToList();
 
         first.Should().Equal(second);
         first.Should().OnlyHaveUniqueItems();
     }
 
     [Fact]
-    public void MapToStateSpans_EmptyList_ReturnsEmpty()
+    public void MapToProfileActivations_EmptyList_ReturnsEmpty()
     {
-        var spans = MyLifePumpSettingsMapper.MapToStateSpans(Array.Empty<MyLifePumpSettingsReadout>(), ConnectorSource);
+        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(Array.Empty<MyLifePumpSettingsReadout>(), ConnectorSource);
 
         spans.Should().BeEmpty();
     }

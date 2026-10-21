@@ -5,7 +5,7 @@ namespace Nocturne.API.Authorization;
 
 /// <summary>
 /// Enforces per-record OAuth write scopes on the state-span write endpoints.
-/// <c>state_spans</c> holds four different data categories behind one table and one controller,
+/// <c>state_spans</c> holds several data categories behind one table and one controller,
 /// and the caller chooses which by setting <see cref="StateSpan.Category"/> in the request body,
 /// so a single declared controller scope would either under-gate the other three categories or
 /// deny the common one. The same shape as <see cref="ActivityWriteScopeGuard"/>: the controller
@@ -34,8 +34,6 @@ internal static class StateSpanWriteScopeGuard
     /// <see cref="StateSpanCategory.PumpConnectivity"/> describe the pump, so they are the devices
     /// category — the same category <c>ReservoirReportsController</c> and the pump-snapshot
     /// surface use.</item>
-    /// <item><see cref="StateSpanCategory.Profile"/> is a profile switch, which V1/V3 profile
-    /// writes gate on the therapy scope.</item>
     /// <item><see cref="StateSpanCategory.DataExclusion"/> marks glucose readings, so it is the
     /// glucose category.</item>
     /// <item><see cref="StateSpanCategory.Override"/>, <see cref="StateSpanCategory.Exercise"/>,
@@ -51,7 +49,6 @@ internal static class StateSpanWriteScopeGuard
         {
             [StateSpanCategory.PumpMode] = Scope.DevicesReadWrite,
             [StateSpanCategory.PumpConnectivity] = Scope.DevicesReadWrite,
-            [StateSpanCategory.Profile] = Scope.TherapyReadWrite,
             [StateSpanCategory.DataExclusion] = Scope.GlucoseReadWrite,
             [StateSpanCategory.Override] = Scope.TreatmentsReadWrite,
             [StateSpanCategory.Exercise] = Scope.TreatmentsReadWrite,
@@ -63,9 +60,9 @@ internal static class StateSpanWriteScopeGuard
 
     /// <summary>
     /// Returns the write scope required for <paramref name="category"/>. An unmapped category —
-    /// one added to the enum without being classified here — resolves to
-    /// <see cref="Scope.FullAccess"/> so a new category fails closed rather than inheriting
-    /// whichever scope happened to be listed first.
+    /// one added to the enum without being classified here, or <see cref="StateSpanCategory.Profile"/>,
+    /// which the controller refuses outright — resolves to <see cref="Scope.FullAccess"/> so it fails
+    /// closed rather than inheriting whichever scope happened to be listed first.
     /// </summary>
     public static string RequiredWriteScope(StateSpanCategory category) =>
         CategoryWriteScopes.TryGetValue(category, out var scope) ? scope : Scope.FullAccess;

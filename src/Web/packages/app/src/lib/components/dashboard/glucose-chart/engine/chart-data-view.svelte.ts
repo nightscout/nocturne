@@ -5,11 +5,13 @@ import type {
   StateSpanCategory,
   ChartSpanKind,
   TrackerCategory,
+  ProfileActivationDto,
 } from "$api-clients";
 import type { PredictionData } from "$lib/api/prediction-data";
 import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
 import type { TransformedChartData } from "$lib/utils/chart-data-transform";
 import { distinct } from "$lib/utils/collections";
+import { profileActivationLabel } from "$lib/utils/profile-activation-label";
 import {
   resolveChartThresholds,
   type ChartThresholds,
@@ -111,6 +113,7 @@ export interface StateSpan {
   endTime: Date | null;
   color: string;
   metadata?: Record<string, unknown> | null;
+  profileActivation?: ProfileActivationDto | null;
 }
 
 /** A state span with display-clipped start/end times */
@@ -119,7 +122,7 @@ export interface DisplaySpan extends StateSpan {
   displayEnd: Date;
 }
 
-/** A profile span with extracted profile name */
+/** A profile span with its activation's label */
 export interface DisplayProfileSpan extends DisplaySpan {
   profileName: string;
 }
@@ -153,9 +156,6 @@ export interface StaleBasalRange {
   start: Date;
   end: Date;
 }
-
-const metadataString = (value: unknown): string | undefined =>
-  typeof value === "string" ? value : undefined;
 
 const metadataNumber = (value: unknown): number | undefined =>
   typeof value === "number" ? value : undefined;
@@ -406,8 +406,7 @@ export function createChartDataView(
     const profile = processSpans(profileSpans, rangeStart, rangeEnd).map(
       (span) => ({
         ...span,
-        profileName:
-          metadataString(span.metadata?.profileName) ?? span.state ?? "",
+        profileName: profileActivationLabel(span.profileActivation) ?? span.state ?? "",
       })
     );
 

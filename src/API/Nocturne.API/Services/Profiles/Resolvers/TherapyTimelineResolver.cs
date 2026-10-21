@@ -7,14 +7,13 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
 /// <summary>
-/// Builds a <see cref="TherapyTimeline"/> by enumerating Profile state-span boundaries
+/// Builds a <see cref="TherapyTimeline"/> by enumerating profile activation boundaries
 /// within the requested window and eagerly resolving DIA, schedules, timezone, and CCP
 /// per segment. Within a segment, profile + CCP are constant — so per-tick chart-data
 /// evaluation reduces to in-memory schedule lookup via <see cref="TherapySnapshot"/>.
 /// </summary>
 internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
 {
-    private readonly IStateSpanService _stateSpanService;
     private readonly ITherapySettingsResolver _therapySettings;
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ISensitivityScheduleRepository _sensitivityRepo;
@@ -23,7 +22,6 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
     private readonly ILogger<TherapyTimelineResolver> _logger;
 
     public TherapyTimelineResolver(
-        IStateSpanService stateSpanService,
         ITherapySettingsResolver therapySettings,
         IActiveProfileResolver activeProfileResolver,
         ISensitivityScheduleRepository sensitivityRepo,
@@ -32,7 +30,6 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         ILogger<TherapyTimelineResolver> logger
     )
     {
-        _stateSpanService = stateSpanService;
         _therapySettings = therapySettings;
         _activeProfileResolver = activeProfileResolver;
         _sensitivityRepo = sensitivityRepo;
@@ -54,7 +51,7 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         // When an explicit profile is supplied, no profile-switch logic applies — single segment.
         if (specProfile is not null)
         {
-            var snapshot = await ResolveSegmentSnapshotAsync(toMills - 1, specProfile, ct);
+            var snapshot = await ResolveSegmentSnapshotAsync(toMills - 1, specProfile, fromActivation: false, ct);
             return new TherapyTimeline([new TherapySegment(fromMills, toMills, snapshot)]);
         }
 
@@ -68,14 +65,14 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
             // Anchor strictly inside the segment so the resolved profile is the one active here.
             var anchor = segStart;
             var profileName = await _activeProfileResolver.GetActiveProfileNameAsync(anchor, ct);
-            var snapshot = await ResolveSegmentSnapshotAsync(anchor, profileName, ct);
+            var snapshot = await ResolveSegmentSnapshotAsync(anchor, profileName, fromActivation: profileName is not null, ct);
             segments.Add(new TherapySegment(segStart, segEnd, snapshot));
         }
 
         if (segments.Count == 0)
         {
             // Defensive — DiscoverProfileBoundariesAsync always returns at least [fromMills, toMills].
-            var snapshot = await ResolveSegmentSnapshotAsync(toMills - 1, null, ct);
+            var snapshot = await ResolveSegmentSnapshotAsync(toMills - 1, null, fromActivation: false, ct);
             segments.Add(new TherapySegment(fromMills, toMills, snapshot));
         }
 
@@ -97,37 +94,21 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
     {
         var profileName = specProfile
             ?? await _activeProfileResolver.GetActiveProfileNameAsync(timeMills, ct);
-        return await ResolveSegmentSnapshotAsync(timeMills, profileName, ct);
+        return await ResolveSegmentSnapshotAsync(
+            timeMills, profileName, fromActivation: specProfile is null && profileName is not null, ct);
     }
 
     /// <summary>
-    /// Returns sorted, distinct segment boundaries spanning [fromMills, toMills].
-    /// Includes the window edges plus any Profile state-span StartMills / EndMills that fall
-    /// strictly inside the window.
+    /// Returns sorted, distinct segment boundaries spanning [fromMills, toMills]: the window edges
+    /// plus every edge of a stretch a profile activation applies over inside it.
     /// </summary>
     private async Task<List<long>> DiscoverProfileBoundariesAsync(long fromMills, long toMills, CancellationToken ct)
     {
-        var fromDt = DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime;
-        var toDt = DateTimeOffset.FromUnixTimeMilliseconds(toMills).UtcDateTime;
-
-        // from: is an overlap bound (open-ended or ending at/after it), so a switch that started
-        // long ago and is still running is kept; its StartMills precede fromMills and add no boundary.
-        var spans = await _stateSpanService.GetStateSpansAsync(
-            category: StateSpanCategory.Profile,
-            from: fromDt,
-            to: toDt,
-            count: 1000,
-            cancellationToken: ct
-        );
+        var spans = await _activeProfileResolver.GetActiveProfileSpansForRangeAsync(fromMills, toMills, ct);
 
         var boundaries = new SortedSet<long> { fromMills, toMills };
         foreach (var span in spans)
         {
-            if (span.EndMills.HasValue && span.EndMills.Value <= fromMills)
-                continue; // ended before the window
-            if (span.StartMills >= toMills)
-                continue; // starts after the window
-
             if (span.StartMills > fromMills && span.StartMills < toMills)
                 boundaries.Add(span.StartMills);
             if (span.EndMills is { } endMills && endMills > fromMills && endMills < toMills)
@@ -137,13 +118,16 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         return boundaries.ToList();
     }
 
+    /// <param name="fromActivation">Whether <paramref name="profileName"/> is the active activation's, whose own schedules win.</param>
     private async Task<TherapySnapshot> ResolveSegmentSnapshotAsync(
         long anchorMills,
         string? profileName,
+        bool fromActivation,
         CancellationToken ct
     )
     {
-        var hasData = await _therapySettings.HasDataAsync(ct);
+        var hasData = await _therapySettings.HasDataAsync(ct)
+            || (fromActivation && await _activeProfileResolver.GetActiveSchedulesAsync(anchorMills, ct) is not null);
 
         if (!hasData)
         {
@@ -160,17 +144,35 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
             );
         }
 
-        var resolvedProfile = profileName ?? "Default";
+        var resolvedProfile = profileName ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
         var anchorDt = DateTimeOffset.FromUnixTimeMilliseconds(anchorMills).UtcDateTime;
 
         // Sequential: see INocturneDbContextFactory.
         var dia = await _therapySettings.GetDIAAsync(anchorMills, resolvedProfile, ct);
         var carbsHr = await _therapySettings.GetCarbAbsorptionRateAsync(anchorMills, resolvedProfile, ct);
         var timezoneId = await _therapySettings.GetTimezoneAsync(resolvedProfile, ct);
+        var ccp = await _activeProfileResolver.GetCircadianAdjustmentAsync(anchorMills, ct);
+        var schedules = fromActivation
+            ? await _activeProfileResolver.GetActiveSchedulesAsync(anchorMills, ct)
+            : null;
+        if (schedules is not null)
+        {
+            return new TherapySnapshot(
+                dia: dia,
+                peakMinutes: TherapySnapshot.DefaultPeakMinutes,
+                carbsPerHour: carbsHr,
+                timezone: ResolveTimezone(timezoneId ?? schedules.Timezone),
+                ccpPercentage: ccp?.Percentage,
+                ccpTimeshiftMs: ccp?.TimeshiftMs ?? 0,
+                sensitivityEntries: schedules.Sensitivity,
+                carbRatioEntries: schedules.CarbRatio,
+                basalEntries: schedules.Basal
+            );
+        }
+
         var sens = await _sensitivityRepo.GetActiveAtAsync(resolvedProfile, anchorDt, ct);
         var carbRatio = await _carbRatioRepo.GetActiveAtAsync(resolvedProfile, anchorDt, ct);
         var basal = await _basalRepo.GetActiveAtAsync(resolvedProfile, anchorDt, ct);
-        var ccp = await _activeProfileResolver.GetCircadianAdjustmentAsync(anchorMills, ct);
 
         return new TherapySnapshot(
             dia: dia,

@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -51,6 +52,8 @@ public class TreatmentDecomposerSourceDeleteRollbackTests : IDisposable
             Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(),
             Mock.Of<IDeviceEventRepository>(), Mock.Of<IBolusCalculationRepository>(),
             Mock.Of<IStateSpanService>(),
+            ProfileActivationTestDeps.Repository(_context),
+            ProfileActivationTestDeps.Writer(_context),
             Mock.Of<ITreatmentFoodService>(),
             Mock.Of<IDeviceService>(),
             Mock.Of<IPatientDeviceStamper>(),

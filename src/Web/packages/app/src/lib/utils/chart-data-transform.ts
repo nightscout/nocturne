@@ -23,6 +23,7 @@ export function transformChartData(data: DashboardChartData) {
       endTime: s.endMills != null ? new Date(s.endMills) : null,
       color: resolveChartColor(s.color ?? "muted-foreground"),
       metadata: s.metadata,
+      profileActivation: s.profileActivation,
     }));
 
   const thresholds = resolveChartThresholds(data.thresholds);

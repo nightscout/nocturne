@@ -13,13 +13,9 @@ namespace Nocturne.API.Hubs;
 /// is what decides access to the groups that carry more than one category.
 /// </summary>
 /// <remarks>
-/// "Belongs to the tenant" is what the handshake proved, which for most types is a tenant-membership
-/// row — <see cref="Middleware.AuthenticationMiddleware"/> rejects a subject that has none.
-/// <see cref="AuthType.ApiKey"/> is the type it exempts from that check (see
-/// <see cref="Middleware.MemberScopeMiddleware"/>: an api-secret grant row is matched on TenantId and
-/// keeps the grant's own scopes), so an api-secret credential whose subject is not a member of the
-/// tenant still classifies as <see cref="Subject"/> and reaches the tenant-wide and subject groups on
-/// its grant alone.
+/// "Belongs to the tenant" is what the handshake proved: a tenant-membership row, which
+/// <see cref="Middleware.AuthenticationMiddleware"/> requires of every credential except the
+/// instance key and platform access.
 /// </remarks>
 /// <seealso cref="HubAuthorization.CanJoinTenantRelay"/>
 public enum HubCredentialKind
@@ -77,8 +73,38 @@ public sealed record HubAuthorization(
     Guid? SubjectId,
     bool HistoryClamped)
 {
+    /// <summary>
+    /// The OAuth client an access token was issued to, or null for any other credential. A Home
+    /// Assistant instance is addressed by it (see <see cref="HomeAssistantHub.Subscribe"/>).
+    /// </summary>
+    public string? ClientId { get; init; }
+
+    /// <summary>
+    /// What the credential was proven from, so <see cref="HubCredentialVerifier"/> can prove it
+    /// again from server-side state. Null only where no credential source exists (a test double),
+    /// and such a credential is withdrawn at the first re-check.
+    /// </summary>
+    public HubCredentialSource? Source { get; init; }
+
     /// <summary>Whether the credential satisfies <paramref name="scope"/>.</summary>
     public bool Satisfies(string scope) => Scope.Satisfies(Scopes, scope);
+
+    /// <summary>
+    /// Whether <paramref name="current"/>, the credential re-derived from the same source, still
+    /// grants everything this one does: the same principal, every scope, and no new history clamp.
+    /// </summary>
+    /// <remarks>
+    /// A widened credential passes too, and keeps the narrower access it connected with until it
+    /// reconnects.
+    /// </remarks>
+    public bool IsCoveredBy(HubAuthorization? current) =>
+        current is not null
+        && current.TenantId == TenantId
+        && current.Kind == Kind
+        && current.SubjectId == SubjectId
+        && current.ClientId == ClientId
+        && (HistoryClamped || !current.HistoryClamped)
+        && Scopes.All(current.Satisfies);
 
     /// <summary>
     /// Whether the credential may receive the live broadcasts of <paramref name="category"/>, one of
@@ -192,6 +218,9 @@ public static class HubAuthorizationState
     /// <summary>Key the authorization is stored under in <see cref="HubCallerContext.Items"/>.</summary>
     private const string ItemKey = "HubAuthorization";
 
+    /// <summary>Key an <see cref="OverviewGrant"/> is stored under.</summary>
+    private const string OverviewItemKey = "OverviewGrant";
+
     /// <summary>
     /// Records the result of a successful in-band authentication on the connection. Only an
     /// authentication method that has verified a credential may call this.
@@ -215,6 +244,14 @@ public static class HubAuthorizationState
         return authorization;
     }
 
+    /// <summary>Records the tenants an <see cref="OverviewHub"/> connection was admitted to.</summary>
+    public static void GrantOverview(HubCallerContext context, OverviewGrant grant) =>
+        context.Items[OverviewItemKey] = grant;
+
+    /// <summary>The <see cref="OverviewHub"/> admission the connection holds, if any.</summary>
+    public static OverviewGrant? Overview(HubCallerContext context) =>
+        context.Items.TryGetValue(OverviewItemKey, out var value) ? value as OverviewGrant : null;
+
     /// <summary>
     /// The connection's proven credential, or null when it has none.
     /// </summary>
@@ -227,14 +264,9 @@ public static class HubAuthorizationState
     /// </remarks>
     public static HubAuthorization? Resolve(HubCallerContext context)
     {
-        if (context.Items.TryGetValue(ItemKey, out var existing)
-            && existing is HubAuthorization granted)
-        {
+        if (context.Items.TryGetValue(ItemKey, out var existing) && existing is HubAuthorization granted)
             return granted;
-        }
 
-        // Scopes come from the handshake, which is where membership and token scopes were resolved;
-        // they cannot change for the life of the connection.
         return context.GetHttpContext() is { } httpContext && FromRequest(httpContext) is { } authorization
             ? Grant(context, authorization)
             : null;
@@ -270,7 +302,17 @@ public static class HubAuthorizationState
             httpContext.GetGrantedScopes(),
             HubAuthorization.Classify(authContext.AuthType),
             authContext.SubjectId,
-            authContext.LimitTo24Hours);
+            authContext.LimitTo24Hours)
+        {
+            ClientId = authContext.ClientId,
+            Source = new HubCredentialSource(
+                authContext.AuthType,
+                authContext.SubjectId,
+                authContext.TokenId,
+                Middleware.AuthenticationMiddleware.CredentialScopes(authContext),
+                authContext.LimitTo24Hours,
+                authContext.ExpiresAt),
+        };
     }
 }
 
@@ -285,11 +327,46 @@ public static class HubAuthorizationState
 /// any connection whose tenant resolves and is active. Authorization therefore has to happen at the
 /// method boundary. It lives in a filter rather than in each method so a method added later is
 /// denied unless it explicitly opts out with <see cref="HubAuthenticationMethodAttribute"/>.
+/// <para>
+/// A connection that holds a credential once an invocation returns is handed to
+/// <see cref="HubConnectionRevalidator"/>, which closes it when the credential no longer proves what
+/// it did.
+/// </para>
 /// </remarks>
-public sealed class HubAuthorizationFilter : IHubFilter
+public sealed class HubAuthorizationFilter(HubConnectionRevalidator revalidator) : IHubFilter
 {
     /// <inheritdoc />
     public async ValueTask<object?> InvokeMethodAsync(
+        HubInvocationContext invocationContext,
+        Func<HubInvocationContext, ValueTask<object?>> next)
+    {
+        try
+        {
+            return await AuthorizeAndInvokeAsync(invocationContext, next);
+        }
+        finally
+        {
+            var context = invocationContext.Context;
+            if (!context.ConnectionAborted.IsCancellationRequested
+                && (HubAuthorizationState.Resolve(context) is not null
+                    || HubAuthorizationState.Overview(context) is not null))
+            {
+                revalidator.Track(context);
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public Task OnDisconnectedAsync(
+        HubLifetimeContext context,
+        Exception? exception,
+        Func<HubLifetimeContext, Exception?, Task> next)
+    {
+        revalidator.Forget(context.Context);
+        return next(context, exception);
+    }
+
+    private static async ValueTask<object?> AuthorizeAndInvokeAsync(
         HubInvocationContext invocationContext,
         Func<HubInvocationContext, ValueTask<object?>> next)
     {

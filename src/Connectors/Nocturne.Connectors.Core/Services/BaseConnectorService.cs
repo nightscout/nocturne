@@ -729,6 +729,29 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
+    ///     Profile activations derive from what a connector reads as the pump's active program and gate
+    ///     and count under <see cref="SyncDataType.StateSpans"/>, as the Profile spans they replace did.
+    /// </summary>
+    protected virtual async Task<bool> PublishProfileActivationDataAsync(
+        IEnumerable<ProfileActivation> activations,
+        TConfig config,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_publisher == null || !_publisher.IsAvailable)
+        {
+            _logger?.LogWarning("Publisher not available for profile activation submission");
+            return false;
+        }
+
+        return await _publisher.Metadata.PublishProfileActivationsAsync(
+            activations,
+            ConnectorSource, WriteOrigin.Live,
+            cancellationToken
+        );
+    }
+
+    /// <summary>
     ///     System events have no <see cref="SyncDataType"/> of their own, so a connector routing them through
     ///     <see cref="PublishRecordTypeAsync{T}"/> gates and counts them under
     ///     <see cref="SyncDataType.DeviceEvents"/>.

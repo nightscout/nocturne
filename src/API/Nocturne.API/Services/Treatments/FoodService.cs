@@ -323,35 +323,4 @@ public class FoodService : IFoodService
             throw;
         }
     }
-
-    /// <inheritdoc />
-    public async Task<long> DeleteMultipleFoodAsync(
-        string? find = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            _logger.LogDebug("Bulk deleting food records with filter: {Find}", find);
-
-            var deletedCount = await _food.BulkDeleteFoodAsync(
-                find ?? "{}",
-                cancellationToken
-            );
-
-            if (deletedCount > 0)
-            {
-                await _sideEffects.OnBulkDeletedAsync(CollectionName, deletedCount, cancellationToken: cancellationToken);
-                await _events.OnBulkDeletedAsync(deletedCount, cancellationToken);
-                _logger.LogDebug("Successfully bulk deleted {Count} food records", deletedCount);
-            }
-
-            return deletedCount;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error bulk deleting food records with filter: {Find}", find);
-            throw;
-        }
-    }
 }

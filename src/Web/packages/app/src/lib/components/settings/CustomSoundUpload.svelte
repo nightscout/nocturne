@@ -187,7 +187,7 @@
               <Input
                 id="audio-file"
                 type="file"
-                accept="audio/mpeg,audio/wav,audio/ogg,audio/webm,audio/mp4,audio/aac,.mp3,.wav,.ogg,.webm,.m4a,.aac"
+                accept="audio/mpeg,audio/wav,audio/ogg,audio/flac,audio/webm,audio/mp4,audio/aac,.mp3,.wav,.ogg,.flac,.webm,.m4a,.aac"
                 onchange={handleFileSelect}
                 bind:ref={fileInput}
                 class="flex-1"

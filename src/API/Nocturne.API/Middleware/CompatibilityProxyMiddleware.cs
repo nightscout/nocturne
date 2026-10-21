@@ -2,7 +2,9 @@ using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
+using Nocturne.API.Extensions;
 using Nocturne.API.Models.Compatibility;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Compatibility;
 
 namespace Nocturne.API.Middleware;
@@ -115,13 +117,22 @@ public class CompatibilityProxyMiddleware
         // Resolve the scope factory BEFORE the background task starts.
         // Do NOT capture HttpContext in the closure — it is disposed after the request completes.
         var scopeFactory = context.RequestServices.GetRequiredService<IServiceScopeFactory>();
+        var tenant = context.GetTenantContext();
+        if (tenant is null)
+        {
+            _logger.LogDebug(
+                "Skipping compatibility comparison for {Path}: the request resolved no tenant to store it under",
+                path);
+            return;
+        }
+
         var nocturneResponseTimeMs = stopwatch.ElapsedMilliseconds;
 
         _ = Task.Run(async () =>
         {
             try
             {
-                using var scope = scopeFactory.CreateScope();
+                await using var scope = TenantJobScope.Open(scopeFactory, tenant, "compatibility-proxy");
                 var forwardingService = scope.ServiceProvider.GetRequiredService<IRequestForwardingService>();
                 var comparisonService = scope.ServiceProvider.GetRequiredService<IResponseComparisonService>();
                 var persistenceService = scope.ServiceProvider.GetRequiredService<IDiscrepancyPersistenceService>();

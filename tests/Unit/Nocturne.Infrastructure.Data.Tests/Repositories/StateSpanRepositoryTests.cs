@@ -724,18 +724,18 @@ public class StateSpanRepositoryTests : IDisposable
                 TestTenantId, StateSpanCategory.PumpMode, state, from.AddDays(-days), end: null));
         foreach (var (state, days) in new[] { ("Default", 5), ("Weekend", 3) })
             _context.StateSpans.Add(SpanEntity(
-                TestTenantId, StateSpanCategory.Profile, state, from.AddDays(-days), end: null));
+                TestTenantId, StateSpanCategory.TemporaryTarget, state, from.AddDays(-days), end: null));
         await _context.SaveChangesAsync();
 
         var result = await _repository.GetByCategories(
-            [StateSpanCategory.Override, StateSpanCategory.PumpMode, StateSpanCategory.Profile],
+            [StateSpanCategory.Override, StateSpanCategory.PumpMode, StateSpanCategory.TemporaryTarget],
             from, from.AddDays(1));
 
         result[StateSpanCategory.Override].Select(s => s.StartTimestamp)
             .Should().BeEquivalentTo([from.AddHours(1), from.AddHours(-1)]);
         result[StateSpanCategory.PumpMode].Select(s => (s.State, s.StartTimestamp))
             .Should().BeEquivalentTo([("Automatic", from.AddDays(-20)), ("Suspended", from.AddDays(-2))]);
-        result[StateSpanCategory.Profile].Select(s => (s.State, s.StartTimestamp))
+        result[StateSpanCategory.TemporaryTarget].Select(s => (s.State, s.StartTimestamp))
             .Should().BeEquivalentTo([("Weekend", from.AddDays(-3))]);
     }
 
@@ -750,17 +750,17 @@ public class StateSpanRepositoryTests : IDisposable
         _context.StateSpans.Add(SpanEntity(
             TestTenantId, StateSpanCategory.PumpMode, "Automatic", from.AddDays(-30), end: null));
         _context.StateSpans.Add(SpanEntity(
-            TestTenantId, StateSpanCategory.Profile, "Default", from.AddDays(-5), end: null));
+            TestTenantId, StateSpanCategory.TemporaryTarget, "Default", from.AddDays(-5), end: null));
         _context.StateSpans.Add(SpanEntity(
-            TestTenantId, StateSpanCategory.Profile, "Weekend", from.AddDays(-3), from.AddDays(-2)));
+            TestTenantId, StateSpanCategory.TemporaryTarget, "Weekend", from.AddDays(-3), from.AddDays(-2)));
         await _context.SaveChangesAsync();
 
         var result = await _repository.GetByCategories(
-            [StateSpanCategory.PumpMode, StateSpanCategory.Profile], from, from.AddDays(1));
+            [StateSpanCategory.PumpMode, StateSpanCategory.TemporaryTarget], from, from.AddDays(1));
 
         result[StateSpanCategory.PumpMode].Select(s => (s.State, s.StartTimestamp))
             .Should().BeEquivalentTo([("Suspended", from.AddDays(-2)), ("Automatic", from.AddDays(-30))]);
-        result[StateSpanCategory.Profile].Should().BeEmpty();
+        result[StateSpanCategory.TemporaryTarget].Should().BeEmpty();
     }
 
     [Fact]
@@ -769,16 +769,16 @@ public class StateSpanRepositoryTests : IDisposable
         var from = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
         foreach (var (state, id) in new[] { ("Higher", 2), ("Lower", 1) })
         {
-            var span = SpanEntity(TestTenantId, StateSpanCategory.Profile, state, from.AddDays(-1), end: null);
+            var span = SpanEntity(TestTenantId, StateSpanCategory.TemporaryTarget, state, from.AddDays(-1), end: null);
             span.Id = Guid.Parse($"00000000-0000-0000-0000-{id:D12}");
             _context.StateSpans.Add(span);
         }
         await _context.SaveChangesAsync();
 
-        var profiles = (await _repository.GetByCategories(
-            [StateSpanCategory.Profile], from, from.AddDays(1)))[StateSpanCategory.Profile];
+        var targets = (await _repository.GetByCategories(
+            [StateSpanCategory.TemporaryTarget], from, from.AddDays(1)))[StateSpanCategory.TemporaryTarget];
 
-        profiles.Select(s => s.State).Should().Equal("Higher");
+        targets.Select(s => s.State).Should().Equal("Higher");
     }
 
     [Fact]
@@ -1191,12 +1191,12 @@ public class StateSpanRepositoryTests : IDisposable
     [Fact]
     public async Task BulkUpsertAsync_OutOfOrderBatch_EndsEachSpanAtTheNextStart()
     {
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 3, "pr-stored"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 3, "pr-stored"));
 
         await _repository.BulkUpsertAsync(
         [
-            Span(StateSpanCategory.Profile, "Active", 10, "pr-late"),
-            Span(StateSpanCategory.Profile, "Active", 5, "pr-early"),
+            Span(StateSpanCategory.PumpMode, "Automatic", 10, "pr-late"),
+            Span(StateSpanCategory.PumpMode, "Automatic", 5, "pr-early"),
         ]);
 
         var rows = await LiveRowsAsync();
@@ -1210,9 +1210,9 @@ public class StateSpanRepositoryTests : IDisposable
     [Fact]
     public async Task UpsertStateSpanAsync_OutOfOrderAcrossCalls_EndsEachSpanAtTheNextStart()
     {
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 1, "pr-x"));
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 5, "pr-b"));
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 3, "pr-c"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 1, "pr-x"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 5, "pr-b"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 3, "pr-c"));
 
         var rows = await LiveRowsAsync();
         rows["pr-x"].EndTimestamp.Should().Be(BatchDay.AddHours(3));
@@ -1225,12 +1225,12 @@ public class StateSpanRepositoryTests : IDisposable
     [Fact]
     public async Task UpsertStateSpanAsync_BackfillBehindASuccessor_LeavesAnUploadedEndInPlace()
     {
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 1, "pr-x"));
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 5, "pr-b"));
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 1, "pr-x", endHour: 2));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 1, "pr-x"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 5, "pr-b"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 1, "pr-x", endHour: 2));
         (await LiveRowsAsync())["pr-x"].SupersededById.Should().BeNull();
 
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 3, "pr-c"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 3, "pr-c"));
 
         var rows = await LiveRowsAsync();
         rows["pr-x"].EndTimestamp.Should().Be(BatchDay.AddHours(2));
@@ -1255,7 +1255,7 @@ public class StateSpanRepositoryTests : IDisposable
     [Fact]
     public async Task UpsertStateSpanAsync_BackfillBehindASuccessor_LeavesAnEndItDidNotSet()
     {
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 5, "pr-b"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 5, "pr-b"));
         var successorId = (await LiveRowsAsync())["pr-b"].Id;
         var stalePointer = SpanEntity(
             _context.TenantId, StateSpanCategory.Profile, "Active", BatchDay.AddHours(1), BatchDay.AddHours(2));
@@ -1265,7 +1265,7 @@ public class StateSpanRepositoryTests : IDisposable
         await _context.SaveChangesAsync();
         _context.ChangeTracker.Clear();
 
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 3, "pr-c"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 3, "pr-c"));
 
         var rows = await LiveRowsAsync();
         rows["pr-x"].EndTimestamp.Should().Be(BatchDay.AddHours(2));
@@ -1275,7 +1275,7 @@ public class StateSpanRepositoryTests : IDisposable
     [Fact]
     public async Task BulkUpsertAsync_BackfillBehindASuccessor_LeavesAnEndItDidNotSetOnARowInTheBatch()
     {
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 5, "pr-b"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 5, "pr-b"));
         var successorId = (await LiveRowsAsync())["pr-b"].Id;
         var stalePointer = SpanEntity(
             _context.TenantId, StateSpanCategory.Profile, "Active", BatchDay.AddHours(1), BatchDay.AddHours(2));
@@ -1287,8 +1287,8 @@ public class StateSpanRepositoryTests : IDisposable
 
         await _repository.BulkUpsertAsync(
         [
-            Span(StateSpanCategory.Profile, "Active", 1, "pr-x", endHour: 2),
-            Span(StateSpanCategory.Profile, "Active", 3, "pr-c"),
+            Span(StateSpanCategory.PumpMode, "Automatic", 1, "pr-x", endHour: 2),
+            Span(StateSpanCategory.PumpMode, "Automatic", 3, "pr-c"),
         ]);
 
         (await LiveRowsAsync())["pr-x"].EndTimestamp.Should().Be(BatchDay.AddHours(2));
@@ -1297,12 +1297,12 @@ public class StateSpanRepositoryTests : IDisposable
     [Fact]
     public async Task BulkUpsertAsync_StoredSuccessorMovedByTheBatch_IsReadAtItsNewStart()
     {
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 5, "pr-moved"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 5, "pr-moved"));
 
         await _repository.BulkUpsertAsync(
         [
-            Span(StateSpanCategory.Profile, "Active", 8, "pr-moved"),
-            Span(StateSpanCategory.Profile, "Active", 3, "pr-backfilled"),
+            Span(StateSpanCategory.PumpMode, "Automatic", 8, "pr-moved"),
+            Span(StateSpanCategory.PumpMode, "Automatic", 3, "pr-backfilled"),
         ]);
 
         var rows = await LiveRowsAsync();
@@ -1313,14 +1313,14 @@ public class StateSpanRepositoryTests : IDisposable
     [Fact]
     public async Task BulkUpsertAsync_BackfillBehindASuccessor_LeavesATombstoneItClosed()
     {
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 1, "pr-x"));
-        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 5, "pr-b"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 1, "pr-x"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 5, "pr-b"));
         (await _repository.DeleteStateSpanAsync("pr-x")).Should().NotBeEmpty();
 
         await _repository.BulkUpsertAsync(
         [
-            Span(StateSpanCategory.Profile, "Active", 1, "pr-x"),
-            Span(StateSpanCategory.Profile, "Active", 3, "pr-c"),
+            Span(StateSpanCategory.PumpMode, "Automatic", 1, "pr-x"),
+            Span(StateSpanCategory.PumpMode, "Automatic", 3, "pr-c"),
         ]);
 
         var tombstone = (await RowsForAsync("pr-x")).Should().ContainSingle().Subject;
@@ -1334,9 +1334,9 @@ public class StateSpanRepositoryTests : IDisposable
     {
         await _repository.BulkUpsertAsync(
         [
-            Span(StateSpanCategory.Profile, "Active", 1, "pr-x"),
-            Span(StateSpanCategory.Profile, "Active", 5, "pr-b"),
-            Span(StateSpanCategory.Profile, "Active", 1, "pr-c"),
+            Span(StateSpanCategory.PumpMode, "Automatic", 1, "pr-x"),
+            Span(StateSpanCategory.PumpMode, "Automatic", 5, "pr-b"),
+            Span(StateSpanCategory.PumpMode, "Automatic", 1, "pr-c"),
         ]);
 
         var rows = await LiveRowsAsync();

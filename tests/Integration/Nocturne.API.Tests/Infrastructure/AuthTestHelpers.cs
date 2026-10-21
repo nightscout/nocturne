@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
@@ -433,6 +434,20 @@ public static class AuthTestHelpers
         var result = await cmd.ExecuteScalarAsync()
                      ?? throw new InvalidOperationException($"Tenant {tenantId} has no '{slug}' role.");
         return (Guid)result;
+    }
+
+    /// <summary>
+    /// Issues <paramref name="subjectId"/> a session as a sign-in would, and returns its access
+    /// token. Sent as a Bearer it is the person's own sign-in, which managing credentials and sign-in
+    /// factors requires; the token <see cref="SeedAuthenticatedSubjectAsync"/> returns is a direct
+    /// grant and is refused there.
+    /// </summary>
+    public static async Task<string> IssueSessionTokenAsync(ApiIntegrationTestFixture fixture, Guid subjectId)
+    {
+        using var scope = fixture.Services.CreateScope();
+        var session = await scope.ServiceProvider.GetRequiredService<ISessionService>()
+            .IssueSessionAsync(subjectId, new SessionContext(DeviceDescription: "integration-test"));
+        return session.AccessToken;
     }
 
     /// <summary>

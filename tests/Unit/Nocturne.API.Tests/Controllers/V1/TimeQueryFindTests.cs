@@ -285,6 +285,27 @@ public class TimeQueryFindTests
         IdsOf(normalResult).Should().BeEquivalentTo(expectedEntryIds);
     }
 
+    [Theory]
+    [InlineData("{0..2147483647}", null)]
+    [InlineData("{a,b}{c,d}{e,f}{g,h}{i,j}{k,l}{m,n}{o,p}{q,r}{s,t}", null)]
+    [InlineData("2015-04", "(?=T13)T1")]
+    [InlineData("2015-04", @"(T1)\1")]
+    public async Task Times_RefusesAPatternItCannotEvaluate(string prefix, string? regex)
+    {
+        var controller = Build("?token=x");
+
+        var times = regex is null
+            ? await controller.GetTimeBasedEntriesWithPrefix(prefix, count: 100)
+            : await controller.GetTimeBasedEntriesWithPrefixAndRegex(prefix, regex, count: 100);
+        var slice = await controller.GetSlicedDataWithAll(
+            "entries", "dateString", "sgv", prefix, regex ?? "T13", count: 100);
+        var echo = controller.GetTimeQueryEchoWithPrefixAndRegex(prefix, regex ?? "T13");
+
+        times.Should().BeOfType<BadRequestObjectResult>();
+        slice.Should().BeOfType<BadRequestObjectResult>();
+        echo.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
     private static string[] IdsOf(ActionResult result) =>
         result.Should().BeOfType<OkObjectResult>().Which.Value
             .Should().BeAssignableTo<IEnumerable<Entry>>().Subject

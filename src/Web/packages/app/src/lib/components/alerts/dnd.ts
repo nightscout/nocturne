@@ -2,7 +2,10 @@ import type { TenantAlertSettingsResponse } from "$api-clients";
 
 type Settings = TenantAlertSettingsResponse | null | undefined;
 
-/** Whether a manual mute is in force. Only this one can be turned off from the UI. */
+/**
+ * Whether a manual mute is in force. Only this one can be turned off from the
+ * UI.
+ */
 export function isDndManualActive(s: Settings): boolean {
   return s?.dndManualActive ?? false;
 }
@@ -15,7 +18,10 @@ export function isDndScheduleActiveNow(s: Settings): boolean {
   return s?.dndScheduleActiveNow ?? false;
 }
 
-/** Whether Do Not Disturb is suppressing non-critical rules now, by either path. */
+/**
+ * Whether Do Not Disturb is on now, by either path. It silences every rule that
+ * is neither critical nor allowed through it.
+ */
 export function isDndInEffect(s: Settings): boolean {
   return isDndManualActive(s) || isDndScheduleActiveNow(s);
 }

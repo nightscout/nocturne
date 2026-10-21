@@ -3,10 +3,9 @@ using Moq;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.API.Tests.TestDoubles;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Profiles.Resolvers;
@@ -17,13 +16,18 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
     private const long From = 1705320000000;
     private const long To = From + 3_600_000;
 
-    private readonly Mock<IStateSpanService> _stateSpans = new();
+    private readonly Mock<IActiveProfileResolver> _activeProfile = ActiveProfileResolverMock.WithDefault();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
+
+    public BasalSegmentServiceCacheTests() =>
+        _activeProfile
+            .Setup(a => a.GetActiveProfileSpansForRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
     public void Dispose() => _cache.Dispose();
 
     private BasalSegmentService Service(ITenantCache cache) => new(
-        _stateSpans.Object,
+        _activeProfile.Object,
         Mock.Of<IBasalScheduleRepository>(),
         Mock.Of<ITherapySettingsRepository>(),
         cache);
@@ -36,18 +40,8 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
     }
 
     private void VerifySpanReads(int times) =>
-        _stateSpans.Verify(
-            s => s.GetStateSpansAsync(
-                It.IsAny<StateSpanCategory?>(),
-                It.IsAny<string?>(),
-                It.IsAny<DateTime?>(),
-                It.IsAny<DateTime?>(),
-                It.IsAny<string?>(),
-                It.IsAny<bool?>(),
-                It.IsAny<int>(),
-                It.IsAny<int>(),
-                It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()),
+        _activeProfile.Verify(
+            a => a.GetActiveProfileSpansForRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()),
             Times.Exactly(times));
 
     [Fact]

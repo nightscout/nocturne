@@ -38,32 +38,18 @@ internal sealed class CarbRatioResolver : ICarbRatioResolver
 
     public async Task<double> GetCarbRatioAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
     {
-        var profileName = specProfile
-            ?? await _activeProfileResolver.GetActiveProfileNameAsync(timeMills, ct)
-            ?? "Default";
-
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
-
-        var schedule = await GetCachedScheduleAsync(profileName, timestamp, ct);
+        var schedule = await ActiveSchedule.ResolveAsync(
+            timeMills, specProfile, _activeProfileResolver, _repo, _versions,
+            s => s.Entries, s => s.CarbRatio, _therapyRepo, _patientRecordRepo, ct);
         if (schedule is null)
             return DefaultCarbRatio;
 
-        var adjustment = await _activeProfileResolver.GetCircadianAdjustmentAsync(timeMills, ct);
-        var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
-
-        var secondsFromMidnight = await ScheduleTimeHelper.GetSecondsFromMidnightAsync(
-            shiftedMills, profileName, timestamp, _therapyRepo, _patientRecordRepo, ct);
-
-        var value = ScheduleResolution.FindValueAtTime(schedule.Entries, secondsFromMidnight)
+        var value = ScheduleResolution.FindValueAtTime(schedule.Entries, schedule.SecondsFromMidnight)
             ?? DefaultCarbRatio;
 
-        if (adjustment is not null)
+        if (schedule.Adjustment is { } adjustment)
             value = value * 100.0 / adjustment.Percentage;
 
         return value;
     }
-
-    private Task<Core.Models.V4.CarbRatioSchedule?> GetCachedScheduleAsync(
-        string profileName, DateTime timestamp, CancellationToken ct) =>
-        _versions.GetActiveAtAsync(_repo, profileName, timestamp, ct);
 }

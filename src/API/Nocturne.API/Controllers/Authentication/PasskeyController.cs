@@ -132,6 +132,7 @@ public class PasskeyController : ControllerBase
     /// subject id would let anyone enrol their own authenticator onto another account.
     /// </remarks>
     [HttpPost("register/options")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [AllowAnonymous]
     [EnableRateLimiting("passkey-register")]
@@ -258,6 +259,7 @@ public class PasskeyController : ControllerBase
     /// </para>
     /// </remarks>
     [HttpPost("register/complete")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [AllowAnonymous]
     [EnableRateLimiting("passkey-register")]
@@ -671,6 +673,7 @@ public class PasskeyController : ControllerBase
     /// Remove a passkey credential. Cannot remove the last credential if user has no OIDC link.
     /// </summary>
     [HttpDelete("credentials/{id:guid}")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["ListCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -696,6 +699,7 @@ public class PasskeyController : ControllerBase
     /// Regenerate recovery codes for the authenticated user. Invalidates all existing codes.
     /// </summary>
     [HttpPost("recovery/regenerate")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetRecoveryStatus", "ListCredentials"])]
     [ProducesResponseType(typeof(RecoveryRegenerateResponse), StatusCodes.Status200OK)]

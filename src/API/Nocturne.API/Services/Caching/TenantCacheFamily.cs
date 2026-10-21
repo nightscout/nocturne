@@ -20,4 +20,7 @@ public static class TenantCacheFamily
     /// <see cref="Analytics.DataOverviewService.EHbA1cCacheFamilies"/>.
     /// </summary>
     public const string EHbA1c = "ehba1c";
+
+    /// <summary>The profile activations the profile resolvers read.</summary>
+    public const string ProfileActivations = "profile-activations";
 }

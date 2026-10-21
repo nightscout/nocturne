@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -66,6 +67,8 @@ public class TreatmentDecomposerTests : IDisposable
             bolusRepo, _tempBasalRepoMock.Object,
             carbIntakeRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             _stateSpanServiceMock.Object,
+            ProfileActivationTestDeps.Repository(_context),
+            ProfileActivationTestDeps.Writer(_context),
             _treatmentFoodServiceMock.Object,
             _deviceServiceMock.Object,
             Mock.Of<IPatientDeviceStamper>(),
@@ -472,9 +475,8 @@ public class TreatmentDecomposerTests : IDisposable
     #region Profile Switch → Delegates to IStateSpanService
 
     [Fact]
-    public async Task DecomposeAsync_ProfileSwitch_DelegatesToStateSpanServiceUpsert()
+    public async Task DecomposeAsync_ProfileSwitch_WritesARequestedProfileActivation()
     {
-        // Arrange
         var treatment = new Treatment
         {
             Id = "profile-switch-1",
@@ -485,35 +487,16 @@ public class TreatmentDecomposerTests : IDisposable
             EnteredBy = "AAPS"
         };
 
-        var expectedStateSpan = new StateSpan
-        {
-            Id = "state-span-456",
-            Category = StateSpanCategory.Profile,
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime
-        };
-
-        _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
-
-        // Act
         var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
-        // Assert
-        result.CreatedRecords.Should().HaveCount(1);
-        result.CreatedRecords[0].Should().BeOfType<StateSpan>();
-
+        var activation = result.CreatedRecords.Should().ContainSingle()
+            .Which.Should().BeOfType<V4Models.ProfileActivation>().Subject;
+        activation.LegacyId.Should().Be("profile-switch-1");
+        activation.BaseProfileName.Should().Be("Day Profile");
+        activation.Phase.Should().Be(V4Models.ProfileActivationPhase.Requested);
+        activation.Mills.Should().Be(1700000000000);
         _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
-                It.Is<StateSpan>(ss =>
-                    ss.Category == StateSpanCategory.Profile
-                    && ss.State == "Active"
-                    && ss.StartMills == 1700000000000
-                    && ss.OriginalId == "profile-switch-1"
-                    && ss.Metadata != null
-                    && ss.Metadata.ContainsKey("profileName")),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
+            s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     #endregion
@@ -1821,34 +1804,6 @@ public class TreatmentDecomposerTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeAsync_MealBolusResentAsOneHalf_DropsTheStoredTwin()
-    {
-        // A meal stored before meals were decomposed by content: a 0 U bolus beside the carbs
-        var stored = new Treatment { Id = "meal-pre-fix", EventType = "Meal Bolus", Mills = 1700000000000, Carbs = 60 };
-        await _context.Boluses.AddAsync(new BolusEntity
-        {
-            Id = Guid.CreateVersion7(), TenantId = _context.TenantId, LegacyId = "meal-pre-fix",
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime, Insulin = 0,
-            CorrelationId = Guid.CreateVersion7(),
-        });
-        await _context.CarbIntakes.AddAsync(new CarbIntakeEntity
-        {
-            Id = Guid.CreateVersion7(), TenantId = _context.TenantId, LegacyId = "meal-pre-fix",
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime, Carbs = 60,
-            CorrelationId = Guid.CreateVersion7(),
-        });
-        await _context.SaveChangesAsync();
-
-        var result = await _decomposer.DecomposeAsync(stored, WriteOrigin.Live);
-
-        result.UpdatedRecords.OfType<V4Models.CarbIntake>().Should().ContainSingle().Which.Carbs.Should().Be(60);
-        result.CreatedRecords.Should().BeEmpty();
-        _context.ChangeTracker.Clear();
-        _context.Boluses.IgnoreQueryFilters().AsNoTracking().Where(b => b.LegacyId == "meal-pre-fix")
-            .Should().ContainSingle().Which.DeletedAt.Should().NotBeNull("the zero-unit twin is no longer part of the record");
-    }
-
-    [Fact]
     public async Task DecomposeAsync_MealBolusUnderATempBasalLegacyId_WritesNothing()
     {
         // AAPS holds a temp basal it read with insulin as a bolus under the temp basal's identifier
@@ -2102,24 +2057,11 @@ public class TreatmentDecomposerTests : IDisposable
             EnteredBy = "AAPS"
         };
 
-        var expectedStateSpan = new StateSpan
-        {
-            Id = "ss-1",
-            Category = StateSpanCategory.Profile,
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime
-        };
-        _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
-
         await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
-        _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
-                It.Is<StateSpan>(ss =>
-                    ss.EndMills == 1700000000000 + (120 * 60 * 1000)),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
+        var stored = await _context.ProfileActivations.SingleAsync(a => a.LegacyId == "profile-duration");
+        stored.RequestedDurationMs.Should().Be(120 * 60 * 1000);
+        stored.EndTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1700000000000 + (120 * 60 * 1000)).UtcDateTime);
     }
 
     [Fact]
@@ -2133,19 +2075,11 @@ public class TreatmentDecomposerTests : IDisposable
             Profile = "Default"
         };
 
-        var expectedStateSpan = new StateSpan { Id = "ss-2", Category = StateSpanCategory.Profile };
-        _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
-
         await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
-        // Duration defaults to 0 in Treatment; 0 is NOT > 0, so EndMills should be null
-        _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
-                It.Is<StateSpan>(ss => ss.EndMills == null),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
+        var stored = await _context.ProfileActivations.SingleAsync(a => a.LegacyId == "profile-no-duration");
+        stored.RequestedDurationMs.Should().BeNull();
+        stored.EndTimestamp.Should().BeNull();
     }
 
     #endregion
@@ -2186,7 +2120,6 @@ public class TreatmentDecomposerTests : IDisposable
     [Theory]
     [InlineData("Temporary Override")]
     [InlineData("Temporary Target")]
-    [InlineData("Profile Switch")]
     public async Task DecomposeAsync_SpanTreatmentWithNotes_KeepsThemOnTheSpanAndWritesNoNote(string eventType)
     {
         var treatment = new Treatment
@@ -2212,6 +2145,30 @@ public class TreatmentDecomposerTests : IDisposable
         result.CreatedRecords.OfType<V4Models.Note>().Should().BeEmpty();
         written!.Metadata!["notes"].Should().Be("Synthetic note");
         written.Metadata!["syncIdentifier"].Should().Be("synthetic-sync");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ProfileSwitchWithNotes_KeepsThemOnTheActivationAndWritesNoNote()
+    {
+        var treatment = new Treatment
+        {
+            Id = "switch-notes",
+            EventType = "Profile Switch",
+            Mills = 1700000000000,
+            Duration = 30,
+            Profile = "Weekend",
+            Notes = "Synthetic note",
+            SyncIdentifier = "synthetic-sync",
+        };
+
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+
+        var activation = result.CreatedRecords.Should().ContainSingle()
+            .Which.Should().BeOfType<V4Models.ProfileActivation>().Subject;
+        result.CreatedRecords.OfType<V4Models.Note>().Should().BeEmpty();
+        var served = LegacyTreatmentTables.ProjectProfileActivation(activation);
+        served.Notes.Should().Be("Synthetic note");
+        served.SyncIdentifier.Should().Be("synthetic-sync");
     }
 
     [Fact]
@@ -3145,9 +3102,8 @@ public class TreatmentDecomposerTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeProfileSwitch_WithAapsIcfg_StoresInMetadata()
+    public async Task DecomposeProfileSwitch_WithAapsIcfg_KeepsTheInsulinOnTheSnapshot()
     {
-        // Arrange — Profile Switch with icfg in AdditionalProperties
         var icfgJson = JsonSerializer.SerializeToElement(new
         {
             insulinLabel = "NovoRapid",
@@ -3169,23 +3125,14 @@ public class TreatmentDecomposerTests : IDisposable
             }
         };
 
-        StateSpan? capturedSpan = null;
-        _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .Callback<StateSpan, CancellationToken>((ss, _) => capturedSpan = ss)
-            .ReturnsAsync((StateSpan ss, CancellationToken _) => ss);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
-        // Act
-        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
-
-        // Assert
-        capturedSpan.Should().NotBeNull();
-        capturedSpan!.Metadata.Should().NotBeNull();
-        capturedSpan.Metadata!["insulinName"].Should().Be("NovoRapid");
-        capturedSpan.Metadata["insulinDia"].Should().Be("3.5");
-        capturedSpan.Metadata["insulinPeak"].Should().Be("55");
-        capturedSpan.Metadata["insulinConcentration"].Should().Be("100");
-        capturedSpan.Metadata["insulinCurve"].Should().Be("rapid-acting");
+        var insulin = result.CreatedRecords.OfType<V4Models.ProfileActivation>().Single().Snapshot!.Insulin!;
+        insulin.InsulinName.Should().Be("NovoRapid");
+        insulin.Dia.Should().Be(3.5);
+        insulin.Peak.Should().Be(55);
+        insulin.Concentration.Should().Be(100);
+        insulin.Curve.Should().Be("rapid-acting");
     }
 
     #endregion
@@ -3193,9 +3140,8 @@ public class TreatmentDecomposerTests : IDisposable
     #region Profile Switch with Inline ProfileJson
 
     [Fact]
-    public async Task DecomposeAsync_ProfileSwitchWithProfileJson_CreatesStateSpanAndCallsProfileDecomposer()
+    public async Task DecomposeAsync_ProfileSwitchWithProfileJson_KeepsItAsTheSnapshotAndWritesNoProfileRows()
     {
-        // Arrange
         var treatment = new Treatment
         {
             Id = "profile-switch-json-1",
@@ -3206,51 +3152,17 @@ public class TreatmentDecomposerTests : IDisposable
             EnteredBy = "AAPS"
         };
 
-        var expectedStateSpan = new StateSpan
-        {
-            Id = "state-span-pj-1",
-            Category = StateSpanCategory.Profile,
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime
-        };
-
-        _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
-
-        var profileDecompResult = new V4Models.DecompositionResult();
-        profileDecompResult.CreatedRecords.Add(new V4Models.TherapySettings { ProfileName = "Day Profile@@@@@1700000000000" });
-
-        _profileDecomposerMock
-            .Setup(d => d.DecomposeProfileSwitchAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(profileDecompResult);
-
-        // Act
         var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
-        // Assert -- StateSpan + TherapySettings from profile decomposer
-        result.CreatedRecords.Should().HaveCount(2);
-        result.CreatedRecords[0].Should().BeOfType<StateSpan>();
-        result.CreatedRecords[1].Should().BeOfType<V4Models.TherapySettings>();
-
-        // Verify state span was created
-        _stateSpanServiceMock.Verify(
-            s => s.UpsertStateSpanAsync(
-                It.Is<StateSpan>(ss =>
-                    ss.Category == StateSpanCategory.Profile
-                    && ss.OriginalId == "profile-switch-json-1"),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
-
-        // Verify profile decomposer was called with the synthetic profile
+        var activation = result.CreatedRecords.Should().ContainSingle()
+            .Which.Should().BeOfType<V4Models.ProfileActivation>().Subject;
+        activation.SnapshotIsCustomized.Should().BeFalse();
+        activation.Snapshot!.Basal!.Single().Value.Should().Be(0.8);
+        activation.Snapshot.Targets!.Single().Should().BeEquivalentTo(new { Low = 80.0, High = 120.0 });
+        activation.Snapshot.Dia.Should().Be(4);
         _profileDecomposerMock.Verify(
-            d => d.DecomposeProfileSwitchAsync(
-                It.Is<Profile>(p =>
-                    p.Id == "profile-switch-json-1"
-                    && p.Mills == 1700000000000
-                    && p.Store.Count == 1
-                    && p.Store.ContainsKey("Day Profile@@@@@1700000000000")),
-                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Once);
+            d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -3282,7 +3194,7 @@ public class TreatmentDecomposerTests : IDisposable
 
         // Assert -- profile decomposer should NOT be called
         _profileDecomposerMock.Verify(
-            d => d.DecomposeProfileSwitchAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

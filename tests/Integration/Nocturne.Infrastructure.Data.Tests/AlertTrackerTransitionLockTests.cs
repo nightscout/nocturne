@@ -9,6 +9,7 @@ using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Tests.Rls;
 using Npgsql;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -55,7 +56,7 @@ public class AlertTrackerTransitionLockTests
             await tx.LockRuleAsync(ruleId, ct);
             return (await tx.GetTrackerStateAsync(ruleId, ct))?.State;
         });
-        await Task.Delay(500);
+        await PostgresLockWaits.UntilBlockedAsync(_fx.AppConnectionString, contender);
         contender.IsCompleted.Should().BeFalse("the first transaction holds the rule's lock");
 
         release.SetResult();

@@ -233,45 +233,6 @@ public class ProfileDecomposerTests
         repos.SetDefaultCalls.Should().BeEmpty();
     }
 
-    /// <summary>
-    /// A profile switch carrying its profile inline (AAPS sends one on every switch) is not a
-    /// profile document: it must not take the default from the document before it, and its newer
-    /// snapshot must not stop that document from settling the default when it is re-synced.
-    /// </summary>
-    [Fact]
-    public async Task ProfileSwitchSnapshot_LeavesTheDocumentsDefault()
-    {
-        const string switchStore = "Day@@@@@1700000900000";
-        var repos = new Repositories(storedSettings:
-        [
-            new TherapySettings
-            {
-                LegacyId = "doc:Default", ProfileName = "Default", IsDefault = true,
-                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
-            },
-            new TherapySettings
-            {
-                LegacyId = $"switch:{switchStore}", ProfileName = switchStore,
-                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000900000).UtcDateTime,
-            },
-        ]);
-
-        await repos.Decomposer.DecomposeProfileSwitchAsync(
-            BuildProfile(id: "switch", stores: [switchStore], mills: 1700000900000, defaultProfile: switchStore),
-            WriteOrigin.Live);
-
-        repos.Written.OfType<TherapySettings>().Should().ContainSingle()
-            .Which.IsDefault.Should().BeFalse();
-        repos.SetDefaultCalls.Should().BeEmpty();
-
-        await repos.Decomposer.DecomposeAsync(
-            BuildProfile(id: "doc", stores: ["Default"], mills: 1700000000000), WriteOrigin.Live);
-
-        var flagged = WrittenDefaults(repos).Should().ContainSingle().Subject;
-        flagged.LegacyId.Should().Be("doc:Default");
-        repos.SetDefaultCalls.Should().Equal([flagged.Id]);
-    }
-
     [Fact]
     public async Task DecomposeBatchAsync_WithNoStoreEntries_WritesNothing()
     {
@@ -478,5 +439,33 @@ public class ProfileDecomposerTests
             [new TimeValue { Time = "00:00", Value = mmol }], "mmol")[0].Value;
 
         ProfileDecomposer.FromMgdl(stored, "mmol").Should().Be(mmol);
+    }
+
+    [Fact]
+    public void EveryOneDecimalMmolValue_SurvivesRepeatedReadAndReupload()
+    {
+        var drifted = new List<double>();
+        for (var tenths = 1; tenths <= 500; tenths++)
+        {
+            var uploaded = tenths / 10.0;
+            var value = uploaded;
+            for (var cycle = 0; cycle < 3; cycle++)
+            {
+                var sens = ProfileDecomposer.ConvertSensitivityValues(
+                    [new TimeValue { Time = "00:00", Value = value }], "mmol")[0].Value;
+                var target = ProfileDecomposer.MergeTargets(
+                    [new TimeValue { Time = "00:00", Value = value }],
+                    [new TimeValue { Time = "00:00", Value = value }],
+                    "mmol/L")[0];
+
+                sens.Should().Be(target.Low).And.Be(target.High);
+                value = ProfileDecomposer.FromMgdl(sens, "mmol");
+            }
+
+            if (value != uploaded)
+                drifted.Add(uploaded);
+        }
+
+        drifted.Should().BeEmpty();
     }
 }

@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -49,6 +50,8 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
             Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(),
             Mock.Of<IDeviceEventRepository>(), Mock.Of<IBolusCalculationRepository>(),
             Mock.Of<IStateSpanService>(),
+            ProfileActivationTestDeps.Repository(_context),
+            ProfileActivationTestDeps.Writer(_context),
             Mock.Of<ITreatmentFoodService>(),
             Mock.Of<IDeviceService>(),
             Mock.Of<IPatientDeviceStamper>(),
@@ -130,12 +133,13 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
     [Fact]
     public async Task Stored_ids_include_the_spans_this_source_stored_treatments_as_in_the_window()
     {
-        AddSpan("switch", "Profile", Connector, """{"utcOffset":0}""", At);
+        AddActivation("switch", Connector, At);
         AddSpan("override", "Override", Connector, """{"collection":"treatments","utcOffset":0}""", At.AddMinutes(5));
         AddSpan("target", "TemporaryTarget", Connector, """{"utcOffset":0}""", At.AddMinutes(10));
         AddSpan("devicestatus-override", "Override", Connector, """{"reason":"devicestatus"}""", At);
-        AddSpan("other-source", "Profile", Other, """{"utcOffset":0}""", At);
-        AddSpan("before-window", "Profile", Connector, """{"utcOffset":0}""", At.AddHours(-3));
+        AddSpan("old-profile-span", "Profile", Connector, """{"utcOffset":0}""", At);
+        AddActivation("other-source", Other, At);
+        AddActivation("before-window", Connector, At.AddHours(-3));
         await _context.SaveChangesAsync();
 
         var stored = await _decomposer.GetLegacyIdsFromSourceAsync(Connector, At.AddHours(-1), At.AddHours(1));
@@ -147,10 +151,10 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task A_profile_switch_stored_only_as_a_span_is_deleted_with_its_profile_rows_once_the_source_drops_it()
+    public async Task A_profile_switch_is_deleted_with_its_profile_rows_once_the_source_drops_it()
     {
-        AddSpan("switch", "Profile", Connector, """{"profileJson":"{}","utcOffset":0}""", At);
-        AddSpan("kept", "Profile", Connector, """{"profileJson":"{}","utcOffset":0}""", At.AddMinutes(5));
+        AddActivation("switch", Connector, At);
+        AddActivation("kept", Connector, At.AddMinutes(5));
         await _context.SaveChangesAsync();
         var upstream = new HashSet<string> { "kept" };
 
@@ -159,13 +163,21 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         await _decomposer.DeleteFromSourceAsync(Connector, gone);
 
         gone.Should().BeEquivalentTo(["switch"]);
-        (await _context.StateSpans.IgnoreQueryFilters().AsNoTracking().SingleAsync(s => s.OriginalId == "switch"))
+        (await _context.ProfileActivations.IgnoreQueryFilters().AsNoTracking().SingleAsync(a => a.LegacyId == "switch"))
             .DeletedAt.Should().NotBeNull();
-        (await _context.StateSpans.IgnoreQueryFilters().AsNoTracking().SingleAsync(s => s.OriginalId == "kept"))
+        (await _context.ProfileActivations.IgnoreQueryFilters().AsNoTracking().SingleAsync(a => a.LegacyId == "kept"))
             .DeletedAt.Should().BeNull();
         _profiles.Verify(p => p.DeleteByLegacyIdAsync("switch", WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
         _profiles.VerifyNoOtherCalls();
     }
+
+    private void AddActivation(string legacyId, string source, DateTime start) =>
+        _context.ProfileActivations.Add(new ProfileActivationEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = legacyId, DataSource = source, Timestamp = start,
+            Phase = nameof(Nocturne.Core.Models.V4.ProfileActivationPhase.Requested),
+            Origin = nameof(Nocturne.Core.Models.V4.ProfileActivationOrigin.Uploader), BaseProfileName = "Weekend",
+        });
 
     private void AddSpan(string originalId, string category, string source, string metadataJson, DateTime start) =>
         _context.StateSpans.Add(new StateSpanEntity

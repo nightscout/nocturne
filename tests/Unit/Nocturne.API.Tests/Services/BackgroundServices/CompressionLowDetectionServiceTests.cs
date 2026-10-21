@@ -64,6 +64,89 @@ public class CompressionLowDetectionServiceTests
         );
     }
 
+    private static readonly double[] CompressionLow =
+        [110, 110, 110, 100, 85, 65, 60, 80, 105, 110, 110, 110];
+
+    private const long FiveMinutes = 5 * 60 * 1000;
+    private const long NightStart = 1_000_000_000;
+
+    private static List<Entry> Readings(
+        string dataSource,
+        string device,
+        long offsetMills,
+        IEnumerable<double> values,
+        Func<int, bool>? present = null) =>
+        values
+            .Select((value, index) => (value, index))
+            .Where(r => present?.Invoke(r.index) ?? true)
+            .Select(r => new Entry
+            {
+                DataSource = dataSource,
+                Device = device,
+                Mills = NightStart + offsetMills + r.index * FiveMinutes,
+                Sgv = r.value,
+                Mgdl = r.value,
+            })
+            .ToList();
+
+    private static List<Entry> Primary(Func<int, bool>? present = null) =>
+        Readings("xdrip", "sensor-a", 0, CompressionLow, present);
+
+    private static List<Entry> Canonical(params List<Entry>[] streams) =>
+        streams.SelectMany(stream => stream).OrderBy(e => e.Mills).ToList();
+
+    private static CompressionLowDetectionService Detector() =>
+        new(
+            Mock.Of<IServiceProvider>(),
+            ActiveTenantSnapshotTestDoubles.Unread(),
+            NullLogger<CompressionLowDetectionService>.Instance
+        );
+
+    [Fact]
+    public void DetectVShapeCandidates_recoversOnThePrimarySensorWhenAnotherSensorFillsItsGap()
+    {
+        var primary = Primary(index => index != 7);
+        var fill = Readings("dexcom", "sensor-b", FiveMinutes / 2, Enumerable.Repeat(110d, CompressionLow.Length), index => index == 7);
+
+        var candidate = Detector().DetectVShapeCandidates(Canonical(primary, fill)).Should().ContainSingle().Subject;
+
+        candidate.LowestGlucose.Should().Be(60);
+        candidate.RecoveryMinutes.Should().Be(10);
+        candidate.EndMills.Should().Be(primary[^4].Mills);
+    }
+
+    [Fact]
+    public void DetectVShapeCandidates_separatesTwoSensorsThatShareADeviceByDataSource()
+    {
+        var primary = Readings("xdrip", "connector", 0, CompressionLow, index => index != 7);
+        var fill = Readings("dexcom", "connector", FiveMinutes / 2, Enumerable.Repeat(110d, CompressionLow.Length), index => index == 7);
+
+        var candidate = Detector().DetectVShapeCandidates(Canonical(primary, fill)).Should().ContainSingle().Subject;
+
+        candidate.RecoveryMinutes.Should().Be(10);
+        candidate.EndMills.Should().Be(primary[^4].Mills);
+    }
+
+    [Fact]
+    public void DetectVShapeCandidates_findsNothingFromAConstantOffsetBetweenSensors()
+    {
+        var high = Readings("xdrip", "sensor-a", 0, Enumerable.Repeat(120d, CompressionLow.Length), index => index % 3 != 1);
+        var offset = Readings("dexcom", "sensor-b", FiveMinutes / 2, Enumerable.Repeat(60d, CompressionLow.Length), index => index % 3 == 1);
+
+        Detector().DetectVShapeCandidates(Canonical(high, offset)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void DetectVShapeCandidates_detectsASingleSensorNightWhetherOrNotItNamesTheDataSource()
+    {
+        var named = Detector().DetectVShapeCandidates(Primary());
+        var unnamed = Detector().DetectVShapeCandidates(
+            Primary().Select(e => { e.DataSource = null; return e; }).ToList());
+
+        named.Should().ContainSingle().Which.LowestGlucose.Should().Be(60);
+        unnamed.Should().Equal(named);
+    }
+
     /// <summary>
     /// A provider whose <see cref="IUISettingsService"/> is the real one over a database that can no
     /// longer be read, which is what a failed read looks like from inside the scope.

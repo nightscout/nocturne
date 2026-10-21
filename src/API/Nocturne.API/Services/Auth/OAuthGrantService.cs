@@ -292,6 +292,13 @@ public class OAuthGrantService : IOAuthGrantService
             ? null
             : Scope.ValidateGrantScopes(scopes, grant.GrantType);
 
+        // A grant with no scopes authorizes nothing, and the tokens it mints carry no scope claim
+        // to mark them as delegated.
+        if (validatedScopes is { Count: 0 })
+        {
+            throw new ArgumentException("A grant needs at least one scope.");
+        }
+
         if (label != null)
         {
             grant.Label = label;

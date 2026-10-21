@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
@@ -24,7 +25,8 @@ namespace Nocturne.API.Controllers.Authentication;
 /// (<see cref="Connectors.Core.Utilities.HashUtils.Sha256Hex"/>); the plaintext is returned once at
 /// creation and cannot be retrieved again.
 ///
-/// Scopes are validated and normalized via <see cref="Scope.Normalize"/> before storage.
+/// Scopes are capped at the caller's own (<see cref="Scope.ValidateDelegation"/>) and normalized via
+/// <see cref="Scope.Normalize"/> before storage.
 /// All mutations are audit-logged through <see cref="IAuthAuditService"/>.
 /// </remarks>
 /// <seealso cref="DirectGrantTokenHandler"/>
@@ -32,6 +34,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// <seealso cref="Scope"/>
 [ApiController]
 [Route("api/auth/direct-grants")]
+[RequireInteractiveSession]
 [Tags("Authentication")]
 public class DirectGrantController : ControllerBase
 {
@@ -60,6 +63,7 @@ public class DirectGrantController : ControllerBase
     [ProducesResponseType(typeof(CreateDirectGrantResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<CreateDirectGrantResponse>> Create([FromBody] CreateDirectGrantRequest request)
     {
         await using var db = await _contexts.CreateAsync();
@@ -67,6 +71,11 @@ public class DirectGrantController : ControllerBase
         if (auth == null || !auth.IsAuthenticated || auth.SubjectId == null)
         {
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
+        }
+
+        if (Scope.ValidateDelegation(request.Scopes, HttpContext.GetGrantedScopes()) is { } violation)
+        {
+            return Problem(detail: violation.Description, statusCode: 403, title: violation.Code);
         }
 
         var limitTo24Hours = HttpContext.InheritHistoryClamp(request.LimitTo24Hours);

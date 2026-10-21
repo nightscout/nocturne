@@ -92,10 +92,193 @@ public class GlookoSsv2SyncTests
         var service = BuildService(handler, new FakeCursorStore(), CapturePublisher(publishedGlucose));
         var result = await service.SyncDataAsync(AllTypesRequest(), Config(), CancellationToken.None);
 
-        result.Success.Should().BeTrue("a single failing feed must degrade, not abort the whole sync");
+        result.Success.Should().BeFalse("a skipped feed is a failed fetch, as it is on the windowed path");
+        result.Errors.Should().Contain("Failed to fetch Boluses");
         publishedGlucose.Should().HaveCount(2, "glucose still imports despite the bolus feed failing");
         handler.RequestedPaths.Should().Contain(p => p.Contains("/api/v2/foods"),
             "resources after the failing one must still be fetched");
+    }
+
+    [Fact]
+    public async Task Ssv2_FeedTimesOutOnEveryAttempt_IsReportedAndKeepsItsCursorAndTheRestOfThePass()
+    {
+        var publishedGlucose = new List<SensorGlucose>();
+        var cursorStore = new FakeCursorStore();
+        var handler = new RoutingHandler(path =>
+        {
+            if (path.Contains("/api/v2/cgm/egvs"))
+                return EgvPage(["e1", "e2"], "2026-06-03T00:00:00.000Z", "g1", lastPage: true);
+            if (path.Contains("/api/v2/notes"))
+                throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout");
+            return Json("{\"lastPage\":true}");
+        });
+
+        var result = await BuildService(handler, cursorStore, CapturePublisher(publishedGlucose))
+            .SyncDataAsync(new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.Notes] },
+                Config(), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().Be("Failed to fetch Notes");
+        publishedGlucose.Should().HaveCount(2);
+        cursorStore.Saved.Should().ContainKey("/api/v2/cgm/egvs");
+        cursorStore.Saved.Should().NotContainKey("/api/v2/notes");
+    }
+
+    [Fact]
+    public async Task Ssv2_InjectionBasalsFeedFails_WhileOnlyBolusesRequested_IsNotReported()
+    {
+        var handler = new RoutingHandler(path =>
+        {
+            if (path.Contains("/api/v2/pumps/injection_basals"))
+                throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout");
+            return Json("{\"lastPage\":true}");
+        });
+
+        var result = await BuildService(handler, new FakeCursorStore(), CapturePublisher(new List<SensorGlucose>()))
+            .SyncDataAsync(new SyncRequest { DataTypes = [SyncDataType.Boluses] }, Config(), CancellationToken.None);
+
+        handler.RequestedPaths.Should().Contain(p => p.Contains("/api/v2/pumps/injection_basals"),
+            "the pen basal feed is fetched whenever Boluses or BasalInjections is on");
+        result.Success.Should().BeTrue("a feed whose records belong to an inactive type must not fail the sync");
+        result.Errors.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Ssv2_WhenPublishDoesNotLand_KeepsTheCursorAndRefetchesTheSameRecords(bool publishThrows)
+    {
+        var cursorStore = new FakeCursorStore();
+        var handler = new RoutingHandler(path =>
+            path.Contains("/api/v2/cgm/egvs")
+                ? EgvPage(["e1", "e2"], "2026-06-03T00:00:00.000Z", "g1", lastPage: true)
+                : Json("{\"lastPage\":true}"));
+
+        var failing = new Mock<IConnectorPublisher>();
+        failing.Setup(p => p.IsAvailable).Returns(true);
+        var glucosePublish = failing.Setup(p => p.Glucose.PublishSensorGlucoseAsync(
+            It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+            It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()));
+        if (publishThrows)
+            glucosePublish.ThrowsAsync(new InvalidOperationException("publish failed"));
+        else
+            glucosePublish.ReturnsAsync(false);
+
+        var firstRun = await BuildService(handler, cursorStore, failing)
+            .SyncDataAsync(GlucoseRequest(), Config(), CancellationToken.None);
+
+        firstRun.Success.Should().BeFalse();
+        cursorStore.Saved.Should().NotContainKey("/api/v2/cgm/egvs",
+            "records that were fetched but never published must not be skipped by the next sync");
+
+        var publishedGlucose = new List<SensorGlucose>();
+        var secondRun = await BuildService(handler, cursorStore, CapturePublisher(publishedGlucose))
+            .SyncDataAsync(GlucoseRequest(), Config(), CancellationToken.None);
+
+        secondRun.Success.Should().BeTrue();
+        handler.EgvsCursors.Should().Equal(Epoch, Epoch);
+        publishedGlucose.Should().HaveCount(2);
+        cursorStore.Saved.Should().ContainKey("/api/v2/cgm/egvs")
+            .WhoseValue.Should().BeEquivalentTo(new ConnectorSyncCursor("2026-06-03T00:00:00.000Z", "g1"));
+    }
+
+    [Fact]
+    public async Task Ssv2_OneResourcePublishFailing_DoesNotHoldBackAnotherResourcesCursor()
+    {
+        var cursorStore = new FakeCursorStore();
+        var handler = new RoutingHandler(path =>
+        {
+            if (path.Contains("/api/v2/cgm/egvs"))
+                return EgvPage(["e1"], "2026-06-03T00:00:00.000Z", "g1", lastPage: true);
+            if (path.Contains("/api/v2/notes"))
+                return Json("{\"notes\":[{\"timestamp\":\"2026-06-01T08:00:00.000Z\",\"value\":\"n\",\"guid\":\"n1\"}],"
+                            + "\"lastPage\":true,\"lastUpdatedAt\":\"2026-06-04T00:00:00.000Z\",\"lastGuid\":\"n1\"}");
+            return Json("{\"lastPage\":true}");
+        });
+
+        var publisher = new Mock<IConnectorPublisher> { DefaultValue = DefaultValue.Mock };
+        publisher.Setup(p => p.IsAvailable).Returns(true);
+        publisher.Setup(p => p.Glucose.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        publisher.Setup(p => p.Metadata.PublishNotesAsync(
+                It.IsAny<IEnumerable<Note>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        await BuildService(handler, cursorStore, publisher).SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.Notes] },
+            Config(), CancellationToken.None);
+
+        cursorStore.Saved.Should().NotContainKey("/api/v2/cgm/egvs");
+        cursorStore.Saved.Should().ContainKey("/api/v2/notes")
+            .WhoseValue.Should().BeEquivalentTo(new ConnectorSyncCursor("2026-06-04T00:00:00.000Z", "n1"));
+    }
+
+    [Fact]
+    public async Task Ssv2_CursorPendingFromARejectedPass_IsNotCommittedByTheForbiddenRetry()
+    {
+        var cursorStore = new FakeCursorStore();
+        var egvsRequests = 0;
+        var bolusRequests = 0;
+        var handler = new RoutingHandler(path =>
+        {
+            if (path.Contains("/api/v2/cgm/egvs"))
+                return ++egvsRequests == 1
+                    ? EgvPage(["e1"], "2026-06-03T00:00:00.000Z", "g1", lastPage: true)
+                    : new HttpResponseMessage(HttpStatusCode.InternalServerError);
+            if (path.Contains("/api/v2/pumps/normal_boluses") && ++bolusRequests == 1)
+                return new HttpResponseMessage(HttpStatusCode.Forbidden);
+            return Json("{\"lastPage\":true}");
+        });
+
+        var publisher = new Mock<IConnectorPublisher> { DefaultValue = DefaultValue.Mock };
+        publisher.Setup(p => p.IsAvailable).Returns(true);
+        publisher.Setup(p => p.Glucose.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        await BuildService(handler, cursorStore, publisher)
+            .SyncDataAsync(GlucoseRequest(), Config(), CancellationToken.None);
+
+        egvsRequests.Should().BeGreaterThan(1, "the forbidden response must have forced a second pass");
+        cursorStore.Saved.Should().NotContainKey("/api/v2/cgm/egvs",
+            "a cursor whose records the first pass failed to publish must not be committed by the retry");
+    }
+
+    [Fact]
+    public async Task Ssv2_BatchFeeds_StoreTheirCursorsOnlyWhenEveryBatchPublishLands()
+    {
+        var cursorStore = new FakeCursorStore();
+        var handler = new RoutingHandler(path =>
+        {
+            if (path.Contains("/api/v2/pumps/normal_boluses"))
+                return Json("{\"normalBoluses\":[{\"pumpTimestamp\":\"2026-06-01T08:00:00.000Z\",\"timestamp\":\"2026-06-01T08:00:00.000Z\","
+                            + "\"insulinDelivered\":2.0,\"deliveredUnits\":2.0,\"programmedUnits\":2.0,\"carbsInput\":0}],"
+                            + "\"lastPage\":true,\"lastUpdatedAt\":\"2026-06-05T00:00:00.000Z\",\"lastGuid\":\"b1\"}");
+            if (path.Contains("/api/v2/readings"))
+                return Json("{\"readings\":[{\"timestamp\":\"2026-06-01T09:00:00.000Z\",\"value\":10000,\"guid\":\"r1\"}],"
+                            + "\"lastPage\":true,\"lastUpdatedAt\":\"2026-06-06T00:00:00.000Z\",\"lastGuid\":\"r1\"}");
+            return Json("{\"lastPage\":true}");
+        });
+        var request = new SyncRequest { DataTypes = [SyncDataType.Boluses, SyncDataType.ManualBG] };
+
+        var rejecting = BatchPublisher(manualBgLands: false);
+        await BuildService(handler, cursorStore, rejecting).SyncDataAsync(request, Config(), CancellationToken.None);
+
+        cursorStore.Saved.Should().NotContainKey("/api/v2/pumps/normal_boluses");
+        cursorStore.Saved.Should().NotContainKey("/api/v2/readings",
+            "one rejected publish in the batch holds back every feed that fed it");
+
+        await BuildService(handler, cursorStore, BatchPublisher(manualBgLands: true))
+            .SyncDataAsync(request, Config(), CancellationToken.None);
+
+        cursorStore.Saved.Should().ContainKey("/api/v2/pumps/normal_boluses")
+            .WhoseValue.Should().BeEquivalentTo(new ConnectorSyncCursor("2026-06-05T00:00:00.000Z", "b1"));
+        cursorStore.Saved.Should().ContainKey("/api/v2/readings")
+            .WhoseValue.Should().BeEquivalentTo(new ConnectorSyncCursor("2026-06-06T00:00:00.000Z", "r1"));
     }
 
     // Regression guard for the SupportedDataTypes gap: Notes/Activity (and the health feeds gated
@@ -189,6 +372,21 @@ public class GlookoSsv2SyncTests
             .Callback<IEnumerable<SensorGlucose>, string, WriteOrigin, CancellationToken>(
                 (g, _, _, _) => sink.AddRange(g))
             .ReturnsAsync(true);
+        return publisher;
+    }
+
+    private static Mock<IConnectorPublisher> BatchPublisher(bool manualBgLands)
+    {
+        var publisher = new Mock<IConnectorPublisher> { DefaultValue = DefaultValue.Mock };
+        publisher.Setup(p => p.IsAvailable).Returns(true);
+        publisher.Setup(p => p.Treatments.PublishBolusesAsync(
+                It.IsAny<IEnumerable<Bolus>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        publisher.Setup(p => p.Treatments.PublishBGChecksAsync(
+                It.IsAny<IEnumerable<BGCheck>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(manualBgLands);
         return publisher;
     }
 

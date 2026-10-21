@@ -102,6 +102,7 @@ public class TotpController : ControllerBase
     /// <response code="400">Setup refused; <c>detail</c> is a <c>TotpSetupFailure</c> value.</response>
     /// <response code="401">Not authenticated.</response>
     [HttpPost("setup")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [RemoteCommand]
     [ProducesResponseType(typeof(TotpSetupResponse), StatusCodes.Status200OK)]
@@ -143,6 +144,7 @@ public class TotpController : ControllerBase
     /// <response code="400">Invalid code or challenge token; <c>detail</c> is a <c>TotpSetupFailure</c> value.</response>
     /// <response code="401">Not authenticated.</response>
     [HttpPost("verify-setup")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["ListCredentials"])]
     [ProducesResponseType(typeof(TotpVerifySetupResponse), StatusCodes.Status200OK)]
@@ -210,6 +212,7 @@ public class TotpController : ControllerBase
     /// <response code="204">Credential removed.</response>
     /// <response code="401">Not authenticated.</response>
     [HttpDelete("{id:guid}")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["ListCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

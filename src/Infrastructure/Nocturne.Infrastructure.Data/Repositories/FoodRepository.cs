@@ -340,40 +340,30 @@ public class FoodRepository : IFoodRepository
         return true;
     }
 
-    /// <summary>
-    /// Bulk delete food entries with query
-    /// </summary>
-    /// <param name="findQuery">The search query for deletion.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
+    /// <inheritdoc />
     public async Task<long> BulkDeleteFoodAsync(
-        string findQuery,
+        string? find,
         CancellationToken cancellationToken = default
     )
     {
+        var query = FindQuery.Parse(find);
+        if (query.IsEmpty)
+            throw new ArgumentException("A bulk delete requires a find with a condition.", nameof(find));
+
+        if (Food.FindRefusal(query) is { } refusal)
+            throw new ArgumentException(refusal, nameof(find));
+
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var query = db.Foods.AsQueryable();
+        var entities = (await db.Foods.ToListAsync(cancellationToken))
+            .Where(f => query.Matches(FoodMapper.ToDomainModel(f)))
+            .ToList();
 
-        // Apply find query filter
-        if (!string.IsNullOrEmpty(findQuery))
-        {
-            // Simple text search across name, category, and subcategory
-            query = query.Where(f =>
-                f.Name.Contains(findQuery)
-                || f.Category.Contains(findQuery)
-                || f.Subcategory.Contains(findQuery)
-            );
-        }
-
-        var entities = await query.ToListAsync(cancellationToken);
-        var count = entities.Count;
-
-        if (count > 0)
+        if (entities.Count > 0)
         {
             await SoftDeleteAsync(db, entities, cancellationToken);
         }
 
-        return count;
+        return entities.Count;
     }
 
     /// <summary>

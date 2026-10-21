@@ -5,7 +5,13 @@
 import { randomUUID } from "$lib/utils";
 import { getRequestEvent, query } from "$app/server";
 import { z } from "zod";
-import { StateSpanCategory, BasalDeliveryOrigin, type StateSpan } from "$lib/api";
+import {
+  StateSpanCategory,
+  BasalDeliveryOrigin,
+  type StateSpan,
+  type ProfileActivationDto,
+} from "$lib/api";
+import { profileActivationLabel } from "$lib/utils/profile-activation-label";
 
 /**
  * Input schema for time spans data queries - supports date range
@@ -148,6 +154,38 @@ function processSpans(
 }
 
 /**
+ * Process profile activations into chart-ready spans labelled by the profile they run
+ */
+function processProfileActivations(
+  activations: ProfileActivationDto[] | null | undefined,
+  rangeStart: number,
+  rangeEnd: number
+): ProcessedSpan[] {
+  if (!activations || !Array.isArray(activations)) {
+    return [];
+  }
+
+  return activations
+    .filter((activation) => {
+      const start = activation.startMills ?? 0;
+      const end = activation.endMills ?? rangeEnd;
+      return end > rangeStart && start < rangeEnd;
+    })
+    .map((activation) => ({
+      id: activation.id ?? randomUUID(),
+      category: StateSpanCategory.Profile,
+      state: activation.phase ?? "Unknown",
+      startTime: new Date(Math.max(activation.startMills ?? 0, rangeStart)),
+      endTime: new Date(Math.min(activation.endMills ?? rangeEnd, rangeEnd)),
+      color: getProfileColor(activation.phase ?? ""),
+      rate: null,
+      percent: null,
+      profileName: profileActivationLabel(activation) ?? null,
+      origin: null,
+    }));
+}
+
+/**
  * Parse a numeric value from metadata (handles various JSON types)
  */
 function parseMetadataNumber(value: unknown): number | null {
@@ -247,14 +285,14 @@ export const getTimeSpansData = query(
       const [pumpModeRes, profileRes, tempBasalRes, overrideRes, activityRes] =
         await Promise.all([
           apiClient.stateSpans.getPumpModes(rangeFrom, rangeTo),
-          apiClient.stateSpans.getProfiles(rangeFrom, rangeTo),
+          apiClient.profileActivations.getActivations(rangeFrom, rangeTo),
           apiClient.stateSpans.getStateSpans(undefined, undefined, rangeFrom, rangeTo),
           apiClient.stateSpans.getOverrides(rangeFrom, rangeTo),
           apiClient.stateSpans.getActivities(rangeFrom, rangeTo),
         ]);
 
       const pumpModeSpans = pumpModeRes?.data ?? [];
-      const profileSpans = profileRes?.data ?? [];
+      const profileActivations = profileRes ?? [];
       const tempBasalSpans = tempBasalRes?.data ?? [];
       const overrideSpans = overrideRes?.data ?? [];
       const activitySpans = activityRes?.data ?? [];
@@ -266,11 +304,10 @@ export const getTimeSpansData = query(
           endTime,
           getPumpModeColor
         ),
-        profileSpans: processSpans(
-          profileSpans,
+        profileSpans: processProfileActivations(
+          profileActivations,
           startTime,
-          endTime,
-          getProfileColor
+          endTime
         ),
         tempBasalSpans: processBasalSpans(
           tempBasalSpans,

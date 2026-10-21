@@ -61,6 +61,7 @@ public class DirectGrantControllerTests : IDisposable
             SubjectId = _subjectId,
             Permissions = ["*"],
         };
+        httpContext.Items["GrantedScopes"] = new HashSet<string> { Scope.FullAccess };
 
         var auditService = new AuthAuditService(
             _dbContext.AsFactory(),
@@ -216,6 +217,39 @@ public class DirectGrantControllerTests : IDisposable
             Assert.IsType<OkObjectResult>(result.Result).Value);
         var grant = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == response.Id);
         Assert.True(grant.LimitTo24Hours);
+    }
+
+    [Theory]
+    [InlineData("*")]
+    [InlineData("treatments.readwrite")]
+    [InlineData("health.read")]
+    public async Task Create_BeyondTheCallersOwnScopes_IsRefusedAndMintsNothing(string scope)
+    {
+        _controller.HttpContext.Items["GrantedScopes"] = new HashSet<string> { Scope.GlucoseRead };
+
+        var result = await _controller.Create(new CreateDirectGrantRequest
+        {
+            Label = "Wider than its maker",
+            Scopes = [scope],
+        });
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, problem.StatusCode);
+        Assert.False(await _dbContext.OAuthGrants.AnyAsync());
+    }
+
+    [Fact]
+    public async Task Create_WithinTheCallersOwnScopes_Succeeds()
+    {
+        _controller.HttpContext.Items["GrantedScopes"] = new HashSet<string> { Scope.GlucoseRead };
+
+        var result = await _controller.Create(new CreateDirectGrantRequest
+        {
+            Label = "Follower",
+            Scopes = [Scope.GlucoseRead],
+        });
+
+        Assert.IsType<OkObjectResult>(result.Result);
     }
 
     [Fact]

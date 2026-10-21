@@ -25,8 +25,9 @@
 
   const { visible = true }: Props = $props();
 
-  // Manual DND is tenant-wide — it suppresses delivery of every non-critical
-  // alert for every member — so the server gates it on alerts.readwrite.
+  // Manual DND is tenant-wide: it silences every rule that is neither critical
+  // nor allowed through DND, for every member. The server gates it on
+  // alerts.readwrite.
   const canSetDnd = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite"),
   );

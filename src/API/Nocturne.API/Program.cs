@@ -222,10 +222,11 @@ builder.Services.AddMigrationServices();
 
 
 // Configure JWT authentication - derive signing key from instance key
-var secretKey =
-    builder.Configuration[$"Parameters:{ServiceNames.Parameters.InstanceKey}"]
-    ?? builder.Configuration[ServiceNames.ConfigKeys.InstanceKey]
-    ?? (isTesting ? "test-instance-key-for-unit-tests-minimum-length" : throw new InvalidOperationException("Instance key must be configured for JWT signing. Set Parameters:instance-key or INSTANCE_KEY."));
+var secretKey = isTesting
+    ? InstanceKeyDigest.ResolveKey(builder.Configuration) is { Length: > 0 } configuredKey
+        ? configuredKey
+        : "test-instance-key-for-unit-tests-minimum-length"
+    : InstanceKeyDigest.RequireKey(builder.Configuration);
 var key = Encoding.UTF8.GetBytes(secretKey);
 
 builder
@@ -340,6 +341,7 @@ else
 }
 
 // Configure middleware pipeline
+app.UseSecurityHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 // Documentation paths get the any-origin policy, foreign origins on the legacy API get

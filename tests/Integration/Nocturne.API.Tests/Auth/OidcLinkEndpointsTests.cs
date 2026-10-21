@@ -25,6 +25,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
     /// Format: {name}-{hex_digest} (Nightscout legacy access token format).
     /// </summary>
     private const string TestAccessToken = "oidctest-a1b2c3d4e5f6g7h8";
+    private Guid _seededSubjectId;
 
     private Guid _tenantId;
 
@@ -66,7 +67,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
         var subjectId = await SeedSubjectWithAccessTokenAsync();
         await SeedPasskeyAsync(subjectId);
 
-        using var client = CreateAccessTokenClient();
+        using var client = await CreateSessionClientAsync();
 
         // Act
         var response = await client.GetAsync("/api/auth/oidc/link/identities");
@@ -90,7 +91,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
         var identityId = await SeedOidcIdentityAsync(
             subjectId, providerId, "ext-user-123", "https://idp.example.com", "user@example.com");
 
-        using var client = CreateAccessTokenClient();
+        using var client = await CreateSessionClientAsync();
 
         // Act
         var response = await client.GetAsync("/api/auth/oidc/link/identities");
@@ -130,7 +131,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
     {
         // Arrange
         await SeedPasskeyAsync(await SeedSubjectWithAccessTokenAsync());
-        using var client = CreateAccessTokenClient();
+        using var client = await CreateSessionClientAsync();
 
         // Act - delete a nonexistent identity
         var response = await client.DeleteAsync(
@@ -149,7 +150,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
         var identityId = await SeedOidcIdentityAsync(
             subjectId, providerId, "solo-user-1", "https://solo.example.com", "solo@example.com");
 
-        using var client = CreateAccessTokenClient();
+        using var client = await CreateSessionClientAsync();
 
         // Act
         var response = await client.DeleteAsync(
@@ -174,7 +175,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
             subjectId, providerId, "multi-user-1", "https://multi.example.com", "multi@example.com");
         await SeedPasskeyAsync(subjectId);
 
-        using var client = CreateAccessTokenClient();
+        using var client = await CreateSessionClientAsync();
 
         // Act
         var response = await client.DeleteAsync(
@@ -192,13 +193,13 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
     /// Creates an HttpClient that authenticates via the test access token.
     /// This resolves to a real SubjectId, which the OIDC link endpoints require.
     /// </summary>
-    private HttpClient CreateAccessTokenClient()
-    {
-        var client = Fixture.CreateHttpClient("nocturne-api", "http");
-        client.DefaultRequestHeaders.Add("api-secret", TestApiSecret);
-        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {TestAccessToken}");
-        return client;
-    }
+    /// <summary>
+    /// A client signed in as the subject <see cref="SeedSubjectWithAccessTokenAsync"/> last seeded:
+    /// linking and unlinking a sign-in method takes the person's own session.
+    /// </summary>
+    private async Task<HttpClient> CreateSessionClientAsync() =>
+        AuthTestHelpers.CreateBearerClient(
+            Fixture, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, _seededSubjectId));
 
     /// <summary>
     /// Resolves the test tenant ID from the database.
@@ -218,7 +219,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
     /// </summary>
     private async Task<Guid> SeedSubjectWithAccessTokenAsync()
     {
-        var subjectId = Guid.CreateVersion7();
+        var subjectId = _seededSubjectId = Guid.CreateVersion7();
         var tokenHash = HashUtils.Sha256Hex(TestAccessToken);
 
         var connStr = await GetPostgresConnectionStringAsync();

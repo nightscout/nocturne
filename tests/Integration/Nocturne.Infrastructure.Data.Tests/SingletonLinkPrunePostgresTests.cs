@@ -92,7 +92,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
         await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
         var prune = service.PruneSingletonLinksAsync(100, 1);
-        await Task.Delay(500);
+        await PostgresLockWaits.UntilBlockedAsync(fx.AppConnectionString, prune);
         prune.IsCompleted.Should().BeFalse("the dedup write lock is held");
 
         release.SetResult();

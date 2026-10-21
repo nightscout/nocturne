@@ -90,11 +90,14 @@ public interface IFoodRepository
     Task<bool> DeleteFoodAsync(string id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Bulk delete food entries using query filters
+    /// Deletes the food entries a legacy <c>find</c> selects.
     /// </summary>
-    /// <param name="findQuery">Query filter for food entries to delete</param>
+    /// <param name="find">The find, in either wire form. It must carry a condition.</param>
+    /// <exception cref="ArgumentException">
+    /// The find has no condition, or names a field or operator the food collection cannot filter on.
+    /// </exception>
     /// <returns>Number of food entries deleted</returns>
-    Task<long> BulkDeleteFoodAsync(string findQuery, CancellationToken cancellationToken = default);
+    Task<long> BulkDeleteFoodAsync(string? find, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Count food entries with optional filtering

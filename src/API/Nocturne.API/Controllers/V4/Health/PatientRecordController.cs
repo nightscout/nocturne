@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -49,6 +50,7 @@ public class PatientRecordController : ControllerBase
     private readonly ISensorSessionInferenceRunner _sessionInference;
     private readonly IDeviceTrackerProvisioner _trackerProvisioner;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly ITenantCache _tenantCache;
     private readonly ILogger<PatientRecordController> _logger;
 
     public PatientRecordController(
@@ -61,6 +63,7 @@ public class PatientRecordController : ControllerBase
         ISensorSessionInferenceRunner sessionInference,
         IDeviceTrackerProvisioner trackerProvisioner,
         ITenantAccessor tenantAccessor,
+        ITenantCache tenantCache,
         ILogger<PatientRecordController> logger)
     {
         _recordRepo = recordRepo;
@@ -72,6 +75,7 @@ public class PatientRecordController : ControllerBase
         _sessionInference = sessionInference;
         _trackerProvisioner = trackerProvisioner;
         _tenantAccessor = tenantAccessor;
+        _tenantCache = tenantCache;
         _logger = logger;
     }
 
@@ -103,7 +107,10 @@ public class PatientRecordController : ControllerBase
         [FromBody] PatientRecord model,
         CancellationToken cancellationToken = default)
     {
+        var storedTimezone = (await _recordRepo.GetAsync(cancellationToken))?.Timezone;
         var updated = await _recordRepo.UpdateAsync(model, WriteOrigin.Live, cancellationToken);
+        if (!string.Equals(storedTimezone, updated.Timezone, StringComparison.Ordinal))
+            await _tenantCache.RemoveFamilyAsync(TenantCacheFamily.EHbA1c, cancellationToken);
         return Ok(updated);
     }
 

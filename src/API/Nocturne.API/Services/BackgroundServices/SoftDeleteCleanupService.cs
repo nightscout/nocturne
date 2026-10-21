@@ -58,28 +58,22 @@ public class SoftDeleteCleanupService(
     /// </summary>
     internal async Task PurgeExpiredRecordsAsync(CancellationToken ct)
     {
-        await using var configContext = await contextFactory.CreatePlatformAsync(ct);
-
-        // Get per-tenant retention config
-        var configs = await configContext.TenantDataRetentionConfig
-            .IgnoreQueryFilters()
-            .Select(c => new { c.TenantId, c.SoftDeleteRetentionDays })
-            .ToListAsync(ct);
-
-        // Also get all tenants that might have soft-deleted records but no config
-        var allTenantIds = await configContext.Tenants
-            .Select(t => t.Id)
-            .ToListAsync(ct);
-
-        var configMap = configs.ToDictionary(c => c.TenantId, c => c.SoftDeleteRetentionDays);
-        var tables = SoftDeletableTables(configContext.Model);
+        List<Guid> allTenantIds;
+        IReadOnlyList<string> tables;
+        await using (var platform = await contextFactory.CreatePlatformAsync(ct))
+        {
+            allTenantIds = await platform.Tenants
+                .Select(t => t.Id)
+                .ToListAsync(ct);
+            tables = SoftDeletableTables(platform.Model);
+        }
 
         foreach (var tenantId in allTenantIds)
         {
             try
             {
                 var retentionDays = SoftDeleteRetentionPolicy.ResolveDays(
-                    configMap.GetValueOrDefault(tenantId), configuration);
+                    await ReadConfiguredDaysAsync(tenantId, ct), configuration);
                 var minAge = TimeSpan.FromDays(retentionDays);
 
                 var totalDeleted = 0;
@@ -107,6 +101,14 @@ public class SoftDeleteCleanupService(
                     tenantId);
             }
         }
+    }
+
+    private async Task<int?> ReadConfiguredDaysAsync(Guid tenantId, CancellationToken ct)
+    {
+        await using var db = await contextFactory.CreateForTenantAsync(tenantId, ct);
+        return await db.TenantDataRetentionConfig
+            .Select(c => c.SoftDeleteRetentionDays)
+            .FirstOrDefaultAsync(ct);
     }
 
     /// <summary>

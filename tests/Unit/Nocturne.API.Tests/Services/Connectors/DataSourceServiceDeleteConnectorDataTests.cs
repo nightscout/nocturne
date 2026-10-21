@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -79,13 +80,15 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         _auditContext,
         _connectorConfig.Object,
         decomposer ?? CreateDecomposer(context, Mock.Of<IProfileDecomposer>()),
+        Nocturne.API.Tests.Infrastructure.ProfileActivationTestDeps.Writer(context),
         NullLogger<DataSourceService>.Instance);
 
     private TreatmentDecomposer CreateDecomposer(NocturneDbContext context, IProfileDecomposer profiles) => new(
         context.AsFactory(),
         Mock.Of<IBolusRepository>(), Mock.Of<ITempBasalRepository>(), Mock.Of<ICarbIntakeRepository>(),
         Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
-        Mock.Of<IBolusCalculationRepository>(), Mock.Of<IStateSpanService>(), Mock.Of<ITreatmentFoodService>(),
+        Mock.Of<IBolusCalculationRepository>(), Mock.Of<IStateSpanService>(),
+        ProfileActivationTestDeps.Repository(context), ProfileActivationTestDeps.Writer(context), Mock.Of<ITreatmentFoodService>(),
         Mock.Of<IDeviceService>(), Mock.Of<IPatientDeviceStamper>(), profiles, Mock.Of<IActiveProfileResolver>(),
         Mock.Of<IPatientInsulinRepository>(), _auditContext, NullLogger<TreatmentDecomposer>.Instance);
 
@@ -220,19 +223,18 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
     public async Task DeleteConnectorData_DeletesTheProfileRowsOfTheSourcesProfileSwitchesOnly()
     {
         const string storeName = "Weekend@@@@@1672567200000";
-        const string metadata = """{"profileName":"Weekend","profileJson":"{}","utcOffset":0}""";
         await using (var seed = NewContext())
         {
-            seed.StateSpans.AddRange(
-                new StateSpanEntity
+            seed.ProfileActivations.AddRange(
+                new ProfileActivationEntity
                 {
-                    Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = "ps-1", Source = _deviceId,
-                    Category = "Profile", State = "Active", StartTimestamp = DateTime.UtcNow, MetadataJson = metadata,
+                    Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "ps-1", DataSource = _deviceId,
+                    Timestamp = DateTime.UtcNow, Phase = "Requested", Origin = "Uploader", BaseProfileName = "Weekend",
                 },
-                new StateSpanEntity
+                new ProfileActivationEntity
                 {
-                    Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = "ps-2", Source = "loop",
-                    Category = "Profile", State = "Active", StartTimestamp = DateTime.UtcNow, MetadataJson = metadata,
+                    Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "ps-2", DataSource = "loop",
+                    Timestamp = DateTime.UtcNow, Phase = "Requested", Origin = "Uploader", BaseProfileName = "Weekend",
                 });
             await seed.SaveChangesAsync();
         }
@@ -247,8 +249,8 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
                 new SensitivityScheduleRepository(factory, _auditContext, NullLogger<SensitivityScheduleRepository>.Instance),
                 new TargetRangeScheduleRepository(factory, _auditContext, NullLogger<TargetRangeScheduleRepository>.Instance),
                 NullLogger<ProfileDecomposer>.Instance);
-            await profiles.DecomposeProfileSwitchAsync(ProfileDocument("ps-1", storeName), WriteOrigin.Live);
-            await profiles.DecomposeProfileSwitchAsync(ProfileDocument("ps-2", storeName), WriteOrigin.Live);
+            await profiles.DecomposeAsync(ProfileDocument("ps-1", storeName), WriteOrigin.Live);
+            await profiles.DecomposeAsync(ProfileDocument("ps-2", storeName), WriteOrigin.Live);
 
             (await CreateService(ctx, CreateDecomposer(ctx, profiles)).DeleteConnectorDataAsync(ConnectorId))
                 .Success.Should().BeTrue();
@@ -265,7 +267,8 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             .And.AllSatisfy(r => r.DeletedAt.Should().NotBeNull());
         snapshots.Where(r => r.LegacyId == $"ps-2:{storeName}").Should().HaveCount(5)
             .And.AllSatisfy(r => r.DeletedAt.Should().BeNull());
-        (await db.StateSpans.IgnoreQueryFilters().SingleAsync(s => s.OriginalId == "ps-1")).DeletedAt.Should().NotBeNull();
+        (await db.ProfileActivations.IgnoreQueryFilters().SingleAsync(a => a.LegacyId == "ps-1")).DeletedAt.Should().NotBeNull();
+        (await db.ProfileActivations.IgnoreQueryFilters().SingleAsync(a => a.LegacyId == "ps-2")).DeletedAt.Should().BeNull();
     }
 
     [Fact]

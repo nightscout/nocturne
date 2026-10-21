@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -214,33 +213,6 @@ public class AlertsController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
-    /// Who to record as having acknowledged an alert.
-    /// </summary>
-    /// <remarks>
-    /// Taken from the authenticated principal, not from the request. The web app
-    /// used to send a fixed "web_user", which made "who silenced the 3am low?"
-    /// unanswerable on a tenant with more than one caregiver — and any caller
-    /// could have claimed to be anyone. The request field is honoured only for
-    /// callers with no name claim at all (a machine token), where it is the only
-    /// information available.
-    /// </remarks>
-    private string ResolveAcknowledger(AcknowledgeRequest request)
-    {
-        var name = User.FindFirstValue(ClaimTypes.Name);
-        if (!string.IsNullOrWhiteSpace(name))
-            return name;
-
-        var subjectId = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub");
-        if (!string.IsNullOrWhiteSpace(subjectId))
-            return subjectId;
-
-        return string.IsNullOrWhiteSpace(request.AcknowledgedBy)
-            ? "unknown"
-            : request.AcknowledgedBy;
-    }
-
     /// <inheritdoc cref="IAlertAcknowledgementService.AcknowledgeAllAsync"/>
     [HttpPost("acknowledge")]
     [RequireScope(Scope.AlertsReadWrite)]
@@ -253,7 +225,7 @@ public class AlertsController : ControllerBase
 
         await _acknowledgementService.AcknowledgeAllAsync(
             tenantId,
-            ResolveAcknowledger(request),
+            User.ResolveAcknowledger(request.AcknowledgedBy),
             ct);
 
         return NoContent();
@@ -297,7 +269,7 @@ public class AlertsController : ControllerBase
         var outcome = await _acknowledgementService.AcknowledgeExcursionAsync(
             tenantId,
             excursionId,
-            ResolveAcknowledger(request),
+            User.ResolveAcknowledger(request.AcknowledgedBy),
             HttpContext.GetAlertAcknowledgementAuthority(),
             broadcast: true,
             ct);

@@ -47,6 +47,7 @@ public class TreatmentsSaveFailedUpdateTests
             Mock.Of<INoteRepository>(),
             Mock.Of<IDeviceEventRepository>(),
             Mock.Of<IBolusCalculationRepository>(),
+            Mock.Of<IProfileActivationRepository>(),
             Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
 

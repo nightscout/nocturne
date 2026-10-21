@@ -12,86 +12,78 @@ namespace Nocturne.API.Services.V4;
 /// <c>originalProfileName</c> (<c>TreatmentMapper.kt</c> in AAPS core/nssdk), and so does this.
 /// </summary>
 /// <remarks>
-/// It decomposes into a Profile span rather than a Note, and that span is read back as the Note
-/// document it was uploaded as (<see cref="LegacyTreatmentTables.StateSpanTables"/>). The span names
-/// the base profile with its percentage and timeshift, as a Profile Switch span does, since its
-/// <c>profileJson</c> already has them applied. It ends whatever span of its source was still
-/// running when it took effect, so the Profile Switch it confirms and the effective switch it
-/// becomes do not both stand over the same time.
+/// It decomposes into an effective <see cref="Core.Models.V4.ProfileActivation"/> rather than a
+/// Note, read back as the Note document it was uploaded as (<see cref="LegacyProfileActivationTable"/>).
+/// The activation names the base profile with its percentage and timeshift, as a Profile Switch's
+/// does, and keeps the effective <c>profileJson</c>, which already has them applied, as its snapshot.
 /// </remarks>
 internal static class EffectiveProfileSwitch
 {
     internal const string NoteEventType = "Note";
-
-    internal const string OriginalProfileNameKey = "originalProfileName";
-    internal const string OriginalCustomizedNameKey = "originalCustomizedName";
-    internal const string OriginalTimeshiftKey = "originalTimeshift";
-    internal const string OriginalPercentageKey = "originalPercentage";
-    internal const string OriginalDurationKey = "originalDuration";
-    internal const string OriginalEndKey = "originalEnd";
-
-    private const double MillisPerHour = 3_600_000;
 
     /// <summary>Whether <paramref name="treatment"/> is an AAPS effective profile switch.</summary>
     internal static bool Is(Treatment treatment) =>
         string.Equals(treatment.EventType?.Trim(), NoteEventType, StringComparison.OrdinalIgnoreCase)
         && !string.IsNullOrEmpty(treatment.OriginalProfileName);
 
-    /// <summary>Whether a Profile span's metadata is that of an effective profile switch.</summary>
-    internal static bool IsSpan(IDictionary<string, object>? metadata) =>
-        metadata.TryReadString(LegacyTreatmentTables.UploadedEventTypeKey) is not null;
-
     /// <summary>
-    /// The span metadata of an effective profile switch: what the active-profile resolver reads, and
-    /// every uploaded field the Note document is read back with.
+    /// The span metadata of an effective profile switch, which
+    /// <see cref="ProfileActivations.ProfileActivationLegacyFields.FromSpanMetadata"/> converts: the
+    /// activation's fields, and every uploaded field the Note document is read back with.
     /// </summary>
     internal static Dictionary<string, object> Metadata(Treatment treatment)
     {
         var metadata = new Dictionary<string, object>
         {
-            [LegacyTreatmentTables.UploadedEventTypeKey] = treatment.EventType!,
-            [StateSpanMetadataExtensions.ProfileNameKey] = treatment.OriginalCustomizedName ?? treatment.OriginalProfileName!,
-            [OriginalProfileNameKey] = treatment.OriginalProfileName!,
+            [ProfileSpanMetadata.EventTypeKey] = treatment.EventType!,
+            [ProfileSpanMetadata.ProfileNameKey] = treatment.OriginalCustomizedName ?? treatment.OriginalProfileName!,
+            [ProfileSpanMetadata.OriginalProfileNameKey] = treatment.OriginalProfileName!,
         };
 
         if (!string.IsNullOrEmpty(treatment.OriginalCustomizedName))
-            metadata[OriginalCustomizedNameKey] = treatment.OriginalCustomizedName;
+            metadata[ProfileSpanMetadata.OriginalCustomizedNameKey] = treatment.OriginalCustomizedName;
 
         if (treatment.OriginalPercentage is { } percentage)
         {
-            metadata[OriginalPercentageKey] = percentage;
-            metadata["percentage"] = percentage;
+            metadata[ProfileSpanMetadata.OriginalPercentageKey] = percentage;
+            metadata[ProfileSpanMetadata.PercentageKey] = percentage;
         }
 
         if (treatment.OriginalTimeshift is { } timeshiftMs)
         {
-            metadata[OriginalTimeshiftKey] = timeshiftMs;
-            metadata["timeshift"] = Math.Round(timeshiftMs / MillisPerHour, 4);
+            metadata[ProfileSpanMetadata.OriginalTimeshiftKey] = timeshiftMs;
+            metadata[ProfileSpanMetadata.TimeshiftKey] =
+                ProfileSpanMetadata.ToHours(timeshiftMs, ProfileTimeshiftUnit.Milliseconds);
         }
 
         if (treatment.OriginalDuration is { } duration)
-            metadata[OriginalDurationKey] = duration;
+            metadata[ProfileSpanMetadata.OriginalDurationKey] = duration;
 
         if (treatment.OriginalEnd is { } end)
-            metadata[OriginalEndKey] = end;
+            metadata[ProfileSpanMetadata.OriginalEndKey] = end;
 
         if (!string.IsNullOrEmpty(treatment.ProfileJson))
-            metadata["profileJson"] = treatment.ProfileJson;
+            metadata[ProfileSpanMetadata.ProfileJsonKey] = treatment.ProfileJson;
 
         return metadata;
     }
 
-    /// <summary>The Note document an effective profile switch span was uploaded as.</summary>
-    internal static Treatment Project(IDictionary<string, object>? metadata) =>
+    /// <summary>The Note document an effective profile switch was uploaded as.</summary>
+    /// <remarks>
+    /// AAPS drops an effective switch read back without any one of its <c>original*</c> fields
+    /// (<c>TreatmentMapper.kt</c> in AAPS core/nssdk), so each is served, defaulted to an unchanged
+    /// permanent switch of the named profile when the upload left it out.
+    /// </remarks>
+    internal static Treatment Project(ProfileSpanMetadata span, long startMills) =>
         new()
         {
-            EventType = metadata.TryReadString(LegacyTreatmentTables.UploadedEventTypeKey),
-            ProfileJson = metadata.TryReadString("profileJson"),
-            OriginalProfileName = metadata.TryReadString(OriginalProfileNameKey),
-            OriginalCustomizedName = metadata.TryReadString(OriginalCustomizedNameKey),
-            OriginalPercentage = (int?)metadata.TryReadDecimal(OriginalPercentageKey),
-            OriginalTimeshift = (int?)metadata.TryReadDecimal(OriginalTimeshiftKey),
-            OriginalDuration = (int?)metadata.TryReadDecimal(OriginalDurationKey),
-            OriginalEnd = (long?)metadata.TryReadDecimal(OriginalEndKey),
+            EventType = span.EventType,
+            ProfileJson = span.ProfileJson,
+            OriginalProfileName = span.OriginalProfileName,
+            OriginalCustomizedName = span.OriginalCustomizedName ?? span.OriginalProfileName,
+            OriginalPercentage = span.OriginalPercentage ?? 100,
+            OriginalTimeshift = (int)(span.OriginalTimeshift ?? 0),
+            OriginalDuration = (int)(span.OriginalDuration ?? 0),
+            OriginalEnd = span.OriginalEnd ?? startMills,
         };
 }

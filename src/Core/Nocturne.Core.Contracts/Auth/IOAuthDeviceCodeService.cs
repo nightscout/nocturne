@@ -28,10 +28,15 @@ public interface IOAuthDeviceCodeService
     /// </summary>
     /// <param name="userCode">The code the user typed.</param>
     /// <param name="subjectId">The approving subject.</param>
+    /// <param name="approverScopes">
+    /// The approver's resolved scopes. The grant holds the requested scopes the approver could
+    /// delegate (see <c>Scope.CapAt</c>); a request left with none is refused.
+    /// </param>
     /// <param name="limitTo24Hours">Whether the grant may read only the last 24 hours.</param>
     Task<bool> ApproveDeviceCodeAsync(
         string userCode,
         Guid subjectId,
+        IReadOnlySet<string> approverScopes,
         bool limitTo24Hours = false,
         CancellationToken ct = default
     );

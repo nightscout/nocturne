@@ -59,6 +59,7 @@ public class DataSourceServiceDeleteDemoDataTests : IDisposable
         Mock.Of<IAuditContext>(),
         _connectorConfig.Object,
         Mock.Of<Nocturne.Core.Contracts.V4.ITreatmentDecomposer>(),
+        Nocturne.API.Tests.Infrastructure.ProfileActivationTestDeps.Writer(context),
         NullLogger<DataSourceService>.Instance);
 
     /// <summary>One already-soft-deleted demo record of every type the purge covers.</summary>

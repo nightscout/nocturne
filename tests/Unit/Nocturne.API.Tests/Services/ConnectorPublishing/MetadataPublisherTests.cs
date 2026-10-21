@@ -1,4 +1,6 @@
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.API.Services.ProfileActivations;
+using Nocturne.API.Services.Caching;
 using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -75,6 +77,8 @@ public class MetadataPublisherTests
             _mockTenantAccessor.Object,
             new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
                 .UseInMemoryDatabase($"metadata-publisher-{Guid.NewGuid():N}").Options).AsFactory(),
+            Mock.Of<IProfileActivationRepository>(),
+            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>()),
             Mock.Of<IAuditContext>(),
             new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance

@@ -44,6 +44,7 @@ internal static class DemoDataPurge
         deleted += await db.DeviceEvents.PurgeAsync(SourceFilter.For<DeviceEventEntity>(DataSources.DemoService), ct);
         deleted += await db.BolusCalculations.PurgeAsync(SourceFilter.For<BolusCalculationEntity>(DataSources.DemoService), ct);
         deleted += await db.TempBasals.PurgeAsync(SourceFilter.For<TempBasalEntity>(DataSources.DemoService), ct);
+        deleted += await db.ProfileActivations.PurgeAsync(SourceFilter.For<ProfileActivationEntity>(DataSources.DemoService), ct);
         var demoAcceptedSpanIds = (await db.StateSpans
                 .Where(s => s.Source == "compression-low-detection" && s.MetadataJson != null)
                 .Select(s => new { s.Id, s.MetadataJson })

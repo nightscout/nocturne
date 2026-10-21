@@ -30,16 +30,17 @@ public class NocturneRemoteBackgroundSyncAuthTests
     /// <summary>
     ///     Returns the right empty-collection JSON based on the request path so that both
     ///     paginated V4 endpoints (expect PaginatedResponse&lt;T&gt;) and array endpoints
-    ///     (DeviceStatus v1, Food v4) can deserialize successfully.
+    ///     (DeviceStatus v1, Food v4, profile activations) can deserialize successfully.
     /// </summary>
     private static HttpMessageHandler RespondOkJson() =>
         new FuncHandler(request =>
         {
             var path = request.RequestUri?.AbsolutePath ?? "";
 
-            // v1 DeviceStatus and v4 Foods return a flat JSON array; everything else is paginated
+            // v1 DeviceStatus, v4 Foods and profile activations return a flat JSON array; everything else is paginated
             var isArrayEndpoint = path.StartsWith("/api/v1/", StringComparison.OrdinalIgnoreCase)
-                || path.Equals("/api/v4/foods", StringComparison.OrdinalIgnoreCase);
+                || path.Equals("/api/v4/foods", StringComparison.OrdinalIgnoreCase)
+                || path.Equals("/api/v4/profile/activations", StringComparison.OrdinalIgnoreCase);
 
             var json = isArrayEndpoint
                 ? "[]"

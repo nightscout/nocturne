@@ -10,6 +10,7 @@ namespace Nocturne.API.Services.Alerts.Providers;
 /// </summary>
 internal sealed class HomeAssistantProvider(
     IHubContext<HomeAssistantHub> hubContext,
+    HomeAssistantConnections connections,
     ILogger<HomeAssistantProvider> logger)
 {
     /// <summary>
@@ -20,7 +21,7 @@ internal sealed class HomeAssistantProvider(
     /// </summary>
     public async Task<bool> SendAsync(Guid tenantId, string destination, AlertPayload payload, CancellationToken ct)
     {
-        if (!HomeAssistantHub.IsInstanceConnected(tenantId.ToString(), destination))
+        if (!connections.IsConnected(tenantId, destination))
         {
             logger.LogDebug("HA instance {Destination} not connected, skipping dispatch", destination);
             return false;

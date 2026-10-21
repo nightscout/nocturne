@@ -3,17 +3,17 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.Connectors.Glooko.Mappers;
 using Nocturne.Connectors.Glooko.Models;
-using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Mappers;
 
-public class GlookoProfileMapperStateSpanTests
+public class GlookoProfileMapperActivationTests
 {
     private const string ConnectorSource = "glooko-connector";
     private readonly GlookoProfileMapper _mapper;
 
-    public GlookoProfileMapperStateSpanTests()
+    public GlookoProfileMapperActivationTests()
     {
         _mapper = new GlookoProfileMapper(ConnectorSource, Mock.Of<ILogger>());
     }
@@ -46,28 +46,27 @@ public class GlookoProfileMapperStateSpanTests
     }
 
     [Fact]
-    public void TransformDeviceSettingsToStateSpans_SingleSnapshotWithProgram_EmitsOpenEndedSpan()
+    public void TransformDeviceSettingsToProfileActivations_SingleSnapshotWithProgram_EmitsOpenEndedActivation()
     {
         var response = Build(
             ("device-1", [("2026-04-01T10:00:00Z", "A")])
         );
 
-        var spans = _mapper.TransformDeviceSettingsToStateSpans(response);
+        var spans = _mapper.TransformDeviceSettingsToProfileActivations(response);
 
         spans.Should().HaveCount(1);
         var span = spans[0];
-        span.Category.Should().Be(StateSpanCategory.Profile);
-        span.State.Should().Be(ProfileState.Active.ToString());
-        span.Source.Should().Be(ConnectorSource);
+        span.Phase.Should().Be(ProfileActivationPhase.Effective);
+        span.Origin.Should().Be(ProfileActivationOrigin.Connector);
+        span.DataSource.Should().Be(ConnectorSource);
         span.StartTimestamp.Should().Be(new DateTime(2026, 4, 1, 10, 0, 0, DateTimeKind.Utc));
         span.EndTimestamp.Should().BeNull();
-        span.Metadata.Should().ContainKey("profileName")
-            .WhoseValue.Should().Be("A");
-        span.OriginalId.Should().NotBeNullOrWhiteSpace();
+        span.BaseProfileName.Should().Be("A");
+        span.SyncIdentifier.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
-    public void TransformDeviceSettingsToStateSpans_MultipleSnapshots_EmitsAbuttingSpansWithLastOpenEnded()
+    public void TransformDeviceSettingsToProfileActivations_MultipleSnapshots_EmitsAbuttingActivationsWithLastOpenEnded()
     {
         var response = Build(
             ("device-1",
@@ -78,7 +77,7 @@ public class GlookoProfileMapperStateSpanTests
             ])
         );
 
-        var spans = _mapper.TransformDeviceSettingsToStateSpans(response)
+        var spans = _mapper.TransformDeviceSettingsToProfileActivations(response)
             .OrderBy(s => s.StartTimestamp)
             .ToList();
 
@@ -86,19 +85,19 @@ public class GlookoProfileMapperStateSpanTests
 
         spans[0].StartTimestamp.Should().Be(new DateTime(2026, 4, 1, 10, 0, 0, DateTimeKind.Utc));
         spans[0].EndTimestamp.Should().Be(new DateTime(2026, 4, 2, 10, 0, 0, DateTimeKind.Utc));
-        spans[0].Metadata!["profileName"].Should().Be("A");
+        spans[0].BaseProfileName.Should().Be("A");
 
         spans[1].StartTimestamp.Should().Be(new DateTime(2026, 4, 2, 10, 0, 0, DateTimeKind.Utc));
         spans[1].EndTimestamp.Should().Be(new DateTime(2026, 4, 3, 10, 0, 0, DateTimeKind.Utc));
-        spans[1].Metadata!["profileName"].Should().Be("B");
+        spans[1].BaseProfileName.Should().Be("B");
 
         spans[2].StartTimestamp.Should().Be(new DateTime(2026, 4, 3, 10, 0, 0, DateTimeKind.Utc));
         spans[2].EndTimestamp.Should().BeNull();
-        spans[2].Metadata!["profileName"].Should().Be("A");
+        spans[2].BaseProfileName.Should().Be("A");
     }
 
     [Fact]
-    public void TransformDeviceSettingsToStateSpans_SnapshotsArrivingOutOfOrder_AreSortedChronologically()
+    public void TransformDeviceSettingsToProfileActivations_SnapshotsArrivingOutOfOrder_AreSortedChronologically()
     {
         var response = Build(
             ("device-1",
@@ -109,7 +108,7 @@ public class GlookoProfileMapperStateSpanTests
             ])
         );
 
-        var spans = _mapper.TransformDeviceSettingsToStateSpans(response)
+        var spans = _mapper.TransformDeviceSettingsToProfileActivations(response)
             .OrderBy(s => s.StartTimestamp)
             .ToList();
 
@@ -120,7 +119,7 @@ public class GlookoProfileMapperStateSpanTests
     }
 
     [Fact]
-    public void TransformDeviceSettingsToStateSpans_NullOrEmptyActiveBasalProgram_SkipsSpan()
+    public void TransformDeviceSettingsToProfileActivations_NullOrEmptyActiveBasalProgram_SkipsActivation()
     {
         var response = Build(
             ("device-1",
@@ -131,16 +130,16 @@ public class GlookoProfileMapperStateSpanTests
             ])
         );
 
-        var spans = _mapper.TransformDeviceSettingsToStateSpans(response);
+        var spans = _mapper.TransformDeviceSettingsToProfileActivations(response);
 
         spans.Should().HaveCount(1);
-        spans[0].Metadata!["profileName"].Should().Be("A");
+        spans[0].BaseProfileName.Should().Be("A");
         spans[0].EndTimestamp.Should().Be(new DateTime(2026, 4, 2, 10, 0, 0, DateTimeKind.Utc),
-            because: "the next snapshot's timestamp closes the prior span even when its program is null");
+            because: "the next snapshot's timestamp ends the prior activation even when its program is null");
     }
 
     [Fact]
-    public void TransformDeviceSettingsToStateSpans_MultipleDevices_EmitsIndependentSpansPerDevice()
+    public void TransformDeviceSettingsToProfileActivations_MultipleDevices_EmitsIndependentActivationsPerDevice()
     {
         var response = Build(
             ("device-1",
@@ -154,22 +153,22 @@ public class GlookoProfileMapperStateSpanTests
             ])
         );
 
-        var spans = _mapper.TransformDeviceSettingsToStateSpans(response);
+        var spans = _mapper.TransformDeviceSettingsToProfileActivations(response);
 
         spans.Should().HaveCount(3);
 
-        var device1Spans = spans.Where(s => s.OriginalId!.Contains("device-1")).ToList();
+        var device1Spans = spans.Where(s => s.SyncIdentifier!.Contains("device-1")).ToList();
         device1Spans.Should().HaveCount(2);
-        device1Spans.Select(s => s.Metadata!["profileName"]).Should().BeEquivalentTo(new object[] { "A", "B" });
+        device1Spans.Select(s => s.BaseProfileName).Should().BeEquivalentTo("A", "B");
 
-        var device2Spans = spans.Where(s => s.OriginalId!.Contains("device-2")).ToList();
+        var device2Spans = spans.Where(s => s.SyncIdentifier!.Contains("device-2")).ToList();
         device2Spans.Should().HaveCount(1);
-        device2Spans[0].Metadata!["profileName"].Should().Be("X");
+        device2Spans[0].BaseProfileName.Should().Be("X");
         device2Spans[0].EndTimestamp.Should().BeNull();
     }
 
     [Fact]
-    public void TransformDeviceSettingsToStateSpans_OriginalIdsAreStableAcrossRuns()
+    public void TransformDeviceSettingsToProfileActivations_SyncIdentifiersAreStableAcrossRuns()
     {
         var response = Build(
             ("device-1",
@@ -179,21 +178,21 @@ public class GlookoProfileMapperStateSpanTests
             ])
         );
 
-        var first = _mapper.TransformDeviceSettingsToStateSpans(response)
-            .Select(s => s.OriginalId).OrderBy(id => id).ToList();
-        var second = _mapper.TransformDeviceSettingsToStateSpans(response)
-            .Select(s => s.OriginalId).OrderBy(id => id).ToList();
+        var first = _mapper.TransformDeviceSettingsToProfileActivations(response)
+            .Select(s => s.SyncIdentifier).OrderBy(id => id).ToList();
+        var second = _mapper.TransformDeviceSettingsToProfileActivations(response)
+            .Select(s => s.SyncIdentifier).OrderBy(id => id).ToList();
 
         first.Should().Equal(second);
         first.Should().OnlyHaveUniqueItems();
     }
 
     [Fact]
-    public void TransformDeviceSettingsToStateSpans_NullPumps_ReturnsEmpty()
+    public void TransformDeviceSettingsToProfileActivations_NullPumps_ReturnsEmpty()
     {
         var response = new GlookoV3DeviceSettingsResponse { DeviceSettings = null };
 
-        var spans = _mapper.TransformDeviceSettingsToStateSpans(response);
+        var spans = _mapper.TransformDeviceSettingsToProfileActivations(response);
 
         spans.Should().BeEmpty();
     }

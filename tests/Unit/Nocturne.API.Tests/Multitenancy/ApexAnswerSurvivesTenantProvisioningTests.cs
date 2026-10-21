@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Auth;
 using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -34,6 +35,7 @@ public sealed class ApexAnswerSurvivesTenantProvisioningTests : TenantResolution
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
+        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         NullLogger<TenantService>.Instance);
 
     [Fact]

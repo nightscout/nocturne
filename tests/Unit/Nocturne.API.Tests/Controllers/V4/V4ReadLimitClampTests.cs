@@ -161,7 +161,7 @@ public class V4ReadLimitClampTests
             count, 0, true, It.IsAny<CancellationToken>()), Times.Exactly(ActivityCategoryCount));
 
     /// <summary>The <c>/state-spans</c> sub-routes that pre-filter by a single category.</summary>
-    private const int CategorySubRouteCount = 8;
+    private const int CategorySubRouteCount = 7;
 
     private static async Task InvokeCategorySubRoutes(StateSpansController controller, int limit, int offset)
     {
@@ -169,7 +169,6 @@ public class V4ReadLimitClampTests
         await controller.GetConnectivity(limit: limit, offset: offset);
         await controller.GetOverrides(limit: limit, offset: offset);
         await controller.GetTemporaryTargets(limit: limit, offset: offset);
-        await controller.GetProfiles(limit: limit, offset: offset);
         await controller.GetExercise(limit: limit, offset: offset);
         await controller.GetIllness(limit: limit, offset: offset);
         await controller.GetTravel(limit: limit, offset: offset);

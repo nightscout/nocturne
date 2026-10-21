@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Health;
@@ -57,6 +58,7 @@ internal sealed class DataFetchStage(
     IApsSnapshotRepository apsSnapshotRepository,
     IPumpSnapshotRepository pumpSnapshotRepository,
     IStateSpanRepository stateSpanRepository,
+    IProfileActivationResolver profileActivationResolver,
     ISystemEventRepository systemEventRepository,
     ITrackerRepository trackerRepository,
     IBasalInjectionRepository basalInjectionRepository,
@@ -205,7 +207,6 @@ internal sealed class DataFetchStage(
             var stateSpanCategories = new[]
             {
                 StateSpanCategory.PumpMode,
-                StateSpanCategory.Profile,
                 StateSpanCategory.Override,
                 StateSpanCategory.Exercise,
                 StateSpanCategory.Illness,
@@ -218,6 +219,8 @@ internal sealed class DataFetchStage(
                 MillsToDateTime(endTime),
                 cancellationToken
             );
+
+            var profileSegments = await profileActivationResolver.GetRangeAsync(startTime, endTime, cancellationToken);
 
             var systemEventsResult = await systemEventRepository.GetSystemEventsAsync(
                 eventType: null,
@@ -262,6 +265,7 @@ internal sealed class DataFetchStage(
             return context with
             {
                 StateSpans = stateSpansReadOnly,
+                ProfileSegments = profileSegments,
                 SystemEvents = systemEventsResult?.ToList() ?? [],
                 TrackerDefinitions = trackerDefs?.ToList() ?? [],
                 TrackerInstances = trackerInstances?.ToList() ?? [],

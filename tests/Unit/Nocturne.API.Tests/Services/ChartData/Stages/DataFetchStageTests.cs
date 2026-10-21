@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -32,6 +33,7 @@ public class DataFetchStageTests
     private readonly Mock<IApsSnapshotRepository> _mockApsSnapshotRepo = new();
     private readonly Mock<IPumpSnapshotRepository> _mockPumpSnapshotRepo = new();
     private readonly Mock<IStateSpanRepository> _mockStateSpanRepo;
+    private readonly Mock<IProfileActivationResolver> _mockProfileActivations = new();
     private readonly Mock<ISystemEventRepository> _mockSystemEventRepo;
     private readonly Mock<ITrackerRepository> _mockTrackerRepo;
     private readonly Mock<IBasalInjectionRepository> _mockBasalInjectionRepo = new();
@@ -47,6 +49,9 @@ public class DataFetchStageTests
         _mockTrackerRepo = new Mock<ITrackerRepository>();
 
         SetupDefaultMocks();
+        _mockProfileActivations
+            .Setup(r => r.GetRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
         _stage = new DataFetchStage(
             _mockSensorGlucoseRepo.Object,
@@ -59,6 +64,7 @@ public class DataFetchStageTests
             _mockApsSnapshotRepo.Object,
             _mockPumpSnapshotRepo.Object,
             _mockStateSpanRepo.Object,
+            _mockProfileActivations.Object,
             _mockSystemEventRepo.Object,
             _mockTrackerRepo.Object,
             _mockBasalInjectionRepo.Object,

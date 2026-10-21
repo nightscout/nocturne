@@ -164,23 +164,6 @@ public class StateSpansController : ControllerBase
         => CategoryPage(StateSpanCategory.TemporaryTarget, from, to, limit, offset, sort, cancellationToken);
 
     /// <summary>
-    /// Get profile state spans
-    /// </summary>
-    [HttpGet("profiles")]
-    [RemoteQuery]
-    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-    [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public Task<ActionResult<PaginatedResponse<StateSpan>>> GetProfiles(
-        [FromQuery] DateTime? from = null,
-        [FromQuery] DateTime? to = null,
-        [FromQuery] int limit = 100,
-        [FromQuery] int offset = 0,
-        [FromQuery] string sort = "timestamp_desc",
-        CancellationToken cancellationToken = default)
-        => CategoryPage(StateSpanCategory.Profile, from, to, limit, offset, sort, cancellationToken);
-
-    /// <summary>
     /// Get exercise state spans (user-annotated activity periods)
     /// </summary>
     [HttpGet("exercise")]
@@ -328,13 +311,17 @@ public class StateSpansController : ControllerBase
     [RemoteCommand(Invalidates = [
         nameof(GetStateSpans),
         nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
-        nameof(GetProfiles), nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
+        nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<StateSpan>> CreateStateSpan(
         [FromBody] CreateStateSpanRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (request.Category == StateSpanCategory.Profile)
+            return ProfileSpanRefused();
+
         var missingScope = StateSpanWriteScopeGuard.FindMissingScope(
             HttpContext.GetGrantedScopes(), request.Category);
         if (missingScope is not null)
@@ -362,14 +349,18 @@ public class StateSpansController : ControllerBase
     [RemoteCommand(Invalidates = [
         nameof(GetStateSpans), nameof(GetStateSpan),
         nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
-        nameof(GetProfiles), nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
+        nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<StateSpan>> UpdateStateSpan(
         string id,
         [FromBody] UpdateStateSpanRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (request.Category == StateSpanCategory.Profile)
+            return ProfileSpanRefused();
+
         var existing = await _stateSpanService.GetStateSpanByIdAsync(id, cancellationToken);
         if (existing == null)
             return NotFound();
@@ -408,7 +399,7 @@ public class StateSpansController : ControllerBase
     [RemoteCommand(Invalidates = [
         nameof(GetStateSpans), nameof(GetStateSpan),
         nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
-        nameof(GetProfiles), nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
+        nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DeleteStateSpan(string id, CancellationToken cancellationToken = default)
@@ -441,8 +432,9 @@ public class StateSpansController : ControllerBase
     [RemoteCommand(Invalidates = [
         nameof(GetStateSpans), nameof(GetStateSpan),
         nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
-        nameof(GetProfiles), nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
+        nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -453,6 +445,8 @@ public class StateSpansController : ControllerBase
             return NotFound();
 
         var (rowId, (_, category)) = deleted.Single();
+        if (category == StateSpanCategory.Profile)
+            return ProfileSpanRefused();
 
         var missingScope = StateSpanWriteScopeGuard.FindMissingScope(HttpContext.GetGrantedScopes(), category);
         if (missingScope is not null)
@@ -480,14 +474,17 @@ public class StateSpansController : ControllerBase
     [RemoteCommand(Invalidates = [
         nameof(GetStateSpans), nameof(GetStateSpan),
         nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
-        nameof(GetProfiles), nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
+        nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
     [ProducesResponseType(typeof(StateSpanBulkRestoreResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<StateSpanBulkRestoreResult>> BulkRestoreStateSpans(
         [FromBody] string[] ids, CancellationToken cancellationToken = default)
     {
         var deleted = await _stateSpanService.ResolveDeletedAsync(ids, cancellationToken);
+        if (deleted.Values.Any(d => d.Category == StateSpanCategory.Profile))
+            return ProfileSpanRefused();
         var missingScope = StateSpanWriteScopeGuard.FindMissingScope(
             HttpContext.GetGrantedScopes(), deleted.Values.Select(d => d.Category).Distinct().ToArray());
         if (missingScope is not null)
@@ -500,6 +497,15 @@ public class StateSpansController : ControllerBase
             Conflicts = result.Conflicts.Select(rowId => deleted[rowId].SentId).ToList(),
         });
     }
+
+    /// <summary>
+    /// A <see cref="StateSpanCategory.Profile"/> span is read by nothing: a profile switch is a
+    /// <see cref="Core.Models.V4.ProfileActivation"/>, written as a Profile Switch treatment.
+    /// </summary>
+    private ObjectResult ProfileSpanRefused() => Problem(
+        detail: "Profile switches are profile activations, read at /api/v4/profile/activations and written as Profile Switch treatments.",
+        statusCode: StatusCodes.Status400BadRequest,
+        title: "Bad Request");
 }
 
 #region Request Models

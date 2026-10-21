@@ -71,15 +71,10 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// </remarks>
     public Task<V4Models.DecompositionResult> DecomposeBatchAsync(
         IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default)
-        => DecomposeCoreAsync(profiles, origin, settlesDefault: true, ct);
-
-    /// <inheritdoc />
-    public Task<V4Models.DecompositionResult> DecomposeProfileSwitchAsync(
-        Profile profile, WriteOrigin origin, CancellationToken ct = default)
-        => DecomposeCoreAsync([profile], origin, settlesDefault: false, ct);
+        => DecomposeCoreAsync(profiles, origin, ct);
 
     private async Task<V4Models.DecompositionResult> DecomposeCoreAsync(
-        IReadOnlyList<Profile> profiles, WriteOrigin origin, bool settlesDefault, CancellationToken ct)
+        IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct)
     {
         var firstMinted = Guid.CreateVersion7();
         var result = new V4Models.DecompositionResult { CorrelationId = firstMinted };
@@ -105,8 +100,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         if (entries.Count == 0)
             return result;
 
-        var claim = settlesDefault ? await ResolveDefaultClaimAsync(entries, ct) : new DefaultClaim(false, null);
-        var storedDefaults = claim.Claims || !settlesDefault
+        var claim = await ResolveDefaultClaimAsync(entries, ct);
+        var storedDefaults = claim.Claims
             ? []
             : (await _therapySettingsRepo.GetDefaultsAsync(ct))
                 .Select(d => d.LegacyId).OfType<string>().ToHashSet(StringComparer.Ordinal);

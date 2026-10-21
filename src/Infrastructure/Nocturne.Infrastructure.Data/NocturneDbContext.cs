@@ -311,6 +311,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TempBasalEntity> TempBasals { get; set; }
 
+    public DbSet<ProfileActivationEntity> ProfileActivations { get; set; }
+
     // V4 Profile Decomposition Models
 
     public DbSet<TherapySettingsEntity> TherapySettings { get; set; }
@@ -511,7 +513,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// uniqueness is filtered on a non-null identifier, which a legacy import never carries.
     /// </summary>
     internal static readonly Type[] V4LegacyIdRecordEntities =
-        [.. V4TimeSeriesRecordEntities, typeof(TempBasalEntity)];
+        [.. V4TimeSeriesRecordEntities, typeof(TempBasalEntity), typeof(ProfileActivationEntity)];
 
     /// <summary>
     /// Tables looked up by the decomposition correlation, adding
@@ -537,6 +539,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(NoteEntity),
         typeof(DeviceEventEntity),
         typeof(TempBasalEntity),
+        typeof(ProfileActivationEntity),
         typeof(BolusCalculationEntity),
         typeof(ApsSnapshotEntity),
         typeof(PumpSnapshotEntity),
@@ -587,6 +590,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(BasalInjectionEntity),
         typeof(CarbIntakeEntity),
         typeof(TempBasalEntity),
+        typeof(ProfileActivationEntity),
         typeof(BGCheckEntity),
         typeof(NoteEntity),
         typeof(DeviceEventEntity),
@@ -1771,6 +1775,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_temp_basals_tenant_start_timestamp")
             .IsDescending(false, true);
 
+        modelBuilder
+            .Entity<ProfileActivationEntity>()
+            .HasIndex(e => new { e.TenantId, e.Timestamp })
+            .HasDatabaseName("ix_profile_activations_tenant_start_timestamp")
+            .IsDescending(false, true)
+            .HasFilter("deleted_at IS NULL");
+
         // Devices unique index (scoped to live records, per tenant).
         // TenantId must be part of the key: devices are tenant-owned (FindByCategoryTypeAndSerialAsync
         // is RLS-scoped to the current tenant) and the type/serial often carry shared, non-unique
@@ -2018,6 +2029,32 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<BolusEntity>()
+            .HasOne<PatientDeviceEntity>()
+            .WithMany()
+            .HasForeignKey(e => e.PatientDeviceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder
+            .Entity<ProfileActivationEntity>()
+            .Property(e => e.Timestamp)
+            .HasColumnName("start_timestamp");
+
+        modelBuilder
+            .Entity<ProfileActivationEntity>()
+            .HasOne<ProfileActivationEntity>()
+            .WithMany()
+            .HasForeignKey(e => e.RequestedActivationId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder
+            .Entity<ProfileActivationEntity>()
+            .HasOne<DeviceEntity>()
+            .WithMany()
+            .HasForeignKey(e => e.DeviceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder
+            .Entity<ProfileActivationEntity>()
             .HasOne<PatientDeviceEntity>()
             .WithMany()
             .HasForeignKey(e => e.PatientDeviceId)

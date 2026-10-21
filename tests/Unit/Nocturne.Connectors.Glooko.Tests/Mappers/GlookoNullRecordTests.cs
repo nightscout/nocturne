@@ -114,7 +114,7 @@ public class GlookoNullRecordTests
         var mapper = new GlookoProfileMapper(Source, NullLogger.Instance);
 
         mapper.TransformDeviceSettingsToProfiles(settings).Should().ContainSingle();
-        mapper.TransformDeviceSettingsToStateSpans(settings).Should().ContainSingle();
+        mapper.TransformDeviceSettingsToProfileActivations(settings).Should().ContainSingle();
     }
 
     private GlookoV4TreatmentMapper Treatments() => new(Source, _timeMapper, NullLogger.Instance);

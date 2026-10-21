@@ -1,4 +1,6 @@
+using System.Reflection;
 using System.Text.Json.Serialization;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.Serializers;
 
 namespace Nocturne.Core.Models;
@@ -13,6 +15,27 @@ namespace Nocturne.Core.Models;
 [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
 public class Food
 {
+    /// <summary>The field names a find on the food collection may name: the wire names of its properties.</summary>
+    private static readonly IReadOnlySet<string> WireFields = typeof(Food)
+        .GetProperties()
+        .Select(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name)
+        .OfType<string>()
+        .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Why a find cannot select foods exactly, or null when it can: it names a field the collection does
+    /// not have, or uses an operator <see cref="FindQuery.Matches"/> cannot apply. Either could widen a
+    /// delete past what the find names.
+    /// </summary>
+    public static string? FindRefusal(FindQuery query)
+    {
+        var unsupported = query.Fields.Where(f => !WireFields.Contains(f)).Order().ToList();
+        if (unsupported.Count > 0)
+            return $"The food collection cannot be filtered on: {string.Join(", ", unsupported)}.";
+
+        return query.HasInexactCondition ? "The find uses an operator the food collection cannot apply." : null;
+    }
+
     /// <summary>
     /// MongoDB ObjectId
     /// </summary>

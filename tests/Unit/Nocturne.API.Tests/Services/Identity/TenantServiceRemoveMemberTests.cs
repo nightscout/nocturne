@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Auth;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -55,6 +56,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
+        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         Mock.Of<ILogger<TenantService>>());
 
     /// <summary>Adds a membership, optionally carrying the owner role or being a system subject.</summary>
@@ -220,6 +222,52 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         (await directory.GetCandidatesAsync("discord", "another-chat-user", default))
             .Select(c => c.Label).Should().BeEquivalentTo(["someone-else"]);
     }
+
+    [Fact]
+    public async Task RemoveMemberAsync_revokesTheMembersGrantsAndTheirRefreshTokens()
+    {
+        var subjectId = await SeedMemberAsync();
+        var otherSubjectId = await SeedMemberAsync();
+        var grant = Grant(subjectId);
+        var otherGrant = Grant(otherSubjectId);
+        var refreshTokenId = Guid.CreateVersion7();
+
+        await using (var db = Context())
+        {
+            db.OAuthGrants.AddRange(grant, otherGrant);
+            db.OAuthRefreshTokens.Add(new OAuthRefreshTokenEntity
+            {
+                Id = refreshTokenId,
+                TenantId = _tenantId,
+                GrantId = grant.Id,
+                TokenHash = "refresh-hash",
+                IssuedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddDays(30),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await Service().RemoveMemberAsync(_tenantId, subjectId);
+
+        result.Ok.Should().BeTrue();
+        await using var check = Context();
+        (await check.OAuthGrants.SingleAsync(g => g.Id == grant.Id)).RevokedAt.Should().NotBeNull(
+            "a grant left live would authenticate again the moment the subject is re-added");
+        (await check.OAuthRefreshTokens.SingleAsync(t => t.Id == refreshTokenId)).RevokedAt
+            .Should().NotBeNull();
+        (await check.OAuthGrants.SingleAsync(g => g.Id == otherGrant.Id)).RevokedAt.Should().BeNull();
+    }
+
+    private OAuthGrantEntity Grant(Guid subjectId) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        TenantId = _tenantId,
+        SubjectId = subjectId,
+        GrantType = OAuthGrantTypes.Direct,
+        Scopes = [Scope.FullAccess],
+        Label = "uploader",
+        TokenHash = Guid.NewGuid().ToString("N"),
+    };
 
     private static ChatIdentityDirectoryEntry Link(
         string platformUserId, Guid tenantId, Guid subjectId, string label) => new()

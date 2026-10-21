@@ -297,5 +297,5 @@ public class TreatmentFindDateWindowTests
         new(projection, Mock.Of<ITreatmentDecomposer>(), Mock.Of<IDecompositionPipeline>(),
             Mock.Of<ITempBasalRepository>(), Mock.Of<IBolusRepository>(), Mock.Of<ICarbIntakeRepository>(),
             Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
-            Mock.Of<IBolusCalculationRepository>(), Mock.Of<IStateSpanService>(), logger);
+            Mock.Of<IBolusCalculationRepository>(), Mock.Of<IProfileActivationRepository>(), Mock.Of<IStateSpanService>(), logger);
 }

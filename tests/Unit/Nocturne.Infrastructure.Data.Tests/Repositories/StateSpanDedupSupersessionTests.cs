@@ -161,8 +161,6 @@ public class StateSpanDedupSupersessionTests : IDisposable
     [InlineData(StateSpanCategory.Override, true)]
     [InlineData(StateSpanCategory.TemporaryTarget, false)]
     [InlineData(StateSpanCategory.TemporaryTarget, true)]
-    [InlineData(StateSpanCategory.Profile, false)]
-    [InlineData(StateSpanCategory.Profile, true)]
     public async Task TwoPresetsWithinTheWindow_AreNotLinked_AndTheLaterSupersedesTheEarlier(
         StateSpanCategory category, bool laterFirst)
     {
@@ -189,7 +187,6 @@ public class StateSpanDedupSupersessionTests : IDisposable
     [Theory]
     [InlineData(StateSpanCategory.Override)]
     [InlineData(StateSpanCategory.TemporaryTarget)]
-    [InlineData(StateSpanCategory.Profile)]
     public async Task TheSamePresetReReportedWithinTheWindow_LeavesOneOpenPrimary(StateSpanCategory category)
     {
         await UpsertInOrderAsync([Preset(category, "first", 0, "N Night"), Preset(category, "repeat", 10, "N Night")]);

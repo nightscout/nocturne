@@ -130,7 +130,12 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             new HashSet<string> { Scope.FullAccess },
             HubCredentialKind.Infrastructure,
             SubjectId: null,
-            HistoryClamped: false);
+            HistoryClamped: false)
+        {
+            Source = new HubCredentialSource(
+                AuthType.InstanceKey, SubjectId: null, GrantId: null, new HashSet<string> { Scope.FullAccess },
+                LimitTo24Hours: false, ExpiresAt: null),
+        };
     }
 
     private async Task<HubAuthorization?> AuthorizeJwtAsync(
@@ -194,7 +199,13 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             HubCredentialKind.Subject,
             claims.SubjectId,
             MemberScopeResolver.IsHistoryClamped(
-                claims.LimitTo24Hours, membership.LimitTo24Hours, membership.EffectivePermissions));
+                claims.LimitTo24Hours, membership.LimitTo24Hours, membership.EffectivePermissions))
+        {
+            ClientId = claims.ClientId,
+            Source = new HubCredentialSource(
+                AuthType.OAuthAccessToken, claims.SubjectId, claims.GrantId,
+                Scope.Normalize(claims.Scopes), claims.LimitTo24Hours, claims.ExpiresAt),
+        };
     }
 
     /// <summary>
@@ -248,6 +259,11 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             HubCredentialKind.Subject,
             grant.SubjectId,
             MemberScopeResolver.IsHistoryClamped(
-                grant.LimitTo24Hours, membership.LimitTo24Hours, membership.EffectivePermissions));
+                grant.LimitTo24Hours, membership.LimitTo24Hours, membership.EffectivePermissions))
+        {
+            Source = new HubCredentialSource(
+                AuthType.DirectGrant, grant.SubjectId, grant.Id, grant.Scopes.ToHashSet(),
+                grant.LimitTo24Hours, ExpiresAt: null),
+        };
     }
 }

@@ -26,8 +26,9 @@ dotnet test tests/Integration/Nocturne.Infrastructure.Data.Tests
 dotnet test tests/Integration/Nocturne.API.Tests
 dotnet test tests/Unit/Nocturne.API.Tests --filter "Category=Integration"
 
-# Web (from src/Web; the app suites need the generated API client, i.e. one API build)
-pnpm --filter @nocturne/app exec vitest --config vitest.config.ts --run
+# Web (from src/Web; the app suites need the generated API client, i.e. one API build).
+# test:unit first builds @nocturne/bridge and @nocturne/bot, which the node suite imports.
+pnpm --filter @nocturne/app run test:unit --run
 pnpm --filter @nocturne/app exec vitest --config vitest.browser.config.ts --run
 pnpm --filter @nocturne/bot run test
 

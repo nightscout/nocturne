@@ -383,6 +383,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "notes",
         "device_events",
         "state_spans",
+        "profile_activations",
         "linked_records",
         "therapy_settings",
         "basal_schedules",

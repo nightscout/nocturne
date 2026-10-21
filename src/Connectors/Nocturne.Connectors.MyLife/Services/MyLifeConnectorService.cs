@@ -222,9 +222,9 @@ public class MyLifeConnectorService(
                 await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
                     profiles, PublishProfileDataAsync, config, cancellationToken);
 
-                var profileStateSpans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource);
+                var activations = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource);
                 await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-                    profileStateSpans, PublishStateSpanDataAsync, config, cancellationToken, "from pump settings");
+                    activations, PublishProfileActivationDataAsync, config, cancellationToken, "from pump settings");
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
