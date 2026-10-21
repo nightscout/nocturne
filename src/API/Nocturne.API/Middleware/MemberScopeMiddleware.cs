@@ -16,19 +16,11 @@ namespace Nocturne.API.Middleware;
 /// role permissions + direct permissions; <see cref="MemberScopeResolver"/> turns them into the
 /// granted scope set, intersecting with the credential's own scopes unless the credential carries
 /// none (<see cref="MemberScopeResolver.UnscopedCredentialTypes"/>).
-/// Must run after <see cref="AuthenticationMiddleware"/>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Pipeline order (position 6 of 6 custom middleware):
-/// <see cref="JsonExtensionMiddleware"/>,
-/// <see cref="ApexCallbackRelayMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
-/// <see cref="TenantSetupMiddleware"/>, <see cref="AuthenticationMiddleware"/>,
-/// <b>MemberScopeMiddleware</b>.
-/// </para>
-/// <para>
-/// Reads the <see cref="AuthContext"/> set by <see cref="AuthenticationMiddleware"/> and
-/// replaces <c>HttpContext.Items[AuthContextKeys.GrantedScopes]</c> and <c>HttpContext.Items[AuthContextKeys.PermissionTrie]</c>
+/// Must run after <see cref="AuthenticationMiddleware"/>: reads the <see cref="AuthContext"/> it sets
+/// and replaces <c>HttpContext.Items[AuthContextKeys.GrantedScopes]</c> and <c>HttpContext.Items[AuthContextKeys.PermissionTrie]</c>
 /// with membership-scoped values. Uses <see cref="ScopeTranslator"/> to convert between
 /// Shiro-style permissions and OAuth scopes.
 /// </para>

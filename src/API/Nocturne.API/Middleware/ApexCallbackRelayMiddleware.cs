@@ -14,19 +14,10 @@ namespace Nocturne.API.Middleware;
 /// on the tenant host, where its session cookies are.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Pipeline order (position 3 of 8 custom middleware):
-/// <see cref="JsonExtensionMiddleware"/>,
-/// <b>ApexCallbackRelayMiddleware</b>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
-/// <see cref="TenantSetupMiddleware"/>, <see cref="AuthenticationMiddleware"/>,
-/// <see cref="MemberScopeMiddleware"/>.
-/// </para>
-/// <para>
 /// The slug is read out of the protected <c>state</c> query parameter by the flow that issued it
 /// (<see cref="IOidcAuthService.TryReadTenantSlug"/>,
 /// <see cref="GoogleHealthOAuthState.TryReadTenantSlug"/>), never from a caller-supplied
 /// parameter, so the redirect target is one this instance issued.
-/// </para>
 /// </remarks>
 /// <seealso cref="Multitenancy.TenantResolutionMiddleware"/>
 /// <seealso cref="BaseDomainOptions"/>

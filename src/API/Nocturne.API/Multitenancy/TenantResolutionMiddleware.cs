@@ -14,7 +14,6 @@ namespace Nocturne.API.Multitenancy;
 /// Tenants are resolved by subdomain: <c>{slug}.{BaseDomain}</c>.
 /// Requests on the apex domain (no subdomain) are either tenantless-allowed
 /// cross-tenant paths or 404/503 depending on whether any tenants exist.
-/// Must run before AuthenticationMiddleware in the pipeline.
 /// </summary>
 public class TenantResolutionMiddleware
 {
