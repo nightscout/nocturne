@@ -17,6 +17,10 @@ public static class TempBasalToTreatmentMapper
     public static Treatment ToTreatment(TempBasal tempBasal)
     {
         var rate = tempBasal.Origin == TempBasalOrigin.Suspended ? 0 : tempBasal.Rate;
+        // A Nightscout client takes absolute over percent, so a relative temp serves no absolute
+        double? absolute = tempBasal.Percent is null || tempBasal.Origin == TempBasalOrigin.Suspended
+            ? rate
+            : null;
         var durationMinutes = tempBasal.EndMills.HasValue
             ? (tempBasal.EndMills.Value - tempBasal.StartMills) / (1000.0 * 60.0)
             : 0;
@@ -34,9 +38,10 @@ public static class TempBasalToTreatmentMapper
             SrvModified = new DateTimeOffset(tempBasal.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
             EventType = "Temp Basal",
             Duration = durationMinutes,
-            Absolute = rate,
-            Rate = rate,
-            Temp = "absolute",
+            Absolute = absolute,
+            Rate = absolute,
+            Percent = tempBasal.Percent,
+            Temp = absolute is null ? null : "absolute",
             EnteredBy = tempBasal.App,
             UtcOffset = tempBasal.UtcOffset,
             DataSource = tempBasal.DataSource,

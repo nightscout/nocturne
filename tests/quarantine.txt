@@ -42,7 +42,6 @@ Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_Wit
 Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_WithData_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
 Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_WithEventTypeFilter_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
 Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_WithFindFilter_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
-Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.PostTreatment_TempBasal_ReturnsSameShape | a temp basal loses percent
 Nocturne.API.Tests.Integration.Parity.V2.DDataParityTests.GetDDataAt_IsoDateString_ReturnsSameShape | ddata/at sgv order and rssi differ, and the frame omits upstream entries, dbstats sizes and a null lastProfileFromSwitch, and adds page
 Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_Empty_ReturnsSameShape | v2 properties omit buckets/upbat/pump and differ on sage/cage/bwp
 Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_Pretty_ReturnsSameShape | v2 properties omit buckets/upbat/pump and differ on sage/cage/bwp

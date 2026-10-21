@@ -52,7 +52,9 @@ internal sealed class TempBasalResolver : ITempBasalResolver
         if (activeTempBasal is null)
             return new TempBasalResolverResult(scheduledBasal, null, null, scheduledBasal);
 
-        var tempRate = activeTempBasal.Rate;
+        var tempRate = activeTempBasal.Origin == TempBasalOrigin.Suspended
+            ? 0
+            : activeTempBasal.RateOver(scheduledBasal);
         return new TempBasalResolverResult(scheduledBasal, tempRate, null, tempRate);
     }
 }

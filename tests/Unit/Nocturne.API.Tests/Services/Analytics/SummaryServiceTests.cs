@@ -492,6 +492,25 @@ public class SummaryServiceTests
     }
 
     [Fact]
+    public void ProcessTempBasals_PercentTemp_ChangesProfileBasalAtItsStartByPercent()
+    {
+        var profile = new ProfileData
+        {
+            Basal = new List<TimeValue> { new() { Time = "00:00", Value = 0.8 } },
+        };
+        var start = DateTimeOffset.UtcNow.AddMinutes(-40).ToUnixTimeMilliseconds();
+        var temps = new List<Treatment>
+        {
+            new() { EventType = "Temp Basal", Mills = start, Duration = 30, Percent = -50 },
+        };
+
+        var result = _service.ProcessTempBasals(profile, temps, start - 1);
+
+        result.Should().Contain(t => t.Start == start)
+            .Which.Absolute.Should().BeApproximately(0.4, 1e-9);
+    }
+
+    [Fact]
     public void FilterSameAbsoluteTemps_WithIdenticalRates_MergesCorrectly()
     {
         // Arrange

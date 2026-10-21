@@ -832,6 +832,7 @@ public static class ServiceRegistrationExtensions
 
         // V4 Decomposers
         services.AddScoped<IEntryDecomposer, EntryDecomposer>();
+        services.AddScoped<RelativeTempBasalRates>();
         services.AddScoped<ITreatmentDecomposer, TreatmentDecomposer>();
         services.AddScoped<IDeviceStatusDecomposer, DeviceStatusDecomposer>();
         services.AddHostedService<ApsSnapshotCurvesBackfillService>();

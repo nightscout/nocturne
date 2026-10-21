@@ -184,14 +184,23 @@ public class SummaryService : ISummaryService
 
         var profileBasals = profileData.Basal;
         var temps = tempBasals
-            .Select(temp => new SummaryTempBasal
+            .Select(temp =>
             {
-                Start =
-                    UploaderTimestamp.TryParse(temp.Created_at, out var createdAt)
-                        ? createdAt.ToUnixTimeMilliseconds()
-                        : temp.Mills,
-                Duration = temp.Duration.HasValue ? (int)(temp.Duration.Value * 60 * 1000) : 0,
-                Absolute = temp.Absolute ?? 0,
+                var start = UploaderTimestamp.TryParse(temp.Created_at, out var createdAt)
+                    ? createdAt.ToUnixTimeMilliseconds()
+                    : temp.Mills;
+                return new SummaryTempBasal
+                {
+                    Start = start,
+                    Duration = temp.Duration.HasValue ? (int)(temp.Duration.Value * 60 * 1000) : 0,
+                    // NIGHTSCOUT-COMPAT: Nightscout reads only absolute here and reports a percent temp
+                    // as 0 U/h, a suspension; it is resolved against the profile basal at its start.
+                    Absolute = temp.Absolute
+                        ?? (temp.Percent is { } percent
+                            ? Nocturne.Core.Models.V4.TempBasal.RateRelativeTo(
+                                GetProfileBasalsInWindow(profileBasals, start, start)[0].Absolute, percent)
+                            : 0),
+                };
             })
             .ToList();
 

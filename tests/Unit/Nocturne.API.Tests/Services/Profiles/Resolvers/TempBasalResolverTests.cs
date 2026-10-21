@@ -65,6 +65,30 @@ public class TempBasalResolverTests
     }
 
     [Fact]
+    public async Task AppliesPercentToTheScheduledBasalAtTheQueriedTime()
+    {
+        _basalRateResolver.Setup(r => r.GetBasalRateAsync(NoonMills, null, default))
+            .ReturnsAsync(1.2);
+        var tempBasal = new TempBasal
+        {
+            Id = Guid.NewGuid(),
+            StartTimestamp = NoonUtc.AddMinutes(-90),
+            EndTimestamp = NoonUtc.AddMinutes(30),
+            Rate = 0.4,
+            ScheduledRate = 0.8,
+            Percent = -50,
+        };
+        _tempBasalRepo.Setup(r => r.GetAsync(null, It.IsAny<DateTime>(), null, null, 10, 0, true, default))
+            .ReturnsAsync(new[] { tempBasal });
+
+        var result = await _sut.GetTempBasalAsync(NoonMills);
+
+        result.Basal.Should().Be(1.2);
+        result.TempBasal.Should().BeApproximately(0.6, 1e-9);
+        result.TotalBasal.Should().BeApproximately(0.6, 1e-9);
+    }
+
+    [Fact]
     public async Task IgnoresExpiredTempBasal()
     {
         _basalRateResolver.Setup(r => r.GetBasalRateAsync(NoonMills, null, default))

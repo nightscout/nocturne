@@ -90,7 +90,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         Mock.Of<IBolusCalculationRepository>(), Mock.Of<IStateSpanService>(),
         ProfileActivationTestDeps.Repository(context), ProfileActivationTestDeps.Writer(context), Mock.Of<ITreatmentFoodService>(),
         Mock.Of<IDeviceService>(), Mock.Of<IPatientDeviceStamper>(), profiles, Mock.Of<IActiveProfileResolver>(),
-        Mock.Of<IPatientInsulinRepository>(), _auditContext, NullLogger<TreatmentDecomposer>.Instance);
+        Mock.Of<IPatientInsulinRepository>(), TempBasalTestDeps.Unscheduled(), _auditContext, NullLogger<TreatmentDecomposer>.Instance);
 
     private static Profile ProfileDocument(string id, string storeName) => new()
     {

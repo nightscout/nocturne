@@ -29,6 +29,7 @@ public static class TempBasalMapper
             LegacyId = model.LegacyId,
             Rate = model.Rate,
             ScheduledRate = model.ScheduledRate,
+            Percent = model.Percent,
             Origin = model.Origin.ToString(),
             DeviceId = model.DeviceId,
             PatientDeviceId = model.PatientDeviceId,
@@ -66,6 +67,7 @@ public static class TempBasalMapper
             ModifiedAt = entity.SysUpdatedAt,
             Rate = entity.Rate,
             ScheduledRate = entity.ScheduledRate,
+            Percent = entity.Percent,
             Origin = Enum.TryParse<TempBasalOrigin>(entity.Origin, out var origin)
                 ? origin
                 : TempBasalOrigin.Inferred,
@@ -100,6 +102,7 @@ public static class TempBasalMapper
         entity.LegacyId = model.LegacyId;
         entity.Rate = model.Rate;
         entity.ScheduledRate = model.ScheduledRate;
+        entity.Percent = model.Percent;
         entity.Origin = model.Origin.ToString();
         entity.DeviceId = model.DeviceId;
         entity.PatientDeviceId = model.PatientDeviceId;

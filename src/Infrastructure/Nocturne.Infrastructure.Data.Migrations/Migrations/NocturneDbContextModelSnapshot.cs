@@ -8583,6 +8583,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("patient_device_id");
 
+                    b.Property<double?>("Percent")
+                        .HasColumnType("double precision")
+                        .HasColumnName("percent");
+
                     b.Property<string>("PumpRecordId")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")

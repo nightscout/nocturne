@@ -105,6 +105,27 @@ public class TempBasal : IV4Record, IDeviceAttributed
     public double? ScheduledRate { get; set; }
 
     /// <summary>
+    /// For a temp basal set relative to the schedule, the change from the scheduled rate in percent
+    /// (Nightscout's <c>percent</c>: -50 halves it, 50 adds half again); null for an absolute temp.
+    /// <see cref="Rate"/> holds what it resolves to at the start.
+    /// </summary>
+    public double? Percent { get; set; }
+
+    /// <summary>
+    /// The rate <paramref name="percent"/> sets over <paramref name="scheduledRate"/>, as Nightscout's
+    /// <c>getTempBasal</c> computes it: <c>basal * (100 + percent) / 100</c>.
+    /// </summary>
+    public static double RateRelativeTo(double scheduledRate, double percent) =>
+        Math.Max(0, scheduledRate * (100 + percent) / 100);
+
+    /// <summary>
+    /// The rate this temp basal sets while <paramref name="scheduledRate"/> is scheduled: a relative
+    /// temp follows the schedule across its span, an absolute one holds <see cref="Rate"/>.
+    /// </summary>
+    public double RateOver(double scheduledRate) =>
+        Percent is { } percent ? RateRelativeTo(scheduledRate, percent) : Rate;
+
+    /// <summary>
     /// Origin of this temp basal: <see cref="TempBasalOrigin.Algorithm"/>,
     /// <see cref="TempBasalOrigin.Scheduled"/>, <see cref="TempBasalOrigin.Manual"/>,
     /// <see cref="TempBasalOrigin.Suspended"/>, or <see cref="TempBasalOrigin.Inferred"/>.

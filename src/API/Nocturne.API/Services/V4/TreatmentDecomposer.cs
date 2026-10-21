@@ -67,6 +67,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     private readonly IProfileDecomposer _profileDecomposer;
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly IPatientInsulinRepository _insulinRepo;
+    private readonly RelativeTempBasalRates _relativeTempBasalRates;
     private readonly IAuditContext _auditContext;
 
     /// <summary>
@@ -97,6 +98,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         IProfileDecomposer profileDecomposer,
         IActiveProfileResolver activeProfileResolver,
         IPatientInsulinRepository insulinRepo,
+        RelativeTempBasalRates relativeTempBasalRates,
         IAuditContext auditContext,
         ILogger<TreatmentDecomposer> logger,
         IDeviceEventReactor? deviceEventReactor = null)
@@ -120,6 +122,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         _profileDecomposer = profileDecomposer;
         _activeProfileResolver = activeProfileResolver;
         _insulinRepo = insulinRepo;
+        _relativeTempBasalRates = relativeTempBasalRates;
         _auditContext = auditContext;
     }
 
@@ -708,6 +711,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     private async Task DecomposeTempBasalAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var model = await BuildTempBasalAsync(treatment, result.CorrelationId, ct);
+        await _relativeTempBasalRates.ResolveAsync([model], ct);
 
         // Resolve insulin context: active profile switch → primary insulin → null
         model.InsulinContext = await _activeProfileResolver.GetActiveInsulinContextAsync(treatment.Mills, ct)
@@ -869,7 +873,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             DataSource = treatment.DataSource,
             CorrelationId = correlationId,
             Rate = treatment.Absolute ?? treatment.Rate ?? 0,
-            ScheduledRate = null, // Not available from legacy treatments
+            Percent = treatment.HasOwnAbsolute ? null : treatment.Percent,
             Origin = MapTempBasalOrigin(treatment),
             PumpRecordId = treatment.PumpId?.ToString(),
         };
@@ -1641,6 +1645,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             if (icfg is not null)
                 batchInsulinTimeline[treatment.Mills] = icfg;
         }
+
+        await _relativeTempBasalRates.ResolveAsync(tempBasalList, ct);
 
         // Resolve insulin context for each temp basal
         // primaryInsulin is fetched at most once lazily if the third tier is ever needed.

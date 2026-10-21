@@ -727,6 +727,63 @@ public class TreatmentsIntegrationTests : ApiIntegrationTestBase
 
 
     /// <summary>
+    /// A temp basal set as a percentage changes the scheduled basal rather than suspending it, and
+    /// reads back with the percent it was uploaded with, as Nightscout stores and serves it.
+    /// </summary>
+    [Fact]
+    public async Task PercentTempBasal_ResolvesAgainstTheScheduleAndReadsBackAsUploaded()
+    {
+        var client = CreateAuthenticatedClient();
+        var profile = new
+        {
+            defaultProfile = "Default",
+            store = new Dictionary<string, object>
+            {
+                ["Default"] = new
+                {
+                    dia = 4,
+                    carbratio = new[] { new { time = "00:00", value = 10, timeAsSeconds = 0 } },
+                    sens = new[] { new { time = "00:00", value = 50, timeAsSeconds = 0 } },
+                    basal = new[] { new { time = "00:00", value = 0.8, timeAsSeconds = 0 } },
+                    target_low = new[] { new { time = "00:00", value = 80, timeAsSeconds = 0 } },
+                    target_high = new[] { new { time = "00:00", value = 120, timeAsSeconds = 0 } },
+                    units = "mg/dl",
+                    timezone = "UTC",
+                },
+            },
+            startDate = DateTime.UtcNow.AddDays(-1).ToString("o"),
+        };
+        (await client.PostAsJsonAsync("/api/v1/profile", profile)).EnsureSuccessStatusCode();
+
+        var createdAt = DistinctTime();
+        var post = await client.PostAsJsonAsync("/api/v1/treatments", new
+        {
+            eventType = "Temp Basal",
+            duration = 30,
+            percent = -50,
+            created_at = createdAt,
+            enteredBy = "careportal",
+        });
+        post.StatusCode.Should().Be(HttpStatusCode.OK, await post.Content.ReadAsStringAsync());
+        var echoed = (await post.Content.ReadFromJsonAsync<JsonElement>())[0];
+        echoed.GetProperty("percent").GetDouble().Should().Be(-50);
+        echoed.TryGetProperty("absolute", out _).Should().BeFalse("Nightscout clients take absolute over percent");
+
+        var served = (await client.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/treatments?find[created_at]={Uri.EscapeDataString(createdAt)}")).EnumerateArray().Single();
+        served.GetProperty("percent").GetDouble().Should().Be(-50);
+        served.TryGetProperty("absolute", out _).Should().BeFalse();
+
+        var at = DateTimeOffset.Parse(createdAt).UtcDateTime;
+        var stored = await WithTenantScopeAsync(sp => sp.GetRequiredService<ITempBasalRepository>().GetAsync(
+            from: at.AddSeconds(-1), to: at.AddSeconds(1), device: null, source: null, limit: 10, offset: 0, descending: true, ct: default));
+        var tempBasal = stored.Should().ContainSingle().Which;
+        tempBasal.Percent.Should().Be(-50);
+        tempBasal.ScheduledRate.Should().Be(0.8);
+        tempBasal.Rate.Should().BeApproximately(0.4, 1e-9);
+    }
+
+    /// <summary>
     /// AAPS's temp basal lifecycle: POST at start, then PATCH by the identifier the create returned
     /// when the pump cuts it short, then PATCH again by the identifier the first PATCH returned.
     /// AAPS stores the identifier from every response, so a PATCH that answers with a different

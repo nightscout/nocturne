@@ -34,6 +34,8 @@ public class TreatmentDecomposerTests : IDisposable
     private readonly Mock<IProfileDecomposer> _profileDecomposerMock;
     private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock;
     private readonly Mock<IPatientInsulinRepository> _insulinRepoMock;
+    private readonly Mock<IBasalRateResolver> _basalRateResolverMock = new();
+    private readonly Mock<ITherapySettingsResolver> _therapySettingsResolverMock = new();
     private readonly TreatmentDecomposer _decomposer;
 
     public TreatmentDecomposerTests()
@@ -75,6 +77,7 @@ public class TreatmentDecomposerTests : IDisposable
             _profileDecomposerMock.Object,
             _activeProfileResolverMock.Object,
             _insulinRepoMock.Object,
+            new RelativeTempBasalRates(_basalRateResolverMock.Object, _therapySettingsResolverMock.Object),
             Mock.Of<IAuditContext>(),
             NullLogger<TreatmentDecomposer>.Instance);
     }
@@ -468,6 +471,135 @@ public class TreatmentDecomposerTests : IDisposable
 
         result.CreatedRecords.Should().BeEmpty();
         result.SkippedDeleted.Should().Be(1);
+    }
+
+    private void GivenScheduledBasal(double rate)
+    {
+        _therapySettingsResolverMock.Setup(r => r.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _basalRateResolverMock
+            .Setup(r => r.BuildResolverAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.FromResult<Func<long, double>>(_ => rate));
+    }
+
+    private async Task<V4Models.TempBasal> DecomposeTempBasalAsync(Treatment treatment)
+    {
+        _tempBasalRepoMock
+            .Setup(r => r.GetByLegacyIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal?)null);
+        _tempBasalRepoMock
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal tb, WriteOrigin _, CancellationToken _) => tb);
+
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        return result.CreatedRecords.OfType<V4Models.TempBasal>().Single();
+    }
+
+    [Theory]
+    [InlineData(-50, 0.4)]
+    [InlineData(50, 1.2)]
+    [InlineData(-100, 0)]
+    [InlineData(0, 0.8)]
+    public async Task DecomposeAsync_PercentTempBasal_ResolvesRateAgainstScheduledBasal(double percent, double expectedRate)
+    {
+        GivenScheduledBasal(0.8);
+
+        var tempBasal = await DecomposeTempBasalAsync(new Treatment
+        {
+            Id = "percent-temp",
+            EventType = "Temp Basal",
+            Mills = 1700000000000,
+            Duration = 30,
+            Percent = percent,
+        });
+
+        tempBasal.Percent.Should().Be(percent);
+        tempBasal.ScheduledRate.Should().Be(0.8);
+        tempBasal.Rate.Should().BeApproximately(expectedRate, 1e-9);
+    }
+
+    /// <summary>AAPS sends its own conversion as <c>rate</c> next to <c>percent</c>; Nightscout reads only the percent.</summary>
+    [Fact]
+    public async Task DecomposeAsync_PercentTempBasalWithRate_StaysRelative()
+    {
+        GivenScheduledBasal(1.2);
+
+        var tempBasal = await DecomposeTempBasalAsync(new Treatment
+        {
+            Id = "aaps-percent-temp",
+            EventType = "Temp Basal",
+            Mills = 1700000000000,
+            Duration = 30,
+            Percent = -30,
+            Rate = 0.7,
+        });
+
+        tempBasal.Percent.Should().Be(-30);
+        tempBasal.Rate.Should().BeApproximately(0.84, 1e-9);
+        tempBasal.ScheduledRate.Should().Be(1.2);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_PercentTempBasalWithoutSchedule_KeepsUploadedRate()
+    {
+        var tempBasal = await DecomposeTempBasalAsync(new Treatment
+        {
+            Id = "unscheduled-percent-temp",
+            EventType = "Temp Basal",
+            Mills = 1700000000000,
+            Duration = 30,
+            Percent = -30,
+            Rate = 0.7,
+        });
+
+        tempBasal.Percent.Should().Be(-30);
+        tempBasal.Rate.Should().Be(0.7);
+        tempBasal.ScheduledRate.Should().BeNull();
+        _basalRateResolverMock.Verify(
+            r => r.BuildResolverAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_AbsoluteBesidePercent_TakesAbsolute()
+    {
+        GivenScheduledBasal(0.8);
+
+        var tempBasal = await DecomposeTempBasalAsync(new Treatment
+        {
+            Id = "absolute-and-percent-temp",
+            EventType = "Temp Basal",
+            Mills = 1700000000000,
+            Duration = 30,
+            Percent = -50,
+            Absolute = 1.5,
+        });
+
+        tempBasal.Rate.Should().Be(1.5);
+        tempBasal.Percent.Should().BeNull();
+        tempBasal.ScheduledRate.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_PercentTempBasal_ReadsBackAndReDecomposesAsUploaded()
+    {
+        GivenScheduledBasal(0.8);
+
+        var tempBasal = await DecomposeTempBasalAsync(new Treatment
+        {
+            Id = "percent-temp-readback",
+            EventType = "Temp Basal",
+            Mills = 1700000000000,
+            Duration = 30,
+            Percent = -50,
+        });
+
+        var served = Nocturne.Infrastructure.Data.Mappers.TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        served.Percent.Should().Be(-50);
+        served.Absolute.Should().BeNull();
+        served.Rate.Should().BeNull();
+
+        var edited = TreatmentDecomposer.MapToTempBasal(served, correlationId: null);
+        edited.Percent.Should().Be(-50);
     }
 
     #endregion

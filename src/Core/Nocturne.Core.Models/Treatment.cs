@@ -263,6 +263,14 @@ public class Treatment : ProcessableDocumentBase
         set => _absolute = value;
     }
 
+    /// <summary>
+    /// Whether <see cref="Absolute"/> was set itself rather than read through from
+    /// <see cref="Rate"/>. Nightscout takes a temp basal as absolute only when <c>absolute</c> is
+    /// present, and otherwise applies <see cref="Percent"/> to the scheduled rate.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasOwnAbsolute => _absolute.HasValue;
+
     [JsonPropertyName("notes")]
     [Sanitizable]
     public string? Notes { get; set; }
