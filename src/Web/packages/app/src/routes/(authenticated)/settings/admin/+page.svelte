@@ -17,7 +17,7 @@
   import IntegrationsTabContent from "$lib/components/admin/IntegrationsTabContent.svelte";
   import OidcProvidersTabContent from "$lib/components/admin/OidcProvidersTabContent.svelte";
   import OidcProviderDialog from "$lib/components/admin/OidcProviderDialog.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import type {
     TenantRoleDto,
@@ -93,11 +93,32 @@
     }
   }
 
+  /**
+   * Runs a delete or disable, and when the API refuses it because some members sign in only
+   * through this provider, asks before going ahead anyway. Those members then need a recovery
+   * code to get back in.
+   */
+  async function withLockoutOverride(
+    providerName: string | undefined,
+    run: (force: boolean) => Promise<unknown>
+  ) {
+    try {
+      await run(false);
+    } catch (err: unknown) {
+      if (errorStatus(err) !== 409) throw err;
+      const proceed = confirm(
+        `Some members sign in only through "${providerName}". They will be locked out until an administrator gives them a recovery code. Continue anyway?`
+      );
+      if (proceed) await run(true);
+    }
+  }
+
   async function deleteProvider(p: OidcProviderResponse) {
-    if (!p.id) return;
+    const id = p.id;
+    if (!id) return;
     if (!confirm(`Delete provider "${p.name}"?`)) return;
     try {
-      await oidcRemote.remove(p.id);
+      await withLockoutOverride(p.name, (force) => oidcRemote.remove({ id, force }));
       await loadOidcData();
     } catch (err: unknown) {
       oidcError = describeSubmitError(err, "Failed to delete provider.");
@@ -105,12 +126,13 @@
   }
 
   async function toggleProvider(p: OidcProviderResponse) {
-    if (!p.id) return;
+    const id = p.id;
+    if (!id) return;
     try {
       if (p.isEnabled) {
-        await oidcRemote.disable(p.id);
+        await withLockoutOverride(p.name, (force) => oidcRemote.disable({ id, force }));
       } else {
-        await oidcRemote.enable(p.id);
+        await oidcRemote.enable(id);
       }
       await loadOidcData();
     } catch (err: unknown) {

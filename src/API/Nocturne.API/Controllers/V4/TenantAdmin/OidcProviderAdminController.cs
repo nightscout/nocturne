@@ -103,12 +103,13 @@ public class OidcProviderAdminController : ControllerBase
     [ProducesResponseType(typeof(OidcProviderResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateOidcProviderRequest request)
+    public async Task<IActionResult> Update(
+        Guid id, [FromBody] UpdateOidcProviderRequest request, [FromQuery] bool force = false)
     {
         var existing = await _providerService.GetProviderByIdAsync(id);
         if (existing is null) return NotFound();
 
-        if (existing.IsEnabled && !request.IsEnabled)
+        if (existing.IsEnabled && !request.IsEnabled && !force)
         {
             await using var db = await _contexts.CreateAsync();
             var conflict = await CheckWouldLockOutUsersAsync(db, id, disable: true);
@@ -139,11 +140,14 @@ public class OidcProviderAdminController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, [FromQuery] bool force = false)
     {
-        await using var db = await _contexts.CreateAsync();
-        var conflict = await CheckWouldLockOutUsersAsync(db, id, disable: false);
-        if (conflict is not null) return conflict;
+        if (!force)
+        {
+            await using var db = await _contexts.CreateAsync();
+            var conflict = await CheckWouldLockOutUsersAsync(db, id, disable: false);
+            if (conflict is not null) return conflict;
+        }
 
         var deleted = await _providerService.DeleteProviderAsync(id);
         return deleted ? NoContent() : NotFound();
@@ -166,11 +170,14 @@ public class OidcProviderAdminController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Disable(Guid id)
+    public async Task<IActionResult> Disable(Guid id, [FromQuery] bool force = false)
     {
-        await using var db = await _contexts.CreateAsync();
-        var conflict = await CheckWouldLockOutUsersAsync(db, id, disable: true);
-        if (conflict is not null) return conflict;
+        if (!force)
+        {
+            await using var db = await _contexts.CreateAsync();
+            var conflict = await CheckWouldLockOutUsersAsync(db, id, disable: true);
+            if (conflict is not null) return conflict;
+        }
 
         var disabled = await _providerService.DisableProviderAsync(id);
         return disabled ? NoContent() : NotFound();
@@ -261,6 +268,11 @@ public class OidcProviderAdminController : ControllerBase
     /// sign-in method (<see cref="OrphanedSubjectFilter"/>): one whose only passkey-free way in is
     /// this provider. Returns <see langword="null"/> when the operation strands nobody.
     /// </summary>
+    /// <remarks>
+    /// The caller can pass <c>force</c> to go ahead anyway, e.g. to switch off a compromised
+    /// provider. The stranded members then recover through a recovery code
+    /// (<see cref="Identity.MemberRecoveryController"/>).
+    /// </remarks>
     private async Task<IActionResult?> CheckWouldLockOutUsersAsync(NocturneDbContext db, Guid providerId, bool disable)
     {
         var strandedCount = await db.WorkingOidcIdentities()
@@ -268,6 +280,7 @@ public class OidcProviderAdminController : ControllerBase
             .Select(i => i.Subject!)
             .Where(s => s.IsActive
                 && !s.IsSystemSubject
+                && !s.IsDemoSubject
                 && !db.PasskeyCredentials.Any(p => p.SubjectId == s.Id)
                 && !db.WorkingOidcIdentities().Any(o => o.SubjectId == s.Id && o.ProviderId != providerId))
             .Select(s => s.Id)

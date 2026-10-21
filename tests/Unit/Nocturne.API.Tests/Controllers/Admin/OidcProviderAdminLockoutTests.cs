@@ -57,10 +57,13 @@ public sealed class OidcProviderAdminLockoutTests : IDisposable
         Id = id, Name = issuer, IssuerUrl = issuer, ClientId = "c", IsEnabled = true,
     };
 
-    private Guid SeedSubject(bool passkey = false, params Guid[] providers)
+    private Guid SeedSubject(bool passkey = false, params Guid[] providers) =>
+        SeedSubject(passkey, demo: false, providers);
+
+    private Guid SeedSubject(bool passkey, bool demo, params Guid[] providers)
     {
         var id = Guid.CreateVersion7();
-        _context.Subjects.Add(new SubjectEntity { Id = id, Name = "s" + id, IsActive = true });
+        _context.Subjects.Add(new SubjectEntity { Id = id, Name = "s" + id, IsActive = true, IsDemoSubject = demo });
         foreach (var provider in providers)
         {
             _context.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
@@ -121,5 +124,23 @@ public sealed class OidcProviderAdminLockoutTests : IDisposable
 
         (await _controller.Disable(_google)).Should().BeOfType<NoContentResult>();
         (await _controller.Update(_google, Disabling())).Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task Force_switches_the_provider_off_anyway()
+    {
+        SeedSubject(providers: _google);
+
+        (await _controller.Disable(_google, force: true)).Should().BeOfType<NoContentResult>();
+        (await _controller.Delete(_google, force: true)).Should().BeOfType<NoContentResult>();
+        (await _controller.Update(_google, Disabling(), force: true)).Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task A_demo_visitor_is_not_an_account_to_strand()
+    {
+        SeedSubject(false, demo: true, _google);
+
+        (await _controller.Disable(_google)).Should().BeOfType<NoContentResult>();
     }
 }
