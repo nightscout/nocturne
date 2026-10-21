@@ -734,6 +734,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await HistoryPage.GetAsync(
+            ctx,
             DedupRecordType is { } recordType
                 ? ctx.Set<TEntity>().IncludingDeleted().AsNoTracking().ExcludeNonPrimaryKeepingDeleted(ctx, recordType)
                 : ctx.Set<TEntity>().IncludingDeleted().AsNoTracking(),
