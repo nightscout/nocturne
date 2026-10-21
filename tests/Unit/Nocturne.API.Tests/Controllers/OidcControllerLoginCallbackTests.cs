@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -24,7 +25,7 @@ public class OidcControllerLoginCallbackTests
             RefreshTokenName = ".Nocturne.RefreshToken",
             StateCookieName = ".Nocturne.OidcState",
             Secure = true,
-            Path = "/",
+            Path = "/app",
         },
     };
     private readonly OidcController _controller;
@@ -66,7 +67,9 @@ public class OidcControllerLoginCallbackTests
             .Which.Url.Should().Be("/auth/login?returnUrl=%2Freports%3Fdays%3D7");
 
         var setCookie = SetCookieHeader();
-        setCookie.Should().Contain($"{SessionCookieExtensions.TotpStepUpCookieName}=step-up-token");
+        setCookie.Should().MatchRegex(
+            $@"{Regex.Escape(SessionCookieExtensions.TotpStepUpCookieName)}=step-up-token;[^,]*path=/(;|$)",
+            "the web app deletes it at the root path");
         setCookie.Should().Contain("httponly");
         setCookie.Should().NotContain(_options.Cookie.AccessTokenName);
         setCookie.Should().NotContain(_options.Cookie.RefreshTokenName);

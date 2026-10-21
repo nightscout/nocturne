@@ -334,16 +334,21 @@ public class OidcAuthService : IOidcAuthService
         // minted by a tenant login and must have been bounced to that subdomain, so an
         // unresolved tenant means something upstream failed — and treating that as "nothing to
         // check" is how the gate silently disappeared when the state encoding changed.
+        var admittedByInvite = false;
         if (currentTenantId is { } tenantId)
         {
-            if (!await _tenantMemberService.IsMemberAsync(subject.Id, tenantId)
-                && !await IsInvitedByReturnUrlAsync(stateData.ReturnUrl, tenantId))
+            if (!await _tenantMemberService.IsMemberAsync(subject.Id, tenantId))
             {
-                _logger.LogWarning(
-                    "OIDC login denied: subject {SubjectId} is not a member of tenant {TenantId}",
-                    subject.Id,
-                    tenantId);
-                return OidcCallbackResult.NotAMember(subject.Id, stateData.ReturnUrl);
+                if (!await IsInvitedByReturnUrlAsync(stateData.ReturnUrl, tenantId))
+                {
+                    _logger.LogWarning(
+                        "OIDC login denied: subject {SubjectId} is not a member of tenant {TenantId}",
+                        subject.Id,
+                        tenantId);
+                    return OidcCallbackResult.NotAMember(subject.Id, stateData.ReturnUrl);
+                }
+
+                admittedByInvite = true;
             }
         }
         else if (!string.IsNullOrEmpty(stateData.TenantSlug))
@@ -361,7 +366,7 @@ public class OidcAuthService : IOidcAuthService
         {
             return OidcCallbackResult.SecondFactorRequired(
                 subject.Id,
-                await _totpService.CreateStepUpTokenAsync(subject.Id),
+                await _totpService.CreateStepUpTokenAsync(subject.Id, currentTenantId, admittedByInvite),
                 stateData.ReturnUrl,
                 provider.Id);
         }

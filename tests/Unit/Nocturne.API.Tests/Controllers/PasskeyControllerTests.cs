@@ -1136,7 +1136,7 @@ public class PasskeyControllerTests : IDisposable
         var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
         StubSuccessfulAssertion(subjectId, "rhys");
         _totpService.Setup(s => s.GetCredentialCountAsync(subjectId)).ReturnsAsync(1);
-        _totpService.Setup(s => s.CreateStepUpTokenAsync(subjectId)).ReturnsAsync("step-up-token");
+        _totpService.Setup(s => s.CreateStepUpTokenAsync(subjectId, _tenantId, false)).ReturnsAsync("step-up-token");
 
         var result = await LoginCompleteAsync();
 
@@ -1174,7 +1174,7 @@ public class PasskeyControllerTests : IDisposable
         _sessionService.Verify(
             s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Once);
-        _totpService.Verify(s => s.CreateStepUpTokenAsync(It.IsAny<Guid>()), Times.Never);
+        _totpService.Verify(s => s.CreateStepUpTokenAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>()), Times.Never);
     }
 
     #endregion

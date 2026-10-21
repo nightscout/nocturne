@@ -583,7 +583,8 @@ public class PasskeyController : ControllerBase
                 {
                     Success = true,
                     TotpRequired = true,
-                    StepUpToken = await _totpService.CreateStepUpTokenAsync(assertionResult.SubjectId),
+                    StepUpToken = await _totpService.CreateStepUpTokenAsync(
+                        assertionResult.SubjectId, tenantId, admittedByInvite: false),
                 });
             }
 

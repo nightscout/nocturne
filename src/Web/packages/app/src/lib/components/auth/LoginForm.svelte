@@ -41,10 +41,9 @@
     returnUrl?: string;
     onSuccess?: () => void;
     /**
-     * Whether this page is served on a host that resolves no tenant. Passkeys, authenticator
-     * codes, and recovery codes are all checked against a resolved tenant's members, so on such
-     * a host only the identity-provider path can complete a sign-in and it is the only one
-     * offered.
+     * Whether this page is served on a host that resolves no tenant. Passkeys and recovery codes
+     * are checked against a resolved tenant's members, so on such a host only the
+     * identity-provider path can start a sign-in and it is the only one offered.
      */
     tenantless?: boolean;
     /** A step-up token from an identity-provider sign-in that still needs the authenticator code. */
@@ -372,7 +371,7 @@
   </div>
 {:else}
   <div class="space-y-4">
-    {#if tenantless}
+    {#if tenantless && mode !== "totp"}
       <p class="text-sm text-muted-foreground">
         Passkeys, authenticator codes, and recovery codes are checked against one
         tenant, so they are used at that tenant's own web address.

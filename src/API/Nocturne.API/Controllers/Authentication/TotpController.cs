@@ -43,6 +43,12 @@ public class TotpController : ControllerBase
     /// </summary>
     private const string CodeNotAccepted = "That code wasn't accepted. Please sign in again.";
 
+    /// <summary>
+    /// The 403 <c>detail</c> for a verified sign-in that this host will not admit. Both factors
+    /// passed, so the caller is the account holder and learns nothing about anyone else.
+    /// </summary>
+    public const string NotAMember = "not_a_member";
+
     private readonly ITotpService _totpService;
     private readonly ISessionService _sessionService;
     private readonly ISubjectService _subjectService;
@@ -241,12 +247,15 @@ public class TotpController : ControllerBase
     /// </remarks>
     /// <response code="200">Login successful with access token.</response>
     /// <response code="400">Invalid step-up token or code.</response>
+    /// <response code="403">Both factors passed, but this host does not admit the subject;
+    /// <c>detail</c> is <see cref="NotAMember"/>.</response>
     [HttpPost("login")]
     [AllowAnonymous]
     [EnableRateLimiting("totp-login")]
     [RemoteCommand]
     [ProducesResponseType(typeof(TotpLoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<TotpLoginResponse>> Login([FromBody] TotpLoginRequest request)
     {
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
@@ -261,16 +270,19 @@ public class TotpController : ControllerBase
             return Problem(detail: CodeNotAccepted, statusCode: 400, title: "Bad Request");
         }
 
-        // The step-up token is not bound to a tenant, so a member of another tenant could otherwise
-        // be issued a session here. Require membership of the tenant being logged into; respond as
-        // for an invalid code so the failure does not reveal that the account exists on a
-        // different tenant.
-        if (!await _tenantMemberService.IsMemberAsync(result.SubjectId, _tenantAccessor.TenantId))
+        // The primary factor decided who may sign in where, and the token carries that decision:
+        // redeem it only on the host it was minted for. A membership revoked since then still
+        // denies, unless the primary factor admitted this subject on an invite.
+        Guid? hostTenantId = _tenantAccessor.IsResolved ? _tenantAccessor.TenantId : null;
+        if (result.TenantId != hostTenantId
+            || (hostTenantId is { } tenantId
+                && !result.AdmittedByInvite
+                && !await _tenantMemberService.IsMemberAsync(result.SubjectId, tenantId)))
         {
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, result.SubjectId, success: false,
                 ipAddress: ip, userAgent: ua,
                 detailsJson: JsonSerializer.Serialize(new { method = "totp", reason = "not_a_member" }));
-            return Problem(detail: CodeNotAccepted, statusCode: 400, title: "Bad Request");
+            return Problem(detail: NotAMember, statusCode: 403, title: "Forbidden");
         }
 
         var session = await _sessionService.IssueSessionAsync(

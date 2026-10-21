@@ -276,7 +276,7 @@ public class OidcAuthServiceLoginGateTests
             .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         _totpService.Setup(t => t.GetCredentialCountAsync(subject.Id)).ReturnsAsync(1);
-        _totpService.Setup(t => t.CreateStepUpTokenAsync(subject.Id)).ReturnsAsync("step-up-token");
+        _totpService.Setup(t => t.CreateStepUpTokenAsync(subject.Id, tenantId, false)).ReturnsAsync("step-up-token");
         SetupSessionIssuance();
 
         var result = await _service.CompleteLoginAsync(
@@ -311,7 +311,50 @@ public class OidcAuthServiceLoginGateTests
 
         result.IsAccessDenied.Should().BeTrue();
         result.StepUpToken.Should().BeNull();
-        _totpService.Verify(t => t.CreateStepUpTokenAsync(It.IsAny<Guid>()), Times.Never);
+        _totpService.Verify(
+            t => t.CreateStepUpTokenAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_WhenAnInviteeHasAnAuthenticator_BindsTheInviteToTheStepUpToken()
+    {
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _memberInviteService
+            .Setup(s => s.GetInviteByTokenAsync("invite-token", tenantId))
+            .ReturnsAsync(ValidInvite(tenantId));
+        _totpService.Setup(t => t.GetCredentialCountAsync(subject.Id)).ReturnsAsync(1);
+        _totpService.Setup(t => t.CreateStepUpTokenAsync(subject.Id, tenantId, true)).ReturnsAsync("step-up-token");
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(returnUrl: "/join?token=invite-token"),
+            Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        result.StepUpToken.Should().Be("step-up-token");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnATenantlessHostWithAnAuthenticator_BindsTheTokenToNoTenant()
+    {
+        var subject = SetupResolvedSubject();
+        _totpService.Setup(t => t.GetCredentialCountAsync(subject.Id)).ReturnsAsync(1);
+        _totpService.Setup(t => t.CreateStepUpTokenAsync(subject.Id, null, false)).ReturnsAsync("step-up-token");
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(tenantSlug: null!), Provider(), Claims(), currentTenantId: null, ipAddress: null, userAgent: null);
+
+        result.StepUpToken.Should().Be("step-up-token");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

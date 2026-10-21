@@ -18,7 +18,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.8")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -5174,6 +5174,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<bool>("AdmittedByInvite")
+                        .HasColumnType("boolean")
+                        .HasColumnName("admitted_by_invite");
+
+                    b.Property<Guid?>("BoundTenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bound_tenant_id");
 
                     b.Property<DateTime?>("ConsumedAt")
                         .HasColumnType("timestamp with time zone")

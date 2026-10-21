@@ -99,7 +99,7 @@ public class TotpService : ITotpService
         return new TotpCredentialResult(entity.Id, payload.SubjectId);
     }
 
-    public async Task<string> CreateStepUpTokenAsync(Guid subjectId)
+    public async Task<string> CreateStepUpTokenAsync(Guid subjectId, Guid? tenantId, bool admittedByInvite)
     {
         await using var db = await _contexts.CreateAsync();
         // The subject lives on the row, not in the token, so the token cannot assert an identity of
@@ -108,6 +108,8 @@ public class TotpService : ITotpService
         {
             Id = Guid.CreateVersion7(),
             SubjectId = subjectId,
+            BoundTenantId = tenantId,
+            AdmittedByInvite = admittedByInvite,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.Add(StepUpExpiry),
         };
@@ -250,7 +252,9 @@ public class TotpService : ITotpService
             "TOTP verification succeeded for subject {SubjectId}",
             subject.Id);
 
-        return new TotpLoginResult(subject.Id, subject.Username ?? subject.Name, subject.Name);
+        return new TotpLoginResult(
+            subject.Id, subject.Username ?? subject.Name, subject.Name,
+            stepUp.BoundTenantId, stepUp.AdmittedByInvite);
     }
 
     public async Task<List<TotpCredentialInfo>> GetCredentialsAsync(Guid subjectId)

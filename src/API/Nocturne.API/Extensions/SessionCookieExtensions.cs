@@ -200,7 +200,8 @@ public static class SessionCookieExtensions
 
     /// <summary>
     /// Hand a step-up token to the login page across a redirect. Host-only: the token is redeemed
-    /// on the tenant the callback resolved, so no other host needs it.
+    /// on the host the callback ran on, so no other host needs it. Path is fixed at the root
+    /// because the web app, which deletes it, cannot read <see cref="CookieSettings.Path"/>.
     /// </summary>
     public static void SetTotpStepUpCookie(
         this HttpResponse response, string stepUpToken, OidcOptions options)
@@ -210,7 +211,7 @@ public static class SessionCookieExtensions
             HttpOnly = true,
             Secure = options.Cookie.Secure,
             SameSite = MapSameSiteMode(options.Cookie.SameSite),
-            Path = options.Cookie.Path,
+            Path = "/",
             IsEssential = true,
             MaxAge = TotpService.StepUpExpiry,
         });
