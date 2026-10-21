@@ -230,16 +230,22 @@ public static class HubAuthorizationState
     /// method reads tenant data through. An in-band credential never passed
     /// <see cref="Middleware.MemberScopeMiddleware"/>, so without this its reads would run unclamped.
     /// The clamp is applied before the credential is recorded, so a clamp that throws leaves the
-    /// connection unauthorized rather than authorized and unclamped. It lives only on the handshake
-    /// scope, so a hub method must read tenant data through that scope and not through
-    /// <see cref="HubInvocationContext.ServiceProvider"/>.
+    /// connection unauthorized rather than authorized and unclamped. It also narrows the connection's
+    /// <see cref="HubConnectionReader"/>, which <see cref="TenantHubFilter"/> sets on the invocation
+    /// scope of every later call; the call that authenticates in-band already has its invocation
+    /// scope, so it reads tenant data through the handshake scope. The credential's principal becomes
+    /// the connection's audit actor (<see cref="HubConnectionActor"/>).
     /// </remarks>
     /// <param name="context">The connection to record the credential on.</param>
     /// <param name="authorization">The verified credential.</param>
     public static HubAuthorization Grant(HubCallerContext context, HubAuthorization authorization)
     {
         if (authorization.HistoryClamped)
+        {
             context.GetHttpContext()?.ClampMemberHistory();
+            HubConnectionReader.ClampToDay(context);
+        }
+        HubConnectionActor.Record(context, authorization);
         context.Items[ItemKey] = authorization;
         return authorization;
     }

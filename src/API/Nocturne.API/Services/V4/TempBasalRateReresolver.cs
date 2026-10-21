@@ -1,9 +1,8 @@
 using Microsoft.Extensions.Logging;
-using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Profiles.Resolvers;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.V4;
 
@@ -30,17 +29,18 @@ public interface ITempBasalRateReresolver
 /// </summary>
 /// <remarks>
 /// Runs after the write has committed and never fails it: an error is logged and the rates are
-/// left as they were. It reads in a scope of its own, so no resolver memo of the writing scope (the
-/// default profile name, the version cache) answers for the schedule just written. A window runs
+/// left as they were. It reads in a scope of its own, as the writer's reader, so no resolver memo of
+/// the writing scope answers for the schedule just written; the version cache is reloaded for it. A window runs
 /// from a written version or activation to the next one's start, or to now; a written version that
-/// is its profile's newest also covers the time before the first, which reads the newest. Each row
+/// is its profile's newest also covers the time before the first, which reads the newest
+/// (<see cref="Profiles.Resolvers.ProfileVersionCache.ActiveAt{TRecord}"/>). A profile document can
+/// also move the default store from its start, and each of its stores gets a window from that start,
+/// so the default's change is covered too. Each row
 /// is written by a conditional update (<see cref="ITempBasalRepository.SetScheduleDerivedRateAsync"/>)
 /// so a concurrent edit, upload or delete of it stands.
 /// </remarks>
 internal sealed class TempBasalRateReresolver(
-    IServiceScopeFactory scopes,
-    ITenantAccessor tenant,
-    ICategoryReadContext reads,
+    IServiceProvider scope,
     ILogger<TempBasalRateReresolver> logger) : ITempBasalRateReresolver
 {
     private const int PageSize = 500;
@@ -64,13 +64,14 @@ internal sealed class TempBasalRateReresolver(
         Func<IServiceProvider, CancellationToken, Task<List<Window>>> windowsOf,
         CancellationToken ct)
     {
-        if (tenant.Context is not { } context)
+        var reader = TenantReader.Of(scope);
+        if (reader.Tenant is null)
             return;
 
         try
         {
-            await using var scope = TenantJobScope.Open(scopes, context, "temp-basal-rates", reads.IsHistoryClamped);
-            var services = scope.ServiceProvider;
+            await using var job = TenantJobScope.OpenFor(scope, reader, "temp-basal-rates");
+            var services = job.ServiceProvider;
 
             var versions = services.GetRequiredService<ProfileVersionCache>();
             var basalSchedules = services.GetRequiredService<IBasalScheduleRepository>();

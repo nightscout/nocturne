@@ -355,7 +355,7 @@ public class SampleDataSeeder
         var (trackerDefinitions, trackerInstances) =
             await SeedTrackersAsync(db, deviceSchedule, ownerSubjectId, ct);
         var (alertRules, alertExcursions) =
-            await SeedAlertsAsync(db, tenant.TenantId, episodeTracker.Episodes, ct);
+            await SeedAlertsAsync(db, tenant.TenantId, ownerSubjectId, episodeTracker.Episodes, ct);
         if (includeGlucose && dataSource == Nocturne.Core.Constants.DataSources.DemoService)
             await SeedCompressionLowReviewsAsync(localToday, days, ct);
 
@@ -539,7 +539,8 @@ public class SampleDataSeeder
 
     /// <summary>
     /// A standard alert rule set (urgent low / low / high / signal loss, each
-    /// with an in-app channel) plus historical excursions and resolved alert
+    /// with an in-app channel to <paramref name="ownerSubjectId"/>, and no channel
+    /// without one) plus historical excursions and resolved alert
     /// instances taken from the threshold crossings of the generated glucose
     /// stream — so /alerts/history lines up with the chart. Rules are
     /// found-or-created by name; their alarm history is wiped and rebuilt.
@@ -547,6 +548,7 @@ public class SampleDataSeeder
     private async Task<(int Rules, int Excursions)> SeedAlertsAsync(
         NocturneDbContext db,
         Guid tenantId,
+        Guid? ownerSubjectId,
         IReadOnlyList<DemoAlertSeeds.GlucoseEpisode> episodes,
         CancellationToken ct)
     {
@@ -572,14 +574,18 @@ public class SampleDataSeeder
                     Severity = seed.Severity,
                     IsEnabled = true,
                 };
-                rule.Channels.Add(new AlertRuleChannelEntity
+                if (ownerSubjectId is { } owner)
                 {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenantId,
-                    AlertRuleId = rule.Id,
-                    ChannelType = ChannelType.InApp,
-                    SortOrder = 0,
-                });
+                    rule.Channels.Add(new AlertRuleChannelEntity
+                    {
+                        Id = Guid.CreateVersion7(),
+                        TenantId = tenantId,
+                        AlertRuleId = rule.Id,
+                        ChannelType = ChannelType.InApp,
+                        Destination = owner.ToString(),
+                        SortOrder = 0,
+                    });
+                }
                 db.AlertRules.Add(rule);
                 rulesCreated++;
             }

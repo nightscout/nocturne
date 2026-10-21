@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;
 

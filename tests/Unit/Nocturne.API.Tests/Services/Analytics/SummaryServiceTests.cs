@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Profiles;
+using Nocturne.API.Tests.Services.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
@@ -38,7 +39,7 @@ public class SummaryServiceTests
     {
         _mockDDataService = new Mock<IDDataService>();
         _mockPropertiesService = new Mock<IPropertiesService>();
-        _mockActiveProfileResolver = new Mock<IActiveProfileResolver>();
+        _mockActiveProfileResolver = ActiveProfileResolverMock.WithDefault();
         _mockTherapySettings = new Mock<ITherapySettingsRepository>();
         _mockTherapySettings
             .Setup(x => x.GetDefaultsAsync(It.IsAny<CancellationToken>()))

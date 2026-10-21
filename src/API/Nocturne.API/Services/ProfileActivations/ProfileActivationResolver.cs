@@ -25,19 +25,16 @@ internal sealed class ProfileActivationResolver : IProfileActivationResolver
     private const int MaxActivationsPerRead = 5_000;
 
     private readonly IProfileActivationRepository _activations;
-    private readonly ITherapySettingsRepository _therapySettings;
-    private readonly ProfileVersionCache _versions;
+    private readonly ProfileStoreTimelineSource _stores;
     private readonly ITenantCache _cache;
 
     public ProfileActivationResolver(
         IProfileActivationRepository activations,
-        ITherapySettingsRepository therapySettings,
-        ProfileVersionCache versions,
+        ProfileStoreTimelineSource stores,
         ITenantCache cache)
     {
         _activations = activations;
-        _therapySettings = therapySettings;
-        _versions = versions;
+        _stores = stores;
         _cache = cache;
     }
 
@@ -101,7 +98,7 @@ internal sealed class ProfileActivationResolver : IProfileActivationResolver
             return new ResolvedProfileActivation(activation, name, ProfileScheduleSource.CustomizedSnapshot, snapshot, null);
 
         // A snapshot missing a kind of schedule gives way to the stored profile, which has every kind.
-        if (snapshot is not null && await _versions.GetActiveAtAsync(_therapySettings, name, ToUtc(atMills), ct) is null)
+        if (snapshot is not null && !(await _stores.GetAsync(ct)).Holds(name, atMills))
             return activation.SnapshotIsCustomized
                 ? new ResolvedProfileActivation(activation, name, ProfileScheduleSource.CustomizedSnapshot, snapshot, null)
                 : new ResolvedProfileActivation(activation, name, ProfileScheduleSource.BaseSnapshot, snapshot, scaling);

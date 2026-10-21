@@ -39,25 +39,25 @@ public class TempBasalRateReresolverTests
             .ReturnsAsync([]);
     }
 
-    private TempBasalRateReresolver Reresolver()
+    private TempBasalRateReresolver Reresolver(IProfileActivationRepository? activations = null)
     {
         var services = new ServiceCollection();
         services.AddScoped(_ => Mock.Of<ITenantAccessor>());
+        services.AddScoped(_ => Mock.Of<ICategoryReadContext>());
         services.AddScoped(_ => new ProfileVersionCache(TestTenantCache.Create()));
         services.AddScoped(_ => _basalSchedules.Object);
         services.AddScoped(_ => _therapySettings.Object);
         services.AddScoped(_ => _tempBasals.Object);
-        services.AddScoped(_ => Mock.Of<IProfileActivationRepository>());
+        services.AddScoped(_ => activations ?? Mock.Of<IProfileActivationRepository>());
         services.AddScoped(_ => _cache.Object);
         services.AddScoped(_ => TempBasalTestDeps.Rates(_basalRates.Object));
-        var tenant = new Mock<ITenantAccessor>();
+
+        var request = services.BuildServiceProvider().CreateScope().ServiceProvider;
+        var tenant = Mock.Get(request.GetRequiredService<ITenantAccessor>());
+        tenant.Setup(t => t.IsResolved).Returns(true);
         tenant.Setup(t => t.Context).Returns(new TenantContext(Guid.CreateVersion7(), "t", "T", true, false));
 
-        return new TempBasalRateReresolver(
-            services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
-            tenant.Object,
-            Mock.Of<ICategoryReadContext>(),
-            NullLogger<TempBasalRateReresolver>.Instance);
+        return new TempBasalRateReresolver(request, NullLogger<TempBasalRateReresolver>.Instance);
     }
 
     private static TempBasal Derived(DateTime start, double? rate, double percent = -50) => new()
@@ -127,20 +127,7 @@ public class TempBasalRateReresolverTests
         activations
             .Setup(r => r.GetStartingAfterAsync(start, 1, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new ProfileActivation { StartTimestamp = nextStart }]);
-        var services = new ServiceCollection();
-        services.AddScoped(_ => Mock.Of<ITenantAccessor>());
-        services.AddScoped(_ => new ProfileVersionCache(TestTenantCache.Create()));
-        services.AddScoped(_ => _basalSchedules.Object);
-        services.AddScoped(_ => _therapySettings.Object);
-        services.AddScoped(_ => _tempBasals.Object);
-        services.AddScoped(_ => activations.Object);
-        services.AddScoped(_ => _cache.Object);
-        services.AddScoped(_ => TempBasalTestDeps.Rates(_basalRates.Object));
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.Setup(t => t.Context).Returns(new TenantContext(Guid.CreateVersion7(), "t", "T", true, false));
-        var reresolver = new TempBasalRateReresolver(
-            services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
-            tenant.Object, Mock.Of<ICategoryReadContext>(), NullLogger<TempBasalRateReresolver>.Instance);
+        var reresolver = Reresolver(activations.Object);
 
         await reresolver.AfterActivationsChangedAsync([("Day", start, null)], CancellationToken.None);
 

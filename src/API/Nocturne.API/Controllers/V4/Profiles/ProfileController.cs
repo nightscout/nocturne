@@ -358,6 +358,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     {
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        model.DocumentDefaultProfile = (await _therapyRepo.GetByIdAsync(id, ct))?.DocumentDefaultProfile;
         TherapySettings updated;
         try
         {

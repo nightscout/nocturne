@@ -5,6 +5,7 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using System.Collections.Concurrent;
 using SocketIOClient;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;
 

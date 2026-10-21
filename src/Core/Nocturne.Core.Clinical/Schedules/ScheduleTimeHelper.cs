@@ -1,66 +1,24 @@
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Clinical.Schedules;
 
 /// <summary>
-/// Converts Unix milliseconds to local seconds-from-midnight using the patient's timezone.
-/// Shared across all schedule resolvers; takes repositories directly (not
-/// <see cref="Core.Contracts.Profiles.Resolvers.ITherapySettingsResolver"/>) to avoid a
-/// circular dependency with that resolver. Timezone precedence matches
-/// <c>TherapySettingsResolver.GetTimezoneAsync</c>: canonical
-/// <see cref="Core.Models.V4.PatientRecord.Timezone"/> first, then the legacy per-profile
-/// <c>TherapySettings.Timezone</c>.
+/// The timezone a therapy schedule's times of day are read in, and the local time of day in it.
 /// </summary>
 public static class ScheduleTimeHelper
 {
     /// <summary>
-    /// Converts Unix milliseconds to seconds-from-midnight in the patient's local timezone.
-    /// Prefers <see cref="IPatientRecordRepository"/>, falls back to the per-profile
-    /// <see cref="ITherapySettingsRepository"/> timezone, then UTC when neither is configured.
+    /// The timezone a schedule is read in: the patient's (<see cref="Core.Models.V4.PatientRecord.Timezone"/>,
+    /// the canonical one, since a patient lives in one timezone whatever profile is running), else the
+    /// one a profile switch was uploaded with, else the stored profile's (connector imports wrote it
+    /// there before the patient record held it), else null, which reads as UTC.
     /// </summary>
-    public static async Task<int> GetSecondsFromMidnightAsync(
-        long timeMills,
-        string profileName,
-        DateTime timestamp,
-        ITherapySettingsRepository therapyRepo,
-        IPatientRecordRepository patientRecordRepo,
-        CancellationToken ct)
-    {
-        var patient = await patientRecordRepo.GetAsync(ct);
-        var timezone = patient?.Timezone;
-
-        if (string.IsNullOrEmpty(timezone))
-        {
-            var therapy = await therapyRepo.GetActiveAtAsync(profileName, timestamp, ct);
-            timezone = therapy?.Timezone;
-        }
-
-        return GetSecondsFromMidnight(
-            timeMills,
-            TimeZoneHelper.GetTimeZoneInfoFromId(timezone)
-        );
-    }
+    /// <remarks>Every resolver reading a schedule at a time, point or batch, takes its timezone from here.</remarks>
+    public static string? TimezoneOf(string? patientTimezone, string? switchTimezone, string? storeTimezone) =>
+        NonEmpty(patientTimezone) ?? NonEmpty(switchTimezone) ?? NonEmpty(storeTimezone);
 
     /// <summary>
-    /// <see cref="GetSecondsFromMidnightAsync(long, string, DateTime, ITherapySettingsRepository, IPatientRecordRepository, CancellationToken)"/>
-    /// for schedules that carry their own timezone, which stands in for the per-profile one.
-    /// </summary>
-    public static async Task<int> GetSecondsFromMidnightAsync(
-        long timeMills,
-        string? scheduleTimezone,
-        IPatientRecordRepository patientRecordRepo,
-        CancellationToken ct)
-    {
-        var patient = await patientRecordRepo.GetAsync(ct);
-        var timezone = string.IsNullOrEmpty(patient?.Timezone) ? scheduleTimezone : patient.Timezone;
-        return GetSecondsFromMidnight(timeMills, TimeZoneHelper.GetTimeZoneInfoFromId(timezone));
-    }
-
-    /// <summary>
-    /// Converts Unix milliseconds to seconds-from-midnight in the given timezone. Synchronous
-    /// core of <see cref="GetSecondsFromMidnightAsync"/> for callers that have already resolved
-    /// the tenant timezone (e.g. per-reading loops).
+    /// Converts Unix milliseconds to seconds-from-midnight in the given timezone.
     /// </summary>
     public static int GetSecondsFromMidnight(long timeMills, TimeZoneInfo timeZone)
     {
@@ -70,4 +28,6 @@ public static class ScheduleTimeHelper
         );
         return (int)dto.TimeOfDay.TotalSeconds;
     }
+
+    private static string? NonEmpty(string? timezone) => string.IsNullOrEmpty(timezone) ? null : timezone;
 }
