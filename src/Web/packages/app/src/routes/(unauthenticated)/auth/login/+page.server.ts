@@ -1,6 +1,7 @@
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 import { GUEST_CODE_DISMISSED_COOKIE } from "$lib/components/auth/guest-code-dismissal";
+import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
 import { safeReturnUrl } from "$lib/server/return-url";
 import { autoLoginEndpoint, autoLoginRedirect, withMarker } from "$lib/server/auto-login";
 
@@ -8,6 +9,13 @@ import { autoLoginEndpoint, autoLoginRedirect, withMarker } from "$lib/server/au
 // auto-login for all of them; the authenticated layout also sends anonymous
 // visitors to the endpoint directly when it already knows it. See auto-login.ts.
 export const load: PageServerLoad = async ({ url, locals, cookies, parent }) => {
+  // An identity provider accepted the visitor and the account wants its authenticator code next.
+  const stepUpToken = cookies.get(AUTH_COOKIE_NAMES.totpStepUp);
+  if (stepUpToken) {
+    cookies.delete(AUTH_COOKIE_NAMES.totpStepUp, { path: "/" });
+    return { stepUpToken };
+  }
+
   const endpoint = await resolveAutoLoginEndpoint(locals);
   if (!endpoint) {
     const { tenantless } = await parent();

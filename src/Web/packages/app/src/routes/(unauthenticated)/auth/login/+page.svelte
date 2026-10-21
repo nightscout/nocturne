@@ -103,7 +103,7 @@
       </Card.Footer>
     {:else}
       <Card.Content>
-        <LoginForm {returnUrl} {tenantless} />
+        <LoginForm {returnUrl} {tenantless} pendingStepUpToken={data.stepUpToken} />
       </Card.Content>
 
       <Card.Footer class="flex flex-col space-y-2">

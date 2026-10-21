@@ -220,6 +220,21 @@ public class OidcController : ControllerBase
             currentTenantId
         );
 
+        if (result.StepUpToken is { } stepUpToken)
+        {
+            Response.SetTotpStepUpCookie(stepUpToken, _options);
+            SetLastSignInCookie(result.ProviderId);
+
+            // Not a completed login, so not a successful one; the success row is written when the
+            // second factor lands.
+            await _auditService.LogAsync(AuthAuditEventType.Login, result.SubjectId, success: false,
+                ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+                detailsJson: JsonSerializer.Serialize(new { method = "oidc", secondFactorPending = true }));
+
+            return Redirect(
+                $"/auth/login?returnUrl={Uri.EscapeDataString(result.ReturnUrl ?? "/")}");
+        }
+
         if (!result.Success)
         {
             // Authenticated identity that is not a member of this tenant: issue no session and
@@ -255,10 +270,7 @@ public class OidcController : ControllerBase
 
         // Set session cookies
         SetSessionCookies(result.Tokens!);
-        Response.SetLastSignInCookie(
-            SessionCookieExtensions.SignInMethods.Oidc,
-            result.ProviderId?.ToString(),
-            _options);
+        SetLastSignInCookie(result.ProviderId);
 
         await _auditService.LogAsync(AuthAuditEventType.Login, result.Tokens?.SubjectId, success: true,
             ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
@@ -681,6 +693,10 @@ public class OidcController : ControllerBase
             tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
 
     private void ClearSessionCookies() => Response.ClearSessionCookies(_options);
+
+    private void SetLastSignInCookie(Guid? providerId) =>
+        Response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Oidc, providerId?.ToString(), _options);
 
     /// <summary>
     /// Get the refresh token from cookie or request body

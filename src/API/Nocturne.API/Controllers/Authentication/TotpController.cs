@@ -23,14 +23,9 @@ namespace Nocturne.API.Controllers.Authentication;
 /// TOTP is never a sole factor: <see cref="Setup"/> requires at least one primary auth factor
 /// (passkey or OIDC link) to already be configured, and <see cref="Login"/> requires a step-up
 /// token minted by a completed primary factor, so a code on its own can never produce a session.
-/// <para>
-/// Known limitation — TOTP is only <em>demanded</em> on the passkey sign-in path.
-/// <c>PasskeyController.LoginComplete</c> checks <see cref="ITotpService.GetCredentialCountAsync"/>
-/// and withholds the session until a code is supplied here. The OIDC login callback
-/// (<c>OidcAuthService.CompleteLoginAsync</c>) does not: a subject with TOTP enrolled and a linked
-/// provider signs in through that provider with no code. Closing it needs a pending-second-factor
-/// state carried across the provider redirect, which the web app has no route for today.
-/// </para>
+/// Both primary factors, <c>PasskeyController.LoginComplete</c> and
+/// <c>OidcAuthService.CompleteLoginAsync</c>, withhold the session from a subject with an
+/// authenticator enrolled and mint that token instead.
 /// </remarks>
 /// <seealso cref="ITotpService"/>
 /// <seealso cref="ISessionService"/>
@@ -238,7 +233,7 @@ public class TotpController : ControllerBase
     /// <returns>A <see cref="TotpLoginResponse"/> with access token on success.</returns>
     /// <remarks>
     /// TOTP is a second factor, so this endpoint needs a step-up token from a completed passkey
-    /// assertion — it cannot be reached with a code alone. The token names the subject; a
+    /// assertion or OIDC callback — it cannot be reached with a code alone. The token names the subject; a
     /// caller-supplied username is not accepted.
     /// Rate-limited via the "totp-login" policy.
     /// On success: issues session cookies, updates last login time, and logs
@@ -266,10 +261,10 @@ public class TotpController : ControllerBase
             return Problem(detail: CodeNotAccepted, statusCode: 400, title: "Bad Request");
         }
 
-        // The step-up token is minted by the passkey assertion, which is not tenant-scoped, so a
-        // member of another tenant could otherwise be issued a session here. Require membership of
-        // the tenant being logged into; respond as for an invalid code so the failure does not
-        // reveal that the account exists on a different tenant.
+        // The step-up token is not bound to a tenant, so a member of another tenant could otherwise
+        // be issued a session here. Require membership of the tenant being logged into; respond as
+        // for an invalid code so the failure does not reveal that the account exists on a
+        // different tenant.
         if (!await _tenantMemberService.IsMemberAsync(result.SubjectId, _tenantAccessor.TenantId))
         {
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, result.SubjectId, success: false,
@@ -285,10 +280,8 @@ public class TotpController : ControllerBase
                 IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                 UserAgent: Request.Headers.UserAgent.ToString()));
 
+        // The sign-in hint names the primary factor, which wrote it when it minted the step-up token.
         Response.SetSessionCookies(session, _oidcOptions);
-        // The passkey was the method chosen at the login form; this step is its second factor.
-        Response.SetLastSignInCookie(
-            SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions);
 
         await _subjectService.UpdateLastLoginAsync(result.SubjectId);
 

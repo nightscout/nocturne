@@ -576,6 +576,8 @@ public class PasskeyController : ControllerBase
                     ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                     userAgent: Request.Headers.UserAgent.ToString(),
                     detailsJson: JsonSerializer.Serialize(new { method = "passkey", secondFactorPending = true }));
+                Response.SetLastSignInCookie(
+                    SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions);
 
                 return Ok(new PasskeyLoginCompleteResponse
                 {

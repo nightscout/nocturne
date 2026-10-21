@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Infrastructure;
@@ -1148,6 +1149,10 @@ public class PasskeyControllerTests : IDisposable
             s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Never,
             "the second factor is still outstanding, so the passkey alone must not grant access");
+
+        _controller.HttpContext.Response.Headers.SetCookie.ToString()
+            .Should().Contain($"{SessionCookieExtensions.LastSignInCookieName}=passkey",
+                "the authenticator step that follows does not know which primary factor preceded it");
     }
 
     [Fact]

@@ -26,7 +26,7 @@ public class TotpService : ITotpService
     /// code, short enough that a leaked token is not a standing credential. Within that window the
     /// token is still only redeemable once — see <see cref="TotpStepUpTokenEntity"/>.
     /// </summary>
-    private static readonly TimeSpan StepUpExpiry = TimeSpan.FromMinutes(5);
+    internal static readonly TimeSpan StepUpExpiry = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// A fixed dummy secret used for constant-time side-channel protection when a username
