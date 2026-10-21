@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Models.Queries;
 using Xunit;
 using TimePatternQuery = Nocturne.Core.Contracts.Legacy.TimePatternQuery;
 
@@ -545,194 +546,79 @@ public class TimeQueryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Parity]
-    public void GenerateTimeQueryEcho_WithValidParams_ReturnsCorrectEcho()
+    public void GenerateTimeQueryEcho_WithMultiplePatterns_MatchesRegexAlternatives()
     {
         // Arrange
-        var prefix = "2024-01";
-        var regex = "T{13..15}:00:00";
-        var storage = "entries";
-        var fieldName = "dateString";
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00", "2024-01T14:00:00", "2024-01T15:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00", "2024-01T14:00:00", "2024-01T15:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
+        var patterns = new[] { "^2024-01T13:00:00", "^2024-01T14:00:00" };
         _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
+            .Setup(x => x.PrepareTimePatterns("2024-01", "T{13..14}:00:00", "dateString"))
+            .Returns(
+                new TimePatternQuery
+                {
+                    Patterns = patterns,
+                    InPatterns = patterns,
+                    CanOptimizeWithIndex = false,
+                }
+            );
 
         // Act
-        var result = _timeQueryService.GenerateTimeQueryEcho(prefix, regex, storage, fieldName);
+        var result = _timeQueryService.GenerateTimeQueryEcho("2024-01", "T{13..14}:00:00");
+        var echoConditions = FindQuery.Parse(JsonSerializer.Serialize(result.Query));
 
         // Assert
-        result.Should().NotBeNull();
-        result.Req.Should().NotBeNull();
-        result.Req.Params.Should().ContainKey("prefix").WhoseValue.Should().Be(prefix);
-        result.Req.Params.Should().ContainKey("regex").WhoseValue.Should().Be(regex);
-        result.Req.Params.Should().ContainKey("storage").WhoseValue.Should().Be(storage);
-        result.Req.Params.Should().ContainKey("field").WhoseValue.Should().Be(fieldName);
-        result.Pattern.Should().BeEquivalentTo(expectedPatterns.Patterns);
-        result.Query.Should().ContainKey(fieldName);
+        echoConditions.Matches(new Entry { DateString = "2024-01T13:00:00.000Z" }).Should().BeTrue();
+        echoConditions.Matches(new Entry { DateString = "2024-01T14:00:00.000Z" }).Should().BeTrue();
+        echoConditions.Matches(new Entry { DateString = "2024-01T15:00:00.000Z" }).Should().BeFalse();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     [Parity]
-    public void GenerateTimeQueryEcho_WithOptimizedPattern_UsesRegexQuery()
+    public void GenerateTimeQueryEcho_KeepsRawParametersSeparateFromAppliedFind()
     {
         // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var storage = "entries";
-        var fieldName = "dateString";
-        var singleRegexPattern = "^2024-01T13:00:00";
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            SingleRegexPattern = singleRegexPattern,
-            CanOptimizeWithIndex = true,
-        };
-
         _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
+            .Setup(x => x.PrepareTimePatterns(null, null, "dateString"))
+            .Returns(new TimePatternQuery { Patterns = [], InPatterns = [] });
+        const string query = "?storage=entries&field=dateString&type=mbg&device=ignored"
+            + "&token=x&secret=y&_=1&count=10&sort=dateString"
+            + "&find[type]=sgv&find[device]=001";
 
         // Act
-        var result = _timeQueryService.GenerateTimeQueryEcho(prefix, regex, storage, fieldName);
+        var result = _timeQueryService.GenerateTimeQueryEcho(null, null, queryString: query);
 
         // Assert
-        result.Should().NotBeNull();
-        result.Query.Should().ContainKey(fieldName);
-        var fieldQuery = result.Query[fieldName] as Dictionary<string, object>;
-        fieldQuery.Should().NotBeNull();
-        fieldQuery.Should().ContainKey("$regex").WhoseValue.Should().Be(singleRegexPattern);
+        result.Req.Query["token"].Should().Be("x");
+        result.Req.Query["secret"].Should().Be("y");
+        var echoConditions = FindQuery.Parse(JsonSerializer.Serialize(result.Query));
+        echoConditions.Matches(new Entry { Type = "sgv", Device = "001" }).Should().BeTrue();
+        echoConditions.Matches(new Entry { Type = "sgv", Device = "1" }).Should().BeFalse();
+        echoConditions.Matches(new Entry { Type = "mbg", Device = "001" }).Should().BeFalse();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    [Parity]
-    public void GenerateTimeQueryEcho_WithMultiplePatterns_UsesInQuery()
+    public void GenerateTimeQueryEcho_UnsupportedOrBranchFailsClosedWithoutRequiringAnId()
     {
         // Arrange
-        var prefix = "2024-01";
-        var regex = "T{13..15}:00:00";
-        var storage = "entries";
-        var fieldName = "dateString";
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00", "2024-01T14:00:00", "2024-01T15:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00", "2024-01T14:00:00", "2024-01T15:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
         _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        // Act
-        var result = _timeQueryService.GenerateTimeQueryEcho(prefix, regex, storage, fieldName);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Query.Should().ContainKey(fieldName);
-        var fieldQuery = result.Query[fieldName] as Dictionary<string, object>;
-        fieldQuery.Should().NotBeNull();
-        fieldQuery.Should().ContainKey("$in");
-        var inValues = fieldQuery!["$in"] as IEnumerable<string>;
-        inValues.Should().BeEquivalentTo(expectedPatterns.InPatterns);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public void GenerateTimeQueryEcho_WithQueryParameters_IncludesInResult()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var storage = "entries";
-        var fieldName = "dateString";
-        var queryParameters = new Dictionary<string, object>
-        {
-            { "type", "sgv" },
-            { "device", "test-device" },
-        };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
+            .Setup(x => x.PrepareTimePatterns(null, null, "dateString"))
+            .Returns(new TimePatternQuery { Patterns = [], InPatterns = [] });
 
         // Act
         var result = _timeQueryService.GenerateTimeQueryEcho(
-            prefix,
-            regex,
-            storage,
-            fieldName,
-            queryParameters
+            null,
+            null,
+            queryString: "?find[$or][0][sgv][$unknown]=100&find[$or][1][type]=mbg"
         );
+        var echoConditions = FindQuery.Parse(JsonSerializer.Serialize(result.Query));
 
         // Assert
-        result.Should().NotBeNull();
-        result.Req.Query.Should().BeEquivalentTo(queryParameters);
-        result.Query.Should().ContainKey("type").WhoseValue.Should().Be("sgv");
-        result.Query.Should().ContainKey("device").WhoseValue.Should().Be("test-device");
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public void GenerateTimeQueryEcho_ExcludesSpecialQueryParameters()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var storage = "entries";
-        var fieldName = "dateString";
-        var queryParameters = new Dictionary<string, object>
-        {
-            { "find", new Dictionary<string, object>() },
-            { "count", 10 },
-            { "sort", "dateString" },
-            { "type", "sgv" },
-        };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        // Act
-        var result = _timeQueryService.GenerateTimeQueryEcho(
-            prefix,
-            regex,
-            storage,
-            fieldName,
-            queryParameters
-        );
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Query.Should().NotContainKey("count");
-        result.Query.Should().NotContainKey("sort");
-        result.Query.Should().ContainKey("type").WhoseValue.Should().Be("sgv");
+        echoConditions.Matches(new { type = "sgv" }).Should().BeFalse();
+        echoConditions.Matches(new { _id = "a", type = "sgv" }).Should().BeFalse();
+        echoConditions.Matches(new { _id = (string?)null, type = "sgv" }).Should().BeFalse();
+        echoConditions.Matches(new { type = "mbg" }).Should().BeTrue();
+        echoConditions.Matches(new { _id = "f", type = "mbg" }).Should().BeTrue();
     }
 
     #endregion

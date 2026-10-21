@@ -394,9 +394,8 @@ msgstr ""
 msgid "Failed to save settings"
 msgstr ""
 
-#: src/lib/stores/settings-store.svelte.ts
-msgid "Validation error"
-msgstr ""
+#~ msgid "Validation error"
+#~ msgstr ""
 
 #~ msgid "Failed to save alarm configuration"
 #~ msgstr ""
@@ -3010,10 +3009,8 @@ msgstr ""
 #~ msgid "Sync completed successfully"
 #~ msgstr ""
 
-#. 0: manualSyncResult.successfulConnectors; 1: manualSyncResult.totalConnectors; 2: elapsedSeconds
-#: src/lib/components/connectors/ManualSyncDialog.svelte
-msgid "{0} of {1} connectors synced in {2}s"
-msgstr ""
+#~ msgid "{0} of {1} connectors synced in {2}s"
+#~ msgstr ""
 
 #: src/lib/components/connectors/ManualSyncDialog.svelte
 msgid "Connector Results"
@@ -13110,7 +13107,6 @@ msgid "Failed to load services"
 msgstr ""
 
 #: src/routes/(authenticated)/alerts/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Unknown error"
 msgstr ""
 
@@ -21027,9 +21023,8 @@ msgstr ""
 msgid "Reconnected to real-time data"
 msgstr ""
 
-#: src/lib/stores/settings-store.svelte.ts
-msgid "We couldn't save your alarm settings. Please try again."
-msgstr ""
+#~ msgid "We couldn't save your alarm settings. Please try again."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/alerts/+page.svelte
 msgid "Changing alerts requires the alerts.readwrite permission."
@@ -21583,7 +21578,6 @@ msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "We couldn't start the sync. Please try again."
 msgstr ""
 
@@ -21591,7 +21585,7 @@ msgstr ""
 msgid "We couldn't download the food data. Please try again."
 msgstr ""
 
-#. 0: manualSyncResult.failedConnectors
+#. 0: failedConnectors
 #: src/lib/components/connectors/ManualSyncDialog.svelte
 msgid "Sync finished with {0} failed"
 msgstr ""
@@ -21604,9 +21598,8 @@ msgstr ""
 msgid "No enabled connectors were found."
 msgstr ""
 
-#: src/lib/components/connectors/ManualSyncDialog.svelte
-msgid "The sync could not be started."
-msgstr ""
+#~ msgid "The sync could not be started."
+#~ msgstr ""
 
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "This data source has no data left to delete."
@@ -21645,9 +21638,8 @@ msgstr ""
 msgid "Add a backup way to sign in"
 msgstr ""
 
-#: src/lib/components/layout/BackupSignInPrompt.svelte
-msgid "There is one way into this account. Add a second passkey, link a sign-in method, or save recovery codes — one-time codes you can type in if you lose your device."
-msgstr ""
+#~ msgid "There is one way into this account. Add a second passkey, link a sign-in method, or save recovery codes — one-time codes you can type in if you lose your device."
+#~ msgstr ""
 
 #: src/lib/components/layout/BackupSignInPrompt.svelte
 msgid "Account settings"
@@ -23851,17 +23843,17 @@ msgstr ""
 msgid "Glucose target range {0}"
 msgstr ""
 
-#. 0: bg(FALLBACK_GLUCOSE_THRESHOLDS.low)
+#. 0: bg(thresholds.low)
 #: src/lib/components/ambulatory-glucose-profile/AmbulatoryGlucoseProfile.svelte
 msgid "Low {0}"
 msgstr ""
 
-#. 0: bg(FALLBACK_GLUCOSE_THRESHOLDS.high)
+#. 0: bg(thresholds.high)
 #: src/lib/components/ambulatory-glucose-profile/AmbulatoryGlucoseProfile.svelte
 msgid "High {0}"
 msgstr ""
 
-#. 0: bgRange(FALLBACK_GLUCOSE_THRESHOLDS.low, FALLBACK_GLUCOSE_THRESHOLDS.high)
+#. 0: bgRange(thresholds.low, thresholds.high)
 #: src/lib/components/ambulatory-glucose-profile/AmbulatoryGlucoseProfile.svelte
 msgid "Target range {0}"
 msgstr ""
@@ -27029,4 +27021,18 @@ msgstr ""
 #. 0: text; 1: value; 2: border; 3: value
 #: ../cms/src/lib/components/edra/shadcn/components/toolbar/QuickColors.svelte
 msgid "{0} background-color: {1}50; border: {2} {3};"
+msgstr ""
+
+#: src/lib/components/layout/BackupSignInPrompt.svelte
+msgid "There is one way into this account. Add a second passkey, link a sign-in method, or save recovery codes, which are one-time codes you can type in if you lose your device."
+msgstr ""
+
+#. 0: successfulConnectors; 1: totalConnectors
+#: src/lib/components/connectors/ManualSyncDialog.svelte
+msgid "{0} of {1} connectors synced"
+msgstr ""
+
+#. 0: result.durationMs
+#: src/lib/components/connectors/ManualSyncDialog.svelte
+msgid "{0}ms"
 msgstr ""

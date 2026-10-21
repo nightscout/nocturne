@@ -23,6 +23,16 @@ function hasGlucoseReadPermission(permissions: string[]): boolean {
   return permissions.some((p) => GLUCOSE_READ_PERMISSIONS.includes(p));
 }
 
+/** A failed read hides the banner: it is a nudge, and must not take the shell down with it. */
+async function readShowBackupSignInPrompt(apiClient: App.Locals["apiClient"]): Promise<boolean> {
+  try {
+    return (await apiClient.backupSignInPrompt.getBackupSignInPrompt()).show ?? false;
+  } catch (error) {
+    console.error("Failed to read the backup sign-in prompt:", error);
+    return false;
+  }
+}
+
 export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, parent, depends }) => {
   depends(SHELL_DATA_KEY);
 
@@ -42,6 +52,12 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   // Tenant status drives the anonymous-access gate and the demo banner. Shared with the root
   // layout's tenantless check, and null on failure — default to no anonymous access then
   // (fail safe: require sign-in rather than over-expose).
+  // Started with the status call so the prompt read adds no round-trip of its own; it never
+  // rejects, so a redirect below leaves nothing unhandled.
+  const backupSignInPrompt =
+    locals.user && !locals.isGuestSession
+      ? readShowBackupSignInPrompt(locals.apiClient)
+      : Promise.resolve(false);
   const status = await getRequestStatus(locals);
   const anonymousReadAccess = status?.anonymousReadAccess ?? false;
 
@@ -127,11 +143,14 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   const isDemo = status?.isDemo ?? false;
   const nextResetAt = toIsoString(status?.nextResetAt);
 
+  const showBackupSignInPrompt = !tenantless && !isDemo && (await backupSignInPrompt);
+
   return {
     user: locals.user ?? null,
     isGuestSession: locals.isGuestSession ?? false,
     guestExpiresAt: locals.guestExpiresAt ?? null,
     canViewRealtimeData,
+    showBackupSignInPrompt,
     isDemo,
     nextResetAt,
   };

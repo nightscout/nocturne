@@ -28,7 +28,9 @@ public static class TrackerSuccession
     /// running instance already stands for this start, or when another writer completes a running
     /// instance first. With <paramref name="replay"/> it also starts nothing when nothing is running
     /// and a run of the definition ended after <paramref name="startedAt"/>: someone has already
-    /// moved the tracker past the start being re-offered.
+    /// moved the tracker past the start being re-offered. Each run it completes is broadcast as
+    /// <see cref="TrackerRealtimeAction.Complete"/>, then the new run as
+    /// <see cref="TrackerRealtimeAction.Create"/>.
     /// </summary>
     public static async Task<TrackerSuccessionResult> StartAsync(
         ITrackerRepository repository,
@@ -92,12 +94,20 @@ public static class TrackerSuccession
                 startedAt
             );
             await broadcast.BroadcastTrackerUpdateAsync(
-                "complete",
+                TrackerRealtimeAction.Complete,
                 TrackerInstanceDto.FromEntity(instance),
                 definition.UserId,
                 definition.Visibility
             );
         }
+
+        if (result.Started is { } started)
+            await broadcast.BroadcastTrackerUpdateAsync(
+                TrackerRealtimeAction.Create,
+                TrackerInstanceDto.FromEntity(started),
+                started.UserId,
+                definition.Visibility
+            );
 
         return result;
     }

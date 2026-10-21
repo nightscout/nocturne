@@ -186,6 +186,40 @@ public class DataHubHistoryClampTests
     }
 
     [Fact]
+    public async Task A_clamped_credential_subscribes_to_no_category()
+    {
+        var (hub, _, authorizer, _) = CreateHub();
+        authorizer
+            .Setup(a => a.AuthorizeTokenAsync("tok", Tenant, Scope.GlucoseRead))
+            .ReturnsAsync(InBand(historyClamped: true));
+        await hub.Authorize(new AuthorizeRequest { Token = "tok" });
+        var groups = Mock.Get(hub.Groups);
+        groups.Invocations.Clear();
+
+        var result = await hub.Subscribe(new StorageSubscribeRequest());
+
+        groups.Verify(
+            g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        System.Text.Json.JsonSerializer.Serialize(result).Should().Contain("\"collections\":[]");
+    }
+
+    [Fact]
+    public async Task An_unclamped_credential_subscribes_to_the_categories_it_holds()
+    {
+        var (hub, _, authorizer, _) = CreateHub();
+        authorizer
+            .Setup(a => a.AuthorizeTokenAsync("tok", Tenant, Scope.GlucoseRead))
+            .ReturnsAsync(InBand(historyClamped: false));
+        await hub.Authorize(new AuthorizeRequest { Token = "tok" });
+
+        var result = await hub.Subscribe(new StorageSubscribeRequest());
+
+        System.Text.Json.JsonSerializer.Serialize(result)
+            .Should().Contain("\"collections\":[\"entries\",\"glucose\"]");
+    }
+
+    [Fact]
     public async Task A_later_in_band_authorization_does_not_replace_a_clamped_grant()
     {
         var (hub, _, authorizer, seen) = CreateHub();

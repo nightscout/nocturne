@@ -66,4 +66,26 @@ public class TreatmentCacheAdapterTests
         result.Should().BeNull("a null answer sends the caller straight to the store");
         _cache.Invocations.Should().BeEmpty();
     }
+
+    /// <summary>
+    /// A share with full history is not clamped, but row level security still narrows what it
+    /// reads: the legacy treatment projection spans <c>notes</c> and <c>state_spans</c>, which no
+    /// share sees, and <c>bg_checks</c> and <c>device_events</c>, which only some do. The key
+    /// carries the tenant alone, so sharing it would hand the share the owner's rows and the owner
+    /// the share's. The multi-period statistics cache stays out for the same reason.
+    /// </summary>
+    [Fact]
+    public async Task GetOrComputeAsync_FullHistoryShare_NeitherReadsNorWritesTheCache()
+    {
+        _categoryReadContext.MarkShare();
+        _categoryReadContext.SetVisibleCategories("glucose.read,treatments.read");
+        _categoryReadContext.SetFullHistory(true);
+        _categoryReadContext.IsHistoryClamped.Should().BeFalse("the precondition: a full-history share is not clamped");
+
+        var result = await Adapter().GetOrComputeAsync(
+            CacheableQuery, () => Task.FromResult<IReadOnlyList<Treatment>>([]), CancellationToken.None);
+
+        result.Should().BeNull("a null answer sends the caller straight to the store");
+        _cache.Invocations.Should().BeEmpty();
+    }
 }

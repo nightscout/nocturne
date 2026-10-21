@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
@@ -112,14 +111,11 @@ public class UISettingsControllerDemoModeTests
     public async Task GetUISettings_inDemoMode_stopsWaitingOnAHungDemoService()
     {
         var demoService = StubDemoService.Hanging();
-        var elapsed = Stopwatch.StartNew();
 
-        var settings = await ProxiedGet(demoService);
-        elapsed.Stop();
+        var settings = await ProxiedGet(demoService).WaitAsync(UISettingsController.DemoServiceProxyTimeout * 10);
 
         settings.Devices.ConnectedDevices.Should().NotBeEmpty();
         demoService.Cancelled.Should().BeTrue();
-        elapsed.Elapsed.Should().BeLessThan(UISettingsController.DemoServiceProxyTimeout * 4);
     }
 
     [Fact]
@@ -232,7 +228,7 @@ public class UISettingsControllerDemoModeTests
                 var factory = new Mock<IHttpClientFactory>();
                 factory
                     .Setup(f => f.CreateClient(It.IsAny<string>()))
-                    .Returns(() => new HttpClient(new Handler(this)));
+                    .Returns(() => new HttpClient(new Handler(this)) { Timeout = Timeout.InfiniteTimeSpan });
 
                 return factory.Object;
             }

@@ -259,19 +259,13 @@ public class SampleDataSeeder
             {
                 ct.ThrowIfCancellationRequested();
 
-                var comparison = step.Time.Minute % 10 == 0
-                    ? DemoCoverageSeeds.CreateComparisonReading(step.Entry)
-                    : null;
-                DemoCoverageSeeds.ApplyCompressionArtifact(step.Entry, step.Time);
-                step.Entry.DataSource = dataSource;
+                foreach (var reading in DemoCoverageSeeds.CgmReadings(step))
+                {
+                    reading.DataSource = dataSource;
+                    entryBatch.Add(reading);
+                }
                 episodeTracker.Observe(
                     DateTimeOffset.FromUnixTimeMilliseconds(step.Entry.Mills).UtcDateTime, step.Entry.Sgv);
-                entryBatch.Add(step.Entry);
-                if (comparison is not null)
-                {
-                    comparison.DataSource = dataSource;
-                    entryBatch.Add(comparison);
-                }
                 foreach (var extra in step.ExtraEntries)
                 {
                     extra.DataSource = dataSource;
@@ -877,7 +871,7 @@ public class SampleDataSeeder
     {
         var nights = Enumerable.Range(0, days)
             .Select(offset => DateOnly.FromDateTime(localToday.AddDays(-offset)))
-            .Where(date => date.DayOfWeek is DayOfWeek.Sunday or DayOfWeek.Tuesday or DayOfWeek.Thursday)
+            .Where(DemoCoverageSeeds.IsCompressionNight)
             .Take(3)
             .ToList();
         var pendingByNight = new Dictionary<DateOnly, List<CompressionLowSuggestion>>();
@@ -926,11 +920,15 @@ public class SampleDataSeeder
 
         foreach (var (night, index) in nights.Select((night, index) => (night, index)))
         {
-            var pending = pendingByNight[night];
-            if (pending.Count == 0 || index == 0)
+            if (index == 0)
                 continue;
 
-            var suggestion = pending[0];
+            var nadirMills = DemoCoverageSeeds.CompressionNadirMills(night);
+            var suggestion = pendingByNight[night].FirstOrDefault(pending =>
+                pending.StartMills <= nadirMills && pending.EndMills >= nadirMills);
+            if (suggestion is null)
+                continue;
+
             if (index == 1)
                 await _compressionLowService.AcceptSuggestionAsync(
                     suggestion.Id, suggestion.StartMills, suggestion.EndMills, ct, demoSeed: true);

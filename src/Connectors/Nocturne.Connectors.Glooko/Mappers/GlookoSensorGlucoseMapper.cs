@@ -57,13 +57,13 @@ public class GlookoSensorGlucoseMapper
 
         foreach (var egv in Records(egvs, "SSV2 egv"))
         {
-            if (egv.Calculated || egv.SoftDeleted || egv.GlucoseValue <= 0) continue;
+            if (egv.Calculated || egv.SoftDeleted || egv.GlucoseValue is not > 0) continue;
 
             var date = ParseV2Timestamp(egv.DisplayTime);
             if (date == null) continue;
 
             // mg/dL × 100, same integer encoding as the v2 cgm/readings feed.
-            var mgdl = egv.GlucoseValue / 100.0;
+            var mgdl = egv.GlucoseValue.Value / 100.0;
 
             // Prefer Glooko's guid; else the RAW fake-UTC display string (stable across timezone
             // re-correction, unlike corrected ticks) so a re-sync upserts rather than duplicates.

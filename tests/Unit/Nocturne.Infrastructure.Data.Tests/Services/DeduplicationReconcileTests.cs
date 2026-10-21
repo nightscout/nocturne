@@ -372,6 +372,86 @@ public class DeduplicationReconcileTests : IDisposable
             .RecordId.Should().Be(LowerRecordId);
     }
 
+    [Fact]
+    public void PickSurvivor_PassesOverASpanAMateSuperseded_ButNotOneAnOutsiderDid()
+    {
+        var outsider = Guid.Parse("00000000-0000-0000-0000-00000000000c");
+        LinkedRecordEntity[] rows =
+        [
+            new() { RecordId = LowerRecordId, SourceTimestamp = 1_700_000_000_000, IsPrimary = true },
+            new() { RecordId = HigherRecordId, SourceTimestamp = 1_700_000_010_000 }
+        ];
+        var info = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        {
+            [LowerRecordId] = new(new MatchCriteria(), IsDeleted: false, new(HigherRecordId, Closed)),
+            [HigherRecordId] = new(new MatchCriteria(), IsDeleted: false, new(outsider, Closed.AddHours(1)))
+        };
+
+        DeduplicationService.PickSurvivor(rows, info).RecordId.Should().Be(HigherRecordId);
+    }
+
+    [Fact]
+    public void PickSurvivor_PrefersTheMemberStillRunning_AndOtherwiseTheEarliest()
+    {
+        LinkedRecordEntity[] rows =
+        [
+            new() { RecordId = LowerRecordId, SourceTimestamp = 1_700_000_000_000, IsPrimary = true },
+            new() { RecordId = HigherRecordId, SourceTimestamp = 1_700_000_010_000 }
+        ];
+        var endedFirst = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        {
+            [LowerRecordId] = new(new MatchCriteria(), IsDeleted: false, new(null, Closed)),
+            [HigherRecordId] = new(new MatchCriteria(), IsDeleted: false, new(null, Closed.AddHours(1)))
+        };
+        var stillRunning = new Dictionary<Guid, DeduplicationService.RecordInfo>(endedFirst)
+        {
+            [HigherRecordId] = new(new MatchCriteria(), IsDeleted: false, new(null, null))
+        };
+
+        DeduplicationService.PickSurvivor(rows, endedFirst).RecordId.Should().Be(
+            LowerRecordId, "a later planned end must not displace an earlier observed one");
+        DeduplicationService.PickSurvivor(rows, stillRunning).RecordId.Should().Be(HigherRecordId);
+    }
+
+    [Fact]
+    public void PickSurvivor_DoesNotPassOverASpanWhoseSupersederWasDeleted()
+    {
+        var middle = Guid.Parse("00000000-0000-0000-0000-00000000000c");
+        LinkedRecordEntity[] rows =
+        [
+            new() { RecordId = LowerRecordId, SourceTimestamp = 1_700_000_000_000, IsPrimary = true },
+            new() { RecordId = middle, SourceTimestamp = 1_700_000_005_000 },
+            new() { RecordId = HigherRecordId, SourceTimestamp = 1_700_000_010_000 }
+        ];
+        var info = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        {
+            [LowerRecordId] = new(new MatchCriteria(), IsDeleted: false, new(HigherRecordId, Closed)),
+            [middle] = new(new MatchCriteria(), IsDeleted: false, new(null, Closed.AddHours(1))),
+            [HigherRecordId] = new(new MatchCriteria(), IsDeleted: true)
+        };
+
+        DeduplicationService.PickSurvivor(rows, info).RecordId.Should().Be(LowerRecordId);
+    }
+
+    private static readonly DateTime Closed = new(2023, 11, 14, 23, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void PickSurvivor_PromotesASpanAMateSuperseded_WhenNoOtherMemberIsLive()
+    {
+        LinkedRecordEntity[] rows =
+        [
+            new() { RecordId = LowerRecordId, SourceTimestamp = 1_700_000_000_000 },
+            new() { RecordId = HigherRecordId, SourceTimestamp = 1_700_000_010_000, IsPrimary = true }
+        ];
+        var info = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        {
+            [LowerRecordId] = new(new MatchCriteria(), IsDeleted: false, new(HigherRecordId, Closed)),
+            [HigherRecordId] = new(new MatchCriteria(), IsDeleted: true)
+        };
+
+        DeduplicationService.PickSurvivor(rows, info).RecordId.Should().Be(LowerRecordId);
+    }
+
     /// <summary>
     /// Two links sharing one source timestamp, in the given order.
     /// </summary>

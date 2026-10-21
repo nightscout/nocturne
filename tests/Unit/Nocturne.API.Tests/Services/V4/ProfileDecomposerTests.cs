@@ -447,4 +447,36 @@ public class ProfileDecomposerTests
         result.Should().ContainSingle();
         result[0].Value.Should().Be(50);
     }
+
+    [Theory]
+    [InlineData("mmol", 63, 3.5)]
+    [InlineData("mmol/L", 58, 3.2)]
+    [InlineData("MMOL", 99, 5.5)]
+    [InlineData("mmol", 90, 5.0)]
+    public void FromMgdl_ConvertsMmolProfilesBackToOneDecimal(string units, double mgdl, double expected)
+    {
+        ProfileDecomposer.FromMgdl(mgdl, units).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("mg/dl")]
+    [InlineData("mg/dL")]
+    [InlineData(null)]
+    public void FromMgdl_LeavesMgdlProfilesUnchanged(string? units)
+    {
+        ProfileDecomposer.FromMgdl(99, units).Should().Be(99);
+    }
+
+    [Theory]
+    [InlineData(2.8)]
+    [InlineData(3.5)]
+    [InlineData(5.5)]
+    [InlineData(8.0)]
+    public void FromMgdl_RoundTripsWhatTheWriteSideStored(double mmol)
+    {
+        var stored = ProfileDecomposer.ConvertSensitivityValues(
+            [new TimeValue { Time = "00:00", Value = mmol }], "mmol")[0].Value;
+
+        ProfileDecomposer.FromMgdl(stored, "mmol").Should().Be(mmol);
+    }
 }

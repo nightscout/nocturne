@@ -1,6 +1,9 @@
 services:
   nocturne-postgres-server:
     image: "docker.io/library/postgres:17.6"
+    command:
+    - "-c"
+    - "max_connections=130"
     environment:
       POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"

@@ -5,10 +5,19 @@ namespace Nocturne.Infrastructure.Data.Mappers;
 
 /// <summary>
 /// Mapper for converting between Activity and StateSpan for v1 API compatibility.
-/// Activities are stored as StateSpans with categories: Exercise, Sleep, Illness, Travel.
+/// Activities are stored as StateSpans with categories: Exercise, Illness, Travel, Motion.
 /// </summary>
 public static class ActivityStateSpanMapper
 {
+    /// <summary>
+    /// The activity type xDrip posts for each detected motion class. Each record marks the start of
+    /// a state that lasts until the next, so it is stored as a <see cref="StateSpanCategory.Motion"/>
+    /// span whose state is the record's <c>class</c>.
+    /// </summary>
+    public const string MotionClassType = "motion-class";
+
+    private const string MotionClassKey = "class";
+
     /// <summary>
     /// Activity type strings that map to Exercise category
     /// </summary>
@@ -49,7 +58,8 @@ public static class ActivityStateSpanMapper
     [
         StateSpanCategory.Exercise,
         StateSpanCategory.Illness,
-        StateSpanCategory.Travel
+        StateSpanCategory.Travel,
+        StateSpanCategory.Motion
     ];
 
     /// <summary>
@@ -156,6 +166,9 @@ public static class ActivityStateSpanMapper
         if (string.IsNullOrEmpty(activityType))
             return StateSpanCategory.Exercise;
 
+        if (string.Equals(activityType, MotionClassType, StringComparison.Ordinal))
+            return StateSpanCategory.Motion;
+
         var lowerType = activityType.ToLowerInvariant();
 
         if (IllnessTypes.Any(t => lowerType.Contains(t)))
@@ -195,7 +208,10 @@ public static class ActivityStateSpanMapper
         var stateSpan = new StateSpan
         {
             Category = category,
-            State = activity.Type ?? category.ToString().ToLowerInvariant(),
+            State = (category == StateSpanCategory.Motion && activity.AdditionalProperties is { } props
+                    ? GetMetadataString(props, MotionClassKey)
+                    : null)
+                ?? activity.Type ?? category.ToString().ToLowerInvariant(),
             StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime,
             EndTimestamp = CalculateEndTimestamp(activity),
             // DataSource is the connector a resume watermark is scoped by; EnteredBy is the
@@ -218,13 +234,14 @@ public static class ActivityStateSpanMapper
         if (stateSpan == null || !IsActivityStateSpan(stateSpan))
             return null;
 
+        var isMotion = stateSpan.Category == StateSpanCategory.Motion;
         var activity = new Activity
         {
             Id = stateSpan.OriginalId ?? stateSpan.Id,
             Mills = stateSpan.StartMills,
-            Type = stateSpan.State,
+            Type = isMotion ? MotionClassType : stateSpan.State,
             EnteredBy = stateSpan.Source,
-            Duration = CalculateDuration(stateSpan)
+            Duration = isMotion ? null : CalculateDuration(stateSpan)
         };
 
         // Extract metadata values

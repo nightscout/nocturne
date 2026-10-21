@@ -1,11 +1,17 @@
 import { createHmac } from 'node:crypto';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createServer } from 'http';
+import type { AddressInfo } from 'node:net';
+import { io as connectClient, type Socket as ClientSocket } from 'socket.io-client';
 import SocketIOServer, { pickHandshakeHost, resolveTenantSlug } from './socketio-server.js';
-import { signHandshakeTicket } from './handshake-ticket.js';
+import { signHandshakeTicket, type RealtimeGrant } from './handshake-ticket.js';
 import MessageTranslator from './message-translator.js';
 
 const SECRET = 'test-instance-key-0123456789';
+
+function grant(tenantRelay: boolean, extra: Partial<RealtimeGrant> = {}): RealtimeGrant {
+  return { tenantRelay, categories: [], historyClamped: false, ...extra };
+}
 
 describe('resolveTenantSlug', () => {
   const base = 'nocturne.run';
@@ -95,7 +101,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
 
     await server.authorizeHandshake(
-      fakeSocket({ host: 'evil.com' }, { token: signHandshakeTicket(SECRET, 'evil.com', true) }) as never,
+      fakeSocket({ host: 'evil.com' }, { token: signHandshakeTicket(SECRET, 'evil.com', grant(true)) }) as never,
       next,
     );
 
@@ -124,7 +130,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     // only a connection offering no ticket at all falls through to the legacy path.
     const server = makeServer();
     const next = vi.fn();
-    const ticket = signHandshakeTicket(SECRET, 'rhys.nocturne.run', true);
+    const ticket = signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true));
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
       { token: ticket.slice(0, -1) + (ticket.endsWith('a') ? 'b' : 'a') },
@@ -142,7 +148,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'someone-else.nocturne.run', true) },
+      { token: signHandshakeTicket(SECRET, 'someone-else.nocturne.run', grant(true)) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -155,7 +161,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const server = makeServer();
     const next = vi.fn();
     // Sign a ticket that expired one minute ago.
-    const expired = signHandshakeTicket(SECRET, 'rhys.nocturne.run', true, undefined, -60_000);
+    const expired = signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true), -60_000);
     const socket = fakeSocket({ 'x-forwarded-host': 'rhys.nocturne.run' }, { token: expired });
 
     await server.authorizeHandshake(socket as never, next);
@@ -170,7 +176,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true) },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true)) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -184,7 +190,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run:443', true) },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run:443', grant(true)) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -198,7 +204,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { host: 'nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'nocturne.run', true) },
+      { token: signHandshakeTicket(SECRET, 'nocturne.run', grant(true)) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -211,7 +217,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const server = makeServer();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true) },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true)) },
     );
 
     await connect(server, socket);
@@ -225,7 +231,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const subjectB = '0b6f2c1e-1111-4222-8333-444455556666';
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true, subjectA) },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true, { subjectId: subjectA })) },
     );
 
     await connect(server, socket);
@@ -236,11 +242,45 @@ describe('SocketIOServer.authorizeHandshake', () => {
     expect(socket.data.subjectId).toBe(subjectA);
   });
 
+  it('joins a member ticket to the category rooms it was granted', async () => {
+    const server = makeServer();
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true, { categories: ['entries', 'care'] })) },
+    );
+
+    await connect(server, socket);
+
+    const categoryRooms = socket.join.mock.calls
+      .map(([room]) => String(room))
+      .filter((room) => room.includes(':category:'));
+    expect(categoryRooms).toEqual(['tenant:rhys:category:entries', 'tenant:rhys:category:care']);
+  });
+
+  it('joins a history-clamped member ticket to the tenant room and no category room', async () => {
+    const server = makeServer();
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      {
+        token: signHandshakeTicket(
+          SECRET,
+          'rhys.nocturne.run',
+          grant(true, { categories: ['entries', 'care'], historyClamped: true }),
+        ),
+      },
+    );
+
+    await connect(server, socket);
+
+    expect(socket.join).toHaveBeenCalledWith('tenant:rhys');
+    expect(socket.join.mock.calls.some(([room]) => String(room).includes(':category:'))).toBe(false);
+  });
+
   it('joins no subject room for a ticket without a subject', async () => {
     const server = makeServer();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true) },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true)) },
     );
 
     await connect(server, socket);
@@ -252,17 +292,16 @@ describe('SocketIOServer.authorizeHandshake', () => {
   });
 
   it.each([
-    ['a restricted ticket', () => signHandshakeTicket(SECRET, 'rhys.nocturne.run', false)],
+    ['a restricted ticket', () => signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(false))],
     ['a ticket carrying no admission', () => ticketWithoutAdmission('rhys.nocturne.run')],
+    [
+      'a restricted ticket granted categories',
+      () => signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(false, { categories: ['entries', 'care'] })),
+    ],
     [
       'a restricted ticket naming a subject',
       () =>
-        signHandshakeTicket(
-          SECRET,
-          'rhys.nocturne.run',
-          false,
-          '0a5f2c1e-1111-4222-8333-444455556666',
-        ),
+        signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(false, { subjectId: '0a5f2c1e-1111-4222-8333-444455556666' })),
     ],
   ])('admits %s but keeps it out of every tenant room', async (_case, mint) => {
     // The tenant room carries every category and every member's in-app
@@ -348,6 +387,38 @@ describe('SocketIOServer.handleAuthorize', () => {
     expect(socket.disconnect).not.toHaveBeenCalled();
     expect(socket.data.tenantSlug).toBe('rhys');
     expect(callback).toHaveBeenCalledWith(expect.objectContaining({ read: true }));
+  });
+
+  it('joins the category rooms the admission grants an unclamped credential', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        admission({ tenantRelay: true, categories: ['entries', 'care'], historyClamped: false }),
+      ),
+    );
+
+    const server = makeApiServer();
+    const socket = pendingSocket('rhys');
+
+    await server.handleAuthorize(socket as never, { secret: 'sha1hash' });
+
+    expect(socket.join).toHaveBeenCalledWith('tenant:rhys:category:entries');
+    expect(socket.join).toHaveBeenCalledWith('tenant:rhys:category:care');
+  });
+
+  it.each([
+    ['history-clamped', { tenantRelay: true, categories: ['entries'], historyClamped: true }],
+    ['silent on the clamp', { tenantRelay: true, categories: ['entries'] }],
+  ])('joins no category room for a credential the admission leaves %s', async (_case, body) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission(body)));
+
+    const server = makeApiServer();
+    const socket = pendingSocket('rhys');
+
+    await server.handleAuthorize(socket as never, { secret: 'sha1hash' });
+
+    expect(socket.join).toHaveBeenCalledWith('tenant:rhys');
+    expect(socket.join.mock.calls.some(([room]) => String(room).includes(':category:'))).toBe(false);
   });
 
   const SUBJECT = '0a5f2c1e-1111-4222-8333-444455556666';
@@ -757,6 +828,108 @@ describe('SocketIOServer v3 /storage namespace', () => {
     // The bridge must NOT use its instance key to authorize the client.
     expect(init.headers['X-Instance-Key']).toBeUndefined();
     expect(init.headers['X-Instance-Service']).toBeUndefined();
+  });
+});
+
+describe('SocketIOServer storage category fan-out', () => {
+  const clients: ClientSocket[] = [];
+
+  afterEach(() => {
+    for (const client of clients.splice(0)) client.disconnect();
+  });
+
+  async function listening() {
+    const http = createServer();
+    const server = new SocketIOServer(http, {}, 'nocturne.run', null, SECRET);
+    await server.start();
+    await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
+    return { server, port: (http.address() as AddressInfo).port };
+  }
+
+  /** A browser socket admitted with `ticket`, recording every storage event it receives. */
+  async function browser(port: number, ticket: RealtimeGrant) {
+    const client = connectClient(`http://127.0.0.1:${port}`, {
+      transports: ['websocket'],
+      extraHeaders: { 'X-Forwarded-Host': 'rhys.nocturne.run' },
+      auth: { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', ticket) },
+    });
+    clients.push(client);
+    const received: { event: string; payload: unknown }[] = [];
+    for (const event of ['create', 'update', 'delete']) {
+      client.on(event, (payload: unknown) => received.push({ event, payload }));
+    }
+    await new Promise<void>((resolve) => client.once('connect_ack', () => resolve()));
+    return received;
+  }
+
+  /** Lets in-flight emits land, so an absent event is absent rather than late. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+  const bolus = { colName: 'care', recordType: 'bolus', doc: { id: 'b1', insulin: 2 } };
+
+  it('delivers a v4 care event to a member granted care and not to one without it', async () => {
+    const { server, port } = await listening();
+    try {
+      const treatmentsReader = await browser(port, grant(true, { categories: ['entries', 'care'] }));
+      const glucoseOnly = await browser(port, grant(true, { categories: ['entries', 'glucose'] }));
+
+      server.broadcastStorageEvent('create', bolus, 'rhys');
+
+      await vi.waitFor(() => expect(treatmentsReader).toEqual([{ event: 'create', payload: bolus }]));
+      await settle();
+      expect(glucoseOnly).toEqual([]);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('delivers no storage event to a restricted or history-clamped socket, whatever its grant names', async () => {
+    const { server, port } = await listening();
+    try {
+      const share = await browser(port, grant(false, { categories: ['entries', 'care'] }));
+      const clamped = await browser(port, grant(true, { categories: ['entries', 'care'], historyClamped: true }));
+
+      server.broadcastStorageEvent('create', bolus, 'rhys');
+      server.broadcastStorageEvent('create', { colName: 'entries', doc: { sgv: 120 } }, 'rhys');
+
+      await settle();
+      expect(share).toEqual([]);
+      expect(clamped).toEqual([]);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('delivers a legacy or v4 event only to the sockets granted its category', async () => {
+    const { server, port } = await listening();
+    try {
+      const glucoseOnly = await browser(port, grant(true, { categories: ['entries'] }));
+      const entry = { colName: 'entries', doc: { sgv: 120 } };
+
+      server.broadcastStorageEvent('create', { colName: 'treatments', doc: { _id: 't1' } }, 'rhys');
+      server.broadcastStorageEvent('create', { colName: 'device', recordType: 'apsSnapshot', doc: { id: 'a1' } }, 'rhys');
+      server.broadcastStorageEvent('create', entry, 'rhys');
+
+      await vi.waitFor(() => expect(glucoseOnly).toEqual([{ event: 'create', payload: entry }]));
+      await settle();
+      expect(glucoseOnly).toHaveLength(1);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('delivers an event naming no category to no browser socket', async () => {
+    const { server, port } = await listening();
+    try {
+      const member = await browser(port, grant(true, { categories: ['entries', 'care'] }));
+
+      server.broadcastStorageEvent('create', { doc: { id: 'x' } }, 'rhys');
+
+      await settle();
+      expect(member).toEqual([]);
+    } finally {
+      await server.stop();
+    }
   });
 });
 

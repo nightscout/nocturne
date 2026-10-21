@@ -47,7 +47,12 @@ public enum StateSpanCategory
     /// <summary>
     /// AAPS temporary glucose target (Eating Soon, Activity, Manual)
     /// </summary>
-    TemporaryTarget
+    TemporaryTarget,
+
+    /// <summary>
+    /// Detected motion class from xDrip (walking, still, in vehicle), held until the next one
+    /// </summary>
+    Motion
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<PumpModeState>))]

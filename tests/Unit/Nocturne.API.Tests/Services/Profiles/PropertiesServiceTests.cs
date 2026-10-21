@@ -171,6 +171,229 @@ public class PropertiesServiceTests
     }
 
     [Fact]
+    public async Task GetPropertiesAsync_Delta_FromOneMinuteReadings_IsTheChangeBetweenBucketMeans()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var readings = Enumerable
+            .Range(0, 20)
+            .Select(m => new Entry { Type = "sgv", Mills = now - m * 60 * 1000, Mgdl = 200 - 2 * m })
+            .ToList();
+
+        var delta = await GetDeltaAsync(readings);
+
+        // Buckets {200,198,196} and {194,192,190,188,186}: means 198 and 190, newest valid 3 minutes apart.
+        Assert.Equal(8, delta.GetProperty("mgdl").GetDouble());
+        Assert.Equal(190, delta.GetProperty("mean5MinsAgo").GetDouble());
+        Assert.Equal(8, delta.GetProperty("absolute").GetDouble());
+        Assert.Equal(3, delta.GetProperty("elapsedMins").GetDouble());
+        Assert.False(delta.GetProperty("interpolated").GetBoolean());
+        Assert.Equal("+8", delta.GetProperty("display").GetString());
+    }
+
+    [Fact]
+    public async Task GetPropertiesAsync_Delta_FromFiveMinuteReadings_IsTheChangeBetweenReadings()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var readings = new List<Entry>
+        {
+            new() { Type = "sgv", Mills = now - 10 * 60 * 1000, Mgdl = 90 },
+            new() { Type = "sgv", Mills = now - 5 * 60 * 1000, Mgdl = 100 },
+            new() { Type = "sgv", Mills = now, Mgdl = 105 },
+        };
+
+        var delta = await GetDeltaAsync(readings);
+
+        Assert.Equal(5, delta.GetProperty("mgdl").GetDouble());
+        Assert.Equal(100, delta.GetProperty("mean5MinsAgo").GetDouble());
+        Assert.Equal(5, delta.GetProperty("elapsedMins").GetDouble());
+    }
+
+    [Fact]
+    public async Task GetPropertiesAsync_Delta_SkipsAnEmptyBucketAndInterpolatesOverTheGap()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var readings = new List<Entry>
+        {
+            new() { Type = "sgv", Mills = now, Mgdl = 120 },
+            new() { Type = "sgv", Mills = now - 10 * 60 * 1000, Mgdl = 100 },
+            new() { Type = "sgv", Mills = now - 11 * 60 * 1000, Mgdl = 96 },
+        };
+
+        var delta = await GetDeltaAsync(readings);
+
+        // Previous bucket mean is 98, 10 minutes back: 120 - (120 - 98) / 10 * 5 = 109.
+        Assert.Equal(10, delta.GetProperty("elapsedMins").GetDouble());
+        Assert.True(delta.GetProperty("interpolated").GetBoolean());
+        Assert.Equal(109, delta.GetProperty("mean5MinsAgo").GetDouble());
+        Assert.Equal(11, delta.GetProperty("mgdl").GetDouble());
+        Assert.Equal(22, delta.GetProperty("absolute").GetDouble());
+    }
+
+    [Fact]
+    public async Task GetPropertiesAsync_Delta_LeavesSensorErrorCodesOutOfTheBucketMeans()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var readings = new List<Entry>
+        {
+            new() { Type = "sgv", Mills = now, Mgdl = 120 },
+            new() { Type = "sgv", Mills = now - 60 * 1000, Mgdl = 39 },
+            new() { Type = "sgv", Mills = now - 4 * 60 * 1000, Mgdl = 20 },
+            new() { Type = "sgv", Mills = now - 5 * 60 * 1000, Mgdl = 100 },
+        };
+
+        var delta = await GetDeltaAsync(readings);
+
+        Assert.Equal(20, delta.GetProperty("absolute").GetDouble());
+        Assert.Equal(5, delta.GetProperty("elapsedMins").GetDouble());
+    }
+
+    [Fact]
+    public async Task GetPropertiesAsync_Delta_IsAbsentWithoutASecondPopulatedBucket()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var readings = new List<Entry>
+        {
+            new() { Type = "sgv", Mills = now, Mgdl = 120 },
+            new() { Type = "sgv", Mills = now - 60 * 1000, Mgdl = 118 },
+            new() { Type = "sgv", Mills = now - 5 * 60 * 1000, Mgdl = 5 },
+        };
+
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { Sgvs = readings });
+
+        var result = await _service.GetPropertiesAsync(new[] { "delta" }, CancellationToken.None);
+
+        Assert.False(result.ContainsKey("delta"));
+    }
+
+    [Theory]
+    [InlineData(111, 110, 11, "+11")]
+    [InlineData(89, 90, -10, "-10")]
+    [InlineData(88, 89, -11, "-11")]
+    public async Task GetPropertiesAsync_Delta_RoundsHalvesTowardsPositiveInfinityLikeJavaScript(
+        double newest,
+        double second,
+        int expectedMgdl,
+        string expectedDisplay
+    )
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var readings = new List<Entry>
+        {
+            new() { Type = "sgv", Mills = now, Mgdl = newest },
+            new() { Type = "sgv", Mills = now - 2 * 60 * 1000, Mgdl = second },
+            new() { Type = "sgv", Mills = now - 4 * 60 * 1000, Mgdl = 100 },
+            new() { Type = "sgv", Mills = now - 6 * 60 * 1000, Mgdl = 100 },
+        };
+
+        var delta = await GetDeltaAsync(readings);
+
+        Assert.Equal(expectedMgdl, delta.GetProperty("mgdl").GetDouble());
+        Assert.Equal(expectedDisplay, delta.GetProperty("display").GetString());
+    }
+
+    [Fact]
+    public async Task GetPropertiesAsync_Delta_PublishesThePreviousBucket()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var readings = new List<Entry>
+        {
+            new() { Type = "sgv", Mills = now, Mgdl = 120 },
+            new() { Type = "sgv", Mills = now - 4 * 60 * 1000, Mgdl = 100 },
+            new() { Type = "sgv", Mills = now - 5 * 60 * 1000, Mgdl = 20 },
+            new() { Type = "sgv", Mills = now - 6 * 60 * 1000, Mgdl = 90 },
+        };
+
+        var delta = await GetDeltaAsync(readings);
+
+        var previous = delta.GetProperty("previous");
+        Assert.Equal(95, previous.GetProperty("mean").GetDouble());
+        Assert.Equal(100, previous.GetProperty("last").GetDouble());
+        Assert.Equal(now - 4 * 60 * 1000, previous.GetProperty("mills").GetInt64());
+        Assert.Equal(3, previous.GetProperty("sgvs").GetArrayLength());
+        Assert.Equal(20, previous.GetProperty("errors")[0].GetProperty("mgdl").GetDouble());
+        Assert.False(delta.TryGetProperty("current", out _));
+    }
+
+    [Theory]
+    [InlineData(39)]
+    [InlineData(10)]
+    public async Task GetPropertiesAsync_NewestBucketOfOnlyErrorCodes_HasNoMeanDeltaOrForecast(double code)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var readings = new List<Entry>
+        {
+            new() { Type = "sgv", Mills = now, Mgdl = code },
+            new() { Type = "sgv", Mills = now - 5 * 60 * 1000, Mgdl = 60 },
+            new() { Type = "sgv", Mills = now - 10 * 60 * 1000, Mgdl = 80 },
+        };
+        var ar2Service = new Mock<IAr2Service>();
+        var service = new PropertiesService(
+            _mockDDataService.Object,
+            _mockLogger.Object,
+            Mock.Of<IIobCalculator>(),
+            Mock.Of<ICobCalculator>(),
+            Mock.Of<IBolusRepository>(),
+            Mock.Of<ICarbIntakeRepository>(),
+            Mock.Of<ITempBasalRepository>(),
+            ar2Service.Object,
+            _mockDeviceAgeService.Object
+        );
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { Sgvs = readings });
+
+        var result = await service.GetPropertiesAsync(new[] { "bgnow", "delta", "ar2" }, CancellationToken.None);
+
+        var json = JsonSerializer.Serialize(result, NightscoutJsonOptions.Create());
+        using var doc = JsonDocument.Parse(json);
+        var bgnow = doc.RootElement.GetProperty("bgnow");
+        Assert.Equal(code, bgnow.GetProperty("mgdl").GetDouble());
+        Assert.False(bgnow.TryGetProperty("mean", out _));
+        Assert.False(bgnow.TryGetProperty("mills", out _));
+        Assert.False(doc.RootElement.TryGetProperty("delta", out _));
+        Assert.False(doc.RootElement.TryGetProperty("ar2", out _));
+        ar2Service.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task GetPropertiesAsync_BgNow_ListsOnlyReadingsBelowThirtyNineAsErrors()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var readings = new List<Entry>
+        {
+            new() { Type = "sgv", Mills = now, Mgdl = 100 },
+            new() { Type = "sgv", Mills = now - 60 * 1000, Mgdl = 39 },
+            new() { Type = "sgv", Mills = now - 2 * 60 * 1000, Mgdl = 38 },
+        };
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { Sgvs = readings });
+
+        var result = await _service.GetPropertiesAsync(new[] { "bgnow" }, CancellationToken.None);
+
+        var json = JsonSerializer.Serialize(result, NightscoutJsonOptions.Create());
+        using var doc = JsonDocument.Parse(json);
+        var bgnow = doc.RootElement.GetProperty("bgnow");
+        Assert.Equal(100, bgnow.GetProperty("mean").GetDouble());
+        Assert.Equal(38, Assert.Single(bgnow.GetProperty("errors").EnumerateArray()).GetProperty("mgdl").GetDouble());
+        Assert.Equal(3, bgnow.GetProperty("sgvs").GetArrayLength());
+    }
+
+    private async Task<JsonElement> GetDeltaAsync(List<Entry> sgvs)
+    {
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { Sgvs = sgvs });
+
+        var result = await _service.GetPropertiesAsync(new[] { "delta" }, CancellationToken.None);
+
+        var json = JsonSerializer.Serialize(result, NightscoutJsonOptions.Create());
+        return JsonDocument.Parse(json).RootElement.GetProperty("delta").Clone();
+    }
+
+    [Fact]
     public async Task GetAllPropertiesAsync_EmitsIobAndCobAtZero_WithDisplayFields()
     {
         // Legacy clients (LoopFollow, Trio) treat a missing `iob`/`cob` as "unsupported"

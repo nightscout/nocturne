@@ -73,10 +73,6 @@ public class DeltaInfo
 
     public double? Scaled { get; set; }
 
-    public Entry? Previous { get; set; }
-
-    public Entry? Current { get; set; }
-
     public Dictionary<string, long> Times { get; set; } = new();
 }
 

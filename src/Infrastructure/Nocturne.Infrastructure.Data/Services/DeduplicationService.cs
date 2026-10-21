@@ -160,10 +160,16 @@ public class DeduplicationService : IDeduplicationService
     internal static string WriteLockKey(Guid tenantId) => $"dedup:{tenantId}";
 
     /// <summary>
-    /// A record's match criteria paired with its soft-deleted status, keyed by record id
-    /// when returned from <see cref="LoadRecordInfoAsync"/>.
+    /// A record's match criteria paired with its soft-deleted status, and for a state span its
+    /// <see cref="SpanEnd"/>, keyed by record id when returned from <see cref="LoadRecordInfoAsync"/>.
     /// </summary>
-    internal sealed record RecordInfo(MatchCriteria Criteria, bool IsDeleted);
+    internal sealed record RecordInfo(MatchCriteria Criteria, bool IsDeleted, SpanEnd Span = default);
+
+    /// <summary>
+    /// How a state span ended, as <see cref="PickSurvivor(IEnumerable{LinkedRecordEntity}, Func{Guid, bool}, Func{Guid, SpanEnd})"/>
+    /// reads it. Every other record type reads as the default: open, superseded by nothing.
+    /// </summary>
+    internal readonly record struct SpanEnd(Guid? SupersededById, DateTime? EndTimestamp);
 
     /// <summary>
     /// One union-find root's span across every link of every canonical group beneath it, used by
@@ -600,9 +606,8 @@ public class DeduplicationService : IDeduplicationService
         // there because its members match each other by transitivity.
         var chunkAssignments = new List<(long mills, Guid canonicalId, MatchCriteria criteria, string dataSource)>();
 
-        // Canonical groups that already existed and were joined through the wide path, whose
-        // primary may need re-deriving once the new links are persisted.
-        var wideJoinedCanonicals = new HashSet<Guid>();
+        // Canonical groups whose primary may need re-deriving once the new links are persisted.
+        var repickCanonicals = new HashSet<Guid>();
 
         var newLinks = new List<LinkedRecordEntity>();
         var restoredLinks = 0;
@@ -701,7 +706,7 @@ public class DeduplicationService : IDeduplicationService
                     // Chunk-minted groups need re-deriving too: this chunk's records are not
                     // sorted on the fast path, so a later-timestamped record can mint the group
                     // that an earlier one then joins.
-                    wideJoinedCanonicals.Add(wideCanonical.Value);
+                    repickCanonicals.Add(wideCanonical.Value);
 
                     var closest = wideCandidates
                         .Where(c => c.CanonicalId == wideCanonical.Value)
@@ -718,6 +723,10 @@ public class DeduplicationService : IDeduplicationService
                 canonicalId = Guid.CreateVersion7();
                 groupsCreated++;
                 isNewCanonical = true;
+            }
+            else if (recordType == RecordType.StateSpan)
+            {
+                repickCanonicals.Add(canonicalId.Value);
             }
 
             // IsPrimary iff this is the first link this batch creates for a not-already-existing canonical.
@@ -772,10 +781,11 @@ public class DeduplicationService : IDeduplicationService
         // 7. A wide join reaches up to ten minutes back, so it can land earlier than the group's
         //    primary — and unlike reconcile-merged groups, ingest-formed groups are never revisited
         //    by MergeDuplicateGroupsAsync. Re-derive the primary here, or the event time the group
-        //    displays would depend on which connector synced first. Scoped to wide joins: the tight
-        //    path's sticky primary is long-standing behaviour.
-        if (wideJoinedCanonicals.Count > 0)
-            await RepickPrimariesAsync(recordType, wideJoinedCanonicals.ToArray(), ct);
+        //    displays would depend on which connector synced first. A state span joined on the tight
+        //    path is re-derived too, since a copy can supersede the primary (see PickSurvivor). Other
+        //    tight joins keep their sticky primary, which is long-standing behaviour.
+        if (repickCanonicals.Count > 0)
+            await RepickPrimariesAsync(recordType, repickCanonicals.ToArray(), ct);
 
         return new DeduplicationBatchResult(
             Processed: records.Count,
@@ -785,7 +795,7 @@ public class DeduplicationService : IDeduplicationService
     }
 
     /// <inheritdoc cref="DuplicateGroupPrimaries.RepickAsync"/>
-    private Task RepickPrimariesAsync(RecordType recordType, Guid[] canonicalIds, CancellationToken ct)
+    private Task<IReadOnlyList<Guid>> RepickPrimariesAsync(RecordType recordType, Guid[] canonicalIds, CancellationToken ct)
         => DuplicateGroupPrimaries.RepickAsync(_context, recordType, canonicalIds, ct);
 
     /// <summary>
@@ -796,22 +806,97 @@ public class DeduplicationService : IDeduplicationService
     /// a record id missing from <paramref name="rowInfo"/> is an orphaned link and is no more
     /// promotable than a deleted one. <see cref="LinkedRecordEntity.RecordId"/> settles a
     /// timestamp tie, which a cross-source pair normally has.
+    /// <para>
+    /// Among state spans, a member superseded by another live member of its own group is passed
+    /// over while a promotable member is not, and of the rest an open one wins over the earliest:
+    /// a copy re-reported seconds later closes the earlier copy at its own start, and Loop's
+    /// treatment and devicestatus records of one override never close each other but may end
+    /// apart. Promoting a closed copy would show the group as ended while it is still in effect.
+    /// Between closed copies the earliest still wins, so an observed end is not traded for a
+    /// planned one.
+    /// </para>
     /// </summary>
     internal static LinkedRecordEntity PickSurvivor(
         IEnumerable<LinkedRecordEntity> rows,
         IReadOnlyDictionary<Guid, RecordInfo> rowInfo)
-        => PickSurvivor(rows, id => rowInfo.TryGetValue(id, out var ri) && !ri.IsDeleted);
+        => PickSurvivor(
+            rows,
+            id => rowInfo.TryGetValue(id, out var ri) && !ri.IsDeleted,
+            id => rowInfo.TryGetValue(id, out var ri) ? ri.Span : default);
 
     /// <inheritdoc cref="PickSurvivor(IEnumerable{LinkedRecordEntity}, IReadOnlyDictionary{Guid, RecordInfo})"/>
     /// <param name="rows">The group's links.</param>
     /// <param name="isPromotable">Whether a record id names a live record.</param>
+    /// <param name="spanEnd">How a record id ended, when it is a state span.</param>
     internal static LinkedRecordEntity PickSurvivor(
         IEnumerable<LinkedRecordEntity> rows,
-        Func<Guid, bool> isPromotable)
+        Func<Guid, bool> isPromotable,
+        Func<Guid, SpanEnd> spanEnd)
     {
         var ordered = rows.OrderBy(r => r.SourceTimestamp).ThenBy(r => r.RecordId).ToList();
+        var live = ordered.Select(r => r.RecordId).Where(isPromotable).ToHashSet();
 
-        return ordered.FirstOrDefault(r => isPromotable(r.RecordId)) ?? ordered[0];
+        var unsuperseded = ordered
+            .Where(r => live.Contains(r.RecordId)
+                && !(spanEnd(r.RecordId).SupersededById is { } by && live.Contains(by)))
+            .ToList();
+
+        return unsuperseded.FirstOrDefault(r => spanEnd(r.RecordId).EndTimestamp is null)
+               ?? unsuperseded.FirstOrDefault()
+               ?? ordered.FirstOrDefault(r => live.Contains(r.RecordId))
+               ?? ordered[0];
+    }
+
+    /// <summary>
+    /// How long after a member started a state span group with no open member is still checked by
+    /// <see cref="RepairStateSpanPrimariesAsync"/>. Reads that matter ask what is in effect now, and
+    /// bounding the check keeps it from rescanning the tenant's whole history under the write lock.
+    /// </summary>
+    internal static readonly TimeSpan StateSpanRepairHorizon = TimeSpan.FromDays(1);
+
+    /// <inheritdoc />
+    public Task<int> RepairStateSpanPrimariesAsync(CancellationToken cancellationToken = default) =>
+        UnderWriteLockAsync(async token =>
+        {
+            var misplaced = await MisplacedStateSpanPrimaries(DateTime.UtcNow - StateSpanRepairHorizon)
+                .ToArrayAsync(token);
+
+            return misplaced.Length == 0
+                ? 0
+                : (await RepickPrimariesAsync(RecordType.StateSpan, misplaced, token)).Count;
+        }, cancellationToken);
+
+    /// <summary>
+    /// The state span groups with a member open or started after <paramref name="startedAfter"/>
+    /// whose primary is closed while a live mate superseded it or is still open: the groups
+    /// <see cref="PickSurvivor(IEnumerable{LinkedRecordEntity}, Func{Guid, bool}, Func{Guid, SpanEnd})"/>
+    /// would move. The two halves of the bound are separate queries so each is an index range:
+    /// the partial open-span index and the links' event time.
+    /// </summary>
+    internal IQueryable<Guid> MisplacedStateSpanPrimaries(DateTime startedAfter)
+    {
+        var key = RecordTypeKeys.Key(RecordType.StateSpan);
+        var startedAfterMills = new DateTimeOffset(startedAfter, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var withOpenMember = _context.StateSpans
+            .Where(s => s.EndTimestamp == null)
+            .Join(_context.LinkedRecords.Where(m => m.RecordType == key),
+                s => s.Id, m => m.RecordId, (s, m) => m.CanonicalId);
+        var startedRecently = _context.LinkedRecords
+            .Where(m => m.RecordType == key && m.SourceTimestamp > startedAfterMills)
+            .Select(m => m.CanonicalId);
+        var recent = withOpenMember.Concat(startedRecently);
+
+        return _context.LinkedRecords.AsNoTracking()
+            .Where(p => p.RecordType == key && p.IsPrimary && recent.Contains(p.CanonicalId))
+            .Join(_context.StateSpans.Where(s => s.EndTimestamp != null),
+                p => p.RecordId, s => s.Id,
+                (p, s) => new { p.CanonicalId, s.Id, s.SupersededById })
+            .Where(p => _context.LinkedRecords.Any(m =>
+                m.RecordType == key && m.CanonicalId == p.CanonicalId && m.RecordId != p.Id
+                && _context.StateSpans.Any(s => s.Id == m.RecordId
+                    && (s.Id == p.SupersededById || s.EndTimestamp == null))))
+            .Select(p => p.CanonicalId)
+            .Distinct();
     }
 
     /// <summary>
@@ -821,7 +906,7 @@ public class DeduplicationService : IDeduplicationService
     /// (union-find) and source-agnostic, mirroring insert-time <see cref="DeduplicateBatchAsync"/>
     /// semantics. A second pass then applies the same wide rules the insert path uses, so a
     /// cross-source pair missed at ingest (out-of-order connector syncs) heals here.
-    /// For each merged super-group <see cref="PickSurvivor"/> chooses the surviving primary; all
+    /// For each merged super-group <see cref="PickSurvivor(IEnumerable{LinkedRecordEntity}, IReadOnlyDictionary{Guid, RecordInfo})"/> chooses the surviving primary; all
     /// linked rows are re-pointed to the survivor's canonical id and <c>IsPrimary</c> is set on
     /// exactly the survivor.
     /// </summary>
@@ -1595,7 +1680,8 @@ public class DeduplicationService : IDeduplicationService
         var records = await _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
             .Where(s => s.TenantId == _context.TenantId && ids.Contains(s.Id)).ToListAsync(ct);
         return records.ToDictionary(s => s.Id,
-            s => new RecordInfo(MatchCriteriaMapper.From(s), s.DeletedAt != null));
+            s => new RecordInfo(
+                MatchCriteriaMapper.From(s), s.DeletedAt != null, new SpanEnd(s.SupersededById, s.EndTimestamp)));
     }
 
     /// <summary>
@@ -1690,7 +1776,8 @@ public class DeduplicationService : IDeduplicationService
             // outright: treating an absent one as a wildcard makes the result depend on which span
             // is the argument, and the merge pass compares stored spans in both orders.
             RecordType.StateSpan => a.Category.HasValue && a.Category == b.Category
-                && string.Equals(a.State, b.State, StringComparison.OrdinalIgnoreCase),
+                && string.Equals(a.State, b.State, StringComparison.OrdinalIgnoreCase)
+                && a.Metadata.IsSamePresetAs(b.Metadata),
             _ => false
         };
     }

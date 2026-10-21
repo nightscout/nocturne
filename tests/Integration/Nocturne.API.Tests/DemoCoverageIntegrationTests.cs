@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using FluentAssertions;
+using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Seeding;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -54,7 +55,7 @@ public sealed class DemoCoverageIntegrationTests(
             var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow,
                 TimeZoneInfo.FindSystemTimeZoneById(demoTimezone)).DateTime);
             var realNight = Enumerable.Range(0, 14).Select(offset => today.AddDays(-offset))
-                .First(date => date.DayOfWeek is DayOfWeek.Sunday or DayOfWeek.Tuesday or DayOfWeek.Thursday);
+                .First(DemoCoverageSeeds.IsCompressionNight);
             var realSuggestion = new CompressionLowSuggestionEntity
             {
                 Id = Guid.CreateVersion7(),
@@ -107,8 +108,16 @@ public sealed class DemoCoverageIntegrationTests(
             suggestions.Should().Contain(s => s.Id == realSuggestion.Id && s.DataSource == "real-connector");
             suggestions.Where(s => s.Id != realSuggestion.Id)
                 .Should().OnlyContain(s => s.DataSource == DataSources.DemoService);
+            // The detector also flags natural dips in the random demo trace below its nadir threshold.
             suggestions.Where(s => s.Id != realSuggestion.Id)
-                .Should().OnlyContain(s => s.DropRate > 0 && s.LowestGlucose <= 60);
+                .Should().OnlyContain(s => s.DropRate > 0
+                    && s.LowestGlucose < CompressionLowDetectionService.NadirThresholdMgDl);
+            suggestions.Where(s => s.Status.Equals("Accepted", StringComparison.OrdinalIgnoreCase)
+                    || s.Status.Equals("Dismissed", StringComparison.OrdinalIgnoreCase))
+                .Should().OnlyContain(s => s.DropRate > 0
+                    && s.LowestGlucose <= DemoCoverageSeeds.CompressionNadirMgdl
+                    && s.StartMills <= DemoCoverageSeeds.CompressionNadirMills(s.NightOf)
+                    && s.EndMills >= DemoCoverageSeeds.CompressionNadirMills(s.NightOf));
             var accepted = suggestions.Single(s => s.Status.Equals("Accepted", StringComparison.OrdinalIgnoreCase));
             accepted.StateSpanId.Should().NotBeNull();
             var acceptedSpan = await dbContext.StateSpans.IgnoreQueryFilters()

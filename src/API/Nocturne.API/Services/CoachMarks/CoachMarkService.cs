@@ -64,6 +64,20 @@ public class CoachMarkService : ICoachMarkService
     }
 
     /// <inheritdoc />
+    public async Task<CoachMarkState?> GetAsync(
+        string markKey,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var subjectId = SubjectId;
+        var entity = await _dbContext.CoachMarkStates.FirstOrDefaultAsync(
+            e => e.SubjectId == subjectId && e.MarkKey == markKey,
+            cancellationToken
+        );
+        return entity is null ? null : CoachMarkStateMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
     public async Task<CoachMarkState> UpsertAsync(
         string markKey,
         string status,
