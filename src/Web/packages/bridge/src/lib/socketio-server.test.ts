@@ -822,7 +822,7 @@ describe('SocketIOServer v3 /storage namespace', () => {
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(String(url)).toContain('/api/v3/entries');
-    expect(String(url)).toContain('count=1');
+    expect([...new URL(String(url)).searchParams]).toEqual([['limit', '1']]);
     expect(init.headers['Authorization']).toBe('Bearer aaps-token');
     expect(init.headers['X-Forwarded-Host']).toBe('rhys.nocturne.run');
     // The bridge must NOT use its instance key to authorize the client.

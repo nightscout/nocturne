@@ -901,7 +901,9 @@ class SocketIOServer {
     }
     try {
       const url = new URL(`${this.apiBaseUrl}${endpointPath}`);
-      url.searchParams.set('count', '1');
+      // v3 reads any parameter but its own (`limit`, `sort`, ...) as a field filter, which the
+      // API matches over up to the tenant's whole history.
+      url.searchParams.set('limit', '1');
       const probe = await fetch(url, {
         method: 'GET',
         headers: {
