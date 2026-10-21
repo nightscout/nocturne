@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Events;
@@ -157,16 +158,27 @@ public class TreatmentService : ITreatmentService
         await PopulateInsulinContextAsync(treatmentList, cancellationToken);
 
         BulkWrite<Treatment> created;
+        var completed = false;
         try
         {
             created = await _store.CreateAsync(treatmentList, cancellationToken);
+            completed = true;
         }
         catch (TreatmentBatchFailedException failed)
         {
             // The treatments before the failing one are stored, so reads and write-back must see them.
             await _cache.InvalidateAsync(CancellationToken.None);
+            completed = true;
             await _events.OnCreatedAsync(failed.Written, CancellationToken.None);
+            if (failed.InnerException is OperationCanceledException canceled && cancellationToken.IsCancellationRequested)
+                ExceptionDispatchInfo.Throw(canceled);
             throw;
+        }
+        finally
+        {
+            // Any other failure may still have committed records the cache does not hold.
+            if (!completed)
+                await _cache.InvalidateAsync(CancellationToken.None);
         }
 
         await _cache.InvalidateAsync(cancellationToken);

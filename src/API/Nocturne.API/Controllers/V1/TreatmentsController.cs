@@ -218,9 +218,9 @@ public class TreatmentsController : ControllerBase
                 PrepareTreatments(treatmentsToCreate),
                 cancellationToken
             );
-            var resultArray = createdTreatments.ToArray();
+            var resultArray = TreatmentEcho.InSubmittedOrder(createdTreatments);
 
-            _logger.LogDebug("Successfully created {Count} treatments", resultArray.Length);
+            _logger.LogDebug("Successfully created {Count} treatments", createdTreatments.Count);
 
             // Return 200 OK to match Nightscout behavior (not 201 Created)
             return Ok(resultArray);
@@ -481,9 +481,10 @@ public class TreatmentsController : ControllerBase
         if (created.SkippedDeleted > 0)
             return NothingSaved(prepared.Id);
 
-        return created.FirstOrDefault() is { } saved
-            ? Ok(saved)
-            : StatusCode(500, "Internal server error while saving treatment");
+        if (created.Rejected is [{ Reason: var reason }])
+            return BadRequest(new { status = 400, message = "Treatment cannot be stored", description = reason });
+
+        return Ok(created[0]);
     }
 
     /// <summary>

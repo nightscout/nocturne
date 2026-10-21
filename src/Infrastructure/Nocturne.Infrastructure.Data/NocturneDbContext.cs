@@ -2868,9 +2868,10 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     /// <summary>
     /// The string-mapped properties of an entity type, each flagged with whether its column is
-    /// jsonb, so the model metadata is read once per type rather than once per row.
+    /// jsonb and, for a <see cref="FitToColumnAttribute"/> one, the length it is cut to, so the
+    /// model metadata is read once per type rather than once per row.
     /// </summary>
-    private static readonly ConcurrentDictionary<IEntityType, (string Name, bool IsJsonb)[]> StringColumns = new();
+    private static readonly ConcurrentDictionary<IEntityType, (string Name, bool IsJsonb, int? Fit)[]> StringColumns = new();
 
     /// <summary>
     /// The six-character JSON escape for U+0000, matched only where the backslash opening it is
@@ -2885,7 +2886,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// uploaders — which Mongo and JSON both accept; Postgres rejects the raw byte in a text column
     /// (22021) and the escape sequence in a jsonb one (22P05), failing the whole insert batch the
     /// row happens to land in. Runs in the SaveChanges walk, before any interceptor sees the entry,
-    /// so audit snapshots record what is actually persisted.
+    /// so audit snapshots record what is actually persisted. A <see cref="FitToColumnAttribute"/>
+    /// column is cut to its length in the same pass.
     /// </summary>
     private static void StripNulCharacters(EntityEntry entry, bool isAdded, bool isRelational)
     {
@@ -2899,10 +2901,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             static (entityType, relational) =>
                 [.. entityType.GetProperties()
                     .Where(p => p.ClrType == typeof(string))
-                    .Select(p => (p.Name, IsJsonb: relational && p.GetColumnType() == "jsonb"))],
+                    .Select(p => (
+                        p.Name,
+                        IsJsonb: relational && p.GetColumnType() == "jsonb",
+                        Fit: p.PropertyInfo?.IsDefined(typeof(FitToColumnAttribute), inherit: true) == true
+                            ? p.GetMaxLength()
+                            : null))],
             isRelational);
 
-        foreach (var (name, isJsonb) in columns)
+        foreach (var (name, isJsonb, fit) in columns)
         {
             var property = entry.Property(name);
             if (property.CurrentValue is not string value)
@@ -2914,6 +2921,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             if (isJsonb && stripped.Contains(@"\u0000", StringComparison.Ordinal))
             {
                 stripped = JsonNulEscape.Replace(stripped, "$1");
+            }
+
+            if (fit is { } length && stripped.Length > length)
+            {
+                stripped = stripped[..(char.IsHighSurrogate(stripped[length - 1]) ? length - 1 : length)];
             }
 
             if (!string.Equals(stripped, value, StringComparison.Ordinal))

@@ -7118,8 +7118,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("Notes")
-                        .HasMaxLength(4096)
-                        .HasColumnType("character varying(4096)")
+                        .HasColumnType("text")
                         .HasColumnName("notes");
 
                     b.Property<Guid?>("PatientDeviceId")
@@ -7449,8 +7448,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.Property<string>("Text")
                         .IsRequired()
-                        .HasMaxLength(4096)
-                        .HasColumnType("character varying(4096)")
+                        .HasColumnType("text")
                         .HasColumnName("text");
 
                     b.Property<DateTime>("Timestamp")

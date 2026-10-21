@@ -1,4 +1,6 @@
+using System.Data.Common;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts;
@@ -9,6 +11,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Infrastructure.Data.Mappers;
 
@@ -209,28 +212,65 @@ public class TreatmentReadService : ITreatmentStore
         IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
     {
         var results = new List<Treatment>();
+        var rejected = new List<BulkWriteRejection<Treatment>>();
         var skippedDeleted = 0;
 
         for (var i = 0; i < treatments.Count; i++)
         {
             var treatment = treatments[i];
+            DecompositionResult? result = null;
             try
             {
-                var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
+                result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
                 skippedDeleted += result.SkippedDeleted;
                 results.Add(await ToCreatedAsync(treatment, result, ct));
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (DbUpdateException ex) when (result is null && StoreRefusal.ReasonFor(ex) is { } reason)
+            {
+                rejected.Add(Reject(i, treatment, ex, reason));
+            }
+            catch (ArgumentException ex) when (result is null)
+            {
+                rejected.Add(Reject(i, treatment, ex, ex.Message));
+            }
+            catch (FormatException ex) when (result is null)
+            {
+                rejected.Add(Reject(i, treatment, ex, ex.Message));
+            }
+            catch (OverflowException ex) when (result is null)
+            {
+                rejected.Add(Reject(i, treatment, ex, ex.Message));
+            }
+            catch (DbUpdateException ex) { throw Stopped(ex); }
+            catch (DbException ex) { throw Stopped(ex); }
+            catch (TimeoutException ex) { throw Stopped(ex); }
+            catch (InvalidOperationException ex) { throw Stopped(ex); }
+            catch (OperationCanceledException ex) { throw Stopped(ex); }
+
+            TreatmentBatchFailedException Stopped(Exception ex)
             {
                 _logger.LogError(ex, "Failed to store treatment {Id}; ending the batch", treatment.Id);
                 _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
-                throw new TreatmentBatchFailedException(
-                    new BulkWrite<Treatment>(results, skippedDeleted), i, treatments.Count, ex);
+                var stored = result is null ? results : [.. results, treatment];
+                return new TreatmentBatchFailedException(
+                    new BulkWrite<Treatment>(stored, skippedDeleted) { Rejected = rejected },
+                    i, treatments.Count, failedOneStored: result is not null, ex);
             }
         }
 
         _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
-        return new BulkWrite<Treatment>(results, skippedDeleted);
+        return new BulkWrite<Treatment>(results, skippedDeleted) { Rejected = rejected };
+    }
+
+    /// <summary>
+    /// A treatment whose write fails the same way on every attempt is answered as refused and the
+    /// batch goes on, so neither a client resending the batch nor a connector re-reading the page
+    /// is held on it forever.
+    /// </summary>
+    private BulkWriteRejection<Treatment> Reject(int index, Treatment treatment, Exception ex, string reason)
+    {
+        _logger.LogError(ex, "Treatment {Id} cannot be stored and was refused", treatment.Id);
+        return new BulkWriteRejection<Treatment>(index, treatment, reason);
     }
 
     /// <inheritdoc />

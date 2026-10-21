@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Npgsql;
 using Nocturne.API.Controllers.V1;
 using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Treatments;
@@ -127,6 +128,44 @@ public class TreatmentsCreatePartialFailureTests
         var echoed = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeAssignableTo<Treatment[]>().Subject;
         echoed.Select(t => t.Notes).Should().Equal("first", "second", "third");
     }
+
+    [Fact]
+    public async Task Post_WhenATreatmentCanNeverBeStored_StoresTheRestAndEchoesItInPlaceWithAnError()
+    {
+        RefuseSecond();
+
+        var result = await _controller.CreateTreatments(Batch());
+
+        var echoed = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeAssignableTo<Treatment[]>().Subject;
+        echoed.Select(t => t.Notes).Should().Equal("first", "second", "third");
+        echoed[1].AdditionalProperties.Should().ContainKey("error")
+            .WhoseValue.Should().Be("value too long for type character varying(255)");
+        echoed[0].AdditionalProperties?.ContainsKey("error").Should().NotBe(true);
+        _events.Verify(
+            e => e.OnCreatedAsync(
+                It.Is<IReadOnlyList<Treatment>>(written => written.Select(t => t.Notes).SequenceEqual(new[] { "first", "third" })),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Put_WhenTheTreatmentCanNeverBeStored_Answers400()
+    {
+        RefuseSecond();
+
+        var result = await _controller.SaveTreatments(JsonSerializer.SerializeToElement(
+            new { eventType = "Note", notes = "second", created_at = "2026-09-30T01:05:00.000Z" }));
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    private void RefuseSecond() =>
+        _decomposer
+            .Setup(d => d.DecomposeAsync(
+                It.Is<Treatment>(t => t.Notes == "second"), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DbUpdateException(
+                "refused",
+                new PostgresException("value too long for type character varying(255)", "ERROR", "ERROR", "22001")));
 
     private static JsonElement Batch() =>
         JsonSerializer.SerializeToElement(new[]
