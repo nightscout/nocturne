@@ -53,9 +53,10 @@ public class ProfileDecomposerTests
     }
 
     /// <summary>
-    /// Every version of a document starts at its <c>mills</c>, else its <c>startDate</c>, else its
-    /// <c>created_at</c>, in the shapes clients upload: Nightscout's profile editor and AAPS send no
-    /// <c>mills</c>, Loop sends it as a string, Trio truncated to the second.
+    /// Every version of a document starts at its <c>startDate</c>, else its <c>mills</c>, else its
+    /// <c>created_at</c>, else the epoch, in the shapes clients upload: Nightscout's profile editor
+    /// and AAPS send no <c>mills</c>, Loop sends it as a string of its <c>startDate</c>, Trio
+    /// truncated to the second, and an editor moving a document it read echoes the old <c>mills</c>.
     /// </summary>
     [Theory]
     [InlineData("""
@@ -65,17 +66,26 @@ public class ProfileDecomposerTests
         "date": 1760000000000, "created_at": "2025-10-09T08:53:20.000Z", "startDate": "2025-10-09T08:53:20.000Z"
         """, "2025-10-09T08:53:20.000Z")]
     [InlineData("""
-        "mills": "1759996800000", "startDate": "2025-10-09T08:53:20.000Z"
-        """, "2025-10-09T08:00:00.000Z")]
+        "mills": "1760000000000", "startDate": "2025-10-09T08:53:20.000Z"
+        """, "2025-10-09T08:53:20.000Z")]
     [InlineData("""
         "mills": 1760000000000, "startDate": "2025-10-09T08:53:20.123Z"
-        """, "2025-10-09T08:53:20.000Z")]
+        """, "2025-10-09T08:53:20.123Z")]
+    [InlineData("""
+        "mills": 1759276800000, "startDate": "2025-10-05T00:00:00.000Z", "created_at": "2025-10-01T00:00:00.000Z"
+        """, "2025-10-05T00:00:00.000Z")]
     [InlineData("""
         "startDate": "2025-10-01T06:00:00", "created_at": "2025-10-09T08:53:20.000Z"
         """, "2025-10-01T06:00:00.000Z")]
     [InlineData("""
-        "startDate": "", "created_at": "2025-10-02T00:00:00.000Z"
+        "startDate": "", "mills": 1760000000000, "created_at": "2025-10-02T00:00:00.000Z"
+        """, "2025-10-09T08:53:20.000Z")]
+    [InlineData("""
+        "created_at": "2025-10-02T00:00:00.000Z"
         """, "2025-10-02T00:00:00.000Z")]
+    [InlineData("""
+        "enteredBy": "editor"
+        """, "1970-01-01T00:00:00.000Z")]
     public async Task DecomposeAsync_StartsEveryVersionAtTheDocumentsTime(string header, string expected)
     {
         var repos = new Repositories();

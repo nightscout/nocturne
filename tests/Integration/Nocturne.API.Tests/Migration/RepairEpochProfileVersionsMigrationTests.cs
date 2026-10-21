@@ -20,6 +20,8 @@ public sealed class RepairEpochProfileVersionsFixture : IAsyncLifetime
 
     internal static readonly Guid TenantA = Guid.Parse("a1111111-1111-7111-8111-111111112377");
     internal static readonly Guid TenantB = Guid.Parse("b2222222-2222-7222-8222-222222222377");
+    internal static readonly Guid TenantC = Guid.Parse("c3333333-3333-7333-8333-333333332377");
+    internal static readonly Guid TenantD = Guid.Parse("d4444444-4444-7444-8444-444444442377");
 
     internal static readonly DateTime Seeded = new(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
 
@@ -31,6 +33,8 @@ public sealed class RepairEpochProfileVersionsFixture : IAsyncLifetime
 
     internal Dictionary<Guid, (DateTime Timestamp, DateTime Updated)> AfterUp { get; } = [];
     internal Dictionary<Guid, (DateTime Timestamp, DateTime Updated)> AfterSecondUp { get; } = [];
+    internal Dictionary<Guid, bool> DefaultAfterUp { get; } = [];
+    internal List<(Guid Tenant, string Job)> JobsAfterUp { get; } = [];
 
     private string _migrator = string.Empty;
 
@@ -43,6 +47,7 @@ public sealed class RepairEpochProfileVersionsFixture : IAsyncLifetime
         await SeedAsync();
         await MigrateToAsync(null);
         await ReadAsync(AfterUp);
+        await ReadDefaultsAndJobsAsync();
         await MigrateToAsync(PriorMigration);
         await MigrateToAsync(null);
         await ReadAsync(AfterSecondUp);
@@ -67,7 +72,9 @@ public sealed class RepairEpochProfileVersionsFixture : IAsyncLifetime
         await Execute(conn, $"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES
               ('{TenantA}', 'tenant-a', 'Tenant A', true, now(), now()),
-              ('{TenantB}', 'tenant-b', 'Tenant B', true, now(), now());
+              ('{TenantB}', 'tenant-b', 'Tenant B', true, now(), now()),
+              ('{TenantC}', 'tenant-c', 'Tenant C', false, now(), now()),
+              ('{TenantD}', 'tenant-d', 'Tenant D', true, now(), now());
             """);
 
         foreach (var store in RepairEpochProfileVersionsTests.Stores)
@@ -81,15 +88,16 @@ public sealed class RepairEpochProfileVersionsFixture : IAsyncLifetime
         await Execute(conn, $"SELECT set_config('app.current_tenant_id', '{store.Tenant}', false);");
         var deleted = store.Deleted ? $"'{Seeded:O}'" : "NULL";
         var startDate = store.StartDate is null ? "NULL" : $"'{store.StartDate}'";
+        var documentDefault = store.DocumentDefault is null ? "NULL" : $"'{store.DocumentDefault}'";
         foreach (var table in Tables)
         {
             var id = Guid.CreateVersion7();
             var timestamp = (store.Retimed ?? []).Contains(table) ? Seeded : store.Timestamp;
             var columns = table == "therapy_settings"
-                ? "units, dia, carbs_hr, delay, per_gi_values, is_default, is_externally_managed, start_date"
+                ? "units, dia, carbs_hr, delay, per_gi_values, is_default, is_externally_managed, start_date, document_default_profile"
                 : "entries_json";
             var values = table == "therapy_settings"
-                ? $"'mg/dl', 4, 20, 20, false, false, false, {startDate}"
+                ? $"'mg/dl', 4, 20, 20, false, {(store.IsDefault ? "true" : "false")}, false, {startDate}, {documentDefault}"
                 : "'[]'::jsonb";
             await Execute(conn, $"""
                 INSERT INTO {table}
@@ -106,6 +114,25 @@ public sealed class RepairEpochProfileVersionsFixture : IAsyncLifetime
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    private async Task ReadDefaultsAndJobsAsync()
+    {
+        await using var conn = new NpgsqlConnection(_migrator);
+        await conn.OpenAsync();
+        foreach (var (id, _, _, tenant) in Rows.Where(r => r.Table == "therapy_settings"))
+        {
+            await Execute(conn, $"SELECT set_config('app.current_tenant_id', '{tenant}', false);");
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"SELECT is_default FROM therapy_settings WHERE id = '{id}';";
+            DefaultAfterUp[id] = (bool)(await cmd.ExecuteScalarAsync())!;
+        }
+
+        await using var jobs = conn.CreateCommand();
+        jobs.CommandText = "SELECT tenant_id, job FROM pending_tenant_jobs;";
+        await using var reader = await jobs.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            JobsAfterUp.Add((reader.GetGuid(0), reader.GetString(1)));
     }
 
     private async Task ReadAsync(Dictionary<Guid, (DateTime Timestamp, DateTime Updated)> into)
@@ -134,10 +161,14 @@ public class RepairEpochProfileVersionsTests : IClassFixture<RepairEpochProfileV
     /// <summary>A store's five rows, seeded at <paramref name="Timestamp"/> but for the tables in <paramref name="Retimed"/>.</summary>
     internal sealed record Store(
         string Key, Guid Tenant, string Name, string LegacyId, string? StartDate,
-        DateTime Timestamp, bool Deleted = false, string[]? Retimed = null);
+        DateTime Timestamp, bool Deleted = false, string[]? Retimed = null,
+        bool IsDefault = false, string? DocumentDefault = null);
 
     private static readonly Guid TenantA = RepairEpochProfileVersionsFixture.TenantA;
     private static readonly Guid TenantB = RepairEpochProfileVersionsFixture.TenantB;
+    private static readonly Guid TenantC = RepairEpochProfileVersionsFixture.TenantC;
+    private static readonly Guid TenantD = RepairEpochProfileVersionsFixture.TenantD;
+    private static readonly DateTime September = new(2025, 9, 1, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime Epoch = DateTime.UnixEpoch;
     private static readonly DateTime Seeded = RepairEpochProfileVersionsFixture.Seeded;
 
@@ -149,13 +180,25 @@ public class RepairEpochProfileVersionsTests : IClassFixture<RepairEpochProfileV
         new("offset", TenantA, "Offset", "docC:Offset", "2025-10-04T10:00:00+10:00", Epoch),
         new("isf edited off the epoch", TenantA, "Edited", "docD:Edited", "2025-10-05T00:00:00.000Z", Epoch,
             Retimed: ["sensitivity_schedules"]),
-        new("unparseable", TenantA, "Odd", "docE:Odd", "Wed Oct 01 2025 junk", Epoch),
+        new("unparseable", TenantA, "Odd", "docE:Odd", "Wed Oct 01 2025 06:00:00 GMT+0000", Epoch),
+        new("now", TenantA, "Now", "docE2:Now", "now", Epoch),
+        new("infinity", TenantA, "Infinite", "docE3:Infinite", "infinity", Epoch),
+        new("out of range", TenantA, "Month13", "docE4:Month13", "2025-13-01T00:00:00Z", Epoch),
+        new("the epoch", TenantA, "Epoch", "docE5:Epoch", "1970-01-01T00:00:00.000Z", Epoch),
         new("no start date", TenantA, "Bare", "docF:Bare", null, Epoch),
-        new("with mills", TenantA, "Dated", "docG:Dated", "2025-10-06T00:00:00.000Z", new(2025, 9, 1, 0, 0, 0, DateTimeKind.Utc)),
+        new("with mills", TenantA, "Dated", "docG:Dated", "2025-10-06T00:00:00.000Z", September),
         new("deleted", TenantA, "Gone", "docH:Gone", "2025-10-07T00:00:00.000Z", Epoch, Deleted: true),
         new("profile switch", TenantA, "Default@@@@@1759276800000", "switch:Default@@@@@1759276800000",
             "2025-10-08T00:00:00.000Z", Epoch),
         new("other tenant", TenantB, "Default", "docA:Default", "2025-10-02T00:00:00.000Z", Epoch),
+        new("older document holding the default", TenantC, "Default", "old:Default", "2025-09-01T00:00:00.000Z", September,
+            IsDefault: true, DocumentDefault: "Default"),
+        new("newest document's default store", TenantC, "Night", "new:Night", "2025-10-10T00:00:00.000Z", Epoch,
+            DocumentDefault: "Night"),
+        new("newest document's other store", TenantC, "Day", "new:Day", "2025-10-10T00:00:00.000Z", Epoch,
+            DocumentDefault: "Night"),
+        new("tenant with nothing at the epoch", TenantD, "Default", "docA:Default", "2025-10-06T00:00:00.000Z", September,
+            IsDefault: true, DocumentDefault: "Default"),
     ];
 
     private IEnumerable<(Guid Id, string Table)> RowsOf(string key) =>
@@ -186,6 +229,8 @@ public class RepairEpochProfileVersionsTests : IClassFixture<RepairEpochProfileV
     [InlineData("zone-less", "2025-10-03T07:30:00Z")]
     [InlineData("offset", "2025-10-04T00:00:00Z")]
     [InlineData("other tenant", "2025-10-02T00:00:00Z")]
+    [InlineData("newest document's default store", "2025-10-10T00:00:00Z")]
+    [InlineData("newest document's other store", "2025-10-10T00:00:00Z")]
     public void AStoreAtTheEpoch_MovesToItsStartDate_WithEverySchedule(string key, string start) =>
         ShouldBeMovedTo(key, DateTimeOffset.Parse(start).UtcDateTime);
 
@@ -199,11 +244,40 @@ public class RepairEpochProfileVersionsTests : IClassFixture<RepairEpochProfileV
 
     [Theory]
     [InlineData("unparseable")]
+    [InlineData("now")]
+    [InlineData("infinity")]
+    [InlineData("out of range")]
+    [InlineData("the epoch")]
+    [InlineData("tenant with nothing at the epoch")]
     [InlineData("no start date")]
     [InlineData("with mills")]
     [InlineData("deleted")]
     [InlineData("profile switch")]
     public void AStoreItCannotOrNeedNotMove_IsUntouched(string key) => ShouldBeUntouched(key);
+
+    private Guid SettingsOf(string key) => RowsOf(key).Single(r => r.Table == "therapy_settings").Id;
+
+    [Fact]
+    public void TheDefault_MovesToTheStoreTheNewestDocumentNames()
+    {
+        _fixture.DefaultAfterUp[SettingsOf("newest document's default store")].Should().BeTrue();
+        _fixture.DefaultAfterUp[SettingsOf("newest document's other store")].Should().BeFalse();
+        _fixture.DefaultAfterUp[SettingsOf("older document holding the default")].Should().BeFalse();
+        _fixture.AfterUp[SettingsOf("older document holding the default")].Timestamp.Should().Be(September);
+    }
+
+    [Fact]
+    public void ADefaultInATenantItMovedNothingFor_StaysWhereItIs() =>
+        _fixture.DefaultAfterUp[SettingsOf("tenant with nothing at the epoch")].Should().BeTrue();
+
+    [Fact]
+    public void EveryTenantItMovedRowsFor_InactiveOrNot_GetsOneJob_AndNoOtherDoes() =>
+        _fixture.JobsAfterUp.Should().BeEquivalentTo(new[]
+        {
+            (TenantA, "profile-versions-moved"),
+            (TenantB, "profile-versions-moved"),
+            (TenantC, "profile-versions-moved"),
+        });
 
     [Fact]
     public void RunningItAgain_ChangesNothing() =>

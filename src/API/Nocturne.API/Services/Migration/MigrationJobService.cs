@@ -1899,7 +1899,12 @@ internal class MigrationJob
         {
             Id = originalId ?? Guid.CreateVersion7().ToString(),
             DefaultProfile = defaultProfile,
-            StartDate = doc.Contains("startDate") ? doc["startDate"].AsString : DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            StartDate = doc.GetValue("startDate", BsonNull.Value) switch
+            {
+                { IsString: true } value => value.AsString,
+                { IsValidDateTime: true } value => value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                _ => null,
+            },
             Mills = mills,
             CreatedAt = doc.Contains("created_at") ? doc["created_at"].AsString : null,
             Units = doc.Contains("units") ? doc["units"].AsString : "mg/dl",

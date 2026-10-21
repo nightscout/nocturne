@@ -236,23 +236,27 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     #region Mapping Methods
 
     /// <summary>
-    /// The instant every version decomposed from <paramref name="profile"/> starts: its <c>mills</c>,
-    /// else its <c>startDate</c>, else its <c>created_at</c>, else the epoch.
+    /// The instant every version decomposed from <paramref name="profile"/> starts: its <c>startDate</c>,
+    /// else its <c>mills</c>, else its <c>created_at</c>, else the epoch.
     /// </summary>
     /// <remarks>
-    /// Nightscout dates a document by <c>startDate</c> alone (profilefunctions.js sets <c>mills</c>
-    /// from it on load). Clients that send both send one instant, give or take Trio's truncation to
-    /// the second; <c>mills</c> leads because the Glooko connector sets it to the pump's settings time
-    /// and <c>startDate</c> to the sync. A zone-less string is read as UTC (<see cref="UploaderTimestamp"/>).
+    /// <c>startDate</c> leads as in Nightscout, which sets a document's <c>mills</c> from it on load
+    /// (profilefunctions.js), so an editor that changes it and echoes the <c>mills</c> it read moves
+    /// the document.
     /// </remarks>
     internal static DateTime VersionStart(Profile profile)
     {
+        if (UploaderTimestamp.ParseUtcDateTime(profile.StartDate) is { } start)
+            return start;
+
+        // NIGHTSCOUT-COMPAT: Nightscout gives a document with no readable startDate no time (NaN), so it
+        // is never in force at a time and is read only when it heads the list. Its mills or created_at
+        // place it where its client meant it instead. A zone-less startDate is read as UTC where
+        // Nightscout reads it in the server's zone, which is UTC in its container image.
         if (profile.Mills != 0)
             return DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime;
 
-        return UploaderTimestamp.ParseUtcDateTime(profile.StartDate)
-            ?? UploaderTimestamp.ParseUtcDateTime(profile.CreatedAt)
-            ?? DateTime.UnixEpoch;
+        return UploaderTimestamp.ParseUtcDateTime(profile.CreatedAt) ?? DateTime.UnixEpoch;
     }
 
     internal static V4Models.TherapySettings MapToTherapySettings(

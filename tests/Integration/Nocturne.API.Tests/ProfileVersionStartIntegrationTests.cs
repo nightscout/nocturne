@@ -1,11 +1,15 @@
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -139,6 +143,70 @@ public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
     }
 
     /// <summary>
+    /// Nightscout's profile editor saves a document it read with the <c>mills</c> it read and the
+    /// <c>startDate</c> the user set; the document moves to that <c>startDate</c>.
+    /// </summary>
+    [Fact]
+    public async Task EditingAReadDocumentsStartDate_MovesItsVersions()
+    {
+        var store = StoreName();
+        var client = CreateAuthenticatedClient();
+        await PostAsync("/api/v1/profile", EditorProfile(store, 1.0, DaysAgo(20)));
+
+        var read = (await client.GetFromJsonAsync<JsonElement>("/api/v1/profile")).EnumerateArray()
+            .Single(d => d.GetProperty("defaultProfile").GetString() == store);
+        read.GetProperty("mills").GetInt64().Should().BeGreaterThan(0);
+        var edited = JsonNode.Parse(read.GetRawText())!.AsObject();
+        var moved = DaysAgo(12);
+        edited["startDate"] = At(moved);
+
+        var put = await client.PutAsJsonAsync("/api/v1/profile", edited);
+        put.IsSuccessStatusCode.Should().BeTrue(await put.Content.ReadAsStringAsync());
+
+        var starts = await WithTenantScopeAsync(async sp =>
+            (await sp.GetRequiredService<IBasalScheduleRepository>().GetByProfileNameAsync(store))
+                .Select(v => v.Timestamp).ToList());
+        starts.Should().Equal(moved.UtcDateTime);
+    }
+
+    /// <summary>
+    /// A document with no <c>startDate</c> and no <c>mills</c>, as a Nightscout server serves one it
+    /// stored that way, starts at its <c>created_at</c> however often it is synced again.
+    /// </summary>
+    [Fact]
+    public async Task ADocumentWithOnlyCreatedAt_StaysAtItAcrossResyncs()
+    {
+        var store = StoreName();
+        var createdAt = DaysAgo(9);
+        var document = new
+        {
+            _id = ObjectId(store),
+            defaultProfile = store,
+            store = Store(store, 1.0),
+            created_at = At(createdAt),
+            units = "mg/dl",
+        };
+
+        await PostAsync("/api/v1/profile", document);
+        var first = await SettingsAsync(store);
+        await PostAsync("/api/v1/profile", document);
+        var second = await SettingsAsync(store);
+
+        first.Timestamp.Should().Be(createdAt.UtcDateTime);
+        second.Should().Be(first, "a re-sync of an unchanged document writes nothing");
+    }
+
+    private static string ObjectId(string seed) =>
+        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(seed)))[..24];
+
+    private Task<(DateTime Timestamp, DateTime Modified)> SettingsAsync(string store) =>
+        WithTenantScopeAsync(async sp =>
+        {
+            var row = (await sp.GetRequiredService<ITherapySettingsRepository>().GetByProfileNameAsync(store)).Single();
+            return (row.Timestamp, row.ModifiedAt);
+        });
+
+    /// <summary>
     /// A percent temp uploaded without a rate resolves against the version its time falls in.
     /// </summary>
     [Fact]
@@ -161,7 +229,8 @@ public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
 
     /// <summary>
     /// A version moved with no re-resolution after it, as <c>RepairEpochProfileVersions</c> moves them
-    /// in SQL, has its percent temp rates re-resolved by the startup sweep.
+    /// in SQL, has its percent temp rates re-resolved by the startup sweep for the job the migration
+    /// left, once.
     /// </summary>
     [Fact]
     public async Task StartupSweep_ReresolvesRatesAgainstAVersionMovedWithoutAWrite()
@@ -186,19 +255,36 @@ public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
             return 0;
         });
 
-        var sweep = new TempBasalRateSweepService(
-            Fixture.Services,
-            new ActiveTenantSnapshot(
-                Fixture.Services.GetRequiredService<INocturneDbContextFactory>(),
-                TimeProvider.System,
-                NullLogger<ActiveTenantSnapshot>.Instance),
-            NullLogger<TempBasalRateSweepService>.Instance);
-        await sweep.StartAsync(default);
-        await sweep.ExecuteTask!;
+        await RunSweepAsync();
+        (await TempBasalAtAsync(createdAt)).ScheduledRate.Should().Be(2.0, "no migration left a job for the tenant");
+
+        var factory = Fixture.Services.GetRequiredService<INocturneDbContextFactory>();
+        await using (var platform = await factory.CreatePlatformAsync())
+        {
+            platform.PendingTenantJobs.Add(new PendingTenantJobEntity
+            {
+                TenantId = Fixture.TenantId,
+                Job = PendingTenantJobs.ProfileVersionsMoved,
+                RequestedAt = DateTime.UtcNow,
+            });
+            await platform.SaveChangesAsync();
+        }
+
+        await RunSweepAsync();
 
         var tempBasal = await TempBasalAtAsync(createdAt);
         tempBasal.ScheduledRate.Should().Be(1.0);
         tempBasal.Rate.Should().BeApproximately(0.5, 1e-9);
+        await using var after = await factory.CreatePlatformAsync();
+        (await after.PendingTenantJobs.CountAsync(j => j.TenantId == Fixture.TenantId))
+            .Should().Be(0, "the job runs once");
+    }
+
+    private async Task RunSweepAsync()
+    {
+        var sweep = new TempBasalRateSweepService(Fixture.Services, NullLogger<TempBasalRateSweepService>.Instance);
+        await sweep.StartAsync(default);
+        await sweep.ExecuteTask!;
     }
 
     private Task<Nocturne.Core.Models.V4.TempBasal> TempBasalAtAsync(DateTimeOffset createdAt) =>

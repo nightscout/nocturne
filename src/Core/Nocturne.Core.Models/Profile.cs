@@ -27,8 +27,11 @@ public class Profile
     [JsonPropertyName("defaultProfile")]
     public string DefaultProfile { get; set; } = "Default";
 
+    /// <summary>
+    /// When the document applies from, as the client sent it; null when it sent none.
+    /// </summary>
     [JsonPropertyName("startDate")]
-    public string StartDate { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+    public string? StartDate { get; set; }
 
     /// <summary>
     /// Time in milliseconds since the Unix epoch

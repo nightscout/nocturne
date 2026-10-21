@@ -222,6 +222,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<ConnectorResetJobEntity> ConnectorResetJobs { get; set; }
 
+    public DbSet<PendingTenantJobEntity> PendingTenantJobs { get; set; }
+
     public DbSet<LinkedRecordEntity> LinkedRecords { get; set; }
 
     public DbSet<DedupReconcileStateEntity> DedupReconcileState { get; set; }
@@ -1478,6 +1480,10 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<ConnectorResetJobEntity>()
             .HasIndex(j => j.State)
             .HasDatabaseName("ix_connector_reset_jobs_state");
+
+        modelBuilder
+            .Entity<PendingTenantJobEntity>()
+            .HasKey(j => new { j.TenantId, j.Job });
 
         // A canonical id is minted per group, so it alone narrows a lookup to that group's few links;
         // leading with record_type, or adding is_primary, only made the index bigger.
