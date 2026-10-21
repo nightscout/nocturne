@@ -146,7 +146,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             groups.Select(g => MapToSensitivitySchedule(g.Entry.Profile, g.Entry.Data, g.Entry.StoreName, g.Entry.LegacyId, g.CorrelationId)).ToList(),
             origin, ct: ct));
         Record(result, await _targetRangeScheduleRepo.BulkUpsertByLegacyIdAsync(
-            groups.Select(g => MapToTargetRangeSchedule(g.Entry.Profile, g.Entry.Data, g.Entry.StoreName, g.Entry.LegacyId, g.CorrelationId)).ToList(),
+            groups.Select(g => MapToTargetRangeSchedule(g.Entry.Profile, g.Entry.Data, g.Entry.StoreName, g.Entry.LegacyId, g.CorrelationId, Logger)).ToList(),
             origin, ct: ct));
 
         return result;
@@ -304,14 +304,25 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         ProfileData profileData,
         string storeName,
         string legacyId,
-        Guid? correlationId)
+        Guid? correlationId,
+        ILogger? logger = null)
     {
+        var entries = MergeTargets(
+            profileData.TargetLow, profileData.TargetHigh, profileData.Units ?? profile.Units, out var undone);
+        if (undone)
+        {
+            logger?.LogWarning(
+                "Profile store {StoreName} ({LegacyId}) is labelled mmol but its targets are mg/dL: stored them as mg/dL. Its ISF is stored as uploaded and may be 18 times too large",
+                storeName,
+                legacyId);
+        }
+
         return new V4Models.TargetRangeSchedule
         {
             LegacyId = legacyId,
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime,
             ProfileName = storeName,
-            Entries = MergeTargets(profileData.TargetLow, profileData.TargetHigh, profileData.Units ?? profile.Units),
+            Entries = entries,
             Device = profile.EnteredBy,
             CorrelationId = correlationId,
         };
@@ -391,10 +402,17 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// <param name="highs">The high-target time-value entries from the profile store.</param>
     /// <param name="units">The profile's glucose units ("mg/dl" or "mmol"); mmol values are converted to mg/dL.</param>
     /// <returns>A merged list of <see cref="V4Models.TargetRangeEntry"/> with <c>Low</c> and <c>High</c> fields in mg/dL.</returns>
-    internal static List<V4Models.TargetRangeEntry> MergeTargets(List<TimeValue> lows, List<TimeValue> highs, string? units)
+    internal static List<V4Models.TargetRangeEntry> MergeTargets(List<TimeValue> lows, List<TimeValue> highs, string? units) =>
+        MergeTargets(lows, highs, units, out _);
+
+    /// <param name="undone">Whether an extra conversion was undone.</param>
+    internal static List<V4Models.TargetRangeEntry> MergeTargets(
+        List<TimeValue> lows, List<TimeValue> highs, string? units, out bool undone)
     {
         var merged = MergeTargetsConverted(lows, highs, units);
-        return IsMmol(units) ? UndoRepeatedTargetConversions(merged) : merged;
+        var targets = IsMmol(units) ? UndoRepeatedTargetConversions(merged) : merged;
+        undone = !ReferenceEquals(targets, merged);
+        return targets;
     }
 
     private static List<V4Models.TargetRangeEntry> MergeTargetsConverted(List<TimeValue> lows, List<TimeValue> highs, string? units)

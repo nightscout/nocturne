@@ -33,15 +33,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
     /// and is an image; the result is at or under 400.</item>
     /// <item>Its values before the last step all exceed 1000 mg/dL/U (55.5 mmol/L/U), above the largest
     /// ISF AAPS accepts (1000 mg/dL/U) and Loop's limit (500), so they cannot be a correct ISF: a
-    /// repeat-converted ISF of 56 mg/dL/U or more is there. Below that, <c>mutation_audit_log</c> must
-    /// show the conversion: an update of this ISF whose entries went from <c>old</c> to
-    /// <c>round(old * 18.0182)</c> and ended at those values, in the same request (trace id) as an update
-    /// of the targets that did the same to theirs.</item>
+    /// repeat-converted ISF of 56 mg/dL/U or more is there.</item>
     /// </list>
     /// <para>
-    /// An ISF that fails any of them is left, which errs towards an ISF too large (weaker corrections)
-    /// rather than too small. A profile-activation snapshot is one write, so its targets are its ISF's
-    /// batch; no audit row records how a snapshot was built, so its ISF is divided only above 1000. Its
+    /// Nothing else proves a conversion. The audit log does not: #521 converted each mmol store on its
+    /// first upload after it shipped, in one request for targets and ISF alike, which reads exactly like
+    /// a repeat conversion. An ISF that fails any rule is left and listed for review by hand, which errs
+    /// towards an ISF too large (weaker corrections) rather than too small. A profile-activation snapshot
+    /// is one write, so its targets are its ISF's batch, and it takes the same rules. Its
     /// <c>profileJson</c> is served as uploaded and is left alone.
     /// </para>
     /// <para>
@@ -90,7 +89,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 snap jsonb;
                 steps int;
                 taken int;
-                audited boolean;
                 left_over text;
                 n_targets int;
                 n_isf int;
@@ -108,8 +106,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     FROM target_range_schedules tr
                     WHERE tr.tenant_id = t.id
                       AND tr.deleted_at IS NULL
-                      AND jsonb_typeof(tr.entries_json) = 'array'
-                      AND jsonb_array_length(tr.entries_json) > 0
                       AND EXISTS (
                           SELECT 1 FROM therapy_settings ts
                           WHERE ts.tenant_id = t.id
@@ -118,7 +114,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                             AND (ts.legacy_id = tr.legacy_id
                                  OR (ts.correlation_id = tr.correlation_id AND ts.profile_name = tr.profile_name)))
                       AND (SELECT min(least((e->>'Low')::numeric, (e->>'High')::numeric))
-                           FROM jsonb_array_elements(tr.entries_json) e) > 400;
+                           FROM jsonb_array_elements(
+                               CASE WHEN jsonb_typeof(tr.entries_json) = 'array' THEN tr.entries_json ELSE '[]'::jsonb END) e) > 400;
 
                     FOREACH rid IN ARRAY COALESCE(ids, ARRAY[]::uuid[]) LOOP
                         SELECT tr.legacy_id, tr.correlation_id, tr.profile_name, tr.timestamp, tr.sys_updated_at, tr.entries_json
@@ -177,7 +174,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                             taken := 0;
                             before_last := NULL;
-                            IF jsonb_typeof(isf) = 'array' AND jsonb_array_length(isf) > 0 THEN
+                            IF jsonb_array_length(CASE WHEN jsonb_typeof(isf) = 'array' THEN isf ELSE '[]'::jsonb END) > 0 THEN
                                 WHILE (SELECT min((e->>'Value')::numeric) FROM jsonb_array_elements(isf) e) > 400
                                       AND taken < 4 LOOP
                                     IF EXISTS (
@@ -204,51 +201,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                             END IF;
 
                             IF (SELECT min((e->>'Value')::numeric) FROM jsonb_array_elements(before_last) e) <= 1000 THEN
-                                BEGIN
-                                    audited := EXISTS (
-                                        SELECT 1 FROM mutation_audit_log a
-                                        WHERE a.tenant_id = t.id
-                                          AND a.entity_type = 'SensitivitySchedule'
-                                          AND a.entity_id = sid
-                                          AND a.action = 'update'
-                                          AND a.correlation_id IS NOT NULL
-                                          AND jsonb_typeof(a.changes->'EntriesJson'->'old') = 'string'
-                                          AND jsonb_typeof(a.changes->'EntriesJson'->'new') = 'string'
-                                          AND NOT EXISTS (
-                                              SELECT 1
-                                              FROM jsonb_array_elements((a.changes->'EntriesJson'->>'old')::jsonb) WITH ORDINALITY o(oe, i)
-                                              FULL JOIN jsonb_array_elements((a.changes->'EntriesJson'->>'new')::jsonb) WITH ORDINALITY n(ne, i) USING (i)
-                                              FULL JOIN jsonb_array_elements(before_last) WITH ORDINALITY p(pe, i) USING (i)
-                                              WHERE oe IS NULL OR ne IS NULL OR pe IS NULL
-                                                 OR (ne->>'Value')::numeric IS DISTINCT FROM (pe->>'Value')::numeric
-                                                 OR abs((ne->>'Value')::numeric - (oe->>'Value')::numeric * f) > 0.5)
-                                          AND EXISTS (
-                                              SELECT 1 FROM mutation_audit_log b
-                                              WHERE b.tenant_id = t.id
-                                                AND b.entity_type = 'TargetRangeSchedule'
-                                                AND b.entity_id = rid
-                                                AND b.action = 'update'
-                                                AND b.correlation_id = a.correlation_id
-                                                AND jsonb_typeof(b.changes->'EntriesJson'->'old') = 'string'
-                                                AND jsonb_typeof(b.changes->'EntriesJson'->'new') = 'string'
-                                                AND jsonb_array_length((b.changes->'EntriesJson'->>'new')::jsonb) > 0
-                                                AND NOT EXISTS (
-                                                    SELECT 1
-                                                    FROM jsonb_array_elements((b.changes->'EntriesJson'->>'old')::jsonb) WITH ORDINALITY o(oe, i)
-                                                    FULL JOIN jsonb_array_elements((b.changes->'EntriesJson'->>'new')::jsonb) WITH ORDINALITY n(ne, i) USING (i)
-                                                    WHERE oe IS NULL OR ne IS NULL
-                                                       OR abs((ne->>'Low')::numeric - (oe->>'Low')::numeric * f) > 0.5
-                                                       OR abs((ne->>'High')::numeric - (oe->>'High')::numeric * f) > 0.5)));
-                                EXCEPTION WHEN data_exception THEN
-                                    audited := false;
-                                END;
-
-                                IF NOT audited THEN
-                                    n_skipped := n_skipped + 1;
-                                    left_isf := left_isf || sid;
-                                    RAISE NOTICE 'tenant %: sensitivity_schedules % left as it is: it could be a correct ISF, and the audit log does not show its conversion', t.id, sid;
-                                    CONTINUE;
-                                END IF;
+                                n_skipped := n_skipped + 1;
+                                left_isf := left_isf || sid;
+                                RAISE NOTICE 'tenant %: sensitivity_schedules % left as it is: at or under 1000 mg/dL/U before its last conversion it could be a correct ISF', t.id, sid;
+                                CONTINUE;
                             END IF;
 
                             UPDATE sensitivity_schedules SET entries_json = isf, sys_updated_at = now()
@@ -263,10 +219,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     WHERE p.tenant_id = t.id
                       AND p.deleted_at IS NULL
                       AND lower(p.snapshot->>'Units') IN ('mmol', 'mmol/l')
-                      AND jsonb_typeof(p.snapshot->'Targets') = 'array'
-                      AND jsonb_array_length(p.snapshot->'Targets') > 0
                       AND (SELECT min(least((e->>'Low')::numeric, (e->>'High')::numeric))
-                           FROM jsonb_array_elements(p.snapshot->'Targets') e) > 400;
+                           FROM jsonb_array_elements(
+                               CASE WHEN jsonb_typeof(p.snapshot->'Targets') = 'array' THEN p.snapshot->'Targets' ELSE '[]'::jsonb END) e) > 400;
 
                     FOREACH rid IN ARRAY COALESCE(ids, ARRAY[]::uuid[]) LOOP
                         SELECT p.snapshot INTO snap FROM profile_activations p WHERE p.id = rid;
@@ -301,7 +256,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         isf := snap->'Sensitivity';
                         taken := 0;
                         before_last := NULL;
-                        IF jsonb_typeof(isf) = 'array' AND jsonb_array_length(isf) > 0 THEN
+                        IF jsonb_array_length(CASE WHEN jsonb_typeof(isf) = 'array' THEN isf ELSE '[]'::jsonb END) > 0 THEN
                             WHILE (SELECT min((e->>'Value')::numeric) FROM jsonb_array_elements(isf) e) > 400
                                   AND taken < 4 LOOP
                                 IF EXISTS (
@@ -323,7 +278,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                            AND (SELECT max((e->>'Value')::numeric) FROM jsonb_array_elements(isf) e) <= 400
                            AND (SELECT min((e->>'Value')::numeric) FROM jsonb_array_elements(before_last) e) > 1000 THEN
                             snap := jsonb_set(snap, '{Sensitivity}', isf);
-                        ELSIF jsonb_typeof(snap->'Sensitivity') = 'array' AND jsonb_array_length(snap->'Sensitivity') > 0 THEN
+                        ELSIF jsonb_array_length(CASE WHEN jsonb_typeof(snap->'Sensitivity') = 'array' THEN snap->'Sensitivity' ELSE '[]'::jsonb END) > 0 THEN
                             n_skipped := n_skipped + 1;
                             left_snapshots := left_snapshots || rid;
                             RAISE NOTICE 'tenant %: profile_activations % sensitivity left as it is: it could be a correct ISF, or is not the % conversions of its targets', t.id, rid, steps;
@@ -353,7 +308,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     FROM target_range_schedules tr
                     WHERE tr.tenant_id = t.id
                       AND tr.deleted_at IS NULL
-                      AND jsonb_typeof(tr.entries_json) = 'array'
                       AND EXISTS (
                           SELECT 1 FROM therapy_settings ts
                           WHERE ts.tenant_id = t.id
@@ -361,7 +315,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                             AND lower(ts.units) IN ('mmol', 'mmol/l')
                             AND (ts.legacy_id = tr.legacy_id
                                  OR (ts.correlation_id = tr.correlation_id AND ts.profile_name = tr.profile_name)))
-                      AND EXISTS (SELECT 1 FROM jsonb_array_elements(tr.entries_json) e
+                      AND EXISTS (SELECT 1 FROM jsonb_array_elements(
+                                      CASE WHEN jsonb_typeof(tr.entries_json) = 'array' THEN tr.entries_json ELSE '[]'::jsonb END) e
                                   WHERE greatest((e->>'Low')::numeric, (e->>'High')::numeric) > 400);
                     IF left_over IS NOT NULL THEN
                         RAISE NOTICE 'tenant %: mmol target_range_schedules still above 400 mg/dL: %', t.id, left_over;
@@ -371,7 +326,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     FROM sensitivity_schedules si
                     WHERE si.tenant_id = t.id
                       AND si.deleted_at IS NULL
-                      AND jsonb_typeof(si.entries_json) = 'array'
                       AND EXISTS (
                           SELECT 1 FROM therapy_settings ts
                           WHERE ts.tenant_id = t.id
@@ -379,7 +333,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                             AND lower(ts.units) IN ('mmol', 'mmol/l')
                             AND (ts.legacy_id = si.legacy_id
                                  OR (ts.correlation_id = si.correlation_id AND ts.profile_name = si.profile_name)))
-                      AND EXISTS (SELECT 1 FROM jsonb_array_elements(si.entries_json) e
+                      AND EXISTS (SELECT 1 FROM jsonb_array_elements(
+                                      CASE WHEN jsonb_typeof(si.entries_json) = 'array' THEN si.entries_json ELSE '[]'::jsonb END) e
                                   WHERE (e->>'Value')::numeric > 400);
                     IF left_over IS NOT NULL THEN
                         RAISE NOTICE 'tenant %: mmol sensitivity_schedules still above 400 mg/dL/U: %', t.id, left_over;

@@ -472,6 +472,27 @@ public class ProfileDecomposerTests
     }
 
     [Theory]
+    [InlineData(90, 99, 1)]
+    [InlineData(5.0, 5.5, 0)]
+    public void UndoingAStoresTargets_IsLoggedAsAWarningNamingTheStore(double low, double high, int warnings)
+    {
+        var logger = new Mock<Microsoft.Extensions.Logging.ILogger>();
+        var profile = new Nocturne.Core.Models.Profile { Id = "doc", Mills = 0, Units = "mmol" };
+        var data = new Nocturne.Core.Models.ProfileData { Units = "mmol", TargetLow = At(low), TargetHigh = At(high) };
+
+        ProfileDecomposer.MapToTargetRangeSchedule(profile, data, "AAPS", "doc:AAPS", null, logger.Object);
+
+        logger.Verify(
+            l => l.Log(
+                Microsoft.Extensions.Logging.LogLevel.Warning,
+                It.IsAny<Microsoft.Extensions.Logging.EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("AAPS") && state.ToString()!.Contains("doc:AAPS")),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Exactly(warnings));
+    }
+
+    [Theory]
     [InlineData(23, 414)]
     [InlineData(25, 450)]
     [InlineData(63, 1135)]

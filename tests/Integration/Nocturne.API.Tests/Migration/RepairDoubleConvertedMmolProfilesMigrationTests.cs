@@ -228,6 +228,11 @@ public class RepairDoubleConvertedMmolProfilesTests : IClassFixture<RepairDouble
             OnceTargets, V(414, 450), Audited: new Audit(CorrectTargets, V(23, 25), "trace-1", "trace-1")),
         new("isf 414 and 450 converted in another request", TenantA, "Apart", "mmol", "docA:Apart", null,
             OnceTargets, V(414, 450), Audited: new Audit(CorrectTargets, V(23, 25), "trace-2", "trace-3")),
+        new("isf 1009, a 56 mg/dL/U image", TenantA, "Edge1009", "mmol", "docA:Edge1009", null, OnceTargets, V(1009)),
+        new("isf 991, a 55 mg/dL/U image", TenantA, "Edge991", "mmol", "docA:Edge991", null, OnceTargets, V(991)),
+        new("isf 1135 beside 991", TenantA, "Mixed", "mmol", "docA:Mixed", null, OnceTargets, V(1135, 991)),
+        new("isf 1000", TenantA, "Edge1000", "mmol", "docA:Edge1000", null, OnceTargets, V(1000)),
+        new("isf 1001", TenantA, "Edge1001", "mmol", "docA:Edge1001", null, OnceTargets, V(1001)),
         new("isf with another timestamp", TenantA, "Later", "mmol", "docA:Later", null, OnceTargets, OnceIsf,
             IsfTimestamp: RepairDoubleConvertedMmolProfilesFixture.Seeded.AddHours(1)),
         new("isf 59 s after its targets", TenantA, "Within", "mmol", "docA:Within", null, OnceTargets, OnceIsf,
@@ -316,6 +321,11 @@ public class RepairDoubleConvertedMmolProfilesTests : IClassFixture<RepairDouble
     [InlineData("isf converted more than its targets")]
     [InlineData("correct isf 23 and 25 mmol beside converted targets")]
     [InlineData("isf 414 and 450 converted in another request")]
+    [InlineData("isf 414 and 450 the audit log shows converted")]
+    [InlineData("isf 991, a 55 mg/dL/U image")]
+    [InlineData("isf 1135 beside 991")]
+    [InlineData("isf 1000")]
+    [InlineData("isf 1001")]
     [InlineData("isf with another timestamp")]
     [InlineData("isf 61 s after its targets")]
     public void AnIsfWithoutTheWitnessOrTheSameConversions_IsLeftWhileItsTargetsAreRepaired(string key)
@@ -353,13 +363,11 @@ public class RepairDoubleConvertedMmolProfilesTests : IClassFixture<RepairDouble
     public void AnIsfWrittenWithinAMinuteOfItsTargets_IsRepaired() => ShouldBeRepaired(StoreOf("isf 59 s after its targets"));
 
     [Fact]
-    public void AnIsfThatCouldBeCorrect_IsRepairedWhenTheAuditLogShowsItsConversion()
+    public void AnIsfAbove1000BeforeItsLastConversion_IsRepaired()
     {
-        var store = StoreOf("isf 414 and 450 the audit log shows converted");
-        var (low, high, isf) = After(store);
+        var (low, _, isf) = After(StoreOf("isf 1009, a 56 mg/dL/U image"));
         low.Should().Equal(90, 108);
-        high.Should().Equal(99, 126);
-        isf.Should().Equal(23, 25);
+        isf.Should().Equal(56);
     }
 
     [Fact]
