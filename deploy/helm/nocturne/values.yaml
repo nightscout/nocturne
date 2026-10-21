@@ -46,7 +46,7 @@ web:
   tolerations: []
   affinity: {}
   pdb:
-    enabled: false       # needs replicaCount >= 2
+    enabled: false       # minAvailable must be below replicaCount
     minAvailable: 1
     maxUnavailable: 0    # 0 disables; set when minAvailable is unset
 

@@ -23,11 +23,10 @@ internal static class ExcursionTransitionWriter
     /// whichever excursion the decision left active. The decision's post-state already reflects
     /// that close.
     /// <para>
-    /// Every caller holds the rule's <see cref="AlertRuleEvaluationGate"/> lease across read, decide
-    /// and write, so no writer in this process changes the state under it. The write also takes the
-    /// rule's transition lock (<see cref="IAlertTrackerRepository.LockRuleAsync"/>) and re-reads the
-    /// state under it, as a backstop for a second process overlapping this one. A state no longer
-    /// equal to <paramref name="prior"/> was written by that process after this one read it, so the
+    /// The caller holds the rule's <see cref="AlertRuleEvaluationGate"/> lease. The write also takes
+    /// the rule's transition lock, the backstop <see cref="IAlertTrackerRepository.LockRuleAsync"/>
+    /// describes, and re-reads the state under it. A state no longer equal to
+    /// <paramref name="prior"/> was written by an overlapping process after this one read it, so the
     /// decision is stale: nothing is written and the transition is
     /// <see cref="ExcursionTransitionType.None"/>. That process has already made and acted on the
     /// transition this one would have.

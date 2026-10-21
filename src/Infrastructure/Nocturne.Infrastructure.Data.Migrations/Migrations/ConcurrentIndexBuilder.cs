@@ -5,7 +5,7 @@ namespace Nocturne.Infrastructure.Data.Migrations;
 /// <summary>
 /// Builds an index with <c>CONCURRENTLY</c>, which every index over one of the large record tables
 /// needs. The API migrates before it serves, so its own writes never meet the build; the writers
-/// that can are a pod still serving through its termination grace period while its replacement
+/// that can are a pod still running through its termination grace period while its replacement
 /// migrates, and an API serving a database someone runs <c>dotnet ef database update</c> against.
 /// A plain <c>CREATE INDEX</c> takes a <c>ShareLock</c>, which blocks those writes until the build
 /// finishes — on the tables the connectors ingest into, that is dropped uploads. Batching the

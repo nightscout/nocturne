@@ -163,7 +163,7 @@ The full set of configurable values is in [`values.yaml`](./values.yaml). Highli
 | `externalDatabase.{app,migrator,web}Secret.existingSecret` | Secret with each role's password under key `password` (override with `existingSecretKey`). |
 | `bootstrap.enabled` | If true, runs `bootstrap-roles.sql` as a Helm pre-install hook against your Postgres using `bootstrap.adminSecret`. |
 | `ingress.enabled` / `.host` / `.className` / `.tls` | Single-host ingress fronting the web service. Optional `ingress.api.externalPath` exposes the API on the same host. |
-| `web.replicaCount` / `web.pdb` | Web replicas (default 1) and an optional PodDisruptionBudget (needs 2 or more replicas). See [Web replicas](#web-replicas). The API has no replica setting: see [Single API process](#single-api-process). |
+| `web.replicaCount` / `web.pdb` | Web replicas (default 1) and an optional PodDisruptionBudget (with the default `minAvailable: 1`, needs 2 or more replicas). See [Web replicas](#web-replicas). The API has no replica setting: see [Single API process](#single-api-process). |
 | `{api,web,bootstrap}.image.digest` | Pin the image to an immutable content digest (see "Image pinning" below). |
 
 ### Image pinning
@@ -192,7 +192,7 @@ Running more than one API process would need: background work split out to a sin
 
 The web pods hold no state another pod needs, so `web.replicaCount` may be raised, with one catch. The realtime bridge in each web pod is a Socket.IO server, and every request of a Socket.IO long-polling session must reach the pod that opened it. That includes the handshake of any client that starts on polling before upgrading to WebSocket (the Socket.IO default, and legacy Nightscout clients such as LoopFollow on Engine.IO v3), not only clients whose WebSocket is blocked. Above one replica, configure session affinity on your ingress controller: cookie affinity covers browsers and other clients that keep cookies, and source-IP affinity covers clients that do not. The Kubernetes Service's `sessionAffinity` does not help, because ingress controllers route to pod endpoints directly. Without affinity, clients that connect straight over WebSocket are unaffected and polling sessions fail.
 
-`web.pdb` keeps pods available through voluntary disruptions such as node drains, and needs `web.replicaCount` of at least 2: with one pod, a budget that keeps one available would block every drain, so the chart refuses to render it. Raise Postgres `max_connections` by 10 per extra web replica.
+`web.pdb` keeps pods available through voluntary disruptions such as node drains. A budget whose `minAvailable` is not below `web.replicaCount` would block every drain, so the chart refuses to render one; with the default `minAvailable: 1` that means at least 2 replicas. Raise Postgres `max_connections` by 10 per extra web replica.
 
 ## Observability
 

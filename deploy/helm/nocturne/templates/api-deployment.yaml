@@ -135,8 +135,9 @@ spec:
             - name: ConnectionStrings__nocturne-postgres-migrator
               value: "Host=$(__DB_HOST);Port=$(__DB_PORT);Database=$(__DB_NAME);Username=nocturne_migrator;Password=$(__DB_MIGRATOR_PASSWORD);SslMode=$(__DB_SSLMODE)"
             {{- include "nocturne.observability.api.env" . | nindent 12 }}
-          # Migrations run before the API listens and may take up to their one-hour command
-          # timeout; liveness would otherwise restart an interrupted migration from scratch.
+          # Migrations run before the API listens, and one index build can take most of an hour;
+          # liveness would otherwise kill the pod and restart the interrupted build from scratch.
+          # A run longer than this hour needs failureThreshold raised.
           startupProbe:
             httpGet:
               path: /alive
