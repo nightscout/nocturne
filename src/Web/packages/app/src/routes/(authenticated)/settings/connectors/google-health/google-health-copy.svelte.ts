@@ -6,8 +6,9 @@ import {
   type GoogleHealthDataTypeStatus,
   type GoogleHealthStatus,
 } from "$lib/api";
+import { isGoogleHealthErrorCode, type GoogleHealthErrorCode } from "$lib/connectors/google-health-error-codes";
 
-const errorMessages: Record<string, string> = {
+const errorMessages: Record<GoogleHealthErrorCode, string> = {
   configure_first: "Connect Google Health first.",
   platform_not_configured: "Google Health is not enabled on this Nocturne server.",
   client_changed:
@@ -64,13 +65,11 @@ const errorMessages: Record<string, string> = {
 
 /** The sentence for a server error code, or a generic one for a code this page does not know. */
 export function errorMessage(code: string): string {
-  return Object.hasOwn(errorMessages, code)
-    ? errorMessages[code]
-    : "The import could not be completed.";
+  return knownErrorMessage(code) ?? "The import could not be completed.";
 }
 
 export function knownErrorMessage(code: string): string | undefined {
-  return Object.hasOwn(errorMessages, code) ? errorMessages[code] : undefined;
+  return isGoogleHealthErrorCode(code) ? errorMessages[code] : undefined;
 }
 
 const notices = {
@@ -97,7 +96,9 @@ const connectionOutcomes: Record<string, string> = {
 
 /** Why the sign-in redirect came back without connecting, or undefined for any other value. */
 export function connectionOutcome(outcome: string): string | undefined {
-  return Object.hasOwn(connectionOutcomes, outcome) ? connectionOutcomes[outcome] : undefined;
+  return Object.hasOwn(connectionOutcomes, outcome)
+    ? connectionOutcomes[outcome]
+    : knownErrorMessage(outcome);
 }
 
 const categoryLabels: Record<GoogleHealthCategoryKind, string> = {

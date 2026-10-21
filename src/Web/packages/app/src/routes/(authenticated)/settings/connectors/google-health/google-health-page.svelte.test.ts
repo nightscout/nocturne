@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import {
@@ -588,5 +588,29 @@ describe("Google Health connector page", () => {
     await expect
       .element(page.getByRole("button", { name: "Connect Google Health", exact: true }))
       .toBeEnabled();
+  });
+
+  describe("after the sign-in redirect", () => {
+    const path = location.pathname;
+    afterEach(() => history.replaceState(null, "", path));
+
+    it("explains the specific reason the callback carried", async () => {
+      history.replaceState(null, "", `${path}?connection=account_mismatch`);
+      render(GoogleHealthPage);
+      await expect
+        .element(page.getByRole("alert"))
+        .toHaveTextContent(
+          "This is a different Google account. Purge the old import before switching."
+        );
+    });
+
+    it("ignores a value it has no sentence for", async () => {
+      history.replaceState(null, "", `${path}?connection=%3Cb%3Eforged%3C%2Fb%3E`);
+      render(GoogleHealthPage);
+      await expect
+        .element(page.getByRole("button", { name: "Connect Google Health", exact: true }))
+        .toBeEnabled();
+      await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+    });
   });
 });
