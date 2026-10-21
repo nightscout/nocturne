@@ -27,6 +27,8 @@ public static class ProfileActivationMapper
             Snapshot = MapperHelpers.DeserializeJson<ProfileActivationSnapshot>(entity.SnapshotJson),
             SnapshotIsCustomized = entity.SnapshotIsCustomized,
             EnteredBy = entity.EnteredBy,
+            EndedAt = entity.EndedAt,
+            EndedBy = entity.EndedBy,
             SyncIdentifier = entity.SyncIdentifier,
             DeviceId = entity.DeviceId,
             PatientDeviceId = entity.PatientDeviceId,
@@ -51,6 +53,8 @@ public static class ProfileActivationMapper
         entity.SnapshotJson = model.Snapshot is null ? null : JsonSerializer.Serialize(model.Snapshot);
         entity.SnapshotIsCustomized = model.SnapshotIsCustomized;
         entity.EnteredBy = model.EnteredBy;
+        entity.EndedAt = model.EndedAt;
+        entity.EndedBy = model.EndedBy;
         entity.SyncIdentifier = model.SyncIdentifier;
         entity.DeviceId = model.DeviceId;
         entity.PatientDeviceId = model.PatientDeviceId;

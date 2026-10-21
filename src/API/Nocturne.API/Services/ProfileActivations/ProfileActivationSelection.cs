@@ -10,8 +10,10 @@ namespace Nocturne.API.Services.ProfileActivations;
 /// temporary one and applies again once the temporary one ends. A source that has reported what its
 /// pump runs is read only from those reports from its first one on: its requested activations starting
 /// then or later never apply on their own, while those before it, from before it reported, still do.
-/// A person's activation is never one of a source's requests: no pump reports it, so it always takes
-/// part.
+/// A switch recorded in Nocturne (<see cref="ProfileActivationSource.IsNative"/>) is never one of a
+/// source's requests, but it gives way to what an AID system reports: at a moment an effective
+/// activation is in force, recorded switches do not apply, since the pump runs what it reports. They
+/// apply where nothing reports, as for someone on injections.
 /// </remarks>
 internal static class ProfileActivationSelection
 {
@@ -23,14 +25,28 @@ internal static class ProfileActivationSelection
         IEnumerable<ProfileActivation> activations, IReadOnlyDictionary<string, long> firstEffectiveMills) =>
         activations
             .Where(a => a.Phase == ProfileActivationPhase.Effective
-                || a.Origin == ProfileActivationOrigin.User
+                || ProfileActivationSource.IsNative(a)
                 || !firstEffectiveMills.TryGetValue(ProfileActivationSource.KeyOf(a), out var first)
                 || a.Mills < first)
             .ToList();
 
-    public static ProfileActivation? At(IReadOnlyList<ProfileActivation> eligible, long timeMills) =>
-        eligible
-            .Where(a => Covers(a, timeMills))
+    public static ProfileActivation? At(IReadOnlyList<ProfileActivation> eligible, long timeMills)
+    {
+        var covering = eligible.Where(a => Covers(a, timeMills)).ToList();
+        var reported = covering.Any(a => a.Phase == ProfileActivationPhase.Effective);
+        return Newest(covering.Where(a => !reported || !ProfileActivationSource.IsNative(a)));
+    }
+
+    /// <summary>The newest effective activation in force at <paramref name="timeMills"/>: what an AID system reports its pump runs.</summary>
+    public static ProfileActivation? ReportedAt(IEnumerable<ProfileActivation> activations, long timeMills) =>
+        Newest(activations.Where(a => a.Phase == ProfileActivationPhase.Effective && Covers(a, timeMills)));
+
+    /// <summary>The newest switch recorded in Nocturne in force at <paramref name="timeMills"/>, whether or not it applies.</summary>
+    public static ProfileActivation? NativeAt(IEnumerable<ProfileActivation> activations, long timeMills) =>
+        Newest(activations.Where(a => ProfileActivationSource.IsNative(a) && Covers(a, timeMills)));
+
+    private static ProfileActivation? Newest(IEnumerable<ProfileActivation> activations) =>
+        activations
             .OrderByDescending(a => a.Mills)
             .ThenByDescending(a => a.Id)
             .FirstOrDefault();

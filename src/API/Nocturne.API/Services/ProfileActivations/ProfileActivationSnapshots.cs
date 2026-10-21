@@ -30,6 +30,16 @@ internal static class ProfileActivationSnapshots
         return snapshot;
     }
 
+    /// <summary>Whether the two snapshots hold different basal, carb ratio, sensitivity or target schedules.</summary>
+    public static bool SchedulesDiffer(ProfileActivationSnapshot a, ProfileActivationSnapshot b) =>
+        !SameEntries(a.Basal, b.Basal)
+        || !SameEntries(a.CarbRatio, b.CarbRatio)
+        || !SameEntries(a.Sensitivity, b.Sensitivity)
+        || !(a.Targets ?? []).Select(t => (t.Time, t.Low, t.High)).SequenceEqual((b.Targets ?? []).Select(t => (t.Time, t.Low, t.High)));
+
+    private static bool SameEntries(List<ScheduleEntry>? a, List<ScheduleEntry>? b) =>
+        (a ?? []).Select(e => (e.Time, e.Value)).SequenceEqual((b ?? []).Select(e => (e.Time, e.Value)));
+
     private static ProfileActivationSnapshot? Parse(string? profileJson)
     {
         if (string.IsNullOrWhiteSpace(profileJson))

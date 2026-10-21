@@ -1,4 +1,5 @@
 import type { ProfileActivationDto } from "$api-clients";
+import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
 
 /** "Rhys", "Rhys 110%", "Rhys 110% +1h": the profile with the percentage and shift it runs at. */
 export function profileActivationLabel(
@@ -11,4 +12,11 @@ export function profileActivationLabel(
   if (activation.timeshiftHours)
     parts.push(`${activation.timeshiftHours > 0 ? "+" : ""}${activation.timeshiftHours}h`);
   return parts.join(" ");
+}
+
+/** The app or connector that wrote an activation, by name; undefined when it carries neither. */
+export function profileActivationSource(
+  activation: ProfileActivationDto | null | undefined
+): string | undefined {
+  return activation?.app ?? getDataSourceDisplayName(activation?.dataSource) ?? undefined;
 }

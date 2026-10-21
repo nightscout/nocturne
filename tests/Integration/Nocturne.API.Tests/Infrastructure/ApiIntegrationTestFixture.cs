@@ -11,6 +11,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Controllers.V4.DevOnly;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data;
@@ -338,6 +339,13 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         var cache = Services.GetRequiredService<IMemoryCache>();
         foreach (var slug in removedSlugs.Append(TenantSlug))
             TenantResolutionMiddleware.EvictTenant(cache, slug);
+
+        // Reads cached under the seeded tenant would outlive the rows this cleanup truncated: the
+        // distributed tier is keyed by tenant, and the local tier sits in the same memory cache.
+        using (var scope = Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<ITenantCache>().RemoveTenantAsync(TenantId);
+        if (cache is MemoryCache memory)
+            memory.Compact(1.0);
 
         await AuthTestHelpers.SeedApiSecretGrantAsync(conn, TenantId, OwnerSubjectId, ApiSecret);
 

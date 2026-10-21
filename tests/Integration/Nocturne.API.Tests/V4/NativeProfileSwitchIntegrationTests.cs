@@ -3,7 +3,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -11,9 +14,9 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration.V4;
 
 /// <summary>
-/// Profile switches a person records through <c>POST /api/v4/profile/activations</c>: in force on v4,
-/// never on the v1 or v3 treatments feed an uploader reads, ended and deleted only by a writer of
-/// therapy, and only in their own tenant.
+/// Profile switches a person records through <c>POST /api/v4/profile/activations</c>: in force on v4
+/// unless an AID system reports its pump, never on the v1 or v3 treatments feed, kept on the schedules
+/// they were recorded with, ended and deleted only by a writer of therapy, and only in their own tenant.
 /// </summary>
 [Trait("Category", "Integration")]
 public class NativeProfileSwitchIntegrationTests : ApiIntegrationTestBase
@@ -23,7 +26,7 @@ public class NativeProfileSwitchIntegrationTests : ApiIntegrationTestBase
     public NativeProfileSwitchIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
         : base(fixture, output) { }
 
-    private static object ProfileDocument(string name) => new
+    private static object ProfileDocument(string name, double basal = 1.0) => new
     {
         _id = "5f8d0c1e8a7b4c3d9e5f1a01",
         defaultProfile = name,
@@ -34,7 +37,7 @@ public class NativeProfileSwitchIntegrationTests : ApiIntegrationTestBase
                 dia = 4,
                 carbratio = new[] { new { time = "00:00", value = 10, timeAsSeconds = 0 } },
                 sens = new[] { new { time = "00:00", value = 50, timeAsSeconds = 0 } },
-                basal = new[] { new { time = "00:00", value = 1.0, timeAsSeconds = 0 } },
+                basal = new[] { new { time = "00:00", value = basal, timeAsSeconds = 0 } },
                 target_low = new[] { new { time = "00:00", value = 80, timeAsSeconds = 0 } },
                 target_high = new[] { new { time = "00:00", value = 120, timeAsSeconds = 0 } },
                 units = "mg/dl",
@@ -44,9 +47,9 @@ public class NativeProfileSwitchIntegrationTests : ApiIntegrationTestBase
         startDate = DateTime.UtcNow.AddHours(-1).ToString("o"),
     };
 
-    private static async Task StoreProfileAsync(HttpClient client, string name = "Rhys")
+    private static async Task StoreProfileAsync(HttpClient client, string name = "Rhys", double basal = 1.0)
     {
-        var response = await client.PutAsJsonAsync("/api/v1/profile", ProfileDocument(name));
+        var response = await client.PutAsJsonAsync("/api/v1/profile", ProfileDocument(name, basal));
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
     }
 
@@ -65,6 +68,33 @@ public class NativeProfileSwitchIntegrationTests : ApiIntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         return JsonNode.Parse(await response.Content.ReadAsStringAsync());
     }
+
+    private static async Task<JsonNode> StatusAsync(HttpClient client) =>
+        (await client.GetFromJsonAsync<JsonNode>($"{Activations}/status"))!;
+
+    private async Task<double?> BasalNowAsync()
+    {
+        using var scope = Fixture.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
+            new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
+        return await scope.ServiceProvider.GetRequiredService<IBasalRateResolver>()
+            .GetBasalRateAsync(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+    }
+
+    private static object AapsEffectiveSwitch(string id) => new
+    {
+        _id = id,
+        eventType = "Note",
+        created_at = DateTime.UtcNow.AddMinutes(-30).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+        enteredBy = "openaps://AndroidAPS",
+        notes = "Pump",
+        profileJson = """{"units":"mg/dl","dia":5,"timezone":"UTC","sens":[{"time":"00:00","value":40}],"carbratio":[{"time":"00:00","value":10}],"basal":[{"time":"00:00","value":0.7}],"target_low":[{"time":"00:00","value":100}],"target_high":[{"time":"00:00","value":110}]}""",
+        originalProfileName = "Pump",
+        originalCustomizedName = "Pump",
+        originalTimeshift = 0,
+        originalPercentage = 100,
+        originalDuration = 0,
+    };
 
     [Fact]
     public async Task A_recorded_switch_is_in_force_on_v4_and_absent_from_every_treatments_feed()
@@ -101,7 +131,7 @@ public class NativeProfileSwitchIntegrationTests : ApiIntegrationTestBase
             .Should().Be(HttpStatusCode.BadRequest);
         (await client.PostAsJsonAsync(Activations, new { baseProfileName = "Rhys", timeshiftHours = 24 })).StatusCode
             .Should().Be(HttpStatusCode.BadRequest);
-        (await client.GetFromJsonAsync<JsonArray>(Activations))!.Should().BeEmpty();
+        (await ActiveAsync(client)).Should().BeNull();
     }
 
     [Fact]
@@ -122,6 +152,78 @@ public class NativeProfileSwitchIntegrationTests : ApiIntegrationTestBase
         (await client.DeleteAsync($"{Activations}/{id}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
         (await client.GetFromJsonAsync<JsonArray>(Activations))!.Should().BeEmpty();
         (await client.DeleteAsync($"{Activations}/{id}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task A_profile_edit_leaves_the_switch_on_its_schedules_and_switching_again_takes_them_up()
+    {
+        var client = CreateAuthenticatedClient();
+        await StoreProfileAsync(client);
+        var id = (await SwitchAsync(client, new { baseProfileName = "Rhys", percentage = 150 }))["id"]!.GetValue<string>();
+        (await BasalNowAsync()).Should().BeApproximately(1.5, 1e-9);
+        (await StatusAsync(client))["recordedProfileChanged"]!.GetValue<bool>().Should().BeFalse();
+
+        await StoreProfileAsync(client, basal: 2.0);
+
+        (await BasalNowAsync()).Should().BeApproximately(1.5, 1e-9, "the switch runs the schedules it was recorded with");
+        var status = await StatusAsync(client);
+        status["recordedProfileChanged"]!.GetValue<bool>().Should().BeTrue();
+
+        var renew = await client.PostAsync($"{Activations}/{id}/renew", null);
+        renew.StatusCode.Should().Be(HttpStatusCode.Created, await renew.Content.ReadAsStringAsync());
+        var renewed = JsonNode.Parse(await renew.Content.ReadAsStringAsync())!;
+        renewed["percentage"]!.GetValue<int>().Should().Be(150);
+        renewed["isTemporary"]!.GetValue<bool>().Should().BeFalse();
+        (await BasalNowAsync()).Should().BeApproximately(3.0, 1e-9);
+        (await StatusAsync(client))["recordedProfileChanged"]!.GetValue<bool>().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task While_an_aid_system_reports_its_pump_a_recorded_switch_is_kept_but_does_not_apply()
+    {
+        var client = CreateAuthenticatedClient();
+        await StoreProfileAsync(client);
+        var post = await client.PostAsJsonAsync("/api/v1/treatments", new[] { AapsEffectiveSwitch("6500000000000000000000e1") });
+        post.StatusCode.Should().Be(HttpStatusCode.OK, await post.Content.ReadAsStringAsync());
+
+        var recorded = await SwitchAsync(client, new { baseProfileName = "Rhys", percentage = 150 });
+
+        var status = await StatusAsync(client);
+        status["recordedSwitchesApply"]!.GetValue<bool>().Should().BeFalse();
+        status["recorded"]!["id"]!.GetValue<string>().Should().Be(recorded["id"]!.GetValue<string>());
+        status["reported"]!["phase"]!.GetValue<string>().Should().Be("Effective");
+        status["active"]!["id"]!.GetValue<string>().Should().Be(status["reported"]!["id"]!.GetValue<string>());
+        (await BasalNowAsync()).Should().BeApproximately(0.7, 1e-9, "Nocturne follows the profile the pump reports");
+    }
+
+    [Fact]
+    public async Task A_careportal_switch_is_the_uploaders_to_end_or_delete()
+    {
+        var client = CreateAuthenticatedClient();
+        await StoreProfileAsync(client);
+        var post = await client.PostAsJsonAsync("/api/v1/treatments", new[]
+        {
+            new
+            {
+                _id = "6500000000000000000000f2",
+                eventType = "Profile Switch",
+                created_at = DateTime.UtcNow.AddMinutes(-10).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                enteredBy = "Rhys",
+                profile = "Rhys",
+                percentage = 100,
+                duration = 0,
+            },
+        });
+        post.StatusCode.Should().Be(HttpStatusCode.OK, await post.Content.ReadAsStringAsync());
+        var active = (await ActiveAsync(client))!;
+        active["origin"]!.GetValue<string>().Should().Be("User");
+        var id = active["id"]!.GetValue<string>();
+
+        var end = await client.PostAsync($"{Activations}/{id}/end", null);
+        end.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await end.Content.ReadAsStringAsync()).Should().Contain("uploaded as a treatment");
+        (await client.DeleteAsync($"{Activations}/{id}")).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await client.GetFromJsonAsync<JsonArray>("/api/v1/treatments"))!.Should().ContainSingle();
     }
 
     [Fact]
@@ -160,8 +262,9 @@ public class NativeProfileSwitchIntegrationTests : ApiIntegrationTestBase
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
-        var (_, accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Therapy Reader");
-        using var subject = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, accessToken);
+        var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Therapy Reader");
+        var sessionToken = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subjectId);
+        using var subject = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, sessionToken);
         var grant = await subject.PostAsJsonAsync("/api/auth/direct-grants", new { label = "therapy-reader", scopes = new[] { "therapy.read" } });
         grant.StatusCode.Should().Be(HttpStatusCode.OK, await grant.Content.ReadAsStringAsync());
         var token = JsonSerializer.Deserialize<JsonElement>(await grant.Content.ReadAsStringAsync()).GetProperty("token").GetString()!;

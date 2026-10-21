@@ -15,7 +15,5 @@ public class CreateProfileActivationRequest
     /// <summary>The length in minutes; null or zero for a permanent switch.</summary>
     public int? DurationMinutes { get; set; }
 
-    public Guid? PatientDeviceId { get; set; }
-
     public string? Notes { get; set; }
 }

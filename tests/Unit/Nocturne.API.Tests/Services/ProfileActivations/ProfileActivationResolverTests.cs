@@ -267,16 +267,29 @@ public sealed class ProfileActivationResolverTests : IDisposable
     }
 
     [Fact]
-    public async Task ASwitchRecordedInNocturneTakesPartBetweenAnUploadersReports()
+    public async Task ASwitchRecordedInNocturneIsIgnoredWhileAnAidSystemReportsWhatItsPumpRuns()
     {
-        Store(0, "Rhys", ProfileActivationPhase.Effective, enteredBy: "openaps://AndroidAPS");
+        var reported = Store(0, "Rhys", ProfileActivationPhase.Effective, end: 3 * Hour, enteredBy: "openaps://AndroidAPS");
         var recorded = Store(Hour, "Rhys", percentage: 120,
             origin: ProfileActivationOrigin.User, dataSource: "manual", enteredBy: null);
-        var reported = Store(3 * Hour, "Rhys", ProfileActivationPhase.Effective, percentage: 90, enteredBy: "openaps://AndroidAPS");
 
-        (await Resolver().GetAtAsync(T0 + 2 * Hour))!.Activation.Id.Should().Be(recorded.Id, "the newest start wins");
-        (await Resolver().GetAtAsync(T0 + 4 * Hour))!.Activation.Id.Should().Be(reported.Id,
-            "a later report of what the pump runs is newer still");
+        (await Resolver().GetAtAsync(T0 + 2 * Hour))!.Activation.Id.Should().Be(reported.Id,
+            "the pump runs what it reports, however recent the recorded switch");
+        (await Resolver().GetAtAsync(T0 + 4 * Hour))!.Activation.Id.Should().Be(recorded.Id,
+            "once nothing reports, the recorded switch applies");
+    }
+
+    [Fact]
+    public async Task ASwitchRecordedInNocturneAppliesBeforeAnAidSystemFirstReports()
+    {
+        var recorded = Store(0, "Rhys", percentage: 120,
+            origin: ProfileActivationOrigin.User, dataSource: "manual", enteredBy: null);
+        var reported = Store(2 * Hour, "Rhys", ProfileActivationPhase.Effective, enteredBy: "openaps://AndroidAPS");
+
+        (await Resolver().GetAtAsync(T0 + Hour))!.Activation.Id.Should().Be(recorded.Id);
+        (await Resolver().GetAtAsync(T0 + 3 * Hour))!.Activation.Id.Should().Be(reported.Id);
+        (await Resolver().GetRangeAsync(T0, T0 + 3 * Hour)).Select(s => (s.StartMills, s.Active.Activation.Id))
+            .Should().Equal((T0, recorded.Id), (T0 + 2 * Hour, reported.Id));
     }
 
     [Fact]

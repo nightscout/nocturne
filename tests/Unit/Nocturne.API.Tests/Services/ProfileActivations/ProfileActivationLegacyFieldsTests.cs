@@ -125,11 +125,12 @@ public class ProfileActivationLegacyFieldsTests
     {
         var activation = ProfileActivationLegacyFields.FromSpanMetadata(Stored(
             """{"profileName":"Rhys","percentage":100,"enteredBy":"Rhys","notes":"sick day"}"""), Start);
-        activation.AdditionalProperties![ProfileActivationWriter.EndedAtKey] = 1_772_352_000_000L;
+        activation.EndedAt = Start.AddHours(1);
+        activation.EndedBy = "Rhys";
 
         var metadata = ProfileActivationLegacyFields.ToSpanMetadata(activation);
 
-        metadata.Should().NotContainKey(ProfileActivationWriter.EndedAtKey);
+        metadata.Keys.Should().NotContain(k => k.StartsWith("ended", StringComparison.OrdinalIgnoreCase));
         metadata.Should().ContainKey(LegacyTreatmentTables.NotesKey);
     }
 }

@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { createActivation } from "$api/generated/profileActivations.generated.remote";
+  import {
+    createActivation,
+    getActivationStatus,
+  } from "$api/generated/profileActivations.generated.remote";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Alert from "$lib/components/ui/alert";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
@@ -7,6 +10,9 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Checkbox } from "$lib/components/ui/checkbox";
+  import { Textarea } from "$lib/components/ui/textarea";
+  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+  import { profileActivationSource } from "$lib/utils/profile-activation-label";
   import Info from "@lucide/svelte/icons/info";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { describeSubmitError } from "$lib/forms";
@@ -23,8 +29,14 @@
   let temporary = $state(false);
   let durationValue = $state(60);
   let durationUnit = $state<"minutes" | "hours">("minutes");
+  let notes = $state("");
   let submitting = $state(false);
   let submitError = $state<string | null>(null);
+
+  const statusQuery = getActivationStatus(undefined);
+  const reported = $derived(
+    statusQuery.current?.recordedSwitchesApply === false ? statusQuery.current.reported : undefined
+  );
 
   const percentageValid = $derived(
     Number.isInteger(percentage) && percentage >= 30 && percentage <= 250
@@ -49,6 +61,7 @@
     temporary = false;
     durationValue = 60;
     durationUnit = "minutes";
+    notes = "";
     submitError = null;
   }
 
@@ -67,6 +80,7 @@
         percentage,
         timeshiftHours,
         durationMinutes: temporary ? durationMinutes : null,
+        notes: notes.trim() === "" ? null : notes,
       });
       close();
     } catch (err) {
@@ -89,10 +103,21 @@
     <Alert.Root>
       <Info class="h-4 w-4" />
       <Alert.Description>
-        The switch is recorded in Nocturne only. It is not sent to your pump or to AAPS, and does
-        not change what they deliver.
+        The switch is recorded in Nocturne only. It is not sent to your pump, and AAPS and
+        Nightscout followers never see it.
       </Alert.Description>
     </Alert.Root>
+
+    {#if reported}
+      <Alert.Root variant="warning">
+        <TriangleAlert class="h-4 w-4" />
+        <Alert.Description>
+          {profileActivationSource(reported) ?? "An AID system"} is reporting the profile your pump
+          runs. The switch will be recorded, but Nocturne's calculations follow the reported profile
+          while it does.
+        </Alert.Description>
+      </Alert.Root>
+    {/if}
 
     <div class="grid gap-4">
       <div class="grid gap-2">
@@ -163,6 +188,11 @@
         {:else}
           <p class="text-xs text-muted-foreground">Runs until another switch replaces it or it is ended.</p>
         {/if}
+      </div>
+
+      <div class="grid gap-2">
+        <Label for="profile-switch-notes">Notes</Label>
+        <Textarea id="profile-switch-notes" rows={2} maxlength={2000} bind:value={notes} />
       </div>
 
       {#if submitError}

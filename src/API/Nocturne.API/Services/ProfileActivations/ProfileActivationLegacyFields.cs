@@ -115,8 +115,6 @@ internal static class ProfileActivationLegacyFields
         var metadata = new Dictionary<string, object>(StringComparer.Ordinal);
         foreach (var (key, value) in activation.AdditionalProperties ?? [])
         {
-            if (key == ProfileActivationWriter.EndedAtKey)
-                continue;
             if (value is not null and not JsonElement { ValueKind: JsonValueKind.Null })
                 metadata[key] = value;
         }

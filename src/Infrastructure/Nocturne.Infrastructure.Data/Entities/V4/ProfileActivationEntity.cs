@@ -48,6 +48,13 @@ public class ProfileActivationEntity
     [MaxLength(256)]
     public string? EnteredBy { get; set; }
 
+    [Column("ended_at")]
+    public DateTime? EndedAt { get; set; }
+
+    [Column("ended_by")]
+    [MaxLength(256)]
+    public string? EndedBy { get; set; }
+
     [Column("sync_identifier")]
     [MaxLength(256)]
     public string? SyncIdentifier { get; set; }

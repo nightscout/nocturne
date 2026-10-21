@@ -45,6 +45,12 @@ public enum ProfileActivationOrigin
 [JsonSchemaFlatten]
 public class ProfileActivation : V4RecordBase, IDeviceAttributed
 {
+    /// <summary>
+    /// The <see cref="IV4Record.AdditionalProperties"/> key an activation's notes are kept under, the
+    /// <c>notes</c> field of the treatment it may be served as.
+    /// </summary>
+    public const string NotesKey = "notes";
+
     [JsonIgnore]
     public DateTime StartTimestamp
     {
@@ -87,6 +93,12 @@ public class ProfileActivation : V4RecordBase, IDeviceAttributed
 
     public string? EnteredBy { get; set; }
 
+    /// <summary>When a person ended the activation early; part of the end it brings with it.</summary>
+    public DateTime? EndedAt { get; set; }
+
+    /// <summary>Who ended it, when <see cref="EndedAt"/> is set.</summary>
+    public string? EndedBy { get; set; }
+
     /// <summary>A connector's upstream key; see the remarks.</summary>
     public string? SyncIdentifier { get; set; }
 
@@ -96,6 +108,10 @@ public class ProfileActivation : V4RecordBase, IDeviceAttributed
 
     [JsonIgnore]
     public bool IsTemporary => RequestedDurationMs is > 0;
+
+    /// <summary>Whether it ends on its own: temporary, or ended by a person.</summary>
+    [JsonIgnore]
+    public bool IsBounded => IsTemporary || EndedAt is not null;
 }
 
 /// <summary>

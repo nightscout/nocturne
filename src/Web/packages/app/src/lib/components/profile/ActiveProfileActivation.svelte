@@ -1,43 +1,90 @@
 <script lang="ts">
   import {
-    getActiveActivation,
+    getActivationStatus,
     endActivation,
+    renewActivation,
   } from "$api/generated/profileActivations.generated.remote";
-  import { ProfileActivationOrigin } from "$api-clients";
+  import { ProfileActivationOrigin, type ProfileActivationDto } from "$api-clients";
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
+  import * as Alert from "$lib/components/ui/alert";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import User from "@lucide/svelte/icons/user";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import Plug from "@lucide/svelte/icons/plug";
   import Repeat from "@lucide/svelte/icons/repeat";
-  import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
+  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+  import { profileActivationSource } from "$lib/utils/profile-activation-label";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { describeSubmitError } from "$lib/forms";
 
-  const activeQuery = getActiveActivation(undefined);
-  const active = $derived(activeQuery.current);
+  const statusQuery = getActivationStatus(undefined);
+  const status = $derived(statusQuery.current);
+  const active = $derived(status?.active);
+  const recorded = $derived(status?.recorded);
+  const ignored = $derived(status?.recordedSwitchesApply === false ? recorded : undefined);
 
-  let ending = $state(false);
-  let endError = $state<string | null>(null);
+  let busy = $state(false);
+  let actionError = $state<string | null>(null);
 
-  const source = $derived(
-    active ? (getDataSourceDisplayName(active.dataSource) ?? active.app ?? null) : null
-  );
+  // Refetch when a shown activation reaches its end, so a lapsed switch does not stay on screen.
+  $effect(() => {
+    const ends = [active?.endMills, recorded?.endMills].filter(
+      (end): end is number => end != null
+    );
+    const timers = ends.map((end) =>
+      setTimeout(() => statusQuery.refresh(), Math.max(0, end - Date.now()) + 1000)
+    );
+    return () => timers.forEach(clearTimeout);
+  });
 
-  async function end(id: string) {
-    ending = true;
-    endError = null;
+  async function run(action: () => Promise<unknown>, fallback: string) {
+    busy = true;
+    actionError = null;
     try {
-      await endActivation(id);
+      await action();
     } catch (err) {
-      endError = describeSubmitError(err, "The switch was not ended.");
+      actionError = describeSubmitError(err, fallback);
     } finally {
-      ending = false;
+      busy = false;
     }
   }
 </script>
+
+{#snippet badges(activation: ProfileActivationDto)}
+  <span class="font-medium">{activation.baseProfileName}</span>
+  {#if activation.percentage != null && activation.percentage !== 100}
+    <Badge variant="secondary">{activation.percentage}%</Badge>
+  {/if}
+  {#if activation.timeshiftHours}
+    <Badge variant="secondary">
+      {activation.timeshiftHours > 0 ? "+" : ""}{activation.timeshiftHours}h
+    </Badge>
+  {/if}
+{/snippet}
+
+{#snippet provenance(activation: ProfileActivationDto)}
+  <p class="text-xs text-muted-foreground flex flex-wrap items-center gap-1">
+    {#if activation.origin === ProfileActivationOrigin.User}
+      <User class="h-3 w-3" />
+      Recorded by {activation.enteredBy ?? "a person"}
+    {:else if activation.origin === ProfileActivationOrigin.Connector}
+      <Plug class="h-3 w-3" />
+      Reported by {profileActivationSource(activation) ?? "a connector"}
+    {:else}
+      <Smartphone class="h-3 w-3" />
+      Uploaded by {profileActivationSource(activation) ?? activation.enteredBy ?? "an uploader"}
+    {/if}
+    &middot; Since {formatDateTimeCompact(activation.startMills)}
+    {#if activation.endMills != null}
+      &middot; Until {formatDateTimeCompact(activation.endMills)}
+    {/if}
+  </p>
+  {#if activation.notes}
+    <p class="text-xs text-muted-foreground">{activation.notes}</p>
+  {/if}
+{/snippet}
 
 <Card>
   <CardHeader class="pb-3">
@@ -46,59 +93,70 @@
       Active profile switch
     </CardTitle>
   </CardHeader>
-  <CardContent>
-    {#if activeQuery.error}
+  <CardContent class="space-y-3">
+    {#if statusQuery.error}
       <p class="text-sm text-destructive">
-        {remoteErrorMessage(activeQuery.error, "The active switch could not be loaded.")}
+        {remoteErrorMessage(statusQuery.error, "The active switch could not be loaded.")}
       </p>
-    {:else if active}
-      <div class="flex flex-wrap items-center justify-between gap-3">
+    {:else if status}
+      {#if active}
         <div class="space-y-1">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="font-medium">{active.baseProfileName}</span>
-            {#if active.percentage != null && active.percentage !== 100}
-              <Badge variant="secondary">{active.percentage}%</Badge>
-            {/if}
-            {#if active.timeshiftHours}
-              <Badge variant="secondary">
-                {active.timeshiftHours > 0 ? "+" : ""}{active.timeshiftHours}h
-              </Badge>
-            {/if}
+            {@render badges(active)}
           </div>
-          <p class="text-xs text-muted-foreground flex items-center gap-1">
-            {#if active.origin === ProfileActivationOrigin.User}
-              <User class="h-3 w-3" />
-              Recorded by a person{source ? ` (${source})` : ""}
-            {:else if active.origin === ProfileActivationOrigin.Connector}
-              <Plug class="h-3 w-3" />
-              Reported by {source ?? "a connector"}
-            {:else}
-              <Smartphone class="h-3 w-3" />
-              Uploaded by {source ?? "an uploader"}
-            {/if}
-            &middot; Since {formatDateTimeCompact(active.startMills)}
-            {#if active.endMills != null}
-              &middot; Until {formatDateTimeCompact(active.endMills)}
-            {/if}
-          </p>
-          {#if active.notes}
-            <p class="text-xs text-muted-foreground">{active.notes}</p>
-          {/if}
+          {@render provenance(active)}
         </div>
-        {#if active.origin === ProfileActivationOrigin.User && active.id}
-          {@const id = active.id}
-          <Button variant="outline" size="sm" disabled={ending} onclick={() => end(id)}>
+      {:else}
+        <p class="text-sm text-muted-foreground">
+          No switch is active. The default profile applies.
+        </p>
+      {/if}
+
+      {#if ignored}
+        <Alert.Root variant="warning">
+          <TriangleAlert class="h-4 w-4" />
+          <Alert.Title>
+            <span class="flex flex-wrap items-center gap-2">{@render badges(ignored)}</span>
+          </Alert.Title>
+          <Alert.Description>
+            This switch is recorded, but Nocturne's calculations follow the profile
+            {profileActivationSource(status.reported) ?? "your AID system"} reports while it does.
+          </Alert.Description>
+        </Alert.Root>
+      {/if}
+
+      {#if recorded?.id}
+        {@const id = recorded.id}
+        {#if status.recordedProfileChanged}
+          <p class="text-sm text-muted-foreground">
+            {recorded.baseProfileName} has changed since this switch was recorded. The switch keeps
+            the schedules it was recorded with.
+          </p>
+        {/if}
+        <div class="flex flex-wrap gap-2">
+          {#if status.recordedProfileChanged}
+            <Button
+              size="sm"
+              disabled={busy}
+              onclick={() => run(() => renewActivation(id), "The switch was not recorded again.")}
+            >
+              Switch again
+            </Button>
+          {/if}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onclick={() => run(() => endActivation(id), "The switch was not ended.")}
+          >
             End switch
           </Button>
-        {/if}
-      </div>
-      {#if endError}
-        <p class="mt-2 text-sm text-destructive" role="alert">{endError}</p>
+        </div>
       {/if}
-    {:else if !activeQuery.loading}
-      <p class="text-sm text-muted-foreground">
-        No switch is active. The default profile applies.
-      </p>
+
+      {#if actionError}
+        <p class="text-sm text-destructive" role="alert">{actionError}</p>
+      {/if}
     {/if}
   </CardContent>
 </Card>
