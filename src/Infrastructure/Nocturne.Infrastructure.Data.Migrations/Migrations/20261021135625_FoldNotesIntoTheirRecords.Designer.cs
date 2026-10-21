@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20261021123207_RestampNotesServedWithTheirRecords")]
-    partial class RestampNotesServedWithTheirRecords
+    [Migration("20261021135625_FoldNotesIntoTheirRecords")]
+    partial class FoldNotesIntoTheirRecords
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -7475,6 +7475,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId", "SysUpdatedAt", "Id")
                         .HasDatabaseName("ix_notes_tenant_history");
+
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_notes_tenant_legacy_id_any")
+                        .HasDatabaseName("ix_notes_tenant_legacy_id_any");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_notes_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_notes_tenant_legacy_id_user_deleted")

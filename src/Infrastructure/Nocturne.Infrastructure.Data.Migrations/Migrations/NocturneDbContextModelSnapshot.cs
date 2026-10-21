@@ -7473,6 +7473,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "SysUpdatedAt", "Id")
                         .HasDatabaseName("ix_notes_tenant_history");
 
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_notes_tenant_legacy_id_any")
+                        .HasDatabaseName("ix_notes_tenant_legacy_id_any");
+
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_notes_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_notes_tenant_legacy_id_user_deleted")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");

@@ -796,8 +796,9 @@ internal static class LegacyTreatmentTables
     /// </summary>
     /// <remarks>
     /// <c>notes</c> holds the text of the Note a served record's treatment wrote beside it, by
-    /// treatment id, served on the record over any copy the record keeps, which a V4 edit of the
-    /// Note does not reach; see <see cref="NotesServedWithAnotherRecord"/>.
+    /// treatment id, served on the record over any copy a span keeps; see
+    /// <see cref="NotesServedWithAnotherRecord"/>. A device event keeps the one copy of its notes,
+    /// which its own V4 edits reach, so a Note written beside one before that is not served on it.
     /// </remarks>
     internal static List<Treatment> Assemble(
         IReadOnlyList<FetchedRecord> rows,
@@ -812,7 +813,9 @@ internal static class LegacyTreatmentTables
             if (paired.Contains(row.Record))
                 continue;
 
-            var treatment = WithNotes(row.Table.Project(row.Record, foods), ServedKey(row.Record), notes);
+            var treatment = row.Table.Project(row.Record, foods);
+            if (row.Record is not DeviceEvent)
+                treatment = WithNotes(treatment, ServedKey(row.Record), notes);
             treatments.Add(Stamp(treatment, row.Created, row.Modified, row.Deleted));
         }
 

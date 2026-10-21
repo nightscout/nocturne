@@ -221,11 +221,28 @@ public class LegacyTreatmentRoundTripTests : IDisposable
     [Fact]
     public async Task RecordWithNotes_HistoryTombstonesTheNoteUnderItsOwnId()
     {
-        await UploadAsync(Upload("Correction Bolus", insulin: 2.0, notes: "after the walk"));
+        await UploadAsync(JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["eventType"] = "Correction Bolus", ["created_at"] = At, ["insulin"] = 2.0,
+            ["notes"] = "after the walk", ["syncIdentifier"] = "loop-sync-1",
+        }));
 
         var history = (await _service.GetTreatmentsModifiedSinceAsync(0)).ToList();
 
-        history.Where(t => t.IsValid == false).Select(t => t.Id).Should().Equal((await NoteIdAsync()).ToString());
+        var tombstone = history.Where(t => t.IsValid == false).Should().ContainSingle().Subject;
+        tombstone.Id.Should().Be((await NoteIdAsync()).ToString());
+        (tombstone.EventType, tombstone.SyncIdentifier, tombstone.Insulin, tombstone.Notes)
+            .Should().Be(("Note", (string?)null, (double?)null, (string?)null));
+    }
+
+    [Fact]
+    public async Task DeviceEventWithNotes_KeepsThemOnItselfAlone()
+    {
+        await UploadAsync(Upload("Site Change", notes: "left arm"));
+
+        await using (var ctx = _db.CreateContext())
+            ctx.Notes.IgnoreQueryFilters().Should().BeEmpty();
+        (await ReadAsync()).Should().ContainSingle().Which.Notes.Should().Be("left arm");
     }
 
     private async Task<Guid> NoteIdAsync()
@@ -268,7 +285,7 @@ public class LegacyTreatmentRoundTripTests : IDisposable
     [Fact]
     public async Task NoteEditedInV4_IsServedOnItsTreatmentWithAMovedStamp()
     {
-        await UploadAsync(Upload("Site Change", notes: "left arm"));
+        await UploadAsync(Upload("Correction Bolus", insulin: 2.0, notes: "left arm"));
         var searched = Stamp(await ReadAsync());
         await Task.Delay(5);
 
@@ -277,7 +294,7 @@ public class LegacyTreatmentRoundTripTests : IDisposable
         await _noteRepo.UpdateAsync(note.Id, note, WriteOrigin.Live);
 
         var served = (await ReadAsync()).Should().ContainSingle().Subject;
-        (served.EventType, served.Notes).Should().Be(("Site Change", "right arm"));
+        (served.EventType, served.Notes).Should().Be(("Correction Bolus", "right arm"));
         served.SrvModified.Should().BeGreaterThan(searched);
     }
 

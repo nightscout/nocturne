@@ -105,6 +105,13 @@ public class TreatmentReadService : ITreatmentStore
             ModifiedSearch.MaxRead,
             ct);
 
+        // A page re-sends a record it did not cut on, such as the record holding a Note on it, so
+        // one treatment can arrive on two pages.
+        live = live
+            .GroupBy(t => t.Id)
+            .Select(g => g.MaxBy(t => t.SrvModified ?? t.Mills)!)
+            .ToList();
+
         Func<Treatment, long> key = query.SortField == ReadSortField.SrvModified
             ? treatment => treatment.SrvModified ?? treatment.Mills
             : treatment => treatment.Mills;

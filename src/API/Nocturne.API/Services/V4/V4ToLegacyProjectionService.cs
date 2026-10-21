@@ -355,6 +355,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         DateTime? historyCursor = null
     )
     {
+        var foldedNotes = new HashSet<string>(StringComparer.Ordinal);
         var noteKeys = rows
             .Select(r => r.Record)
             .OfType<Note>()
@@ -395,11 +396,13 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             else
             {
                 var seen = rows.Select(RecordId).ToHashSet();
+                var kept = rows
+                    .Where(r => !Held(r) || heldByRecords.Contains(((Note)r.Record).LegacyId!))
+                    .ToList();
+                foldedNotes.UnionWith(kept.Where(Held).Select(r => RecordId(r).ToString()));
                 rows =
                 [
-                    .. rows
-                        .Where(r => !Held(r) || heldByRecords.Contains(((Note)r.Record).LegacyId!))
-                        .Select(r => Held(r) ? r with { Deleted = true } : r),
+                    .. kept.Select(r => Held(r) ? r with { Deleted = true } : r),
                     .. holders.Where(h => seen.Add(RecordId(h))),
                 ];
             }
@@ -444,8 +447,26 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             return historyCursor is { } cursor && stamp > cursor ? cursor : stamp;
         }
 
-        return LegacyTreatmentTables.Assemble(rows, await LoadCarbFoodsAsync(rows, ct), notes);
+        var treatments = LegacyTreatmentTables.Assemble(rows, await LoadCarbFoodsAsync(rows, ct), notes);
+        return foldedNotes.Count == 0
+            ? treatments
+            : treatments.Select(t => t.Id is { } id && foldedNotes.Contains(id) ? FoldedNoteTombstone(t) : t).ToList();
     }
+
+    /// <summary>
+    /// A folded Note's tombstone carries its identity and deletion alone: its event type and sync
+    /// identifier are its treatment's, and a client matching on those would take it for the record
+    /// that is still served.
+    /// </summary>
+    private static Treatment FoldedNoteTombstone(Treatment note) => new()
+    {
+        Id = note.Id,
+        EventType = "Note",
+        Mills = note.Mills,
+        SrvCreated = note.SrvCreated,
+        SrvModified = note.SrvModified,
+        IsValid = false,
+    };
 
     /// <summary>
     /// Adds the live Notes of the records deleted on a history page whose treatment keeps no other

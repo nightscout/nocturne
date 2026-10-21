@@ -357,8 +357,9 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             && !produceDeviceEvent && !delegateToStateSpan;
 
         // Produce a Note record for any treatment with non-empty Notes, unless we're already
-        // producing a Note (avoids duplicate). The served state spans keep their notes themselves.
-        if (!produceNote && !isProfileSwitch && !isOverride && !isTemporaryTarget
+        // producing a Note (avoids duplicate). The served state spans and device events keep their
+        // notes themselves.
+        if (!produceNote && !isProfileSwitch && !isOverride && !isTemporaryTarget && !produceDeviceEvent
             && !string.IsNullOrWhiteSpace(treatment.Notes))
         {
             produceNote = true;
