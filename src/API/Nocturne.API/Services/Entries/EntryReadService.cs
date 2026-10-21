@@ -163,7 +163,7 @@ public class EntryReadService : IEntryStore
 
         if (truncated)
             _logger.LogWarning(
-                "Find-filtered entry query hit the {MaxFetch}-row window; older matches are not returned",
+                "Find-filtered entry query hit the {MaxFetch}-row window; matches beyond it are not returned",
                 MaxFilterFetch);
 
         return matching.Skip(skip).Take(count).ToList();
