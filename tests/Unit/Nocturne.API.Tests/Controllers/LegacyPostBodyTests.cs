@@ -332,6 +332,7 @@ public class LegacyPostBodyTests
                 decomposer.Object,
                 Mock.Of<IWriteSideEffects>(),
                 Mock.Of<IDataEventSink<DeviceStatus>>(),
+                TimeProvider.System,
                 NullLogger<LegacyV1.DeviceStatusController>.Instance));
             return new Handler(single, malformed, async body => Unwrap(await v1.CreateDeviceStatus(Json(body))), () => statuses.Count, () => statuses.All(s => s.Device == "openaps://phone"));
         }

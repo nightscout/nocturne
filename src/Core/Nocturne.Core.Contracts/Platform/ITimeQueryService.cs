@@ -60,13 +60,13 @@ public interface ITimeQueryService
     /// <param name="regex">Time regex pattern</param>
     /// <param name="storage">Storage type</param>
     /// <param name="fieldName">Field name</param>
-    /// <param name="queryParameters">Additional query parameters</param>
+    /// <param name="queryString">The request query string without changes.</param>
     /// <returns>Debug information about the generated patterns and query</returns>
     TimeQueryEcho GenerateTimeQueryEcho(
         string? prefix,
         string? regex,
         string storage = "entries",
         string fieldName = "dateString",
-        Dictionary<string, object>? queryParameters = null
+        string? queryString = null
     );
 }
