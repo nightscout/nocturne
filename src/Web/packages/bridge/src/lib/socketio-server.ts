@@ -49,7 +49,7 @@ interface BridgeSocketData {
 type Readmission =
   | { kind: 'ticket' }
   | { kind: 'credential'; apiSecret?: string; token?: string }
-  | { kind: 'storage'; accessToken: string; collections: string[] }
+  | { kind: 'storage'; accessToken: string; collections: string[]; unanswered: string[] }
   | { kind: 'alarm'; accessToken: string };
 
 /**
@@ -58,6 +58,12 @@ type Readmission =
  * ticket expires instead.
  */
 export const ADMISSION_RECHECK_INTERVAL_MS = 60_000;
+
+/**
+ * How soon a /storage socket's collections whose probe went unanswered are probed again. A
+ * collection the API has not yet answered for is neither joined nor refused.
+ */
+export const UNANSWERED_COLLECTION_RETRY_MS = 10_000;
 
 /** How long a browser has to answer a request for a fresh ticket. */
 export const TICKET_REFRESH_TIMEOUT_MS = 10_000;
@@ -534,20 +540,23 @@ class SocketIOServer {
         return ADMISSION_RECHECK_INTERVAL_MS;
       }
       case 'storage': {
-        const kept: string[] = [];
-        for (const collection of readmission.collections) {
-          const answer = await this.probeAccessToken(
-            readmission.accessToken, tenantSlug, COLLECTION_READ_ENDPOINT[collection]);
-          if (answer === false) socket.leave(storageRoom(tenantSlug, collection));
-          else kept.push(collection);
-        }
-        if (kept.length === 0) {
+        const [joined, waiting] = await Promise.all([
+          this.probeCollections(readmission.accessToken, tenantSlug, readmission.collections),
+          this.probeCollections(readmission.accessToken, tenantSlug, readmission.unanswered),
+        ]);
+        for (const collection of joined.refused) socket.leave(storageRoom(tenantSlug, collection));
+        for (const collection of waiting.granted) socket.join(storageRoom(tenantSlug, collection));
+
+        const collections = readmission.collections.filter((c) => !joined.refused.includes(c))
+          .concat(waiting.granted);
+        const unanswered = waiting.unanswered;
+        if (collections.length === 0 && unanswered.length === 0) {
           logger.warn(`/storage client ${socket.id} lost every collection for tenant ${tenantSlug}; disconnecting`);
           socket.disconnect(true);
           return null;
         }
-        socket.data.readmission = { ...readmission, collections: kept };
-        return ADMISSION_RECHECK_INTERVAL_MS;
+        socket.data.readmission = { ...readmission, collections, unanswered };
+        return unanswered.length > 0 ? UNANSWERED_COLLECTION_RETRY_MS : ADMISSION_RECHECK_INTERVAL_MS;
       }
       case 'alarm': {
         const admission = await this.probeRealtimeAdmission(tenantSlug, readmission);
@@ -924,6 +933,22 @@ class SocketIOServer {
     }
   }
 
+  /** Probes a token's read access to each collection at once, each against its own v3 read
+   *  endpoint, so access is per collection as the API's per-endpoint scopes are. */
+  private async probeCollections(
+    accessToken: string,
+    tenantSlug: string,
+    collections: readonly string[],
+  ): Promise<{ granted: string[]; refused: string[]; unanswered: string[] }> {
+    const answers = await Promise.all(collections.map((collection) =>
+      this.probeAccessToken(accessToken, tenantSlug, COLLECTION_READ_ENDPOINT[collection])));
+    return {
+      granted: collections.filter((_, i) => answers[i] === true),
+      refused: collections.filter((_, i) => answers[i] === false),
+      unanswered: collections.filter((_, i) => answers[i] === UNANSWERED),
+    };
+  }
+
   /**
    * Nightscout v3 `/storage` namespace. AAPS connects to `<url>/storage` and,
    * on connect, emits `subscribe` with its access token and the collections it
@@ -974,6 +999,10 @@ class SocketIOServer {
    * rejected outright — and the socket is disconnected so the client has to
    * re-establish the connection (going back through TLS/transport) rather than
    * immediately retrying `subscribe` as a credential-guessing oracle.
+   *
+   * A collection the API gave no answer for (timeout, 5xx, unreachable) is
+   * neither joined nor refused: re-admission probes it again and joins it once
+   * the API grants it, so an outage never reads as a refusal.
    */
   async handleStorageSubscribe(
     socket: BridgeSocket,
@@ -1007,17 +1036,10 @@ class SocketIOServer {
           .filter((name, i, all) => all.findIndex((other) => collectionIdentity(other) === collectionIdentity(name)) === i)
       : DEFAULT_STORAGE_COLLECTIONS;
 
-    // Probe each collection's read endpoint independently so authorization is
-    // per-collection, matching the API's per-endpoint RequireScope.
-    const authorized: string[] = [];
-    for (const collection of candidateCollections) {
-      const endpoint = COLLECTION_READ_ENDPOINT[collection];
-      if (await this.probeAccessToken(accessToken, tenantSlug, endpoint) === true) {
-        authorized.push(collection);
-      }
-    }
+    const { granted: authorized, unanswered } = await this.probeCollections(
+      accessToken, tenantSlug, candidateCollections);
 
-    if (authorized.length === 0) {
+    if (authorized.length === 0 && unanswered.length === 0) {
       logger.warn(
         `/storage subscribe denied for ${socket.id} (tenant ${tenantSlug}): token not authorized for any collection`,
       );
@@ -1031,10 +1053,12 @@ class SocketIOServer {
     }
     socket.data.tenantSlug = tenantSlug;
     socket.data.pendingTenantSlug = undefined;
-    socket.data.readmission = { kind: 'storage', accessToken, collections: authorized };
-    this.scheduleReadmission(socket, ADMISSION_RECHECK_INTERVAL_MS);
+    socket.data.readmission = { kind: 'storage', accessToken, collections: authorized, unanswered };
+    this.scheduleReadmission(
+      socket, unanswered.length > 0 ? UNANSWERED_COLLECTION_RETRY_MS : ADMISSION_RECHECK_INTERVAL_MS);
     logger.info(
-      `/storage client ${socket.id} subscribed for tenant ${tenantSlug}: ${authorized.join(', ')}`,
+      `/storage client ${socket.id} subscribed for tenant ${tenantSlug}: ${authorized.join(', ')}`
+        + (unanswered.length > 0 ? ` (awaiting the API for ${unanswered.join(', ')})` : ''),
     );
     ack?.({ success: true, collections: authorized });
   }
