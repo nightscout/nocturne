@@ -305,7 +305,7 @@ public class TempBasalToTreatmentMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToTreatment_RelativeTemp_ServesPercentAndNoAbsoluteRate()
+    public void ToTreatment_RelativeTemp_ServesPercentAndRateButNoAbsolute()
     {
         var tempBasal = CreateTempBasal(TempBasalOrigin.Manual, 0.4);
         tempBasal.ScheduledRate = 0.8;
@@ -315,9 +315,24 @@ public class TempBasalToTreatmentMapperTests
 
         result.Percent.Should().Be(-50);
         result.Absolute.Should().BeNull("a Nightscout client takes absolute over percent");
-        result.Rate.Should().BeNull();
+        result.Rate.Should().Be(0.4);
         result.Temp.Should().BeNull();
         result.Duration.Should().BeApproximately(30.0, 0.001);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToTreatment_RelativeTempOfUnknownRate_ServesOnlyPercent()
+    {
+        var tempBasal = CreateTempBasal(TempBasalOrigin.Manual, 0);
+        tempBasal.Rate = null;
+        tempBasal.Percent = -50;
+
+        var result = TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        result.Percent.Should().Be(-50);
+        result.Absolute.Should().BeNull();
+        result.Rate.Should().BeNull();
     }
 
     [Fact]

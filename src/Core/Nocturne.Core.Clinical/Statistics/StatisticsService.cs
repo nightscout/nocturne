@@ -2298,7 +2298,7 @@ public class StatisticsService : IStatisticsService
     {
         var endMills = effectiveEndMills ?? tb.EndMills ?? tb.StartMills + (5 * 60 * 1000);
         var durationHours = (endMills - tb.StartMills) / (1000.0 * 60 * 60);
-        return tb.Rate * durationHours;
+        return (tb.Rate ?? 0) * durationHours;
     }
 
     /// <summary>
@@ -2543,7 +2543,8 @@ public class StatisticsService : IStatisticsService
             if (effectiveEndMills <= tb.StartMills)
                 continue;
 
-            var rate = tb.Rate;
+            if (tb.Rate is not { } rate)
+                continue;
             allRates.Add(rate);
             totalDelivered += GetTempBasalInsulin(tb, effectiveEndMills);
 
@@ -2645,7 +2646,7 @@ public class StatisticsService : IStatisticsService
 
         foreach (var (tb, effectiveEndMills) in ClipOverlappingTempBasals(tempBasals))
         {
-            if (effectiveEndMills <= tb.StartMills)
+            if (effectiveEndMills <= tb.StartMills || tb.Rate is not { } rate)
                 continue;
 
             // Categorize whole segments by origin: what was delivered while a
@@ -2655,7 +2656,7 @@ public class StatisticsService : IStatisticsService
                 : tempBasal;
 
             DistributeInsulinAcrossHourOfDay(
-                tb.StartMills, effectiveEndMills, tb.Rate, tz, target, basalDays);
+                tb.StartMills, effectiveEndMills, rate, tz, target, basalDays);
             counts[LocalHourOfDay(tb.StartMills, tz)]++;
         }
 

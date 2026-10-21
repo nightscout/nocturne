@@ -44,6 +44,10 @@ internal sealed class BasalSeriesBuilder(
 
         foreach (var tb in sorted)
         {
+            // A relative temp with no known rate leaves the schedule showing beneath it
+            if (tb.Origin != TempBasalOrigin.Suspended && tb.Rate is null)
+                continue;
+
             var tbStart = tb.StartMills;
             var tbEnd = tb.EndMills ?? endTime;
 
@@ -65,7 +69,7 @@ internal sealed class BasalSeriesBuilder(
                 new BasalPoint
                 {
                     Timestamp = tbStart,
-                    Rate = origin == BasalDeliveryOrigin.Suspended ? 0 : tb.Rate,
+                    Rate = origin == BasalDeliveryOrigin.Suspended ? 0 : tb.Rate!.Value,
                     ScheduledRate = scheduledRate,
                     Origin = origin,
                     FillColor = ChartColorMapper.FillFromBasalOrigin(origin),

@@ -668,7 +668,6 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITherapySettingsResolver, TherapySettingsResolver>();
         services.AddScoped<ITherapyTimelineResolver, TherapyTimelineResolver>();
         services.AddScoped<Services.Glucose.IProfileSnapshotService, Services.Glucose.ProfileSnapshotService>();
-        services.AddScoped<ITempBasalResolver, TempBasalResolver>();
         services.AddScoped<IProfileProjectionService, ProfileProjectionService>();
         services.AddScoped<IDataEventSink<Profile>>(sp =>
         {

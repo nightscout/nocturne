@@ -39,7 +39,6 @@ public class TreatmentDecomposerBatchTests : IDisposable
     private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock;
     private readonly Mock<IPatientInsulinRepository> _insulinRepoMock;
     private readonly Mock<IBasalRateResolver> _basalRateResolverMock = new();
-    private readonly Mock<ITherapySettingsResolver> _therapySettingsResolverMock = new();
     private readonly TreatmentDecomposer _decomposer;
 
     public TreatmentDecomposerBatchTests()
@@ -122,7 +121,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
             _profileDecomposerMock.Object,
             _activeProfileResolverMock.Object,
             _insulinRepoMock.Object,
-            new RelativeTempBasalRates(_basalRateResolverMock.Object, _therapySettingsResolverMock.Object),
+            new RelativeTempBasalRates(_basalRateResolverMock.Object),
             Mock.Of<IAuditContext>(),
             NullLogger<TreatmentDecomposer>.Instance);
     }
@@ -221,18 +220,22 @@ public class TreatmentDecomposerBatchTests : IDisposable
         result.CorrelationId.Should().BeNull();
     }
 
+    /// <summary>
+    /// Each temp resolves against the schedule in force at its own start, as the single path does, so
+    /// a batch spanning a profile edit gives each side its own rate.
+    /// </summary>
     [Fact]
-    public async Task DecomposeBatchAsync_PercentTempBasal_ResolvesRateAgainstScheduledBasal()
+    public async Task DecomposeBatchAsync_PercentTempBasals_ResolveEachAtItsOwnStart()
     {
-        _therapySettingsResolverMock.Setup(r => r.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _basalRateResolverMock
-            .Setup(r => r.BuildResolverAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.FromResult<Func<long, double>>(mills => mills < 1700001000000 ? 0.8 : 1.2));
+            .Setup(r => r.FindBasalRateAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long mills, CancellationToken _) => mills < 1700001000000 ? 0.8 : 1.2);
 
         var treatments = new List<Treatment>
         {
             new() { Id = "tb-percent-1", EventType = "Temp Basal", Mills = 1700000000000, Duration = 30, Percent = -50 },
             new() { Id = "tb-percent-2", EventType = "Temp Basal", Mills = 1700002000000, Duration = 30, Percent = 50 },
+            new() { Id = "tb-aaps", EventType = "Temp Basal", Mills = 1700003000000, Duration = 30, Percent = -30, Rate = 0.7 },
             new() { Id = "tb-absolute", EventType = "Temp Basal", Mills = 1700004000000, Duration = 30, Absolute = 1.5 },
         };
 
@@ -244,9 +247,52 @@ public class TreatmentDecomposerBatchTests : IDisposable
         temps["tb-percent-1"].Percent.Should().Be(-50);
         temps["tb-percent-2"].Rate.Should().BeApproximately(1.8, 1e-9);
         temps["tb-percent-2"].ScheduledRate.Should().Be(1.2);
+        temps["tb-aaps"].Rate.Should().Be(0.7);
+        temps["tb-aaps"].Percent.Should().Be(-30);
         temps["tb-absolute"].Rate.Should().Be(1.5);
         temps["tb-absolute"].Percent.Should().BeNull();
         temps["tb-absolute"].ScheduledRate.Should().BeNull();
+    }
+
+    /// <summary>
+    /// AAPS uploads a temp ahead of the profile switch that set it; a percent-only temp resolves after
+    /// the batch's switches are written, and a temp carrying its rate keeps it.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_PercentTempBeforeSwitchInTheSameBatch_SeesTheSwitch()
+    {
+        _basalRateResolverMock
+            .Setup(r => r.FindBasalRateAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _context.ProfileActivations.Any() ? 1.5 : 1.0);
+
+        var treatments = new List<Treatment>
+        {
+            new() { Id = "tb-percent", EventType = "Temp Basal", Mills = 1700000060000, Duration = 30, Percent = -50 },
+            new() { Id = "tb-aaps", EventType = "Temp Basal", Mills = 1700000120000, Duration = 30, Percent = 50, Rate = 1.65 },
+            new() { Id = "ps-1", EventType = "Profile Switch", Mills = 1700000000000, Profile = "Default", Duration = 0, Percentage = 150 },
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
+
+        var temps = result.CreatedRecords.OfType<V4Models.TempBasal>().ToDictionary(t => t.LegacyId!);
+        temps["tb-percent"].Rate.Should().BeApproximately(0.75, 1e-9);
+        temps["tb-aaps"].Rate.Should().Be(1.65);
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_PercentOnlyTempWithNoScheduleInForce_LeavesRateUnknown()
+    {
+        var treatments = new List<Treatment>
+        {
+            new() { Id = "tb-percent", EventType = "Temp Basal", Mills = 1700000000000, Duration = 30, Percent = -50 },
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
+
+        var temp = result.CreatedRecords.OfType<V4Models.TempBasal>().Single();
+        temp.Rate.Should().BeNull();
+        temp.ScheduledRate.Should().BeNull();
+        temp.Percent.Should().Be(-50);
     }
 
     [Fact]

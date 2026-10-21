@@ -232,7 +232,7 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
             var programmedRate = resolve(record.StartMills);
             record.ScheduledRate = programmedRate;
 
-            if (Math.Abs(record.Rate - programmedRate) > rateTolerance)
+            if (record.Rate is { } rate && Math.Abs(rate - programmedRate) > rateTolerance)
             {
                 record.Origin = TempBasalOrigin.Algorithm;
                 reclassified++;

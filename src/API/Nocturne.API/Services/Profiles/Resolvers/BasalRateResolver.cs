@@ -38,20 +38,23 @@ internal sealed class BasalRateResolver : IBasalRateResolver
     }
 
     public async Task<double> GetBasalRateAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
+        => await FindAsync(timeMills, specProfile, ct) ?? DefaultBasalRate;
+
+    public Task<double?> FindBasalRateAsync(long timeMills, CancellationToken ct = default)
+        => FindAsync(timeMills, specProfile: null, ct);
+
+    private async Task<double?> FindAsync(long timeMills, string? specProfile, CancellationToken ct)
     {
         var schedule = await ActiveSchedule.ResolveAsync(
             timeMills, specProfile, _activeProfileResolver, _repo, _versions,
             s => s.Entries, s => s.Basal, _therapyRepo, _patientRecordRepo, ct);
-        if (schedule is null)
-            return DefaultBasalRate;
+        if (schedule is null
+            || ScheduleResolution.FindValueAtTime(schedule.Entries, schedule.SecondsFromMidnight) is not { } value)
+            return null;
 
-        var value = ScheduleResolution.FindValueAtTime(schedule.Entries, schedule.SecondsFromMidnight)
-            ?? DefaultBasalRate;
-
-        if (schedule.Adjustment is { } adjustment)
-            value = value * adjustment.Percentage / 100.0;
-
-        return value;
+        return schedule.Adjustment is { } adjustment
+            ? value * adjustment.Percentage / 100.0
+            : value;
     }
 
     public async Task<Func<long, double>> BuildResolverAsync(

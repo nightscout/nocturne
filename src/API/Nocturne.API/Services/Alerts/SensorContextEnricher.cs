@@ -489,9 +489,9 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         if (needs.NeedsTempBasal)
         {
             var temp = await _deps.TempBasals.GetActiveAtAsync(now, ct);
-            if (temp is not null)
+            if (temp is { Rate: { } rate })
             {
-                enriched = enriched with { ActiveTempBasal = ProjectTempBasal(temp) };
+                enriched = enriched with { ActiveTempBasal = ProjectTempBasal(temp, rate) };
             }
         }
 
@@ -527,9 +527,9 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         return enriched;
     }
 
-    private static TempBasalSnapshot ProjectTempBasal(TempBasal t) =>
+    private static TempBasalSnapshot ProjectTempBasal(TempBasal t, double rate) =>
         new(
-            Rate: (decimal)t.Rate,
+            Rate: (decimal)rate,
             ScheduledRate: t.ScheduledRate.HasValue ? (decimal?)t.ScheduledRate.Value : null,
             StartedAt: t.StartTimestamp);
 

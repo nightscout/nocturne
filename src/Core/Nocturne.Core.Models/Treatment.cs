@@ -253,22 +253,19 @@ public class Treatment : ProcessableDocumentBase
 
     /// <summary>
     /// Absolute temporary basal rate.
-    /// Returns Rate if this is null.
+    /// Returns Rate if this is null, unless <see cref="Percent"/> is set.
     /// </summary>
+    /// <remarks>
+    /// Nightscout takes a temp basal as absolute only when <c>absolute</c> is present, and otherwise
+    /// applies <see cref="Percent"/> to the scheduled rate. AAPS sends a percent temp as
+    /// <c>percent</c> plus its own conversion in <c>rate</c>, with no <c>absolute</c>.
+    /// </remarks>
     [JsonPropertyName("absolute")]
     public double? Absolute
     {
-        get => _absolute ?? Rate;
+        get => _absolute ?? (Percent is null ? Rate : null);
         set => _absolute = value;
     }
-
-    /// <summary>
-    /// Whether <see cref="Absolute"/> was set itself rather than read through from
-    /// <see cref="Rate"/>. Nightscout takes a temp basal as absolute only when <c>absolute</c> is
-    /// present, and otherwise applies <see cref="Percent"/> to the scheduled rate.
-    /// </summary>
-    [JsonIgnore]
-    public bool HasOwnAbsolute => _absolute.HasValue;
 
     [JsonPropertyName("notes")]
     [Sanitizable]

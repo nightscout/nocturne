@@ -487,7 +487,7 @@ public class DeduplicationServiceTests : IDisposable
         var partner = entities[499];
         var boundaryDuplicate = CreateTestTempBasalEntity(
             startTimestamp: partner.Timestamp.AddSeconds(5),
-            rate: partner.Rate,
+            rate: partner.Rate!.Value,
             origin: "Scheduled",
             dataSource: "mylife-connector");
         entities.Add(boundaryDuplicate);

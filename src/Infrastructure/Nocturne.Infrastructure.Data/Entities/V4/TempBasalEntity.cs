@@ -98,10 +98,10 @@ public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Tim
     public DateTime SysUpdatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Temporary basal rate in units per hour
+    /// Temporary basal rate in units per hour; see <see cref="Core.Models.V4.TempBasal.Rate"/>.
     /// </summary>
     [Column("rate")]
-    public double Rate { get; set; }
+    public double? Rate { get; set; }
 
     /// <summary>
     /// Scheduled basal rate that this temp basal overrides

@@ -482,12 +482,12 @@ public class RetrospectiveController : ControllerBase
         {
             var startTime = tb.StartMills;
             var endTime = tb.EndMills;
-            if (endTime == null) continue;
+            if (endTime == null || tb.Rate is not { } rate) continue;
             if (targetTime >= startTime && targetTime < endTime)
             {
                 return new BasalData
                 {
-                    Rate = tb.Rate,
+                    Rate = rate,
                     IsTemp = true
                 };
             }
@@ -523,8 +523,8 @@ public class RetrospectiveController : ControllerBase
     {
         foreach (var tb in tempBasals.Where(tb => tb.EndMills is not null))
         {
-            if (targetTime >= tb.StartMills && targetTime < tb.EndMills)
-                return new BasalData { Rate = tb.Rate, IsTemp = true };
+            if (targetTime >= tb.StartMills && targetTime < tb.EndMills && tb.Rate is { } rate)
+                return new BasalData { Rate = rate, IsTemp = true };
         }
         return new BasalData { Rate = scheduledRateAt(targetTime), IsTemp = false };
     }
