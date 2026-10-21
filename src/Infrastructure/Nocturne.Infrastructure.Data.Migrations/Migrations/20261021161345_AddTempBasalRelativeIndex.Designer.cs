@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20261021143422_AddTempBasalPercent")]
-    partial class AddTempBasalPercent
+    [Migration("20261021161345_AddTempBasalRelativeIndex")]
+    partial class AddTempBasalRelativeIndex
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -8785,6 +8785,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<double>("Dia")
                         .HasColumnType("double precision")
                         .HasColumnName("dia");
+
+                    b.Property<string>("DocumentDefaultProfile")
+                        .HasColumnType("text")
+                        .HasColumnName("document_default_profile");
 
                     b.Property<string>("EnteredBy")
                         .HasMaxLength(100)
