@@ -356,6 +356,7 @@ class SignalRClient {
       logger.info("Successfully subscribed to ConfigHub");
     } catch (error) {
       logger.error("Error subscribing to ConfigHub:", error);
+      SignalRClient.rethrowIfClosed(this.configConnection, error);
     }
   }
 
@@ -388,6 +389,7 @@ class SignalRClient {
       }
     } catch (error) {
       logger.error("Error authenticating with SignalR DataHub:", error);
+      SignalRClient.rethrowIfClosed(this.dataConnection, error);
     }
   }
 
@@ -412,6 +414,7 @@ class SignalRClient {
       }
     } catch (error) {
       logger.error("Error subscribing to storage collections:", error);
+      SignalRClient.rethrowIfClosed(this.dataConnection, error);
     }
   }
 
@@ -441,7 +444,14 @@ class SignalRClient {
       }
     } catch (error) {
       logger.error("Error subscribing to SignalR AlarmHub:", error);
+      SignalRClient.rethrowIfClosed(this.alarmConnection, error);
     }
+  }
+
+  /** A hub that closes the connection under a call made while connecting refused the connection,
+   *  as the API does for a tenant other than the one the client expects; that fails the connect. */
+  private static rethrowIfClosed(connection: HubConnection | null, error: unknown): void {
+    if (connection?.state !== "Connected") throw error;
   }
 
   private async handleReconnect(isSetupRequired = false): Promise<void> {

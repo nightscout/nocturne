@@ -6,6 +6,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
 
@@ -60,11 +61,17 @@ public class GoogleHealthSessionStoreTests : IDisposable
     }
 
     private bool? savedEnabled;
+    private readonly Guid tenantId = Guid.NewGuid();
+    private readonly Mock<IGoogleHealthGrantHolders> holders = new();
+    private readonly List<bool> tokenStoredWhenHeld = [];
 
     private GoogleHealthSessionStore Store(
         out Mock<IConnectorConfigurationService> configurations, HttpMessageHandler? handler = null,
         TimeSpan? revokeTimeout = null)
     {
+        holders.Setup(value => value.HoldAsync(tenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback(() => tokenStoredWhenHeld.Add(secrets.ContainsKey("refreshToken")))
+            .Returns(Task.CompletedTask);
         configurations = new Mock<IConnectorConfigurationService>();
         configurations.Setup(service => service.GetSecretsAsync("GoogleHealth", It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new Dictionary<string, string>(secrets));
@@ -85,7 +92,7 @@ public class GoogleHealthSessionStoreTests : IDisposable
             .ReturnsAsync(new ConnectorConfigurationResponse());
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(accessor => accessor.IsResolved).Returns(true);
-        tenant.SetupGet(accessor => accessor.TenantId).Returns(Guid.NewGuid());
+        tenant.SetupGet(accessor => accessor.TenantId).Returns(tenantId);
         var http = new HttpClient(handler ?? new ThrowingHandler());
         _httpClients.Add(http);
         var oauth = new GoogleHealthAuthTokenProvider(
@@ -95,7 +102,9 @@ public class GoogleHealthSessionStoreTests : IDisposable
             tenant.Object,
             TestPlatform.Options(),
             NullLogger<GoogleHealthAuthTokenProvider>.Instance);
-        return new GoogleHealthSessionStore(configurations.Object, oauth, TestPlatform.Options(), revokeTimeout);
+        return new GoogleHealthSessionStore(
+            configurations.Object, oauth, holders.Object, tenant.Object, TestPlatform.Options(),
+            NullLogger<GoogleHealthSessionStore>.Instance, revokeTimeout);
     }
 
     [Fact]
@@ -112,6 +121,102 @@ public class GoogleHealthSessionStoreTests : IDisposable
 
         revoked.Should().ContainSingle().Which.Should().Contain("token=refresh");
         secrets.Should().NotContainKey("refreshToken");
+    }
+
+    [Fact]
+    public async Task Clearing_releases_the_tenants_hold_without_revoking_an_account_another_tenant_holds()
+    {
+        holders.Setup(value => value.SharingAsync(tenantId, "account", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(GoogleHealthGrantSharing.Shared);
+        var store = Store(out _);
+
+        await store.ClearAsync(removeAccount: false, Guid.NewGuid(), revoke: true, default);
+
+        secrets.Should().NotContainKey("refreshToken");
+        holders.Verify(value => value.ReleaseAsync(tenantId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task A_grant_for_an_unknown_account_is_kept(string? accountKey)
+    {
+        var store = Store(out _);
+
+        var outcome = await store.RevokeAsync("refresh", accountKey, default);
+
+        outcome.Should().Be(GoogleHealthRevocation.Undetermined);
+    }
+
+    [Fact]
+    public async Task A_grant_whose_holders_cannot_be_read_is_kept()
+    {
+        holders.Setup(value => value.SharingAsync(tenantId, "account", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(GoogleHealthGrantSharing.Undetermined);
+        var store = Store(out _);
+
+        (await store.RevokeAsync("refresh", "account", default)).Should().Be(GoogleHealthRevocation.Undetermined);
+    }
+
+    [Fact]
+    public async Task Clearing_releases_the_hold_before_asking_who_else_holds_the_account()
+    {
+        var order = new List<string>();
+        holders.Setup(value => value.ReleaseAsync(tenantId, It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("release")).Returns(Task.CompletedTask);
+        holders.Setup(value => value.SharingAsync(tenantId, "account", It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("sharing")).ReturnsAsync(GoogleHealthGrantSharing.Shared);
+        var store = Store(out _);
+
+        await store.ClearAsync(removeAccount: false, Guid.NewGuid(), revoke: true, default);
+
+        order.Should().Equal("release", "sharing");
+    }
+
+    public static TheoryData<string?, string?, string?> StoredSessions => new()
+    {
+        { "refresh", "account", "account" },
+        { "refresh", null, null },
+        { "refresh", "", null },
+        { null, "account", null },
+        { " ", "account", null },
+    };
+
+    [Theory]
+    [MemberData(nameof(StoredSessions))]
+    public void Only_a_stored_token_with_its_account_is_held(string? refreshToken, string? accountKey, string? held)
+    {
+        var stored = new Dictionary<string, string>();
+        if (refreshToken is not null) stored["refreshToken"] = refreshToken;
+        if (accountKey is not null) stored["accountKey"] = accountKey;
+
+        GoogleHealthSessionStore.HeldAccount(stored).Should().Be(held);
+    }
+
+    [Theory]
+    [InlineData(true, 0)]
+    [InlineData(false, 1)]
+    public async Task An_unstored_sign_in_releases_the_hold_only_when_no_token_is_stored(bool tokenStored, int releases)
+    {
+        if (!tokenStored) secrets.Remove("refreshToken");
+        var store = Store(out _);
+
+        await store.ReleaseUnstoredAsync(default);
+
+        holders.Verify(value => value.ReleaseAsync(tenantId, It.IsAny<CancellationToken>()), Times.Exactly(releases));
+    }
+
+    [Fact]
+    public async Task Storing_a_session_holds_its_account_before_the_token_is_saved()
+    {
+        secrets.Clear();
+        var store = Store(out _);
+
+        await store.StoreAsync(new("refresh", ["scope-a"]), "account", Guid.NewGuid(), default);
+
+        tokenStoredWhenHeld.Should().Equal(false);
+        secrets["refreshToken"].Should().Be("refresh");
+        holders.Verify(value => value.HoldAsync(tenantId, "account", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     public static TheoryData<string> RevokeOutcomes => ["ok", "refused", "unreachable", "hanging"];
@@ -135,9 +240,10 @@ public class GoogleHealthSessionStoreTests : IDisposable
                 : System.Net.HttpStatusCode.ServiceUnavailable) { Content = new StringContent("{}") };
         }), revokeTimeout: TimeSpan.FromMilliseconds(100));
 
-        var revoke = store.TryRevokeAsync("refresh", default);
+        var revoke = store.RevokeAsync("refresh", "account", default);
 
-        (await revoke.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(outcome == "ok");
+        (await revoke.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(
+            outcome == "ok" ? GoogleHealthRevocation.Revoked : GoogleHealthRevocation.Failed);
     }
 
     [Fact]
@@ -151,7 +257,7 @@ public class GoogleHealthSessionStoreTests : IDisposable
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => store.TryRevokeAsync("refresh", cancellation.Token).WaitAsync(TimeSpan.FromSeconds(5)));
+            () => store.RevokeAsync("refresh", "account", cancellation.Token).WaitAsync(TimeSpan.FromSeconds(5)));
     }
 
     private sealed class RecordingHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond)
