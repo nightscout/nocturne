@@ -73,6 +73,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
         private const string RawIsf =
             "CASE WHEN jsonb_typeof(e->'Value') = 'number' THEN (e->'Value')::numeric BETWEEN 0.5 AND 22.2 ELSE false END";
 
+        private const string IsfUnder9 =
+            "CASE WHEN jsonb_typeof(e->'Value') = 'number' THEN (e->'Value')::numeric < 9 ELSE false END";
+
         private static string AsArray(string json) =>
             $"CASE WHEN jsonb_typeof({json}) = 'array' THEN {json} ELSE '[]'::jsonb END";
 
@@ -115,17 +118,19 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
         /// <summary>
         /// A live ISF schedule that may still be raw: a value at 0.5 to 22.2, no mg/dL owner without a mmol
-        /// one, and a store with no live target schedule or one still holding a raw-band target. A correct
-        /// ISF of 9 to 22 mg/dL/U sits beside converted targets and is not one.
+        /// one, and not proven converted. Only its own batch proves that: a store whose every live target
+        /// schedule has the ISF's <c>timestamp</c> and no raw-band target. A V4 edit can retime and correct
+        /// a target schedule, leaving its ISF raw, so targets of another <c>timestamp</c> prove nothing.
         /// </summary>
         private static string MaybeRawIsf(string si) => $"""
             ({AnyRaw($"{si}.entries_json", RawIsf)}
              AND NOT ({MgdlOwner(si)} AND NOT {MmolOwner(si)})
-             AND (NOT EXISTS (SELECT 1 FROM target_range_schedules x
+             AND NOT (EXISTS (SELECT 1 FROM target_range_schedules x
                               WHERE x.tenant_id = t.id AND x.deleted_at IS NULL AND {SameStore("x", si)})
-                  OR EXISTS (SELECT 1 FROM target_range_schedules x
-                             WHERE x.tenant_id = t.id AND x.deleted_at IS NULL AND {SameStore("x", si)}
-                               AND {AnyRaw("x.entries_json", AnyRawTarget)})))
+                      AND NOT EXISTS (SELECT 1 FROM target_range_schedules x
+                                      WHERE x.tenant_id = t.id AND x.deleted_at IS NULL AND {SameStore("x", si)}
+                                        AND (x.timestamp IS DISTINCT FROM {si}.timestamp
+                                             OR {AnyRaw("x.entries_json", AnyRawTarget)}))))
             """;
 
         private static readonly string RepairSql = $$"""
@@ -327,6 +332,16 @@ namespace Nocturne.Infrastructure.Data.Migrations
                       AND {{MaybeRawIsf("si")}};
                     IF left_over IS NOT NULL THEN
                         RAISE NOTICE 'tenant %: sensitivity_schedules without a mg/dL owner still holding an ISF at 0.5 to 22.2 beside raw targets or none: %', t.id, left_over;
+                    END IF;
+
+                    SELECT string_agg(si.id::text, ', ') INTO left_over
+                    FROM sensitivity_schedules si
+                    WHERE si.tenant_id = t.id
+                      AND si.deleted_at IS NULL
+                      AND {{MmolOwner("si")}}
+                      AND {{AnyRaw("si.entries_json", IsfUnder9)}};
+                    IF left_over IS NOT NULL THEN
+                        RAISE NOTICE 'tenant %: mmol sensitivity_schedules holding an ISF under 9 mg/dL/U, whatever their targets: %', t.id, left_over;
                     END IF;
 
                     SELECT string_agg(p.id::text, ', ') INTO left_over

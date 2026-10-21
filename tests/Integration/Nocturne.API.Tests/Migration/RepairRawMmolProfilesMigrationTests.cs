@@ -126,7 +126,7 @@ public sealed class RepairRawMmolProfilesFixture : IAsyncLifetime
             await Execute(conn, $"""
                 INSERT INTO target_range_schedules
                   (id, tenant_id, timestamp, profile_name, entries_json, legacy_id, correlation_id, sys_created_at, sys_updated_at, deleted_at)
-                VALUES ('{store.TargetId}', '{store.Tenant}', '{timestamp:O}', '{store.Name}', '{store.Targets}'::jsonb,
+                VALUES ('{store.TargetId}', '{store.Tenant}', '{store.TargetTimestamp ?? timestamp:O}', '{store.Name}', '{store.Targets}'::jsonb,
                    {Key(store.LegacyId)}, {correlation}, '{Seeded:O}', '{targetUpdated:O}', {deleted});
                 """);
             Rows.Add((store.TargetId, store.Tenant, "target_range_schedules", store.Targets, targetUpdated));
@@ -183,7 +183,8 @@ public class RepairRawMmolProfilesTests : IClassFixture<RepairRawMmolProfilesFix
     internal sealed record Store(
         string Key, Guid Tenant, string Name, string Units, string? LegacyId, Guid? Correlation,
         string? Targets, string? Sensitivity, DateTime? IsfUpdated = null, bool Deleted = false,
-        DateTime? IsfTimestamp = null, DateTime? TargetUpdated = null, bool Owner = true, DateTime? Timestamp = null)
+        DateTime? IsfTimestamp = null, DateTime? TargetUpdated = null, bool Owner = true, DateTime? Timestamp = null,
+        DateTime? TargetTimestamp = null)
     {
         public Guid TargetId { get; } = Guid.CreateVersion7();
         public Guid SensitivityId { get; } = Guid.CreateVersion7();
@@ -273,6 +274,10 @@ public class RepairRawMmolProfilesTests : IClassFixture<RepairRawMmolProfilesFix
         new("raw store beside a newer converted isf", TenantA, "Corrected", "mmol", "d1:Corrected", null, RawTargets, RawIsf),
         new("newer converted mmol store with isf 15", TenantA, "Corrected", "mmol", "d2:Corrected", null, CorrectTargets, V(15),
             Timestamp: Seeded.AddDays(1)),
+        new("raw store beside a store whose targets were retimed", TenantA, "Retimed", "mmol", "d1:Retimed", null, RawTargets, RawIsf),
+        new("store with targets edited later beside its raw isf", TenantA, "Retimed", "mmol", "d2:Retimed", null, T((100, 110)), V(3.0),
+            Timestamp: Seeded.AddDays(1), TargetTimestamp: Seeded.AddDays(2)),
+        new("mmol store with mg/dL targets and isf 5", TenantA, "Under9", "mmol", "docA:Under9", null, CorrectTargets, V(5)),
         new("raw store beside a newer mg/dL isf", TenantA, "Switched", "mmol", "d1:Switched", null, RawTargets, RawIsf),
         new("newer mg/dL store with isf 15", TenantA, "Switched", "mg/dl", "d2:Switched", null, CorrectTargets, V(15),
             Timestamp: Seeded.AddDays(1)),
@@ -473,6 +478,28 @@ public class RepairRawMmolProfilesTests : IClassFixture<RepairRawMmolProfilesFix
         ShouldBeLeftWhole(StoreOf("store beside an older orphan raw isf"));
         ShouldBeUntouched(StoreOf("older orphan raw isf").SensitivityId);
         ShouldBeReportedLeft(StoreOf("store beside an older orphan raw isf").TargetId);
+    }
+
+    /// <summary>
+    /// A V4 edit retimed and corrected the newer store's targets, so between its ISF's timestamp and theirs
+    /// the resolvers would read the older store's converted targets beside that ISF of 3.0 mg/dL/U.
+    /// </summary>
+    [Fact]
+    public void AStoreBesideAnIsfWhoseTargetsWereRetimed_IsLeftWhole_AndThatIsfIsReported()
+    {
+        var retimed = StoreOf("store with targets edited later beside its raw isf");
+        ShouldBeLeftWhole(StoreOf("raw store beside a store whose targets were retimed"));
+        ShouldBeLeftWhole(retimed);
+        _fixture.Notices.Should().Contain(n =>
+            n.Contains("still holding an ISF at 0.5 to 22.2") && n.Contains(retimed.SensitivityId.ToString()));
+    }
+
+    [Fact]
+    public void AMmolIsfUnder9_IsReportedWhateverItsTargets()
+    {
+        var store = StoreOf("mmol store with mg/dL targets and isf 5");
+        ShouldBeLeftWhole(store);
+        _fixture.Notices.Should().Contain(n => n.Contains("ISF under 9 mg/dL/U") && n.Contains(store.SensitivityId.ToString()));
     }
 
     [Fact]
