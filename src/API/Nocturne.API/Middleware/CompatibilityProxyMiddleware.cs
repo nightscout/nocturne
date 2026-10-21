@@ -6,6 +6,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Models.Compatibility;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Compatibility;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Middleware;
 

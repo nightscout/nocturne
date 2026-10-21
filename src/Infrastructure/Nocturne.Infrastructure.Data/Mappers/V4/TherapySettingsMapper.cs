@@ -37,6 +37,7 @@ public static class TherapySettingsMapper
                 : null,
             IsApnsProduction = model.IsAPNSProduction,
             IsDefault = model.IsDefault,
+            DocumentDefaultProfile = model.DocumentDefaultProfile,
             EnteredBy = model.EnteredBy,
             IsExternallyManaged = model.IsExternallyManaged,
             StartDate = model.StartDate,
@@ -70,6 +71,7 @@ public static class TherapySettingsMapper
             ),
             IsAPNSProduction = entity.IsApnsProduction,
             IsDefault = entity.IsDefault,
+            DocumentDefaultProfile = entity.DocumentDefaultProfile,
             EnteredBy = entity.EnteredBy,
             IsExternallyManaged = entity.IsExternallyManaged,
             StartDate = entity.StartDate,
@@ -104,5 +106,6 @@ public static class TherapySettingsMapper
         entity.EnteredBy = model.EnteredBy;
         entity.IsExternallyManaged = model.IsExternallyManaged;
         entity.StartDate = model.StartDate;
+        entity.DocumentDefaultProfile = model.DocumentDefaultProfile;
     }
 }

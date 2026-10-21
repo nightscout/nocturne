@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Alerts;
 

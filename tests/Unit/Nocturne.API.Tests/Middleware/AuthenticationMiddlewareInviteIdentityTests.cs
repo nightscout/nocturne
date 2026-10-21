@@ -100,7 +100,7 @@ public sealed class AuthenticationMiddlewareInviteIdentityTests
             .ReturnsAsync(inviteForThisTenant);
 
         var services = new ServiceCollection();
-        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         services.AddSingleton(memberService.Object);
         services.AddSingleton(inviteService.Object);
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext($"invite_identity_{Guid.NewGuid()}").AsFactory());

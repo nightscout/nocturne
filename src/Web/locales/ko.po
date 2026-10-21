@@ -27184,3 +27184,36 @@ msgstr ""
 #: src/routes/(authenticated)/oauth/consent/+page.svelte
 msgid "Approving sends access to <0/>"
 msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Unavailable member"
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "No recipient"
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Me"
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Member"
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "This channel has no recipient. Saving the rule sends it to you."
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "This person can no longer receive alerts on this site. Saving the rule sends this channel to you."
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Shown in this person's Nocturne notification centre."
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Recipient"
+msgstr ""

@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -14,6 +13,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;
 
@@ -28,10 +28,10 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// The service schedules itself to wake shortly after the configured wake time so that
 /// the full overnight window is available for analysis.
 /// </remarks>
-/// <seealso cref="ICompressionLowDetectionService"/>
-public class CompressionLowDetectionService : BackgroundService, ICompressionLowDetectionService
+/// <seealso cref="CompressionLowDetection"/>
+public class CompressionLowDetectionService : BackgroundService
 {
-    private const string AuditEndpoint = "service:compression-low-detection";
+    internal const string AuditEndpoint = "service:compression-low-detection";
 
     private readonly IServiceProvider _serviceProvider;
     private readonly ActiveTenantSnapshot _activeTenants;
@@ -211,7 +211,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
                 var detectionTimeLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, userTimeZone);
                 var lastNight = DateOnly.FromDateTime(detectionTimeLocal.AddDays(-1));
 
-                await DetectForNightInternalAsync(lastNight, scope.ServiceProvider, cancellationToken);
+                await DetectForNightAsync(lastNight, scope.ServiceProvider, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -220,31 +220,14 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         }
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Called from an API endpoint, the work runs in a scope of its own carrying the request's
-    /// tenant and history clamp, so a clamped member reads no more through it than the request may.
-    /// </remarks>
-    /// <param name="nightOf">The local calendar date whose overnight window should be analysed.</param>
+    /// <summary>
+    /// Detects and saves the compression lows of the night of <paramref name="nightOf"/> for the tenant
+    /// <paramref name="scopedProvider"/> reads as, and returns how many it saved.
+    /// </summary>
+    /// <param name="nightOf">The local calendar date whose overnight window is analysed.</param>
+    /// <param name="scopedProvider">A job scope from <see cref="TenantJobScope"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The number of compression-low suggestions created.</returns>
     public async Task<int> DetectForNightAsync(
-        DateOnly nightOf,
-        CancellationToken cancellationToken = default)
-    {
-        var requestServices = _serviceProvider.GetService<IHttpContextAccessor>()?.HttpContext?.RequestServices;
-        var requestTenant = requestServices?.GetService<ITenantAccessor>() is { IsResolved: true } accessor
-            ? accessor.Context
-            : null;
-        var requestClamped = requestServices?.GetService<ICategoryReadContext>()?.IsHistoryClamped == true;
-
-        await using var scope = TenantJobScope.Open(
-            _serviceProvider, requestTenant, AuditEndpoint, historyClamped: requestClamped);
-
-        return await DetectForNightInternalAsync(nightOf, scope.ServiceProvider, cancellationToken);
-    }
-
-    private async Task<int> DetectForNightInternalAsync(
         DateOnly nightOf,
         IServiceProvider scopedProvider,
         CancellationToken cancellationToken)

@@ -11,6 +11,10 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// </summary>
 public sealed class CategoryReadContext : ICategoryReadContext
 {
+    internal CategoryReadContext()
+    {
+    }
+
     public bool IsShare { get; private set; }
 
     public string? VisibleCategoriesCsv { get; private set; }
