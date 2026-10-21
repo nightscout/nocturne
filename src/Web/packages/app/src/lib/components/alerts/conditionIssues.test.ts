@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { conditionIssuesMessage } from "./conditionIssues.svelte";
+import { conditionIssuesMessage, storedConditionIssuesMessage } from "./conditionIssues.svelte";
 import type { RustValidationIssue } from "$api-clients";
 
 const rejected = (status: number, issues: RustValidationIssue[]) => ({
@@ -82,5 +82,20 @@ describe("conditionIssuesMessage", () => {
 
 	it("does not read a prototype key as a reason it has copy for", () => {
 		expect(conditionIssuesMessage(rejected(400, [issue("constructor")]))).toBeNull();
+	});
+});
+
+describe("storedConditionIssuesMessage", () => {
+	it("says nothing about a stored rule with no issues", () => {
+		expect(storedConditionIssuesMessage(undefined)).toBeNull();
+		expect(storedConditionIssuesMessage([])).toBeNull();
+	});
+
+	it("describes every issue, including ones it has no sentence for", () => {
+		expect(
+			storedConditionIssuesMessage([issue("field_missing", "value"), issue("constructor")])
+		).toBe(
+			"A condition is missing a setting it needs. Fill it in and save again. Part of this rule's conditions is malformed, so the rule may not alert as set. Edit its conditions and save it."
+		);
 	});
 });

@@ -64,6 +64,10 @@ public class AlertRulesControllerRearmTests
                 It.IsAny<string?>(), It.IsAny<StoredConditionTrees>()))
             .Returns((AlertConditionType _, string body, bool _, string? autoResolve, string? client, StoredConditionTrees _) =>
                 new ConditionUpdateCheck([], body, autoResolve, client, []));
+        validator
+            .Setup(v => v.Validate(
+                It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([]);
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(db),
             Mock.Of<IAlertReferenceService>(),

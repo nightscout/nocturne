@@ -27217,3 +27217,21 @@ msgstr "Shown in this person's Nocturne notification centre."
 #: src/lib/components/alerts/ChannelsSection.svelte
 msgid "Recipient"
 msgstr "Recipient"
+
+#: src/lib/components/alerts/AlertRuleRow.svelte
+msgid "Needs review"
+msgstr "Needs review"
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "Part of this rule's conditions is malformed, so the rule may not alert as set. Edit its conditions and save it."
+msgstr "Part of this rule's conditions is malformed, so the rule may not alert as set. Edit its conditions and save it."
+
+#. 0: needsReview
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "{0} alert rules need review."
+msgstr "{0} alert rules need review."
+
+#. 0: needsReview === 1 ? "1 alert rule needs review." \\: `${needsReview} alert rules need review.`
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "{0} An update changed or turned off rules set up in an older format, or their conditions may not alert as set. They are marked below."
+msgstr "{0} An update changed or turned off rules set up in an older format, or their conditions may not alert as set. They are marked below."
