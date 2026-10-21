@@ -234,6 +234,10 @@ function queryValue(value: string | string[] | undefined): string | undefined {
   return single || undefined;
 }
 
+function isApexHost(host: string, baseDomain: string): boolean {
+  return host.split(':')[0] === baseDomain.split(':')[0];
+}
+
 /** Resolve the tenant slug a host belongs to. A subdomain resolves to its slug;
  *  the apex domain resolves to `apexTenantSlug`, the tenant the API serves there
  *  (see `discoverApexTenant`). Returns null when the host is foreign or the apex
@@ -343,7 +347,7 @@ class SocketIOServer {
   async authorizeHandshake(socket: BridgeSocket, next: (err?: Error) => void): Promise<void> {
     try {
       const host = pickHandshakeHost(socket.handshake.headers);
-      const tenantSlug = resolveTenantSlug(host, this.baseDomain, this.apexTenantSlug);
+      const tenantSlug = await this.resolveTenant(host);
       if (!tenantSlug) {
         logger.warn(`Rejecting connection ${socket.id}: no resolvable tenant`);
         return next(new Error('tenant_unresolved'));
@@ -454,6 +458,7 @@ class SocketIOServer {
 
   /** Records an admission on the socket, for the rooms it joins. */
   private setGrant(socket: BridgeSocket, tenantSlug: string, grant: RealtimeGrant): void {
+    this.onTenantAdmitted(tenantSlug);
     socket.data.tenantSlug = tenantSlug;
     socket.data.pendingTenantSlug = undefined;
     socket.data.tenantRelay = grant.tenantRelay;
@@ -546,6 +551,7 @@ class SocketIOServer {
         ]);
         for (const collection of joined.refused) socket.leave(storageRoom(tenantSlug, collection));
         for (const collection of waiting.granted) socket.join(storageRoom(tenantSlug, collection));
+        if (waiting.granted.length > 0) this.onTenantAdmitted(tenantSlug);
 
         const collections = readmission.collections.filter((c) => !joined.refused.includes(c))
           .concat(waiting.granted);
@@ -869,6 +875,32 @@ class SocketIOServer {
     this.apexTenantSlug = slug;
   }
 
+  /** Called with the tenant of every socket the API admits, so the bridge can open a relay for a
+   *  tenant created since it last read the tenant list. */
+  onTenantAdmitted: (tenantSlug: string) => void = () => {};
+
+  /** Awaited when a connection arrives on the apex while the apex serves no tenant, before it is
+   *  refused: an install's first tenant is created after the bridge starts. */
+  onApexUnresolved: () => Promise<void> = async () => {};
+
+  private async resolveTenant(host: string | undefined): Promise<string | null> {
+    const slug = resolveTenantSlug(host, this.baseDomain, this.apexTenantSlug);
+    if (slug || !host || !isApexHost(host, this.baseDomain)) return slug;
+    await this.onApexUnresolved();
+    return resolveTenantSlug(host, this.baseDomain, this.apexTenantSlug);
+  }
+
+  /** Closes every socket bound to a tenant, in every namespace. */
+  disconnectTenant(tenantSlug: string): void {
+    for (const nsp of [this.io?.of('/'), this.storageNsp, this.alarmNsp]) {
+      for (const socket of nsp?.sockets.values() ?? []) {
+        if (socket.data.tenantSlug === tenantSlug || socket.data.pendingTenantSlug === tenantSlug) {
+          socket.disconnect(true);
+        }
+      }
+    }
+  }
+
   getIO(): BridgeServer | null {
     return this.io;
   }
@@ -882,9 +914,8 @@ class SocketIOServer {
    * Returns the slug, or null when the host resolves to no tenant. Exposed for
    * unit testing.
    */
-  resolveNamespaceTenant(socket: BridgeSocket): string | null {
-    const host = pickHandshakeHost(socket.handshake.headers);
-    return resolveTenantSlug(host, this.baseDomain, this.apexTenantSlug);
+  resolveNamespaceTenant(socket: BridgeSocket): Promise<string | null> {
+    return this.resolveTenant(pickHandshakeHost(socket.handshake.headers));
   }
 
   /**
@@ -967,7 +998,7 @@ class SocketIOServer {
     // Admit the socket unauthorized; the tenant is resolved for room routing
     // but no room is joined until `subscribe` succeeds.
     this.storageNsp.use(async (socket, next) => {
-      const tenantSlug = this.resolveNamespaceTenant(socket);
+      const tenantSlug = await this.resolveNamespaceTenant(socket);
       if (!tenantSlug) {
         logger.warn(`Rejecting /storage connection ${socket.id}: no resolvable tenant`);
         return next(new Error('tenant_unresolved'));
@@ -1053,6 +1084,7 @@ class SocketIOServer {
     }
     socket.data.tenantSlug = tenantSlug;
     socket.data.pendingTenantSlug = undefined;
+    if (authorized.length > 0) this.onTenantAdmitted(tenantSlug);
     socket.data.readmission = { kind: 'storage', accessToken, collections: authorized, unanswered };
     this.scheduleReadmission(
       socket, unanswered.length > 0 ? UNANSWERED_COLLECTION_RETRY_MS : ADMISSION_RECHECK_INTERVAL_MS);
@@ -1086,7 +1118,7 @@ class SocketIOServer {
     this.alarmNsp = this.io.of('/alarm');
 
     this.alarmNsp.use(async (socket, next) => {
-      const tenantSlug = this.resolveNamespaceTenant(socket);
+      const tenantSlug = await this.resolveNamespaceTenant(socket);
       if (!tenantSlug) {
         logger.warn(`Rejecting /alarm connection ${socket.id}: no resolvable tenant`);
         return next(new Error('tenant_unresolved'));
@@ -1162,6 +1194,7 @@ class SocketIOServer {
     socket.join(alarmRoom(tenantSlug));
     socket.data.tenantSlug = tenantSlug;
     socket.data.pendingTenantSlug = undefined;
+    this.onTenantAdmitted(tenantSlug);
     socket.data.readmission = { kind: 'alarm', accessToken };
     this.scheduleReadmission(socket, ADMISSION_RECHECK_INTERVAL_MS);
     logger.info(`/alarm client ${socket.id} subscribed for tenant ${tenantSlug}`);

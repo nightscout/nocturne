@@ -129,7 +129,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
             .Returns<IEnumerable<Entry>>(entries => entries);
         var controller = new EntriesController(
             service, documents.Object, Mock.Of<ICanonicalAlertEvaluator>(),
-            NullLogger<EntriesController>.Instance)
+            TimeProvider.System, NullLogger<EntriesController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

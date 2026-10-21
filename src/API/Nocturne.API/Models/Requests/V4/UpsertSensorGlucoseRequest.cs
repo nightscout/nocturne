@@ -80,6 +80,11 @@ public class UpsertSensorGlucoseRequest : IBulkUpsertRequest
     public double? Delta { get; set; }
 
     /// <summary>
+    /// Received signal strength the uploader reported for the reading
+    /// </summary>
+    public int? Rssi { get; set; }
+
+    /// <summary>
     /// Whether this glucose value is smoothed or unsmoothed.
     /// Accepted values: "Smoothed", "Unsmoothed". Case-insensitive. Null for unknown.
     /// </summary>

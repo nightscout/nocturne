@@ -7,7 +7,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Hubs;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Npgsql;
 using Xunit;
@@ -18,7 +20,7 @@ namespace Nocturne.API.Tests.Integration.Hubs;
 /// <summary>
 /// A hub connection stays open while the server-side records behind its credential stand, however
 /// short-lived the access token it connected with, and <see cref="HubConnectionRevalidator"/>
-/// closes it once they do not: a revoked grant or a removed member. Covers a credential presented
+/// closes it once they do not: a revoked grant, a removed member or a deactivated tenant. Covers a credential presented
 /// on the upgrade request and one presented in-band.
 /// </summary>
 [Trait("Category", "Integration")]
@@ -213,5 +215,37 @@ public class HubRevalidationIntegrationTests : ApiIntegrationTestBase
 
         await ShouldCloseAsync(upgradeClosed, "the upgrade credential's member was removed");
         await ShouldCloseAsync(inBandClosed, "the in-band credential's member was removed");
+    }
+
+    [Fact]
+    public async Task Every_connection_on_a_deactivated_tenant_closes_the_realtime_bridges_included()
+    {
+        var (grantId, _) = await SeedSecretAsync();
+        var memberClosed = ClosedAsync(await DataHubWithTokenAsync(AccessToken(grantId, TimeSpan.FromMinutes(15))));
+        var bridge = Hub("hubs/data");
+        await bridge.StartAsync();
+        var authorized = await bridge.InvokeAsync<JsonElement>("Authorize", new
+        {
+            client = "websocket-bridge",
+            secret = HashUtils.Sha256Hex(ApiIntegrationTestFixture.InstanceKey),
+        });
+        authorized.GetProperty("success").GetBoolean().Should().BeTrue();
+        var bridgeClosed = ClosedAsync(bridge);
+
+        using var scope = Fixture.Services.CreateScope();
+        var tenants = scope.ServiceProvider.GetRequiredService<ITenantService>();
+        var tenant = (await tenants.GetByIdAsync(_tenantId))!;
+        await tenants.UpdateAsync(_tenantId, tenant.DisplayName, isActive: false);
+        try
+        {
+            await RevalidateAsync();
+
+            await ShouldCloseAsync(memberClosed, "the member's tenant was deactivated");
+            await ShouldCloseAsync(bridgeClosed, "the bridge relays a tenant that was deactivated");
+        }
+        finally
+        {
+            await tenants.UpdateAsync(_tenantId, tenant.DisplayName, isActive: true);
+        }
     }
 }

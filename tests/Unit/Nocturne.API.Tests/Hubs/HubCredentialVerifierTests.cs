@@ -65,6 +65,7 @@ public class HubCredentialVerifierTests
         bool session = false)
     {
         await using var db = await _contexts.CreateDbContextAsync();
+        db.Tenants.Add(new TenantEntity { Id = Tenant, Slug = "default", DisplayName = "Default", IsActive = true });
         db.Subjects.Add(new SubjectEntity
         {
             Id = _subject, Name = "Member", IsActive = subjectActive, IsPlatformAdmin = platformAdmin,
@@ -327,6 +328,34 @@ public class HubCredentialVerifierTests
         _revokedTokens.Setup(r => r.IsRevokedAsync(jti.ToString(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         (await StillCoveredAsync(credential)).Should().BeFalse();
+    }
+
+    private HubAuthorization InstanceKeyCredential() =>
+        new(Tenant, new HashSet<string> { Scope.FullAccess }, HubCredentialKind.Subject, null, HistoryClamped: false)
+        {
+            Source = new HubCredentialSource(
+                AuthType.InstanceKey, null, null, new HashSet<string> { Scope.FullAccess }, false, null),
+        };
+
+    public static TheoryData<string> TenantRemovals => new() { "deactivated", "deleted" };
+
+    [Theory]
+    [MemberData(nameof(TenantRemovals))]
+    public async Task A_tenant_that_is_deactivated_or_deleted_withdraws_every_credential_on_it(string removal)
+    {
+        await SeedAsync();
+        var member = await AdmittedAsync(Credential(AuthType.OAuthAccessToken, _grant));
+        var instanceKey = await AdmittedAsync(InstanceKeyCredential());
+
+        await UpdateAsync(db =>
+        {
+            var tenant = db.Tenants.Single();
+            if (removal == "deleted") db.Tenants.Remove(tenant);
+            else tenant.IsActive = false;
+        });
+
+        (await StillCoveredAsync(member)).Should().BeFalse();
+        (await StillCoveredAsync(instanceKey)).Should().BeFalse();
     }
 
     [Fact]

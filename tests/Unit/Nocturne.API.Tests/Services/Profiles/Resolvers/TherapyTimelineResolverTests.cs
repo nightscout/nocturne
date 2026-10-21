@@ -15,7 +15,7 @@ public class TherapyTimelineResolverTests
     private const long Middle = (From + To) / 2;
 
     private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
-    private readonly Mock<IActiveProfileResolver> _activeProfile = new();
+    private readonly Mock<IActiveProfileResolver> _activeProfile = ActiveProfileResolverMock.WithDefault();
     private readonly TherapyTimelineResolver _sut;
 
     public TherapyTimelineResolverTests()

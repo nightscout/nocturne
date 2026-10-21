@@ -71,6 +71,12 @@ public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDevi
     public double? Delta { get; set; }
 
     /// <summary>
+    /// Received signal strength the uploader reported for the reading
+    /// </summary>
+    [Column("rssi")]
+    public int? Rssi { get; set; }
+
+    /// <summary>
     /// Whether this reading is smoothed or unsmoothed (enum stored as string). Null when unknown.
     /// </summary>
     [Column("glucose_processing")]

@@ -615,7 +615,8 @@ public class StatisticsController : ControllerBase
     private async Task<TargetRangeSchedule?> GetActiveTargetRangeScheduleAsync(CancellationToken ct)
     {
         var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var profileName = await _activeProfileResolver.GetActiveProfileNameAsync(nowMills, ct) ?? "Default";
+        var profileName = await _activeProfileResolver.GetActiveProfileNameAsync(nowMills, ct)
+            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
         return await _targetRangeScheduleRepository.GetActiveAtAsync(profileName, DateTime.UtcNow, ct);
     }
 
