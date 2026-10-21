@@ -70,8 +70,8 @@ public static class AuditedBulkDeleteExtensions
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
     };
 
-    /// <summary>What a <c>bulk_delete</c> summary row records in place of per-row snapshots.</summary>
-    private readonly record struct BulkDeleteSummary(int Count, string Scope);
+    /// <summary>What a <c>bulk_delete</c> or <c>allow_reimport</c> summary row records in place of per-row snapshots.</summary>
+    private readonly record struct BulkSummary(int Count, string Scope);
 
     /// <summary>
     /// Executes a bulk hard delete, snapshotting every removed row into <c>mutation_audit_log</c>.
@@ -346,12 +346,42 @@ public static class AuditedBulkDeleteExtensions
             : query;
 
     /// <summary>
-    /// Appends the one summary row a bulk soft delete records: the entity type, how many rows it
+    /// Clears <c>deleted_by_user</c> on the user tombstones among <paramref name="query"/>, so a resync
+    /// re-creates their records (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>),
+    /// and records one <c>allow_reimport</c> summary row for <paramref name="scope"/>. The rows stay
+    /// deleted.
+    /// </summary>
+    /// <returns>The number of tombstones released.</returns>
+    public static async Task<int> AuditedAllowReimportAsync<T>(
+        this NocturneDbContext context,
+        IQueryable<T> query,
+        IAuditContext? auditContext,
+        string scope,
+        CancellationToken ct = default) where T : class, ITenantScoped, ISoftDeletable
+        => await context.ExecuteInTransactionAsync(async token =>
+        {
+            var released = await query.UserTombstones(context).ExecuteUpdateAsync(
+                s => s.SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), false), token);
+            await WriteBulkSummaryAsync<T>(context, "allow_reimport", released, scope, auditContext, token);
+            return released;
+        }, ct: ct);
+
+    private static Task WriteBulkDeleteSummaryAsync<T>(
+        NocturneDbContext context,
+        int count,
+        string scope,
+        IAuditContext? auditContext,
+        CancellationToken ct)
+        => WriteBulkSummaryAsync<T>(context, "bulk_delete", count, scope, auditContext, ct);
+
+    /// <summary>
+    /// Appends the one summary row a bulk operation records: the entity type, how many rows it
     /// covered, the scope it was issued against, and the actor. <c>EntityId</c> is null — the row
     /// describes a set, not a record.
     /// </summary>
-    private static async Task WriteBulkDeleteSummaryAsync<T>(
+    private static async Task WriteBulkSummaryAsync<T>(
         NocturneDbContext context,
+        string action,
         int count,
         string scope,
         IAuditContext? auditContext,
@@ -365,8 +395,8 @@ public static class AuditedBulkDeleteExtensions
             auditContext,
             AuditEntityTypeName<T>(),
             null,
-            "bulk_delete",
-            JsonSerializer.Serialize(new BulkDeleteSummary(count, scope), JsonOptions),
+            action,
+            JsonSerializer.Serialize(new BulkSummary(count, scope), JsonOptions),
             DateTime.UtcNow));
 
         await context.SaveChangesAsync(ct);

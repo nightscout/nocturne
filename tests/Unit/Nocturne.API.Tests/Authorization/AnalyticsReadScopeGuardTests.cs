@@ -10,6 +10,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
@@ -359,9 +360,7 @@ public class AnalyticsReadScopeGuardTests
     {
         var entries = new Mock<IEntryService>();
         entries
-            .Setup(s => s.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new Entry { Mills = 1_000, Sgv = 120, Direction = "Flat" }]);
 
         var boluses = new Mock<IBolusRepository>();
@@ -852,5 +851,55 @@ public class AnalyticsReadScopeGuardTests
                 RoleSeeds.Permissions[RoleSeeds.Admin]),
             Scope.TenantSettings)
             .Should().BeTrue("an administrator must keep managing analytics collection");
+    }
+
+    // ── Multi-period statistics ─────────────────────────────────────────────────────────────
+
+    private static PeriodStatistics PeriodWithTreatments(int days) => new()
+    {
+        PeriodDays = days,
+        Analytics = new GlucoseAnalytics(),
+        TreatmentSummary = new TreatmentSummary(),
+        InsulinDelivery = new InsulinDeliveryStatistics(),
+        HasSufficientData = true,
+        EntryCount = 12,
+        TreatmentCount = 2,
+    };
+
+    private static MultiPeriodStatistics AllPeriodsWithTreatments() => new()
+    {
+        LastDay = PeriodWithTreatments(1),
+        Last3Days = PeriodWithTreatments(3),
+        LastWeek = PeriodWithTreatments(7),
+        LastMonth = PeriodWithTreatments(30),
+        Last90Days = PeriodWithTreatments(90),
+    };
+
+    [Fact]
+    public void MultiPeriod_GlucoseOnlyGrant_DropsTreatmentFieldsFromACopy()
+    {
+        var cached = AllPeriodsWithTreatments();
+
+        var redacted = StatisticsReadScopeGuard.Redact(cached, Granted(Scope.GlucoseRead));
+
+        var periods = new[] { redacted.LastDay, redacted.Last3Days, redacted.LastWeek, redacted.LastMonth, redacted.Last90Days };
+        periods.Should().OnlyContain(p =>
+            p.TreatmentSummary == null && p.InsulinDelivery == null && p.TreatmentCount == 0
+            && p.Analytics != null && p.EntryCount == 12 && p.HasSufficientData);
+        cached.LastDay.TreatmentSummary.Should().NotBeNull("the cached instance is shared by every reader");
+        cached.Last90Days.InsulinDelivery.Should().NotBeNull();
+        cached.LastWeek.TreatmentCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void MultiPeriod_TreatmentsGrant_KeepsTreatmentFields()
+    {
+        var cached = AllPeriodsWithTreatments();
+
+        var result = StatisticsReadScopeGuard.Redact(cached, Granted(Scope.GlucoseRead, Scope.TreatmentsReadWrite));
+
+        result.LastDay.TreatmentSummary.Should().NotBeNull();
+        result.LastDay.InsulinDelivery.Should().NotBeNull();
+        result.LastDay.TreatmentCount.Should().Be(2);
     }
 }

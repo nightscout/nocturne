@@ -4,6 +4,17 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models;
 
 /// <summary>
+/// The order a V3 search asks for: <c>sort=field</c> ascending or <c>sort$desc=field</c> descending.
+/// </summary>
+/// <param name="Field">The field named by the request, or <c>null</c> when it named none.</param>
+/// <param name="Descending">Whether the order is descending. Nightscout's default is ascending.</param>
+public sealed record V3Sort(string? Field, bool Descending)
+{
+    /// <summary>No field named, ascending: Nightscout's order when a request gives neither parameter.</summary>
+    public static V3Sort Default { get; } = new(null, false);
+}
+
+/// <summary>
 /// V3 API query parameters for filtering and field selection.
 /// Supports the Nightscout v3 query syntax including field projection, pagination, and filter criteria.
 /// </summary>
@@ -29,7 +40,7 @@ public class V3QueryParameters
     /// <summary>
     /// Sort field and direction
     /// </summary>
-    public string? Sort { get; set; }
+    public V3Sort Sort { get; set; } = V3Sort.Default;
 
     /// <summary>
     /// Filter criteria as JsonElement (legacy)

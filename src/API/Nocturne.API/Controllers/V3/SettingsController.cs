@@ -69,14 +69,13 @@ public class SettingsController : BaseV3Controller<Settings>
 
             // Convert V3 parameters to backend query for compatibility
             var findQuery = ConvertV3FilterToV1Find(parameters.Filter);
-            var reverseResults = ExtractSortDirection(parameters.Sort);
 
             // Get settings using existing backend with V3 parameters
             var settings = await _settings.GetSettingsWithAdvancedFilterAsync(
                 count: parameters.Limit,
                 skip: parameters.Offset,
                 findQuery: findQuery,
-                reverseResults: reverseResults,
+                reverseResults: parameters.Sort.Descending,
                 cancellationToken: cancellationToken
             );
 
@@ -151,7 +150,7 @@ public class SettingsController : BaseV3Controller<Settings>
             );
         }
 
-        var parameters = ParseV3QueryParameters(); // Apply field selection if specified
+        var parameters = ParseV3QueryParameters(readSort: false); // Apply field selection if specified
         var result = ApplyFieldSelection(new[] { settings }, parameters.Fields).First();
 
         _logger.LogDebug("Successfully returned settings with ID {Id}", id);

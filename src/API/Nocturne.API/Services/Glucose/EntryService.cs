@@ -141,23 +141,6 @@ public class EntryService : IEntryService
 
     /// <inheritdoc />
     public async Task<IEnumerable<Entry>> GetEntriesWithAdvancedFilterAsync(
-        string find,
-        int count,
-        int skip,
-        CancellationToken cancellationToken = default)
-    {
-        var query = new EntryQuery
-        {
-            Find = find,
-            Count = count,
-            Skip = skip
-        };
-
-        return await _store.QueryAsync(query, cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<Entry>> GetEntriesWithAdvancedFilterAsync(
         string? type,
         int count,
         int skip,
@@ -178,6 +161,11 @@ public class EntryService : IEntryService
 
         return await _store.QueryAsync(query, cancellationToken);
     }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<Entry>> QueryEntriesAsync(
+        EntryQuery query, CancellationToken cancellationToken = default) =>
+        await _store.QueryAsync(query, cancellationToken);
 
     /// <inheritdoc />
     /// <remarks>

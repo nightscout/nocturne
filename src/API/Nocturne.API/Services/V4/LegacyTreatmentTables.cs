@@ -27,7 +27,9 @@ internal sealed record LegacyTreatmentRepositories(
     IBolusCalculationRepository BolusCalculations
 );
 
-/// <summary>The time window, page size and provenance filter of one time-range projection read.</summary>
+/// <summary>
+/// The time window, page size, direction and provenance filter of one time-range projection read.
+/// </summary>
 /// <remarks>
 /// When <paramref name="NativeOnly"/> is <see langword="true"/>, records that mirror a legacy
 /// v1/v2/v3 write (<c>LegacyId</c> set) are dropped. Treatments have no legacy table left to double
@@ -38,7 +40,8 @@ internal readonly record struct LegacyTreatmentRange(
     DateTime? From,
     DateTime? To,
     int Limit,
-    bool NativeOnly
+    bool NativeOnly,
+    bool Descending
 );
 
 /// <summary>
@@ -83,7 +86,8 @@ internal interface ILegacyTreatmentTable
     string RecordType { get; }
 
     /// <summary>
-    /// A page of records within the requested window, newest first.
+    /// A page of records within the requested window: the newest <see cref="LegacyTreatmentRange.Limit"/>
+    /// newest first, or the oldest oldest first when <see cref="LegacyTreatmentRange.Descending"/> is false.
     /// </summary>
     /// <remarks>
     /// <see cref="LegacyTreatmentRange.NativeOnly"/> is honoured after the page is taken, so for a
@@ -288,8 +292,10 @@ internal sealed class LegacyStateSpanTable(
         if (range.NativeOnly)
             return [];
 
-        var spans = await InWindow(context, range.From, range.To)
-            .OrderByDescending(s => s.StartTimestamp)
+        var window = InWindow(context, range.From, range.To);
+        var spans = await (range.Descending
+                ? window.OrderByDescending(s => s.StartTimestamp)
+                : window.OrderBy(s => s.StartTimestamp))
             .ThenBy(s => s.Id)
             .Take(range.Limit)
             .ToListAsync(ct);
@@ -468,49 +474,49 @@ internal static class LegacyTreatmentTables
         new LegacyTreatmentTable<Bolus, BolusEntity>(
             (repositories, range, ct) => repositories.Boluses.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,
-                limit: range.Limit, offset: 0, descending: true, nativeOnly: range.NativeOnly, ct: ct),
+                limit: range.Limit, offset: 0, descending: range.Descending, nativeOnly: range.NativeOnly, ct: ct),
             r => r.LegacyId,
             c => c.Boluses, RecordType.Bolus, BolusMapper.ToDomainModel,
             (r, _) => ProjectCorrectionBolus(r)),
         new LegacyTreatmentTable<CarbIntake, CarbIntakeEntity>(
             (repositories, range, ct) => repositories.CarbIntakes.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,
-                limit: range.Limit, offset: 0, descending: true, nativeOnly: range.NativeOnly, ct: ct),
+                limit: range.Limit, offset: 0, descending: range.Descending, nativeOnly: range.NativeOnly, ct: ct),
             r => r.LegacyId,
             c => c.CarbIntakes, RecordType.CarbIntake, CarbIntakeMapper.ToDomainModel,
             (r, foods) => ProjectCarbCorrection(r, foods.For(r.Id))),
         new LegacyTreatmentTable<BGCheck, BGCheckEntity>(
             (repositories, range, ct) => repositories.BGChecks.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,
-                limit: range.Limit, offset: 0, descending: true, nativeOnly: range.NativeOnly, ct: ct),
+                limit: range.Limit, offset: 0, descending: range.Descending, nativeOnly: range.NativeOnly, ct: ct),
             r => r.LegacyId,
             c => c.BGChecks, RecordType.BGCheck, BGCheckMapper.ToDomainModel,
             (r, _) => ProjectBgCheck(r)),
         new LegacyTreatmentTable<Note, NoteEntity>(
             (repositories, range, ct) => repositories.Notes.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,
-                limit: range.Limit, offset: 0, descending: true, nativeOnly: range.NativeOnly, ct: ct),
+                limit: range.Limit, offset: 0, descending: range.Descending, nativeOnly: range.NativeOnly, ct: ct),
             r => r.LegacyId,
             c => c.Notes, RecordType.Note, NoteMapper.ToDomainModel,
             (r, _) => ProjectNote(r)),
         new LegacyTreatmentTable<DeviceEvent, DeviceEventEntity>(
             (repositories, range, ct) => repositories.DeviceEvents.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,
-                limit: range.Limit, offset: 0, descending: true, nativeOnly: range.NativeOnly, ct: ct),
+                limit: range.Limit, offset: 0, descending: range.Descending, nativeOnly: range.NativeOnly, ct: ct),
             r => r.LegacyId,
             c => c.DeviceEvents, RecordType.DeviceEvent, DeviceEventMapper.ToDomainModel,
             (r, _) => ProjectDeviceEvent(r)),
         new LegacyTreatmentTable<TempBasal, TempBasalEntity>(
             (repositories, range, ct) => repositories.TempBasals.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,
-                limit: range.Limit, offset: 0, descending: true, ct: ct),
+                limit: range.Limit, offset: 0, descending: range.Descending, ct: ct),
             r => r.LegacyId,
             c => c.TempBasals, RecordType.TempBasal, TempBasalMapper.ToDomainModel,
             (r, _) => TempBasalToTreatmentMapper.ToTreatment(r)),
         new LegacyTreatmentTable<BolusCalculation, BolusCalculationEntity>(
             (repositories, range, ct) => repositories.BolusCalculations.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,
-                limit: range.Limit, offset: 0, descending: true, ct: ct),
+                limit: range.Limit, offset: 0, descending: range.Descending, ct: ct),
             r => r.LegacyId,
             c => c.BolusCalculations, RecordType.BolusCalculation, BolusCalculationMapper.ToDomainModel,
             (r, _) => ProjectBolusCalculation(r)),

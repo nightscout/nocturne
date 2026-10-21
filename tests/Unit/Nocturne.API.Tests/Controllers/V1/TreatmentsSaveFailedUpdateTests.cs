@@ -137,7 +137,7 @@ public class TreatmentsSaveFailedUpdateTests
         _bolusRepo.Setup(r => r.GetByLegacyIdAsync(StoredId, It.IsAny<CancellationToken>())).ReturnsAsync(bolus);
         _carbIntakeRepo.Setup(r => r.GetByLegacyIdAsync(StoredId, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProjectedTreatmentsAsync(It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new Treatment { Id = bolus.Id.ToString() }, new Treatment { Id = carb.Id.ToString() }]);
         _decomposer
             .Setup(d => d.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -158,7 +158,7 @@ public class TreatmentsSaveFailedUpdateTests
     {
         var carb = StoreCarb();
         _projection
-            .SetupSequence(p => p.GetProjectedTreatmentsAsync(It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
+            .SetupSequence(p => p.GetProjectedTreatmentsAsync(It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new Treatment { Id = carb.Id.ToString() }])
             .ReturnsAsync([]);
 
@@ -194,7 +194,7 @@ public class TreatmentsSaveFailedUpdateTests
             .Setup(r => r.GetByLegacyIdAsync(StoredId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(carb);
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProjectedTreatmentsAsync(It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new Treatment { Id = carb.Id.ToString() }]);
         return carb;
     }

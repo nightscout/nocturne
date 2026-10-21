@@ -29,6 +29,10 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     /// </summary>
     public const string ProfileSwitchStoreMarker = "@@@@@";
 
+    /// <summary>Whether <paramref name="settings"/> is a profile-switch snapshot (see <see cref="ProfileSwitchStoreMarker"/>).</summary>
+    public static bool IsProfileSwitchSnapshot(TherapySettings settings) =>
+        settings.ProfileName.Contains(ProfileSwitchStoreMarker, StringComparison.Ordinal);
+
     /// <summary>
     /// The <c>_id</c> a row answers to as a legacy profile document: the part of its legacy id before
     /// the first colon, since a document fans out to one <c>"{_id}:{storeName}"</c> row per store; the

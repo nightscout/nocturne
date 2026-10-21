@@ -850,7 +850,6 @@ msgstr "Rollendetails und Berechtigungen aktualisieren."
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
 #: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 msgid "Name"
 msgstr "Name"
@@ -882,7 +881,7 @@ msgstr "Benutzerdefinierte Berechtigung"
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 #: src/routes/(authenticated)/tools/packing/list/+page.svelte
 #: src/routes/(authenticated)/tools/packing/list/+page.svelte
 msgid "Add"
@@ -2384,6 +2383,7 @@ msgid "You are about to permanently delete all data synchronized by this connect
 msgstr "Du bist dabei, alle von diesem Connector synchronisierten Daten dauerhaft zu löschen."
 
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "Delete All Data"
 msgstr "Alle Daten löschen"
 
@@ -2756,9 +2756,8 @@ msgstr "DELETE eingeben"
 msgid "<0/> Deleting..."
 msgstr "<0/> Wird gelöscht ..."
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "<0/> Delete All Data"
-msgstr "<0/> Alle Daten löschen"
+#~ msgid "<0/> Delete All Data"
+#~ msgstr "<0/> Alle Daten löschen"
 
 #: src/lib/components/connectors/ConnectorSetup.svelte
 msgid "Failed to load available connectors"
@@ -3598,7 +3597,7 @@ msgstr "Bolus"
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -3698,7 +3697,7 @@ msgstr "Kohlenhydrate (g)"
 
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "Glycemic Index"
 msgstr "Glykämischer Index"
 
@@ -3711,8 +3710,7 @@ msgstr "Portion"
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "Unit"
 msgstr "Einheit"
 
@@ -5008,9 +5006,7 @@ msgstr "Pronomen"
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/routes/(authenticated)/food/+page.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "Category"
 msgstr "Kategorie"
 
@@ -6169,12 +6165,9 @@ msgid "COB"
 msgstr "COB"
 
 #: src/lib/components/reports/RetrospectiveStats.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "g"
 msgstr "g"
 
@@ -7992,7 +7985,6 @@ msgstr "Portionsgröße"
 
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
 #: src/routes/(authenticated)/food/+page.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
 #: src/routes/(authenticated)/food/FoodListHeader.svelte
 msgid "GI"
 msgstr "GI"
@@ -8408,8 +8400,6 @@ msgid "{0} minor"
 msgstr "{0} gering"
 
 #: src/routes/(authenticated)/compatibility/+page.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "None"
 msgstr "Keine"
@@ -8603,43 +8593,36 @@ msgstr "Lebensmittel hinzufügen"
 #~ msgid "Tab through fields · ⌘+Enter to save and add another · Esc to close"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Per"
-msgstr "Pro"
+#~ msgid "Per"
+#~ msgstr "Pro"
 
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/settings/alarm-profile/AlarmAudioTab.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "Hide"
 msgstr "Ausblenden"
 
-#. 0: showDetails ? 'Hide' \\: 'Add'
-#: src/routes/(authenticated)/food/Composer.svelte
+#. 0: showDetails ? "Hide" \\: "Add"
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "<0/> {0} fat, protein, category..."
 msgstr "<0/> {0} Fett, Eiweiß, Kategorie..."
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Fat"
-msgstr "Fett"
+#~ msgid "Fat"
+#~ msgstr "Fett"
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Protein"
-msgstr "Eiweiß"
+#~ msgid "Protein"
+#~ msgstr "Eiweiß"
 
-#: src/routes/(authenticated)/food/Composer.svelte
 #: src/routes/(authenticated)/food/FoodListHeader.svelte
 msgid "Energy"
 msgstr "Energie"
 
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "kcal"
 msgstr "kcal"
 
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "Subcategory"
 msgstr "Unterkategorie"
 
@@ -8685,6 +8668,7 @@ msgstr "Lebensmittel gelöscht"
 msgid "Failed to delete food"
 msgstr "Lebensmittel konnte nicht gelöscht werden"
 
+#: src/routes/(authenticated)/food/FoodFields.svelte
 #: src/routes/(authenticated)/food/FoodListHeader.svelte
 msgid "Name <0/>"
 msgstr "Name <0/>"
@@ -8713,10 +8697,10 @@ msgstr "Aus Favoriten entfernen"
 msgid "Add to favorites"
 msgstr "Zu Favoriten hinzufügen"
 
+#. 0: draft.portion ?? 100; 1: draft.unit ?? "g"
 #. 0: food.portion ?? 0; 1: food.unit ?? 'g'
-#. 0: draft.portion ?? 100; 1: draft.unit ?? 'g'
+#: src/routes/(authenticated)/food/FoodFields.svelte
 #: src/routes/(authenticated)/food/FoodRow.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
 msgid "per {0} {1}"
 msgstr "pro {0} {1}"
 
@@ -8749,13 +8733,13 @@ msgstr "Löschen <0/>? <1/>"
 #~ msgid "auto"
 #~ msgstr "auto"
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "No category"
 msgstr "Keine Kategorie"
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "No subcategory"
 msgstr "Keine Unterkategorie"
 
@@ -20991,6 +20975,7 @@ msgid "Error Loading Test Report"
 msgstr ""
 
 #: src/lib/forms/FormField.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "(required)"
 msgstr ""
 
@@ -21037,17 +21022,14 @@ msgstr ""
 msgid "Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close"
 msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-msgid "Name <0/><1>(required)</1>"
-msgstr ""
+#~ msgid "Name <0/><1>(required)</1>"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-msgid "Carbs <0/><1>(required)</1>"
-msgstr ""
+#~ msgid "Carbs <0/><1>(required)</1>"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-msgid "Portion <0/><1>(required)</1>"
-msgstr ""
+#~ msgid "Portion <0/><1>(required)</1>"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Pump Modes"
@@ -23731,17 +23713,16 @@ msgstr ""
 msgid "<0/> Play Preview"
 msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "Fat <0>optional</0>"
 msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "Protein <0>optional</0>"
 msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-msgid "Energy <0>auto</0>"
-msgstr ""
+#~ msgid "Energy <0>auto</0>"
+#~ msgstr ""
 
 #. 0: rule.name
 #. 0: perm
@@ -27151,4 +27132,45 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Fills only between the glucose line and the target range when it is out of range."
+msgstr ""
+
+#: src/lib/components/audit/AuditMutationsTable.svelte
+#: src/lib/components/audit/AuditMutationsTable.svelte
+#: src/lib/components/connectors/ConnectorDangerZone.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Allow re-import"
+msgstr ""
+
+#: src/lib/components/audit/AuditMutationsTable.svelte
+msgid "Records released for re-import:"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectorDangerZone.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Delete and Allow Re-import"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectorDangerZone.svelte
+msgid "The connector stays enabled and imports this data again on its next sync, along with any of its records deleted earlier."
+msgstr ""
+
+#. 0: displayName
+#: src/lib/components/connectors/ConnectorDangerZone.svelte
+msgid "The connector is disabled, and deleted records are never imported again, even if {0} still has them."
+msgstr ""
+
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Records this source sends again are imported, including any of its records deleted earlier."
+msgstr ""
+
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Deleted records are never imported again, even if this source sends them."
+msgstr ""
+
+#: src/routes/(authenticated)/food/FoodFields.svelte
+msgid "Energy <0>optional</0>"
+msgstr ""
+
+#: src/routes/(authenticated)/food/FoodFields.svelte
+msgid "Portion <0/>"
 msgstr ""

@@ -6,6 +6,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -102,14 +103,9 @@ public class RetrospectiveController : ControllerBase
         var fromMills = time - (30 * 60 * 1000); // 30 minutes before
         var toMills = time + (5 * 60 * 1000);    // 5 minutes after
         var findQuery = $"{{\"mills\":{{\"$gte\":{fromMills},\"$lte\":{toMills}}}}}";
-        var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
-            type: "sgv",
-            count: 50,
-            skip: 0,
-            findQuery: findQuery,
-            dateString: null,
-            reverseResults: false,
-            cancellationToken: cancellationToken
+        var entries = await _entryService.QueryEntriesAsync(
+            new EntryQuery { Type = "sgv", Count = 50, Find = findQuery },
+            cancellationToken
         );
         var entryList = entries?.ToList() ?? new List<Entry>();
         _logger.LogDebug("GetRetrospectiveData: Found {Count} entries for time {Time} (range: {From} to {To})",

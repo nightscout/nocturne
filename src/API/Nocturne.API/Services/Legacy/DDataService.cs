@@ -121,25 +121,12 @@ public class DDataService : IDDataService
     {
         var ddata = await GetDDataAsync(timestamp, cancellationToken);
 
-        // Clone profiles and filter out temporary profile switches (containing "@@@@@")
-        var profiles =
-            JsonSerializer.Deserialize<List<Profile>>(JsonSerializer.Serialize(ddata.Profiles))
-            ?? new();
-        if (profiles.Count > 0 && profiles[0].Store != null)
-        {
-            var keysToRemove = profiles[0].Store.Keys.Where(k => k.Contains("@@@@@")).ToList();
-            foreach (var key in keysToRemove)
-            {
-                profiles[0].Store.Remove(key);
-            }
-        }
-
         return new DDataResponse
         {
             DeviceStatus = GetRecentDeviceStatus(ddata.DeviceStatus, timestamp),
             Sgvs = ddata.Sgvs,
             Cals = ddata.Cals,
-            Profiles = profiles,
+            Profiles = ddata.Profiles,
             Mbgs = ddata.Mbgs,
             Food = ddata.Food,
             Treatments = ddata.Treatments,

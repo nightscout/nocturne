@@ -135,7 +135,7 @@ public class V3FoodProfileIdentifierTests
     public async Task ProfileSearch_ServesTheIdentifier()
     {
         _profiles
-            .Setup(p => p.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([Profile(ObjectId)]);
         _profiles
             .Setup(p => p.CountProfilesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))

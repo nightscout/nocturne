@@ -65,19 +65,12 @@ public class FoodController : BaseV3Controller<Food>
             );
             var type = typeFilter?.Value?.ToString();
 
-            // Determine sort direction from sort$desc query parameter
-            // Nightscout V3: sort$desc=field means descending (newest first)
-            // reverseResults=false means descending, reverseResults=true means ascending
-            var hasSortDesc = HttpContext?.Request.Query.ContainsKey("sort$desc") ?? false;
-            var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
-
             // Get all food records - we'll apply V3 filtering in memory
             var foodRecords = await _foods.GetFoodWithAdvancedFilterAsync(
                 count: int.MaxValue, // Get all, filter later
                 skip: 0,
                 findQuery: null,
                 type: type,
-                reverseResults: reverseResults,
                 cancellationToken: cancellationToken
             );
 
@@ -85,6 +78,7 @@ public class FoodController : BaseV3Controller<Food>
 
             // Apply V3 filter criteria
             foodList = ApplyV3FilterCriteria(foodList, parameters.FilterCriteria);
+            foodList = OrderFood(foodList, parameters.Sort);
 
             // Get total count before pagination
             var totalCount = foodList.Count;
@@ -112,11 +106,6 @@ public class FoodController : BaseV3Controller<Food>
                 totalCount,
                 lastModified
             );
-        }
-        catch (V3ParameterOutOfToleranceException ex)
-        {
-            _logger.LogWarning(ex, "V3 parameter out of tolerance: {Parameter}", ex.ParameterName);
-            return CreateV3ErrorResponse(400, $"Parameter {ex.ParameterName} out of tolerance");
         }
         catch (ArgumentException ex)
         {
@@ -169,6 +158,55 @@ public class FoodController : BaseV3Controller<Food>
     /// <summary>
     /// Apply V3 filter criteria to a list of food records
     /// </summary>
+    private static readonly IReadOnlyDictionary<string, Func<Food, object?>> SortKeys =
+        new Dictionary<string, Func<Food, object?>>
+        {
+            ["name"] = f => f.Name,
+            ["category"] = f => f.Category,
+            ["subcategory"] = f => f.Subcategory,
+            ["type"] = f => f.Type,
+            ["unit"] = f => f.Unit,
+            ["portion"] = f => f.Portion,
+            ["carbs"] = f => f.Carbs,
+            ["fat"] = f => f.Fat,
+            ["protein"] = f => f.Protein,
+            ["energy"] = f => f.Energy,
+            ["gi"] = f => f.Gi,
+            ["position"] = f => f.Position,
+            ["created_at"] = f => f.CreatedAt,
+            ["srvModified"] = f => f.SrvModified,
+            ["srvCreated"] = f => f.SrvCreated,
+        };
+
+    /// <summary>
+    /// Orders the filtered foods by the sort field when it is one of <see cref="SortKeys"/>, and by
+    /// name otherwise, breaking ties by name then identifier in the same direction.
+    /// </summary>
+    private static List<Food> OrderFood(List<Food> foods, V3Sort sort)
+    {
+        var key = SortKeys.GetValueOrDefault(sort.Field ?? string.Empty, SortKeys["name"]);
+        var comparer = Comparer<object?>.Create(CompareSortKeys);
+
+        return (sort.Descending
+                ? foods.OrderByDescending(key, comparer)
+                    .ThenByDescending(f => f.Name, StringComparer.Ordinal)
+                    .ThenByDescending(f => f.Id, StringComparer.Ordinal)
+                : foods.OrderBy(key, comparer)
+                    .ThenBy(f => f.Name, StringComparer.Ordinal)
+                    .ThenBy(f => f.Id, StringComparer.Ordinal))
+            .ToList();
+    }
+
+    private static int CompareSortKeys(object? left, object? right) =>
+        (left, right) switch
+        {
+            (null, null) => 0,
+            (null, _) => -1,
+            (_, null) => 1,
+            (string a, string b) => string.CompareOrdinal(a, b),
+            _ => ((IComparable)left).CompareTo(right),
+        };
+
     private List<Food> ApplyV3FilterCriteria(List<Food> foods, List<V3FilterCriteria> criteria)
     {
         if (criteria == null || criteria.Count == 0)
@@ -304,7 +342,7 @@ public class FoodController : BaseV3Controller<Food>
             );
         }
 
-        var parameters = ParseV3QueryParameters(); // Apply field selection if specified
+        var parameters = ParseV3QueryParameters(readSort: false); // Apply field selection if specified
         var result = ApplyFieldSelection(new[] { ToV3Document(food, food.Id) }, parameters.Fields)
             .FirstOrDefault();
 

@@ -6,9 +6,13 @@ import { page as pageState } from "$app/state";
 import type { DataSourceInfo } from "$api-clients";
 
 let deleteImpl: () => Promise<unknown>;
+let deleteArgs: unknown[];
 
 vi.mock("$api/generated/services.generated.remote", () => ({
-  deleteDataSourceData: () => deleteImpl(),
+  deleteDataSourceData: (args: unknown) => {
+    deleteArgs.push(args);
+    return deleteImpl();
+  },
 }));
 
 import DataSourceManageDialog from "./DataSourceManageDialog.svelte";
@@ -34,7 +38,31 @@ async function attemptDelete() {
 describe("DataSourceManageDialog", () => {
   beforeEach(() => {
     deleteImpl = () => Promise.resolve({ success: true, totalDeleted: 1 });
+    deleteArgs = [];
     pageState.data = { effectivePermissions: ["tenant.settings"] };
+  });
+
+  it("deletes without allowing re-import by default", async () => {
+    await attemptDelete();
+
+    await expect.poll(() => deleteArgs).toEqual([
+      { id: dataSource.id, allowReimport: false },
+    ]);
+  });
+
+  it("allows re-import when the option is checked", async () => {
+    render(DataSourceManageDialog, {
+      props: { open: true, selectedDataSource: dataSource },
+    });
+
+    await page.getByRole("button", { name: "Delete Data..." }).click();
+    await page.getByRole("checkbox", { name: /Allow re-import/ }).click();
+    await page.getByRole("textbox").fill("DELETE");
+    await page.getByRole("button", { name: "Delete and Allow Re-import" }).click();
+
+    await expect.poll(() => deleteArgs).toEqual([
+      { id: dataSource.id, allowReimport: true },
+    ]);
   });
 
   it("hides the delete control from a member without tenant.settings", async () => {

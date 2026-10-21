@@ -15,13 +15,15 @@ public interface IV4ToLegacyProjectionService
     /// Returns a set of legacy <see cref="Treatment"/> objects synthesised from V4 treatment records
     /// (Bolus, CarbIntake, BGCheck, Note, DeviceEvent).
     /// These supplement the treatments already stored in the legacy treatments table for connectors
-    /// that write V4 directly.
+    /// that write V4 directly. The newest <paramref name="limit"/> treatments in the window newest
+    /// first, or, when <paramref name="descending"/> is <c>false</c>, the oldest oldest first.
     /// </summary>
     Task<IEnumerable<Treatment>> GetProjectedTreatmentsAsync(
         long? fromMills,
         long? toMills,
         int limit,
         bool nativeOnly = true,
+        bool descending = true,
         CancellationToken ct = default
     );
 

@@ -56,22 +56,8 @@ public interface ITreatmentService
     /// <param name="cancellationToken">Cancellation token</param>
     Task<bool> IsTreatmentDeletedByUserAsync(string id, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get treatments with advanced V3-style filtering, including StateSpan-derived temp basals.
-    /// </summary>
-    /// <param name="count">Maximum number of treatments to return.</param>
-    /// <param name="skip">Number of treatments to skip for pagination.</param>
-    /// <param name="findQuery">Optional MongoDB-style query filter string.</param>
-    /// <param name="reverseResults">When <c>true</c>, results are returned in ascending chronological order.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Collection of treatments matching the filter criteria.</returns>
-    Task<IEnumerable<Treatment>> GetTreatmentsWithAdvancedFilterAsync(
-        int count,
-        int skip,
-        string? findQuery,
-        bool reverseResults,
-        CancellationToken cancellationToken = default
-    );
+    /// <summary>Treatments matching <paramref name="query"/>, in the order it asks for.</summary>
+    Task<IEnumerable<Treatment>> QueryTreatmentsAsync(TreatmentQuery query, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Returns treatments whose <see cref="Treatment.Mills"/> falls within

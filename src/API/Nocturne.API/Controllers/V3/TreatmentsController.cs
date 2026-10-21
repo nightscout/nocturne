@@ -79,19 +79,16 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
                 ?? ConvertV3FilterToV1Find(parameters.Filter);
 
-            // Determine sort direction from sort$desc query parameter
-            // Nightscout V3: sort$desc=field means descending (newest first)
-            // reverseResults=false means descending, reverseResults=true means ascending
-            var hasSortDesc = HttpContext?.Request.Query.ContainsKey("sort$desc") ?? false;
-            var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
-
-            // Get treatments using existing backend with V3 parameters
-            var treatments = await _treatmentService.GetTreatmentsWithAdvancedFilterAsync(
-                count: parameters.Limit,
-                skip: parameters.Offset,
-                findQuery: findQuery,
-                reverseResults: reverseResults,
-                cancellationToken: cancellationToken
+            var treatments = await _treatmentService.QueryTreatmentsAsync(
+                new TreatmentQuery
+                {
+                    Find = findQuery,
+                    Count = parameters.Limit,
+                    Skip = parameters.Offset,
+                    ReverseResults = !parameters.Sort.Descending,
+                    SortField = ReadSortFieldOf(parameters.Sort),
+                },
+                cancellationToken
             );
 
             var treatmentsList = treatments.ToList();

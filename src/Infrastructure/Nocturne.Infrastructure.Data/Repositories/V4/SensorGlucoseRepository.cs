@@ -45,15 +45,30 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(
+    public Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit = 100, int offset = 0, bool descending = true, bool nativeOnly = false,
         DateTime? afterTimestamp = null, Guid? afterId = null,
-        CancellationToken ct = default, Guid? patientDeviceId = null)
+        CancellationToken ct = default, Guid? patientDeviceId = null) =>
+        ReadForEntriesAsync(from, to, device, source, limit, offset, descending, nativeOnly,
+            afterTimestamp, afterId, patientDeviceId, orderByValue: false, ct);
+
+    /// <inheritdoc />
+    public Task<IEnumerable<SensorGlucose>> GetForEntriesByValueAsync(
+        DateTime? from, DateTime? to, string? source, int limit, int offset, bool descending,
+        CancellationToken ct = default) =>
+        ReadForEntriesAsync(from, to, device: null, source, limit, offset, descending, nativeOnly: false,
+            afterTimestamp: null, afterId: null, patientDeviceId: null, orderByValue: true, ct);
+
+    private async Task<IEnumerable<SensorGlucose>> ReadForEntriesAsync(
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit, int offset, bool descending, bool nativeOnly,
+        DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
+        bool orderByValue, CancellationToken ct)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
-                descending, nativeOnly, afterTimestamp, afterId, patientDeviceId)
+                descending, nativeOnly, afterTimestamp, afterId, patientDeviceId, orderByValue)
             .Select(e => new SensorGlucose
             {
                 Id = e.Id,
@@ -228,7 +243,8 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     private IQueryable<SensorGlucoseEntity> BuildReadQuery(
         NocturneDbContext ctx, DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending, bool nativeOnly,
-        DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId)
+        DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
+        bool orderByValue = false)
     {
         var query = ctx.SensorGlucose.AsNoTracking().AsQueryable();
         if (from.HasValue)
@@ -257,9 +273,13 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
                     || (e.Timestamp == afterTimestamp.Value && e.Id > afterId.Value));
         }
 
-        query = descending
-            ? query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
-            : query.OrderBy(e => e.Timestamp).ThenBy(e => e.Id);
+        query = (orderByValue, descending) switch
+        {
+            (true, true) => query.OrderByDescending(e => e.Mgdl).ThenByDescending(e => e.Timestamp).ThenByDescending(e => e.Id),
+            (true, false) => query.OrderBy(e => e.Mgdl).ThenBy(e => e.Timestamp).ThenBy(e => e.Id),
+            (false, true) => query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id),
+            (false, false) => query.OrderBy(e => e.Timestamp).ThenBy(e => e.Id),
+        };
 
         if (!afterTimestamp.HasValue || !afterId.HasValue)
         {

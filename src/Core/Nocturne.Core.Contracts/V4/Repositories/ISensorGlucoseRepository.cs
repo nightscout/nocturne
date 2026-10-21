@@ -78,6 +78,14 @@ public interface ISensorGlucoseRepository
         DateTime? afterTimestamp = null, Guid? afterId = null,
         CancellationToken ct = default, Guid? patientDeviceId = null);
 
+    /// <summary>
+    /// <see cref="GetForEntriesAsync"/> ordered by the reading's value, then by time in the same
+    /// direction, so a page is the lowest or highest readings rather than the oldest or newest.
+    /// </summary>
+    Task<IEnumerable<SensorGlucose>> GetForEntriesByValueAsync(
+        DateTime? from, DateTime? to, string? source, int limit, int offset, bool descending,
+        CancellationToken ct = default);
+
     /// <summary>Retrieve all <see cref="SensorGlucose"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records.</param>
     /// <param name="ct">Cancellation token.</param>

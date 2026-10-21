@@ -77,17 +77,21 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         long? toMills,
         int limit,
         bool nativeOnly = true,
+        bool descending = true,
         CancellationToken ct = default
     )
     {
         await using var db = await _contexts.CreateAsync(ct);
         var range = new LegacyTreatmentRange(
-            MillsToDateTime(fromMills), MillsToDateTime(toMills), limit, nativeOnly);
+            MillsToDateTime(fromMills), MillsToDateTime(toMills), limit, nativeOnly, descending);
 
         var rows = await FetchAsync(table => table.InRangeAsync(_repositories, db, range, ct));
         var treatments = await AssembleAsync(db, rows, ct);
 
-        return treatments.OrderByDescending(t => t.Mills).Take(limit);
+        return (descending
+                ? treatments.OrderByDescending(t => t.Mills)
+                : treatments.OrderBy(t => t.Mills))
+            .Take(limit);
     }
 
     /// <inheritdoc />

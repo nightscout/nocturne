@@ -890,6 +890,7 @@ public class DataSourceService : IDataSourceService
     /// <inheritdoc />
     public async Task<DataSourceDeleteResult> DeleteConnectorDataAsync(
         string connectorId,
+        bool allowReimport = false,
         CancellationToken cancellationToken = default
     )
     {
@@ -917,12 +918,21 @@ public class DataSourceService : IDataSourceService
                 deviceId
             );
 
+            var reEnable = allowReimport
+                && (await _connectorConfiguration.GetConfigurationAsync(connectorId, cancellationToken))?.IsActive == true;
+
             // Disable the connector before purging so a scheduled or in-flight sync cannot
             // re-import the data we are about to delete.
             await _connectorConfiguration.SetActiveAsync(
                 connectorId, isActive: false, _auditContext.SubjectName, cancellationToken);
 
-            var deletedCounts = await DeleteAllSourceDataAsync(db, deviceId, cancellationToken);
+            var deletedCounts = await DeleteAllSourceDataAsync(db, deviceId, allowReimport, cancellationToken);
+
+            // With nothing of the source left stored, the connector's next sync imports its
+            // history from the start.
+            if (reEnable)
+                await _connectorConfiguration.SetActiveAsync(
+                    connectorId, isActive: true, _auditContext.SubjectName, cancellationToken);
 
             _logger.LogInformation(
                 "Deleted data for connector {ConnectorId} (device {DeviceId}): {DeletedCounts}",
@@ -966,6 +976,7 @@ public class DataSourceService : IDataSourceService
     private async Task<Dictionary<string, long>> DeleteAllSourceDataAsync(
         NocturneDbContext db,
         string source,
+        bool allowReimport,
         CancellationToken cancellationToken
     )
     {
@@ -998,6 +1009,9 @@ public class DataSourceService : IDataSourceService
         var stateSpansDeleted = await db.AuditedSoftDeleteAsync(
             db.StateSpans.Where(s => s.Source == source), _auditContext, scope, cancellationToken);
 
+        if (allowReimport)
+            await AllowSourceReimportAsync(db, source, scope, cancellationToken);
+
         var deletedCounts = new Dictionary<string, long>();
         if (sensorGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.Glucose)] = sensorGlucoseDeleted;
         if (meterGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.ManualBG)] = meterGlucoseDeleted;
@@ -1013,6 +1027,32 @@ public class DataSourceService : IDataSourceService
         if (stateSpansDeleted > 0) deletedCounts[nameof(SyncDataType.StateSpans)] = stateSpansDeleted;
 
         return deletedCounts;
+    }
+
+    /// <summary>
+    /// Releases every user tombstone <paramref name="source"/> produced, including those of earlier
+    /// deletes, so the source can send its records again.
+    /// </summary>
+    private async Task AllowSourceReimportAsync(NocturneDbContext db, string source, string scope, CancellationToken ct)
+    {
+        await db.AuditedAllowReimportAsync(db.SensorGlucose.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.MeterGlucose.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.Calibrations.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.Boluses.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.CarbIntakes.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.BolusCalculations.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.DeviceEvents.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.BGChecks.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.Notes.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.ApsSnapshots.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.TempBasals.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.TherapySettings.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.BasalSchedules.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.CarbRatioSchedules.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.SensitivitySchedules.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.TargetRangeSchedules.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(
+            db.StateSpans.Where(s => s.Source == source), _auditContext, scope, ct);
     }
 
     internal static string GenerateId(string deviceId) => $"ds-{HashUtils.Sha256Hex(deviceId)[..8]}";
@@ -1037,6 +1077,7 @@ public class DataSourceService : IDataSourceService
     /// <inheritdoc />
     public async Task<DataSourceDeleteResult> DeleteDataSourceDataAsync(
         string dataSourceId,
+        bool allowReimport = false,
         CancellationToken cancellationToken = default
     )
     {
@@ -1061,7 +1102,7 @@ public class DataSourceService : IDataSourceService
 
             var deviceId = source.DeviceId;
 
-            var deletedCounts = await DeleteAllSourceDataAsync(db, deviceId, cancellationToken);
+            var deletedCounts = await DeleteAllSourceDataAsync(db, deviceId, allowReimport, cancellationToken);
 
             _logger.LogInformation(
                 "Deleted data for {DeviceId}: {DeletedCounts}",

@@ -1,8 +1,8 @@
 ﻿{
-  StatusCode: 500,
+  StatusCode: 400,
   ContentType: application/json; charset=utf-8,
   Body: {
-    status: 500,
-    message: Internal server error
+    status: 400,
+    message: Parameter limit out of tolerance
   }
 }

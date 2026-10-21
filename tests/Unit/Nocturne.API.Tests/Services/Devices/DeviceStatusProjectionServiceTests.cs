@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -51,7 +52,7 @@ public class DeviceStatusProjectionServiceTests
         _groupRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
 
         _pumpRepo
@@ -550,7 +551,45 @@ public class DeviceStatusProjectionServiceTests
     {
         await _service.GetAsync(2, 1, null, CancellationToken.None);
 
-        _groupRepo.Verify(r => r.GetAsync(null, null, null, 2, 1, It.IsAny<CancellationToken>()), Times.Once);
+        _groupRepo.Verify(r => r.GetAsync(null, null, null, 2, 1, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetAsync_Ascending_PagesFromTheOldestEndOfTheRepository()
+    {
+        await _service.GetAsync(2, 1, """{"device":"openaps://rpi"}""", CancellationToken.None, descending: false);
+
+        _groupRepo.Verify(r => r.GetAsync(null, null, "openaps://rpi", 2, 1, false, It.IsAny<CancellationToken>()), Times.Once);
+        _groupRepo.Verify(
+            r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetAsync_SrvModifiedAfterACursor_PagesByStampAndNeverReadsTheTimeOrderedPage()
+    {
+        var stamps = Enumerable.Range(1, 3).Select(i => ReferenceTime.AddMinutes(i)).ToList();
+        var groups = stamps
+            .Select(stamp => new DeviceStatusGroup(
+                CreateApsSnapshot(AidAlgorithm.AndroidAps), null, null, null, stamp))
+            .ToList();
+        _groupRepo
+            .Setup(r => r.GetModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long cursor, int _, CancellationToken _) => groups
+                .Where(g => new DateTimeOffset(g.ModifiedAt).ToUnixTimeMilliseconds() > cursor)
+                .Select(g => new HistoryRecord<DeviceStatusGroup>(g, false))
+                .ToList());
+
+        var result = (await _service.GetAsync(
+            2, 1, $"find[srvModified][$gt]={ReferenceMillis}", CancellationToken.None,
+            descending: false, sort: ReadSortField.SrvModified)).ToList();
+
+        result.Select(r => r.SrvModified).Should().Equal(
+            new DateTimeOffset(stamps[1]).ToUnixTimeMilliseconds(),
+            new DateTimeOffset(stamps[2]).ToUnixTimeMilliseconds());
+        _groupRepo.Verify(
+            r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -558,7 +597,7 @@ public class DeviceStatusProjectionServiceTests
     {
         await _service.GetAsync(10, 0, """{"device":"openaps://rpi"}""", CancellationToken.None);
 
-        _groupRepo.Verify(r => r.GetAsync(null, null, "openaps://rpi", 10, 0, It.IsAny<CancellationToken>()), Times.Once);
+        _groupRepo.Verify(r => r.GetAsync(null, null, "openaps://rpi", 10, 0, true, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -571,7 +610,7 @@ public class DeviceStatusProjectionServiceTests
             """{"created_at":{"$gte":"2024-01-15T00:00:00Z","$lt":"2024-01-16T00:00:00Z"}}""",
             CancellationToken.None);
 
-        _groupRepo.Verify(r => r.GetAsync(expectedFrom, expectedTo, null, 10, 0, It.IsAny<CancellationToken>()), Times.Once);
+        _groupRepo.Verify(r => r.GetAsync(expectedFrom, expectedTo, null, 10, 0, true, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     #endregion
@@ -661,7 +700,7 @@ public class DeviceStatusProjectionServiceTests
         _groupRepo.Verify(r => r.GetAsync(
             new DateTime(2024, 1, 15, 0, 0, 0, 1, DateTimeKind.Utc),
             new DateTime(2024, 1, 15, 23, 59, 59, 999, 999, DateTimeKind.Utc),
-            null, 10, 0, It.IsAny<CancellationToken>()), Times.Once);
+            null, 10, 0, true, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -677,7 +716,7 @@ public class DeviceStatusProjectionServiceTests
         matches.Should().ContainSingle();
         _groupRepo.Verify(r => r.GetAsync(
             null, ReferenceTime.AddTicks(TimeSpan.TicksPerMillisecond - TimeSpan.TicksPerMicrosecond),
-            null, 10, 0, It.IsAny<CancellationToken>()), Times.Once);
+            null, 10, 0, true, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -686,7 +725,7 @@ public class DeviceStatusProjectionServiceTests
         await _service.GetMatchingAsync(
             DeviceStatusProjectionService.ParseFind("find[device]=openaps://rpi"), 2, 1, CancellationToken.None);
 
-        _groupRepo.Verify(r => r.GetAsync(null, null, "openaps://rpi", 2, 1, It.IsAny<CancellationToken>()), Times.Once);
+        _groupRepo.Verify(r => r.GetAsync(null, null, "openaps://rpi", 2, 1, true, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -698,7 +737,7 @@ public class DeviceStatusProjectionServiceTests
 
         (await _service.GetMatchingAsync(DeviceStatusProjectionService.ParseFind(find), 10, 0, CancellationToken.None))
             .Should().BeEmpty();
-        _groupRepo.Verify(r => r.GetAsync(null, null, null, It.IsAny<int>(), 0, It.IsAny<CancellationToken>()), Times.Once);
+        _groupRepo.Verify(r => r.GetAsync(null, null, null, It.IsAny<int>(), 0, true, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -719,7 +758,7 @@ public class DeviceStatusProjectionServiceTests
             .Should().BeEmpty();
         _groupRepo.Verify(r => r.GetAsync(
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -769,8 +808,8 @@ public class DeviceStatusProjectionServiceTests
         _groupRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((DateTime? _, DateTime? _, string? _, int limit, int offset, CancellationToken _) =>
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? _, DateTime? _, string? _, int limit, int offset, bool _, CancellationToken _) =>
             {
                 var page = stored.Skip(offset).Take(limit).ToArray();
                 read += page.Length;
@@ -1120,7 +1159,7 @@ public class DeviceStatusProjectionServiceTests
         _groupRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(groups);
 
     private void ReturnOverrides(params StateSpan[] spans) =>
