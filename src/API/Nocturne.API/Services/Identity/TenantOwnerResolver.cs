@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Identity;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Identity;
@@ -8,9 +8,9 @@ namespace Nocturne.API.Services.Identity;
 /// <inheritdoc cref="ITenantOwnerResolver"/>
 public class TenantOwnerResolver : ITenantOwnerResolver
 {
-    private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
 
-    public TenantOwnerResolver(IDbContextFactory<NocturneDbContext> contextFactory)
+    public TenantOwnerResolver(INocturneDbContextFactory contextFactory)
     {
         _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
     }
@@ -23,7 +23,7 @@ public class TenantOwnerResolver : ITenantOwnerResolver
         // Pinned to the tenant asked about: the callers are background services
         // (metadata publishing, compression-low detection, share-link notifications) with no
         // ambient tenant, so the context carries no pin of its own.
-        await using var context = await _contextFactory.CreateTenantPinnedContextAsync(
+        await using var context = await _contextFactory.CreateForTenantAsync(
             tenantId, cancellationToken);
 
         var ownerSubjectId = await context.TenantMembers.AsNoTracking()

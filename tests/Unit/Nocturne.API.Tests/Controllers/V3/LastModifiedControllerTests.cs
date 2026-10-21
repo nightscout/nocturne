@@ -32,10 +32,10 @@ public class LastModifiedControllerTests
         };
     }
 
-    private static JsonElement CaptureBody(IActionResult result)
+    private static JsonElement CaptureBody(ActionResult<V3Envelope<V3LastModifiedResult>> result)
     {
-        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
-        return JsonSerializer.SerializeToElement(ok.Value);
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        return JsonSerializer.SerializeToElement(ok.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
     }
 
     [Fact]

@@ -184,4 +184,45 @@ public class TreatmentReadServiceFindFilterTests
 
         count.Should().Be(2);
     }
+
+    [Theory]
+    [InlineData("find[eventType]=/bolus/i")]
+    [InlineData("find[enteredBy]=/XDRIP/i")]
+    [InlineData("find[notes]=/lunch/i")]
+    public async Task QueryAsync_BareRegexLiteralOnATreatmentField_MatchesAsARegex(string find)
+    {
+        SetupProjection(
+            new Treatment { Id = "1", Mills = 3000, EventType = "Meal Bolus", EnteredBy = "xdrip", Notes = "Lunch" },
+            new Treatment { Id = "2", Mills = 2000, EventType = "Correction Bolus", EnteredBy = "xdrip-2", Notes = "lunch fix" },
+            new Treatment { Id = "3", Mills = 1000, EventType = "Note", EnteredBy = "Loop", Notes = "walk" });
+
+        var result = await _service.QueryAsync(new TreatmentQuery { Find = find, Count = 10 });
+
+        result.Select(t => t.Id).Should().Equal("1", "2");
+    }
+
+    [Fact]
+    public async Task QueryAsync_BareRegexLiteralOnAnotherField_StaysLiteral()
+    {
+        SetupProjection(
+            new Treatment { Id = "1", Mills = 2000, EventType = "Meal Bolus", Insulin = 2 },
+            new Treatment { Id = "2", Mills = 1000, EventType = "Note", Insulin = 3 });
+
+        var result = await _service.QueryAsync(new TreatmentQuery { Find = "find[insulin]=/2/", Count = 10 });
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CountAsync_BareRegexLiteralOnEventType_CountsRegexMatches()
+    {
+        SetupProjection(
+            new Treatment { Id = "1", Mills = 3000, EventType = "Meal Bolus" },
+            new Treatment { Id = "2", Mills = 2000, EventType = "Correction Bolus" },
+            new Treatment { Id = "3", Mills = 1000, EventType = "Note" });
+
+        var count = await _service.CountAsync("find[eventType]=/bolus/i");
+
+        count.Should().Be(2);
+    }
 }

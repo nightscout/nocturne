@@ -16,6 +16,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Configuration;
@@ -42,7 +43,7 @@ public partial class SetupController : ControllerBase
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly ISessionService _sessionService;
     private readonly ISubjectService _subjectService;
-    private readonly IDbContextFactory<NocturneDbContext> _dbFactory;
+    private readonly INocturneDbContextFactory _dbFactory;
     private readonly OidcOptions _oidcOptions;
     private readonly IOidcAuthService _oidcAuthService;
     private readonly OperatorConfiguration _operatorConfig;
@@ -57,7 +58,7 @@ public partial class SetupController : ControllerBase
         IRecoveryCodeService recoveryCodeService,
         ISessionService sessionService,
         ISubjectService subjectService,
-        IDbContextFactory<NocturneDbContext> dbFactory,
+        INocturneDbContextFactory dbFactory,
         IOptions<OidcOptions> oidcOptions,
         IOidcAuthService oidcAuthService,
         IOptions<OperatorConfiguration> operatorConfig,
@@ -145,7 +146,7 @@ public partial class SetupController : ControllerBase
         if (ReservedUsernames.Contains(normalized))
             return Ok(new SlugValidationResult(false, "This username is reserved"));
 
-        await using var context = await _dbFactory.CreateDbContextAsync(ct);
+        await using var context = await _dbFactory.CreatePlatformAsync(ct);
 
         var tenant = await context.Tenants.AsNoTracking().ExcludeDemo().FirstOrDefaultAsync(ct);
         if (tenant == null)
@@ -476,7 +477,7 @@ public partial class SetupController : ControllerBase
     /// </remarks>
     private async Task<(TenantEntity? Tenant, IActionResult? Error)> GetSoleTenantWithoutOwnerAsync(CancellationToken ct)
     {
-        await using var context = await _dbFactory.CreateDbContextAsync(ct);
+        await using var context = await _dbFactory.CreatePlatformAsync(ct);
 
         var tenants = await context.Tenants.ExcludeDemo().Take(2).ToListAsync(ct);
 
@@ -518,9 +519,7 @@ public partial class SetupController : ControllerBase
     /// </summary>
     private async Task<Guid?> FindSetupOwnerSubjectIdAsync(TenantEntity tenant, CancellationToken ct)
     {
-        await using var context = await _dbFactory.CreateDbContextAsync(ct);
-
-        await context.PinTenantAsync(tenant.Id, ct);
+        await using var context = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
 
         return await SetupOwnerSubjects(context)
             .AsNoTracking()
@@ -537,9 +536,7 @@ public partial class SetupController : ControllerBase
     private async Task<Guid> EnsureOwnerSubjectAsync(
         TenantEntity tenant, string displayName, string username, CancellationToken ct)
     {
-        await using var context = await _dbFactory.CreateDbContextAsync(ct);
-
-        await context.PinTenantAsync(tenant.Id, ct);
+        await using var context = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
 
         var existingSubject = await SetupOwnerSubjects(context).FirstOrDefaultAsync(ct);
 
@@ -582,8 +579,7 @@ public partial class SetupController : ControllerBase
         }
 
         // Set per-tenant username on the membership
-        await using var memberCtx = await _dbFactory.CreateDbContextAsync(ct);
-        await memberCtx.PinTenantAsync(tenant.Id, ct);
+        await using var memberCtx = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
         var membership = await memberCtx.TenantMembers
             .FirstOrDefaultAsync(m => m.TenantId == tenant.Id && m.SubjectId == subjectId, ct);
         if (membership != null)

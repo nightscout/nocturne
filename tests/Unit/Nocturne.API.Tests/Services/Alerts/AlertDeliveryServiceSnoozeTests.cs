@@ -76,7 +76,7 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
         _providers.Add(provider);
 
         return new AlertDeliveryService(
-            _factory,
+            _factory.AsNocturneFactory(),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             _broadcast.Object,
             provider,

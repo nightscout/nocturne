@@ -258,6 +258,7 @@ wire_enum! {
         Travel = "Travel",
         DataExclusion = "DataExclusion",
         TemporaryTarget = "TemporaryTarget",
+        Motion = "Motion",
     }
 }
 

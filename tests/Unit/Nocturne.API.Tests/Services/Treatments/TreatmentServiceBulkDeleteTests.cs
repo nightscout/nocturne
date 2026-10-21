@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -109,5 +110,46 @@ public class TreatmentServiceBulkDeleteTests
 
         deleted.Should().Be(0);
         _cache.Verify(c => c.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteTreatmentsAsync_BareRegexLiteralOnEventType_DeletesExactlyTheRegexMatches()
+    {
+        var projection = new Mock<IV4ToLegacyProjectionService>();
+        projection
+            .Setup(p => p.GetProjectedTreatmentsAsync(
+                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Treatment>
+            {
+                new() { Id = "note-1", Mills = 3000, EventType = "Note" },
+                new() { Id = "bolus-1", Mills = 2000, EventType = "Meal Bolus" },
+                new() { Id = "note-2", Mills = 1000, EventType = "NOTE" },
+            });
+        var readService = new TreatmentReadService(
+            projection.Object,
+            new Mock<ITreatmentDecomposer>().Object,
+            new Mock<IDecompositionPipeline>().Object,
+            new Mock<ITempBasalRepository>().Object,
+            new Mock<IBolusRepository>().Object,
+            new Mock<ICarbIntakeRepository>().Object,
+            new Mock<IBGCheckRepository>().Object,
+            new Mock<INoteRepository>().Object,
+            new Mock<IDeviceEventRepository>().Object,
+            new Mock<IBolusCalculationRepository>().Object,
+            Mock.Of<IStateSpanService>(),
+            NullLogger<TreatmentReadService>.Instance);
+        _store
+            .Setup(s => s.QueryAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()))
+            .Returns((TreatmentQuery q, CancellationToken ct) => readService.QueryAsync(q, ct));
+        _store
+            .Setup(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TreatmentDeletion(null));
+
+        var deleted = await _service.DeleteTreatmentsAsync("find[eventType]=/note/i");
+
+        deleted.Should().Be(2);
+        _store.Verify(s => s.DeleteAsync("note-1", It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(s => s.DeleteAsync("note-2", It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(s => s.DeleteAsync("bolus-1", It.IsAny<CancellationToken>()), Times.Never);
     }
 }

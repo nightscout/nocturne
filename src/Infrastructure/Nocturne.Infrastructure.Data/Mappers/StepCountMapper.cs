@@ -39,6 +39,7 @@ public static class StepCountMapper
         {
             Id = entity.OriginalId ?? entity.Id.ToString(),
             Timestamp = entity.Timestamp,
+            CreatedAt = MapperHelpers.CreatedAtFromReading(entity.Timestamp),
             Metric = entity.Metric,
             Source = entity.Source,
             Type = entity.Type,

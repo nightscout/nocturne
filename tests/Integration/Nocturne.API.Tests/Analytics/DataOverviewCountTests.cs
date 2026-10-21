@@ -76,7 +76,7 @@ public class DataOverviewCountTests(ApiIntegrationTestFixture fixture, ITestOutp
         await SeedAsync(otherTenant, [timestamp], "vendor-a");
         await WithTenantScopeAsync(async services =>
         {
-            await using var context = await services.GetRequiredService<ITenantDbContextFactory>().CreateAsync();
+            await using var context = await services.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
             var duplicateId = Guid.NewGuid();
             context.Notes.AddRange(
                 new NoteEntity { Id = duplicateId, Timestamp = timestamp, DataSource = "vendor-a" },
@@ -133,7 +133,7 @@ public class DataOverviewCountTests(ApiIntegrationTestFixture fixture, ITestOutp
         using var scope = Fixture.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
             new TenantContext(tenant, "counts", "Counts", true, false));
-        await using var context = await scope.ServiceProvider.GetRequiredService<ITenantDbContextFactory>().CreateAsync();
+        await using var context = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
         foreach (var timestamp in timestamps)
         {
             context.Notes.Add(new NoteEntity { Id = Guid.NewGuid(), Timestamp = timestamp, DataSource = source });

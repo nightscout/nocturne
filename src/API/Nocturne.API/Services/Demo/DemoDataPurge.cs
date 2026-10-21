@@ -2,6 +2,8 @@ using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Nocturne.API.Services.Demo;
 
@@ -31,8 +33,7 @@ internal static class DemoDataPurge
     }
 
     /// <summary>
-    /// Treatments the demo service wrote: boluses, carbs, BG checks, notes, device events, bolus
-    /// calculations, temp basals and state spans.
+    /// Treatments and compression-low review data the demo service wrote.
     /// </summary>
     public static async Task<long> PurgeTreatmentsAsync(NocturneDbContext db, CancellationToken ct)
     {
@@ -43,8 +44,39 @@ internal static class DemoDataPurge
         deleted += await db.DeviceEvents.PurgeAsync(SourceFilter.For<DeviceEventEntity>(DataSources.DemoService), ct);
         deleted += await db.BolusCalculations.PurgeAsync(SourceFilter.For<BolusCalculationEntity>(DataSources.DemoService), ct);
         deleted += await db.TempBasals.PurgeAsync(SourceFilter.For<TempBasalEntity>(DataSources.DemoService), ct);
-        deleted += await db.StateSpans.PurgeAsync(s => s.Source == DataSources.DemoService, ct);
+        var demoAcceptedSpanIds = (await db.StateSpans
+                .Where(s => s.Source == "compression-low-detection" && s.MetadataJson != null)
+                .Select(s => new { s.Id, s.MetadataJson })
+                .ToListAsync(ct))
+            .Where(span => HasDemoSeedMarker(span.MetadataJson))
+            .Select(span => span.Id)
+            .ToArray();
+        deleted += await db.StateSpans.PurgeAsync(
+            s => s.Source == DataSources.DemoService || demoAcceptedSpanIds.Contains(s.Id), ct);
+        deleted += await db.CompressionLowSuggestions.PurgeAsync(
+            s => s.DataSource == DataSources.DemoService, ct);
+        deleted += await db.LabHbA1cResults
+            .Where(result => result.Note == "Demo lab result")
+            .ExecuteUpdateAsync(update => update.SetProperty(
+                result => result.DeletedAt, DateTime.UtcNow), ct);
         return deleted;
+    }
+
+    private static bool HasDemoSeedMarker(string? metadata)
+    {
+        if (string.IsNullOrWhiteSpace(metadata))
+            return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(metadata);
+            return document.RootElement.TryGetProperty("DemoSeed", out var marker)
+                && marker.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     /// <summary>APS snapshots the demo service wrote.</summary>

@@ -167,7 +167,7 @@ public class RecentTreatmentRepublishTests : IDisposable
 
     private TreatmentPublisher NewPublisher()
     {
-        var ctxFactory = new TestTenantDbContextFactory(_context);
+        var ctxFactory = new TestNocturneDbContextFactory(_context);
         var audit = Mock.Of<IAuditContext>();
         var dedup = Mock.Of<IDeduplicationService>();
         var bolus = new BolusRepository(ctxFactory, dedup, audit, NullLogger<BolusRepository>.Instance);

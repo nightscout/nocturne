@@ -27,7 +27,10 @@
   } from "$lib/api/generated/nocturne-api-client";
   import type { SyncRequestInput } from "$lib/api/generated/schemas";
   import type { ConnectorStatusWithDescription } from "./ServerConnectorsCard.svelte";
-  import { formatNumber, lastSeen } from "$lib/utils/formatting";
+  import {
+    formatNumber,
+    lastSeen,
+  } from "$lib/utils/formatting";
   import { SkippedRecordsNote } from "$lib/components/shared";
 
   interface Props {
@@ -272,7 +275,13 @@
 
           <div class="space-y-3">
             <div class="flex items-center justify-between">
-              <span class="text-sm text-muted-foreground">Total records</span>
+              <span class="text-sm text-muted-foreground">
+                {#if selectedConnector.totalEntriesWindowDays == null}
+                  Records in total
+                {:else}
+                  Records in the last {selectedConnector.totalEntriesWindowDays} days
+                {/if}
+              </span>
               <Tooltip.Root>
                 <Tooltip.Trigger variant="term">
                   <span class="font-mono font-medium">

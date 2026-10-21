@@ -35,7 +35,7 @@ public class AlertRulesControllerConditionValidationTests
             .Options;
         var ctx = new NocturneDbContext(options) { TenantId = Tenant };
         var controller = new AlertRulesController(
-            new TestTenantDbContextFactory(ctx),
+            new TestNocturneDbContextFactory(ctx),
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),

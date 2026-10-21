@@ -16,7 +16,7 @@ namespace Nocturne.API.Tests.Multitenancy;
 
 /// <summary>
 /// The request scope <see cref="TenantResolutionMiddleware"/> runs in: a SQLite-backed context
-/// factory, the scoped context the middleware pins the tenant onto, and the accessors downstream
+/// factory, a scoped context that reads the scope's accessors live, and the accessors downstream
 /// services read.
 /// </summary>
 /// <remarks>
@@ -35,6 +35,9 @@ public abstract class TenantResolutionMiddlewareTestBase : IDisposable
         _db.AddToServices(services);
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        services.AddScoped(sp => new NocturneDbContext(_db.Options).ReadingFrom(
+            sp.GetRequiredService<ITenantAccessor>(), sp.GetRequiredService<ICategoryReadContext>()));
+        services.AddTransient(sp => sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory());
         services.AddSingleton<ShareTokenCacheService>();
         services.AddMemoryCache();
         services.AddLogging();

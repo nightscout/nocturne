@@ -29,7 +29,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Route("api/v4/alert-invites")]
 public class AlertInvitesController : ControllerBase
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly ILogger<AlertInvitesController> _logger;
 
     /// <summary>
@@ -38,7 +38,7 @@ public class AlertInvitesController : ControllerBase
     /// <param name="contextFactory">Tenant-scoped factory for creating <see cref="NocturneDbContext"/> instances.</param>
     /// <param name="logger">Logger instance.</param>
     public AlertInvitesController(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         ILogger<AlertInvitesController> logger)
     {
         _contextFactory = contextFactory;
@@ -114,7 +114,7 @@ public class AlertInvitesController : ControllerBase
     [ProducesResponseType(typeof(AlertInviteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status410Gone)]
-    public async Task<ActionResult<AlertInviteResponse>> ValidateInvite(string token, CancellationToken ct)
+    public async Task<ActionResult<AlertInviteResponse>> ValidateInvite([CredentialRouteValue] string token, CancellationToken ct)
     {
         await using var db = await _contextFactory.CreateAsync(ct);
 
@@ -153,7 +153,7 @@ public class AlertInvitesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status410Gone)]
-    public async Task<ActionResult> RedeemInvite(string token, CancellationToken ct)
+    public async Task<ActionResult> RedeemInvite([CredentialRouteValue] string token, CancellationToken ct)
     {
         await using var db = await _contextFactory.CreateAsync(ct);
 

@@ -49,7 +49,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(_dbName));
 
         _publicAccess = new PublicAccessCacheService(
-            new MemoryCache(new MemoryCacheOptions()), factory.Object, NullLogger<PublicAccessCacheService>.Instance);
+            new MemoryCache(new MemoryCacheOptions()), factory.Object.AsNocturneFactory(), NullLogger<PublicAccessCacheService>.Instance);
     }
 
     private AuthenticationMiddleware Build(params IAuthHandler[] handlers) =>

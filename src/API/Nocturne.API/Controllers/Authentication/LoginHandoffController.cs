@@ -18,7 +18,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// the tenant host the code belongs to.
 /// </summary>
 /// <remarks>
-/// The request-scoped context is pinned to the tenant the host resolved to, and a login code is
+/// The request-scoped context reads the tenant the host resolved to, and a login code is
 /// tenant-scoped, so a code minted for one tenant is not visible here on another's host and fails
 /// like any unknown code.
 /// </remarks>

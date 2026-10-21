@@ -28,7 +28,7 @@ public class DataOverviewServiceTests : IDisposable
     private readonly DataOverviewService _service;
     private readonly Mock<ICacheService> _cacheService = new();
     private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
-    private readonly Mock<ITenantDbContextFactory> _factory = new();
+    private readonly Mock<INocturneDbContextFactory> _factory = new();
     private readonly CategoryReadContext _categoryReadContext = new();
     private readonly ListLogger<DataOverviewService> _logger = new();
     private IInterceptor[] _interceptors = [];
@@ -53,7 +53,7 @@ public class DataOverviewServiceTests : IDisposable
     {
         // Seed via a long-lived context; the service leases its own contexts from the factory.
         // Both share the same named InMemory store and tenant, so the service sees seeded data —
-        // mirroring production, where the service queries through ITenantDbContextFactory.
+        // mirroring production, where the service queries through INocturneDbContextFactory.
         _dbContext = TestDbContextFactory.CreateInMemoryContext(_dbName);
         _dbContext.TenantId = TenantId;
 
@@ -1659,19 +1659,13 @@ public class DataOverviewServiceTests : IDisposable
 
     [Theory]
     [Trait("Category", "Unit")]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task GetEHbA1cTimelineAsync_HistoryClamped_NeitherReadsNorWritesTheCache(bool share)
+    [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
+    public async Task GetEHbA1cTimelineAsync_BypassingCaller_NeitherReadsNorWritesTheCache(string caller)
     {
-        // The cache holds a full-history timeline an unclamped reader loaded; a clamped reader
-        // must not be served it, nor leave its own narrowed timeline for the next reader.
         _cacheService
             .Setup(c => c.GetAsync<EHbA1cTimelineResponse>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new EHbA1cTimelineResponse { Year = 2024 });
-        if (share)
-            _categoryReadContext.MarkShare();
-        else
-            _categoryReadContext.ClampMemberHistory();
+        CacheBypassingCallers.Become(_categoryReadContext, caller);
 
         await _service.GetEHbA1cTimelineAsync(2024);
 

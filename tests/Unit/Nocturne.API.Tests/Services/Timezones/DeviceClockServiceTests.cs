@@ -29,6 +29,7 @@ public class DeviceClockServiceTests : IDisposable
     public DeviceClockServiceTests()
     {
         _db = TestDbContextFactory.CreateInMemoryContext();
+        _db.TenantId = _tenantId;
 
         var accessor = new Mock<ITenantAccessor>();
         accessor.SetupGet(a => a.Context)

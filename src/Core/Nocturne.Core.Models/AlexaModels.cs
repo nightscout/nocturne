@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Nocturne.Core.Models;
 
 /// <summary>
@@ -129,6 +131,58 @@ public class AlexaSlot
     /// Slot value
     /// </summary>
     public string Value { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Entity resolution Alexa attaches when the utterance matched the interaction model
+    /// </summary>
+    public AlexaSlotResolutions? Resolutions { get; set; }
+}
+
+/// <summary>
+/// Alexa slot resolutions, one entry per authority
+/// </summary>
+public class AlexaSlotResolutions
+{
+    public List<AlexaResolutionAuthority> ResolutionsPerAuthority { get; set; } = new();
+}
+
+/// <summary>
+/// Alexa slot resolution from a single authority
+/// </summary>
+public class AlexaResolutionAuthority
+{
+    public AlexaResolutionStatus? Status { get; set; }
+
+    public List<AlexaResolutionValue> Values { get; set; } = new();
+}
+
+/// <summary>
+/// Outcome of an Alexa slot resolution
+/// </summary>
+public class AlexaResolutionStatus
+{
+    /// <summary>
+    /// Resolution status code, <c>ER_SUCCESS_MATCH</c> when the slot matched a canonical value
+    /// </summary>
+    public string Code { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Wrapper Alexa puts around each resolved value
+/// </summary>
+public class AlexaResolutionValue
+{
+    public AlexaResolvedValue? Value { get; set; }
+}
+
+/// <summary>
+/// Canonical value a slot resolved to
+/// </summary>
+public class AlexaResolvedValue
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string Id { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -155,6 +209,7 @@ public class AlexaResponseBody
     /// <summary>
     /// Whether to end the session
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public bool ShouldEndSession { get; set; } = true;
 
     /// <summary>

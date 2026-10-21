@@ -6,14 +6,17 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Authorization;
 
 /// <summary>
-/// Maps a legacy <c>storage</c> selector to the read scope that governs it.
+/// Maps a legacy <c>storage</c> selector or V3 collection to the read scope that governs it.
 /// </summary>
 /// <remarks>
 /// The V1 routes that take the collection as a parameter — <c>slice/{storage}/…</c>,
 /// <c>times/echo?storage=</c>, <c>count/{storage}/where</c> — cannot be gated by an attribute, because a
 /// class- or action-level scope list is an OR across every collection the route can serve and so
 /// admits a caller holding any one of them to all of them. The storage is a route or query value, so
-/// the governing scope is resolvable per request and is checked in the action instead.
+/// the governing scope is resolvable per request and is checked in the action instead. The V3
+/// <c>lastModified</c> and <c>status</c> reads list only the collections the caller can read here.
+/// Each route keeps its own list of the selectors it accepts, so a collection classified here is
+/// not thereby served by a route that did not already accept it.
 /// </remarks>
 /// <seealso cref="ActivityReadScopeGuard"/>
 internal static class LegacyStorageReadScopes
@@ -32,7 +35,11 @@ internal static class LegacyStorageReadScopes
             ["devicestatus"] = Scope.DevicesRead,
             ["profile"] = Scope.TherapyRead,
             ["food"] = Scope.FoodRead,
+            ["settings"] = Scope.TherapyRead,
         };
+
+    /// <summary>The collections classified here, in ordinal order, which V3 <c>status</c> advertises.</summary>
+    public static readonly IReadOnlyList<string> Collections = [.. ScopesByStorage.Keys.Order(StringComparer.Ordinal)];
 
     /// <summary>
     /// The read scope <paramref name="storage"/> requires, or <see langword="null"/> when the

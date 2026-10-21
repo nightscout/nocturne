@@ -34,7 +34,7 @@ public class AlertRulesControllerDeviceActionTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         var ctx = new NocturneDbContext(options) { TenantId = Tenant };
-        var factory = new TestTenantDbContextFactory(ctx);
+        var factory = new TestNocturneDbContextFactory(ctx);
 
         return new AlertRulesController(
             factory,

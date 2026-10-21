@@ -16,7 +16,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// </summary>
 public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<DeviceStatusExtrasRepository> _logger;
 
@@ -27,7 +27,7 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
     public DeviceStatusExtrasRepository(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<DeviceStatusExtrasRepository> logger)
     {
@@ -55,6 +55,25 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
         ctx.DeviceStatusExtras.Add(entity);
         await ctx.SaveChangesAsync(ct);
         return DeviceStatusExtrasMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<DeviceStatusExtras?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entity = await ctx.DeviceStatusExtras.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id, ct);
+        return entity is null ? null : DeviceStatusExtrasMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<DeviceStatusExtras?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entity = await ctx.DeviceStatusExtras.AsNoTracking()
+            .Where(e => e.Id >= low && e.Id <= high)
+            .OrderBy(e => e.Id)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : DeviceStatusExtrasMapper.ToDomainModel(entity);
     }
 
     /// <summary>

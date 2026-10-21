@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
@@ -75,6 +77,8 @@ public abstract class SqliteWebAppFactoryBase<TEntryPoint> : WebApplicationFacto
             mockFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => mockFactory.Object.CreateDbContext());
             services.AddSingleton(mockFactory.Object);
+            services.AddScoped<INocturneDbContextFactory>(sp =>
+                new TestNocturneDbContextFactory(mockFactory.Object, sp.GetService<ITenantAccessor>()));
 
             ConfigureTestServices(services);
 
@@ -143,5 +147,22 @@ public abstract class SqliteWebAppFactoryBase<TEntryPoint> : WebApplicationFacto
         {
             _connection?.Dispose();
         }
+    }
+}
+
+/// <summary>
+/// Test-only <see cref="INocturneDbContextFactory"/> that creates tenant-scoped contexts
+/// from the shared <see cref="IDbContextFactory{NocturneDbContext}"/> mock.
+/// </summary>
+file sealed class TestNocturneDbContextFactory(
+    IDbContextFactory<NocturneDbContext> pool,
+    ITenantAccessor? tenantAccessor) : SingleReaderDbContextFactory
+{
+    public override async ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
+    {
+        var ctx = await pool.CreateDbContextAsync(ct);
+        if (tenantAccessor?.IsResolved == true)
+            ctx.TenantId = tenantAccessor.TenantId;
+        return ctx;
     }
 }

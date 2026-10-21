@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 
@@ -27,7 +27,7 @@ namespace Nocturne.API.Services.Chat;
 /// <seealso cref="ChatIdentityDirectoryService"/>
 /// <seealso cref="ChatIdentityService"/>
 public sealed class ChatIdentityPendingLinkService(
-    IDbContextFactory<NocturneDbContext> contextFactory,
+    INocturneDbContextFactory contextFactory,
     ILogger<ChatIdentityPendingLinkService> logger)
 {
     /// <summary>
@@ -63,7 +63,7 @@ public sealed class ChatIdentityPendingLinkService(
             ExpiresAt = now.Add(TokenLifetime),
         };
 
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await contextFactory.CreatePlatformAsync(ct);
         db.ChatIdentityPendingLinks.Add(entity);
         await db.SaveChangesAsync(ct);
 
@@ -83,7 +83,7 @@ public sealed class ChatIdentityPendingLinkService(
     /// </summary>
     public async Task<ChatIdentityPendingLinkEntity?> TryConsumeAsync(string token, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await contextFactory.CreatePlatformAsync(ct);
 
         var consumed = await db.ExecuteInTransactionAsync<ChatIdentityPendingLinkEntity?>(async attemptCt =>
         {
@@ -119,7 +119,7 @@ public sealed class ChatIdentityPendingLinkService(
     /// </summary>
     public async Task<int> CleanupExpiredAsync(CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await contextFactory.CreatePlatformAsync(ct);
         var deleted = await db.ChatIdentityPendingLinks
             .Where(p => p.ExpiresAt < DateTime.UtcNow)
             .ExecuteDeleteAsync(ct);

@@ -16,9 +16,7 @@ namespace Nocturne.API.Attributes;
 /// dual permission + scope enforcement.
 /// </remarks>
 /// <seealso cref="RequireScopeAttribute"/>
-/// <seealso cref="RequireAdminAttribute"/>
-/// <seealso cref="RequireReadAttribute"/>
-/// <seealso cref="RequireWriteAttribute"/>
+/// <seealso cref="RequireSuperuserAttribute"/>
 /// <seealso cref="Middleware.AuthenticationMiddleware"/>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public class RequirePermissionAttribute : Attribute, IAuthorizationFilter
@@ -95,30 +93,8 @@ public class RequireAuthenticationAttribute : Attribute, IAuthorizationFilter
 /// </summary>
 /// <seealso cref="RequirePermissionAttribute"/>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
-public class RequireAdminAttribute : RequirePermissionAttribute
+public class RequireSuperuserAttribute : RequirePermissionAttribute
 {
-    public RequireAdminAttribute()
+    public RequireSuperuserAttribute()
         : base(false, "*") { }
-}
-
-/// <summary>
-/// Attribute to require read permissions. Matches <c>*</c>, <c>api:*</c>, <c>api:*:read</c>, or <c>readable</c>.
-/// </summary>
-/// <seealso cref="RequirePermissionAttribute"/>
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
-public class RequireReadAttribute : RequirePermissionAttribute
-{
-    public RequireReadAttribute()
-        : base(false, "*", "api:*", "api:*:read", "readable") { }
-}
-
-/// <summary>
-/// Attribute to require write permissions. Matches <c>*</c>, <c>api:*</c>, <c>api:*:create</c>, <c>api:*:update</c>, or <c>api:*:delete</c>.
-/// </summary>
-/// <seealso cref="RequirePermissionAttribute"/>
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
-public class RequireWriteAttribute : RequirePermissionAttribute
-{
-    public RequireWriteAttribute()
-        : base(false, "*", "api:*", "api:*:create", "api:*:update", "api:*:delete") { }
 }

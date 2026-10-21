@@ -26,7 +26,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Route("api/v4/alert-sounds")]
 public class AlertCustomSoundsController : ControllerBase
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly ILogger<AlertCustomSoundsController> _logger;
 
     /// <summary>
@@ -35,7 +35,7 @@ public class AlertCustomSoundsController : ControllerBase
     /// <param name="contextFactory">Tenant-scoped factory for creating <see cref="NocturneDbContext"/> instances.</param>
     /// <param name="logger">Logger instance.</param>
     public AlertCustomSoundsController(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         ILogger<AlertCustomSoundsController> logger)
     {
         _contextFactory = contextFactory;

@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -68,7 +68,7 @@ public class TreatmentReadService : ITreatmentStore
     /// <inheritdoc />
     public async Task<IReadOnlyList<Treatment>> QueryAsync(TreatmentQuery query, CancellationToken ct = default)
     {
-        var find = FindQuery.Parse(query.Find);
+        var find = FindQuery.Parse(query.Find, FindQuery.TreatmentBareRegexFields);
 
         var results = find.HasFieldFilters
             ? await QueryFilteredAsync(find, query.Count, query.Skip, ct)
@@ -102,32 +102,21 @@ public class TreatmentReadService : ITreatmentStore
     private async Task<IReadOnlyList<Treatment>> QueryFilteredAsync(
         FindQuery find, int count, int skip, CancellationToken ct)
     {
-        var needed = (long)count + skip;
-        var fetchLimit = (int)Math.Min(Math.Max(needed * 4, 100), MaxFilterFetch);
+        var (matching, truncated) = await FindFilteredFetch.MatchWindowAsync<Treatment>(
+            async limit => (await _projection.GetProjectedTreatmentsAsync(
+                find.FromMills, find.ToMills, limit, nativeOnly: false, ct: ct)).ToList(),
+            find.Matches, (long)count + skip, MaxFilterFetch);
 
-        while (true)
-        {
-            var projected = (await _projection.GetProjectedTreatmentsAsync(
-                find.FromMills, find.ToMills, fetchLimit, nativeOnly: false, ct: ct)).ToList();
+        if (truncated)
+            _logger.LogWarning(
+                "Find-filtered treatment query hit the {MaxFetch}-row window; older matches are not returned",
+                MaxFilterFetch);
 
-            var matching = projected.Where(find.Matches).ToList();
-            var exhausted = projected.Count < fetchLimit || fetchLimit >= MaxFilterFetch;
-            if (matching.Count >= needed || exhausted)
-            {
-                if (matching.Count < needed && projected.Count >= fetchLimit)
-                    _logger.LogWarning(
-                        "Find-filtered treatment query hit the {MaxFetch}-row window; older matches are not returned",
-                        MaxFilterFetch);
-
-                return matching
-                    .OrderByDescending(t => t.Mills)
-                    .Skip(skip)
-                    .Take(count)
-                    .ToList();
-            }
-
-            fetchLimit = (int)Math.Min((long)fetchLimit * 4, MaxFilterFetch);
-        }
+        return matching
+            .OrderByDescending(t => t.Mills)
+            .Skip(skip)
+            .Take(count)
+            .ToList();
     }
 
     /// <inheritdoc />
@@ -215,23 +204,15 @@ public class TreatmentReadService : ITreatmentStore
 
         TreatmentClientId.KeepStored(treatment, existing);
 
-        treatment.Id = await UpsertKeyAsync(stored, ct);
-        try
-        {
-            await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
-            return await GetByIdAsync(stored.Record.Id.ToString(), ct);
-        }
-        catch (OperationCanceledException)
-        {
-            // Canceled request is control flow, not an update failure: propagate.
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to update treatment {Id}", id);
-            return null;
-        }
+        var upsertKey = await UpsertKeyAsync(stored, ct);
+        treatment.Id = upsertKey;
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
+        return await GetByIdAsync(upsertKey, ct)
+            ?? throw ReadBackFailed(id);
     }
+
+    private static InvalidOperationException ReadBackFailed(string id) =>
+        new($"Treatment {id} did not read back after the update");
 
     /// <summary>
     /// Updates the state span a treatment was decomposed into, by re-decomposing the update under the
@@ -244,16 +225,9 @@ public class TreatmentReadService : ITreatmentStore
             return null;
 
         treatment.Id = upsertKey;
-        try
-        {
-            await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
-            return await _projection.GetProjectedStateSpanTreatmentAsync(spanId, ct);
-        }
-        catch (DbUpdateException ex)
-        {
-            _logger.LogError(ex, "Failed to update state span treatment {SpanId}", spanId);
-            return null;
-        }
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
+        return await _projection.GetProjectedStateSpanTreatmentAsync(spanId, ct)
+            ?? throw ReadBackFailed(id);
     }
 
     /// <inheritdoc />
@@ -288,18 +262,17 @@ public class TreatmentReadService : ITreatmentStore
     private async Task<TreatmentDeletion?> DeleteStateSpanAsync(string id, CancellationToken ct)
     {
         if (await _projection.GetProjectedStateSpanTreatmentAsync(id, ct) is not { Id: { } spanId } served
-            || await _projection.GetStateSpanTreatmentIdAsync(id, ct) is not { } treatmentId
-            || !await _stateSpans.DeleteStateSpanAsync(spanId, ct))
+            || await _projection.GetStateSpanTreatmentIdAsync(id, ct) is not { } treatmentId)
             return null;
 
         await _pipeline.DeleteByLegacyIdAsync<Treatment>(treatmentId, WriteOrigin.Live, ct);
-        return new TreatmentDeletion(served);
+        return await _stateSpans.DeleteStateSpanAsync(spanId, ct) ? new TreatmentDeletion(served) : null;
     }
 
     /// <inheritdoc />
     public async Task<long> CountAsync(string? find = null, CancellationToken ct = default)
     {
-        var findQuery = FindQuery.Parse(find);
+        var findQuery = FindQuery.Parse(find, FindQuery.TreatmentBareRegexFields);
 
         if (findQuery.HasFieldFilters)
         {

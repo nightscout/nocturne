@@ -186,11 +186,3 @@ public sealed class TherapyTimeline
             : _segments[^1].Snapshot;
     }
 }
-
-/// <summary>
-/// Single APS-snapshot-derived COB observation captured once per chart-data request.
-/// The legacy <c>CobService.GetLatestDeviceCobAsync</c> path returned this per-tick,
-/// but the freshness check is against wall-clock <c>now</c>, so the answer is constant
-/// across all ticks in a request.
-/// </summary>
-public sealed record DeviceCobSnapshot(double Cob, long Mills, string? Source, string? Device = null);

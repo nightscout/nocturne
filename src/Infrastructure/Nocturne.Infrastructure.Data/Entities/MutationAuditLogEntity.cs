@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Contracts.Audit;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -81,4 +82,30 @@ public class MutationAuditLogEntity : ITenantScoped
     /// <summary>UTC timestamp when this audit record was written.</summary>
     [Column("created_at")]
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>Builds an audit row, taking every actor field from <paramref name="auditContext"/>.</summary>
+    public static MutationAuditLogEntity Create(
+        Guid tenantId,
+        IAuditContext? auditContext,
+        string entityType,
+        Guid? entityId,
+        string action,
+        string? changesJson,
+        DateTime createdAt) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        TenantId = tenantId,
+        EntityType = entityType,
+        EntityId = entityId,
+        Action = action,
+        ChangesJson = changesJson,
+        SubjectId = auditContext?.SubjectId,
+        SubjectName = auditContext?.SubjectName,
+        AuthType = auditContext?.AuthType,
+        IpAddress = auditContext?.IpAddress,
+        TokenId = auditContext?.TokenId,
+        TraceId = auditContext?.TraceId,
+        Endpoint = auditContext?.Endpoint,
+        CreatedAt = createdAt
+    };
 }

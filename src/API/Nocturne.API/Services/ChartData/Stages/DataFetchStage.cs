@@ -12,7 +12,7 @@ namespace Nocturne.API.Services.ChartData.Stages;
 
 /// <summary>
 /// Chart data pipeline stage that fetches all raw data required for the dashboard chart.
-/// Repositories that open their own context per call through <c>ITenantDbContextFactory</c> run
+/// Repositories that open their own context per call through <c>INocturneDbContextFactory</c> run
 /// concurrently; the ones that share the request-scoped
 /// <see cref="Microsoft.EntityFrameworkCore.DbContext"/>, which is not thread-safe, run one after
 /// another alongside them.
@@ -35,7 +35,8 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// basal IOB sees temp basals that began before the window, under the same cap as
 /// <see cref="Nocturne.API.Services.Analytics.ChartDataService"/> because the ascending read truncates the newest
 /// rows. Consumers sort for themselves. <see cref="ChartDataContext.DisplayTempBasals"/> is the
-/// display-window subset.
+/// subset overlapping the display window, chosen by
+/// <see cref="Nocturne.API.Services.Analytics.ChartDataService.SelectDisplayTempBasals"/>.
 /// </para>
 /// <para>
 /// All <see cref="StateSpanCategory"/> variants are fetched in one call to
@@ -288,9 +289,8 @@ internal sealed class DataFetchStage(
         var displayCarbIntakes = carbIntakeList
             .Where(c => c.Mills >= startTime && c.Mills <= endTime)
             .ToList();
-        var displayTempBasals = tempBasalList
-            .Where(tb => tb.StartMills >= startTime && tb.StartMills <= endTime)
-            .ToList();
+        var displayTempBasals = Nocturne.API.Services.Analytics.ChartDataService
+            .SelectDisplayTempBasals(tempBasalList, startTime, endTime);
 
         logger.LogDebug(
             "DataFetchStage: fetched {Glucose} glucose, {Bolus} bolus, {Carb} carb, {BgCheck} bg-check, {DeviceEvent} device-event, {TempBasal} temp-basal, {HeartRate} heart-rate, {StepCount} step-count, {Sleep} sleep records",

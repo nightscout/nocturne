@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -25,7 +26,7 @@ namespace Nocturne.API.Services.Analytics;
 /// <seealso cref="ITherapySettingsResolver"/>
 public class DataOverviewService : IDataOverviewService
 {
-    private readonly ITenantDbContextFactory _factory;
+    private readonly INocturneDbContextFactory _factory;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly IStatisticsService _statisticsService;
     private readonly ICacheService _cacheService;
@@ -47,12 +48,11 @@ public class DataOverviewService : IDataOverviewService
     /// <param name="statisticsService">Statistics service for per-day metric aggregation.</param>
     /// <param name="cacheService">Cross-request cache for the eHbA1c timeline, keyed per tenant and year.</param>
     /// <param name="tenantAccessor">Resolves the current tenant for cache-key scoping.</param>
-    /// <param name="categoryReadContext">Says whether this request is history-clamped, in which
-    /// case the timeline cache is bypassed for the reason given on
-    /// <see cref="Nocturne.API.Services.Entries.EntryCacheAdapter"/>.</param>
+    /// <param name="categoryReadContext">Says whether this request bypasses the timeline cache, per
+    /// <see cref="ICategoryReadContext.BypassesTenantCaches"/>.</param>
     /// <param name="logger">The logger instance.</param>
     public DataOverviewService(
-        ITenantDbContextFactory factory,
+        INocturneDbContextFactory factory,
         ITherapySettingsResolver therapySettingsResolver,
         IStatisticsService statisticsService,
         ICacheService cacheService,
@@ -469,7 +469,7 @@ public class DataOverviewService : IDataOverviewService
 
         // Computed once per tenant/year/source combination and reused until it expires below —
         // only a cache miss (new day, first view, or expiry) triggers recomputation.
-        var useCache = !_categoryReadContext.IsHistoryClamped;
+        var useCache = !_categoryReadContext.BypassesTenantCaches;
         var cached = useCache
             ? await _cacheService.GetAsync<EHbA1cTimelineResponse>(cacheKey, cancellationToken)
             : null;

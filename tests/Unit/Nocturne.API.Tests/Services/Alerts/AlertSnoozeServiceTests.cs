@@ -64,7 +64,7 @@ public class AlertSnoozeServiceTests
             .ReturnsAsync(new SensorGlucose { Timestamp = Now.AddMinutes(-minutesAgo), Mgdl = mgdl, TrendRate = trendRate });
 
     private AlertSnoozeService CreateService() => new(
-        _factory,
+        _factory.AsNocturneFactory(),
         Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
         _repository.Object,
         _delivery.Object,

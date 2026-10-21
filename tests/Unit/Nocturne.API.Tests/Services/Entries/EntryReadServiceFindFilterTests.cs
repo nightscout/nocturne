@@ -36,7 +36,7 @@ public class EntryReadServiceFindFilterTests
             _demoMode.Object,
             Mock.Of<ILogger<EntryReadService>>());
 
-        _sgRepo.Setup(r => r.GetAsync(
+        _sgRepo.Setup(r => r.GetForEntriesAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<DateTime?>(),
                 It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
@@ -53,7 +53,7 @@ public class EntryReadServiceFindFilterTests
 
     private void SetupSg(params SensorGlucose[] readings)
     {
-        _sgRepo.Setup(r => r.GetAsync(
+        _sgRepo.Setup(r => r.GetForEntriesAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<DateTime?>(),
                 It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))

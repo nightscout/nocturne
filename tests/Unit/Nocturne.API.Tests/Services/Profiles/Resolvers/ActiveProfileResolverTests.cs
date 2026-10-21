@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Profiles.Resolvers;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -402,6 +403,33 @@ public class ActiveProfileResolverTests : IDisposable
         }
 
         [Fact]
+        public async Task BoundsQueryByOverlapWindow_AndKeepsLongRunningSpan()
+        {
+            var longRunning = MakeProfileSpan(
+                startMills: MorningMills - 90L * 24 * 3_600_000,
+                endMills: null,
+                profileName: "Winter");
+            SetupSpans(longRunning);
+
+            var result = await _sut.GetActiveProfileSpansForRangeAsync(MorningMills, EveningMills);
+
+            result.Should().ContainSingle().Which.ProfileName.Should().Be("Winter");
+            _stateSpanService.Verify(
+                s => s.GetStateSpansAsync(
+                    StateSpanCategory.Profile,
+                    It.IsAny<string?>(),
+                    DateTimeOffset.FromUnixTimeMilliseconds(MorningMills).UtcDateTime,
+                    DateTimeOffset.FromUnixTimeMilliseconds(EveningMills).UtcDateTime,
+                    It.IsAny<string?>(),
+                    It.IsAny<bool?>(),
+                    It.IsAny<int>(),
+                    It.IsAny<int>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+
+        [Fact]
         public async Task IssuesOneDbQuery_RegardlessOfRangeSize()
         {
             SetupSpans();
@@ -411,6 +439,135 @@ public class ActiveProfileResolverTests : IDisposable
             _stateSpanService.Verify(
                 s => s.GetStateSpansAsync(
                     StateSpanCategory.Profile,
+                    It.IsAny<string?>(),
+                    It.IsAny<DateTime?>(),
+                    It.IsAny<DateTime?>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<bool?>(),
+                    It.IsAny<int>(),
+                    It.IsAny<int>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+    }
+
+    public class LookupOrder : ActiveProfileResolverTests
+    {
+        private const long SwitchMills = NoonMills + 30_000;
+
+        private void SetupSpansStartedBy(params StateSpan[] spans)
+        {
+            _stateSpanService
+                .Setup(s => s.GetStateSpansAsync(
+                    StateSpanCategory.Profile,
+                    It.IsAny<string?>(),
+                    It.IsAny<DateTime?>(),
+                    It.IsAny<DateTime?>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<bool?>(),
+                    It.IsAny<int>(),
+                    It.IsAny<int>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync((StateSpanCategory? _, string? _, DateTime? _, DateTime? to, string? _, bool? _, int _, int _, bool _, CancellationToken _) =>
+                    spans.Where(s => s.StartTimestamp <= to).OrderByDescending(s => s.StartTimestamp).ToList());
+        }
+
+        private StateSpan[] SwitchAtHalfPast()
+        {
+            var old = MakeProfileSpan(NoonMills - 3_600_000, SwitchMills, "Old");
+            var current = MakeProfileSpan(SwitchMills, null, "New");
+            return [old, current];
+        }
+
+        [Fact]
+        public async Task SwitchMidMinute_EarlyThenLateLookup()
+        {
+            SetupSpansStartedBy(SwitchAtHalfPast());
+
+            var early = await _sut.GetActiveProfileNameAsync(NoonMills + 10_000);
+            var late = await _sut.GetActiveProfileNameAsync(NoonMills + 45_000);
+
+            early.Should().Be("Old");
+            late.Should().Be("New");
+        }
+
+        [Fact]
+        public async Task SwitchMidMinute_LateThenEarlyLookup()
+        {
+            SetupSpansStartedBy(SwitchAtHalfPast());
+
+            var late = await _sut.GetActiveProfileNameAsync(NoonMills + 45_000);
+            var early = await _sut.GetActiveProfileNameAsync(NoonMills + 10_000);
+
+            late.Should().Be("New");
+            early.Should().Be("Old");
+        }
+
+        [Fact]
+        public async Task NoProfileBeforeSwitch_EarlyLookupDoesNotHideTheSwitch()
+        {
+            SetupSpansStartedBy(MakeProfileSpan(SwitchMills, null, "New"));
+
+            var early = await _sut.GetActiveProfileNameAsync(NoonMills + 10_000);
+            var late = await _sut.GetActiveProfileNameAsync(NoonMills + 45_000);
+
+            early.Should().BeNull();
+            late.Should().Be("New");
+        }
+
+        [Fact]
+        public async Task NoProfileBeforeSwitch_LateLookupDoesNotLeakIntoEarly()
+        {
+            SetupSpansStartedBy(MakeProfileSpan(SwitchMills, null, "New"));
+
+            var late = await _sut.GetActiveProfileNameAsync(NoonMills + 45_000);
+            var early = await _sut.GetActiveProfileNameAsync(NoonMills + 10_000);
+
+            late.Should().Be("New");
+            early.Should().BeNull();
+        }
+
+        /// <summary>
+        /// The minute's candidates are shared by every lookup in it, so the overlap bound is the
+        /// minute's start, not the lookup time: a later lookup must not drop a span that ended
+        /// mid-minute and an earlier lookup still needs.
+        /// </summary>
+        [Fact]
+        public async Task QueriesSpansOverlappingTheWholeMinute()
+        {
+            SetupSpansStartedBy(SwitchAtHalfPast());
+
+            await _sut.GetActiveProfileNameAsync(NoonMills + 45_000);
+
+            _stateSpanService.Verify(
+                s => s.GetStateSpansAsync(
+                    StateSpanCategory.Profile,
+                    It.IsAny<string?>(),
+                    DateTimeOffset.FromUnixTimeMilliseconds(NoonMills).UtcDateTime,
+                    DateTimeOffset.FromUnixTimeMilliseconds(NoonMills + 59_999).UtcDateTime,
+                    It.IsAny<string?>(),
+                    It.IsAny<bool?>(),
+                    It.IsAny<int>(),
+                    It.IsAny<int>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task LookupsWithinOneMinute_ShareOneQuery()
+        {
+            SetupSpansStartedBy(SwitchAtHalfPast());
+
+            await _sut.GetActiveProfileNameAsync(NoonMills + 10_000);
+            await _sut.GetActiveProfileNameAsync(NoonMills + 45_000);
+            await _sut.GetActiveProfileNameAsync(NoonMills + 59_999);
+
+            _stateSpanService.Verify(
+                s => s.GetStateSpansAsync(
+                    It.IsAny<StateSpanCategory?>(),
                     It.IsAny<string?>(),
                     It.IsAny<DateTime?>(),
                     It.IsAny<DateTime?>(),
@@ -457,24 +614,21 @@ public class ActiveProfileResolverTests : IDisposable
                 Times.Once);
         }
 
-        /// <summary>
-        /// A history-clamped request reads only the last 24 hours of state spans, so it must not
-        /// serve, or leave behind, the tenant-keyed result another caller reads.
-        /// </summary>
-        [Fact]
-        public async Task HistoryClampedRequest_NeitherReadsNorWritesTheCache()
+        [Theory]
+        [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
+        public async Task BypassingRequest_NeitherReadsNorWritesTheCache(string caller)
         {
             SetupSpans(MakeProfileSpan(startMills: NoonMills - 3_600_000, endMills: null, profileName: "Cached"));
-            var clamped = new ActiveProfileResolver(
+            var bypassing = new ActiveProfileResolver(
                 _stateSpanService.Object,
                 _tenantAccessor.Object,
                 _cache,
-                Mock.Of<ICategoryReadContext>(c => c.IsHistoryClamped),
+                CacheBypassingCallers.Context(caller),
                 NullLogger<ActiveProfileResolver>.Instance);
 
-            await clamped.GetActiveProfileNameAsync(NoonMills);
+            await bypassing.GetActiveProfileNameAsync(NoonMills);
             await _sut.GetActiveProfileNameAsync(NoonMills);
-            await clamped.GetActiveProfileNameAsync(NoonMills);
+            await bypassing.GetActiveProfileNameAsync(NoonMills);
 
             _stateSpanService.Verify(
                 s => s.GetStateSpansAsync(

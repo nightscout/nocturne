@@ -17,7 +17,7 @@ namespace Nocturne.API.Controllers.V1;
 [ApiController]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
-[RequireAdmin]
+[RequireSuperuser]
 public class DebugController : ControllerBase
 {
     private readonly IEntryStore _store;

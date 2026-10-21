@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -33,7 +34,7 @@ public class TrackerAlertRuleSyncServiceTests
             db.Database.EnsureCreated();
         }
 
-        var factory = new TestTenantDbContextFactory(_options, _tenantId);
+        var factory = new TestNocturneDbContextFactory(_options, _tenantId);
 
         var classifier = new Mock<IRuleScopeClassifier>();
         classifier
@@ -696,10 +697,10 @@ public class TrackerAlertRuleSyncServiceTests
         (await db.AlertRules.CountAsync()).Should().Be(0);
     }
 
-    private sealed class TestTenantDbContextFactory(
-        DbContextOptions<NocturneDbContext> options, Guid tenantId) : ITenantDbContextFactory
+    private sealed class TestNocturneDbContextFactory(
+        DbContextOptions<NocturneDbContext> options, Guid tenantId) : SingleReaderDbContextFactory
     {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
             ValueTask.FromResult(new NocturneDbContext(options) { TenantId = tenantId });
     }
 }

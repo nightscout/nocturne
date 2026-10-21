@@ -69,7 +69,7 @@ public class DirectGrantLastUsedTests : IDisposable
     public async Task Records_when_where_and_by_what_the_grant_was_presented()
     {
         await DirectGrantTokenHandler.RecordLastUsedAsync(
-            _dbContextFactory.Object, Mock.Of<ILogger>(), _grantId, _tenantId, "203.0.113.7", "xDrip4iOS");
+            _dbContextFactory.Object.AsNocturneFactory(), Mock.Of<ILogger>(), _grantId, _tenantId, "203.0.113.7", "xDrip4iOS");
 
         await using var ctx = _db.CreateContext(_tenantId);
         var grant = await ctx.OAuthGrants.AsNoTracking().FirstAsync(g => g.Id == _grantId);
@@ -89,7 +89,7 @@ public class DirectGrantLastUsedTests : IDisposable
             .ThrowsAsync(new InvalidOperationException("no connection"));
 
         var record = async () => await DirectGrantTokenHandler.RecordLastUsedAsync(
-            brokenFactory.Object, logger.Object, _grantId, _tenantId, null, null);
+            brokenFactory.Object.AsNocturneFactory(), logger.Object, _grantId, _tenantId, null, null);
 
         await record.Should().NotThrowAsync();
     }

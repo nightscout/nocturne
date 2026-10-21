@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Services.Devices;
@@ -10,7 +11,6 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.Serializers;
 
 namespace Nocturne.API.Controllers.V3;
 
@@ -181,12 +181,13 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// </summary>
     /// <param name="deviceStatusData">Device status data to create (single object or array)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Created device status records</returns>
+    /// <returns>The <see cref="V3CreateResponse"/> for one document; the created records for an array.</returns>
     [HttpPost]
     [Authorize]
     [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus")]
-    [ProducesResponseType(typeof(DeviceStatus[]), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -256,16 +257,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                     );
                     if (existing != null)
                     {
-                        var existingIdentifier = MongoObjectId.Coerce(existing.Id);
-                        return Ok(
-                            new
-                            {
-                                status = 200,
-                                identifier = existingIdentifier,
-                                isDeduplication = true,
-                                deduplicatedIdentifier = existingIdentifier,
-                            }
-                        );
+                        return V3Deduplicated(existing.Id, existing.SrvModified);
                     }
                 }
             }
@@ -299,11 +291,17 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
             await _events.OnCreatedAsync(projectedResults, cancellationToken);
 
-            return CreatedAtAction(
-                nameof(GetDeviceStatusById),
-                new { id = projectedResults.First().Id },
-                new { status = 200, result = projectedResults.Select(MapToV3Dto) }
-            );
+            if (deviceStatusData.ValueKind == JsonValueKind.Array)
+            {
+                return CreatedAtAction(
+                    nameof(GetDeviceStatusById),
+                    new { id = projectedResults.First().Id },
+                    new V3Envelope<object> { Result = projectedResults.Select(MapToV3Dto).ToList() }
+                );
+            }
+
+            var created = projectedResults.First();
+            return V3Created(nameof(GetDeviceStatusById), created.Id);
         }
         catch (ArgumentException ex)
         {
@@ -345,10 +343,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         DeviceStatus? deviceStatus;
         try
         {
-            deviceStatus = JsonSerializer.Deserialize<DeviceStatus>(
-                request.GetRawText(),
-                UploaderIdJsonModifier.CaseInsensitiveReadOptions
-            );
+            deviceStatus = NightscoutJsonBody.ReadObject<DeviceStatus>(request);
         }
         catch (JsonException)
         {
@@ -410,12 +405,12 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// </summary>
     /// <param name="id">Device status ID to delete</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>No content on success</returns>
+    /// <returns><c>{"status": 200}</c> on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus/{id}")]
-    [ProducesResponseType(204)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -453,7 +448,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
         _logger.LogDebug("Successfully deleted device status with ID {Id}", id);
 
-        return NoContent();
+        return CreateV3DeleteResponse();
     }
 
     /// <summary>
@@ -528,58 +523,31 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         out ActionResult? validationError
     )
     {
-        var deviceStatusRecords = new List<DeviceStatus>();
         validationError = null;
+
+        var elements = jsonElement.ValueKind switch
+        {
+            JsonValueKind.Array => jsonElement.EnumerateArray().ToList(),
+            JsonValueKind.Object => [jsonElement],
+            _ => [],
+        };
+
+        // Nightscout V3 Strict Validation: the 'app' field is required in the JSON payload
+        if (elements.Any(element => element.ValueKind != JsonValueKind.Object || !element.TryGetProperty("app", out _)))
+        {
+            validationError = CreateV3ErrorResponse(400, "Bad or missing app field");
+            return Enumerable.Empty<DeviceStatus>();
+        }
 
         try
         {
-            if (jsonElement.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var element in jsonElement.EnumerateArray())
-                {
-                    // Nightscout V3 Strict Validation: 'app' field is required in the JSON payload
-                    if (!element.TryGetProperty("app", out _))
-                    {
-                        validationError = CreateV3ErrorResponse(400, "Bad or missing app field");
-                        return Enumerable.Empty<DeviceStatus>();
-                    }
-
-                    var deviceStatus = JsonSerializer.Deserialize<DeviceStatus>(
-                        element.GetRawText(),
-                        UploaderIdJsonModifier.CaseInsensitiveReadOptions
-                    );
-                    if (deviceStatus != null)
-                    {
-                        deviceStatusRecords.Add(deviceStatus);
-                    }
-                }
-            }
-            else if (jsonElement.ValueKind == JsonValueKind.Object)
-            {
-                // Nightscout V3 Strict Validation: 'app' field is required
-                if (!jsonElement.TryGetProperty("app", out _))
-                {
-                    validationError = CreateV3ErrorResponse(400, "Bad or missing app field");
-                    return Enumerable.Empty<DeviceStatus>();
-                }
-
-                var deviceStatus = JsonSerializer.Deserialize<DeviceStatus>(
-                    jsonElement.GetRawText(),
-                    UploaderIdJsonModifier.CaseInsensitiveReadOptions
-                );
-                if (deviceStatus != null)
-                {
-                    deviceStatusRecords.Add(deviceStatus);
-                }
-            }
+            return NightscoutJsonBody.ReadObjects<DeviceStatus>(jsonElement) ?? [];
         }
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Failed to parse device status data from JsonElement");
             throw new ArgumentException("Invalid device status data format", ex);
         }
-
-        return deviceStatusRecords;
     }
 
     internal static object MapToV3Dto(DeviceStatus status)

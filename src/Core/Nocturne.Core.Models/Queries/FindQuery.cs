@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -27,6 +28,11 @@ public sealed class FindQuery
         "date", "mills", "created_at", "dateString", "timestamp",
     };
 
+    private static readonly HashSet<string> KnownOps =
+    [
+        "$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin", "$regex", "$exists",
+    ];
+
     /// <summary>
     /// Wire-shape serializer options: camelCase like ASP.NET's defaults, with the models'
     /// <c>[JsonPropertyName]</c> attributes taking precedence.
@@ -35,20 +41,36 @@ public sealed class FindQuery
 
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
+    private static readonly Regex RegexLiteral = new("^/(.*)/([a-z]*)$", RegexOptions.None, RegexTimeout);
+
     /// <summary>
-    /// Synthetic operator for a find[...] key the parser couldn't interpret. It never matches, so
-    /// an unsupported filter narrows results to nothing (fail closed) instead of being dropped.
+    /// Treatment fields on which legacy Nightscout reads a bare <c>/pattern/flags</c> value as a
+    /// regular expression. Pass to <see cref="Parse(string?, IReadOnlySet{string}?)"/> from
+    /// treatment queries only: other collections compare such a value literally.
+    /// </summary>
+    public static readonly IReadOnlySet<string> TreatmentBareRegexFields =
+        new[] { "eventType", "notes", "enteredBy" }.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Synthetic operator for a find[...] key, operator, empty operand object or <c>$and</c>/<c>$or</c>
+    /// value the parser couldn't interpret. It never matches, so an unsupported filter narrows results
+    /// to nothing (fail closed) instead of being dropped. MongoDB matches nothing for an empty operand
+    /// object and refuses the rest.
     /// </summary>
     private const string UnsupportedOp = "$unsupported";
 
+    private static readonly Condition Unsupported = new("", UnsupportedOp, "", JsonValue: null, RegexOptions: null);
+
     /// <summary>An empty query: no time bounds, no field filters, matches everything.</summary>
-    public static readonly FindQuery Empty = new(new Group(IsAnd: true, []), null, null);
+    public static readonly FindQuery Empty = new(new Group(IsAnd: true, []), TimeFields, null, null);
 
     private readonly Group _root;
+    private readonly IReadOnlySet<string> _boundFields;
 
-    private FindQuery(Group root, long? fromMills, long? toMills)
+    private FindQuery(Group root, IReadOnlySet<string> boundFields, long? fromMills, long? toMills)
     {
         _root = root;
+        _boundFields = boundFields;
         FromMills = fromMills;
         ToMills = toMills;
     }
@@ -59,8 +81,49 @@ public sealed class FindQuery
     /// <summary>Inclusive upper time bound in Unix milliseconds, if the query constrains one.</summary>
     public long? ToMills { get; }
 
-    /// <summary><c>true</c> when the query contains no conditions at all.</summary>
-    public bool IsEmpty => _root.Children.Count == 0;
+    /// <summary>
+    /// <c>true</c> when the query carries no condition a caller could honour: nothing at all, only
+    /// empty <c>$and</c>/<c>$or</c> groups or operand objects, or only <c>find[…]</c> keys the parser
+    /// could not interpret.
+    /// </summary>
+    public bool IsEmpty => !HasLeafCondition(_root);
+
+    private static bool HasLeafCondition(Group group) =>
+        group.Children.Any(child => child is Condition cond
+            ? cond.Op != UnsupportedOp
+            : child is Group nested && HasLeafCondition(nested));
+
+    /// <summary>
+    /// <c>true</c> when a condition cannot be evaluated as legacy Nightscout evaluates it: a find key,
+    /// operator, empty operand object, <c>$options</c> without a <c>$regex</c> or <c>$and</c>/<c>$or</c>
+    /// value the parser could not read, an <c>$exists</c> whose operand is not a boolean, or a
+    /// condition on a time field whose operand is not an instant, which Nightscout refuses. A read may
+    /// serve such a query; a delete must refuse it.
+    /// </summary>
+    public bool HasInexactCondition => EnumerateAll(_root).Any(cond =>
+        !KnownOps.Contains(cond.Op)
+        || (cond.Op == "$exists" && TryReadExists(cond) is null)
+        || (cond.Op != "$exists" && TimeFields.Contains(cond.Path) && !TryConvertToInstant(cond, out _, out _)));
+
+    /// <summary>
+    /// The presence an <c>$exists</c> asks for, or <c>null</c> for an operand that is not a boolean.
+    /// MongoDB reads such an operand by its truthiness and Nightscout passes a query-string one on
+    /// as a string, so no reading of it here is safe to act on: it matches nothing.
+    /// </summary>
+    private static bool? TryReadExists(Condition cond) => cond.StringValue.ToLowerInvariant() switch
+    {
+        "true" or "1" => true,
+        "false" or "0" => false,
+        _ => null,
+    };
+
+    private static IEnumerable<Condition> EnumerateAll(Group group) =>
+        group.Children.SelectMany(child => child switch
+        {
+            Condition cond => [cond],
+            Group nested => EnumerateAll(nested),
+            _ => [],
+        });
 
     /// <summary>
     /// <c>true</c> when the query contains conditions beyond the extracted
@@ -74,15 +137,21 @@ public sealed class FindQuery
     /// <paramref name="exceptField"/> (which the caller handles separately, e.g. entry
     /// <c>type</c> routing).
     /// </summary>
-    public bool HasFieldFiltersExcept(string? exceptField)
+    /// <param name="exceptField">The field whose equality the caller applies itself.</param>
+    /// <param name="comparison">
+    /// How a condition's path is matched to <paramref name="exceptField"/>. Ordinal for a caller
+    /// that applies the equality to a store, since MongoDB field names are case-sensitive.
+    /// </param>
+    public bool HasFieldFiltersExcept(
+        string? exceptField, StringComparison comparison = StringComparison.OrdinalIgnoreCase)
     {
         // Only a single consistent equality can be excepted: contradictory equalities on the
         // field (a match-nothing query) must stay residual, or excepting them would silently
         // widen the query — and, on the delete path, widen it into a whole-window sweep.
-        if (exceptField != null && GetEqualityValue(exceptField) is null)
+        if (exceptField != null && GetEqualityValue(exceptField, comparison) is null)
             exceptField = null;
 
-        return CountResidual(_root, andReachable: true, exceptField) > 0;
+        return CountResidual(_root, andReachable: true, exceptField, comparison, _boundFields) > 0;
     }
 
     /// <summary>
@@ -90,11 +159,10 @@ public sealed class FindQuery
     /// <paramref name="field"/>, or <c>null</c> when the query doesn't constrain the field to a
     /// single equality.
     /// </summary>
-    public string? GetEqualityValue(string field)
+    public string? GetEqualityValue(string field, StringComparison comparison = StringComparison.OrdinalIgnoreCase)
     {
         string? found = null;
-        foreach (var cond in EnumerateAndReachable(_root)
-                     .Where(c => c.Path.Equals(field, StringComparison.OrdinalIgnoreCase)))
+        foreach (var cond in EnumerateAndReachable(_root).Where(c => c.Path.Equals(field, comparison)))
         {
             if (cond.Op != "$eq")
                 return null;
@@ -103,6 +171,32 @@ public sealed class FindQuery
             found = cond.StringValue;
         }
         return found;
+    }
+
+    /// <summary>
+    /// The values <paramref name="field"/> may take when every AND-reachable condition on it is an
+    /// <c>$eq</c> or <c>$in</c>, ordinally named: their intersection, possibly empty. <c>null</c>
+    /// when the field is unconstrained or constrained any other way.
+    /// </summary>
+    public IReadOnlyList<string>? GetEqualityValues(string field)
+    {
+        List<string>? allowed = null;
+        foreach (var cond in EnumerateAndReachable(_root).Where(c => c.Path.Equals(field, StringComparison.Ordinal)))
+        {
+            IEnumerable<string>? values = cond.Op switch
+            {
+                "$eq" => new[] { cond.StringValue },
+                "$in" when cond.JsonValue is { ValueKind: JsonValueKind.Array } array =>
+                    array.EnumerateArray().Select(JsonScalarToString),
+                "$in" => cond.StringValue.Split('|', StringSplitOptions.RemoveEmptyEntries),
+                _ => null,
+            };
+            if (values is null)
+                return null;
+
+            allowed = allowed is null ? values.Distinct().ToList() : allowed.Intersect(values).ToList();
+        }
+        return allowed;
     }
 
     /// <summary>
@@ -138,8 +232,25 @@ public sealed class FindQuery
     /// Parses a find query from either wire form. A null/empty/unparseable input yields
     /// <see cref="Empty"/> (no filtering), matching the legacy server's lenient behavior.
     /// </summary>
-    public static FindQuery Parse(string? find)
+    public static FindQuery Parse(string? find) => Parse(find, bareRegexFields: null);
+
+    /// <summary>
+    /// Parses a find query, additionally reading a bare querystring operand of the form
+    /// <c>/pattern/flags</c> on one of <paramref name="bareRegexFields"/> as a <c>$regex</c>.
+    /// Only top-level fields are read this way, not those inside <c>$and</c>/<c>$or</c> clauses. An explicit operator is never rewritten.
+    /// </summary>
+    /// <param name="find">The find in either wire form.</param>
+    /// <param name="bareRegexFields">Fields whose bare <c>/pattern/flags</c> operand is a regex.</param>
+    /// <param name="boundFields">
+    /// The time fields whose bounds become <see cref="FromMills"/>/<see cref="ToMills"/>, when the
+    /// caller's source filters on a time only some of them carry. A bound on any other time field
+    /// stays residual. Defaults to every recognised time field.
+    /// </param>
+    public static FindQuery Parse(
+        string? find, IReadOnlySet<string>? bareRegexFields, IReadOnlySet<string>? boundFields = null)
     {
+        boundFields ??= TimeFields;
+
         if (string.IsNullOrWhiteSpace(find) || find.Trim() == "{}")
             return Empty;
 
@@ -156,21 +267,98 @@ public sealed class FindQuery
             else if (find.Contains("find[", StringComparison.OrdinalIgnoreCase)
                 || find.Contains("find%5B", StringComparison.OrdinalIgnoreCase))
             {
-                root = ParseQueryString(find);
+                root = ParseQueryString(find, bareRegexFields);
             }
             else
             {
                 return Empty;
             }
 
-            var (from, to) = ExtractTimeBounds(root);
-            return new FindQuery(root, from, to);
+            var (from, to) = ExtractTimeBounds(root, boundFields);
+            return new FindQuery(root, boundFields, from, to);
         }
         catch (Exception)
         {
             // Malformed queries never break a read; legacy Nightscout silently ignores them.
             return Empty;
         }
+    }
+
+    /// <summary>
+    /// This method gives a query object with the search conditions.
+    /// The query object keeps the AND and OR groups and the query values.
+    /// The regex text does not change before the search.
+    /// </summary>
+    public Dictionary<string, object> ToQueryObject() {
+        return ToQueryObject(_root);
+    }
+
+    private static Dictionary<string, object> ToQueryObject(Group group) {
+        if (group.Children.Count == 0) {
+            return new Dictionary<string, object>();
+        }
+
+        var childQueries = new Dictionary<string, object>[group.Children.Count];
+
+        for (int i = 0; i < group.Children.Count; i++) {
+            object child = group.Children[i];
+
+            if (child is Group) {
+                childQueries[i] = ToQueryObject((Group)child);
+            } else {
+                childQueries[i] = ToQueryObject((Condition)child);
+            }
+        }
+
+        string groupOperator = group.IsAnd ? "$and" : "$or";
+        return new Dictionary<string, object> { [groupOperator] = childQueries };
+    }
+
+    private static Dictionary<string, object> ToQueryObject(Condition condition) {
+        string operatorName = condition.Op;
+
+        bool isSupportedOperator =
+            operatorName == "$eq" || operatorName == "$ne" ||
+            operatorName == "$gt" || operatorName == "$gte" ||
+            operatorName == "$lt" || operatorName == "$lte" ||
+            operatorName == "$in" || operatorName == "$nin" ||
+            operatorName == "$exists" || operatorName == "$regex";
+
+        if (!isSupportedOperator) {
+            // These filters must give no matches, also for documents without an _id.
+            return new Dictionary<string, object> {
+                ["_id"] = new Dictionary<string, object> { ["$in"] = Array.Empty<string>() }
+            };
+        }
+
+        var operators = new Dictionary<string, object> { [operatorName] = ToQueryOperand(condition) };
+
+        if (operatorName == "$regex" && condition.RegexOptions != null) {
+            operators["$options"] = condition.RegexOptions;
+        }
+
+        return new Dictionary<string, object> { [condition.Path] = operators };
+    }
+
+    private static object ToQueryOperand(Condition condition) {
+        object operand = condition.StringValue;
+
+        if (condition.JsonValue.HasValue) {
+            operand = condition.JsonValue.Value;
+        }
+
+        bool isListOperator = condition.Op == "$in" || condition.Op == "$nin";
+
+        if (isListOperator) {
+            bool isJsonArray = condition.JsonValue.HasValue &&
+                condition.JsonValue.Value.ValueKind == JsonValueKind.Array;
+
+            if (!isJsonArray) {
+                operand = condition.StringValue.Split('|', StringSplitOptions.RemoveEmptyEntries);
+            }
+        }
+
+        return operand;
     }
 
     /// <summary>
@@ -188,7 +376,31 @@ public sealed class FindQuery
     /// </summary>
     public bool Matches(JsonElement document)
     {
-        return EvaluateGroup(_root, document);
+        return EvaluateGroup(_root, document, _boundFields);
+    }
+
+    /// <summary>
+    /// Like <see cref="Matches{T}(T)"/>, with top-level <paramref name="field"/> read as
+    /// <paramref name="value"/>: for a document known by a value its wire shape rewrites, such as a
+    /// stored id the wire form coerces to an ObjectId.
+    /// </summary>
+    public bool MatchesAs<T>(T document, string field, string value)
+    {
+        var node = JsonSerializer.SerializeToNode(document, WireOptions)!.AsObject();
+        node[field] = value;
+        return Matches(JsonSerializer.SerializeToElement(node, WireOptions));
+    }
+
+    /// <summary>
+    /// Like <see cref="Matches{T}(T)"/> but without the conditions already captured as
+    /// <see cref="FromMills"/>/<see cref="ToMills"/>, for callers whose source applied those bounds
+    /// to a time the document's own timestamp fields do not carry.
+    /// </summary>
+    public bool MatchesResidual<T>(T document)
+    {
+        return EvaluateGroup(
+            _root, JsonSerializer.SerializeToElement(document, WireOptions), _boundFields,
+            skipCapturedBounds: true, andReachable: true);
     }
 
     #region Condition tree
@@ -205,7 +417,7 @@ public sealed class FindQuery
 
     #region Parsing — querystring form
 
-    private static Group ParseQueryString(string queryString)
+    private static Group ParseQueryString(string queryString, IReadOnlySet<string>? bareRegexFields)
     {
         var parsed = HttpUtility.ParseQueryString(queryString);
 
@@ -224,14 +436,17 @@ public sealed class FindQuery
             if (values is null)
                 continue;
 
-            if (!TryParseFindKey(key, out var groupKey, out var field, out var op))
+            if (!TryParseFindKey(key, out var groupKey, out var field, out var op, out var opIsImplicit))
             {
                 entries.Add(("", "", UnsupportedOp, ""));
                 continue;
             }
 
+            var readsBareRegex = groupKey.Length == 0 && opIsImplicit && bareRegexFields?.Contains(field) == true;
             foreach (var value in values)
-                entries.Add((groupKey, field, op, value));
+                entries.Add(readsBareRegex && RegexLiteral.IsMatch(value)
+                    ? (groupKey, field, "$regex", value)
+                    : (groupKey, field, op, value));
         }
 
         // Repeated $in/$nin params for one field form a single value set, not AND'ed conditions
@@ -281,6 +496,11 @@ public sealed class FindQuery
             owner.Children.Add(new Condition(field, op, value, JsonValue: null, RegexOptions: options));
         }
 
+        // MongoDB refuses an $options with no $regex beside it
+        var regexKeys = entries.Where(e => e.Op == "$regex").Select(e => (e.GroupKey, e.Field.ToLowerInvariant())).ToHashSet();
+        if (regexOptions.Keys.Any(key => !regexKeys.Contains(key)))
+            root.Children.Add(Unsupported);
+
         return root;
     }
 
@@ -297,11 +517,13 @@ public sealed class FindQuery
     /// (<c>find[a][b]</c> → <c>a.b</c>), the <c>find[field][$in][]</c> array marker, and
     /// <c>find[$and|$or][N][field…][$op]</c> group clauses.
     /// </summary>
-    private static bool TryParseFindKey(string key, out string groupKey, out string field, out string op)
+    private static bool TryParseFindKey(
+        string key, out string groupKey, out string field, out string op, out bool opIsImplicit)
     {
         groupKey = "";
         field = "";
         op = "$eq";
+        opIsImplicit = true;
 
         if (!Regex.IsMatch(key, @"^find(\[[^\]]*\])+$"))
             return false;
@@ -327,6 +549,7 @@ public sealed class FindQuery
         if (segments[^1].StartsWith('$'))
         {
             op = segments[^1];
+            opIsImplicit = false;
             segments.RemoveAt(segments.Count - 1);
         }
 
@@ -346,10 +569,11 @@ public sealed class FindQuery
     private static Group ParseJsonObject(JsonElement element, string? path, int depth)
     {
         if (depth > MaxDepth)
-            return new Group(IsAnd: true, []);
+            return new Group(IsAnd: true, [Unsupported]);
 
         var group = new Group(IsAnd: true, []);
         string? pendingRegexOptions = null;
+        var sawOptions = false;
         Condition? pendingRegex = null;
 
         foreach (var property in element.EnumerateObject())
@@ -358,18 +582,25 @@ public sealed class FindQuery
             {
                 case "$and":
                 case "$or":
-                    if (property.Value.ValueKind == JsonValueKind.Array)
+                    if (property.Value.ValueKind != JsonValueKind.Array
+                        || property.Value.GetArrayLength() == 0
+                        || property.Value.EnumerateArray().Any(i => i.ValueKind != JsonValueKind.Object))
                     {
-                        var logical = new Group(IsAnd: property.Name == "$and", [], IsLogical: true);
-                        foreach (var item in property.Value.EnumerateArray()
-                                     .Where(i => i.ValueKind == JsonValueKind.Object))
-                            logical.Children.Add(ParseJsonObject(item, path: null, depth + 1));
-                        group.Children.Add(logical);
+                        group.Children.Add(Unsupported);
+                        break;
                     }
+
+                    var logical = new Group(IsAnd: property.Name == "$and", [], IsLogical: true);
+                    foreach (var item in property.Value.EnumerateArray())
+                        logical.Children.Add(ParseJsonObject(item, path: null, depth + 1));
+                    group.Children.Add(logical);
                     break;
 
                 case "$options" when path != null:
-                    pendingRegexOptions = property.Value.GetString();
+                    sawOptions = true;
+                    pendingRegexOptions = property.Value.ValueKind == JsonValueKind.String
+                        ? property.Value.GetString()
+                        : null;
                     break;
 
                 case "$eq" or "$ne" or "$gt" or "$gte" or "$lt" or "$lte"
@@ -380,6 +611,10 @@ public sealed class FindQuery
                     if (property.Name == "$regex")
                         pendingRegex = cond;
                     group.Children.Add(cond);
+                    break;
+
+                case var name when name.StartsWith('$'):
+                    group.Children.Add(Unsupported);
                     break;
 
                 default:
@@ -403,6 +638,9 @@ public sealed class FindQuery
                     break;
             }
         }
+
+        if ((path != null && group.Children.Count == 0) || (sawOptions && pendingRegex == null))
+            group.Children.Add(Unsupported);
 
         if (pendingRegex != null && pendingRegexOptions != null)
         {
@@ -430,33 +668,38 @@ public sealed class FindQuery
 
     #region Time bound extraction
 
-    private static (long? From, long? To) ExtractTimeBounds(Group root)
+    /// <remarks>
+    /// A document's time is its whole millisecond, so a strict or sub-millisecond operand rounds
+    /// inward and the inclusive window stays exact: <c>$gte 0.5ms</c> starts at 1ms, <c>$lt 0.5ms</c>
+    /// ends at 0ms, and <c>$eq 0.5ms</c> is empty.
+    /// </remarks>
+    private static (long? From, long? To) ExtractTimeBounds(Group root, IReadOnlySet<string> boundFields)
     {
         long? from = null;
         long? to = null;
 
-        foreach (var cond in EnumerateAndReachable(root).Where(c => TimeFields.Contains(c.Path)))
+        foreach (var cond in EnumerateAndReachable(root).Where(c => boundFields.Contains(c.Path)))
         {
-            if (!TryConvertToMills(cond, out var mills))
+            if (!TryConvertToInstant(cond, out var mills, out var wholeMillisecond))
                 continue;
 
+            var ceiling = wholeMillisecond ? mills : Next(mills);
             switch (cond.Op)
             {
-                // Strict bounds tighten by 1ms so the inclusive repository window stays exact.
                 case "$gte":
-                    from = Max(from, mills);
+                    from = Max(from, ceiling);
                     break;
                 case "$gt":
-                    from = Max(from, mills + 1);
+                    from = Max(from, Next(mills));
                     break;
                 case "$lte":
                     to = Min(to, mills);
                     break;
                 case "$lt":
-                    to = Min(to, mills - 1);
+                    to = Min(to, Previous(ceiling));
                     break;
                 case "$eq":
-                    from = Max(from, mills);
+                    from = Max(from, ceiling);
                     to = Min(to, mills);
                     break;
             }
@@ -464,6 +707,10 @@ public sealed class FindQuery
 
         return (from, to);
     }
+
+    private static long Next(long mills) => mills == long.MaxValue ? mills : mills + 1;
+
+    private static long Previous(long mills) => mills == long.MinValue ? mills : mills - 1;
 
     private static long? Max(long? current, long candidate)
         => current.HasValue ? Math.Max(current.Value, candidate) : candidate;
@@ -499,7 +746,9 @@ public sealed class FindQuery
     /// Counts conditions not captured by the extracted time bounds (everything inside $or, every
     /// non-time field, and non-range operators on time fields).
     /// </summary>
-    private static int CountResidual(Group group, bool andReachable, string? exceptField)
+    private static int CountResidual(
+        Group group, bool andReachable, string? exceptField, StringComparison comparison,
+        IReadOnlySet<string> boundFields)
     {
         var count = 0;
         foreach (var child in group.Children)
@@ -507,28 +756,36 @@ public sealed class FindQuery
             switch (child)
             {
                 case Condition cond:
-                    var isCapturedTimeBound = andReachable
-                        && TimeFields.Contains(cond.Path)
-                        && cond.Op is "$eq" or "$gt" or "$gte" or "$lt" or "$lte"
-                        && TryConvertToMills(cond, out _);
+                    var isCapturedTimeBound = IsCapturedTimeBound(cond, andReachable, boundFields);
                     var isExceptedEquality = exceptField != null
                         && cond.Op == "$eq"
                         && andReachable
-                        && cond.Path.Equals(exceptField, StringComparison.OrdinalIgnoreCase);
+                        && cond.Path.Equals(exceptField, comparison);
                     if (!isCapturedTimeBound && !isExceptedEquality)
                         count++;
                     break;
                 case Group nested:
-                    count += CountResidual(nested, andReachable && nested.IsAnd, exceptField);
+                    count += CountResidual(nested, andReachable && nested.IsAnd, exceptField, comparison, boundFields);
                     break;
             }
         }
         return count;
     }
 
-    private static bool TryConvertToMills(Condition cond, out long mills)
+    private static bool IsCapturedTimeBound(Condition cond, bool andReachable, IReadOnlySet<string> boundFields) =>
+        andReachable
+        && boundFields.Contains(cond.Path)
+        && cond.Op is "$eq" or "$gt" or "$gte" or "$lt" or "$lte"
+        && TryConvertToInstant(cond, out _, out _);
+
+    /// <summary>
+    /// Reads the operand as an instant: <paramref name="mills"/> is its millisecond, rounded down,
+    /// and <paramref name="wholeMillisecond"/> says nothing was rounded away.
+    /// </summary>
+    private static bool TryConvertToInstant(Condition cond, out long mills, out bool wholeMillisecond)
     {
         mills = 0;
+        wholeMillisecond = true;
 
         // Numeric operand: epoch milliseconds (the wire form for date/mills)
         if (long.TryParse(cond.StringValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numeric))
@@ -538,35 +795,49 @@ public sealed class FindQuery
         }
 
         // ISO 8601 operand (created_at / dateString)
-        if (DateTimeOffset.TryParse(
-                cond.StringValue.Trim('\'', '"'), CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal, out var parsed))
-        {
-            mills = parsed.ToUnixTimeMilliseconds();
-            return true;
-        }
+        if (!TryParseOperandDate(cond.StringValue.Trim('\'', '"'), out var parsed))
+            return false;
 
-        return false;
+        mills = parsed.ToUnixTimeMilliseconds();
+        wholeMillisecond = parsed.UtcTicks % TimeSpan.TicksPerMillisecond == 0;
+        return true;
     }
+
+    /// <summary>
+    /// An unencoded <c>+hh:mm</c> offset arrives from the query string as a space, which Nightscout
+    /// turns back into the <c>+</c> before it parses the date.
+    /// </summary>
+    private static bool TryParseOperandDate(string value, out DateTimeOffset parsed) =>
+        DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out parsed)
+        || (value.LastIndexOf(' ') is var space and > 0
+            && DateTimeOffset.TryParse(
+                string.Concat(value.AsSpan(0, space), "+", value.AsSpan(space + 1)),
+                CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out parsed));
 
     #endregion
 
     #region Evaluation
 
-    private static bool EvaluateGroup(Group group, JsonElement document)
+    private static bool EvaluateGroup(
+        Group group, JsonElement document, IReadOnlySet<string> boundFields,
+        bool skipCapturedBounds = false, bool andReachable = true)
     {
         if (group.Children.Count == 0)
             return true;
 
         return group.IsAnd
-            ? group.Children.All(child => EvaluateChild(child, document))
-            : group.Children.Any(child => EvaluateChild(child, document));
+            ? group.Children.All(child => EvaluateChild(child, document, boundFields, skipCapturedBounds, andReachable))
+            : group.Children.Any(child => EvaluateChild(child, document, boundFields, skipCapturedBounds, andReachable));
     }
 
-    private static bool EvaluateChild(object child, JsonElement document) => child switch
+    private static bool EvaluateChild(
+        object child, JsonElement document, IReadOnlySet<string> boundFields,
+        bool skipCapturedBounds, bool andReachable) => child switch
     {
-        Condition cond => EvaluateCondition(cond, document),
-        Group nested => EvaluateGroup(nested, document),
+        Condition cond => (skipCapturedBounds && IsCapturedTimeBound(cond, andReachable, boundFields))
+            || EvaluateCondition(cond, document),
+        Group nested => EvaluateGroup(
+            nested, document, boundFields, skipCapturedBounds, andReachable && nested.IsAnd),
         _ => true,
     };
 
@@ -579,9 +850,7 @@ public sealed class FindQuery
         switch (cond.Op)
         {
             case "$exists":
-                var wantExists = cond.StringValue.Equals("true", StringComparison.OrdinalIgnoreCase)
-                    || cond.StringValue == "1";
-                return wantExists != missing;
+                return TryReadExists(cond) is { } wantExists && wantExists != missing;
 
             // Mongo semantics: negative operators match documents missing the field, and a null
             // operand means "absent or null" for $eq / "present and non-null" for $ne
@@ -620,7 +889,7 @@ public sealed class FindQuery
         comparison = 0;
         if (!TimeFields.Contains(cond.Path))
             return false;
-        if (!TryConvertToMills(cond, out var operandMills))
+        if (!TryConvertToInstant(cond, out var operandMills, out var wholeMillisecond))
             return false;
 
         long fieldMills;
@@ -632,7 +901,10 @@ public sealed class FindQuery
         else
             return false;
 
+        // A field is its whole millisecond, so it lies before an operand inside that millisecond.
         comparison = fieldMills.CompareTo(operandMills);
+        if (comparison == 0 && !wholeMillisecond)
+            comparison = -1;
         return true;
     }
 
@@ -755,7 +1027,7 @@ public sealed class FindQuery
         var flags = cond.RegexOptions ?? string.Empty;
 
         // Accept the /pattern/flags literal form
-        var literal = Regex.Match(pattern, "^/(.*)/([a-z]*)$");
+        var literal = RegexLiteral.Match(pattern);
         if (literal.Success)
         {
             pattern = literal.Groups[1].Value;

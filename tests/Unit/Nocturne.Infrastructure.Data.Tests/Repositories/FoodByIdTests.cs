@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -26,7 +25,7 @@ public class FoodByIdTests : IDisposable
     public FoodByIdTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(
-            TenantId, "test", new MutationAuditInterceptor(Mock.Of<IHttpContextAccessor>()));
+            TenantId, "test", new MutationAuditInterceptor());
         _context = _db.CreateContext();
         _foods = new FoodRepository(_context, NullLogger<FoodRepository>.Instance);
     }

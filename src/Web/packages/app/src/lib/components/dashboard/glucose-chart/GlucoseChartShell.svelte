@@ -9,6 +9,7 @@
   import { computeTrackLayout } from "./engine/track-layout";
   import { formatWeekdayDate, hourLabel } from "$lib/utils/formatting";
   import { hourTicks } from "./engine/axis-ticks";
+  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
 
   interface Props {
@@ -21,6 +22,7 @@
     selectionDomain?: [Date, Date] | null;
     onSelectionChange?: (domain: [Date, Date] | null) => void;
     showTimeAxis?: boolean;
+    glucoseUnits?: GlucoseUnits;
     tracks: Snippet<[GlucoseChartContext]>;
     /** HTML overlays rendered after Svg but inside Chart (tooltips, etc.) */
     overlays?: Snippet<[GlucoseChartContext]>;
@@ -36,6 +38,7 @@
     selectionDomain,
     onSelectionChange,
     showTimeAxis = true,
+    glucoseUnits,
     tracks,
     overlays,
   }: Props = $props();
@@ -46,7 +49,7 @@
   const layout = $derived(
     computeTrackLayout(
       chartHeight,
-      engine.glucoseYMax,
+      engine.thresholds.glucoseYMax,
       engine.maxBasalRate,
       engine.maxIOB,
       {
@@ -107,6 +110,9 @@
     get printing() {
       return print.active;
     },
+    get glucoseUnits() {
+      return glucoseUnits;
+    },
   };
   setGlucoseChartContext(ctx);
 </script>
@@ -119,7 +125,7 @@
     y="sgv"
     xScale={scaleTime()}
     xDomain={[chartXDomain.from, chartXDomain.to]}
-    yDomain={[0, engine.glucoseYMax]}
+    yDomain={[0, engine.thresholds.glucoseYMax]}
     {padding}
     tooltipContext={{ mode: "quadtree-x" }}
   >

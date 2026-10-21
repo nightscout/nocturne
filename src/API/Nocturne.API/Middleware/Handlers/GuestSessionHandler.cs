@@ -73,11 +73,12 @@ public class GuestSessionHandler : IAuthHandler
         }
 
         // A guest grant belongs to exactly one tenant, so a session cannot be validated
-        // without a resolved tenant to validate it against.
+        // without a resolved tenant to validate it against. The cookie is kept: a host-only
+        // cookie on a single-tenant apex reaches that apex's cross-tenant paths too, and saying
+        // nothing about the grant is no reason to end it.
         if (context.GetTenantContext() is not { } tenantCtx)
         {
-            _logger.LogDebug("Guest session {GrantId} presented with no resolved tenant, clearing cookie", grantId);
-            ClearGuestSessionCookie(context);
+            _logger.LogDebug("Guest session {GrantId} presented with no resolved tenant", grantId);
             return AuthResult.Failure(InvalidSessionError);
         }
 

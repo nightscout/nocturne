@@ -1,4 +1,3 @@
-using System.Linq;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -24,33 +23,6 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
-    // Replaces the registered IDbContextFactory<NocturneDbContext> with a decorator that
-    // normalizes the carrier properties on every acquisition. Applied immediately after
-    // AddDbContextFactory so the descriptor it wraps is the registered factory.
-    private static void DecorateWithCarrierReset(IServiceCollection services)
-    {
-        var descriptor = services.LastOrDefault(
-            d => d.ServiceType == typeof(IDbContextFactory<NocturneDbContext>))
-            ?? throw new InvalidOperationException(
-                "AddDbContextFactory<NocturneDbContext> must be registered before decorating it.");
-
-        services.Remove(descriptor);
-        services.Add(new ServiceDescriptor(
-            typeof(IDbContextFactory<NocturneDbContext>),
-            sp => new CarrierResettingDbContextFactory(ResolveInner(descriptor, sp)),
-            descriptor.Lifetime));
-    }
-
-    private static IDbContextFactory<NocturneDbContext> ResolveInner(
-        ServiceDescriptor descriptor, IServiceProvider sp)
-    {
-        var inner =
-            descriptor.ImplementationInstance
-            ?? descriptor.ImplementationFactory?.Invoke(sp)
-            ?? ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType!);
-        return (IDbContextFactory<NocturneDbContext>)inner;
-    }
-
     /// <summary>
     /// Add PostgreSQL data services with explicit connection string
     /// </summary>
@@ -143,11 +115,6 @@ public static class ServiceCollectionExtensions
             }
         );
 
-        // Normalize the context carriers to fail-closed defaults on every acquisition, so raw
-        // IDbContextFactory callers start from a known-safe tenant/subject/share state. See
-        // CarrierResettingDbContextFactory.
-        DecorateWithCarrierReset(services);
-
         // Register scoped DbContext, repositories, and shared services.
         AddDataServices(services);
 
@@ -155,40 +122,22 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Register scoped NocturneDbContext, repository interfaces, deduplication, and query parser.
-    /// Called by AddPostgreSqlInfrastructure; also usable independently by test factories
-    /// that provide their own IDbContextFactory without creating an NpgsqlDataSource.
+    /// Register <see cref="INocturneDbContextFactory"/>, the scoped NocturneDbContext, repository
+    /// interfaces and deduplication. Called by AddPostgreSqlInfrastructure; also usable independently
+    /// by test factories that provide their own IDbContextFactory without creating an NpgsqlDataSource.
     /// </summary>
     public static IServiceCollection AddDataServices(this IServiceCollection services)
     {
-        // Register scoped NocturneDbContext that sets TenantId from ITenantAccessor.
-        // All existing constructor injections of NocturneDbContext continue to work.
-        // The context is disposed when the scope ends.
-        services.AddScoped(sp =>
-        {
-            var factory = sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-            var context = factory.CreateDbContext();
-            var tenantAccessor = sp.GetService<ITenantAccessor>();
-            if (tenantAccessor?.IsResolved == true)
-            {
-                context.TenantId = tenantAccessor.TenantId;
-            }
-            // Mark the scoped context as a share when the request is one. Carrier defaults (CSV
-            // null) are already set by CarrierResettingDbContextFactory; this path never resolves
-            // the CSV, so a share reading PHI here is denied (fail-closed) — share PHI reads go
-            // through ITenantDbContextFactory, which carries the CSV.
-            var categoryReadContext = sp.GetService<ICategoryReadContext>();
-            context.IsShareContext = categoryReadContext?.IsShare == true;
-            context.HistoryClamped = categoryReadContext?.IsHistoryClamped == true;
-            return context;
-        });
-
-        // Per-request public-share category context, read by the factory and the scoped
-        // context above to stamp the RLS carrier properties.
         services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        services.AddScoped(sp => new TenantReadContext(
+            sp.GetService<ITenantAccessor>(),
+            sp.GetService<ICategoryReadContext>(),
+            sp.GetService<IAuditContext>()));
+        services.TryAddSingleton(sp => new RootServiceProvider(sp));
+        services.TryAddTransient<NocturneDbContextFactory>();
+        services.TryAddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
 
-        // Register tenant-aware context factory for V4 repositories
-        services.AddScoped<ITenantDbContextFactory, TenantDbContextFactory>();
+        services.AddScoped(sp => sp.GetRequiredService<NocturneDbContextFactory>().Create());
 
         // Register deduplication service (required by repositories)
         services.AddScoped<IDeduplicationService, DeduplicationService>();

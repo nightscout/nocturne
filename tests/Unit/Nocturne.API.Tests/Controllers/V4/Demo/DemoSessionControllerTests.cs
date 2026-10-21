@@ -216,7 +216,7 @@ public class DemoSessionControllerTests : IDisposable
     private DemoSessionController BuildController(Guid tenantId, bool isDemo, bool shareAccess = false)
     {
         var demoTenantService = new DemoTenantService(
-            BuildDbFactory(),
+            BuildDbFactory().AsNocturneFactory(),
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),
             new Mock<ICacheService>().Object,

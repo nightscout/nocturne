@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -37,8 +38,6 @@ public class MembershipRequestService : IMembershipRequestService
     public async Task<CreateMembershipRequestResult> CreateRequestAsync(
         Guid tenantId, Guid subjectId, string? message, CancellationToken ct = default)
     {
-        _dbContext.TenantId = tenantId;
-
         var tenant = await _dbContext.Tenants.AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == tenantId, ct);
         if (tenant == null)
@@ -72,14 +71,18 @@ public class MembershipRequestService : IMembershipRequestService
         var subject = await _dbContext.Subjects.FindAsync([subjectId], ct);
         var subjectName = subject?.Name ?? "Someone";
 
-        // Find all tenant members whose roles include "members.manage" or "*"
-        var membersToNotify = await _dbContext.TenantMembers
-            .Where(m => m.TenantId == tenantId)
-            .Where(m => m.MemberRoles.Any(mr =>
-                mr.TenantRole.Permissions.Any(p => p == "members.manage" || p == "*")))
+        var candidates = await _dbContext.TenantMembers
+            .AsNoTracking()
+            .Include(m => m.MemberRoles)
+                .ThenInclude(mr => mr.TenantRole)
+            .PeopleOf(tenantId)
+            .ToListAsync(ct);
+
+        var membersToNotify = candidates
+            .Where(m => m.Holds(Scope.MembersManage))
             .Select(m => m.SubjectId)
             .Distinct()
-            .ToListAsync(ct);
+            .ToList();
 
         foreach (var recipientSubjectId in membersToNotify)
         {
@@ -99,8 +102,6 @@ public class MembershipRequestService : IMembershipRequestService
     public async Task<MembershipRequestDto?> GetMyRequestAsync(
         Guid tenantId, Guid subjectId, CancellationToken ct = default)
     {
-        _dbContext.TenantId = tenantId;
-
         var entity = await _dbContext.MembershipRequests
             .Where(r => r.SubjectId == subjectId)
             .OrderByDescending(r => r.CreatedAt)
@@ -125,8 +126,6 @@ public class MembershipRequestService : IMembershipRequestService
     public async Task<List<MembershipRequestDto>> GetPendingRequestsAsync(
         Guid tenantId, CancellationToken ct = default)
     {
-        _dbContext.TenantId = tenantId;
-
         var requests = await _dbContext.MembershipRequests
             .Where(r => r.Status == "pending")
             .OrderByDescending(r => r.CreatedAt)
@@ -161,8 +160,6 @@ public class MembershipRequestService : IMembershipRequestService
         bool limitTo24Hours = false,
         CancellationToken ct = default)
     {
-        _dbContext.TenantId = tenantId;
-
         var roleGrant = await _tenantRoleService.ValidateRoleGrantAsync(
             tenantId, roleIds, granterScopes, ct);
         if (!roleGrant.Ok)
@@ -210,8 +207,6 @@ public class MembershipRequestService : IMembershipRequestService
         Guid requestId, Guid tenantId,
         Guid decidedBySubjectId, CancellationToken ct = default)
     {
-        _dbContext.TenantId = tenantId;
-
         var request = await _dbContext.MembershipRequests
             .FirstOrDefaultAsync(r => r.Id == requestId, ct);
 

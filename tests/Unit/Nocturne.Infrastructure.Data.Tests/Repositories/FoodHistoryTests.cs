@@ -29,9 +29,9 @@ public class FoodHistoryTests : IDisposable
     public FoodHistoryTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(
-            TenantId, "test", new MutationAuditInterceptor(Mock.Of<IHttpContextAccessor>()));
+            TenantId, "test", new MutationAuditInterceptor());
         _context = _db.CreateContext();
-        _context.AuditContext = new UserAuditContext();
+        _context.AttributedTo(new UserAuditContext());
         _foods = new FoodRepository(_context, NullLogger<FoodRepository>.Instance);
     }
 

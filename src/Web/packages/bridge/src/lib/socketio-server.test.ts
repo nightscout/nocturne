@@ -1,36 +1,39 @@
 import { createHmac } from 'node:crypto';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createServer } from 'http';
+import type { AddressInfo } from 'node:net';
+import { io as connectClient, type Socket as ClientSocket } from 'socket.io-client';
 import SocketIOServer, { pickHandshakeHost, resolveTenantSlug } from './socketio-server.js';
-import { signHandshakeTicket } from './handshake-ticket.js';
+import { signHandshakeTicket, type RealtimeGrant } from './handshake-ticket.js';
+import MessageTranslator from './message-translator.js';
 
 const SECRET = 'test-instance-key-0123456789';
+
+function grant(tenantRelay: boolean, extra: Partial<RealtimeGrant> = {}): RealtimeGrant {
+  return { tenantRelay, categories: [], historyClamped: false, ...extra };
+}
 
 describe('resolveTenantSlug', () => {
   const base = 'nocturne.run';
 
   it('resolves a subdomain to its slug', () => {
-    expect(resolveTenantSlug('rhys.nocturne.run', base, [])).toBe('rhys');
+    expect(resolveTenantSlug('rhys.nocturne.run', base, null)).toBe('rhys');
   });
 
-  it('resolves the apex domain to the sole tenant', () => {
-    expect(resolveTenantSlug('nocturne.run', base, ['only'])).toBe('only');
+  it('resolves the apex domain to the tenant the API serves there', () => {
+    expect(resolveTenantSlug('nocturne.run', base, 'only')).toBe('only');
   });
 
-  it('returns null on the apex when more than one tenant exists', () => {
-    expect(resolveTenantSlug('nocturne.run', base, ['a', 'b'])).toBeNull();
-  });
-
-  it('returns null on the apex when no tenants are known yet', () => {
-    expect(resolveTenantSlug('nocturne.run', base, [])).toBeNull();
+  it('returns null on the apex when the API serves no tenant there', () => {
+    expect(resolveTenantSlug('nocturne.run', base, null)).toBeNull();
   });
 
   it('returns null for a foreign domain', () => {
-    expect(resolveTenantSlug('evil.com', base, ['only'])).toBeNull();
+    expect(resolveTenantSlug('evil.com', base, 'only')).toBeNull();
   });
 
   it('ignores a port on the host', () => {
-    expect(resolveTenantSlug('rhys.nocturne.run:443', base, [])).toBe('rhys');
+    expect(resolveTenantSlug('rhys.nocturne.run:443', base, null)).toBe('rhys');
   });
 });
 
@@ -58,8 +61,8 @@ describe('pickHandshakeHost', () => {
 
 type HandshakeHeaders = Record<string, string | string[] | undefined>;
 
-function makeServer(tenantSlugs: string[] = []): SocketIOServer {
-  return new SocketIOServer(createServer(), {}, 'nocturne.run', tenantSlugs, SECRET);
+function makeServer(apexTenantSlug: string | null = null): SocketIOServer {
+  return new SocketIOServer(createServer(), {}, 'nocturne.run', apexTenantSlug, SECRET);
 }
 
 function fakeSocket(headers: HandshakeHeaders, auth: { token?: string } = {}) {
@@ -98,7 +101,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
 
     await server.authorizeHandshake(
-      fakeSocket({ host: 'evil.com' }, { token: signHandshakeTicket(SECRET, 'evil.com', true) }) as never,
+      fakeSocket({ host: 'evil.com' }, { token: signHandshakeTicket(SECRET, 'evil.com', grant(true)) }) as never,
       next,
     );
 
@@ -127,7 +130,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     // only a connection offering no ticket at all falls through to the legacy path.
     const server = makeServer();
     const next = vi.fn();
-    const ticket = signHandshakeTicket(SECRET, 'rhys.nocturne.run', true);
+    const ticket = signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true));
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
       { token: ticket.slice(0, -1) + (ticket.endsWith('a') ? 'b' : 'a') },
@@ -145,7 +148,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'someone-else.nocturne.run', true) },
+      { token: signHandshakeTicket(SECRET, 'someone-else.nocturne.run', grant(true)) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -158,7 +161,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const server = makeServer();
     const next = vi.fn();
     // Sign a ticket that expired one minute ago.
-    const expired = signHandshakeTicket(SECRET, 'rhys.nocturne.run', true, undefined, -60_000);
+    const expired = signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true), -60_000);
     const socket = fakeSocket({ 'x-forwarded-host': 'rhys.nocturne.run' }, { token: expired });
 
     await server.authorizeHandshake(socket as never, next);
@@ -173,7 +176,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true) },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true)) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -187,7 +190,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run:443', true) },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run:443', grant(true)) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -197,11 +200,11 @@ describe('SocketIOServer.authorizeHandshake', () => {
   });
 
   it('admits an apex connection for the sole tenant with an apex ticket', async () => {
-    const server = makeServer(['only']);
+    const server = makeServer('only');
     const next = vi.fn();
     const socket = fakeSocket(
       { host: 'nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'nocturne.run', true) },
+      { token: signHandshakeTicket(SECRET, 'nocturne.run', grant(true)) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -214,7 +217,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const server = makeServer();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true) },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true)) },
     );
 
     await connect(server, socket);
@@ -228,7 +231,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const subjectB = '0b6f2c1e-1111-4222-8333-444455556666';
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true, subjectA) },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true, { subjectId: subjectA })) },
     );
 
     await connect(server, socket);
@@ -239,11 +242,45 @@ describe('SocketIOServer.authorizeHandshake', () => {
     expect(socket.data.subjectId).toBe(subjectA);
   });
 
+  it('joins a member ticket to the category rooms it was granted', async () => {
+    const server = makeServer();
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true, { categories: ['entries', 'care'] })) },
+    );
+
+    await connect(server, socket);
+
+    const categoryRooms = socket.join.mock.calls
+      .map(([room]) => String(room))
+      .filter((room) => room.includes(':category:'));
+    expect(categoryRooms).toEqual(['tenant:rhys:category:entries', 'tenant:rhys:category:care']);
+  });
+
+  it('joins a history-clamped member ticket to the tenant room and no category room', async () => {
+    const server = makeServer();
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      {
+        token: signHandshakeTicket(
+          SECRET,
+          'rhys.nocturne.run',
+          grant(true, { categories: ['entries', 'care'], historyClamped: true }),
+        ),
+      },
+    );
+
+    await connect(server, socket);
+
+    expect(socket.join).toHaveBeenCalledWith('tenant:rhys');
+    expect(socket.join.mock.calls.some(([room]) => String(room).includes(':category:'))).toBe(false);
+  });
+
   it('joins no subject room for a ticket without a subject', async () => {
     const server = makeServer();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true) },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(true)) },
     );
 
     await connect(server, socket);
@@ -255,17 +292,16 @@ describe('SocketIOServer.authorizeHandshake', () => {
   });
 
   it.each([
-    ['a restricted ticket', () => signHandshakeTicket(SECRET, 'rhys.nocturne.run', false)],
+    ['a restricted ticket', () => signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(false))],
     ['a ticket carrying no admission', () => ticketWithoutAdmission('rhys.nocturne.run')],
+    [
+      'a restricted ticket granted categories',
+      () => signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(false, { categories: ['entries', 'care'] })),
+    ],
     [
       'a restricted ticket naming a subject',
       () =>
-        signHandshakeTicket(
-          SECRET,
-          'rhys.nocturne.run',
-          false,
-          '0a5f2c1e-1111-4222-8333-444455556666',
-        ),
+        signHandshakeTicket(SECRET, 'rhys.nocturne.run', grant(false, { subjectId: '0a5f2c1e-1111-4222-8333-444455556666' })),
     ],
   ])('admits %s but keeps it out of every tenant room', async (_case, mint) => {
     // The tenant room carries every category and every member's in-app
@@ -296,7 +332,7 @@ describe('SocketIOServer.handleAuthorize', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       apiBaseUrl,
     );
@@ -351,6 +387,38 @@ describe('SocketIOServer.handleAuthorize', () => {
     expect(socket.disconnect).not.toHaveBeenCalled();
     expect(socket.data.tenantSlug).toBe('rhys');
     expect(callback).toHaveBeenCalledWith(expect.objectContaining({ read: true }));
+  });
+
+  it('joins the category rooms the admission grants an unclamped credential', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        admission({ tenantRelay: true, categories: ['entries', 'care'], historyClamped: false }),
+      ),
+    );
+
+    const server = makeApiServer();
+    const socket = pendingSocket('rhys');
+
+    await server.handleAuthorize(socket as never, { secret: 'sha1hash' });
+
+    expect(socket.join).toHaveBeenCalledWith('tenant:rhys:category:entries');
+    expect(socket.join).toHaveBeenCalledWith('tenant:rhys:category:care');
+  });
+
+  it.each([
+    ['history-clamped', { tenantRelay: true, categories: ['entries'], historyClamped: true }],
+    ['silent on the clamp', { tenantRelay: true, categories: ['entries'] }],
+  ])('joins no category room for a credential the admission leaves %s', async (_case, body) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission(body)));
+
+    const server = makeApiServer();
+    const socket = pendingSocket('rhys');
+
+    await server.handleAuthorize(socket as never, { secret: 'sha1hash' });
+
+    expect(socket.join).toHaveBeenCalledWith('tenant:rhys');
+    expect(socket.join.mock.calls.some(([room]) => String(room).includes(':category:'))).toBe(false);
   });
 
   const SUBJECT = '0a5f2c1e-1111-4222-8333-444455556666';
@@ -476,7 +544,7 @@ describe('SocketIOServer tracker broadcast fan-out', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       'http://api.internal',
     );
@@ -521,7 +589,7 @@ describe('SocketIOServer in-app notification fan-out', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       'http://api.internal',
     );
@@ -574,7 +642,7 @@ describe('SocketIOServer v3 /storage namespace', () => {
   });
 
   function makeStorageServer(apiBaseUrl = 'http://api.internal') {
-    return new SocketIOServer(createServer(), {}, 'nocturne.run', [], SECRET, apiBaseUrl);
+    return new SocketIOServer(createServer(), {}, 'nocturne.run', null, SECRET, apiBaseUrl);
   }
 
   /** A fake socket carrying a pending tenant slug (post-handshake state). */
@@ -617,9 +685,39 @@ describe('SocketIOServer v3 /storage namespace', () => {
 
     expect(ack).toHaveBeenCalledWith({
       success: true,
-      collections: ['devicestatus', 'entries', 'profile', 'treatments', 'foods', 'settings'],
+      collections: ['devicestatus', 'entries', 'profile', 'treatments', 'food', 'settings'],
     });
     expect(socket.join).toHaveBeenCalledTimes(6);
+  });
+
+  it.each([
+    [['food'], ['food']],
+    [['foods'], ['foods']],
+    [['food', 'entries'], ['food', 'entries']],
+    [['foods', 'food'], ['foods']],
+    [['food', 'foods'], ['food']],
+  ])('subscribes %j, acks %j and joins only those rooms', async (requested, acked) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    const server = makeStorageServer();
+    const socket = storageSocket('rhys');
+    const ack = vi.fn();
+
+    await server.handleStorageSubscribe(socket as never, { accessToken: 'tok', collections: requested }, ack);
+
+    expect(ack).toHaveBeenCalledWith({ success: true, collections: acked });
+    expect(socket.join.mock.calls.map(([room]) => room)).toEqual(acked.map((name) => `storage:rhys:${name}`));
+  });
+
+  it('authorises food against the food read endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 403 });
+    vi.stubGlobal('fetch', fetchMock);
+    const server = makeStorageServer();
+    const socket = storageSocket('rhys');
+
+    await server.handleStorageSubscribe(socket as never, { accessToken: 'tok', collections: ['food'] });
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/v3/food');
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
   });
 
   it('filters out unknown collection names', async () => {
@@ -733,6 +831,108 @@ describe('SocketIOServer v3 /storage namespace', () => {
   });
 });
 
+describe('SocketIOServer storage category fan-out', () => {
+  const clients: ClientSocket[] = [];
+
+  afterEach(() => {
+    for (const client of clients.splice(0)) client.disconnect();
+  });
+
+  async function listening() {
+    const http = createServer();
+    const server = new SocketIOServer(http, {}, 'nocturne.run', null, SECRET);
+    await server.start();
+    await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
+    return { server, port: (http.address() as AddressInfo).port };
+  }
+
+  /** A browser socket admitted with `ticket`, recording every storage event it receives. */
+  async function browser(port: number, ticket: RealtimeGrant) {
+    const client = connectClient(`http://127.0.0.1:${port}`, {
+      transports: ['websocket'],
+      extraHeaders: { 'X-Forwarded-Host': 'rhys.nocturne.run' },
+      auth: { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', ticket) },
+    });
+    clients.push(client);
+    const received: { event: string; payload: unknown }[] = [];
+    for (const event of ['create', 'update', 'delete']) {
+      client.on(event, (payload: unknown) => received.push({ event, payload }));
+    }
+    await new Promise<void>((resolve) => client.once('connect_ack', () => resolve()));
+    return received;
+  }
+
+  /** Lets in-flight emits land, so an absent event is absent rather than late. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+  const bolus = { colName: 'care', recordType: 'bolus', doc: { id: 'b1', insulin: 2 } };
+
+  it('delivers a v4 care event to a member granted care and not to one without it', async () => {
+    const { server, port } = await listening();
+    try {
+      const treatmentsReader = await browser(port, grant(true, { categories: ['entries', 'care'] }));
+      const glucoseOnly = await browser(port, grant(true, { categories: ['entries', 'glucose'] }));
+
+      server.broadcastStorageEvent('create', bolus, 'rhys');
+
+      await vi.waitFor(() => expect(treatmentsReader).toEqual([{ event: 'create', payload: bolus }]));
+      await settle();
+      expect(glucoseOnly).toEqual([]);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('delivers no storage event to a restricted or history-clamped socket, whatever its grant names', async () => {
+    const { server, port } = await listening();
+    try {
+      const share = await browser(port, grant(false, { categories: ['entries', 'care'] }));
+      const clamped = await browser(port, grant(true, { categories: ['entries', 'care'], historyClamped: true }));
+
+      server.broadcastStorageEvent('create', bolus, 'rhys');
+      server.broadcastStorageEvent('create', { colName: 'entries', doc: { sgv: 120 } }, 'rhys');
+
+      await settle();
+      expect(share).toEqual([]);
+      expect(clamped).toEqual([]);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('delivers a legacy or v4 event only to the sockets granted its category', async () => {
+    const { server, port } = await listening();
+    try {
+      const glucoseOnly = await browser(port, grant(true, { categories: ['entries'] }));
+      const entry = { colName: 'entries', doc: { sgv: 120 } };
+
+      server.broadcastStorageEvent('create', { colName: 'treatments', doc: { _id: 't1' } }, 'rhys');
+      server.broadcastStorageEvent('create', { colName: 'device', recordType: 'apsSnapshot', doc: { id: 'a1' } }, 'rhys');
+      server.broadcastStorageEvent('create', entry, 'rhys');
+
+      await vi.waitFor(() => expect(glucoseOnly).toEqual([{ event: 'create', payload: entry }]));
+      await settle();
+      expect(glucoseOnly).toHaveLength(1);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('delivers an event naming no category to no browser socket', async () => {
+    const { server, port } = await listening();
+    try {
+      const member = await browser(port, grant(true, { categories: ['entries', 'care'] }));
+
+      server.broadcastStorageEvent('create', { doc: { id: 'x' } }, 'rhys');
+
+      await settle();
+      expect(member).toEqual([]);
+    } finally {
+      await server.stop();
+    }
+  });
+});
+
 describe('SocketIOServer v3 /storage broadcast fan-out', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -745,7 +945,7 @@ describe('SocketIOServer v3 /storage broadcast fan-out', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       'http://api.internal',
     );
@@ -783,18 +983,21 @@ describe('SocketIOServer v3 /storage broadcast fan-out', () => {
     server.getIO()!.close();
   });
 
-  it('amends the payload colName for food -> foods', async () => {
+  it.each(['food', 'foods'])('delivers a %s broadcast to each spelling room under that spelling', async (broadcast) => {
     const server = await startedServer();
     const storageNsp = server.getIO()!.of('/storage');
 
-    const emitted: { event: string; payload: unknown }[] = [];
-    vi.spyOn(storageNsp, 'to').mockReturnValue({
-      emit: (event: string, payload: unknown) => emitted.push({ event, payload }),
-    } as never);
+    const emitted: { room: string; payload: { colName: string } }[] = [];
+    vi.spyOn(storageNsp, 'to').mockImplementation(((room: string) => ({
+      emit: (_event: string, payload: { colName: string }) => emitted.push({ room, payload }),
+    })) as never);
 
-    server.broadcastStorageEvent('create', { colName: 'food', doc: {} }, 'rhys');
+    server.broadcastStorageEvent('create', { colName: broadcast, doc: {} }, 'rhys');
 
-    expect((emitted[0].payload as { colName: string }).colName).toBe('foods');
+    expect(emitted).toEqual([
+      { room: 'storage:rhys:food', payload: { colName: 'food', doc: {} } },
+      { room: 'storage:rhys:foods', payload: { colName: 'foods', doc: {} } },
+    ]);
     server.getIO()!.close();
   });
 
@@ -821,7 +1024,7 @@ describe('SocketIOServer v3 /alarm namespace', () => {
   });
 
   function makeAlarmServer(apiBaseUrl = 'http://api.internal') {
-    return new SocketIOServer(createServer(), {}, 'nocturne.run', [], SECRET, apiBaseUrl);
+    return new SocketIOServer(createServer(), {}, 'nocturne.run', null, SECRET, apiBaseUrl);
   }
 
   function alarmSocket(pendingTenantSlug?: string) {
@@ -946,7 +1149,7 @@ describe('SocketIOServer v3 /alarm broadcast fan-out', () => {
       createServer(),
       {},
       'nocturne.run',
-      [],
+      null,
       SECRET,
       'http://api.internal',
     );
@@ -954,36 +1157,147 @@ describe('SocketIOServer v3 /alarm broadcast fan-out', () => {
     return server;
   }
 
-  it('fans an alarm out to the /alarm tenant room', async () => {
+  function relayTo(server: SocketIOServer) {
+    const io = server.getIO()!;
+    const tenantEmit = vi.fn();
+    const alarmEmit = vi.fn();
+    const tenantTo = vi.spyOn(io, 'to').mockReturnValue({ emit: tenantEmit } as never);
+    const alarmTo = vi.spyOn(io.of('/alarm'), 'to').mockReturnValue({ emit: alarmEmit } as never);
+    const expectRooms = () => {
+      expect(tenantTo).toHaveBeenCalledExactlyOnceWith('tenant:rhys');
+      expect(alarmTo).toHaveBeenCalledExactlyOnceWith('alarm:rhys');
+    };
+    return {
+      translator: new MessageTranslator(server, 'rhys'),
+      tenantEmit,
+      alarmEmit,
+      expectRooms,
+    };
+  }
+
+  const urgentNotification = {
+    level: 2,
+    title: 'Urgent High',
+    message: 'BG 15.1',
+    group: 'default',
+    plugin: 'simplealarms',
+    timestamp: 1700000000000,
+    clear: false,
+  };
+
+  it('relays an urgent notification as urgent_alarm with its numeric level on both namespaces', async () => {
     const server = await startedServer();
-    const alarmNsp = server.getIO()!.of('/alarm');
-    const toSpy = vi.spyOn(alarmNsp, 'to');
+    const { translator, tenantEmit, alarmEmit, expectRooms } = relayTo(server);
 
-    server.broadcastAlarm({ level: 'urgent', message: 'HIGH' }, 'rhys');
+    translator.handleAlarm('urgent_alarm', urgentNotification);
 
-    expect(toSpy).toHaveBeenCalledWith('alarm:rhys');
+    for (const emit of [tenantEmit, alarmEmit]) {
+      expect(emit).toHaveBeenCalledExactlyOnceWith(
+        'urgent_alarm',
+        expect.objectContaining({ level: 2, title: 'Urgent High', group: 'default' }),
+      );
+    }
+    expectRooms();
     server.getIO()!.close();
   });
 
-  it('fans a clear_alarm out to the /alarm tenant room', async () => {
+  it('relays a warn notification as alarm with its numeric level on both namespaces', async () => {
     const server = await startedServer();
-    const alarmNsp = server.getIO()!.of('/alarm');
-    const toSpy = vi.spyOn(alarmNsp, 'to');
+    const { translator, tenantEmit, alarmEmit, expectRooms } = relayTo(server);
 
-    server.broadcastClearAlarm('rhys');
+    translator.handleAlarm('alarm', { ...urgentNotification, level: 1, title: 'Warning High' });
 
-    expect(toSpy).toHaveBeenCalledWith('alarm:rhys');
+    for (const emit of [tenantEmit, alarmEmit]) {
+      expect(emit).toHaveBeenCalledExactlyOnceWith(
+        'alarm',
+        expect.objectContaining({ level: 1, title: 'Warning High' }),
+      );
+    }
+    expectRooms();
     server.getIO()!.close();
   });
 
-  it('fans an announcement out to the /alarm tenant room', async () => {
+  it('gives a level-less alarm the numeric level of the event it arrived on', async () => {
     const server = await startedServer();
-    const alarmNsp = server.getIO()!.of('/alarm');
-    const toSpy = vi.spyOn(alarmNsp, 'to');
+    const { translator, tenantEmit } = relayTo(server);
 
-    server.broadcastAnnouncement({ message: 'sensor change' }, 'rhys');
+    translator.handleAlarm('urgent_alarm', { title: 'No level' });
+    translator.handleAlarm('alarm', { title: 'No level' });
 
-    expect(toSpy).toHaveBeenCalledWith('alarm:rhys');
+    expect(tenantEmit).toHaveBeenNthCalledWith(1, 'urgent_alarm', expect.objectContaining({ level: 2 }));
+    expect(tenantEmit).toHaveBeenNthCalledWith(2, 'alarm', expect.objectContaining({ level: 1 }));
+    server.getIO()!.close();
+  });
+
+  it('relays clear_alarm with the clearing notification on both namespaces', async () => {
+    const server = await startedServer();
+    const { translator, tenantEmit, alarmEmit, expectRooms } = relayTo(server);
+    const clear = {
+      clear: true,
+      title: 'Alarm Cleared - default',
+      message: 'Level 2 alarm has been acknowledged and cleared',
+      group: 'default',
+      level: 2,
+    };
+
+    translator.handleClearAlarm(clear);
+
+    expect(tenantEmit).toHaveBeenCalledExactlyOnceWith('clear_alarm', clear);
+    expect(alarmEmit).toHaveBeenCalledExactlyOnceWith('clear_alarm', clear);
+    expectRooms();
+    server.getIO()!.close();
+  });
+
+  const apiAnnouncement = {
+    level: 0,
+    title: 'Sensor change',
+    message: 'Change the sensor',
+    group: 'default',
+    plugin: 'announcement',
+    timestamp: 1700000000000,
+    isAnnouncement: true,
+  };
+
+  it('relays an announcement with its numeric level to the tenant room and /alarm', async () => {
+    const server = await startedServer();
+    const { translator, tenantEmit, alarmEmit, expectRooms } = relayTo(server);
+
+    translator.handleAnnouncement(apiAnnouncement);
+
+    for (const emit of [tenantEmit, alarmEmit]) {
+      expect(emit).toHaveBeenCalledExactlyOnceWith(
+        'announcement',
+        expect.objectContaining({ level: 0, title: 'Sensor change', isAnnouncement: true }),
+      );
+    }
+    expectRooms();
+    server.getIO()!.close();
+  });
+
+  it('relays a notification with its numeric level to /alarm', async () => {
+    const server = await startedServer();
+    const { translator, alarmEmit } = relayTo(server);
+
+    translator.handleNotification({ ...apiAnnouncement, level: 1, isAnnouncement: false });
+
+    expect(alarmEmit).toHaveBeenCalledExactlyOnceWith(
+      'notification',
+      expect.objectContaining({ level: 1, title: 'Sensor change', group: 'default' }),
+    );
+    server.getIO()!.close();
+  });
+
+  it('keeps relaying a notification to the tenant room', async () => {
+    const server = await startedServer();
+    const { translator, tenantEmit, expectRooms } = relayTo(server);
+
+    translator.handleNotification({ ...apiAnnouncement, level: 1, isAnnouncement: false });
+
+    expect(tenantEmit).toHaveBeenCalledExactlyOnceWith(
+      'notification',
+      expect.objectContaining({ level: 1, title: 'Sensor change' }),
+    );
+    expectRooms();
     server.getIO()!.close();
   });
 });

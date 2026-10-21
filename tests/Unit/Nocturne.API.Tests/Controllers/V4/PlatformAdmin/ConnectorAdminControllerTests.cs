@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -70,7 +71,7 @@ public class ConnectorAdminControllerTests
             Mock.Of<ILogger<ConnectorAdminController>>());
 
     private static ConnectorCursorResetService Engine(NocturneDbContext db) =>
-        new(db, Mock.Of<IConnectorSyncService>(), Mock.Of<ITenantAccessor>(),
+        new(db, new TestNocturneDbContextFactory(db), Mock.Of<IConnectorSyncService>(), Mock.Of<ITenantAccessor>(),
             Mock.Of<ILogger<ConnectorCursorResetService>>());
 
     [Fact]

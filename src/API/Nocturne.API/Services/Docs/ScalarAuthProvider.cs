@@ -7,7 +7,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Demo;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 
@@ -79,7 +79,7 @@ public sealed class ScalarAuthProvider
     private static readonly TimeSpan ClientCacheTtl = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan DemoTokenCacheTtl = TimeSpan.FromMinutes(10);
 
-    private readonly IDbContextFactory<NocturneDbContext> _factory;
+    private readonly INocturneDbContextFactory _factory;
     private readonly DemoTenantService _demoTenantService;
     private readonly ISessionService _sessionService;
     private readonly RedirectUriValidator _redirectUriValidator;
@@ -88,7 +88,7 @@ public sealed class ScalarAuthProvider
     private readonly ILogger<ScalarAuthProvider> _logger;
 
     public ScalarAuthProvider(
-        IDbContextFactory<NocturneDbContext> factory,
+        INocturneDbContextFactory factory,
         DemoTenantService demoTenantService,
         ISessionService sessionService,
         RedirectUriValidator redirectUriValidator,
@@ -268,7 +268,7 @@ public sealed class ScalarAuthProvider
         if (_cache.TryGetValue(cacheKey, out ResolvedDocsTenant? cached) && cached is not null)
             return cached;
 
-        await using var db = await _factory.CreateDbContextAsync(ct);
+        await using var db = await _factory.CreatePlatformAsync(ct);
 
         TenantEntity? tenant;
         if (slug is null)
@@ -345,8 +345,7 @@ public sealed class ScalarAuthProvider
         if (_cache.TryGetValue(cacheKey, out string? cached) && cached is not null)
             return cached;
 
-        await using var db = await _factory.CreateDbContextAsync(ct);
-        db.TenantId = tenantId;
+        await using var db = await _factory.CreateForTenantAsync(tenantId, ct);
 
         var client = await db.OAuthClients
             .IgnoreQueryFilters()

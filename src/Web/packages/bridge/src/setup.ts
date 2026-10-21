@@ -49,6 +49,28 @@ async function discoverTenants(
   return activeSlugs;
 }
 
+/** The tenant the API serves on the apex domain, or null when it serves none.
+ *  Asked of the API rather than counted from the tenant list, so the bridge
+ *  never disagrees with it about which tenants make an apex ambiguous. */
+async function discoverApexTenant(
+  apiBaseUrl: string,
+  baseDomain: string,
+): Promise<string | null> {
+  const response = await fetch(`${apiBaseUrl}/api/v4/status`, {
+    headers: { 'X-Forwarded-Host': baseDomain },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Apex tenant discovery failed: ${response.status} ${response.statusText}`,
+    );
+  }
+
+  const slug = stringField(await response.json(), 'tenantSlug') ?? null;
+  logger.info(`Apex domain serves tenant: ${slug ?? '(none)'}`);
+  return slug;
+}
+
 /** Create a SignalR client for a specific tenant. */
 function createTenantClient(
   socketIOServer: SocketIOServer,
@@ -109,14 +131,14 @@ export async function setupBridge(
   const apiBaseUrl = apiBaseFromHubUrl(config.signalr.hubUrl);
 
   // Start the Socket.IO server eagerly — it doesn't need tenant info to accept
-  // browser connections. Tenant room assignment uses the Host header; the slug
-  // list is only needed for the apex-domain single-tenant case and is filled in
-  // once tenant discovery completes.
+  // browser connections. Tenant room assignment uses the Host header; the apex
+  // tenant is only needed for the single-tenant apex and is filled in once
+  // tenant discovery completes.
   const socketIOServer = new SocketIOServer(
     httpServer,
     config.socketio,
     baseDomain,
-    [],
+    null,
     config.instanceKey,
     apiBaseUrl,
   );
@@ -161,7 +183,7 @@ export async function setupBridge(
     while (!cancelled) {
       try {
         const tenantSlugs = await discoverTenants(apiBaseUrl, instanceKeyHash);
-        socketIOServer.setTenantSlugs(tenantSlugs);
+        socketIOServer.setApexTenantSlug(await discoverApexTenant(apiBaseUrl, baseDomain));
 
         for (const slug of tenantSlugs) {
           if (cancelled) return;

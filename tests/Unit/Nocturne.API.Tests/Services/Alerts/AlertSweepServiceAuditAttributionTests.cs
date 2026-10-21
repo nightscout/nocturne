@@ -13,6 +13,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -23,11 +24,10 @@ public class AlertSweepServiceAuditAttributionTests
     private static readonly Guid Tenant = Guid.NewGuid();
 
     /// <summary>
-    /// The orchestrator auto-acknowledges Info-severity excursions, and
-    /// <see cref="AlertAcknowledgementService"/> carries the scope's audit context onto the
-    /// contexts it creates. The sweep has no request and no actor, so both the ambient context
-    /// and the scope's own DbContext must be system-attributed or those acknowledgements land as
-    /// user mutations with every actor field null.
+    /// The orchestrator auto-acknowledges Info-severity excursions on contexts that read the
+    /// scope's audit context. The sweep has no request and no actor, so the scope must be
+    /// system-attributed or those acknowledgements land as user mutations with every actor field
+    /// null.
     /// </summary>
     [Fact]
     public async Task EvaluateWallClockRulesAsync_SystemAttributesTheTenantScope()
@@ -52,11 +52,11 @@ public class AlertSweepServiceAuditAttributionTests
         services.AddSingleton(Mock.Of<ICanonicalGlucoseService>());
         services.AddScoped<ITenantAccessor>(_ => Mock.Of<ITenantAccessor>());
         services.AddScoped<IAuditContext, AuditContext>();
-        services.AddScoped(_ => new NocturneDbContext(
+        services.AddScoped(sp => new NocturneDbContext(
             new DbContextOptionsBuilder<NocturneDbContext>()
                 .UseSqlite("DataSource=:memory:")
                 .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-                .Options));
+                .Options).AttributedTo(sp.GetRequiredService<IAuditContext>()));
         services.AddScoped<IAlertOrchestrator>(sp =>
         {
             var orchestrator = new Mock<IAlertOrchestrator>();

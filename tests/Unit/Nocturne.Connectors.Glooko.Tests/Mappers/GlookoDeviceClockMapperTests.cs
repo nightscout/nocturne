@@ -127,10 +127,10 @@ public class GlookoDeviceClockMapperTests
     {
         var egvs = new[]
         {
-            new GlookoClockEgv { DisplayTime = "2026-04-10T14:00:00.000Z", SyncTimestamp = "2026-04-10T12:00:00.000Z" },
-            new GlookoClockEgv { DisplayTime = "2026-04-10T13:55:00.000Z", SyncTimestamp = "2026-04-10T12:00:00.000Z" },
-            new GlookoClockEgv { DisplayTime = "2026-04-10T13:50:00.000Z", SyncTimestamp = "2026-04-10T12:00:00.000Z", Calculated = true },
-            new GlookoClockEgv { DisplayTime = "2026-04-10T13:45:00.000Z", SyncTimestamp = "2026-04-10T12:00:00.000Z", SoftDeleted = true },
+            new GlookoEgv { DisplayTime = "2026-04-10T14:00:00.000Z", SyncTimestamp = "2026-04-10T12:00:00.000Z" },
+            new GlookoEgv { DisplayTime = "2026-04-10T13:55:00.000Z", SyncTimestamp = "2026-04-10T12:00:00.000Z" },
+            new GlookoEgv { DisplayTime = "2026-04-10T13:50:00.000Z", SyncTimestamp = "2026-04-10T12:00:00.000Z", Calculated = true },
+            new GlookoEgv { DisplayTime = "2026-04-10T13:45:00.000Z", SyncTimestamp = "2026-04-10T12:00:00.000Z", SoftDeleted = true },
         };
 
         var obs = GlookoDeviceClockMapper.MapUploadBatches(Connector, egvs, null);
@@ -146,8 +146,8 @@ public class GlookoDeviceClockMapperTests
     {
         var boluses = new[]
         {
-            new GlookoClockBolus { PumpTimestamp = "2026-04-10T14:00:00.000Z", SyncTimestamp = "2026-04-10T12:00:00.000Z" },
-            new GlookoClockBolus { PumpTimestamp = null, Timestamp = "2026-04-11T14:00:00.000Z", SyncTimestamp = "2026-04-11T12:00:00.000Z" },
+            new GlookoBolus { PumpTimestamp = "2026-04-10T14:00:00.000Z", SyncTimestamp = "2026-04-10T12:00:00.000Z" },
+            new GlookoBolus { PumpTimestamp = "", Timestamp = "2026-04-11T14:00:00.000Z", SyncTimestamp = "2026-04-11T12:00:00.000Z" },
         };
 
         var obs = GlookoDeviceClockMapper.MapUploadBatches(Connector, null, boluses);
@@ -161,7 +161,7 @@ public class GlookoDeviceClockMapperTests
     {
         var sync = "2026-04-10T12:00:00.000Z";
         var egvs = Enumerable.Range(0, 8)
-            .Select(i => new GlookoClockEgv
+            .Select(i => new GlookoEgv
             {
                 DisplayTime = $"2026-04-10T{13}:{55 - 5 * i:00}:00.000Z",
                 SyncTimestamp = sync,
@@ -169,7 +169,7 @@ public class GlookoDeviceClockMapperTests
             .ToArray();
         var boluses = new[]
         {
-            new GlookoClockBolus { PumpTimestamp = "2026-04-10T08:00:00.000Z", SyncTimestamp = sync },
+            new GlookoBolus { PumpTimestamp = "2026-04-10T08:00:00.000Z", SyncTimestamp = sync },
         };
 
         var obs = GlookoDeviceClockMapper.MapUploadBatches(Connector, egvs, boluses);
@@ -183,8 +183,8 @@ public class GlookoDeviceClockMapperTests
     {
         var egvs = new[]
         {
-            new GlookoClockEgv { DisplayTime = "not a date", SyncTimestamp = "2026-04-10T12:00:00.000Z" },
-            new GlookoClockEgv { DisplayTime = "2026-04-10T14:00:00.000Z", SyncTimestamp = null },
+            new GlookoEgv { DisplayTime = "not a date", SyncTimestamp = "2026-04-10T12:00:00.000Z" },
+            new GlookoEgv { DisplayTime = "2026-04-10T14:00:00.000Z", SyncTimestamp = null },
         };
 
         GlookoDeviceClockMapper.MapUploadBatches(Connector, egvs, null).Should().BeEmpty();

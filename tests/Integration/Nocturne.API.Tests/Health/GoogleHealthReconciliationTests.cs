@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
@@ -513,8 +514,9 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         var services = new ServiceCollection();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.Database.AppConnectionString));
-        services.AddDbContext<NocturneDbContext>((provider, options) => options
+        services.AddDbContextFactory<NocturneDbContext>((provider, options) => options
             .UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()).AddInterceptors(new TenantConnectionInterceptor()));
+        services.AddDataServices();
         var tenants = new Mock<ITenantService>();
         tenants.Setup(service => service.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
             [new TenantDto(tenantId, "synthetic", "Synthetic", true, DateTime.UtcNow)]);

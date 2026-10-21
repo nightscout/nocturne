@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Contracts.Glucose;
 
@@ -43,6 +44,14 @@ public interface IStateSpanService
         int count = 100,
         int skip = 0,
         bool descending = true,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.GetStateSpansStartingFromAsync"/>
+    Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
+        StateSpanCategory category,
+        string? source,
+        DateTime from,
+        int count,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -101,6 +110,21 @@ public interface IStateSpanService
         string id,
         CancellationToken cancellationToken = default);
 
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.ResolveDeletedAsync"/>
+    Task<IReadOnlyDictionary<Guid, Nocturne.Core.Contracts.Repositories.DeletedStateSpan>> ResolveDeletedAsync(
+        IReadOnlyCollection<string> ids,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.RestoreAsync"/>
+    Task<StateSpan> RestoreStateSpanAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.BulkRestoreAsync"/>
+    Task<BulkRestoreResult<StateSpan>> BulkRestoreStateSpansAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Update an existing state span
     /// </summary>
@@ -137,12 +161,16 @@ public interface IStateSpanService
     /// <param name="type">Optional activity type filter</param>
     /// <param name="count">Maximum number of activities to return</param>
     /// <param name="skip">Number of activities to skip for pagination</param>
+    /// <param name="from">Inclusive lower bound on the activity's start, or <c>null</c> for none</param>
+    /// <param name="to">Inclusive upper bound on the activity's start, or <c>null</c> for none</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Collection of activities</returns>
+    /// <returns>Collection of activities, newest first</returns>
     Task<IEnumerable<Activity>> GetActivitiesAsync(
         string? type = null,
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

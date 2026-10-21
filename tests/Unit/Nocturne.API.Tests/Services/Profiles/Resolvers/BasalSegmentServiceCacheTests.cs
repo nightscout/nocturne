@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using Moq;
 using Nocturne.API.Services.Profiles.Resolvers;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -24,13 +25,15 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
 
     public void Dispose() => _cache.Dispose();
 
-    private BasalSegmentService Service(bool historyClamped) => new(
+    private BasalSegmentService Service(ICategoryReadContext categoryReadContext) => new(
         _stateSpans.Object,
         Mock.Of<IBasalScheduleRepository>(),
         Mock.Of<ITherapySettingsRepository>(),
         _tenant.Object,
         _cache,
-        Mock.Of<ICategoryReadContext>(c => c.IsHistoryClamped == historyClamped));
+        categoryReadContext);
+
+    private BasalSegmentService OwnerService() => Service(Mock.Of<ICategoryReadContext>());
 
     private static async Task DrainAsync(BasalSegmentService service)
     {
@@ -53,9 +56,9 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
             Times.Exactly(times));
 
     [Fact]
-    public async Task An_unclamped_request_reuses_the_cached_window()
+    public async Task An_owner_request_reuses_the_cached_window()
     {
-        var service = Service(historyClamped: false);
+        var service = OwnerService();
 
         await DrainAsync(service);
         await DrainAsync(service);
@@ -63,19 +66,16 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
         VerifySpanReads(1);
     }
 
-    /// <summary>
-    /// A history-clamped request reads <c>state_spans</c> narrowed to the last 24 hours, so it must not
-    /// serve, or leave behind, the tenant-keyed window another caller reads.
-    /// </summary>
-    [Fact]
-    public async Task A_history_clamped_request_neither_reads_nor_writes_the_cache()
+    [Theory]
+    [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
+    public async Task A_bypassing_request_neither_reads_nor_writes_the_cache(string caller)
     {
-        var clamped = Service(historyClamped: true);
-        var unclamped = Service(historyClamped: false);
+        var bypassing = Service(CacheBypassingCallers.Context(caller));
+        var owner = OwnerService();
 
-        await DrainAsync(clamped);
-        await DrainAsync(unclamped);
-        await DrainAsync(clamped);
+        await DrainAsync(bypassing);
+        await DrainAsync(owner);
+        await DrainAsync(bypassing);
 
         VerifySpanReads(3);
     }

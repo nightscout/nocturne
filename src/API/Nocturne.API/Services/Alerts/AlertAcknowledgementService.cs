@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -9,6 +8,7 @@ using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Services.Alerts;
@@ -23,32 +23,19 @@ namespace Nocturne.API.Services.Alerts;
 /// <seealso cref="IAlertAcknowledgementService"/>
 /// <seealso cref="ISignalRBroadcastService"/>
 internal sealed class AlertAcknowledgementService(
-    IDbContextFactory<NocturneDbContext> contextFactory,
-    ITenantAccessor tenantAccessor,
+    INocturneDbContextFactory contextFactory,
     ISignalRBroadcastService broadcastService,
     ITenantMemberService memberService,
-    ILogger<AlertAcknowledgementService> logger,
-    IAuditContext? auditContext = null)
+    ILogger<AlertAcknowledgementService> logger)
     : IAlertAcknowledgementService
 {
     /// <summary>
-    /// Creates a fresh pooled <see cref="NocturneDbContext"/> with <see cref="NocturneDbContext.TenantId"/>
-    /// set from the supplied tenant or the ambient <see cref="ITenantAccessor"/>. Necessary because
-    /// <see cref="IDbContextFactory{TContext}.CreateDbContextAsync"/> hands back a raw context
-    /// (TenantId == Guid.Empty) which the global tenant query filter then uses to exclude every row.
-    /// The scope's audit context is carried too, as <c>ITenantDbContextFactory</c> does: the pooled
-    /// context is leased with the property cleared, and an auto-acknowledgement made during a
-    /// connector sync would otherwise fall back to the enclosing HTTP request's actor.
+    /// A context for <paramref name="tenantId"/>, or for the scope's tenant when it is empty.
     /// </summary>
-    private async Task<NocturneDbContext> CreateContextForAsync(Guid tenantId, CancellationToken ct)
-    {
-        var db = await contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = tenantId == Guid.Empty
-            ? (tenantAccessor.IsResolved ? tenantAccessor.TenantId : Guid.Empty)
-            : tenantId;
-        db.AuditContext = auditContext;
-        return db;
-    }
+    private async Task<NocturneDbContext> CreateContextForAsync(Guid tenantId, CancellationToken ct) =>
+        tenantId == Guid.Empty
+            ? await contextFactory.CreateAsync(ct)
+            : await contextFactory.CreateForTenantAsync(tenantId, ct);
 
     /// <inheritdoc/>
     /// <remarks>

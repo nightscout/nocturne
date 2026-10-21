@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
@@ -12,7 +11,7 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// Runs every 24 hours, deleting in batches to avoid WAL bloat.
 /// </summary>
 public class SoftDeleteCleanupService(
-    IDbContextFactory<NocturneDbContext> contextFactory,
+    INocturneDbContextFactory contextFactory,
     IConfiguration configuration,
     ILogger<SoftDeleteCleanupService> logger) : BackgroundService
 {
@@ -59,7 +58,7 @@ public class SoftDeleteCleanupService(
     /// </summary>
     internal async Task PurgeExpiredRecordsAsync(CancellationToken ct)
     {
-        await using var configContext = await contextFactory.CreateDbContextAsync(ct);
+        await using var configContext = await contextFactory.CreatePlatformAsync(ct);
 
         // Get per-tenant retention config
         var configs = await configContext.TenantDataRetentionConfig
@@ -128,7 +127,7 @@ public class SoftDeleteCleanupService(
     /// <returns>The number of links deleted.</returns>
     private async Task<int> CleanupOrphanedLinkedRecordsAsync(Guid tenantId, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateTenantPinnedContextAsync(tenantId, ct);
+        await using var db = await contextFactory.CreateForTenantAsync(tenantId, ct);
         return await DeduplicationService.DeleteOrphanedLinksAsync(db, ct);
     }
 }

@@ -21,9 +21,11 @@
   import { useApsPrediction } from "./aps-prediction.svelte";
   import { inspectionSearchWindow } from "./inspection-window";
   import InspectionChart from "./InspectionChart.svelte";
+  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
   import InspectionFooter from "./InspectionFooter.svelte";
 
   interface Props {
+    glucoseUnits?: GlucoseUnits;
     open: boolean;
     timestamp: Date;
     bolusInsulin?: number;
@@ -71,6 +73,7 @@
     onNavigateGlucose,
     onNavigateDelivery,
     onEditEntry,
+    glucoseUnits,
   }: Props = $props();
 
   const bolusSourceName = $derived(getDataSourceDisplayName(bolusDataSource));
@@ -187,7 +190,7 @@
       <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm py-3">
         {#if glucoseValue != null}
           <span class="text-muted-foreground">BG at time</span>
-          <span class="font-medium">{bg(glucoseValue)} {bgLabel()}</span>
+          <span class="font-medium">{bg(glucoseValue, glucoseUnits)} {bgLabel(glucoseUnits)}</span>
         {/if}
 
         {#if iob != null}
@@ -226,7 +229,7 @@
           {#if bolusCalc.bloodGlucoseInput != null}
             <span class="text-muted-foreground">BG Input</span>
             <span class="font-medium">
-              {bg(bolusCalc.bloodGlucoseInput)} {bgLabel()}
+              {bg(bolusCalc.bloodGlucoseInput, glucoseUnits)} {bgLabel(glucoseUnits)}
               {#if bolusCalc.bloodGlucoseInputSource}
                 <span class="text-xs text-muted-foreground">
                   ({bolusCalc.bloodGlucoseInputSource})
@@ -283,6 +286,7 @@
     {/if}
 
     <InspectionChart
+      {glucoseUnits}
       {glucoseData}
       centerTime={timestamp}
       predictionData={aps.predictionData}

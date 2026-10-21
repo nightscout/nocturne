@@ -1,3 +1,4 @@
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -14,6 +15,8 @@ namespace Nocturne.API.Services.Notifications;
 /// </summary>
 public class NotificationResolutionService : BackgroundService
 {
+    private const string AuditEndpoint = "service:notification-resolution";
+
     private readonly IServiceProvider _serviceProvider;
     private readonly ActiveTenantSnapshot _activeTenants;
     private readonly ILogger<NotificationResolutionService> _logger;
@@ -83,9 +86,10 @@ public class NotificationResolutionService : BackgroundService
         {
             try
             {
-                using var scope = _serviceProvider.CreateScope();
-                var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
+                await using var scope = TenantJobScope.Open(
+                    _serviceProvider,
+                    new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false),
+                    AuditEndpoint);
 
                 await EvaluatePendingNotificationsAsync(scope.ServiceProvider, cancellationToken);
             }

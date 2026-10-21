@@ -36,7 +36,7 @@ public interface ITrackerAlertRuleSyncService
 /// <inheritdoc />
 public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly IRuleScopeClassifier _scopeClassifier;
     private readonly IAlertReferenceService _referenceService;
     private readonly AlertRuleRearm _rearm;
@@ -45,7 +45,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
 
     /// <summary>Initialises a new <see cref="TrackerAlertRuleSyncService"/>.</summary>
     public TrackerAlertRuleSyncService(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IRuleScopeClassifier scopeClassifier,
         IAlertReferenceService referenceService,
         AlertRuleRearm rearm,

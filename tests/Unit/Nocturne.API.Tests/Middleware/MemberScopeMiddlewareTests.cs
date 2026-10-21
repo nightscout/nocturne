@@ -1,16 +1,20 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.API.Extensions;
 using Nocturne.API.Middleware;
+using Nocturne.API.Services.Audit;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
-using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Tests.Middleware;
 
@@ -420,7 +424,8 @@ public class MemberScopeMiddlewareTests
         // carries.
         var publicScopes = (IReadOnlySet<string>)new HashSet<string> { Scope.GlucoseRead };
 
-        var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+        var middleware = new MemberScopeMiddleware(
+            _ => Task.CompletedTask, Mock.Of<INocturneDbContextFactory>(), NullLogger<MemberScopeMiddleware>.Instance);
         var context = new DefaultHttpContext();
         context.Items["AuthContext"] = new AuthContext
         {
@@ -605,7 +610,7 @@ public class MemberScopeMiddlewareTests
 
         category.IsHistoryClamped.Should().BeTrue();
         scoped.HistoryClamped.Should().BeTrue(
-            "the scoped context was pinned before authentication, so it must be stamped here");
+            "a context created before authentication reads the clamp once it is resolved");
     }
 
     [Fact]
@@ -670,9 +675,102 @@ public class MemberScopeMiddlewareTests
         scoped.HistoryClamped.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task LastUsedWrite_RunsAfterTheRequestScopeIsDisposed_AndReadsNoRequestState()
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedMemberWithRole(
+            db, RoleSeeds.Permissions[RoleSeeds.Viewer], limitTo24Hours: true);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(db.ContextFactory);
+        services.AddScoped<IAuditContext, AuditContext>();
+        services.AddDataServices();
+        await using var provider = services.BuildServiceProvider();
+
+        var detached = new GatedFactory(provider.GetRequiredService<INocturneDbContextFactory>());
+        var middleware = new MemberScopeMiddleware(
+            _ => Task.CompletedTask, detached, NullLogger<MemberScopeMiddleware>.Instance);
+
+        await using (var request = provider.CreateAsyncScope())
+        {
+            var context = new DefaultHttpContext { RequestServices = request.ServiceProvider };
+            context.Items["AuthContext"] = new AuthContext
+            {
+                IsAuthenticated = true,
+                AuthType = AuthType.SessionCookie,
+                SubjectId = subjectId,
+                TenantId = TestDatabaseSeeder.TenantId,
+                Scopes = [],
+            };
+            context.Items["GrantedScopes"] = Scope.Normalize([]);
+            context.Items["PermissionTrie"] = new PermissionTrie();
+
+            await middleware.InvokeAsync(context);
+
+            request.ServiceProvider.GetRequiredService<ICategoryReadContext>().IsHistoryClamped
+                .Should().BeTrue("the request itself is clamped, so a context reading it would be too");
+        }
+
+        detached.Release();
+        var writer = await detached.Created.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        writer.TenantId.Should().Be(TestDatabaseSeeder.TenantId);
+        writer.HistoryClamped.Should().BeFalse();
+        writer.IsShareContext.Should().BeFalse();
+        writer.AuditContext.Should().BeNull();
+
+        DateTime? lastUsed = null;
+        for (var attempt = 0; attempt < 100 && lastUsed is null; attempt++)
+        {
+            await Task.Delay(20);
+            using var read = db.CreateContext();
+            lastUsed = await read.TenantMembers.AsNoTracking()
+                .Where(tm => tm.SubjectId == subjectId)
+                .Select(tm => tm.LastUsedAt)
+                .SingleAsync();
+        }
+
+        lastUsed.Should().NotBeNull("the write lands after the request's scope is gone");
+    }
+
     /// <summary>
-    /// Runs the middleware with a real <see cref="ICategoryReadContext"/> and scoped context, as
-    /// the request pipeline registers them, and returns both carriers of the history clamp.
+    /// Holds a tenant-pinned create until <see cref="Release"/>, so the write runs after the request
+    /// scope is disposed, and hands back the context it created.
+    /// </summary>
+    private sealed class GatedFactory(INocturneDbContextFactory inner) : INocturneDbContextFactory
+    {
+        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<NocturneDbContext> Created { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Release() => _gate.SetResult();
+
+        public async ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default)
+        {
+            await _gate.Task;
+            var context = await inner.CreateForTenantAsync(tenantId, ct);
+            Created.SetResult(context);
+            return context;
+        }
+
+        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// Runs the middleware with a real <see cref="ICategoryReadContext"/> and a scoped context reading
+    /// it, as the request pipeline registers them, and returns both.
     /// </summary>
     private static async Task<(CategoryReadContext Category, NocturneDbContext Scoped)> ResolveClampAsync(
         SqliteTestDatabase db,
@@ -683,6 +781,7 @@ public class MemberScopeMiddlewareTests
     {
         var category = new CategoryReadContext();
         var scoped = db.CreateContext();
+        scoped.ReadingFrom(reader: category);
         var services = new ServiceCollection();
         services.AddSingleton<ICategoryReadContext>(category);
         services.AddSingleton(scoped);
@@ -702,7 +801,7 @@ public class MemberScopeMiddlewareTests
         context.Items["PermissionTrie"] = new PermissionTrie();
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, db.ContextFactory.AsNocturneFactory(), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         return (category, scoped);
@@ -751,7 +850,7 @@ public class MemberScopeMiddlewareTests
         context.Items["PermissionTrie"] = new PermissionTrie();
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, db.ContextFactory.AsNocturneFactory(), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         return context;
@@ -821,7 +920,8 @@ public class MemberScopeMiddlewareTests
     {
         RequestDelegate next = _ => Task.CompletedTask;
 
-        var middleware = new MemberScopeMiddleware(next, NullLogger<MemberScopeMiddleware>.Instance);
+        var middleware = new MemberScopeMiddleware(
+            next, Mock.Of<INocturneDbContextFactory>(), NullLogger<MemberScopeMiddleware>.Instance);
 
         var context = new DefaultHttpContext();
         context.Items["AuthContext"] = authContext;

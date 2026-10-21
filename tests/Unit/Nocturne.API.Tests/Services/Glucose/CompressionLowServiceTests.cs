@@ -154,6 +154,27 @@ public class CompressionLowServiceTests
     }
 
     [Fact]
+    public async Task AcceptSuggestionAsync_DemoSeedTagsTheCreatedExclusionSpan()
+    {
+        var suggestion = PendingSuggestion(stillPendingAfterReview: 1);
+        StateSpan? captured = null;
+        _stateSpanService
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .Callback<StateSpan, CancellationToken>((span, _) => captured = span)
+            .ReturnsAsync((StateSpan span, CancellationToken _) =>
+            {
+                span.Id = Guid.NewGuid().ToString();
+                return span;
+            });
+
+        await _sut.AcceptSuggestionAsync(
+            suggestion.Id, suggestion.StartMills, suggestion.EndMills, demoSeed: true);
+
+        captured!.Metadata.Should().ContainKey("DemoSeed").WhoseValue.Should().Be(true);
+        captured.Metadata.Should().ContainKey("SuggestionId").WhoseValue.Should().Be(suggestion.Id.ToString());
+    }
+
+    [Fact]
     public async Task DismissSuggestionAsync_WhenNightFullyReviewed_ArchivesNotificationUnderTenantOwner()
     {
         var suggestion = PendingSuggestion(stillPendingAfterReview: 0);

@@ -3,14 +3,13 @@ using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Nocturne.API.Services.Audit;
+using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.BackgroundServices;
 
@@ -170,6 +169,12 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     /// </summary>
     /// <seealso cref="ConnectorRegistrationAttribute.DeclaredOn"/>
     protected static string ConnectorName => Registration.ConnectorName;
+
+    /// <summary>
+    /// The audit endpoint every job scope of this connector is attributed under, the one
+    /// <c>ConnectorSyncService</c> uses for a manual sync too.
+    /// </summary>
+    protected static string AuditEndpoint => $"connector:{Registration.ConnectorId}";
 
     /// <summary>
     /// Called after the initial startup delay and again every <see cref="RealtimeSupervisionInterval"/>.
@@ -541,27 +546,10 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         CancellationToken shutdownToken,
         CancellationToken stoppingToken)
     {
-        using var scope = ServiceProvider.CreateScope();
-
-        // Set tenant context for this scope
-        var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-        tenantAccessor.SetTenant(new TenantContext(tenantId, tenantSlug, displayName, true, IsDemo: false));
-
-        // Attribute this connector's mutations to the connector rather than to a human actor, under
-        // the dispatch id so a scheduled sync and one ConnectorSyncService triggered agree.
-        using var systemScope = SystemAuditScope.PushForScope(
-            scope.ServiceProvider, $"connector:{Registration.ConnectorId}");
-
-        var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-
-        // Pin the RLS tenant on the scoped DbContext. NocturneDbContext is pooled and the
-        // CarrierResettingDbContextFactory leases it with TenantId reset to Guid.Empty; the scoped
-        // registration re-pins from ITenantAccessor, and background syncs set it explicitly here
-        // because the flow depends on it — the TenantConnectionInterceptor reads
-        // NocturneDbContext.TenantId to configure RLS on connection open, and without a real tenant
-        // the tenant-scoped reads (connector config + secrets) silently return nothing, so every
-        // connector authenticates with empty credentials and no data syncs.
-        dbContext.TenantId = tenantId;
+        await using var scope = TenantJobScope.Open(
+            ServiceProvider,
+            new TenantContext(tenantId, tenantSlug, displayName, true, IsDemo: false),
+            AuditEndpoint);
 
         // Load per-tenant config via the loader
         var loader = scope.ServiceProvider.GetRequiredService<IConnectorConfigurationLoader<TConfig>>();

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Services.Chat;
@@ -188,7 +189,7 @@ public class ChatIdentityController : ControllerBase
     [ProducesResponseType(typeof(PendingLinkViewResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<PendingLinkViewResponse>> GetPending(
-        string token, CancellationToken ct)
+        [CredentialRouteValue] string token, CancellationToken ct)
     {
         var pending = await _service.GetPendingAsync(token, ct);
         if (pending is null) return NotFound();

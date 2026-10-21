@@ -34,6 +34,59 @@ public sealed class TenantResolutionMiddlewareApexTests : TenantResolutionMiddle
         accessor.TenantId.Should().Be(tenantId);
     }
 
+    [Theory]
+    [InlineData("/api/auth/oidc/session", "GET")]
+    [InlineData("/api/auth/oidc/refresh", "POST")]
+    [InlineData("/api/v4/me/permissions", "GET")]
+    [InlineData("/api/v4/user/preferences", "GET")]
+    [InlineData("/api/auth/passkey/credentials", "GET")]
+    public async Task Apex_serves_a_caller_scoped_path_as_the_sole_tenant(string path, string method)
+    {
+        var tenantId = SeedTenant("theconen");
+
+        var (context, served) = await InvokeAsync(BaseDomain, path, method);
+
+        // A guest session belongs to one tenant and member roles are read per tenant, so leaving
+        // these tenantless sent a guest redeemed on the apex straight to the login page.
+        served.Should().BeTrue();
+        Resolve<ITenantAccessor>(context).TenantId.Should().Be(tenantId);
+    }
+
+    [Theory]
+    [InlineData("/api/auth/oidc/session", "GET")]
+    [InlineData("/api/v4/me/permissions", "GET")]
+    public async Task Apex_caller_scoped_path_stays_tenantless_on_a_multi_tenant_install(string path, string method)
+    {
+        SeedTenant("alpha");
+        SeedTenant("beta");
+
+        var (context, served) = await InvokeAsync(BaseDomain, path, method);
+
+        served.Should().BeTrue();
+        Resolve<ITenantAccessor>(context).IsResolved.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("/api/auth/oidc/login", "GET")]
+    [InlineData("/api/auth/oidc/callback", "GET")]
+    [InlineData("/api/auth/oidc/link", "GET")]
+    [InlineData("/api/auth/oidc/link/callback", "GET")]
+    [InlineData("/api/v4/me/tenants", "GET")]
+    [InlineData("/api/v4/me/tenants/overview", "GET")]
+    [InlineData("/api/v4/admin/tenants", "GET")]
+    [InlineData("/api/v4/setup/status", "GET")]
+    public async Task Apex_cross_tenant_path_stays_tenantless_on_a_single_tenant_install(string path, string method)
+    {
+        SeedTenant("theconen");
+
+        var (context, served) = await InvokeAsync(BaseDomain, path, method);
+
+        // Login and link would carry the slug into the OIDC state and bounce their callback to a
+        // subdomain a single-tenant install may not serve; the rest work across tenants.
+        served.Should().BeTrue();
+        Resolve<ITenantAccessor>(context).IsResolved.Should().BeFalse();
+    }
+
     [Fact]
     public async Task Apex_health_probe_passes_through_without_resolving_a_tenant()
     {

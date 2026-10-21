@@ -1,5 +1,3 @@
-using Nocturne.API.Controllers.V4;
-using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
@@ -15,7 +13,6 @@ namespace Nocturne.API.Services.Glucose;
 /// IOB, COB, and determine-basal pipeline to produce prediction curves.
 /// </summary>
 /// <seealso cref="IPredictionService"/>
-/// <seealso cref="IOrefService"/>
 public class PredictionService : IPredictionService
 {
     private readonly IEntryStore _store;

@@ -42,7 +42,7 @@ export const getDayInReviewData = query(
 				apiClient.bolus.getAll(dayStart, dayEnd, 1000),
 				apiClient.nutrition.getCarbIntakes(dayStart, dayEnd, 1000),
 				getApsSnapshots({ from: dayStart, to: dayEnd, limit: 1000, sort: 'timestamp_asc' }),
-				getInsulinDeliveryStatistics({ startDate: dayStart, endDate: dayEnd }),
+				getInsulinDeliveryStatistics({ startDate: dayStart, endDate: dayEnd, includeBoluses: true }),
 			]);
 
 		const entries = entriesResponse.data ?? [];
@@ -57,6 +57,8 @@ export const getDayInReviewData = query(
 					boluses,
 					carbIntakes,
 					population: 0 as const, // Type1Adult
+					startDate: dayStart,
+					endDate: dayEnd,
 				})
 			: null;
 

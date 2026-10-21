@@ -19,7 +19,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 public class DedupRecordTypeTests : IDisposable
 {
     private readonly NocturneDbContext _context;
-    private readonly TestTenantDbContextFactory _factory;
+    private readonly TestNocturneDbContextFactory _factory;
     private readonly IDeduplicationService _dedup = new Mock<IDeduplicationService>().Object;
     private readonly IAuditContext _audit = new Mock<IAuditContext>().Object;
 
@@ -27,7 +27,7 @@ public class DedupRecordTypeTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        _factory = new TestTenantDbContextFactory(_context);
+        _factory = new TestNocturneDbContextFactory(_context);
     }
 
     public void Dispose()

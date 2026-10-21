@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -33,11 +33,11 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+            var factory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
             var validator = scope.ServiceProvider.GetRequiredService<IAlertRuleConditionValidator>();
 
             List<Guid> tenantIds;
-            await using (var lookup = await factory.CreateDbContextAsync(stoppingToken))
+            await using (var lookup = await factory.CreatePlatformAsync(stoppingToken))
             {
                 tenantIds = await lookup.Tenants
                     .AsNoTracking()
@@ -72,13 +72,12 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
     }
 
     private async Task<int> AuditTenantAsync(
-        IDbContextFactory<NocturneDbContext> factory,
+        INocturneDbContextFactory factory,
         IAlertRuleConditionValidator validator,
         Guid tenantId,
         CancellationToken ct)
     {
-        await using var db = await factory.CreateDbContextAsync(ct);
-        db.TenantId = tenantId;
+        await using var db = await factory.CreateForTenantAsync(tenantId, ct);
 
         var rules = await db.AlertRules
             .AsNoTracking()

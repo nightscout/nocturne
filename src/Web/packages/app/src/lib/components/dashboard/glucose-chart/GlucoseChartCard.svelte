@@ -55,6 +55,7 @@
   import PointInspectionPicker from "./dialogs/PointInspectionPicker.svelte";
   import BasalInjectionMarkers from "./markers/BasalInjectionMarkers.svelte";
   import BgCheckMarkers from "./markers/BgCheckMarkers.svelte";
+  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { afterNextPaint } from "$lib/utils/after-next-paint";
 
   interface Props {
@@ -74,6 +75,7 @@
      * task it delays the current reading's paint behind it.
      */
     deferDrawing?: boolean;
+    glucoseUnits?: GlucoseUnits;
   }
 
   let {
@@ -87,6 +89,7 @@
     heightClass,
     demoMode,
     deferDrawing = false,
+    glucoseUnits,
   }: Props = $props();
 
   const realtimeStore = getRealtimeStore();
@@ -139,6 +142,7 @@
       cobData: () => engine.cobData,
       basalData: () => engine.basalData,
     },
+    () => glucoseUnits,
   );
 
   // ===== LEGEND STATE =====
@@ -393,6 +397,7 @@
           {engine}
           {inspection}
           {legend}
+          {glucoseUnits}
           brushDomain={brushDomain}
           padding={chartPadding}
         >
@@ -432,10 +437,8 @@
         data={engine.glucoseData}
         fullXDomain={[engine.fullXDomain.from, engine.fullXDomain.to]}
         selectedXDomain={miniSelectedDomain}
-        yDomain={[0, engine.glucoseYMax]}
+        yDomain={[0, engine.thresholds.glucoseYMax]}
         expanded={true}
-        highThreshold={Number(engine.highThreshold)}
-        lowThreshold={Number(engine.lowThreshold)}
         onSelectionChange={(domain) => handleMiniChartBrush(domain)}
         predictionData={miniPredictionData}
         showPredictions={effectiveShowPredictions && predictionEnabled.current}
@@ -450,11 +453,12 @@
     {/if}
 
     <ChartLegend
+      {glucoseUnits}
       glucoseData={engine.glucoseData}
-      highThreshold={engine.highThreshold}
-      lowThreshold={engine.lowThreshold}
-      veryHighThreshold={engine.veryHighThreshold}
-      veryLowThreshold={engine.veryLowThreshold}
+      highThreshold={engine.thresholds.high}
+      lowThreshold={engine.thresholds.low}
+      veryHighThreshold={engine.thresholds.veryHigh}
+      veryLowThreshold={engine.thresholds.veryLow}
       {showBasal}
       {showIob}
       {showCob}
@@ -544,6 +548,7 @@
 {#if inspection.timestamp && inspection.glucosePoint && inspection.context}
   {#if glucoseInspectionDialog.component}
     <glucoseInspectionDialog.component
+      {glucoseUnits}
       bind:open={glucoseInspectionDialog.open}
       timestamp={inspection.timestamp}
       glucoseValue={inspection.glucosePoint.sgv}
@@ -551,8 +556,8 @@
       previousGlucoseValue={inspection.context.previousGlucoseValue}
       dataSource={inspection.context.dataSource}
       glucoseData={engine.glucoseData}
-      highThreshold={engine.highThreshold}
-      lowThreshold={engine.lowThreshold}
+      highThreshold={engine.thresholds.high}
+      lowThreshold={engine.thresholds.low}
       iob={inspection.context.iob}
       cob={inspection.context.cob}
       basalRate={inspection.context.basalRate}
@@ -573,6 +578,7 @@
 
   {#if deliveryInspectionDialog.component}
     <deliveryInspectionDialog.component
+      {glucoseUnits}
       bind:open={deliveryInspectionDialog.open}
       timestamp={inspection.timestamp}
       basalRate={inspection.context.basalRate}
@@ -586,8 +592,8 @@
       isStaleBasal={inspection.context.isStaleBasal}
       dataSource={inspection.context.dataSource}
       glucoseData={engine.glucoseData}
-      highThreshold={engine.highThreshold}
-      lowThreshold={engine.lowThreshold}
+      highThreshold={engine.thresholds.high}
+      lowThreshold={engine.thresholds.low}
       hasGlucoseContext={true}
       hasTreatmentContext={inspection.context.nearbyBolus != null ||
         inspection.context.nearbyCarbs != null}
@@ -599,6 +605,7 @@
 
   {#if treatmentInspectionDialog.component}
     <treatmentInspectionDialog.component
+      {glucoseUnits}
       bind:open={treatmentInspectionDialog.open}
       timestamp={inspection.timestamp}
       bolusInsulin={inspection.context.nearbyBolus?.insulin}
@@ -611,8 +618,8 @@
       cob={inspection.context.cob}
       glucoseValue={inspection.glucosePoint.sgv}
       glucoseData={engine.glucoseData}
-      highThreshold={engine.highThreshold}
-      lowThreshold={engine.lowThreshold}
+      highThreshold={engine.thresholds.high}
+      lowThreshold={engine.thresholds.low}
       hasGlucoseContext={true}
       hasDeliveryContext={inspection.context.basalRate != null}
       onClose={closeAllInspections}

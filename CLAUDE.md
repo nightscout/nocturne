@@ -118,6 +118,7 @@ src/
 ├── Aspire/                      # .NET Aspire orchestration (AppHost, ServiceDefaults, SourceGenerators)
 ├── Connectors/                  # Data source integrations (Dexcom, Glooko, Libre, etc.)
 ├── Core/
+│   ├── Nocturne.Core.Clinical   # Clinical calculators (statistics, IOB/COB, sleep)
 │   ├── Nocturne.Core.Contracts  # Service interfaces
 │   ├── Nocturne.Core.Models     # Domain models
 │   └── Nocturne.Core.Constants  # Shared constants
@@ -246,6 +247,50 @@ container-init directory — it refuses to run with placeholder passwords
 and would abort container startup if Postgres picked it up. Never GRANT
 BYPASSRLS to either role.
 
+#### Tenant read context
+
+A context reaches the database as one reader. `TenantReadContext` (internal, one per DI
+scope) reads the scope's `ITenantAccessor`, `ICategoryReadContext` and `IAuditContext`
+**live**; every `NocturneDbContext` of the scope holds it, and its carrier properties
+(`TenantId`, `SubjectId`, `IsShareContext`, `VisibleCategories`, `ShareFullHistory`,
+`HistoryClamped`, `AuditContext`) are getters over it. The EF tenant query filter, ownership
+stamping on save, the mutation audit interceptor and the `TenantConnectionInterceptor` all
+read those properties, so a context created before authentication sees the share CSV and
+the clamp once they are resolved. Nothing outside Infrastructure can set them.
+
+Every context comes from `INocturneDbContextFactory`:
+
+- `CreateAsync` — the scope's reader, including its resolved tenant.
+- `CreateForTenantAsync(tenantId)` — pins the tenant in place of the scope's.
+- `CreateForSubjectAsync(subjectId)` — no tenant; sets `app.current_subject_id`. No policy
+  reads that GUC today: its callers (tenant switcher, caregiver overview, membership
+  enumeration) work because the identity tables carry no RLS.
+- `CreatePlatformAsync` — no tenant, no subject, for platform tables.
+
+A pin replaces only the tenant or subject: share, clamp and audit state always come from the
+scope, so a pin can narrow what a reader sees but never widen it. The one exception is
+`CreateSystemPinnedAsync(tenantId)`, a tenant pin that reads as no reader, for an allowlist of
+instance-level reads (members of `TenantSetupMiddleware`, `PasskeyController` and
+`InstanceSetupState`; pinned per member by `SystemPinnedAllowlistTests`). Its remarks give the
+reason. A singleton needs no system pin: its root-resolved factory already reads as no reader.
+
+The factory is transient. Resolved from the root (singletons, hosted services, middleware
+constructors) it has no scope, and its contexts read fail-closed defaults: empty tenant,
+not a share, null CSV, no clamp, no audit actor. A root-resolved factory never reads a
+request's state, and nothing reads `HttpContext` for it. A write that outlives its request
+(fire-and-forget) uses a root-resolved factory and pins the tenant from a captured value,
+never the request's factory: that one reads the request's scope after it is disposed. The raw
+`IDbContextFactory<NocturneDbContext>` stays registered for Infrastructure's own use only.
+
+Background work opens its scope with `TenantJobScope.Open(provider, tenant, actor)`
+(`Nocturne.API.Multitenancy`): the tenant (or none) set on the scope's `ITenantAccessor` and
+the audit actor system-attributed. Everything the scope resolves or creates follows it. A
+request that works for other tenants does it in such a scope per tenant rather than moving
+its own accessor, since every context of the request would follow.
+
+The GUCs are written when a connection opens, so a connection held open keeps the state it
+opened with; `PinTenantAsync` is for that case (see the `TenantReadContext` remarks).
+
 #### Per-category public-share RLS
 
 Public share links (`{token}.share.{domain}`) serve an anonymous viewer who may
@@ -274,37 +319,30 @@ clamped member however long ago it started; clamping it by start would leave the
 therapy resolvers on the default profile.
 `IS [NOT] DISTINCT FROM` keeps the clamp test non-null when a GUC is unset.)
 
-Four extra GUCs carry the request state to the connection (set by
-`TenantConnectionInterceptor` from `NocturneDbContext` properties):
+Four extra GUCs carry the reader's state to the connection (written by
+`TenantConnectionInterceptor` on every open, unconditionally, from the tenant read context):
 
-- **`app.is_share`** — `'true'` for a public share, else `'false'`. Known
-  **pre-auth** (at tenant resolution), so it is set wherever `TenantId` is set
-  (factory, scoped-context registration, `PinTenantOnScopedDbContext`) — set
-  **unconditionally** so a pooled context never inherits a prior lessee's flag.
+- **`app.is_share`** — `'true'` for a public share, else `'false'`. Marked **pre-auth**
+  at tenant resolution (`ICategoryReadContext.MarkShare`).
 - **`app.visible_categories`** — CSV of the share's governing read scopes
-  (`glucose.read,treatments.read,…`). Known only **post-auth**, so it is carried
-  **only on the `ITenantDbContextFactory` path** (`TenantDbContextFactory.CreateAsync`).
-  Share-reachable PHI reads must go through the factory; a share that reads PHI on
-  a directly-injected scoped context carries no CSV and is **denied** (fail-closed).
+  (`glucose.read,treatments.read,…`), resolved **post-auth** by `AuthenticationMiddleware`.
+  A share connection that opens before it is resolved carries no CSV and is **denied** all
+  categorized data (fail-closed).
 - **`app.share_full_history`** — `'true'` when the share's Public membership has
-  `limit_to_24_hours = false`. Same post-auth, factory-only carriage as the CSV; a
-  share connection that never sets it is **clamped to the last 24 hours** of every
-  time-series category (fail-closed).
+  `limit_to_24_hours = false`, resolved post-auth with the CSV; a share connection without it
+  is **clamped to the last 24 hours** of every time-series category (fail-closed).
 - **`app.history_clamped`**: `'true'` when `ICategoryReadContext.IsHistoryClamped`:
   a share without full history, or an authenticated member or credential whose
   `AuthContext.LimitTo24Hours` resolved true (membership flag OR credential flag,
-  combined in `MemberScopeMiddleware`). Known **post-auth**, so it is carried on
-  **both** paths: `TenantDbContextFactory` stamps it from `ICategoryReadContext`, and
-  `MemberScopeMiddleware` stamps the already-pinned scoped context. Every reset site
-  (`CarrierResettingDbContextFactory`, scoped registration, `PinTenantOnScopedDbContext`)
-  clears it, and the interceptor sets it unconditionally. Unlike the share clamp it is
-  **fail-open**: a connection that never sets it is not clamped, so owners, members
-  without the flag and background jobs read full history. A member who is an owner or
-  holds `tenant.settings` (`MemberScopeResolver.IsExemptFromHistoryClamp`) cannot be
-  given the flag, and a membership row that holds it anyway is ignored. A clamped
-  caller cannot mint anything wider than itself: invites, direct grants, guest links
-  and OAuth consents inherit its clamp, and it may not lift another member's clamp or
-  give a share full history (`HttpContext.IsCallerHistoryClamped`).
+  combined in `MemberScopeMiddleware`, which calls `ICategoryReadContext.ClampMemberHistory`).
+  Unlike the share clamp it is **fail-open**: a connection that never sets it is not
+  clamped, so owners, members without the flag and background jobs read full history. A
+  member who is an owner or holds `tenant.settings`
+  (`MemberScopeResolver.IsExemptFromHistoryClamp`) cannot be given the flag, and a
+  membership row that holds it anyway is ignored. A clamped caller cannot mint anything
+  wider than itself: invites, direct grants, guest links and OAuth consents inherit its
+  clamp, and it may not lift another member's clamp or give a share full history
+  (`HttpContext.IsCallerHistoryClamped`).
 
 Design notes:
 
@@ -337,10 +375,13 @@ Design notes:
   `Cache-Control` headers follow the same rule: a tenant data read is never `public`
   (V3 reads send `private, max-age=60`, pinned by `V3CacheControlTests`).
 - **PHI cache invariant.** The same holds for the tenant-keyed application caches of
-  time-series data (`EntryCacheAdapter`, `TreatmentCacheAdapter`, the multi-period
-  statistics, the eHbA1c timeline): their keys carry the tenant, not the history
-  window, so a history-clamped request (`ICategoryReadContext.IsHistoryClamped`)
-  neither reads nor writes them. Do not key them by clamp instead. A read that fans out
+  time-series data and of values derived from it (`EntryCacheAdapter`,
+  `TreatmentCacheAdapter`, the multi-period statistics, the eHbA1c timeline, IOB/COB, the
+  active-profile and basal-assignment resolvers): their keys carry the tenant, not the
+  history window or the share's categories, so a history-clamped request or any share
+  (`ICategoryReadContext.BypassesTenantCaches`) neither reads nor writes them. A
+  full-history share still differs from the owner: every table no granted scope governs
+  is hidden from it. Do not key them by clamp or share instead. A read that fans out
   in a fresh DI scope (`TenantOverviewService`) carries the caller's clamp into that
   scope's `ICategoryReadContext`.
 

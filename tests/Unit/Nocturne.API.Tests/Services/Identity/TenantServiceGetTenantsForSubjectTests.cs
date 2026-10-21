@@ -34,7 +34,7 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
     }
 
     private TenantService Service() => new(
-        _db.ContextFactory,
+        _db.ContextFactory.AsNocturneFactory(),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),

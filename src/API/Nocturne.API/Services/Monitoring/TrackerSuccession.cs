@@ -1,4 +1,3 @@
-using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -27,7 +26,11 @@ public static class TrackerSuccession
     /// that moment: the start is then history rather than a replacement, and completing the newer
     /// run would rewind the tracker. Starts nothing when <paramref name="alreadyStarted"/> says a
     /// running instance already stands for this start, or when another writer completes a running
-    /// instance first.
+    /// instance first. With <paramref name="replay"/> it also starts nothing when nothing is running
+    /// and a run of the definition ended after <paramref name="startedAt"/>: someone has already
+    /// moved the tracker past the start being re-offered. Each run it completes is broadcast as
+    /// <see cref="TrackerRealtimeAction.Complete"/>, then the new run as
+    /// <see cref="TrackerRealtimeAction.Create"/>.
     /// </summary>
     public static async Task<TrackerSuccessionResult> StartAsync(
         ITrackerRepository repository,
@@ -39,7 +42,8 @@ public static class TrackerSuccession
         string? completeTreatmentId,
         Func<CancellationToken, Task<TrackerInstanceEntity>> start,
         CancellationToken ct,
-        Func<IReadOnlyList<TrackerInstanceEntity>, bool>? alreadyStarted = null)
+        Func<IReadOnlyList<TrackerInstanceEntity>, bool>? alreadyStarted = null,
+        bool replay = false)
     {
         var result = await repository.ExecuteUnderDefinitionLockAsync(
             definition.Id,
@@ -51,6 +55,9 @@ public static class TrackerSuccession
                     var running = await repository.GetActiveInstancesForDefinitionAsync(definition.Id, token);
                     if (alreadyStarted?.Invoke(running) == true)
                         return new TrackerSuccessionResult(TrackerSuccessionOutcome.AlreadyStarted, null, completed);
+                    if (replay && running.Count == 0
+                        && await repository.HasRunEndedAfterAsync(definition.Id, startedAt, token))
+                        return new TrackerSuccessionResult(TrackerSuccessionOutcome.EndedSince, null, completed);
                     if (running.Any(i => i.StartedAt >= startedAt))
                         return new TrackerSuccessionResult(TrackerSuccessionOutcome.NewerRunning, null, completed);
 
@@ -87,12 +94,20 @@ public static class TrackerSuccession
                 startedAt
             );
             await broadcast.BroadcastTrackerUpdateAsync(
-                "complete",
+                TrackerRealtimeAction.Complete,
                 TrackerInstanceDto.FromEntity(instance),
                 definition.UserId,
                 definition.Visibility
             );
         }
+
+        if (result.Started is { } started)
+            await broadcast.BroadcastTrackerUpdateAsync(
+                TrackerRealtimeAction.Create,
+                TrackerInstanceDto.FromEntity(started),
+                started.UserId,
+                definition.Visibility
+            );
 
         return result;
     }
@@ -105,6 +120,7 @@ public enum TrackerSuccessionOutcome
     NewerRunning,
     AlreadyStarted,
     CompletedElsewhere,
+    EndedSince,
 }
 
 /// <param name="Outcome">How the call ended.</param>

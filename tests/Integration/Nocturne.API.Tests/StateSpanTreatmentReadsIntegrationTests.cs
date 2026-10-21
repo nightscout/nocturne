@@ -1061,9 +1061,6 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
             new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
         scope.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        db.TenantId = Fixture.TenantId;
-        db.HistoryClamped = true;
         return await action(scope.ServiceProvider);
     }
 

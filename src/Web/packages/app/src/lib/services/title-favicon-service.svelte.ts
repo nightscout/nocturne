@@ -109,7 +109,7 @@ export class TitleFaviconService {
   update(
     bg: number,
     direction: string,
-    delta: number,
+    delta: number | null,
     settings: TitleFaviconSettings,
     variant: GlucoseTileVariant,
     isDisconnected: boolean = false,
@@ -249,7 +249,7 @@ export class TitleFaviconService {
   private buildTitle(
     bg: number,
     direction: string,
-    delta: number,
+    delta: number | null,
     settings: TitleFaviconSettings,
     isDisconnected: boolean = false,
     isStale: boolean = false,
@@ -278,7 +278,7 @@ export class TitleFaviconService {
       bgParts.push(directionGlyph(direction));
     }
 
-    if (settings.showDelta && delta !== undefined && !isDisconnected) {
+    if (settings.showDelta && delta != null && !isDisconnected) {
       bgParts.push(formatBgDelta(delta));
     }
 

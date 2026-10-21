@@ -10,7 +10,13 @@
   import { Switch } from "$lib/components/ui/switch";
   import Bell from "@lucide/svelte/icons/bell";
   import BellOff from "@lucide/svelte/icons/bell-off";
-  import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
+  import {
+    isDndInEffect,
+    isDndManualActive,
+    isDndScheduleActiveNow,
+    isDndScheduleConfigured,
+  } from "./dnd";
+  import { refreshOnReturn } from "$lib/utils/refresh-on-return.svelte";
 
   interface Props {
     /** Whether the toggle is on screen. The settings are read the first time it is. */
@@ -29,22 +35,31 @@
   let saving = $state(false);
   let failed = $state(false);
 
-  // A configured schedule is not the same as DND being on now — the backend
-  // evaluates the window and the response carries no "active now" field. See
-  // lib/components/alerts/dnd.ts.
-  let isManualActive = $derived(isDndActiveNow(settings));
+  let isManualActive = $derived(isDndManualActive(settings));
+  let inEffect = $derived(isDndInEffect(settings));
   let isScheduled = $derived(isDndScheduleConfigured(settings));
+  let scheduleTitle = $derived(
+    isManualActive || !isScheduled
+      ? undefined
+      : isDndScheduleActiveNow(settings)
+        ? "Scheduled Do Not Disturb window is on now"
+        : "Scheduled Do Not Disturb window configured",
+  );
 
   const href = "/alerts/dnd";
   let isActive = $derived(page.url.pathname.startsWith(href));
 
+  let reads = 0;
+
   async function load(): Promise<void> {
+    const read = ++reads;
     try {
-      settings = await getDnd().run();
+      const fetched = await getDnd().run();
+      if (read === reads) settings = fetched;
     } catch {
       // A sidebar toggle has nowhere to put a sentence; the null state renders as
       // "unknown" and the panel behind it reports the reason.
-      settings = null;
+      if (read === reads) settings = null;
     }
   }
 
@@ -62,6 +77,7 @@
         dndScheduleStart: settings?.dndScheduleStart,
         dndScheduleEnd: settings?.dndScheduleEnd,
       });
+      reads++;
       settings = r;
     } catch {
       // The toggle's own failed state is the report; a reason needs somewhere to
@@ -73,6 +89,9 @@
   }
 
   let requested = false;
+  refreshOnReturn(() => {
+    if (visible && requested && !saving) void load();
+  });
   // `.run()` rejects during the render flush, so defer the bootstrap to a microtask.
   $effect(() => {
     if (!visible || !canSetDnd || requested) return;
@@ -91,11 +110,9 @@
     <a
       href={resolve(href)}
       class="flex flex-1 items-center gap-2 min-w-0 text-sm hover:text-sidebar-accent-foreground"
-      title={isScheduled && !isManualActive
-        ? "Scheduled Do Not Disturb window configured"
-        : undefined}
+      title={scheduleTitle}
     >
-      {#if isManualActive}
+      {#if inEffect}
         <BellOff class="size-4 shrink-0 text-status-info" />
       {:else}
         <Bell class="size-4 shrink-0" />

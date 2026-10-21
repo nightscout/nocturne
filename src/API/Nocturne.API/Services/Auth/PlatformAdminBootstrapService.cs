@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Auth;
@@ -26,7 +27,7 @@ namespace Nocturne.API.Services.Auth;
 /// </remarks>
 public class PlatformAdminBootstrapService
 {
-    private readonly IDbContextFactory<NocturneDbContext> _dbFactory;
+    private readonly INocturneDbContextFactory _dbFactory;
     private readonly PlatformOptions _options;
     private readonly ILogger<PlatformAdminBootstrapService> _logger;
 
@@ -38,7 +39,7 @@ public class PlatformAdminBootstrapService
     /// <param name="options">Platform configuration options, including <c>AdminSubjectIds</c>.</param>
     /// <param name="logger">Logger for the resulting grant.</param>
     public PlatformAdminBootstrapService(
-        IDbContextFactory<NocturneDbContext> dbFactory,
+        INocturneDbContextFactory dbFactory,
         IOptions<PlatformOptions> options,
         ILogger<PlatformAdminBootstrapService> logger)
     {
@@ -53,7 +54,7 @@ public class PlatformAdminBootstrapService
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task BootstrapAsync(CancellationToken cancellationToken)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var db = await _dbFactory.CreatePlatformAsync(cancellationToken);
 
         // Option 1: explicit config takes precedence
         if (_options.AdminSubjectIds.Count > 0)
@@ -155,7 +156,7 @@ public class PlatformAdminBootstrapService
         if (_options.AdminSubjectIds.Count > 0)
             return false;
 
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var db = await _dbFactory.CreatePlatformAsync(cancellationToken);
 
         if (await db.Subjects.AnyAsync(s => s.IsPlatformAdmin, cancellationToken))
             return false;

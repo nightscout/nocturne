@@ -33,7 +33,7 @@ public class NulSanitizationTests : IDisposable
         accessor.Setup(a => a.HttpContext).Returns((HttpContext)null!);
 
         _db = TestDbContextFactory.CreateSqliteWithTenant(
-            _tenantId, "test", _recorder, new MutationAuditInterceptor(accessor.Object));
+            _tenantId, "test", _recorder, new MutationAuditInterceptor());
     }
 
     public void Dispose()
@@ -132,7 +132,7 @@ public class NulSanitizationTests : IDisposable
 
         await using (var ctx = _db.CreateContext())
         {
-            ctx.AuditContext = new UserAuditContext();
+            ctx.AttributedTo(new UserAuditContext());
             var reading = await ctx.MeterGlucose.SingleAsync(r => r.Id == id);
             reading.Device = "iPhone" + Nul;
             await ctx.SaveChangesAsync();

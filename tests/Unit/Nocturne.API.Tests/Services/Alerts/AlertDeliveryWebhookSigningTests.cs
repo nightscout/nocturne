@@ -98,7 +98,7 @@ public class AlertDeliveryWebhookSigningTests
         services.AddSingleton(provider);
 
         var service = new AlertDeliveryService(
-            factory,
+            factory.AsNocturneFactory(),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             Mock.Of<ISignalRBroadcastService>(),
             services.BuildServiceProvider(),

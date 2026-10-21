@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -30,7 +31,7 @@ public class GlookoPumpEventMapper
         if (events == null) return results;
 
         var skipped = 0;
-        foreach (var evt in events)
+        foreach (var evt in ConnectorFaults.NonNullRecords(events, _logger, _connectorSource, "SSV2 pump event"))
         {
             if (evt.SoftDeleted) continue;
 

@@ -95,7 +95,7 @@
       {#if data?.sgv}
         <Tooltip.Item
           label="Glucose"
-          value={`${bg(data.sgv)} ${bgLabel()}`}
+          value={`${bg(data.sgv, ctx.glucoseUnits)} ${bgLabel(ctx.glucoseUnits)}`}
           color="var(--glucose-in-range)"
           class="text-popover-foreground font-bold"
         />

@@ -11,6 +11,7 @@ using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.Services;
 
@@ -26,9 +27,8 @@ namespace Nocturne.API.Controllers;
 /// the widget catalogue, and multitenancy answers from configuration and the resolved tenant.
 ///
 /// The class hides itself from the interactive API explorer with
-/// <see cref="ApiExplorerSettingsAttribute"/>, so an endpoint a client actually calls has to
-/// override that with <c>IgnoreApi = false</c> to reach the OpenAPI document at all; widget
-/// definitions, alert condition types, auth error codes and TOTP setup failures do.
+/// <see cref="ApiExplorerSettingsAttribute"/>, so an endpoint whose types must reach the generated
+/// client has to override that with <c>IgnoreApi = false</c> to reach the OpenAPI document at all.
 /// All endpoints are permitted during initial setup (<see cref="AllowDuringSetupAttribute"/>).
 /// </remarks>
 [ApiController]
@@ -269,6 +269,27 @@ public class MetadataController : ControllerBase
     }
 
     /// <summary>
+    /// Get tracker realtime actions metadata
+    /// This endpoint ensures NSwag generates TypeScript types for TrackerRealtimeAction, the
+    /// <c>action</c> of every <c>trackerUpdate</c> event, which the web app validates against
+    /// </summary>
+    /// <returns>Tracker realtime actions metadata</returns>
+    [HttpGet("tracker-realtime-actions")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(TrackerRealtimeActionsMetadata), 200)]
+    public ActionResult<TrackerRealtimeActionsMetadata> GetTrackerRealtimeActions()
+    {
+        return Ok(
+            new TrackerRealtimeActionsMetadata
+            {
+                AvailableActions = Enum.GetValues<TrackerRealtimeAction>(),
+                Description = "Actions a trackerUpdate realtime event can carry",
+            }
+        );
+    }
+
+    /// <summary>
     /// Get TOTP setup failure codes metadata
     /// This endpoint ensures NSwag generates TypeScript types for TotpSetupFailure, which the
     /// verify-setup endpoint returns as the <c>detail</c> of its 400 and the web app turns into copy
@@ -285,6 +306,27 @@ public class MetadataController : ControllerBase
             {
                 AvailableFailures = Enum.GetValues<TotpSetupFailure>(),
                 Description = "Reasons a TOTP setup attempt can be refused",
+            }
+        );
+    }
+
+    /// <summary>
+    /// Get permission atoms metadata
+    /// This endpoint ensures NSwag generates a TypeScript enum for PermissionAtom, which the
+    /// permission selector is checked against
+    /// </summary>
+    /// <returns>Permission atoms metadata</returns>
+    [HttpGet("permission-atoms")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(PermissionAtomsMetadata), 200)]
+    public ActionResult<PermissionAtomsMetadata> GetPermissionAtoms()
+    {
+        return Ok(
+            new PermissionAtomsMetadata
+            {
+                AvailableAtoms = Enum.GetValues<PermissionAtom>(),
+                Description = "Atoms a tenant role, invite or member permission may confer",
             }
         );
     }
@@ -525,6 +567,38 @@ public class TotpSetupFailuresMetadata
 
     /// <summary>
     /// Description of the TOTP setup failure codes
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Metadata about permission atoms for NSwag generation
+/// </summary>
+public class PermissionAtomsMetadata
+{
+    /// <summary>
+    /// Array of all atoms a tenant role, invite or member permission may confer
+    /// </summary>
+    public PermissionAtom[] AvailableAtoms { get; set; } = [];
+
+    /// <summary>
+    /// Description of the permission atoms
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Metadata about tracker realtime actions for NSwag generation
+/// </summary>
+public class TrackerRealtimeActionsMetadata
+{
+    /// <summary>
+    /// Array of all actions a tracker update event can carry
+    /// </summary>
+    public TrackerRealtimeAction[] AvailableActions { get; set; } = [];
+
+    /// <summary>
+    /// Description of the tracker realtime actions
     /// </summary>
     public string Description { get; set; } = string.Empty;
 }

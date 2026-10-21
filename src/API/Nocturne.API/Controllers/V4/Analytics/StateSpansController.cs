@@ -428,6 +428,78 @@ public class StateSpansController : ControllerBase
             return NotFound();
         return NoContent();
     }
+
+    /// <summary>
+    /// Restore a soft-deleted state span by the ID reads return for it
+    /// </summary>
+    /// <remarks>
+    /// Returns <c>404 Not Found</c> when no soft-deleted span has the ID. A span is refused with
+    /// <c>409 Conflict</c>, and stays deleted, when a live span holds its original id at the time of
+    /// the restore. A span that another span superseded before the delete is not re-pointed at.
+    /// </remarks>
+    [HttpPost("{id}/restore")]
+    [RemoteCommand(Invalidates = [
+        nameof(GetStateSpans), nameof(GetStateSpan),
+        nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
+        nameof(GetProfiles), nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
+    [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<StateSpan>> RestoreStateSpan(string id, CancellationToken cancellationToken = default)
+    {
+        var deleted = await _stateSpanService.ResolveDeletedAsync([id], cancellationToken);
+        if (deleted.Count == 0)
+            return NotFound();
+
+        var (rowId, (_, category)) = deleted.Single();
+
+        var missingScope = StateSpanWriteScopeGuard.FindMissingScope(HttpContext.GetGrantedScopes(), category);
+        if (missingScope is not null)
+            return this.ForbiddenForScope(missingScope);
+
+        try
+        {
+            return Ok(await _stateSpanService.RestoreStateSpanAsync(rowId, cancellationToken));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
+    /// <summary>
+    /// Restore soft-deleted state spans by the IDs reads return for them
+    /// </summary>
+    /// <remarks>
+    /// IDs that match no soft-deleted span are ignored. A span left deleted because a live span holds
+    /// its original id is listed in <c>conflicts</c> by the ID sent; the rest of the batch is still
+    /// restored. The caller needs write access to the category of every span restored.
+    /// </remarks>
+    [HttpPost("restore")]
+    [RemoteCommand(Invalidates = [
+        nameof(GetStateSpans), nameof(GetStateSpan),
+        nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
+        nameof(GetProfiles), nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
+    [ProducesResponseType(typeof(StateSpanBulkRestoreResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<StateSpanBulkRestoreResult>> BulkRestoreStateSpans(
+        [FromBody] string[] ids, CancellationToken cancellationToken = default)
+    {
+        var deleted = await _stateSpanService.ResolveDeletedAsync(ids, cancellationToken);
+        var missingScope = StateSpanWriteScopeGuard.FindMissingScope(
+            HttpContext.GetGrantedScopes(), deleted.Values.Select(d => d.Category).Distinct().ToArray());
+        if (missingScope is not null)
+            return this.ForbiddenForScope(missingScope);
+
+        var result = await _stateSpanService.BulkRestoreStateSpansAsync(deleted.Keys, cancellationToken);
+        return Ok(new StateSpanBulkRestoreResult
+        {
+            Restored = result.Restored,
+            Conflicts = result.Conflicts.Select(rowId => deleted[rowId].SentId).ToList(),
+        });
+    }
 }
 
 #region Request Models

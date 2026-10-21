@@ -1,26 +1,37 @@
 import { describe, it, expect } from "vitest";
 import type { TenantAlertSettingsResponse } from "$api-clients";
-import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
+import {
+  isDndInEffect,
+  isDndManualActive,
+  isDndScheduleActiveNow,
+  isDndScheduleConfigured,
+} from "./dnd";
 
 const settings = (
   overrides: TenantAlertSettingsResponse
 ): TenantAlertSettingsResponse => ({
   dndManualActive: false,
   dndScheduleEnabled: false,
+  dndScheduleActiveNow: false,
   ...overrides,
 });
 
-describe("isDndActiveNow", () => {
-  it("is true only for a manual mute", () => {
-    expect(isDndActiveNow(settings({ dndManualActive: true }))).toBe(true);
-    expect(isDndActiveNow(settings({}))).toBe(false);
+describe("isDndInEffect", () => {
+  it("is true for a manual mute", () => {
+    expect(isDndInEffect(settings({ dndManualActive: true }))).toBe(true);
   });
 
-  it("is false when a schedule is merely configured", () => {
-    // 22:00-07:00 quiet hours must not read as "on" at noon; the backend
-    // evaluates the window and the response has no "active now" field.
+  it("is true while the schedule is in effect", () => {
     expect(
-      isDndActiveNow(
+      isDndInEffect(
+        settings({ dndScheduleEnabled: true, dndScheduleActiveNow: true })
+      )
+    ).toBe(true);
+  });
+
+  it("is false when a schedule is configured but not in effect", () => {
+    expect(
+      isDndInEffect(
         settings({
           dndScheduleEnabled: true,
           dndScheduleStart: "22:00",
@@ -31,8 +42,29 @@ describe("isDndActiveNow", () => {
   });
 
   it("is false for a missing response", () => {
-    expect(isDndActiveNow(null)).toBe(false);
-    expect(isDndActiveNow(undefined)).toBe(false);
+    expect(isDndInEffect(null)).toBe(false);
+    expect(isDndInEffect(undefined)).toBe(false);
+  });
+});
+
+describe("isDndManualActive", () => {
+  it("ignores the schedule", () => {
+    expect(
+      isDndManualActive(
+        settings({ dndScheduleEnabled: true, dndScheduleActiveNow: true })
+      )
+    ).toBe(false);
+    expect(isDndManualActive(settings({ dndManualActive: true }))).toBe(true);
+  });
+});
+
+describe("isDndScheduleActiveNow", () => {
+  it("reads the backend's verdict", () => {
+    expect(
+      isDndScheduleActiveNow(settings({ dndScheduleActiveNow: true }))
+    ).toBe(true);
+    expect(isDndScheduleActiveNow(settings({}))).toBe(false);
+    expect(isDndScheduleActiveNow(null)).toBe(false);
   });
 });
 

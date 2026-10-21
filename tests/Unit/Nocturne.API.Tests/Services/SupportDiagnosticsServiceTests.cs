@@ -29,7 +29,7 @@ public class SupportDiagnosticsServiceTests
             .Setup(c => c.GetConnectorStatusesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        var factory = new Mock<ITenantDbContextFactory>();
+        var factory = new Mock<INocturneDbContextFactory>();
         factory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .Returns(() => ValueTask.FromResult(NewContext()));

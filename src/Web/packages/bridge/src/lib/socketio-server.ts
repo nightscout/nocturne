@@ -1,12 +1,13 @@
 import { Server as SocketIOServerClass, Socket, Namespace, type DefaultEventsMap } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import logger from './logger.js';
-import type { ClientInfo, AlarmData, ServerStats } from '../types.js';
+import type { ClientInfo, AlarmData, AlarmEvent, ServerStats } from '../types.js';
 import {
   verifyHandshakeTicket,
   normalizeHandshakeHost,
   REALTIME_ADMISSION_PATH,
-  canonicalSubjectId,
+  readRealtimeGrant,
+  type RealtimeGrant,
 } from './handshake-ticket.js';
 import { isRecord, stringField, type Payload } from './payload.js';
 
@@ -18,8 +19,8 @@ interface BridgeSocketData {
   pendingTenantSlug?: string;
   /**
    * Whether the socket's credential may join the tenant-wide room. The room
-   * carries every category and every member's in-app notifications, so a guest
-   * link or anonymous share that holds single categories stays out of it.
+   * carries live payloads of more than one category, so a guest link or
+   * anonymous share that holds single categories stays out of it.
    */
   tenantRelay?: boolean;
   /**
@@ -28,6 +29,8 @@ interface BridgeSocketData {
    * subject, which then receives no per-subject notifications.
    */
   subjectId?: string;
+  /** The API broadcast categories whose storage events the socket receives. */
+  categories?: string[];
 }
 
 /** Room a socket joins for one subject's per-subject payloads within a tenant. */
@@ -35,21 +38,38 @@ function subjectRoom(tenantSlug: string, subjectId: string): string {
   return `tenant:${tenantSlug}:subject:${subjectId}`;
 }
 
+/** Room a socket joins for one API broadcast category's storage events within a tenant. */
+function categoryRoom(tenantSlug: string, category: string): string {
+  return `tenant:${tenantSlug}:category:${category}`;
+}
+
+/**
+ * The categories a grant's socket receives storage events for. A storage event
+ * carries whatever record was just written, backdated or not, so a
+ * history-clamped credential receives none and catches up through its own
+ * clamped reads.
+ */
+function storageCategories(grant: RealtimeGrant): string[] {
+  return grant.historyClamped ? [] : grant.categories;
+}
+
 type BridgeServer = SocketIOServerClass<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>;
 type BridgeNamespace = Namespace<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>;
 type BridgeSocket = Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>;
 
 /**
- * The six collection names the Nightscout v3 `/storage` namespace lets a client
- * subscribe to (AndroidAPS sends exactly these, lowercase). Not all of them are
- * broadcast by the API today — `settings` has no realtime path — but the client
- * is allowed to ask for any of them.
+ * The collection names the Nightscout v3 `/storage` namespace lets a client
+ * subscribe to. Upstream spells the food collection `food`; AndroidAPS sends
+ * `foods`, so both are accepted and each socket is answered in its own spelling.
+ * Not all of them are broadcast by the API today (`settings` has no realtime
+ * path) but the client is allowed to ask for any of them.
  */
 const KNOWN_STORAGE_COLLECTIONS = [
   'devicestatus',
   'entries',
   'profile',
   'treatments',
+  'food',
   'foods',
   'settings',
 ] as const;
@@ -59,25 +79,32 @@ type StorageCollection = (typeof KNOWN_STORAGE_COLLECTIONS)[number];
 const isStorageCollection = (name: string): name is StorageCollection =>
   KNOWN_STORAGE_COLLECTIONS.some((known) => known === name);
 
+/** Collections a subscribe without a `collections` list receives, as upstream names them. */
+const DEFAULT_STORAGE_COLLECTIONS: StorageCollection[] = KNOWN_STORAGE_COLLECTIONS.filter(
+  (name) => name !== 'foods',
+);
+
 /**
- * The API broadcasts storage events under its own collection names, which don't
- * all match the names v3 clients subscribe with: the API uses the singular
- * `food` and the plural `profiles`, while AAPS subscribes to `foods` and
- * `profile`. To route a broadcast to the sockets that asked for it we have to
- * translate the broadcast's collection name into the name those sockets joined
- * their room under. `clientCollectionName` returns the v3-client spelling for a
- * given broadcast collection; anything not in the map is returned unchanged.
+ * The API broadcasts storage events under its own collection names (singular
+ * `food`, plural `profiles`). Each name maps to every spelling a v3 client may
+ * have joined a room under; the first spelling is the family's identity, so two
+ * spellings of one collection can be recognised as the same subscription.
  */
-const BROADCAST_TO_CLIENT_COLLECTION: Record<string, string> = {
-  food: 'foods',
-  foods: 'foods',
-  profiles: 'profile',
-  profile: 'profile',
+const COLLECTION_SPELLINGS: Record<string, string[]> = {
+  food: ['food', 'foods'],
+  foods: ['food', 'foods'],
+  profiles: ['profile'],
+  profile: ['profile'],
 };
 
-/** Translate an API broadcast collection name to the v3-client spelling. */
-function clientCollectionName(broadcastCollection: string): string {
-  return BROADCAST_TO_CLIENT_COLLECTION[broadcastCollection] ?? broadcastCollection;
+/** The client spellings a broadcast collection is delivered under. */
+function clientCollectionNames(broadcastCollection: string): string[] {
+  return COLLECTION_SPELLINGS[broadcastCollection] ?? [broadcastCollection];
+}
+
+/** Identity shared by every spelling of one collection. */
+function collectionIdentity(collection: string): string {
+  return clientCollectionNames(collection)[0];
 }
 
 /** Room a `/storage` socket joins for a tenant + collection (client spelling). */
@@ -93,7 +120,7 @@ function alarmRoom(tenantSlug: string): string {
 /**
  * Map each v3-client collection name to the API v3 endpoint path it reads from.
  * The API's controller names don't always match the client collection names
- * (`foods` → `/api/v3/food`, singular), so this is used to probe per-collection
+ * (`food` and `foods` → `/api/v3/food`), so this is used to probe per-collection
  * read authorization: a token that can read `/api/v3/entries` is authorized for
  * the `entries` room, but not necessarily for `treatments` or `settings`.
  */
@@ -102,6 +129,7 @@ const COLLECTION_READ_ENDPOINT: Record<string, string> = {
   treatments: '/api/v3/treatments',
   devicestatus: '/api/v3/devicestatus',
   profile: '/api/v3/profile',
+  food: '/api/v3/food',
   foods: '/api/v3/food',
   settings: '/api/v3/settings',
 };
@@ -138,21 +166,20 @@ export function pickHandshakeHost(
   return single || undefined;
 }
 
-/** Resolve the tenant slug a host belongs to. A subdomain resolves to its slug;
- *  the apex domain resolves to the sole tenant when exactly one exists, mirroring
- *  the API's tenant resolution so a single tenant served on the root domain works
- *  without a subdomain. Returns null when the host is foreign or the apex can't be
- *  resolved to a single tenant. */
 /** Socket.IO query values are `string | string[]`; take the first. */
 function queryValue(value: string | string[] | undefined): string | undefined {
   const single = Array.isArray(value) ? value[0] : value;
   return single || undefined;
 }
 
+/** Resolve the tenant slug a host belongs to. A subdomain resolves to its slug;
+ *  the apex domain resolves to `apexTenantSlug`, the tenant the API serves there
+ *  (see `discoverApexTenant`). Returns null when the host is foreign or the apex
+ *  serves no tenant. */
 export function resolveTenantSlug(
   host: string | undefined,
   baseDomain: string,
-  tenantSlugs: string[],
+  apexTenantSlug: string | null,
 ): string | null {
   if (!host) return null;
 
@@ -164,8 +191,8 @@ export function resolveTenantSlug(
     return slug || null;
   }
 
-  if (hostname === baseDomainHost && tenantSlugs.length === 1) {
-    return tenantSlugs[0];
+  if (hostname === baseDomainHost) {
+    return apexTenantSlug;
   }
 
   return null;
@@ -177,7 +204,7 @@ class SocketIOServer {
   private clients: Map<string, ClientInfo> = new Map();
   private config: SocketIOConfig;
   private baseDomain: string;
-  private tenantSlugs: string[];
+  private apexTenantSlug: string | null;
   private signingSecret: string;
   private apiBaseUrl: string;
   /** Nightscout v3 namespaces for uploaders (AAPS, xDrip+, ...). null until
@@ -189,13 +216,13 @@ class SocketIOServer {
     httpServer: HttpServer,
     config: SocketIOConfig = {},
     baseDomain: string,
-    tenantSlugs: string[] = [],
+    apexTenantSlug: string | null = null,
     signingSecret: string = '',
     apiBaseUrl: string = '',
   ) {
     this.httpServer = httpServer;
     this.baseDomain = baseDomain;
-    this.tenantSlugs = tenantSlugs;
+    this.apexTenantSlug = apexTenantSlug;
     this.signingSecret = signingSecret;
     this.apiBaseUrl = apiBaseUrl;
     this.config = {
@@ -254,7 +281,7 @@ class SocketIOServer {
   async authorizeHandshake(socket: BridgeSocket, next: (err?: Error) => void): Promise<void> {
     try {
       const host = pickHandshakeHost(socket.handshake.headers);
-      const tenantSlug = resolveTenantSlug(host, this.baseDomain, this.tenantSlugs);
+      const tenantSlug = resolveTenantSlug(host, this.baseDomain, this.apexTenantSlug);
       if (!tenantSlug) {
         logger.warn(`Rejecting connection ${socket.id}: no resolvable tenant`);
         return next(new Error('tenant_unresolved'));
@@ -286,6 +313,7 @@ class SocketIOServer {
         socket.data.tenantSlug = tenantSlug;
         socket.data.tenantRelay = ticket.tenantRelay;
         socket.data.subjectId = ticket.subjectId;
+        socket.data.categories = storageCategories(ticket);
         return next();
       }
 
@@ -343,12 +371,12 @@ class SocketIOServer {
     });
   }
 
-  /** Join an authorized socket to its tenant room and, when its credential owns a subject, that
-   *  subject's room. A restricted socket stays authorized and joins nothing, as the API hub's
-   *  Authorize does; the bridge has no per-category room for the default namespace to offer it
-   *  instead. A socket with no subject receives no per-subject notifications. */
+  /** Join an authorized socket to its tenant room, the category rooms it was granted and, when its
+   *  credential owns a subject, that subject's room. A restricted socket stays authorized and joins
+   *  nothing, category rooms included, so a guest link or share receives no storage events. A socket
+   *  with no subject receives no per-subject notifications. */
   private joinTenantRoom(socket: BridgeSocket): void {
-    const { tenantSlug, tenantRelay, subjectId } = socket.data;
+    const { tenantSlug, tenantRelay, subjectId, categories = [] } = socket.data;
     if (!tenantSlug) return;
 
     if (tenantRelay !== true) {
@@ -358,6 +386,10 @@ class SocketIOServer {
 
     socket.join(`tenant:${tenantSlug}`);
     logger.info(`Client ${socket.id} joined tenant room: ${tenantSlug}`);
+
+    for (const category of categories) {
+      socket.join(categoryRoom(tenantSlug, category));
+    }
 
     if (subjectId) {
       socket.join(subjectRoom(tenantSlug, subjectId));
@@ -413,20 +445,21 @@ class SocketIOServer {
     socket.data.pendingTenantSlug = undefined;
     socket.data.tenantRelay = admission.tenantRelay;
     socket.data.subjectId = admission.subjectId;
+    socket.data.categories = storageCategories(admission);
     this.joinTenantRoom(socket);
     logger.info(`Client ${socket.id} authorized via legacy credentials for tenant: ${tenantSlug}`);
     callback?.({ read: true, write: false, write_treatment: false });
   }
 
   /** Replays a client credential against the API's realtime admission endpoint,
-   *  scoped to the connection's own tenant, and returns its `tenantRelay`
-   *  decision and the admitted subject, or null when the API refused the credential or the probe failed.
+   *  scoped to the connection's own tenant, and returns its grant, or null when
+   *  the API refused the credential or the probe failed.
    *  The probe carries the client's credential and nothing else: the bridge's
    *  instance key would authenticate any anonymous caller as a service. */
   private async probeRealtimeAdmission(
     tenantSlug: string,
     credential: { apiSecret?: string; token?: string; accessToken?: string },
-  ): Promise<{ tenantRelay: boolean; subjectId: string | undefined } | null> {
+  ): Promise<RealtimeGrant | null> {
     if (!this.apiBaseUrl) {
       logger.warn('Realtime admission probe has no API base URL configured');
       return null;
@@ -453,12 +486,7 @@ class SocketIOServer {
       });
 
       if (!probe.ok) return null;
-      const admission: unknown = await probe.json();
-      if (!isRecord(admission)) return { tenantRelay: false, subjectId: undefined };
-      return {
-        tenantRelay: admission.tenantRelay === true,
-        subjectId: canonicalSubjectId(admission.subjectId),
-      };
+      return readRealtimeGrant(await probe.json());
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       logger.warn(`Realtime admission probe failed: ${reason}`);
@@ -509,28 +537,27 @@ class SocketIOServer {
     }
   }
 
-  broadcastAlarm(alarm: AlarmData, tenantSlug?: string): void {
+  broadcastAlarm(event: AlarmEvent, alarm: AlarmData, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
-    const eventName = alarm.level === 'urgent' ? 'urgent_alarm' : 'alarm';
-    logger.debug(`Broadcasting ${eventName}${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit(eventName, alarm);
+    logger.debug(`Broadcasting ${event}${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
+    target.emit(event, alarm);
 
     if (this.alarmNsp && tenantSlug) {
-      this.alarmNsp.to(alarmRoom(tenantSlug)).emit(eventName, alarm);
+      this.alarmNsp.to(alarmRoom(tenantSlug)).emit(event, alarm);
     }
   }
 
-  broadcastClearAlarm(tenantSlug?: string): void {
+  broadcastClearAlarm(clear: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
     logger.debug(`Broadcasting clear_alarm${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit('clear_alarm');
+    target.emit('clear_alarm', clear);
 
     if (this.alarmNsp && tenantSlug) {
-      this.alarmNsp.to(alarmRoom(tenantSlug)).emit('clear_alarm');
+      this.alarmNsp.to(alarmRoom(tenantSlug)).emit('clear_alarm', clear);
     }
   }
 
@@ -540,6 +567,10 @@ class SocketIOServer {
 
     logger.debug(`Broadcasting notification${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
     target.emit('notification', notification);
+
+    if (this.alarmNsp && tenantSlug) {
+      this.alarmNsp.to(alarmRoom(tenantSlug)).emit('notification', notification);
+    }
   }
 
   broadcastStatusUpdate(status: unknown, tenantSlug?: string): void {
@@ -550,12 +581,18 @@ class SocketIOServer {
     target.emit('status', status);
   }
 
+  /** Emit a storage event to the sockets granted its category, read from `colName`. An event naming
+   *  no category reaches no default-namespace socket: the tenant room holds members whose scopes
+   *  do not cover every category. */
   broadcastStorageEvent(eventType: 'create' | 'update' | 'delete', data: Payload, tenantSlug?: string): void {
-    const target = this.emitTarget(tenantSlug);
-    if (!target) return;
+    if (!this.io) return;
+    if (!tenantSlug) {
+      logger.warn('Refusing to broadcast without a tenant slug');
+      return;
+    }
 
     const clientCount = this.clients.size;
-    logger.debug(`Broadcasting storage ${eventType} event to ${clientCount} connected clients${tenantSlug ? ` (tenant: ${tenantSlug})` : ''}`);
+    logger.debug(`Broadcasting storage ${eventType} event to ${clientCount} connected clients (tenant: ${tenantSlug})`);
 
     if (clientCount === 0) {
       // This is normal while the service starts or a connector catches up
@@ -564,19 +601,17 @@ class SocketIOServer {
       logger.debug('No Socket.IO clients connected - event will not be delivered to frontend');
     }
 
-    target.emit(eventType, data);
+    const broadcastCollection = stringField(data, 'colName') ?? stringField(data, 'collection');
+    if (!broadcastCollection) return;
 
-    // Fan out to v3 `/storage` namespace clients (AAPS, xDrip+, ...). The event
-    // is delivered only to sockets subscribed to the matching collection room,
-    // translating the API's collection spelling (e.g. `profiles`, `food`) to the
-    // v3-client spelling (`profile`, `foods`) so a socket that subscribed to
-    // `profile` receives broadcasts the API emits as `profiles`. The payload's
-    // `colName` is amended to the client spelling too, since AAPS routes the
-    // event by reading `colName` from the payload.
-    if (this.storageNsp && tenantSlug) {
-      const broadcastCollection = stringField(data, 'colName') ?? stringField(data, 'collection') ?? null;
-      if (broadcastCollection) {
-        const clientCollection = clientCollectionName(broadcastCollection);
+    this.io.to(categoryRoom(tenantSlug, broadcastCollection)).emit(eventType, data);
+
+    // Fan out to v3 `/storage` namespace clients (AAPS, xDrip+, ...). Each
+    // spelling of the collection has its own room and its own `colName`, since
+    // AAPS routes the event by reading `colName` from the payload. A socket
+    // joins one spelling only, so it never receives the event twice.
+    if (this.storageNsp) {
+      for (const clientCollection of clientCollectionNames(broadcastCollection)) {
         this.storageNsp
           .to(storageRoom(tenantSlug, clientCollection))
           .emit(eventType, { ...data, colName: clientCollection });
@@ -639,8 +674,8 @@ class SocketIOServer {
     };
   }
 
-  setTenantSlugs(slugs: string[]): void {
-    this.tenantSlugs = slugs;
+  setApexTenantSlug(slug: string | null): void {
+    this.apexTenantSlug = slug;
   }
 
   getIO(): BridgeServer | null {
@@ -658,7 +693,7 @@ class SocketIOServer {
    */
   resolveNamespaceTenant(socket: BridgeSocket): string | null {
     const host = pickHandshakeHost(socket.handshake.headers);
-    return resolveTenantSlug(host, this.baseDomain, this.tenantSlugs);
+    return resolveTenantSlug(host, this.baseDomain, this.apexTenantSlug);
   }
 
   /**
@@ -773,15 +808,18 @@ class SocketIOServer {
       return;
     }
 
-    // Normalize the requested collections to the known v3 set, preserving order
-    // and dropping anything unrecognized.
+    // Normalize the requested collections to the known v3 set, preserving order,
+    // dropping anything unrecognized and keeping the first spelling of a
+    // collection requested under two.
     const collections = isRecord(payload) ? payload.collections : undefined;
     const requested = Array.isArray(collections)
       ? collections.filter((c): c is string => typeof c === 'string')
       : [];
     const candidateCollections: StorageCollection[] = requested.length > 0
-      ? requested.filter(isStorageCollection)
-      : [...KNOWN_STORAGE_COLLECTIONS];
+      ? requested
+          .filter(isStorageCollection)
+          .filter((name, i, all) => all.findIndex((other) => collectionIdentity(other) === collectionIdentity(name)) === i)
+      : DEFAULT_STORAGE_COLLECTIONS;
 
     // Probe each collection's read endpoint independently so authorization is
     // per-collection, matching the API's per-endpoint RequireScope.

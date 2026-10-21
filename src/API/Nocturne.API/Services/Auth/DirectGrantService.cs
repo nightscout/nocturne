@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Authorization;
@@ -12,7 +11,7 @@ namespace Nocturne.API.Services.Auth;
 
 /// <summary>
 /// Creates, lists, and revokes direct grant tokens (<c>noc_</c> opaque bearer tokens).
-/// Shared by the self-service <see cref="DirectGrantController"/> and the platform-admin
+/// Shared by the self-service <see cref="Controllers.Authentication.DirectGrantController"/> and the platform-admin
 /// tenant grant endpoints so token generation and hashing live in one place.
 /// </summary>
 /// <remarks>

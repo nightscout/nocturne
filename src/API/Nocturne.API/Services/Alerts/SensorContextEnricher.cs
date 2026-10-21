@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Configuration;
-using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Constants;

@@ -39,12 +39,13 @@ export function formatGlucoseValue(mgdl: number, units: GlucoseUnits): number {
   return Math.round(value);
 }
 
-/** Format a glucose delta for display, with a leading +/- sign by default. */
+/** Format a glucose delta for display, with a leading +/- sign by default. Empty when there is no delta. */
 export function formatGlucoseDelta(
-  deltaMgdl: number,
+  deltaMgdl: number | null | undefined,
   units: GlucoseUnits,
   includeSign: boolean = true,
 ): string {
+  if (deltaMgdl == null) return "";
   const value = convertToDisplayUnits(deltaMgdl, units);
   const sign = includeSign && value > 0 ? "+" : "";
   if (units === "mmol") {

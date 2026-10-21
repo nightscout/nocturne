@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -464,7 +465,7 @@ public class TenantOverviewServiceTests
         var provider = services.BuildServiceProvider();
 
         var service = new TenantOverviewService(
-            new InMemoryContextFactory(options),
+            (new InMemoryContextFactory(options)).AsNocturneFactory(),
             provider.GetRequiredService<IServiceScopeFactory>(),
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
@@ -590,7 +591,7 @@ public class TenantOverviewServiceTests
         var provider = services.BuildServiceProvider();
 
         return new TenantOverviewService(
-            new InMemoryContextFactory(options),
+            (new InMemoryContextFactory(options)).AsNocturneFactory(),
             provider.GetRequiredService<IServiceScopeFactory>(),
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),

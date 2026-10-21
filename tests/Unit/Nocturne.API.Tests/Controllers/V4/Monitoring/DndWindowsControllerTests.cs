@@ -215,7 +215,7 @@ public class DndWindowsControllerTests
         }
 
         var controller = new DndWindowsController(
-            new TestTenantDbContextFactory(sqlite.CreateContext(Tenant)));
+            new TestNocturneDbContextFactory(sqlite.CreateContext(Tenant)));
 
         var result = await controller.Create(Request(id, DndScope.Lows), CancellationToken.None);
 
@@ -405,7 +405,7 @@ public class DndWindowsControllerTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         var seed = new NocturneDbContext(options) { TenantId = Tenant };
-        var factory = new TestTenantDbContextFactory(seed);
+        var factory = new TestNocturneDbContextFactory(seed);
         return (new DndWindowsController(factory), options);
     }
 

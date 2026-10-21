@@ -433,9 +433,6 @@ jobs:
       - name: App server-rendering tests
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: pnpm --filter @nocturne/app run test:render
-      - name: App production translation tests
-        if: ${{ !cancelled() && steps.client.outcome == 'success' }}
-        run: pnpm --filter @nocturne/app exec vitest --config vitest.config.ts --run tools/ehba1c-translations.test.js
       - name: Portal unit tests
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: |
@@ -530,6 +527,7 @@ jobs:
           working-directory: src/Web/packages/app
       - name: App unit tests
         run: |
+          node tools/ensure-check-deps.mjs
           pnpm exec svelte-kit sync
           pnpm exec vitest --config vitest.config.ts --run --coverage
       - name: App browser component tests

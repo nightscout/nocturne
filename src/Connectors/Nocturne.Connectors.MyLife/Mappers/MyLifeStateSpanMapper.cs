@@ -21,10 +21,6 @@ internal sealed class MyLifeStateSpanMapper
     /// <summary>
     ///     Maps MyLife events to TempBasal records for basal delivery.
     /// </summary>
-    /// <param name="events">The MyLife events to process</param>
-    /// <param name="enableTempBasalConsolidation">Whether to enable temp basal consolidation</param>
-    /// <param name="tempBasalConsolidationWindowMinutes">The window for temp basal consolidation</param>
-    /// <returns>A collection of TempBasal records</returns>
     internal static IEnumerable<TempBasal> MapTempBasals(
         IEnumerable<MyLifeEvent> events,
         bool enableTempBasalConsolidation,

@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -32,11 +34,18 @@ public class TenantAlertSettingsController : ControllerBase
 {
     private const string ManualSource = "web";
 
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
+    private readonly ITherapySettingsResolver _therapySettings;
+    private readonly TimeProvider _timeProvider;
 
-    public TenantAlertSettingsController(ITenantDbContextFactory contextFactory)
+    public TenantAlertSettingsController(
+        INocturneDbContextFactory contextFactory,
+        ITherapySettingsResolver therapySettings,
+        TimeProvider timeProvider)
     {
         _contextFactory = contextFactory;
+        _therapySettings = therapySettings;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -62,8 +71,9 @@ public class TenantAlertSettingsController : ControllerBase
             await db.SaveChangesAsync(ct);
         }
 
-        var manual = await ActiveManualWindowAsync(db, DateTime.UtcNow, ct);
-        return Ok(MapToResponse(entity, manual));
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var manual = await ActiveManualWindowAsync(db, now, ct);
+        return Ok(MapToResponse(entity, manual, await ScheduleActiveNowAsync(entity, now, ct)));
     }
 
     /// <summary>
@@ -85,7 +95,7 @@ public class TenantAlertSettingsController : ControllerBase
         [FromBody] UpdateTenantAlertSettingsRequest request, CancellationToken ct)
     {
         await using var db = await _contextFactory.CreateAsync(ct);
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         // A manual mute must end in the future (mirrors DndWindowsController's ends_at
         // guard): a past until would persist a never-active window (EndsAt <= StartedAt)
@@ -93,7 +103,7 @@ public class TenantAlertSettingsController : ControllerBase
         // response would report DndManualActive=false despite the request saying true.
         // Only when the request is actually turning the mute on: with the toggle absent the
         // expiry is never read, so rejecting a stale echo of it would 400 a schedule-only save.
-        if (request.DndManualActive == true && AsUtc(request.DndManualUntil) is { } until && until <= now)
+        if (request.DndManualActive == true && request.DndManualUntil?.AsUtc() is { } until && until <= now)
             return BadRequest("dnd_manual_until must be in the future.");
 
         var entity = await db.TenantAlertSettings.FirstOrDefaultAsync(ct);
@@ -121,7 +131,7 @@ public class TenantAlertSettingsController : ControllerBase
             var activeAll = await ActiveAllWindowsAsync(db, now, ct);
             if (manualActive)
             {
-                var endsAt = AsUtc(request.DndManualUntil);
+                var endsAt = request.DndManualUntil?.AsUtc();
                 if (activeAll.Count == 0)
                 {
                     db.DndWindows.Add(new DndWindowEntity
@@ -159,10 +169,12 @@ public class TenantAlertSettingsController : ControllerBase
             }
         }
 
+        var scheduleActiveNow = await ScheduleActiveNowAsync(entity, now, ct);
+
         await db.SaveChangesAsync(ct);
 
         var manual = await ActiveManualWindowAsync(db, now, ct);
-        return Ok(MapToResponse(entity, manual));
+        return Ok(MapToResponse(entity, manual, scheduleActiveNow));
     }
 
     /// <summary>The active <c>scope=all</c> windows (resolve-on-read), tracked for mutation.</summary>
@@ -183,16 +195,18 @@ public class TenantAlertSettingsController : ControllerBase
             .OrderBy(w => w.StartedAt)
             .FirstOrDefaultAsync(ct);
 
-    private static DateTime? AsUtc(DateTime? value) => value switch
+    private async Task<bool> ScheduleActiveNowAsync(
+        TenantAlertSettingsEntity e, DateTime now, CancellationToken ct)
     {
-        null => null,
-        { Kind: DateTimeKind.Utc } v => v,
-        { Kind: DateTimeKind.Local } v => v.ToUniversalTime(),
-        { } v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
-    };
+        if (!e.DndScheduleEnabled)
+            return false;
+
+        var schedule = new TenantAlertSettingsSnapshot(e.DndScheduleEnabled, e.DndScheduleStart, e.DndScheduleEnd);
+        return schedule.Resolve(now, await _therapySettings.GetTimezoneAsync(ct: ct)) is not null;
+    }
 
     private static TenantAlertSettingsResponse MapToResponse(
-        TenantAlertSettingsEntity e, DndWindowEntity? manual) => new()
+        TenantAlertSettingsEntity e, DndWindowEntity? manual, bool scheduleActiveNow) => new()
     {
         DndManualActive = manual is not null,
         DndManualUntil = manual?.EndsAt,
@@ -200,6 +214,7 @@ public class TenantAlertSettingsController : ControllerBase
         DndScheduleEnabled = e.DndScheduleEnabled,
         DndScheduleStart = e.DndScheduleStart,
         DndScheduleEnd = e.DndScheduleEnd,
+        DndScheduleActiveNow = scheduleActiveNow,
     };
 }
 
@@ -219,6 +234,11 @@ public class TenantAlertSettingsResponse
 
     /// <summary>True when a recurring scheduled DND window is configured.</summary>
     public bool DndScheduleEnabled { get; set; }
+
+    /// <summary>True when the scheduled window is in effect at this instant, evaluated in the
+    /// patient's timezone by <see cref="TenantAlertSettingsSnapshot.Resolve"/>, the rule the alert
+    /// engine suppresses by.</summary>
+    public bool DndScheduleActiveNow { get; set; }
 
     /// <summary>Local-time start of the scheduled DND window, interpreted in the patient's timezone.</summary>
     public TimeOnly? DndScheduleStart { get; set; }

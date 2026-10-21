@@ -42,7 +42,7 @@ public class DataOverviewZoneCharacterisationTests : IDisposable
         _dbContext = TestDbContextFactory.CreateInMemoryContext(dbName);
         _dbContext.TenantId = TenantId;
 
-        var factory = new Mock<ITenantDbContextFactory>();
+        var factory = new Mock<INocturneDbContextFactory>();
         factory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>

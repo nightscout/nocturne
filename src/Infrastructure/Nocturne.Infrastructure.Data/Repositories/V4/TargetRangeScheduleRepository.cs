@@ -24,7 +24,7 @@ public class TargetRangeScheduleRepository : V4RepositoryBase<TargetRangeSchedul
     /// Initializes a new instance of the <see cref="TargetRangeScheduleRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public TargetRangeScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TargetRangeScheduleRepository> logger, IV4RecordBroadcaster<TargetRangeSchedule>? broadcaster = null)
+    public TargetRangeScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TargetRangeScheduleRepository> logger, IV4RecordBroadcaster<TargetRangeSchedule>? broadcaster = null)
         : base(contextFactory, auditContext, logger, broadcaster)
     {
     }

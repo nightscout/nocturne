@@ -50,6 +50,47 @@ public class TreatmentServiceTests
         result.Should().ContainSingle();
     }
 
+    [Theory]
+    [InlineData(null, 100)]
+    [InlineData("{\"eventType\":\"Meal Bolus\"}", 1000)]
+    [InlineData("find[eventType]=Meal%20Bolus", 1000)]
+    public async Task GetTreatmentsAsync_WithoutCount_DefaultsToOneHundredOrOneThousandWithAFind(
+        string? find, int expectedCount)
+    {
+        TreatmentQuery? observed = null;
+        _mockCache.Setup(x => x.GetOrComputeAsync(It.IsAny<TreatmentQuery>(), It.IsAny<Func<Task<IReadOnlyList<Treatment>>>>(), It.IsAny<CancellationToken>()))
+            .Returns<TreatmentQuery, Func<Task<IReadOnlyList<Treatment>>>, CancellationToken>(async (q, c, ct) =>
+            {
+                observed = q;
+                return await c();
+            });
+        _mockStore.Setup(x => x.QueryAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Treatment>().AsReadOnly());
+
+        await _treatmentService.GetTreatmentsAsync(find: find);
+
+        observed.Should().NotBeNull();
+        observed!.Count.Should().Be(expectedCount);
+    }
+
+    [Fact]
+    public async Task GetTreatmentsAsync_WithExplicitCount_KeepsIt()
+    {
+        TreatmentQuery? observed = null;
+        _mockCache.Setup(x => x.GetOrComputeAsync(It.IsAny<TreatmentQuery>(), It.IsAny<Func<Task<IReadOnlyList<Treatment>>>>(), It.IsAny<CancellationToken>()))
+            .Returns<TreatmentQuery, Func<Task<IReadOnlyList<Treatment>>>, CancellationToken>(async (q, c, ct) =>
+            {
+                observed = q;
+                return await c();
+            });
+        _mockStore.Setup(x => x.QueryAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Treatment>().AsReadOnly());
+
+        await _treatmentService.GetTreatmentsAsync(find: "{\"eventType\":\"Meal Bolus\"}", count: 7);
+
+        observed!.Count.Should().Be(7);
+    }
+
     [Fact]
     public async Task GetTreatmentsByRangeAsync_DelegatesToStoreWithBounds()
     {
@@ -108,6 +149,18 @@ public class TreatmentServiceTests
         var result = await _treatmentService.UpdateTreatmentAsync("x", new Treatment(), CancellationToken.None);
         result.Should().BeNull();
         _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateTreatmentAsync_WhenTheStoreFails_InvalidatesTheCacheAndPropagates()
+    {
+        _mockStore.Setup(x => x.UpdateAsync("id", It.IsAny<Treatment>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("store down"));
+
+        var update = () => _treatmentService.UpdateTreatmentAsync("id", new Treatment(), CancellationToken.None);
+
+        await update.Should().ThrowAsync<InvalidOperationException>();
+        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnUpdatedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

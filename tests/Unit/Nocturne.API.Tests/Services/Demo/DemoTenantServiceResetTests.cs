@@ -43,7 +43,7 @@ public class DemoTenantServiceResetTests : IDisposable
             .Returns((Guid tenantId, CancellationToken _) => SeedRolesAndPublicMemberAsync(tenantId));
 
         _service = new DemoTenantService(
-            dbFactory.Object,
+            dbFactory.Object.AsNocturneFactory(),
             _tenantService.Object,
             TestPublicAccessCache.Create(),
             new Mock<ICacheService>().Object,

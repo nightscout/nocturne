@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Identity;
@@ -7,9 +7,9 @@ namespace Nocturne.API.Services.Identity;
 /// <inheritdoc cref="IInstanceSetupState"/>
 public sealed class InstanceSetupState : IInstanceSetupState
 {
-    private readonly IDbContextFactory<NocturneDbContext> _dbFactory;
+    private readonly INocturneDbContextFactory _dbFactory;
 
-    public InstanceSetupState(IDbContextFactory<NocturneDbContext> dbFactory)
+    public InstanceSetupState(INocturneDbContextFactory dbFactory)
     {
         _dbFactory = dbFactory;
     }
@@ -22,15 +22,17 @@ public sealed class InstanceSetupState : IInstanceSetupState
     /// </remarks>
     public async Task<bool> IsSetupCompleteAsync(CancellationToken ct = default)
     {
-        await using var context = await _dbFactory.CreateDbContextAsync(ct);
-
-        var tenantIds = await context.Tenants.AsNoTracking()
-            .Select(t => t.Id)
-            .ToListAsync(ct);
+        List<Guid> tenantIds;
+        await using (var context = await _dbFactory.CreatePlatformAsync(ct))
+        {
+            tenantIds = await context.Tenants.AsNoTracking()
+                .Select(t => t.Id)
+                .ToListAsync(ct);
+        }
 
         foreach (var tenantId in tenantIds)
         {
-            if (await HasCredentialedMemberAsync(context, tenantId, ct))
+            if (await TenantHasCredentialedMemberAsync(tenantId, ct))
                 return true;
         }
 
@@ -38,25 +40,13 @@ public sealed class InstanceSetupState : IInstanceSetupState
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// System-pinned (<see cref="INocturneDbContextFactory.CreateSystemPinnedAsync"/>): setup state is asked on public-share
+    /// requests too.
+    /// </remarks>
     public async Task<bool> TenantHasCredentialedMemberAsync(Guid tenantId, CancellationToken ct = default)
     {
-        await using var context = await _dbFactory.CreateDbContextAsync(ct);
-
-        return await HasCredentialedMemberAsync(context, tenantId, ct);
-    }
-
-    /// <summary>
-    /// Whether <paramref name="tenantId"/> has a member holding a passkey or a linked OIDC
-    /// identity, read under that tenant's pin.
-    /// </summary>
-    /// <remarks>
-    /// The caller's context is re-pinned, so it must be one the caller owns — never the
-    /// request-scoped context, which the rest of the request would then find pinned elsewhere.
-    /// </remarks>
-    private static async Task<bool> HasCredentialedMemberAsync(
-        NocturneDbContext context, Guid tenantId, CancellationToken ct)
-    {
-        await context.PinTenantAsync(tenantId, ct);
+        await using var context = await _dbFactory.CreateSystemPinnedAsync(tenantId, ct);
 
         return await context.TenantMembers.AsNoTracking()
             .Where(m => m.TenantId == tenantId)

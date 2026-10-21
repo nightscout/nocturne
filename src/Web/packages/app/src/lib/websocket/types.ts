@@ -3,6 +3,7 @@ import type {
   Entry,
   Treatment,
   TrackerInstanceDto,
+  TrackerRealtimeAction,
   InAppNotificationDto,
 } from '$lib/api/generated/nocturne-api-client';
 
@@ -51,6 +52,10 @@ export interface StorageEvent {
   colName: string;
   /** Unvalidated: the collection decides the shape, so consumers narrow it. */
   doc: unknown;
+  /** The v4 model a native record broadcast carries; absent on a legacy collection event. */
+  recordType?: string;
+  /** The removed record's id on a native record delete, which carries no `doc`. */
+  id?: string;
 }
 
 export interface AnnouncementEvent {
@@ -76,7 +81,7 @@ export interface StatusEvent {
 }
 
 export interface TrackerUpdateEvent {
-  action: 'create' | 'delete' | 'complete' | 'ack';
+  action: TrackerRealtimeAction;
   instance: TrackerInstanceDto;
 }
 

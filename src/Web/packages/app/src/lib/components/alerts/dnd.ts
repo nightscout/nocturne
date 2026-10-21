@@ -1,27 +1,26 @@
 import type { TenantAlertSettingsResponse } from "$api-clients";
 
-/**
- * Whether Do Not Disturb is suppressing non-critical rules right now.
- *
- * Only the manual mute is knowable from the response. `dndScheduleEnabled` means
- * a recurring window is *configured*, not that it is currently in effect: the
- * backend evaluates the window against the patient's timezone
- * (TenantAlertSettingsSnapshot.Resolve) and the response carries no "active now"
- * field. Treating the flag as "on" told a user with 22:00-07:00 quiet hours that
- * DND was on at noon.
- */
-export function isDndActiveNow(
-  s: TenantAlertSettingsResponse | null | undefined
-): boolean {
+type Settings = TenantAlertSettingsResponse | null | undefined;
+
+/** Whether a manual mute is in force. Only this one can be turned off from the UI. */
+export function isDndManualActive(s: Settings): boolean {
   return s?.dndManualActive ?? false;
 }
 
 /**
- * Whether a recurring quiet-hours window is configured. Says nothing about
- * whether it is in effect at this moment.
+ * Whether the recurring quiet-hours window is in effect now, as the backend
+ * evaluated it against the patient's timezone.
  */
-export function isDndScheduleConfigured(
-  s: TenantAlertSettingsResponse | null | undefined
-): boolean {
+export function isDndScheduleActiveNow(s: Settings): boolean {
+  return s?.dndScheduleActiveNow ?? false;
+}
+
+/** Whether Do Not Disturb is suppressing non-critical rules now, by either path. */
+export function isDndInEffect(s: Settings): boolean {
+  return isDndManualActive(s) || isDndScheduleActiveNow(s);
+}
+
+/** Whether a recurring quiet-hours window is configured, in effect or not. */
+export function isDndScheduleConfigured(s: Settings): boolean {
   return s?.dndScheduleEnabled ?? false;
 }

@@ -143,13 +143,13 @@ public class DemoAdminProvisionCacheTests : IDisposable
             });
 
         var demoTenantService = new DemoTenantService(
-            dbFactory.Object,
+            dbFactory.Object.AsNocturneFactory(),
             tenantService.Object,
             TestPublicAccessCache.Create(),
             new Mock<ICacheService>().Object,
             new Mock<ILogger<DemoTenantService>>().Object);
 
-        return new DemoAdminController(tenantService.Object, demoTenantService, dbFactory.Object);
+        return new DemoAdminController(tenantService.Object, demoTenantService, dbFactory.Object.AsNocturneFactory());
     }
 
     public void Dispose()

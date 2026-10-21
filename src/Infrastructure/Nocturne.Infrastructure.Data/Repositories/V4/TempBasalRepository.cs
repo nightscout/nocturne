@@ -33,7 +33,7 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
     /// <param name="logger">The logger instance.</param>
     /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
     public TempBasalRepository(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<TempBasalRepository> logger,

@@ -38,10 +38,10 @@ public class ChatIdentityControllerTests : IDisposable
         _db = TestDbContextFactory.CreateSqlite();
         _service = new ChatIdentityService(
             new ChatIdentityDirectoryService(
-                _db.ContextFactory, Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
+                _db.ContextFactory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
             new ChatIdentityPendingLinkService(
-                _db.ContextFactory, Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
-            _db.ContextFactory,
+                _db.ContextFactory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
+            _db.ContextFactory.AsNocturneFactory(),
             Mock.Of<ILogger<ChatIdentityService>>());
 
         _tenantId = NewTenant();

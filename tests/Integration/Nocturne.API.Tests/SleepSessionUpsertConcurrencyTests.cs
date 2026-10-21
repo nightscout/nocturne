@@ -57,7 +57,7 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
         SleepSession stored;
         await using (var seed = Fixture.CreateDbContext(Fixture.TenantId))
         {
-            stored = await Repository(new TestTenantDbContextFactory(seed))
+            stored = await Repository(new TestNocturneDbContextFactory(seed))
                 .UpsertSessionAsync(Session(id: null, originalId: "sleep-race-before-update", score: 60));
         }
         var storedId = Guid.Parse(stored.Id!);
@@ -120,7 +120,7 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
     private async Task<Guid> SeedAsync(string originalId)
     {
         await using var seed = Fixture.CreateDbContext(Fixture.TenantId);
-        var stored = await Repository(new TestTenantDbContextFactory(seed))
+        var stored = await Repository(new TestNocturneDbContextFactory(seed))
             .UpsertSessionAsync(Session(id: null, originalId: originalId, score: 60));
         return Guid.Parse(stored.Id!);
     }
@@ -130,11 +130,11 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
         Func<SleepSessionRepository, Task<TSecond>> second,
         IAuditContext? firstAudit = null)
     {
-        TestTenantDbContextFactory contexts;
+        TestNocturneDbContextFactory contexts;
         await using (var seed = Fixture.CreateDbContext(Fixture.TenantId))
-            contexts = new TestTenantDbContextFactory(seed);
+            contexts = new TestNocturneDbContextFactory(seed);
         var held = await contexts.CreateAsync();
-        held.AuditContext = firstAudit;
+        held.AttributedTo(firstAudit);
         var racer = await contexts.CreateAsync();
         Task<TSecond>? secondTask = null;
         try
@@ -206,7 +206,7 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
             .ToList();
     }
 
-    private static SleepSessionRepository Repository(ITenantDbContextFactory contexts) => new(contexts);
+    private static SleepSessionRepository Repository(INocturneDbContextFactory contexts) => new(contexts);
 
     private static SleepSession Session(Guid? id, string? originalId, short score) => new()
     {
@@ -222,8 +222,8 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
         SleepScore = score,
     };
 
-    private sealed class Pinned(NocturneDbContext context) : ITenantDbContextFactory
+    private sealed class Pinned(NocturneDbContext context) : SingleReaderDbContextFactory
     {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(context);
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(context);
     }
 }

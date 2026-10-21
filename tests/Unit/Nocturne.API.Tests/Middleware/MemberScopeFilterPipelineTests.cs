@@ -314,7 +314,7 @@ public class MemberScopeFilterPipelineTests
         httpContext.Items["PermissionTrie"] = new PermissionTrie();
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, db.ContextFactory.AsNocturneFactory(), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(httpContext);
 
         return (IReadOnlySet<string>)httpContext.Items["GrantedScopes"]!;

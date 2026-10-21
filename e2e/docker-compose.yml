@@ -77,6 +77,7 @@ services:
       DemoService__Enabled: "false"
       NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS: "true"
       NOCTURNE_GOOGLE_HEALTH_MOCK: "true"
+      NOCTURNE_EVERSENSE_MOCK: "true"
       # Workstation GC with a conserving heap: the server GC sizes its heaps per core.
       DOTNET_gcServer: "0"
       DOTNET_GCConserveMemory: "5"

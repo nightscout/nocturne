@@ -48,20 +48,20 @@ public class SyncKeyLookupPlanTests(RlsCompletenessFixture fx)
             "gen_random_uuid(), @tid, now() - make_interval(mins => g), 100, 'aaps', 'sync-' || g, now(), now()",
             async (factory, key) => await BGChecks(factory).FindBySyncIdentifierAsync(DataSource, key));
 
-    private static NoteRepository Notes(TestTenantDbContextFactory factory) =>
+    private static NoteRepository Notes(TestNocturneDbContextFactory factory) =>
         new(factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
             NullLogger<NoteRepository>.Instance);
 
-    private static DeviceEventRepository DeviceEvents(TestTenantDbContextFactory factory) =>
+    private static DeviceEventRepository DeviceEvents(TestNocturneDbContextFactory factory) =>
         new(factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
             NullLogger<DeviceEventRepository>.Instance);
 
-    private static BGCheckRepository BGChecks(TestTenantDbContextFactory factory) =>
+    private static BGCheckRepository BGChecks(TestNocturneDbContextFactory factory) =>
         new(factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
             NullLogger<BGCheckRepository>.Instance);
 
     private async Task AssertLookupAsync(
-        string table, string columns, string values, Func<TestTenantDbContextFactory, string, Task<object?>> lookup)
+        string table, string columns, string values, Func<TestNocturneDbContextFactory, string, Task<object?>> lookup)
     {
         var tenant = Guid.NewGuid();
         await SeedAsync(tenant, table, columns, values);
@@ -75,7 +75,7 @@ public class SyncKeyLookupPlanTests(RlsCompletenessFixture fx)
             .AddInterceptors(capture)
             .Options) { TenantId = tenant };
 
-        (await lookup(new TestTenantDbContextFactory(ctx), "sync-7777")).Should().NotBeNull();
+        (await lookup(new TestNocturneDbContextFactory(ctx), "sync-7777")).Should().NotBeNull();
 
         var plan = await ExplainAsync(conn, capture.Command!);
         Descendants(plan, "Node Type").Should().NotContain("Seq Scan", plan.ToString());

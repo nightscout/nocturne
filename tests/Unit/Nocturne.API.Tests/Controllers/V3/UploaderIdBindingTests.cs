@@ -46,6 +46,7 @@ public class UploaderIdBindingTests
             .Callback<DeviceStatus, string?, WriteOrigin, CancellationToken>((ds, _, _, _) => decomposed.Add(ds))
             .ReturnsAsync(new DecompositionResult());
         var projection = new DeviceStatusProjectionService(
+            Mock.Of<IDeviceStatusGroupRepository>(),
             Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IPumpSnapshotRepository>(),
             Mock.Of<IUploaderSnapshotRepository>(),
@@ -96,7 +97,7 @@ public class UploaderIdBindingTests
         writeService
             .Setup(w => w.CreateProfilesAsync(It.IsAny<IEnumerable<Profile>>(), It.IsAny<CancellationToken>()))
             .Callback<IEnumerable<Profile>, CancellationToken>((p, _) => created.AddRange(p))
-            .ReturnsAsync([]);
+            .ReturnsAsync((IEnumerable<Profile> p, CancellationToken _) => p.ToList());
         var controller = WithContext(new ProfileController(
             Mock.Of<IProfileProjectionService>(),
             writeService.Object,

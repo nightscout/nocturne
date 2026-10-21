@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseFrontmatter, buildManifest, listedPosts } from './manifest.ts';
 import type { BlogPostMeta } from './types.ts';
+import { toSvx } from '../editor/markdown.ts';
 
 describe('parseFrontmatter', () => {
   it('parses valid frontmatter from svx content', () => {
@@ -126,6 +127,52 @@ unlisted: true
 ---`;
 
     expect(parseFrontmatter(content, 'unlisted-post.svx')?.unlisted).toBe(true);
+  });
+});
+
+describe('parseFrontmatter with generated frontmatter', () => {
+  it('reads hostile values back unchanged', () => {
+    const title = 'Release: "the big one" #12\n--- done\\';
+    const tags = ['plain', 'has, comma', 'say "hi"'];
+    const content = toSvx({ title, slug: 'p', date: '2026-04-13', tags, summary: "It's: here" }, 'Body');
+
+    const meta = parseFrontmatter(content, 'p.svx');
+    expect(meta?.title).toBe(title);
+    expect(meta?.tags).toEqual(tags);
+    expect(meta?.summary).toBe("It's: here");
+  });
+
+  it('reads an unquoted array item holding a lone quote as before', () => {
+    const meta = parseFrontmatter('---\ntags: [5" screen, other]\n---\nBody', 'p.svx');
+    expect(meta?.tags).toEqual(['5" screen', 'other']);
+  });
+
+  it('reads an existing unquoted post block as before', () => {
+    const content = `---
+title: Coming from Nightscout
+slug: coming-from-nightscout
+date: 2026-04-13
+author: Rhys
+category: nightscout
+tags: []
+summary: Setting up your Nocturne instance to be like Nightscout
+image:
+draft: true
+---
+<p>Body</p>`;
+
+    expect(parseFrontmatter(content, 'coming-from-nightscout.svx')).toEqual({
+      title: 'Coming from Nightscout',
+      slug: 'coming-from-nightscout',
+      date: '2026-04-13',
+      tags: [],
+      category: 'nightscout',
+      author: 'Rhys',
+      summary: 'Setting up your Nocturne instance to be like Nightscout',
+      image: undefined,
+      draft: true,
+      unlisted: undefined,
+    });
   });
 });
 

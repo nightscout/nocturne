@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Extensions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,6 +29,7 @@ public class OidcProviderServiceSyncTests
         });
         services.AddDbContextFactory<NocturneDbContext>(options =>
             options.UseInMemoryDatabase(databaseName));
+        services.AddDataServices();
         return services.BuildServiceProvider();
     }
 

@@ -10,6 +10,7 @@ vi.mock("$app/environment", () => ({
 }));
 import { isRedirect, type Cookies } from "@sveltejs/kit";
 import { classifyHost, isTenantlessHost } from "$lib/server/tenantless-host";
+import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
 import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 import { load } from "./+layout.server";
 import { load as universalLoad } from "./+layout";
@@ -48,10 +49,17 @@ interface Situation {
   permissions?: string[];
   /** The cookies the browser presents on this host. */
   cookies?: Record<string, string>;
+  /** What the backup sign-in prompt endpoint answers; a number rejects with that HTTP status. */
+  backupSignInPrompt?: { show: boolean } | number;
 }
 
 /** URL properties the server load read outside `untrack`, which SvelteKit would re-run it on. */
 let trackedUrlReads: string[] = [];
+let backupSignInPromptReads = 0;
+let apiCalls: string[] = [];
+
+/** The invalidation keys the server load registered. */
+let declaredDependencies: string[] = [];
 
 function trackingUrl(href: string): { url: URL; untrack: <T>(fn: () => T) => T } {
   trackedUrlReads = [];
@@ -76,6 +84,9 @@ function trackingUrl(href: string): { url: URL; untrack: <T>(fn: () => T) => T }
 }
 
 async function runLoad(situation: Situation) {
+  declaredDependencies = [];
+  backupSignInPromptReads = 0;
+  apiCalls = [];
   const { kind } = classifyHost(situation.host, BASE, situation.dashboardSlugs ?? []);
   const tenantless = isTenantlessHost(kind, situation.apexResolvesTenant ?? false);
   const shareHost = kind === "share";
@@ -100,8 +111,18 @@ async function runLoad(situation: Situation) {
     apiClient: {
       status: {
         getStatus: async () => {
+          apiCalls.push("status");
           if (typeof situation.status === "number") throw { status: situation.status };
           return situation.status;
+        },
+      },
+      backupSignInPrompt: {
+        getBackupSignInPrompt: async () => {
+          backupSignInPromptReads++;
+          apiCalls.push("prompt");
+          const answer = situation.backupSignInPrompt ?? { show: false };
+          if (typeof answer === "number") throw { status: answer };
+          return answer;
         },
       },
       passkey: {
@@ -119,6 +140,7 @@ async function runLoad(situation: Situation) {
     cookies,
     url,
     untrack,
+    depends: (key: string) => declaredDependencies.push(key),
     parent: async () => ({ tenantless }),
   };
 
@@ -485,6 +507,27 @@ describe("(authenticated) layout load — client navigation", () => {
   });
 });
 
+describe("(authenticated) layout load — revalidation", () => {
+  it("registers the shell key, so invalidating it re-runs the load without a navigation", async () => {
+    await loadedData({
+      host: `acme.${BASE}`,
+      status: { status: "ok", tenantSlug: "acme" },
+      authStatus: { onboardingCompleted: true },
+    });
+    expect(declaredDependencies).toEqual([SHELL_DATA_KEY]);
+  });
+
+  it("registers the shell key before it redirects a visitor whose session has gone", async () => {
+    await redirectLocation({
+      host: `acme.${BASE}`,
+      signedIn: false,
+      status: { status: "ok", tenantSlug: "acme" },
+      authStatus: { onboardingCompleted: true },
+    });
+    expect(declaredDependencies).toEqual([SHELL_DATA_KEY]);
+  });
+});
+
 describe("(authenticated) layout load — a session that ended since the server load ran", () => {
   afterEach(() => {
     environment.browser = false;
@@ -591,5 +634,42 @@ describe("(authenticated) layout load — a session that ended since the server 
     await expect(
       locationOf(navigate({ cookie: "", data: { user: null, isGuestSession: false } }))
     ).resolves.toBeNull();
+  });
+});
+
+describe("(authenticated) layout load: backup sign-in prompt", () => {
+  const tenant = { status: { status: "ok", tenantSlug: "sam" }, authStatus: { onboardingCompleted: true } };
+
+  it("hands the backend's answer to the layout so the prompt renders on the server", async () => {
+    const data = await runLoad({ host: `sam.${BASE}`, ...tenant, backupSignInPrompt: { show: true } });
+
+    expect(data).toMatchObject({ showBackupSignInPrompt: true });
+    expect(backupSignInPromptReads).toBe(1);
+  });
+
+  it("starts the read with the status call rather than after it", async () => {
+    await runLoad({ host: `sam.${BASE}`, ...tenant, backupSignInPrompt: { show: true } });
+
+    expect(apiCalls.slice(0, 2).sort()).toEqual(["prompt", "status"]);
+  });
+
+  it("hides the prompt rather than failing the shell when the read fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const data = await runLoad({ host: `sam.${BASE}`, ...tenant, backupSignInPrompt: 500 });
+
+    expect(data).toMatchObject({ showBackupSignInPrompt: false });
+  });
+
+  it("does not ask for a share visitor, who has no account", async () => {
+    const data = await runLoad({
+      host: `k7m2q9x4r3wt.share.${BASE}`,
+      status: { status: "ok", tenantSlug: "acme", anonymousReadAccess: true },
+      authStatus: { onboardingCompleted: true },
+      backupSignInPrompt: { show: true },
+    });
+
+    expect(data).toMatchObject({ showBackupSignInPrompt: false });
+    expect(backupSignInPromptReads).toBe(0);
   });
 });

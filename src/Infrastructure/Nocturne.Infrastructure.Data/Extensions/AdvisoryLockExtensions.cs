@@ -7,7 +7,7 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// names what is being serialised, the second is the id folded to an int. Replicas sharing the
 /// database serialise on the id, and the lock goes with the commit or rollback. Other providers
 /// have no other process to exclude and take nothing. Two ids whose keys collide only wait for
-/// each other.
+/// each other, or turn each other's try away.
 /// </summary>
 public static class AdvisoryLockExtensions
 {
@@ -25,6 +25,27 @@ public static class AdvisoryLockExtensions
 
         await context.Database.ExecuteSqlAsync(
             $"SELECT pg_advisory_xact_lock({lockClass}, {LockKey(id)})", ct);
+    }
+
+    /// <summary>
+    /// Takes the lock only when no other transaction holds it. Other providers always get it.
+    /// </summary>
+    /// <returns>Whether this transaction now holds the lock.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    public static async Task<bool> TryLockForTransactionAsync(
+        this DbContext context,
+        int lockClass,
+        Guid id,
+        CancellationToken ct = default)
+    {
+        if (!context.Database.IsNpgsql())
+            return true;
+        if (context.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("An advisory lock is taken inside a transaction");
+
+        return await context.Database
+            .SqlQuery<bool>($"SELECT pg_try_advisory_xact_lock({lockClass}, {LockKey(id)}) AS \"Value\"")
+            .SingleAsync(ct);
     }
 
     private static int LockKey(Guid id)

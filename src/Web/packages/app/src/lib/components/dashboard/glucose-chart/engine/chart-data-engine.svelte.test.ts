@@ -206,7 +206,7 @@ describe("chart data engine — realtime glucose source", () => {
       s.chartThresholds = { low: 70, high: 180, veryLow: 54, veryHigh: 250, glucoseYMax: 370 };
     });
 
-    expect(engine.glucoseYMax).toBe(370);
+    expect(engine.thresholds.glucoseYMax).toBe(370);
   });
 
   it("makes no remote call at all", async () => {
@@ -540,6 +540,29 @@ describe("chart data engine — SSR data refresh", () => {
     await vi.advanceTimersByTimeAsync(3 * SECOND);
 
     expect(calls()).toBe(1);
+  });
+
+  it("refreshes when a v4 record broadcast edits a record in place", async () => {
+    const at = Date.now();
+    const { store } = await mount(undefined, (s) => {
+      s.boluses = [
+        { id: "b1", insulin: 1, mills: at - 1 * MINUTE },
+        { id: "b2", insulin: 2, mills: at - 2 * MINUTE },
+        { id: "b3", insulin: 3, mills: at - 3 * MINUTE },
+      ];
+    });
+    await vi.advanceTimersByTimeAsync(3 * SECOND);
+    const before = calls();
+
+    socketHandlers.update({
+      colName: "care",
+      recordType: "bolus",
+      doc: { id: "b2", insulin: 5, mills: at - 2 * MINUTE },
+    });
+    await vi.advanceTimersByTimeAsync(3 * SECOND);
+
+    expect(store.boluses.map((b) => b.insulin)).toEqual([1, 5, 3]);
+    expect(calls()).toBe(before + 1);
   });
 
   it("refreshes when a legacy treatments socket event is created, edited or deleted", async () => {

@@ -111,6 +111,21 @@ public class DeviceReattributionServiceTests
         It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<IReadOnlyCollection<DeviceEventType>>(),
         It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
 
+    /// <summary>Postgres refuses a timestamptz parameter whose kind is not UTC.</summary>
+    [Fact]
+    public async Task RegisteredDates_AreReadAsAUtcWindow()
+    {
+        var device = Device(DeviceCategory.CGM, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30));
+        SetupAllStreams(device.Id);
+
+        await _service.ReattributeForDeviceAsync(device);
+
+        _sensorGlucose.Verify(r => r.GetUnattributedAsync(
+            It.Is<DateTime?>(d => d!.Value.Kind == DateTimeKind.Utc && d.Value == new DateTime(2026, 8, 31, 0, 0, 0, DateTimeKind.Utc)),
+            It.Is<DateTime?>(d => d!.Value.Kind == DateTimeKind.Utc && d.Value.Date == new DateTime(2026, 10, 1)),
+            It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task Cgm_BackStampsSensorGlucoseAndSensorEvents_LeavingPumpStreamsUntouched()
     {

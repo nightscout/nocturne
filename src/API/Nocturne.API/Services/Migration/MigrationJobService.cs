@@ -5,14 +5,13 @@ using Microsoft.EntityFrameworkCore;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Nocturne.API.Helpers;
-using Nocturne.API.Services.Audit;
+using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using DecompositionResult = Nocturne.Core.Models.V4.DecompositionResult;
-using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Infrastructure.Data;
@@ -91,9 +90,7 @@ public class MigrationJobService : IMigrationJobService
 
     private bool IsTerminal(Guid jobId) =>
         _jobs.TryGetValue(jobId, out var job)
-        && job.GetStatus().State is MigrationJobState.Completed
-            or MigrationJobState.Failed
-            or MigrationJobState.Cancelled;
+        && !job.GetStatus().State.IsLive();
 
     public async Task<MigrationJobInfo> StartMigrationAsync(
         StartMigrationRequest request,
@@ -101,9 +98,8 @@ public class MigrationJobService : IMigrationJobService
         CancellationToken ct = default
     )
     {
-        // Never start a migration without a resolved tenant. The job writes via the detached
-        // background task, so an empty/unresolved tenant here would otherwise fall back to a
-        // stale pooled DbContext tenant and import a third party's data into the wrong tenant.
+        // Never start a migration without a resolved tenant: the detached background task writes
+        // under whatever tenant it is given.
         if (tenantContext is null || tenantContext.TenantId == Guid.Empty)
         {
             throw new InvalidOperationException(
@@ -515,47 +511,12 @@ internal class MigrationJob
     private const string AuditEndpoint = "service:migration";
 
     /// <summary>
-    /// Creates a DI scope for migration work and propagates the owning tenant's context into it,
-    /// so that tenant-scoped services (NocturneDbContext, decomposers, repositories) resolve and
-    /// write under the correct tenant. The migration runs on a detached background task with no
-    /// ambient request scope, so the tenant must be re-applied explicitly here — mirroring the
-    /// pattern used by other background services (e.g. ConnectorBackgroundService).
+    /// The DI scope migration work runs in: the owning tenant, with imported records attributed to
+    /// the migration rather than a human actor, so a backfill writes no mutation_audit_log row per
+    /// historical record.
     /// </summary>
-    private IServiceScope CreateTenantScope()
-    {
-        var scope = _serviceProvider.CreateScope();
-        if (_tenantContext is not null)
-        {
-            scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(_tenantContext);
-            // Pin the RLS tenant on the pooled DbContext too: setting ITenantAccessor alone does
-            // not retrofit an already-leased context (TenantConnectionInterceptor reads
-            // NocturneDbContext.TenantId on connection open). Without this the detached migration
-            // task could write under a stale pooled tenant. Mirrors ConnectorBackgroundService.
-            scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = _tenantContext.TenantId;
-        }
-
-        // Attribute the imported records to the migration rather than to a human actor. A backfill
-        // writes one row per historical treatment/entry, and without this every one of them also
-        // appends a mutation_audit_log row. Mirrors ConnectorBackgroundService.
-        return new SystemAttributedScope(
-            scope,
-            SystemAuditScope.PushForScope(scope.ServiceProvider, AuditEndpoint));
-    }
-
-    /// <summary>
-    /// A DI scope whose ambient <see cref="IAuditContext"/> stays system-attributed for the
-    /// scope's lifetime. Disposing releases the audit attribution, then the scope.
-    /// </summary>
-    private sealed class SystemAttributedScope(IServiceScope inner, IDisposable auditScope) : IServiceScope
-    {
-        public IServiceProvider ServiceProvider => inner.ServiceProvider;
-
-        public void Dispose()
-        {
-            auditScope.Dispose();
-            inner.Dispose();
-        }
-    }
+    private AsyncServiceScope CreateTenantScope() =>
+        TenantJobScope.Open(_serviceProvider, _tenantContext, AuditEndpoint);
 
     public MigrationJobStatus GetStatus() =>
         new()
@@ -576,7 +537,7 @@ internal class MigrationJob
         // Leave terminal states untouched — cancelling a job that already Completed/Failed must
         // not rewrite its (now persisted) outcome, which would also un-satisfy the startup
         // "was this source ever migrated?" check.
-        if (_state is MigrationJobState.Pending or MigrationJobState.Validating or MigrationJobState.Running)
+        if (_state.IsLive())
             _state = MigrationJobState.Cancelled;
     }
 
@@ -665,8 +626,8 @@ internal class MigrationJob
             run.State = _state.ToString();
             run.StartedAt = _startedAt == default ? _info.CreatedAt : _startedAt;
             run.CompletedAt = _completedAt;
-            run.DateRangeStart = AsUtc(_request.StartDate);
-            run.DateRangeEnd = AsUtc(_request.EndDate);
+            run.DateRangeStart = _request.StartDate?.AsUtc();
+            run.DateRangeEnd = _request.EndDate?.AsUtc();
             run.ErrorMessage = _errorMessage;
             run.EntriesMigrated = (int)Math.Min(int.MaxValue, MigratedCount("entries"));
             run.TreatmentsMigrated = (int)Math.Min(int.MaxValue, MigratedCount("treatments"));
@@ -751,14 +712,6 @@ internal class MigrationJob
     /// <summary>Canonical source identifier for a MongoDB-mode migration: a non-usable digest, never the connection string itself.</summary>
     internal static string MongoSourceIdentifier(string connectionString) =>
         HashUtils.Sha256Hex(connectionString);
-
-    /// <summary>Npgsql rejects Local/Unspecified kinds for timestamptz; normalize optional caller-supplied dates.</summary>
-    private static DateTime? AsUtc(DateTime? value) => value switch
-    {
-        null => null,
-        { Kind: DateTimeKind.Unspecified } v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
-        { } v => v.ToUniversalTime(),
-    };
 
     /// <summary>Reconstructs a status snapshot from a persisted run (post-restart lookups).</summary>
     public static MigrationJobStatus StatusFromRecord(MigrationRunEntity run)
@@ -1921,6 +1874,9 @@ internal class MigrationJob
             Store = store,
             EnteredBy = doc.Contains("enteredBy") ? doc["enteredBy"].AsString : null,
             LoopSettings = loopSettings,
+            IsAPNSProduction = doc.Contains("isAPNSProduction") && doc["isAPNSProduction"].IsBoolean
+                ? doc["isAPNSProduction"].AsBoolean
+                : null,
         };
 
         using var scope = CreateTenantScope();

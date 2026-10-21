@@ -140,7 +140,7 @@ public static class PortainerComposePublisherExtensions
     /// no-ops when its target isn't present, so applying it to an already-transformed
     /// compose is safe.
     /// </summary>
-    private static string SelfContainCompose(string composeYaml, string initScriptPath, string caddyfilePath)
+    internal static string SelfContainCompose(string composeYaml, string initScriptPath, string caddyfilePath)
         => ScopeWatchtowerToStack(
             InlineCaddyfile(
                 HardenPostgresStartup(InlineInitScript(composeYaml, initScriptPath)),
@@ -399,14 +399,19 @@ public static class PortainerComposePublisherExtensions
     }
 
     /// <summary>
-    /// Puts Watchtower in label-only mode and stamps every service in the compose —
-    /// Watchtower included, so it still self-updates — with the enable label. Unscoped,
+    /// Puts Watchtower in label-only mode and stamps every service in the compose with
+    /// the enable label. Watchtower itself is enabled so it still self-updates. Unscoped,
     /// Watchtower updates every container on the daemon, including other stacks sharing
     /// the host. Labelling here rather than per-resource in the AppHost covers any
     /// service added to the bundle later. Returns the compose unchanged when Watchtower
     /// is disabled.
     /// </summary>
-    private static string ScopeWatchtowerToStack(string composeYaml)
+    /// <remarks>
+    /// A service with a <c>configs:</c> entry is labelled <c>"false"</c>. Watchtower
+    /// recreates a container from its inspected state, which does not include files
+    /// Compose copied in from <c>configs:</c>, so the recreated container loses them.
+    /// </remarks>
+    internal static string ScopeWatchtowerToStack(string composeYaml)
     {
         const string enableLabel = "com.centurylinklabs.watchtower.enable";
 
@@ -429,7 +434,8 @@ public static class PortainerComposePublisherExtensions
                 continue;
 
             var serviceName = ((YamlScalarNode)entry.Key).Value ?? "<unnamed>";
-            SetQuotedEntry(service, "labels", enableLabel, "true", serviceName);
+            var enabled = service.Children.ContainsKey("configs") ? "false" : "true";
+            SetQuotedEntry(service, "labels", enableLabel, enabled, serviceName);
         }
 
         var sb = new StringBuilder();

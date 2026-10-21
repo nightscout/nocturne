@@ -49,6 +49,7 @@ export interface CarbMarkerData {
   carbs?: number;
   label?: string;
   treatmentId?: string;
+  isOffset?: boolean;
   dataSource?: string;
   [key: string]: unknown;
 }
@@ -59,6 +60,7 @@ export interface DeviceEventMarkerData {
   eventType?: DeviceEventType;
   color: string;
   treatmentId?: string;
+  isInferred?: boolean;
   [key: string]: unknown;
 }
 
@@ -243,11 +245,6 @@ export interface ChartDataEngine {
   readonly maxBasalRate: number;
 
   // Thresholds
-  readonly lowThreshold: number;
-  readonly highThreshold: number;
-  readonly veryHighThreshold: number;
-  readonly veryLowThreshold: number;
-  readonly glucoseYMax: number;
   readonly thresholds: ChartThresholds;
   readonly medianGlucose: number;
 
@@ -376,11 +373,6 @@ export function createChartDataView(
   const resolvedThresholds = $derived(
     source.thresholdsOverride ?? resolveChartThresholds(serverChartData?.thresholds)
   );
-  const lowThreshold = $derived(resolvedThresholds.low);
-  const highThreshold = $derived(resolvedThresholds.high);
-  const veryHighThreshold = $derived(resolvedThresholds.veryHigh);
-  const veryLowThreshold = $derived(resolvedThresholds.veryLow);
-  const glucoseYMax = $derived(resolvedThresholds.glucoseYMax);
 
   const medianGlucose = $derived.by(() => {
     if (glucoseData.length === 0) return 100;
@@ -724,21 +716,6 @@ export function createChartDataView(
     },
     get maxBasalRate() {
       return maxBasalRate;
-    },
-    get lowThreshold() {
-      return lowThreshold;
-    },
-    get highThreshold() {
-      return highThreshold;
-    },
-    get veryHighThreshold() {
-      return veryHighThreshold;
-    },
-    get veryLowThreshold() {
-      return veryLowThreshold;
-    },
-    get glucoseYMax() {
-      return glucoseYMax;
     },
     get thresholds() {
       return resolvedThresholds;

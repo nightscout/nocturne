@@ -20,7 +20,7 @@ describe("DataMaintenanceCard", () => {
   });
 
   it("offers nothing to someone the API would refuse", async () => {
-    // Both tools are RequireAdmin server-side. An ordinary member opens Data Quality to set a
+    // Both tools are RequireSuperuser server-side. An ordinary member opens Data Quality to set a
     // sleep schedule, so a Remove Demo Data button that could only 403 is worse than none.
     page.data = {
       effectivePermissions: ["glucose.read"],
@@ -45,7 +45,7 @@ describe("DataMaintenanceCard", () => {
   });
 
   it("offers only demo data deletion to a member holding tenant.settings", async () => {
-    // Deduplication is RequireAdmin; deleting demo data is tenant.settings. A tenant
+    // Deduplication is RequireSuperuser; deleting demo data is tenant.settings. A tenant
     // administrator holds the second and not the first.
     page.data = {
       effectivePermissions: ["tenant.settings"],

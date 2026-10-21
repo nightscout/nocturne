@@ -457,6 +457,75 @@ public class TrackerRepository : ITrackerRepository
         return updated == 0 ? null : await GetInstanceByIdAsync(instanceId, cancellationToken);
     }
 
+    /// <inheritdoc />
+    public virtual async Task<List<TrackerInstanceEntity>> GetRunningStartedByAsync(
+        IReadOnlyCollection<string> startTreatmentIds,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (startTreatmentIds.Count == 0)
+            return [];
+
+        var ids = startTreatmentIds.ToList();
+        return await _context
+            .TrackerInstances.AsNoTracking()
+            .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
+            .Where(i => i.CompletedAt == null && i.StartTreatmentId != null && ids.Contains(i.StartTreatmentId))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public virtual Task<bool> HasRunEndedAfterAsync(
+        Guid definitionId,
+        DateTime at,
+        CancellationToken cancellationToken = default
+    ) =>
+        _context.TrackerInstances.AnyAsync(
+            i => i.DefinitionId == definitionId && i.CompletedAt > at,
+            cancellationToken
+        );
+
+    /// <inheritdoc />
+    public virtual async Task<TrackerStartRevert?> RevertStartAsync(
+        Guid definitionId,
+        string startTreatmentId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var removed = await _context.TrackerInstances.AsNoTracking()
+            .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
+            .FirstOrDefaultAsync(
+            i => i.DefinitionId == definitionId && i.StartTreatmentId == startTreatmentId && i.CompletedAt == null,
+            cancellationToken
+        );
+        if (removed == null)
+            return null;
+
+        var deleted = await _context.TrackerInstances
+            .Where(i => i.Id == removed.Id && i.CompletedAt == null)
+            .ExecuteDeleteAsync(cancellationToken);
+        if (deleted == 0)
+            return null;
+
+        var replaced = _context.TrackerInstances
+            .Where(i => i.DefinitionId == definitionId && i.CompleteTreatmentId == startTreatmentId);
+        var reopenedIds = await replaced.Select(i => i.Id).ToListAsync(cancellationToken);
+        await replaced.ExecuteUpdateAsync(
+            s => s
+                .SetProperty(i => i.CompletedAt, (DateTime?)null)
+                .SetProperty(i => i.CompletionReason, (CompletionReason?)null)
+                .SetProperty(i => i.CompletionNotes, (string?)null)
+                .SetProperty(i => i.CompleteTreatmentId, (string?)null),
+            cancellationToken
+        );
+
+        var reopened = await _context.TrackerInstances.AsNoTracking()
+            .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
+            .Where(i => reopenedIds.Contains(i.Id))
+            .ToListAsync(cancellationToken);
+        return new TrackerStartRevert(removed, reopened);
+    }
+
     private const int SuccessionLockClass = 0x4E54_524B;
 
     /// <inheritdoc />

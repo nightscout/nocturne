@@ -37,16 +37,16 @@ public class AlertDeliveryServiceMuteTests
     {
         var factory = new Mock<IDbContextFactory<NocturneDbContext>>();
         factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(_dbName));
+            .ReturnsAsync(NewContext);
         var services = new ServiceCollection()
-            .AddSingleton(factory.Object)
+            .AddSingleton(factory.Object.AsNocturneFactory())
             .AddSingleton<ChatIdentityDirectoryService>()
             .AddSingleton(_notifications.Object)
             .AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>))
             .AddSingleton<InAppProvider>()
             .BuildServiceProvider();
         return new AlertDeliveryService(
-            factory.Object,
+            factory.Object.AsNocturneFactory(),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             Mock.Of<ISignalRBroadcastService>(),
             services,

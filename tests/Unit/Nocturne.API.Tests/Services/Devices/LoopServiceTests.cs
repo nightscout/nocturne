@@ -93,6 +93,7 @@ public class LoopServiceTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -113,6 +114,7 @@ public class LoopServiceTests
             data,
             null!,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -141,6 +143,7 @@ public class LoopServiceTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 
@@ -169,6 +172,7 @@ public class LoopServiceTests
             data,
             loopSettings,
             "127.0.0.1",
+            null,
             CancellationToken.None
         );
 

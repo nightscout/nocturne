@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -28,7 +29,7 @@ namespace Nocturne.API.Tests.Multitenancy;
 public sealed class ApexAnswerSurvivesTenantProvisioningTests : TenantResolutionMiddlewareTestBase
 {
     private TenantService Provisioner() => new(
-        Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>(),
+        Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory(),
         Root.GetRequiredService<IMemoryCache>(),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),

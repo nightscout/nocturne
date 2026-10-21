@@ -40,7 +40,7 @@ public class V3StatusResponse
     public StorageInfo Storage { get; set; } = new();
 
     /// <summary>
-    /// API version string (legacy: "3.0.3-alpha")
+    /// V3 API level, <see cref="Nocturne.Core.Constants.ApplicationConstants.NightscoutApi.V3Version"/>
     /// </summary>
     public string ApiVersion { get; set; } = string.Empty;
 

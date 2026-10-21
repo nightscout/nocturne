@@ -18,10 +18,9 @@ namespace Nocturne.Infrastructure.Data.Interceptors;
 /// <c>DatabaseInitializationExtensions.VerifyPoolResetOnClose</c> refuses to start the API
 /// on a connection string that would turn that reset off.
 ///
-/// The same open path carries app.current_subject_id, which gives the
-/// subject-scoped cross-tenant reads (tenant switcher, caregiver overview,
-/// membership enumeration) reach over one subject's own rows. Both are set only
-/// when non-empty, so an unpinned context leaves the GUC unset and matches nothing.
+/// The same open path carries app.current_subject_id for a subject pin, for policies that
+/// may read it; none does today. Both are set only when non-empty, so an unpinned context
+/// leaves the GUC unset.
 ///
 /// Additionally, on the first open against any given connection string, the
 /// interceptor verifies that the connected role is neither a superuser nor

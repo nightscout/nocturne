@@ -15,15 +15,8 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     private static readonly ConcurrentDictionary<Type, Dictionary<SyncDataType, PropertyInfo>>
         SyncTogglePropertyCache = new();
 
-    /// <summary>
-    ///     Gets the connector name from the ConnectorRegistration attribute.
-    ///     Used for error messages and logging.
-    /// </summary>
     protected string ConnectorName => ConnectorRegistrationAttribute.NameFor(GetType());
 
-    /// <summary>
-    ///     Gets the environment variable prefix from the ConnectorRegistration attribute.
-    /// </summary>
     private string? EnvPrefix =>
         GetType().GetCustomAttribute<ConnectorRegistrationAttribute>()?.EnvironmentPrefix;
     /// <summary>

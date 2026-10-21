@@ -295,30 +295,6 @@ public class RefreshTokenService : IRefreshTokenService
     }
 
     /// <inheritdoc />
-    public async Task<int> RevokeAllRefreshTokensForSubjectAsync(Guid subjectId, string reason)
-    {
-        var count = await _repository.RevokeAllForSubjectAsync(subjectId, reason);
-
-        _logger.LogInformation(
-            "Revoked {Count} refresh tokens for subject {SubjectId}. Reason: {Reason}",
-            count, subjectId, reason);
-
-        return count;
-    }
-
-    /// <inheritdoc />
-    public async Task<int> RevokeRefreshTokensByOidcSessionAsync(string oidcSessionId, string reason)
-    {
-        var count = await _repository.RevokeByOidcSessionAsync(oidcSessionId, reason);
-
-        _logger.LogInformation(
-            "Revoked {Count} refresh tokens for OIDC session {SessionId}. Reason: {Reason}",
-            count, oidcSessionId, reason);
-
-        return count;
-    }
-
-    /// <inheritdoc />
     public async Task<List<RefreshTokenInfo>> GetActiveSessionsForSubjectAsync(Guid subjectId)
     {
         var tokens = await _repository.GetActiveSessionsAsync(subjectId);

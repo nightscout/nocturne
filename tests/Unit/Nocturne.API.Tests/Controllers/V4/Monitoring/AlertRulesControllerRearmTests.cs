@@ -65,7 +65,7 @@ public class AlertRulesControllerRearmTests
             .Returns((AlertConditionType _, string body, bool _, string? autoResolve, string? client, StoredConditionTrees _) =>
                 new ConditionUpdateCheck([], body, autoResolve, client, []));
         var controller = new AlertRulesController(
-            new TestTenantDbContextFactory(db),
+            new TestNocturneDbContextFactory(db),
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),

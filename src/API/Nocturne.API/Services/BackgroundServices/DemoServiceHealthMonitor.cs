@@ -1,4 +1,4 @@
-using Nocturne.API.Services.Audit;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.API.Services.BackgroundServices;
@@ -187,12 +187,9 @@ public class DemoServiceHealthMonitor : BackgroundService
     {
         try
         {
-            using var scope = _serviceProvider.CreateScope();
-
-            // Attribute the cleanup to the monitor rather than to whoever last ran a request, so the
-            // demo data it soft-deletes stays re-seedable after the service recovers.
-            using var systemScope = SystemAuditScope.PushForScope(
-                scope.ServiceProvider, AuditEndpoint);
+            // System-attributed so the demo data it soft-deletes stays re-seedable after the service
+            // recovers.
+            await using var scope = TenantJobScope.Open(_serviceProvider, tenant: null, AuditEndpoint);
 
             var dataSourceService = scope.ServiceProvider.GetRequiredService<IDataSourceService>();
 

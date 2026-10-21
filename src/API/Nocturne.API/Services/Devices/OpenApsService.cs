@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Web;
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -728,7 +729,7 @@ public class OpenApsService : IOpenApsService
         OpenApsAnalysisResult result
     )
     {
-        var enacted = DeserializeJson<OpenApsEnacted>(snapshot.EnactedJson);
+        var enacted = DeserializeJson<OpenApsEnacted>(ApsSnapshotCurves.RestoreCommand(snapshot.EnactedJson, snapshot));
         if (enacted == null)
             return;
 
@@ -800,7 +801,7 @@ public class OpenApsService : IOpenApsService
         if (!moments.Suggested.HasValue)
             return;
 
-        var suggested = DeserializeJson<OpenApsSuggested>(snapshot.SuggestedJson);
+        var suggested = DeserializeJson<OpenApsSuggested>(ApsSnapshotCurves.RestoreCommand(snapshot.SuggestedJson, snapshot));
         if (suggested == null)
             return;
 

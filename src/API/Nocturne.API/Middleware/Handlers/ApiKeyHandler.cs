@@ -5,7 +5,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Extensions;
 
@@ -23,12 +23,12 @@ public class ApiKeyHandler : IAuthHandler
 
     public string Name => "ApiKeyHandler";
 
-    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ApiKeyHandler> _logger;
 
     public ApiKeyHandler(
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        INocturneDbContextFactory dbContextFactory,
         TimeProvider timeProvider,
         ILogger<ApiKeyHandler> logger)
     {
@@ -82,8 +82,7 @@ public class ApiKeyHandler : IAuthHandler
         }
 
         // 5. Query for matching grant
-        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
-        dbContext.TenantId = tenantCtx.TenantId;
+        await using var dbContext = await _dbContextFactory.CreateForTenantAsync(tenantCtx.TenantId);
 
         var activeGrants = DirectGrantTokenHandler.ActiveDirectGrants(
             dbContext.OAuthGrants.AsNoTracking(),

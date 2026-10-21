@@ -24,14 +24,15 @@ public static class SettingsMapper
             CreatedAt = settings.CreatedAt,
             Mills = settings.Mills,
             UtcOffset = settings.UtcOffset,
-            SrvCreated = settings.SrvCreated,
-            SrvModified = settings.SrvModified,
+            SrvCreated = FromMills(settings.SrvCreated),
+            SrvModified = FromMills(settings.SrvModified),
             App = settings.App,
             Device = settings.Device,
             EnteredBy = settings.EnteredBy,
             Version = settings.Version,
             IsActive = settings.IsActive,
             Notes = settings.Notes,
+            AdditionalPropertiesJson = SerializeAdditionalProperties(settings),
         };
     }
 
@@ -62,14 +63,17 @@ public static class SettingsMapper
             CreatedAt = entity.CreatedAt,
             Mills = entity.Mills,
             UtcOffset = entity.UtcOffset,
-            SrvCreated = entity.SrvCreated,
-            SrvModified = entity.SrvModified,
+            SrvCreated = entity.SrvCreated?.ToUnixTimeMilliseconds(),
+            SrvModified = entity.SrvModified?.ToUnixTimeMilliseconds(),
             App = entity.App,
             Device = entity.Device,
             EnteredBy = entity.EnteredBy,
             Version = entity.Version,
             IsActive = entity.IsActive,
             Notes = entity.Notes,
+            AdditionalProperties = MapperHelpers.DeserializeJson<Dictionary<string, JsonElement>>(
+                entity.AdditionalPropertiesJson
+            ),
         };
     }
 
@@ -83,13 +87,22 @@ public static class SettingsMapper
         entity.CreatedAt = settings.CreatedAt;
         entity.Mills = settings.Mills;
         entity.UtcOffset = settings.UtcOffset;
-        entity.SrvCreated = settings.SrvCreated;
-        entity.SrvModified = settings.SrvModified;
+        entity.SrvCreated = FromMills(settings.SrvCreated);
+        entity.SrvModified = FromMills(settings.SrvModified);
         entity.App = settings.App;
         entity.Device = settings.Device;
         entity.EnteredBy = settings.EnteredBy;
         entity.Version = settings.Version;
         entity.IsActive = settings.IsActive;
         entity.Notes = settings.Notes;
+        entity.AdditionalPropertiesJson = SerializeAdditionalProperties(settings);
     }
+
+    private static DateTimeOffset? FromMills(long? mills) =>
+        mills.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(mills.Value) : null;
+
+    private static string? SerializeAdditionalProperties(Settings settings) =>
+        settings.AdditionalProperties is { Count: > 0 }
+            ? JsonSerializer.Serialize(settings.AdditionalProperties)
+            : null;
 }

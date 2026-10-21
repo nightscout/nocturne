@@ -122,14 +122,14 @@ internal sealed class DocsTenantFixture : IDisposable
             .ReturnsAsync(Db);
 
         var demoTenantService = new DemoTenantService(
-            dbFactory.Object,
+            dbFactory.Object.AsNocturneFactory(),
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),
             new Mock<ICacheService>().Object,
             new Mock<ILogger<DemoTenantService>>().Object);
 
         return new ScalarAuthProvider(
-            dbFactory.Object,
+            dbFactory.Object.AsNocturneFactory(),
             demoTenantService,
             SessionService.Object,
             new RedirectUriValidator(),

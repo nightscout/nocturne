@@ -175,7 +175,7 @@ public class EntriesController : BaseV3Controller<Entry>
     /// </summary>
     /// <param name="entry">The <see cref="Entry"/> to create.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The created <see cref="Entry"/> in V3 format.</returns>
+    /// <returns>The <see cref="V3CreateResponse"/> for the created or already stored entry.</returns>
     /// <remarks>
     /// Supports AAPS deduplication: if an entry with the same device, type and timestamp already
     /// exists, returns a 200 response with <c>isDeduplication: true</c> instead of creating a
@@ -190,11 +190,12 @@ public class EntriesController : BaseV3Controller<Entry>
     [Authorize]
     [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries")]
-    [ProducesResponseType(typeof(Entry), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<Entry>> CreateEntry(
+    public async Task<ActionResult> CreateEntry(
         [FromBody] Entry entry,
         CancellationToken cancellationToken = default
     )
@@ -223,16 +224,7 @@ public class EntriesController : BaseV3Controller<Entry>
                 );
                 if (existingEntry != null)
                 {
-                    var existingIdentifier = MongoObjectId.Coerce(existingEntry.Id);
-                    return Ok(
-                        new
-                        {
-                            status = 200,
-                            identifier = existingIdentifier,
-                            isDeduplication = true,
-                            deduplicatedIdentifier = existingIdentifier,
-                        }
-                    );
+                    return V3Deduplicated(existingEntry.Id, existingEntry.SrvModified);
                 }
             }
 
@@ -257,12 +249,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
             await _alertEvaluator.EvaluateForEntriesAsync([createdEntry], cancellationToken);
 
-            // Location resolves to the 24-hex ObjectId that matches the response body identifier.
-            return CreatedAtAction(
-                nameof(GetEntry),
-                new { id = MongoObjectId.Coerce(createdEntry.Id) },
-                createdEntry.ToV3Response()
-            );
+            return V3Created(nameof(GetEntry), createdEntry.Id);
         }
         catch (ArgumentException ex)
         {
@@ -459,12 +446,12 @@ public class EntriesController : BaseV3Controller<Entry>
     /// </summary>
     /// <param name="id">Entry ID</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>No content on success</returns>
+    /// <returns><c>{"status": 200}</c> on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries/:id")]
-    [ProducesResponseType(204)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -488,7 +475,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
         _logger.LogDebug("Successfully deleted V3 entry {Id}", id);
 
-        return NoContent();
+        return CreateV3DeleteResponse();
     }
 
     /// <summary>
@@ -536,68 +523,6 @@ public class EntriesController : BaseV3Controller<Entry>
     }
 
     #region Helper Methods
-
-    private new string? ExtractTypeFromFilter(JsonElement? filter)
-    {
-        if (!filter.HasValue)
-            return null;
-
-        try
-        {
-            if (filter.Value.TryGetProperty("type", out var typeElement))
-            {
-                return typeElement.GetString();
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to extract type from V3 filter");
-        }
-
-        return null;
-    }
-
-    private new string? ConvertV3FilterToV1Find(JsonElement? filter)
-    {
-        if (!filter.HasValue)
-            return null;
-
-        try
-        {
-            // Convert V3 JSON filter to V1 query string format
-            // This is a simplified conversion - full implementation would need more sophisticated mapping
-            var filterObj = filter.Value;
-            var queryParts = new List<string>();
-
-            foreach (var property in filterObj.EnumerateObject())
-            {
-                if (property.Name == "type")
-                    continue; // Handled separately
-
-                var value = property.Value;
-                if (value.ValueKind == JsonValueKind.Object)
-                {
-                    // Handle operators like $gte, $lte, etc.
-                    foreach (var op in value.EnumerateObject())
-                    {
-                        queryParts.Add($"find[{property.Name}][{op.Name}]={op.Value}");
-                    }
-                }
-                else
-                {
-                    // Simple equality
-                    queryParts.Add($"find[{property.Name}]={value}");
-                }
-            }
-
-            return queryParts.Count > 0 ? string.Join("&", queryParts) : null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to convert V3 filter to V1 find query");
-            return null;
-        }
-    }
 
     private DateTimeOffset GetLastModified(List<Entry> entries)
     {

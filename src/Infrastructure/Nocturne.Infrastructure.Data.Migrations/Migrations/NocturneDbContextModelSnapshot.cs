@@ -1182,6 +1182,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("DataSource")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("data_source");
+
                     b.Property<double?>("DropRate")
                         .HasColumnType("double precision")
                         .HasColumnName("drop_rate");
@@ -2390,15 +2395,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("CanonicalId")
                         .HasDatabaseName("ix_linked_records_canonical");
 
-                    b.HasIndex("RecordType", "RecordId")
-                        .HasDatabaseName("ix_linked_records_non_primary_record")
-                        .HasFilter("NOT is_primary");
-
                     b.HasIndex("TenantId", "SysCreatedAt")
                         .HasDatabaseName("ix_linked_records_tenant_created");
-
-                    b.HasIndex("RecordType", "CanonicalId", "IsPrimary")
-                        .HasDatabaseName("ix_linked_records_type_canonical_primary");
 
                     b.HasIndex("TenantId", "RecordType", "RecordId")
                         .IsUnique()
@@ -5867,9 +5865,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("PatientDeviceId");
 
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("IX_aps_snapshots_tenant_id");
-
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_aps_snapshots_timestamp");
@@ -6703,9 +6698,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("CorrelationId")
                         .HasDatabaseName("ix_calibrations_correlation_id");
 
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("IX_calibrations_tenant_id");
-
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_calibrations_timestamp");
@@ -7232,7 +7224,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("CorrelationId")
                         .HasDatabaseName("ix_device_status_extras_correlation_id");
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("TenantId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_device_status_extras_tenant_timestamp")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "SysUpdatedAt", "Id")
+                        .HasDatabaseName("ix_device_status_extras_tenant_history");
 
                     b.ToTable("device_status_extras");
                 });
@@ -7322,9 +7320,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("PatientDeviceId")
                         .HasDatabaseName("ix_meter_glucose_patient_device_id")
                         .HasFilter("patient_device_id IS NOT NULL");
-
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("IX_meter_glucose_tenant_id");
 
                     b.HasIndex("Timestamp")
                         .IsDescending()
@@ -7916,9 +7911,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("PatientDeviceId");
 
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("IX_pump_snapshots_tenant_id");
-
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_pump_snapshots_timestamp");
@@ -7942,6 +7934,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_pump_snapshots_tenant_source_timestamp")
                         .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "SysUpdatedAt", "Id")
+                        .HasDatabaseName("ix_pump_snapshots_tenant_history");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_pump_snapshots_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_pump_snapshots_tenant_legacy_id_user_deleted")
@@ -8581,6 +8576,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("entered_by");
 
+                    b.Property<bool?>("IsApnsProduction")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_apns_production");
+
                     b.Property<bool>("IsDefault")
                         .HasColumnType("boolean")
                         .HasColumnName("is_default");
@@ -8794,9 +8793,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("DeviceId");
 
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("IX_uploader_snapshots_tenant_id");
-
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_uploader_snapshots_timestamp");
@@ -8820,6 +8816,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_uploader_snapshots_tenant_source_timestamp")
                         .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "SysUpdatedAt", "Id")
+                        .HasDatabaseName("ix_uploader_snapshots_tenant_history");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_uploader_snapshots_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_uploader_snapshots_tenant_legacy_id_user_deleted")
