@@ -95,13 +95,28 @@ public static class ShareDataCategories
     /// <summary>
     /// Recency column per table that no scope governs, so it stays hidden from every share, but whose
     /// rows a history-clamped member still reads only the last 24 hours of. <c>notes</c> holds the
-    /// Note and Announcement treatments the legacy treatment reads serve.
+    /// Note and Announcement treatments the legacy treatment reads serve; <c>in_app_notifications</c>
+    /// embed glucose-derived text, so they are clamped by when they were raised, not by whether they
+    /// are still unread.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> HiddenRecencyColumns =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["notes"] = "timestamp",
+            ["sleep_biometric_samples"] = "timestamp",
+            ["body_weights"] = "mills",
+            ["lab_hba1c_results"] = "measured_at",
+            ["system_events"] = "mills",
+            ["in_app_notifications"] = "created_at",
+            ["device_clock_observations"] = "observed_at",
         };
+
+    /// <summary>
+    /// Tables whose recency column holds Unix milliseconds rather than a timestamp, so the clamp
+    /// compares it with the window's start in milliseconds.
+    /// </summary>
+    public static readonly IReadOnlySet<string> UnixMillisRecencyTables =
+        new HashSet<string>(StringComparer.Ordinal) { "body_weights", "system_events" };
 
     /// <summary>
     /// End column per hidden table of spans, which a history-clamped member reads by overlap with the
@@ -112,13 +127,35 @@ public static class ShareDataCategories
     /// the default profile. They also hold the profile switches, overrides and temporary targets the
     /// legacy treatment reads serve.
     /// </summary>
-    /// <remarks>A clamped request has no cache partition, so no cache serves it these rows; see
-    /// <c>IReaderCachePartition</c>.</remarks>
+    /// <remarks>
+    /// The same rule keeps an open alert (<c>alert_instances</c> unresolved, <c>alert_excursions</c>
+    /// not ended) and an active tracker (<c>tracker_instances</c> not completed) in front of a clamped
+    /// member, and keeps a sleep session or stage that ended inside the window whole however early it
+    /// began. A clamped request has no cache partition, so no cache serves it these rows; see
+    /// <c>IReaderCachePartition</c>.
+    /// </remarks>
     public static readonly IReadOnlyDictionary<string, string> HiddenSpanEndColumns =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["state_spans"] = "end_timestamp",
             ["profile_activations"] = "end_timestamp",
+            ["sleep_sessions"] = "end_time",
+            ["sleep_stages"] = "end_time",
+            ["alert_excursions"] = "ended_at",
+            ["alert_instances"] = "resolved_at",
+            ["tracker_instances"] = "completed_at",
+        };
+
+    /// <summary>
+    /// Hidden tables with no time of their own, which a history-clamped member reads only while the
+    /// parent row they belong to is inside the last 24 hours by the parent's recency column in
+    /// <see cref="RecencyColumns"/>. A <c>treatment_foods</c> line is part of its carb intake, so it is
+    /// clamped by the intake's time and follows an edit to that time with no copy to keep in step.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, ParentRecency> HiddenParentRecency =
+        new Dictionary<string, ParentRecency>(StringComparer.Ordinal)
+        {
+            ["treatment_foods"] = new("carb_intakes", "carb_intake_id"),
         };
 
     private static readonly IReadOnlyDictionary<string, string> TableToScope = BuildTableToScope();
@@ -147,6 +184,15 @@ public static class ShareDataCategories
     /// </summary>
     public static string? SpanEndColumnFor(string table) => HiddenSpanEndColumns.GetValueOrDefault(table);
 
+    /// <summary>Whether the <see cref="RecencyColumnFor"/> column of <paramref name="table"/> holds Unix milliseconds.</summary>
+    public static bool RecencyIsUnixMillis(string table) => UnixMillisRecencyTables.Contains(table);
+
+    /// <summary>
+    /// Returns the parent a table is clamped through, or <c>null</c> when it is not. See
+    /// <see cref="HiddenParentRecency"/>.
+    /// </summary>
+    public static ParentRecency? ParentRecencyFor(string table) => HiddenParentRecency.GetValueOrDefault(table);
+
     /// <summary>
     /// Computes the value for the <c>app.visible_categories</c> GUC carried by a
     /// share connection: the comma-separated governing scopes the share's granted
@@ -172,10 +218,11 @@ public static class ShareDataCategories
             foreach (var table in tables)
             {
                 map.Add(table, scope); // throws on a duplicate table across scopes — a map authoring error
-                if (HiddenRecencyColumns.ContainsKey(table) || HiddenSpanEndColumns.ContainsKey(table))
+                if (HiddenRecencyColumns.ContainsKey(table) || HiddenSpanEndColumns.ContainsKey(table)
+                    || HiddenParentRecency.ContainsKey(table))
                 {
                     throw new InvalidOperationException(
-                        $"Governed table '{table}' is also in {nameof(HiddenRecencyColumns)} or {nameof(HiddenSpanEndColumns)}; declare it in {nameof(RecencyColumns)} only.");
+                        $"Governed table '{table}' is also in {nameof(HiddenRecencyColumns)}, {nameof(HiddenSpanEndColumns)} or {nameof(HiddenParentRecency)}; declare it in {nameof(RecencyColumns)} only.");
                 }
                 if (!RecencyColumns.ContainsKey(table))
                 {
@@ -186,6 +233,26 @@ public static class ShareDataCategories
             }
         }
 
+        foreach (var (child, parent) in HiddenParentRecency)
+        {
+            if (HiddenRecencyColumns.ContainsKey(child) || HiddenSpanEndColumns.ContainsKey(child))
+            {
+                throw new InvalidOperationException(
+                    $"Table '{child}' is clamped through its parent, so it cannot also have a clamp column of its own.");
+            }
+            if (RecencyColumns.GetValueOrDefault(parent.Table) is null)
+            {
+                throw new InvalidOperationException(
+                    $"Parent '{parent.Table}' of '{child}' has no recency column in {nameof(RecencyColumns)}.");
+            }
+        }
+
         return map;
     }
 }
+
+/// <summary>
+/// The parent row a hidden table is clamped through: <paramref name="Table"/> is the parent table and
+/// <paramref name="ForeignKeyColumn"/> the child's column holding the parent's <c>id</c>.
+/// </summary>
+public sealed record ParentRecency(string Table, string ForeignKeyColumn);

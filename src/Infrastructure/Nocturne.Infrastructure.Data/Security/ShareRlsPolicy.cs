@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Security;
@@ -56,8 +57,21 @@ public static class ShareRlsPolicy
     /// <param name="spanEndColumn">For a table of spans, the end column the clamp applies to by
     /// overlap instead: a row whose end is null (still running) or inside the last 24 hours stays
     /// visible. Exclusive with <paramref name="recencyColumn"/>.</param>
+    /// <param name="recencyIsUnixMillis">True when <paramref name="recencyColumn"/> holds Unix
+    /// milliseconds rather than a timestamp.</param>
+    /// <param name="parent">For a table with no time of its own, the parent row it is clamped
+    /// through: a row stays visible while its parent's <paramref name="parentRecencyColumn"/>, a
+    /// timestamp, is inside the last 24 hours. Exclusive with the other clamp columns.</param>
+    /// <param name="parentRecencyColumn">The parent's recency column; required with
+    /// <paramref name="parent"/>.</param>
     public static string BuildPolicySql(
-        string table, string? governingScope, string? recencyColumn = null, string? spanEndColumn = null)
+        string table,
+        string? governingScope,
+        string? recencyColumn = null,
+        string? spanEndColumn = null,
+        bool recencyIsUnixMillis = false,
+        ParentRecency? parent = null,
+        string? parentRecencyColumn = null)
     {
         SqlIdentifier.Require(table, nameof(table));
         if (governingScope is not null && !ScopePattern.IsMatch(governingScope))
@@ -68,6 +82,22 @@ public static class ShareRlsPolicy
             SqlIdentifier.Require(spanEndColumn, nameof(spanEndColumn));
         if (recencyColumn is not null && spanEndColumn is not null)
             throw new ArgumentException("A table is clamped by a recency column or a span end column, not both.");
+        if (recencyIsUnixMillis && recencyColumn is null)
+            throw new ArgumentException("Only a recency column can hold Unix milliseconds.", nameof(recencyIsUnixMillis));
+        if (parent is not null)
+        {
+            if (recencyColumn is not null || spanEndColumn is not null)
+                throw new ArgumentException("A table clamped through its parent has no clamp column of its own.", nameof(parent));
+            if (parentRecencyColumn is null)
+                throw new ArgumentException("A parent clamp needs the parent's recency column.", nameof(parentRecencyColumn));
+            SqlIdentifier.Require(parent.Table, nameof(parent));
+            SqlIdentifier.Require(parent.ForeignKeyColumn, nameof(parent));
+            SqlIdentifier.Require(parentRecencyColumn, nameof(parentRecencyColumn));
+        }
+        else if (parentRecencyColumn is not null)
+        {
+            throw new ArgumentException("A parent recency column needs a parent.", nameof(parentRecencyColumn));
+        }
 
         var usingExpr = "current_setting('app.is_share', true) IS DISTINCT FROM 'true'";
         if (governingScope is not null)
@@ -76,11 +106,20 @@ public static class ShareRlsPolicy
                 $"({usingExpr} OR '{governingScope}' = ANY(string_to_array(current_setting('app.visible_categories', true), ',')))";
         }
 
+        var windowStart = recencyIsUnixMillis
+            ? "(extract(epoch from now() - interval '24 hours') * 1000)::bigint"
+            : "now() - interval '24 hours'";
+
+        // The subquery reads the parent under the parent's own policies. The child's column is
+        // table-qualified: unqualified, a parent column of the same name would shadow it.
         var recent = recencyColumn is not null
-            ? $"\"{recencyColumn}\" >= now() - interval '24 hours'"
+            ? $"\"{recencyColumn}\" >= {windowStart}"
             : spanEndColumn is not null
                 ? $"(\"{spanEndColumn}\" IS NULL OR \"{spanEndColumn}\" >= now() - interval '24 hours')"
-                : null;
+                : parent is not null
+                    ? $"EXISTS (SELECT 1 FROM {parent.Table} p WHERE p.id = {table}.\"{parent.ForeignKeyColumn}\"" +
+                      $" AND p.\"{parentRecencyColumn}\" >= now() - interval '24 hours')"
+                    : null;
 
         if (recent is not null)
         {

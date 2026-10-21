@@ -26,7 +26,7 @@ public class RlsShareCategoryTests
     // simple NOT NULL columns. The rules are about category gating, not the data itself.
     private const string GovernedTable = "step_counts";
     private const string GovernedScope = "stepcount.read";
-    private const string HiddenTable = "body_weights";
+    private const string HiddenTable = "clock_faces";
     // boluses/treatments.read is the category that originally leaked to glucose-only shares.
     private const string TreatmentTable = "boluses";
 
@@ -420,10 +420,20 @@ public class RlsShareCategoryTests
                     usingExpr.Should().Contain($"{end} IS NULL",
                         $"{table} is clamped by overlap, so a span still running stays visible");
                 }
-                else if (ShareDataCategories.RecencyColumnFor(table) is not null)
+                else if (ShareDataCategories.RecencyColumnFor(table) is { } recency)
                 {
                     usingExpr.Should().Contain("history_clamped",
                         $"{table} is hidden from shares but clamps a history-clamped member to 24 hours");
+                    usingExpr.Should().Contain(recency, $"{table} is clamped by {recency}");
+                    if (ShareDataCategories.RecencyIsUnixMillis(table))
+                        usingExpr.Should().Contain("epoch", $"{table}'s {recency} holds Unix milliseconds");
+                }
+                else if (ShareDataCategories.ParentRecencyFor(table) is { } parent)
+                {
+                    usingExpr.Should().Contain("history_clamped",
+                        $"{table} is hidden from shares but clamps a history-clamped member to 24 hours");
+                    usingExpr.Should().Contain("EXISTS", $"{table} is clamped through its parent row");
+                    usingExpr.Should().Contain(parent.Table, $"{table} is clamped by its {parent.Table} row's time");
                 }
                 else
                 {
@@ -483,8 +493,8 @@ public class RlsShareCategoryTests
             $"INSERT INTO {GovernedTable} (id, tenant_id, timestamp, metric, source, sys_created_at, sys_updated_at) " +
             "VALUES (gen_random_uuid(), @tid, now(), 0, 0, now(), now())", tenantId);
         await ExecuteAsync(conn,
-            $"INSERT INTO {HiddenTable} (id, tenant_id, mills, weight_kg, sys_created_at, sys_updated_at) " +
-            "VALUES (gen_random_uuid(), @tid, 0, 0, now(), now())", tenantId);
+            $"INSERT INTO {HiddenTable} (id, tenant_id, user_id, name, config, created_at, sys_created_at, sys_updated_at) " +
+            "VALUES (gen_random_uuid(), @tid, 'owner', 'face', '{}', now() - interval '30 days', now(), now())", tenantId);
         await ExecuteAsync(conn,
             $"INSERT INTO {TreatmentTable} (id, tenant_id, timestamp, insulin, automatic, bolus_kind, sys_created_at, sys_updated_at) " +
             "VALUES (gen_random_uuid(), @tid, now(), 1.0, false, 'Manual', now(), now())", tenantId);
