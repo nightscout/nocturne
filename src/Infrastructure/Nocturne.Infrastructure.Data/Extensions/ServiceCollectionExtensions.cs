@@ -136,6 +136,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton(sp => new RootServiceProvider(sp));
         services.TryAddTransient<NocturneDbContextFactory>();
         services.TryAddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
+        services.AddScoped<IReaderCachePartition, ReaderCachePartition>();
 
         services.AddScoped(sp => sp.GetRequiredService<NocturneDbContextFactory>().Create());
 

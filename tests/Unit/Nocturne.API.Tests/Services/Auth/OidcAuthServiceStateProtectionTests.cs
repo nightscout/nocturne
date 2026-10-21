@@ -147,7 +147,7 @@ public class OidcAuthServiceStateProtectionTests
     [Trait("Category", "Unit")]
     public async Task TryReadTenantSlug_RoundTripsTheSlugItWasIssuedWith()
     {
-        // The seam OidcCallbackRedirectMiddleware depends on. It stubs TryReadTenantSlug, so
+        // The seam ApexCallbackRelayMiddleware depends on. It stubs TryReadTenantSlug, so
         // without this nothing asserts that a real generated state actually yields its slug —
         // which is how protecting the payload silently broke the apex-to-subdomain redirect.
         var request = await _service.GenerateAuthorizationUrlAsync(ProviderId, "/", tenantSlug: "erik");

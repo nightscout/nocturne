@@ -157,16 +157,6 @@ export const connectorPropertyMeta = {
     description: 'OAuth client identifier issued by the provider',
     category: 'Credentials',
   },
-  ClientSecret: {
-    label: 'Client Secret',
-    description: 'OAuth client secret issued by the provider',
-    category: 'Credentials',
-  },
-  CallbackUrl: {
-    label: 'Callback URL',
-    description: 'HTTPS URL where the provider returns after authorization',
-    category: 'Credentials',
-  },
   ImportFrom: {
     label: 'Import From',
     description: 'Earliest date to retrieve from the provider',

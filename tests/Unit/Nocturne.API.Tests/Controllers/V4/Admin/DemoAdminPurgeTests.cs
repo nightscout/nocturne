@@ -7,12 +7,12 @@ using Nocturne.API.Services.Demo;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Tests.Controllers.V4.Admin;
 
@@ -56,7 +56,7 @@ public class DemoAdminPurgeTests : IDisposable
             dbFactory.Object.AsNocturneFactory(),
             tenantService.Object,
             TestPublicAccessCache.Create(),
-            new Mock<ICacheService>().Object,
+            Mock.Of<ITenantCache>(),
             new Mock<ILogger<DemoTenantService>>().Object);
 
         return new DemoAdminController(tenantService.Object, demoTenantService, dbFactory.Object.AsNocturneFactory());

@@ -1,91 +1,116 @@
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
-using Nocturne.API.Services.Platform;
-using Nocturne.API.Tests.TestDoubles;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Treatments;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Tests.Services.Treatments;
 
 /// <summary>
-/// The recent-treatment cache is keyed by tenant alone, so every caller
-/// <see cref="CacheBypassingCallers"/> lists stays out of it entirely.
+/// The recent-treatment cache is shared by the owner's partition, so no reader
+/// <see cref="NarrowedReaders"/> lists reads or fills the owner's treatments.
 /// </summary>
 [Trait("Category", "Unit")]
 public class TreatmentCacheAdapterTests
 {
     private static readonly TreatmentQuery CacheableQuery = new() { Count = 10, Skip = 0 };
 
-    private readonly Mock<ICacheService> _cache = new();
-    private readonly CategoryReadContext _categoryReadContext = new();
-    private readonly List<Treatment> _cachedTreatments = [new() { Id = "cached" }];
+    private static TreatmentCacheAdapter Adapter(ITenantCache cache) =>
+        new(cache, NullLogger<TreatmentCacheAdapter>.Instance);
 
-    public TreatmentCacheAdapterTests()
+    [Fact]
+    public async Task GetOrComputeAsync_CacheableQuery_ServesTheTenantCache()
     {
-        _cache
+        var cached = new List<Treatment> { new() { Id = "cached" } };
+        var cache = new Mock<ITenantCache>();
+        cache
             .Setup(c => c.GetOrSetAsync(
                 It.IsAny<string>(), It.IsAny<Func<Task<List<Treatment>>>>(),
-                It.IsAny<TimeSpan?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(_cachedTreatments);
-    }
+                It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(cached);
 
-    private TreatmentCacheAdapter Adapter()
-    {
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.SetupGet(t => t.Context)
-            .Returns(new TenantContext(Guid.CreateVersion7(), "test", "Test", true, false));
+        var result = await Adapter(cache.Object).GetOrComputeAsync(
+            CacheableQuery, () => Task.FromResult<IReadOnlyList<Treatment>>([]), CancellationToken.None);
 
-        return new TreatmentCacheAdapter(
-            _cache.Object,
-            Mock.Of<IDemoModeService>(),
-            tenant.Object,
-            _categoryReadContext,
-            NullLogger<TreatmentCacheAdapter>.Instance);
+        result.Should().BeSameAs(cached);
     }
 
     [Fact]
-    public async Task GetOrComputeAsync_Unclamped_ServesTheTenantCache()
+    public async Task InvalidateAsync_DropsTheCachedRead()
     {
-        var result = await Adapter().GetOrComputeAsync(
-            CacheableQuery, () => Task.FromResult<IReadOnlyList<Treatment>>([]), CancellationToken.None);
+        var adapter = Adapter(TestTenantCache.Create());
+        await adapter.GetOrComputeAsync(
+            CacheableQuery,
+            () => Task.FromResult<IReadOnlyList<Treatment>>([new Treatment { Id = "stale" }]),
+            CancellationToken.None);
 
-        result.Should().BeSameAs(_cachedTreatments);
+        await adapter.InvalidateAsync(CancellationToken.None);
+        var result = await adapter.GetOrComputeAsync(
+            CacheableQuery,
+            () => Task.FromResult<IReadOnlyList<Treatment>>([new Treatment { Id = "fresh" }]),
+            CancellationToken.None);
+
+        result!.Single().Id.Should().Be("fresh");
     }
 
     [Theory]
-    [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
-    public async Task GetOrComputeAsync_BypassingCaller_NeitherReadsNorWritesTheCache(string caller)
+    [MemberData(nameof(NarrowedReaders.All), MemberType = typeof(NarrowedReaders))]
+    public async Task GetOrComputeAsync_NarrowedReader_NeverSharesTheOwnersTreatments(string reader)
     {
-        CacheBypassingCallers.Become(_categoryReadContext, caller);
+        using var local = new MemoryCache(new MemoryCacheOptions());
+        var distributed = TestTenantCache.Distributed(local);
 
-        var result = await Adapter().GetOrComputeAsync(
-            CacheableQuery, () => Task.FromResult<IReadOnlyList<Treatment>>([]), CancellationToken.None);
+        var (narrowedResult, ownerResult) = await ReadAfterTheOwner(
+            Adapter(TestTenantCache.Create(local, distributed)),
+            Adapter(NarrowedReaders.Cache(reader, local, distributed)));
 
-        result.Should().BeNull("a null answer sends the caller straight to the store");
-        _cache.Invocations.Should().BeEmpty();
+        narrowedResult!.Select(t => t.Id).Should().Equal("narrowed");
+        ownerResult!.Select(t => t.Id).Should().Equal("owner");
     }
 
     /// <summary>
     /// A share with full history is not clamped, but row level security still narrows what it
     /// reads: the legacy treatment projection spans <c>notes</c> and <c>state_spans</c>, which no
-    /// share sees, and <c>bg_checks</c> and <c>device_events</c>, which only some do. The key
-    /// carries the tenant alone, so sharing it would hand the share the owner's rows and the owner
-    /// the share's. The multi-period statistics cache stays out for the same reason.
+    /// share sees, and <c>bg_checks</c> and <c>device_events</c>, which only some do. Its category
+    /// set is its own partition, so it neither reads the owner's rows nor hands the owner its own.
     /// </summary>
     [Fact]
-    public async Task GetOrComputeAsync_FullHistoryShare_NeitherReadsNorWritesTheCache()
+    public async Task GetOrComputeAsync_FullHistoryShare_NeverSharesTheOwnersTreatments()
     {
-        _categoryReadContext.MarkShare();
-        _categoryReadContext.SetVisibleCategories("glucose.read,treatments.read");
-        _categoryReadContext.SetFullHistory(true);
-        _categoryReadContext.IsHistoryClamped.Should().BeFalse("the precondition: a full-history share is not clamped");
+        var share = new CategoryReadContext();
+        share.MarkShare();
+        share.SetVisibleCategories("glucose.read,treatments.read");
+        share.SetFullHistory(true);
+        share.IsHistoryClamped.Should().BeFalse("the precondition: a full-history share is not clamped");
 
-        var result = await Adapter().GetOrComputeAsync(
-            CacheableQuery, () => Task.FromResult<IReadOnlyList<Treatment>>([]), CancellationToken.None);
+        using var local = new MemoryCache(new MemoryCacheOptions());
+        var distributed = TestTenantCache.Distributed(local);
+        var (shareResult, ownerResult) = await ReadAfterTheOwner(
+            Adapter(TestTenantCache.Create(local, distributed)),
+            Adapter(TestTenantCache.Create(local, distributed, partition: new ReaderCachePartition(share).Current)));
 
-        result.Should().BeNull("a null answer sends the caller straight to the store");
-        _cache.Invocations.Should().BeEmpty();
+        shareResult!.Select(t => t.Id).Should().Equal("narrowed");
+        ownerResult!.Select(t => t.Id).Should().Equal("owner");
+    }
+
+    private static async Task<(IReadOnlyList<Treatment>? Narrowed, IReadOnlyList<Treatment>? Owner)> ReadAfterTheOwner(
+        TreatmentCacheAdapter owner, TreatmentCacheAdapter narrowed)
+    {
+        await owner.GetOrComputeAsync(
+            CacheableQuery,
+            () => Task.FromResult<IReadOnlyList<Treatment>>([new Treatment { Id = "owner" }]),
+            CancellationToken.None);
+        var narrowedResult = await narrowed.GetOrComputeAsync(
+            CacheableQuery,
+            () => Task.FromResult<IReadOnlyList<Treatment>>([new Treatment { Id = "narrowed" }]),
+            CancellationToken.None);
+        var ownerResult = await owner.GetOrComputeAsync(
+            CacheableQuery,
+            () => Task.FromResult<IReadOnlyList<Treatment>>([new Treatment { Id = "recomputed" }]),
+            CancellationToken.None);
+        return (narrowedResult, ownerResult);
     }
 }

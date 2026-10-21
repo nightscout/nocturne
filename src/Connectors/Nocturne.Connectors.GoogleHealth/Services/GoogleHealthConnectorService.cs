@@ -18,7 +18,7 @@ public sealed class GoogleHealthConnectorService(
     HttpClient httpClient,
     IConnectorServerResolver<GoogleHealthConnectorConfiguration> serverResolver,
     GoogleHealthClient google,
-    GoogleHealthAuthTokenProvider oauth,
+    GoogleHealthSessionStore sessions,
     IGoogleHealthReadingWriter writer,
     IGoogleHealthSyncCoordinator coordinator,
     IConnectorConfigurationService connectorConfigurations,
@@ -286,7 +286,7 @@ public sealed class GoogleHealthConnectorService(
             }
 
             await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.RefreshingSession);
-            var session = await SessionAsync(config, cancellationToken);
+            var session = await sessions.RefreshAsync(config, force: false, cancellationToken);
             var active = selected
                 .Where(type => session.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal))
                 .ToArray();
@@ -371,8 +371,9 @@ public sealed class GoogleHealthConnectorService(
                 ex is JsonException ? "invalid_google_response" : "google_unavailable",
                 stage: ex is JsonException ? "response_parse" : "network");
             LogFailure(ex, error, tenantId);
-            if (error.Message == "reconnect_required")
-                await ClearSessionAsync(cancellationToken);
+            if (error.RequiresReconnect)
+                await sessions.ClearAsync(removeAccount: false, subject: null,
+                    revoke: error.Message == "client_changed", cancellationToken);
             return Fail(result, GoogleHealthErrorCode.Encode(
                 error.Message,
                 error.DataType is null ? null : [error.DataType]));
@@ -391,32 +392,6 @@ public sealed class GoogleHealthConnectorService(
         }
     }
 
-    private async Task<GoogleHealthTokenSession> SessionAsync(
-        GoogleHealthConnectorConfiguration config,
-        CancellationToken ct,
-        bool forceRefresh = false)
-    {
-        if (string.IsNullOrWhiteSpace(config.RefreshToken))
-            throw new GoogleHealthException("reconnect_required", stage: "session_read");
-
-        var scopes = (config.GrantedScopes ?? string.Empty)
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        await oauth.SeedSessionAsync(new GoogleHealthTokenSession(config.RefreshToken, scopes));
-        if (forceRefresh)
-            oauth.InvalidateToken();
-
-        var accessToken = await oauth.GetValidTokenAsync(config, ct);
-        if (string.IsNullOrWhiteSpace(accessToken))
-            throw new GoogleHealthException("invalid_token_response", stage: "token_refresh");
-
-        var session = await oauth.GetCurrentSessionAsync() ??
-            throw new GoogleHealthException("invalid_token_response", stage: "token_cache");
-        await PersistSessionAsync(session, ct);
-        return session;
-    }
-
     private async Task<string> ReadWithRefreshAsync(
             GoogleHealthConnectorConfiguration config,
             string accessToken,
@@ -430,8 +405,18 @@ public sealed class GoogleHealthConnectorService(
         var previousCounts = result.ItemsSynced.ToDictionary();
         try
         {
-            await ReadOnceAsync(config, accessToken, active, from, to, tenantId, result, ct);
-            return accessToken;
+            return await sessions.WithAccessTokenAsync(config, accessToken, async token =>
+            {
+                await ReadOnceAsync(config, token, active, from, to, tenantId, result, ct);
+                return token;
+            }, ct, async () =>
+            {
+                logger.LogInformation(
+                    "Google Health access token was rejected for tenant {TenantId}; refreshing once",
+                    tenantId);
+                await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.RefreshingSession);
+                RestoreCounts();
+            });
         }
         catch (GoogleHealthException error) when (error.Message == "history_too_large" &&
             error.Stage?.StartsWith("native_reconciliation", StringComparison.Ordinal) == true &&
@@ -442,26 +427,6 @@ public sealed class GoogleHealthConnectorService(
             RestoreCounts();
             var token = await ReadWithRefreshAsync(config, accessToken, active, from, middle, tenantId, result, ct);
             return await ReadWithRefreshAsync(config, token, active, middle, to, tenantId, result, ct);
-        }
-        catch (GoogleHealthException first) when (first.Message == "access_token_rejected")
-        {
-            logger.LogInformation(
-                "Google Health access token was rejected for tenant {TenantId}; refreshing once",
-                tenantId);
-            await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.RefreshingSession);
-            var refreshed = await SessionAsync(config, ct, forceRefresh: true);
-            RestoreCounts();
-            try
-            {
-                await ReadOnceAsync(config, refreshed.AccessToken!, active, from, to, tenantId, result, ct);
-                return refreshed.AccessToken!;
-            }
-            catch (GoogleHealthException second) when (second.Message == "access_token_rejected")
-            {
-                throw new GoogleHealthException("reconnect_required", stage: second.Stage,
-                    dataType: second.DataType, providerReason: second.ProviderReason,
-                    providerStatus: second.ProviderStatus);
-            }
         }
 
         void RestoreCounts()
@@ -588,33 +553,6 @@ public sealed class GoogleHealthConnectorService(
                     innerException: ex);
             }
         }
-    }
-
-    private async Task PersistSessionAsync(GoogleHealthTokenSession session, CancellationToken ct)
-    {
-        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
-        var scopes = string.Join(' ', session.Scopes.Distinct(StringComparer.Ordinal));
-        if (secrets.GetValueOrDefault("refreshToken") == session.RefreshToken &&
-            secrets.GetValueOrDefault("grantedScopes") == scopes)
-            return;
-        secrets["refreshToken"] = session.RefreshToken;
-        secrets["grantedScopes"] = scopes;
-        await connectorConfigurations.SaveSecretsAsync(ConnectorName, secrets, ct: ct);
-    }
-
-    private async Task ClearSessionAsync(CancellationToken ct)
-    {
-        oauth.InvalidateToken();
-        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
-        secrets.Remove("refreshToken");
-        secrets.Remove("grantedScopes");
-        await connectorConfigurations.SaveSecretsAsync(ConnectorName, secrets, ct: ct);
-        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
-        if (stored is null) return;
-        var configuration = stored.Configuration.RootElement.Deserialize<Dictionary<string, JsonElement>>() ?? [];
-        configuration["enabled"] = JsonSerializer.SerializeToElement(false);
-        using var updated = JsonSerializer.SerializeToDocument(configuration);
-        await connectorConfigurations.SaveConfigurationAsync(ConnectorName, updated, ct: ct);
     }
 
     private async Task ConsumeImportFromAsync(CancellationToken ct)

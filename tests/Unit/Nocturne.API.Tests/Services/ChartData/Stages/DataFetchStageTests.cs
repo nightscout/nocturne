@@ -30,6 +30,7 @@ public class DataFetchStageTests
     private readonly Mock<IDeviceEventRepository> _mockDeviceEventRepo = new();
     private readonly Mock<ITempBasalRepository> _mockTempBasalRepo = new();
     private readonly Mock<IApsSnapshotRepository> _mockApsSnapshotRepo = new();
+    private readonly Mock<IPumpSnapshotRepository> _mockPumpSnapshotRepo = new();
     private readonly Mock<IStateSpanRepository> _mockStateSpanRepo;
     private readonly Mock<ISystemEventRepository> _mockSystemEventRepo;
     private readonly Mock<ITrackerRepository> _mockTrackerRepo;
@@ -56,6 +57,7 @@ public class DataFetchStageTests
             _mockDeviceEventRepo.Object,
             _mockTempBasalRepo.Object,
             _mockApsSnapshotRepo.Object,
+            _mockPumpSnapshotRepo.Object,
             _mockStateSpanRepo.Object,
             _mockSystemEventRepo.Object,
             _mockTrackerRepo.Object,

@@ -52,12 +52,14 @@ export function continuousLineStops(
 	axisScale: (mgdl: number) => number,
 	chartHeight: number
 ): GradientStop[] {
+	// SVG clamps each stop's offset up to the largest before it, so stops must
+	// ascend: the anchors run low to high glucose, which is bottom to top.
 	return GLUCOSE_SPECTRUM_ANCHORS.map(
 		(mgdl): GradientStop => [
 			offsetFor(mgdl, axisScale, chartHeight),
 			getGlucoseColorContinuous(mgdl)
 		]
-	);
+	).reverse();
 }
 
 export function fillStopsFromLineStops(
@@ -70,6 +72,25 @@ export function fillStopsFromLineStops(
 	});
 }
 
+export function solidFillStopsFromLineStops(
+	lineStops: GradientStop[],
+	areaOpacity: number
+): GradientStop[] {
+	const pct = Math.round(areaOpacity * 100);
+	return lineStops.map(
+		([offset, color]): GradientStop => [offset, `color-mix(in lch, ${color} ${pct}%, transparent)`]
+	);
+}
+
+export function solidSingleColorFillStops(color: string, areaOpacity: number): GradientStop[] {
+	const pct = Math.round(areaOpacity * 100);
+	const fill = `color-mix(in lch, ${color} ${pct}%, transparent)`;
+	return [
+		[0, fill],
+		[1, fill]
+	];
+}
+
 export function singleColorFillStops(color: string, areaOpacity: number): GradientStop[] {
 	const topPct = Math.round(areaOpacity * 100);
 	return [
@@ -79,9 +100,44 @@ export function singleColorFillStops(color: string, areaOpacity: number): Gradie
 }
 
 export function areaY0Accessor(
-	areaMode: 'baseline' | 'deviation',
+	areaMode: 'full' | 'baseline' | 'deviation',
 	thresholds: Pick<GlucoseThresholds, 'low' | 'high'>
 ): ((d: { sgv: number }) => number) | undefined {
-	if (areaMode === 'baseline') return undefined;
+	if (areaMode !== 'deviation') return undefined;
 	return (d) => Math.max(thresholds.low, Math.min(thresholds.high, d.sgv));
+}
+
+export type LineColorMode = 'single' | 'threshold' | 'continuous';
+export type AreaMode = 'off' | 'full' | 'baseline' | 'deviation';
+
+/** Line stops for a colour mode; `undefined` in single mode, which strokes flat. */
+export function lineStopsFor(
+	mode: LineColorMode,
+	thresholds: GlucoseThresholds,
+	axisScale: (mgdl: number) => number,
+	chartHeight: number
+): GradientStop[] | undefined {
+	if (mode === 'single') return undefined;
+	if (mode === 'threshold') return thresholdLineStops(thresholds, axisScale, chartHeight);
+	return continuousLineStops(axisScale, chartHeight);
+}
+
+/**
+ * Fill stops for an area mode. `full` holds the opacity flat to the chart
+ * bottom; `baseline` and `deviation` fade it out toward the bottom.
+ */
+export function fillStopsFor(
+	areaMode: AreaMode,
+	lineStops: GradientStop[] | undefined,
+	lineColor: string,
+	areaOpacity: number
+): GradientStop[] | undefined {
+	if (areaMode === 'off') return undefined;
+	if (areaMode === 'full')
+		return lineStops
+			? solidFillStopsFromLineStops(lineStops, areaOpacity)
+			: solidSingleColorFillStops(lineColor, areaOpacity);
+	return lineStops
+		? fillStopsFromLineStops(lineStops, areaOpacity)
+		: singleColorFillStops(lineColor, areaOpacity);
 }

@@ -1,26 +1,23 @@
 using System.Globalization;
 using System.Text.Json;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
 /// <summary>
 /// Resolves the active profile name and CircadianPercentageProfile adjustments at a given time
 /// by querying Profile <see cref="StateSpan"/> records via <see cref="IStateSpanService"/>.
-/// Candidate spans are cached per tenant with a 5-second TTL, keyed by minute.
+/// Candidate spans are cached in <see cref="ITenantCache"/> with a 5-second TTL, keyed by minute.
 /// </summary>
 internal sealed class ActiveProfileResolver : IActiveProfileResolver
 {
     private readonly IStateSpanService _stateSpanService;
-    private readonly ITenantAccessor _tenantAccessor;
-    private readonly IMemoryCache _cache;
-    private readonly ICategoryReadContext _categoryReadContext;
+    private readonly ITenantCache _cache;
     private readonly ILogger<ActiveProfileResolver> _logger;
 
     private const int CacheTtlSeconds = 5;
@@ -28,15 +25,11 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
 
     public ActiveProfileResolver(
         IStateSpanService stateSpanService,
-        ITenantAccessor tenantAccessor,
-        IMemoryCache cache,
-        ICategoryReadContext categoryReadContext,
+        ITenantCache cache,
         ILogger<ActiveProfileResolver> logger)
     {
         _stateSpanService = stateSpanService;
-        _tenantAccessor = tenantAccessor;
         _cache = cache;
-        _categoryReadContext = categoryReadContext;
         _logger = logger;
     }
 
@@ -85,17 +78,14 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
 
     /// <remarks>
     /// The cache holds the newest spans that overlap the minute, so the active span is picked at
-    /// the exact time and the answer does not depend on which lookup in the minute came first. A request
-    /// that <see cref="ICategoryReadContext.BypassesTenantCaches"/> neither reads nor writes it.
+    /// the exact time and the answer does not depend on which lookup in the minute came first.
     /// </remarks>
     private async Task<StateSpan?> GetActiveProfileSpanAsync(long timeMills, CancellationToken ct)
     {
         var minuteStart = timeMills / MillisPerMinute * MillisPerMinute;
-        var tenantId = _tenantAccessor.TenantId;
-        var cacheKey = $"ActiveProfile:{tenantId}:{minuteStart}";
-        var useCache = !_categoryReadContext.BypassesTenantCaches;
+        var cacheKey = $"active-profile:{minuteStart}";
 
-        if (!useCache || !_cache.TryGetValue(cacheKey, out IReadOnlyList<StateSpan>? candidates) || candidates is null)
+        if (!_cache.TryGetLocal(cacheKey, out IReadOnlyList<StateSpan>? candidates) || candidates is null)
         {
             var minuteFrom = DateTimeOffset.FromUnixTimeMilliseconds(minuteStart).UtcDateTime;
             var minuteEnd = DateTimeOffset.FromUnixTimeMilliseconds(minuteStart + MillisPerMinute - 1).UtcDateTime;
@@ -106,8 +96,7 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
                 count: 100,
                 cancellationToken: ct)).ToList();
 
-            if (useCache)
-                _cache.Set(cacheKey, candidates, TimeSpan.FromSeconds(CacheTtlSeconds));
+            _cache.SetLocal(cacheKey, candidates, TimeSpan.FromSeconds(CacheTtlSeconds));
         }
 
         return candidates
@@ -116,10 +105,18 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
             .FirstOrDefault();
     }
 
+    /// <remarks>
+    /// The profile an AAPS switch customizes, where it names one: AAPS names the switch itself after
+    /// the customization (<c>"Rhys (110%)"</c>), which no stored profile is called, and the
+    /// customization is applied from the span's percentage and timeshift.
+    /// </remarks>
     private static string? ExtractProfileName(StateSpan? span)
     {
         if (span?.Metadata is null)
             return null;
+
+        if (span.Metadata.TryGetValue("originalProfileName", out var original) && ConvertToString(original) is { Length: > 0 } name)
+            return name;
 
         if (span.Metadata.TryGetValue("profileName", out var value))
             return ConvertToString(value);

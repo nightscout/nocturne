@@ -7,12 +7,20 @@
     Axis,
     BrushContext,
     ChartClipPath,
+    LinearGradient,
   } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
   import { curveMonotoneX } from "d3";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { Button } from "$lib/components/ui/button";
   import { time, formatDateTimeCompact } from "$lib/utils/formatting";
+  import type { GlucoseThresholds } from "$lib/utils/chart-colors";
+  import {
+    lineStopsFor,
+    fillStopsFor,
+    type AreaMode,
+    type LineColorMode,
+  } from "./glucose-chart/utils/glucose-gradient-stops";
 
   interface GlucosePoint {
     time: Date;
@@ -52,6 +60,12 @@
      * lines up with it. `top` must hold the range label: 18px plus a gap.
      */
     padding?: { left: number; right: number; top: number; bottom: number };
+    /** Mirrors the main chart's glucose line style. */
+    thresholds: GlucoseThresholds;
+    lineColorMode?: LineColorMode;
+    lineColor?: string;
+    areaMode?: AreaMode;
+    areaOpacity?: number;
   }
 
   let {
@@ -65,6 +79,11 @@
     showPredictions = false,
     isZoomed,
     padding = { left: 48, right: 48, top: 20, bottom: 20 },
+    thresholds,
+    lineColorMode = "continuous",
+    lineColor = "var(--glucose-in-range)",
+    areaMode = "off",
+    areaOpacity = 0.5,
   }: Props = $props();
 
   /** Widest range label at this font, used to keep it inside the strip. */
@@ -136,82 +155,127 @@
         {yDomain}
         {padding}
       >
-        <Svg>
-          <ChartClipPath>
-            <!-- Glucose area fill -->
-            <Area
-              {data}
-              x={(d: GlucosePoint) => d.time}
-              y="sgv"
-              y0={() => yDomain[0]}
-              curve={curveMonotoneX}
-              fill="var(--glucose-in-range)"
-              class="opacity-20"
+        {#snippet children({ context })}
+          {@const lineStops = lineStopsFor(
+            lineColorMode,
+            thresholds,
+            context.yScale,
+            context.height
+          )}
+          {@const fillStops = fillStopsFor(
+            areaMode,
+            lineStops,
+            lineColor,
+            areaOpacity
+          )}
+          <Svg>
+            <ChartClipPath>
+              {#if fillStops}
+                <LinearGradient
+                  stops={fillStops}
+                  units="userSpaceOnUse"
+                  vertical
+                  y1="0"
+                  y2={String(context.height)}
+                >
+                  {#snippet children({ gradient })}
+                    <Area
+                      {data}
+                      x={(d: GlucosePoint) => d.time}
+                      y="sgv"
+                      y0={() => yDomain[0]}
+                      curve={curveMonotoneX}
+                      fill={gradient}
+                    />
+                  {/snippet}
+                </LinearGradient>
+              {/if}
+
+              {#if lineStops}
+                <LinearGradient
+                  stops={lineStops}
+                  units="userSpaceOnUse"
+                  vertical
+                  y1="0"
+                  y2={String(context.height)}
+                >
+                  {#snippet children({ gradient })}
+                    <Spline
+                      {data}
+                      x={(d: GlucosePoint) => d.time}
+                      y="sgv"
+                      curve={curveMonotoneX}
+                      stroke={gradient}
+                      class="stroke-1 fill-none"
+                    />
+                  {/snippet}
+                </LinearGradient>
+              {:else}
+                <Spline
+                  {data}
+                  x={(d: GlucosePoint) => d.time}
+                  y="sgv"
+                  curve={curveMonotoneX}
+                  stroke={lineColor}
+                  class="stroke-1 fill-none"
+                />
+              {/if}
+
+              <!-- Prediction line -->
+              {#if showPredictions && predictionData && predictionData.length > 0}
+                <Spline
+                  data={predictionData}
+                  x={(d: PredictionPoint) => d.time}
+                  y={(d: PredictionPoint) => d.value}
+                  curve={curveMonotoneX}
+                  class="stroke-primary/60 stroke-1 fill-none"
+                  stroke-dasharray="3,3"
+                />
+              {/if}
+            </ChartClipPath>
+            <!-- X axis -->
+            <Axis
+              placement="bottom"
+              ticks={4}
+              format={(v) => (v instanceof Date ? time(v) : String(v))}
+              tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
             />
+          </Svg>
 
-            <!-- Glucose line -->
-            <Spline
-              {data}
-              x={(d: GlucosePoint) => d.time}
-              y="sgv"
-              curve={curveMonotoneX}
-              class="stroke-glucose-in-range stroke-1 fill-none"
-            />
-
-            <!-- Prediction line -->
-            {#if showPredictions && predictionData && predictionData.length > 0}
-              <Spline
-                data={predictionData}
-                x={(d: PredictionPoint) => d.time}
-                y={(d: PredictionPoint) => d.value}
-                curve={curveMonotoneX}
-                class="stroke-primary/60 stroke-1 fill-none"
-                stroke-dasharray="3,3"
-              />
-            {/if}
-          </ChartClipPath>
-          <!-- X axis -->
-          <Axis
-            placement="bottom"
-            ticks={4}
-            format={(v) => (v instanceof Date ? time(v) : String(v))}
-            tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
-          />
-        </Svg>
-
-        <!-- Brush context for selection -->
-        <BrushContext
-          axis="x"
-          x={selectedXDomain ?? fullXDomain}
-          onBrushEnd={handleBrush}
-          onChange={handleBrush}
-          classes={{
-            range: "bg-primary/20 border border-primary/40 rounded",
-            handle: "bg-primary/60 hover:bg-primary/80 rounded-sm",
-          }}
-        >
-          {#snippet children({ state: bc })}
-            <!-- One label for the selected range, centred over the brush.
-                   This snippet renders in a container anchored at the chart's
-                   outer corner, while bc.range is measured from the plot's,
-                   so add the padding back or the label lands a gutter to the
-                   left and above the strip. Clamped to stay inside the strip
-                   when the brush hugs an edge, as it does at "now". -->
-            {#if bc.active && bc.x?.[0] != null && bc.x?.[1] != null}
-              <div
-                class="absolute text-2xs font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20 left-(--label-left) top-(--label-top) -translate-x-1/2"
-                style:--label-left="clamp({RANGE_LABEL_HALF_WIDTH}px, {padding.left +
-                  bc.range.x +
-                  bc.range.width / 2}px, calc(100% - {RANGE_LABEL_HALF_WIDTH}px))"
-                style:--label-top="{padding.top + bc.range.y - 18}px"
-              >
-                {formatDateTime(new Date(bc.x[0]))} - {formatDateTime(
-                  new Date(bc.x[1])
-                )}
-              </div>
-            {/if}
-          {/snippet}
-        </BrushContext>
+          <!-- Brush context for selection -->
+          <BrushContext
+            axis="x"
+            x={selectedXDomain ?? fullXDomain}
+            onBrushEnd={handleBrush}
+            onChange={handleBrush}
+            classes={{
+              range: "bg-primary/20 border border-primary/40 rounded",
+              handle: "bg-primary/60 hover:bg-primary/80 rounded-sm",
+            }}
+          >
+            {#snippet children({ state: bc })}
+              <!-- One label for the selected range, centred over the brush.
+                     This snippet renders in a container anchored at the chart's
+                     outer corner, while bc.range is measured from the plot's,
+                     so add the padding back or the label lands a gutter to the
+                     left and above the strip. Clamped to stay inside the strip
+                     when the brush hugs an edge, as it does at "now". -->
+              {#if bc.active && bc.x?.[0] != null && bc.x?.[1] != null}
+                <div
+                  class="absolute text-2xs font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20 left-(--label-left) top-(--label-top) -translate-x-1/2"
+                  style:--label-left="clamp({RANGE_LABEL_HALF_WIDTH}px, {padding.left +
+                    bc.range.x +
+                    bc.range.width / 2}px, calc(100% - {RANGE_LABEL_HALF_WIDTH}px))"
+                  style:--label-top="{padding.top + bc.range.y - 18}px"
+                >
+                  {formatDateTime(new Date(bc.x[0]))} - {formatDateTime(
+                    new Date(bc.x[1])
+                  )}
+                </div>
+              {/if}
+            {/snippet}
+          </BrushContext>
+        {/snippet}
       </Chart>
     </div>
 

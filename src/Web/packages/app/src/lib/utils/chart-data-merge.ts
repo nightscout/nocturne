@@ -1,6 +1,10 @@
 import type { CarbMarkerDto } from '$lib/api/generated/nocturne-api-client';
 import type { TransformedChartData } from '$lib/utils/chart-data-transform';
 
+// Either half may have seen the pump last, or neither.
+const latestOf = (a: number | null, b: number | null): number | null =>
+	a == null ? b : b == null ? a : Math.max(a, b);
+
 // An empty id is a missing one: rows keyed by it would collide on "".
 const hasId = (id: unknown): id is string => id != null && id !== '';
 
@@ -131,6 +135,7 @@ export function mergeChartData(
 			initial.basalDeliverySpans,
 			historical.basalDeliverySpans
 		),
+		lastPumpSyncMills: latestOf(initial.lastPumpSyncMills, historical.lastPumpSyncMills),
 
 		// Thresholds are profile-derived and identical across both halves, except
 		// glucoseYMax, which the server sizes to the max SGV it was asked for — the
@@ -272,6 +277,7 @@ export function replaceWindow(
 		activitySpans: swapSpans(current.activitySpans, recent.activitySpans),
 		tempBasalSpans: swapSpans(current.tempBasalSpans, recent.tempBasalSpans),
 		basalDeliverySpans: swapSpans(current.basalDeliverySpans, recent.basalDeliverySpans),
+		lastPumpSyncMills: latestOf(current.lastPumpSyncMills, recent.lastPumpSyncMills),
 		defaultBasalRate: current.defaultBasalRate,
 		thresholds: { ...current.thresholds, glucoseYMax },
 		maxIob: peak(recent.maxIob ?? 0, iobSeries.map((p) => p.value)),

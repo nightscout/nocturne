@@ -2,7 +2,8 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Moq;
 using Nocturne.API.Services.Profiles.Resolvers;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 
@@ -11,8 +12,6 @@ namespace Nocturne.API.Tests.Services.Profiles.Resolvers;
 public class ProfileVersionCacheTests : IDisposable
 {
     private readonly Mock<IBasalScheduleRepository> _repo = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessor = new();
-    private readonly Mock<ICategoryReadContext> _categoryReadContext = new();
     private readonly MemoryCache _memoryCache = new(new MemoryCacheOptions());
     private readonly ProfileVersionCache _sut;
 
@@ -25,10 +24,9 @@ public class ProfileVersionCacheTests : IDisposable
 
     public ProfileVersionCacheTests()
     {
-        _tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
         _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
             .ReturnsAsync(new[] { _second, _first });
-        _sut = new ProfileVersionCache(_tenantAccessor.Object, _categoryReadContext.Object, _memoryCache);
+        _sut = new ProfileVersionCache(TestTenantCache.Create(_memoryCache));
     }
 
     public void Dispose() => _memoryCache.Dispose();
@@ -90,52 +88,25 @@ public class ProfileVersionCacheTests : IDisposable
     public async Task KeepsTenantsApart()
     {
         await _sut.GetActiveAtAsync(_repo.Object, "Default", Day1, default);
-        _tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var otherTenant = new ProfileVersionCache(TestTenantCache.Create(_memoryCache, tenantId: Guid.NewGuid()));
 
-        await _sut.GetActiveAtAsync(_repo.Object, "Default", Day1, default);
+        await otherTenant.GetActiveAtAsync(_repo.Object, "Default", Day1, default);
 
         _repo.Verify(r => r.GetByProfileNameAsync("Default", default), Times.Exactly(2));
     }
 
-    [Fact]
-    public async Task HistoryClampedRequestsNeitherReadNorWriteTheCache()
+    [Theory]
+    [MemberData(nameof(NarrowedReaders.All), MemberType = typeof(NarrowedReaders))]
+    public async Task ANarrowedReaderNeverSharesTheOwnersVersions(string reader)
     {
-        _repo.Setup(r => r.GetActiveAtAsync("Default", Day9, default)).ReturnsAsync(_first);
-        _categoryReadContext.Setup(c => c.IsHistoryClamped).Returns(true);
+        var narrowed = new ProfileVersionCache(NarrowedReaders.Cache(reader, _memoryCache));
 
-        var clamped = await _sut.GetActiveAtAsync(_repo.Object, "Default", Day9, default);
-        _categoryReadContext.Setup(c => c.IsHistoryClamped).Returns(false);
-        var unclamped = await _sut.GetActiveAtAsync(_repo.Object, "Default", Day9, default);
-
-        clamped.Should().BeSameAs(_first);
-        unclamped.Should().BeSameAs(_second);
-        _repo.Verify(r => r.GetByProfileNameAsync("Default", default), Times.Once);
-    }
-
-    [Fact]
-    public async Task ShareDoesNotReadACachedOwnerEntry()
-    {
         await _sut.GetActiveAtAsync(_repo.Object, "Default", Day9, default);
-        _repo.Setup(r => r.GetActiveAtAsync("Default", Day9, default)).ReturnsAsync((BasalSchedule?)null);
-        _categoryReadContext.Setup(c => c.IsShare).Returns(true);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default)).ReturnsAsync([]);
+        var narrowedVersion = await narrowed.GetActiveAtAsync(_repo.Object, "Default", Day9, default);
+        var ownerVersion = await _sut.GetActiveAtAsync(_repo.Object, "Default", Day9, default);
 
-        var share = await _sut.GetActiveAtAsync(_repo.Object, "Default", Day9, default);
-
-        share.Should().BeNull();
-        _repo.Verify(r => r.GetActiveAtAsync("Default", Day9, default), Times.Once);
-    }
-
-    [Fact]
-    public async Task ShareLookupDoesNotPopulateTheCache()
-    {
-        _repo.Setup(r => r.GetActiveAtAsync("Default", Day9, default)).ReturnsAsync((BasalSchedule?)null);
-        _categoryReadContext.Setup(c => c.IsShare).Returns(true);
-        await _sut.GetActiveAtAsync(_repo.Object, "Default", Day9, default);
-        _categoryReadContext.Setup(c => c.IsShare).Returns(false);
-
-        var owner = await _sut.GetActiveAtAsync(_repo.Object, "Default", Day9, default);
-
-        owner.Should().BeSameAs(_second);
-        _repo.Verify(r => r.GetByProfileNameAsync("Default", default), Times.Once);
+        narrowedVersion.Should().BeNull("the owner's cached versions are not served");
+        ownerVersion.Should().BeSameAs(_second, "the narrowed reader's empty list is not written over them");
     }
 }

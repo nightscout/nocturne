@@ -14,6 +14,9 @@
   import PreludeQuickConnect from "$lib/components/PreludeQuickConnect.svelte";
   import type { UploaderApp } from "$lib/api/generated/nocturne-api-client";
   import KeyRound from "@lucide/svelte/icons/key-round";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import { create as createGrant } from "$lib/api/generated/directGrants.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import {
     getUploaderName,
@@ -23,11 +26,9 @@
   let {
     open = $bindable(false),
     selectedUploader = null,
-    onRequestApiKey,
   }: {
     open: boolean;
     selectedUploader: UploaderApp | null;
-    onRequestApiKey?: (label: string, scopes: string[]) => void;
   } = $props();
 
   const copy = createCopyFeedback();
@@ -36,12 +37,38 @@
     selectedUploader?.id === "xdrip" || selectedUploader?.id === "prelude",
   );
 
-  function handleRequestApiKey() {
-    if (!selectedUploader) return;
-    // Dialogs layer by declaration order rather than open order, so a second one opened over
-    // this one can land underneath it and take no input. Hand off by stepping aside.
-    open = false;
-    onRequestApiKey?.(getUploaderName(selectedUploader), ["health.readwrite"]);
+  let apiToken = $state<string | null>(null);
+  let apiTokenFor = $state<string | null>(null);
+  let apiTokenLoading = $state(false);
+  let apiTokenError = $state<string | null>(null);
+
+  // A key belongs to the uploader it was made for; switching uploaders starts over.
+  $effect(() => {
+    if (selectedUploader?.id !== apiTokenFor) {
+      apiToken = null;
+      apiTokenError = null;
+    }
+  });
+
+  async function generateApiToken() {
+    if (!selectedUploader || apiTokenLoading) return;
+    apiTokenLoading = true;
+    apiTokenError = null;
+    try {
+      const result = await createGrant({
+        label: getUploaderName(selectedUploader),
+        scopes: ["health.readwrite"],
+      });
+      apiToken = result.token ?? null;
+      apiTokenFor = selectedUploader.id ?? null;
+    } catch (err) {
+      apiTokenError = describeSubmitError(
+        err,
+        "Failed to generate API key. You can create one in the API tokens section.",
+      );
+    } finally {
+      apiTokenLoading = false;
+    }
   }
 
   function getPlatformIcon(platform?: string) {
@@ -114,18 +141,62 @@
           </div>
 
           {#if !hasOAuthFlow}
-          <div class="space-y-2">
-            <span class="text-sm text-muted-foreground">API Key</span>
-            <div>
-              <Button variant="outline" size="sm" onclick={handleRequestApiKey}>
-                <KeyRound class="mr-1.5 h-4 w-4" />
-                Generate API key
-              </Button>
-              <p class="text-xs text-muted-foreground mt-1.5">
-                Creates an API token pre-configured for {getUploaderName(selectedUploader)}
-              </p>
+            <div class="space-y-2">
+              <span class="text-sm text-muted-foreground">API Key</span>
+              {#if apiToken}
+                <div class="flex gap-2">
+                  <code
+                    class="flex-1 px-3 py-2 rounded-md bg-muted text-sm font-mono break-all"
+                  >
+                    {apiToken}
+                  </code>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label="Copy API key"
+                    onclick={() => apiToken && copy.copy(apiToken, "dialogToken")}
+                  >
+                    {#if copy.isCopied("dialogToken")}
+                      <Check class="h-4 w-4 text-success" />
+                    {:else}
+                      <Copy class="h-4 w-4" />
+                    {/if}
+                  </Button>
+                </div>
+                <p class="text-xs text-muted-foreground">
+                  Copy this now. It cannot be shown again.
+                </p>
+              {:else}
+                <div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onclick={generateApiToken}
+                    disabled={apiTokenLoading}
+                  >
+                    {#if apiTokenLoading}
+                      <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
+                    {:else}
+                      <KeyRound class="mr-1.5 h-4 w-4" />
+                    {/if}
+                    Generate API key
+                  </Button>
+                  <p class="text-xs text-muted-foreground mt-1.5">
+                    Creates an API key for {getUploaderName(selectedUploader)} with read and write access to health data.
+                  </p>
+                </div>
+                {#if apiTokenError}
+                  <p class="text-sm text-destructive">{apiTokenError}</p>
+                {/if}
+              {/if}
             </div>
-          </div>
+
+            {#if selectedUploader.id === "aaps"}
+              <p class="text-sm text-muted-foreground">
+                In AAPS, open Config Builder, then Synchronization, and select NSClient V3. In its
+                settings, paste the URL into Nightscout URL and the API key into NS access token.
+              </p>
+            {/if}
           {/if}
 
         <Separator />

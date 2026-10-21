@@ -94,13 +94,11 @@ public enum ConnectorPropertyKey
     FetchAllEventTypes,
     IgnoreZeroUnitBasal,
 
-    // Glooko-specific (appended so earlier members keep their values)
+    // Glooko-specific
     AutoClockCorrection,
 
-    // Google Health-specific (appended so earlier members keep their values)
+    // Google Health-specific
     ClientId,
-    ClientSecret,
-    CallbackUrl,
     ImportFrom,
     PreviewOnly,
     GrantedScopes,
