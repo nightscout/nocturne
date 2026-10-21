@@ -148,10 +148,12 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     {
         _progressReporter = progressReporter;
         var skippedBefore = _publisher?.SkippedDeleted ?? 0;
+        var refusedBefore = _publisher?.Refused ?? 0;
         try
         {
             var result = await body();
             result.ItemsSkipped = (_publisher?.SkippedDeleted ?? 0) - skippedBefore;
+            result.ItemsRefused = (_publisher?.Refused ?? 0) - refusedBefore;
             StandInFailureMessage(result);
             await ReportSyncOutcomeAsync(result.Success, FailureMessage(result), cancellationToken);
             return result;

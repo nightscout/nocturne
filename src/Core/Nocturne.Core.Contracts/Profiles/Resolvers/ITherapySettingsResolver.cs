@@ -18,9 +18,14 @@ public interface ITherapySettingsResolver
     Task<double> GetCarbAbsorptionRateAsync(long timeMills, string? specProfile = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the IANA timezone for the profile, or null if not set.
+    /// Returns the IANA timezone for the profile now, or null if not set.
     /// </summary>
     Task<string?> GetTimezoneAsync(string? specProfile = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the IANA timezone for the profile in force at the given time, or null if not set.
+    /// </summary>
+    Task<string?> GetTimezoneAtAsync(long timeMills, string? specProfile = null, CancellationToken ct = default);
 
     /// <summary>
     /// Returns the blood glucose units ("mg/dL" or "mmol/L") for the profile, or null if not set.

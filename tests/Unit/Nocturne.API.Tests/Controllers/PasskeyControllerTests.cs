@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Infrastructure;
@@ -1135,7 +1136,7 @@ public class PasskeyControllerTests : IDisposable
         var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
         StubSuccessfulAssertion(subjectId, "rhys");
         _totpService.Setup(s => s.GetCredentialCountAsync(subjectId)).ReturnsAsync(1);
-        _totpService.Setup(s => s.CreateStepUpTokenAsync(subjectId)).ReturnsAsync("step-up-token");
+        _totpService.Setup(s => s.CreateStepUpTokenAsync(subjectId, _tenantId, false)).ReturnsAsync("step-up-token");
 
         var result = await LoginCompleteAsync();
 
@@ -1148,6 +1149,10 @@ public class PasskeyControllerTests : IDisposable
             s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Never,
             "the second factor is still outstanding, so the passkey alone must not grant access");
+
+        _controller.HttpContext.Response.Headers.SetCookie.ToString()
+            .Should().Contain($"{SessionCookieExtensions.LastSignInCookieName}=passkey",
+                "the authenticator step that follows does not know which primary factor preceded it");
     }
 
     [Fact]
@@ -1169,7 +1174,7 @@ public class PasskeyControllerTests : IDisposable
         _sessionService.Verify(
             s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Once);
-        _totpService.Verify(s => s.CreateStepUpTokenAsync(It.IsAny<Guid>()), Times.Never);
+        _totpService.Verify(s => s.CreateStepUpTokenAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>()), Times.Never);
     }
 
     #endregion

@@ -2219,7 +2219,11 @@ public class DeduplicationService : IDeduplicationService
             StartedAt = DateTime.UtcNow
         };
 
-        var callerClamped = _categoryReadContext?.IsHistoryClamped == true;
+        var reader = TenantReader.Of(
+            tenantContext,
+            _categoryReadContext ?? throw new InvalidOperationException(
+                "Cannot start a deduplication job without the caller's read context: the job would read "
+                + "past the caller's history clamp."));
 
         _runningJobs[jobId] = status;
         _jobTenants[jobId] = tenantContext.TenantId;
@@ -2228,14 +2232,7 @@ public class DeduplicationService : IDeduplicationService
         // Start the job in the background with its own scope
         _ = Task.Run(async () =>
         {
-            // The job outlives the request, so it runs in a scope of its own: the caller's tenant
-            // and history clamp, its writes attributed to the system.
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(tenantContext);
-            if (callerClamped)
-                scope.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
-            if (scope.ServiceProvider.GetService<IAuditContext>() is ISystemAttributable audit)
-                audit.AttributeToSystem(JobAuditEndpoint);
+            await using var scope = TenantJobScope.OpenFor(_scopeFactory, reader, JobAuditEndpoint);
 
             var scopedService = scope.ServiceProvider.GetRequiredService<IDeduplicationService>();
 

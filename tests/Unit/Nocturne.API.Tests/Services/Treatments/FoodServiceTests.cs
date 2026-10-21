@@ -162,9 +162,7 @@ public class FoodServiceTests
         };
 
         _mockFoodRepository
-            .Setup(x => x.GetFoodWithAdvancedFilterAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(x => x.SearchFoodAsync(It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedFoods);
 
         // Act
@@ -174,9 +172,7 @@ public class FoodServiceTests
         result.Should().NotBeNull();
         result.Should().BeEquivalentTo(expectedFoods);
         _mockFoodRepository.Verify(
-            x => x.GetFoodWithAdvancedFilterAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()),
+            x => x.SearchFoodAsync(It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -201,9 +197,7 @@ public class FoodServiceTests
         };
 
         _mockFoodRepository
-            .Setup(x => x.GetFoodWithAdvancedFilterAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(x => x.SearchFoodAsync(It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedFoods);
 
         // Act
@@ -213,7 +207,7 @@ public class FoodServiceTests
         result.Should().NotBeNull();
         result.Should().BeEquivalentTo(expectedFoods);
         _mockFoodRepository.Verify(
-            x => x.GetFoodWithAdvancedFilterAsync(count, skip, find, false, It.IsAny<CancellationToken>()),
+            x => x.SearchFoodAsync(find, count, skip, It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -226,9 +220,7 @@ public class FoodServiceTests
         // Arrange
         var expectedException = new InvalidOperationException("Database error");
         _mockFoodRepository
-            .Setup(x => x.GetFoodWithAdvancedFilterAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(x => x.SearchFoodAsync(It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(expectedException);
 
         // Act & Assert

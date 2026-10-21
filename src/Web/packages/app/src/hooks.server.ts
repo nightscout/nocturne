@@ -34,6 +34,7 @@ import * as main from '../../../locales/main.loader.server.svelte.js'
 import * as js from '../../../locales/js.loader.server.js'
 import { locales } from '../../../locales/data.js'
 import supportedLocales from '../../../supportedLocales.json';
+import { renderColorScheme } from "$lib/server/color-scheme-html";
 import { LANGUAGE_COOKIE_NAME } from "$lib/stores/appearance-store.svelte";
 
 // Await so no request can render before catalogs are registered: a lookup
@@ -543,6 +544,11 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
   return response;
 };
 
+const colorSchemeHandle: Handle = ({ event, resolve }) =>
+  resolve(event, {
+    transformPageChunk: ({ html }) => renderColorScheme(html, event.cookies),
+  });
+
 /**
  * Liveness probe for the Aspire health check. Answers before any auth or
  * session work: probes carry no cookies and no forwarded tenant host, so
@@ -563,4 +569,4 @@ const healthHandle: Handle = async ({ event, resolve }) => {
 // none of the locals they set and the API authenticates it and answers its setup/recovery state
 // itself, so running them first cost every browser /api call three serial API round-trips, and let
 // a session refresh in authHandle rotate the refresh token the proxy then forwarded stale.
-export const handle: Handle = sequence(healthHandle, requestContextHandle, securityHeadersHandle, proxyHandle, resetBitsId, statusProbeHandle, authHandle, readinessHandle, apiClientHandle, locale);
+export const handle: Handle = sequence(healthHandle, requestContextHandle, securityHeadersHandle, proxyHandle, resetBitsId, colorSchemeHandle, statusProbeHandle, authHandle, readinessHandle, apiClientHandle, locale);

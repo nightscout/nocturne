@@ -189,13 +189,20 @@ public static class DatabaseInitializationExtensions
                 var governingScope = ShareDataCategories.GoverningScopeFor(table);
                 var recencyColumn = ShareDataCategories.RecencyColumnFor(table);
                 var spanEndColumn = ShareDataCategories.SpanEndColumnFor(table);
+                var parent = ShareDataCategories.ParentRecencyFor(table);
                 // Wrap each table's DROP+CREATE in a transaction so the "RLS enabled, no
                 // restrictive policy" state is never observable to a concurrent reader.
                 await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
                 await using (var command = connection.CreateCommand())
                 {
                     command.Transaction = transaction;
-                    command.CommandText = ShareRlsPolicy.BuildPolicySql(table, governingScope, recencyColumn, spanEndColumn);
+                    command.CommandText = ShareRlsPolicy.BuildPolicySql(
+                        table, governingScope, recencyColumn, spanEndColumn,
+                        ShareDataCategories.RecencyIsUnixMillis(table),
+                        parent,
+                        parent is null ? null : ShareDataCategories.RecencyColumnFor(parent.Table),
+                        parent is null ? null : ShareDataCategories.SpanEndColumnFor(parent.Table),
+                        ShareDataCategories.OpenSpanBoundFor(table));
                     await command.ExecuteNonQueryAsync(cancellationToken);
                 }
                 await transaction.CommitAsync(cancellationToken);

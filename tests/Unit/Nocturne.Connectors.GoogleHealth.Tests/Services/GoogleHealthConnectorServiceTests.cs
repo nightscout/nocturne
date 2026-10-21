@@ -915,7 +915,8 @@ public class GoogleHealthConnectorServiceTests
         private Dictionary<string, string> secrets = new(StringComparer.OrdinalIgnoreCase)
         {
             ["refreshToken"] = "refresh",
-            ["grantedScopes"] = GoogleHealthClient.MetricsScope
+            ["grantedScopes"] = GoogleHealthClient.MetricsScope,
+            ["accountKey"] = "account"
         };
 
         public Fixture(Func<HttpRequestMessage, HttpResponseMessage> responder, TimeProvider? timeProvider = null)
@@ -1005,7 +1006,9 @@ public class GoogleHealthConnectorServiceTests
                 new HttpClient(),
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
                 new GoogleHealthClient(new HttpClient(handler, false)),
-                new GoogleHealthSessionStore(configurations.Object, oauth, TestPlatform.Options()),
+                new GoogleHealthSessionStore(configurations.Object, oauth,
+                    Mock.Of<IGoogleHealthGrantHolders>(), tenant.Object, TestPlatform.Options(),
+                    NullLogger<GoogleHealthSessionStore>.Instance),
                 Writer.Object,
                 coordinator.Object,
                 configurations.Object,

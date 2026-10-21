@@ -229,6 +229,25 @@
       firedThisWeek === fetchedHistory.length &&
       (history?.totalCount ?? 0) > fetchedHistory.length}
 
+    {@const needsReview = rules.filter(
+      (r) => !!r.reviewReason || (r.conditionIssues?.length ?? 0) > 0,
+    ).length}
+    {#if needsReview > 0 && canManageAlerts}
+      <div
+        role="status"
+        class="flex items-center gap-3 rounded-lg border px-4 py-3 {severity('warning', 'strip')}"
+      >
+        <AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" />
+        <p class="text-sm font-medium">
+          {needsReview === 1
+            ? "1 alert rule needs review."
+            : `${needsReview} alert rules need review.`}
+          An update changed or turned off rules set up in an older format, or their conditions
+          may not alert as set. They are marked below.
+        </p>
+      </div>
+    {/if}
+
     {#if dnd && isDndInEffect(dnd)}
       <DndNoticeStrip
         onDisableDnd={canManageAlerts && isDndManualActive(dnd) ? () => handleDisableDnd(dnd) : undefined}

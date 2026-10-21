@@ -16,12 +16,12 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
     private const long From = 1705320000000;
     private const long To = From + 3_600_000;
 
-    private readonly Mock<IActiveProfileResolver> _activeProfile = new();
+    private readonly Mock<IActiveProfileResolver> _activeProfile = ActiveProfileResolverMock.WithDefault();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
 
     public BasalSegmentServiceCacheTests() =>
         _activeProfile
-            .Setup(a => a.GetActiveProfileSpansForRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Setup(a => a.GetProfileSpansForRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
     public void Dispose() => _cache.Dispose();
@@ -30,6 +30,7 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
         _activeProfile.Object,
         Mock.Of<IBasalScheduleRepository>(),
         Mock.Of<ITherapySettingsRepository>(),
+        Mock.Of<IPatientRecordRepository>(),
         cache);
 
     private BasalSegmentService Service() => Service(TestTenantCache.Create(_cache));
@@ -41,7 +42,7 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
 
     private void VerifySpanReads(int times) =>
         _activeProfile.Verify(
-            a => a.GetActiveProfileSpansForRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()),
+            a => a.GetProfileSpansForRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()),
             Times.Exactly(times));
 
     [Fact]

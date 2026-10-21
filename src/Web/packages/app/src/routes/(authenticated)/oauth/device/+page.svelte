@@ -22,6 +22,7 @@
     getOAuthScopeDescription,
     isSensitiveDeviceScope,
   } from "$lib/constants/oauth-scopes";
+  import DeviceAppClaimNotice from "$lib/components/auth/DeviceAppClaimNotice.svelte";
 
   // Auth guard: redirect to login if not authenticated
   $effect(() => {
@@ -80,7 +81,7 @@
 </script>
 
 <svelte:head>
-  <title>{deviceInfo ? `Authorize ${appName}` : "Link a Device"} - Nocturne</title>
+  <title>{deviceInfo ? "Authorize a Device" : "Link a Device"} - Nocturne</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-background p-4">
@@ -147,25 +148,12 @@
           Authorize Application
         </Card.Title>
         <Card.Description>
-          <span class="font-semibold text-foreground">{appName}</span> wants to access
-          your Nocturne data.
+          A device wants to access your Nocturne data.
         </Card.Description>
       </Card.Header>
 
       <Card.Content class="space-y-4">
-        {#if !deviceInfo.isKnown}
-          <div
-            class="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 p-3"
-          >
-            <AlertTriangle
-              class="mt-0.5 h-4 w-4 shrink-0 text-warning"
-            />
-            <p class="text-sm text-warning">
-              This application is not in the Nocturne known app directory. Only
-              approve if you trust this application.
-            </p>
-          </div>
-        {/if}
+        <DeviceAppClaimNotice claimedName={appName} />
 
         <Separator />
 

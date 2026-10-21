@@ -238,7 +238,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         Assert.Single(await db.StepCounts.AsNoTracking().ToListAsync());
         Assert.Equal(0, await db.Database.SqlQueryRaw<int>("""
             SELECT count(*)::integer AS "Value" FROM pg_class
-            WHERE relname LIKE 'google_health_%'
+            WHERE relname LIKE 'google_health_%' AND relname <> 'google_health_grant_holders'
             """).SingleAsync());
     }
 

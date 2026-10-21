@@ -45,6 +45,14 @@ public interface IDataEventSink<in T>
     Task OnDeletedAsync(T? item, CancellationToken ct = default) => Task.CompletedTask;
 
     /// <summary>
+    /// Raised by the V4 glucose repositories for every committed batch, whatever its
+    /// <see cref="V4.WriteOrigin"/>, with each record the batch created, updated or deleted, and only for
+    /// <c>Entry</c> sinks. Deletes that bypass the repository broadcast (delete by source, delete by time
+    /// range) do not raise it. A sink that must see backfills and imports overrides it.
+    /// </summary>
+    Task OnWrittenAsync(IReadOnlyList<T> items, CancellationToken ct = default) => Task.CompletedTask;
+
+    /// <summary>
     /// Called after a bulk delete operation has completed.
     /// </summary>
     Task OnBulkDeletedAsync(long deletedCount, CancellationToken ct = default) => Task.CompletedTask;

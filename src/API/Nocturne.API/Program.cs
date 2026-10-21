@@ -148,6 +148,7 @@ builder.Services.AddHostedService<AuditRetentionService>();
 builder.Services.AddHostedService<SoftDeleteCleanupService>();
 builder.Services.AddSingleton<IGoogleHealthCoordinatorStore, PostgresGoogleHealthCoordinatorStore>();
 builder.Services.AddSingleton<GoogleHealthCoordinator>();
+builder.Services.AddSingleton<IGoogleHealthGrantHolders, PostgresGoogleHealthGrantHolders>();
 builder.Services.AddSingleton<IGoogleHealthSyncCoordinator>(provider =>
     provider.GetRequiredService<GoogleHealthCoordinator>());
 builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
@@ -386,6 +387,9 @@ app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseMiddleware<TenantSetupMiddleware>();
 app.UseMiddleware<AuthenticationMiddleware>();
 app.UseMiddleware<MemberScopeMiddleware>();
+app.UseWhen(
+    context => context.Request.Path.StartsWithSegments("/hubs"),
+    hubs => hubs.UseMiddleware<ReaderRecordingMiddleware>());
 app.UseMiddleware<AuditContextMiddleware>();
 
 // There is no app.UseAuthentication() call here, and adding one would be a security regression.

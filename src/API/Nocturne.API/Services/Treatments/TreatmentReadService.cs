@@ -1,4 +1,6 @@
+using System.Data.Common;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts;
@@ -9,6 +11,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Infrastructure.Data.Mappers;
 
@@ -100,6 +103,7 @@ public class TreatmentReadService : ITreatmentStore
                     page, page.Count == 0 ? null : page.Max(t => t.SrvModified ?? t.Mills), page.Count == 0);
             },
             treatment => treatment.IsValid == false,
+            treatment => treatment.Id,
             after,
             ModifiedSearch.ArrivesInOrder(query.SortField, descending) ? (long)query.Count + query.Skip : null,
             ModifiedSearch.MaxRead,
@@ -206,33 +210,65 @@ public class TreatmentReadService : ITreatmentStore
 
     /// <inheritdoc />
     public async Task<BulkWrite<Treatment>> CreateAsync(
-        IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
+        IReadOnlyList<Treatment> treatments, CancellationToken ct = default, ICollection<Treatment>? stored = null)
     {
         var results = new List<Treatment>();
+        var rejected = new List<BulkWriteRejection<Treatment>>();
         var skippedDeleted = 0;
 
-        foreach (var treatment in treatments)
+        for (var i = 0; i < treatments.Count; i++)
         {
+            var treatment = treatments[i];
+            DecompositionResult? result = null;
             try
             {
-                var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
+                result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
                 skippedDeleted += result.SkippedDeleted;
-                results.Add(await ToCreatedAsync(treatment, result, ct));
+                var created = await ToCreatedAsync(treatment, result, ct);
+                results.Add(created);
+                stored?.Add(created);
             }
-            catch (OperationCanceledException)
+            catch (DbUpdateException ex) when (result is null && StoreRefusal.ReasonFor(ex) is { } reason)
             {
-                // Every later call on a canceled token throws too, so catching it here would log
-                // each remaining treatment as a failure instead of ending the batch.
-                throw;
+                rejected.Add(Reject(i, treatment, ex, reason));
             }
-            catch (Exception ex)
+            catch (TreatmentMappingException ex)
             {
-                _logger.LogError(ex, "Failed to decompose treatment {Id}", treatment.Id);
+                rejected.Add(Reject(i, treatment, ex, ex.Message));
+            }
+            catch (DbUpdateException ex) { throw Stopped(ex); }
+            catch (DbException ex) { throw Stopped(ex); }
+            catch (TimeoutException ex) { throw Stopped(ex); }
+            catch (InvalidOperationException ex) { throw Stopped(ex); }
+            catch (OperationCanceledException ex) { throw Stopped(ex); }
+
+            TreatmentBatchFailedException Stopped(Exception ex)
+            {
+                _logger.LogError(ex, "Failed to store treatment {Id}; ending the batch", treatment.Id);
+                _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
+                var written = result is null ? results : [.. results, treatment];
+                if (result is not null)
+                    stored?.Add(treatment);
+                return new TreatmentBatchFailedException(
+                    new BulkWrite<Treatment>(written, skippedDeleted) { Rejected = rejected },
+                    i, treatments.Count, failedOneStored: result is not null, ex);
             }
         }
 
         _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
-        return new BulkWrite<Treatment>(results, skippedDeleted);
+        return new BulkWrite<Treatment>(results, skippedDeleted) { Rejected = rejected };
+    }
+
+    /// <summary>
+    /// A treatment whose write fails the same way on every attempt is answered as refused and the
+    /// batch goes on, so neither a client resending the batch nor a connector re-reading the page
+    /// is held on it forever. The records written for it before the refusal stay written.
+    /// </summary>
+    private BulkWriteRejection<Treatment> Reject(int index, Treatment treatment, Exception ex, string reason)
+    {
+        _logger.LogRefused(nameof(Treatment), reason, treatment.DataSource ?? "api", ex);
+        return new BulkWriteRejection<Treatment>(
+            index, treatment, $"{reason}; parts of the treatment may be stored");
     }
 
     /// <inheritdoc />
@@ -337,7 +373,7 @@ public class TreatmentReadService : ITreatmentStore
         var bolusCount = await _bolusRepo.CountAsync(from, to, ct);
         var carbCount = await _carbIntakeRepo.CountAsync(from, to, ct);
         var bgCheckCount = await _bgCheckRepo.CountAsync(from, to, ct);
-        var noteCount = await _noteRepo.CountAsync(from, to, ct);
+        var noteCount = await _projection.CountNotesServedApartAsync(fromMills, toMills, ct);
         var deviceEventCount = await _deviceEventRepo.CountAsync(from, to, ct);
         var tempBasalCount = await _tempBasalRepo.CountAsync(from, to, ct);
         var bolusCalcCount = await _bolusCalcRepo.CountAsync(from, to, ct);
@@ -395,8 +431,8 @@ public class TreatmentReadService : ITreatmentStore
 
     /// <summary>
     /// The stored record a client-sent treatment id names, or none and the id to look a state span up
-    /// by. A Note a served span's or activation's treatment wrote beside it, before notes were kept on
-    /// the span, is served as that span or activation, so it resolves to it.
+    /// by. A Note a treatment wrote beside another record is served as part of that record, so it
+    /// resolves to it; see <see cref="Nocturne.API.Services.V4.LegacyTreatmentTables.NotesServedWithAnotherRecord"/>.
     /// </summary>
     private async Task<(StoredRecord? Stored, string SpanId)> ResolveAsync(string id, CancellationToken ct)
     {
@@ -406,8 +442,8 @@ public class TreatmentReadService : ITreatmentStore
         if (stored.Record is not Note { LegacyId: { Length: > 0 } legacyId })
             return (stored, id);
 
-        if (await FindServedActivationAsync(new RecordKey.LegacyId(legacyId), ct) is { } activation)
-            return (activation, id);
+        if (await FindServingRecordAsync(new RecordKey.LegacyId(legacyId), ct) is { } holder)
+            return (holder, id);
 
         return await _projection.GetStateSpanTreatmentIdAsync(legacyId, ct) == legacyId
             ? (null, legacyId)
@@ -431,20 +467,23 @@ public class TreatmentReadService : ITreatmentStore
     {
         foreach (var key in RecordKeysFor(id))
         {
-            var stored = await FindAsync(_tempBasalRepo, key, ct)
-                ?? await FindAsync(_bolusRepo, key, ct)
-                ?? await FindAsync(_carbIntakeRepo, key, ct)
-                ?? await FindAsync(_bgCheckRepo, key, ct)
-                ?? await FindAsync(_deviceEventRepo, key, ct)
-                ?? await FindAsync(_bolusCalcRepo, key, ct)
-                ?? await FindServedActivationAsync(key, ct)
-                ?? await FindAsync(_noteRepo, key, ct);
+            var stored = await FindServingRecordAsync(key, ct) ?? await FindAsync(_noteRepo, key, ct);
             if (stored is not null)
                 return stored;
         }
 
         return null;
     }
+
+    /// <summary>The stored record a key names, the Notes left out.</summary>
+    private async Task<StoredRecord?> FindServingRecordAsync(RecordKey key, CancellationToken ct) =>
+        await FindAsync(_tempBasalRepo, key, ct)
+            ?? await FindAsync(_bolusRepo, key, ct)
+            ?? await FindAsync(_carbIntakeRepo, key, ct)
+            ?? await FindAsync(_bgCheckRepo, key, ct)
+            ?? await FindAsync(_deviceEventRepo, key, ct)
+            ?? await FindAsync(_bolusCalcRepo, key, ct)
+            ?? await FindServedActivationAsync(key, ct);
 
     /// <summary>
     /// A UUID is a record's own id or a client's legacy id. A 24-hex id is a client's legacy id, the

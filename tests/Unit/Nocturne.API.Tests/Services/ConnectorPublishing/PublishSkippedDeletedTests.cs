@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.EntityFrameworkCore;
 using Moq;
+using Npgsql;
 using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
@@ -99,6 +101,67 @@ public class PublishSkippedDeletedTests : IDisposable
 
         published.Should().BeTrue();
         _tally.SkippedDeleted.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_treatment_that_can_never_be_stored_does_not_stall_the_publish()
+    {
+        var decomposer = new Mock<ITreatmentDecomposer>();
+        decomposer
+            .Setup(d => d.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult());
+        decomposer
+            .Setup(d => d.DecomposeAsync(It.Is<Treatment>(t => t.Id == "t-1"), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DbUpdateException("refused", new PostgresException("value too long", "ERROR", "ERROR", "22001")));
+
+        var published = await TreatmentPublisherOver(decomposer).PublishTreatmentsAsync(
+            [new Treatment { Id = "t-1", EventType = "Note" }, new Treatment { Id = "t-2", EventType = "Note" }],
+            "nightscout", WriteOrigin.Backfill);
+
+        published.Should().BeTrue();
+        _tally.Refused.Should().Be(1);
+        decomposer.Verify(
+            d => d.DecomposeAsync(It.Is<Treatment>(t => t.Id == "t-2"), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task A_failed_treatment_batch_still_counts_what_its_stored_prefix_skipped()
+    {
+        var decomposer = new Mock<ITreatmentDecomposer>();
+        decomposer
+            .Setup(d => d.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult { SkippedDeleted = 1 });
+        decomposer
+            .Setup(d => d.DecomposeAsync(It.Is<Treatment>(t => t.Id == "t-2"), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException());
+
+        var published = await TreatmentPublisherOver(decomposer).PublishTreatmentsAsync(
+            [new Treatment { Id = "t-1", EventType = "Note" }, new Treatment { Id = "t-2", EventType = "Note" }],
+            "nightscout", WriteOrigin.Backfill);
+
+        published.Should().BeFalse();
+        _tally.SkippedDeleted.Should().Be(1);
+    }
+
+    private TreatmentPublisher TreatmentPublisherOver(Mock<ITreatmentDecomposer> decomposer)
+    {
+        var store = new TreatmentReadService(
+            Mock.Of<IV4ToLegacyProjectionService>(), decomposer.Object, Mock.Of<IDecompositionPipeline>(),
+            Mock.Of<ITempBasalRepository>(), Mock.Of<IBolusRepository>(), Mock.Of<ICarbIntakeRepository>(),
+            Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
+            Mock.Of<IBolusCalculationRepository>(), Mock.Of<IProfileActivationRepository>(), Mock.Of<IStateSpanService>(), NullLogger<TreatmentReadService>.Instance);
+        var service = new TreatmentService(
+            store, decomposer.Object, Mock.Of<ITreatmentCache>(), Mock.Of<IDataEventSink<Treatment>>(),
+            Mock.Of<IPatientInsulinRepository>(), NullLogger<TreatmentService>.Instance);
+        return new TreatmentPublisher(
+            new TestNocturneDbContextFactory(_context), service, decomposer.Object, Mock.Of<ITreatmentCache>(),
+            Mock.Of<IBolusRepository>(), Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(),
+            Mock.Of<IBolusCalculationRepository>(), Mock.Of<ITempBasalRepository>(),
+            Mock.Of<IBasalInjectionRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
+            Mock.Of<IPatientInsulinRepository>(), Mock.Of<IBasalRateResolver>(), Mock.Of<ITherapySettingsResolver>(),
+            Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), _tally,
+            NullLogger<TreatmentPublisher>.Instance);
     }
 
     [Fact]

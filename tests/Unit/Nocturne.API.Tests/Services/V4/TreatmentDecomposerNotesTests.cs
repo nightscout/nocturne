@@ -65,6 +65,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             profileDecomposerMock.Object,
             activeProfileResolverMock.Object,
             insulinRepoMock.Object,
+            TempBasalTestDeps.Unscheduled(),
             Mock.Of<IAuditContext>(),
             NullLogger<TreatmentDecomposer>.Instance);
     }

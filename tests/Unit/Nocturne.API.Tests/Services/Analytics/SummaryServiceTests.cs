@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Profiles;
+using Nocturne.API.Tests.Services.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
@@ -38,7 +39,7 @@ public class SummaryServiceTests
     {
         _mockDDataService = new Mock<IDDataService>();
         _mockPropertiesService = new Mock<IPropertiesService>();
-        _mockActiveProfileResolver = new Mock<IActiveProfileResolver>();
+        _mockActiveProfileResolver = ActiveProfileResolverMock.WithDefault();
         _mockTherapySettings = new Mock<ITherapySettingsRepository>();
         _mockTherapySettings
             .Setup(x => x.GetDefaultsAsync(It.IsAny<CancellationToken>()))
@@ -489,6 +490,42 @@ public class SummaryServiceTests
         result.Cage.Should().Be(48);
         result.Sage.Should().Be(72);
         result.Battery.Should().Be(85);
+    }
+
+    [Fact]
+    public void ProcessTempBasals_PercentTemp_ReportsTheRateItResolvedTo()
+    {
+        var profile = new ProfileData
+        {
+            Basal = new List<TimeValue> { new() { Time = "00:00", Value = 0.6 } },
+        };
+        var start = DateTimeOffset.UtcNow.AddMinutes(-40).ToUnixTimeMilliseconds();
+        var temps = new List<Treatment>
+        {
+            new() { EventType = "Temp Basal", Mills = start, Duration = 30, Percent = -50, DeliveredRate = 0.4 },
+        };
+
+        var result = _service.ProcessTempBasals(profile, temps, start - 1);
+
+        result.Should().Contain(t => t.Start == start).Which.Absolute.Should().Be(0.4);
+    }
+
+    [Fact]
+    public void ProcessTempBasals_PercentTempOfUnknownRate_LeavesTheProfileBasal()
+    {
+        var profile = new ProfileData
+        {
+            Basal = new List<TimeValue> { new() { Time = "00:00", Value = 0.6 } },
+        };
+        var start = DateTimeOffset.UtcNow.AddMinutes(-40).ToUnixTimeMilliseconds();
+        var temps = new List<Treatment>
+        {
+            new() { EventType = "Temp Basal", Mills = start, Duration = 30, Percent = -50 },
+        };
+
+        var result = _service.ProcessTempBasals(profile, temps, start - 1);
+
+        result.Should().NotContain(t => t.Absolute == 0);
     }
 
     [Fact]

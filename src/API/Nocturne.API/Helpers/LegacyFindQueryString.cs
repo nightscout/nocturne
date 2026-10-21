@@ -21,7 +21,7 @@ public static class LegacyFindQueryString
         if (queryString.StartsWith('?'))
             queryString = queryString[1..];
 
-        if (queryString.Contains("find[") || queryString.Contains("find%5B", StringComparison.OrdinalIgnoreCase))
+        if (CarriesFindKeys(queryString))
             return queryString;
 
         return string.IsNullOrEmpty(boundFind) ? null : boundFind;
@@ -34,4 +34,14 @@ public static class LegacyFindQueryString
     /// refuse it too through <see cref="FindQuery.IsEmpty"/>.
     /// </summary>
     public static bool HasConditions(string? find) => !FindQuery.Parse(find).IsEmpty;
+
+    /// <summary>
+    /// <c>true</c> when <paramref name="find"/> is a query string with <c>find[…]</c> keys of which the
+    /// parser can read none, so it names no condition and is not an activity type either.
+    /// </summary>
+    public static bool IsUnreadableQueryString(string? find) =>
+        find is not null && CarriesFindKeys(find) && FindQuery.Parse(find).IsEmpty;
+
+    private static bool CarriesFindKeys(string queryString) =>
+        queryString.Contains("find[") || queryString.Contains("find%5B", StringComparison.OrdinalIgnoreCase);
 }

@@ -28,12 +28,14 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     private readonly ICarbRatioScheduleRepository _carbRatioScheduleRepo;
     private readonly ISensitivityScheduleRepository _sensitivityScheduleRepo;
     private readonly ITargetRangeScheduleRepository _targetRangeScheduleRepo;
+    private readonly ITempBasalRateReresolver _tempBasalRates;
 
     /// <param name="therapySettingsRepo">Repository for <see cref="V4Models.TherapySettings"/> records.</param>
     /// <param name="basalScheduleRepo">Repository for <see cref="V4Models.BasalSchedule"/> records.</param>
     /// <param name="carbRatioScheduleRepo">Repository for <see cref="V4Models.CarbRatioSchedule"/> records.</param>
     /// <param name="sensitivityScheduleRepo">Repository for <see cref="V4Models.SensitivitySchedule"/> records.</param>
     /// <param name="targetRangeScheduleRepo">Repository for <see cref="V4Models.TargetRangeSchedule"/> records.</param>
+    /// <param name="tempBasalRates">Re-resolves the percent temp basals a written basal schedule covers.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public ProfileDecomposer(
         ITherapySettingsRepository therapySettingsRepo,
@@ -41,6 +43,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         ICarbRatioScheduleRepository carbRatioScheduleRepo,
         ISensitivityScheduleRepository sensitivityScheduleRepo,
         ITargetRangeScheduleRepository targetRangeScheduleRepo,
+        ITempBasalRateReresolver tempBasalRates,
         ILogger<ProfileDecomposer> logger)
         : base(logger)
     {
@@ -49,6 +52,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         _carbRatioScheduleRepo = carbRatioScheduleRepo;
         _sensitivityScheduleRepo = sensitivityScheduleRepo;
         _targetRangeScheduleRepo = targetRangeScheduleRepo;
+        _tempBasalRates = tempBasalRates;
     }
 
     /// <inheritdoc />
@@ -69,12 +73,21 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// id they would fork off the settings row they belong to rather than join it.
     /// </para>
     /// </remarks>
-    public Task<V4Models.DecompositionResult> DecomposeBatchAsync(
+    public async Task<V4Models.DecompositionResult> DecomposeBatchAsync(
         IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default)
-        => DecomposeCoreAsync(profiles, origin, ct);
+    {
+        var changed = new List<(string ProfileName, DateTime Start)>();
+        var result = await DecomposeCoreAsync(profiles, origin, changed, ct);
+        await _tempBasalRates.AfterSchedulesWrittenAsync(changed, ct);
+        return result;
+    }
 
+    /// <param name="changed">Receives the store versions whose basal schedule or settings changed.</param>
     private async Task<V4Models.DecompositionResult> DecomposeCoreAsync(
-        IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct)
+        IReadOnlyList<Profile> profiles,
+        WriteOrigin origin,
+        List<(string ProfileName, DateTime Start)> changed,
+        CancellationToken ct)
     {
         var firstMinted = Guid.CreateVersion7();
         var result = new V4Models.DecompositionResult { CorrelationId = firstMinted };
@@ -106,6 +119,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             : (await _therapySettingsRepo.GetDefaultsAsync(ct))
                 .Select(d => d.LegacyId).OfType<string>().ToHashSet(StringComparer.Ordinal);
 
+        var writtenSince = DateTime.UtcNow;
         var anchors = await _therapySettingsRepo.BulkUpsertByLegacyIdAsync(
             entries.Select(e => MapToTherapySettings(
                 e.Profile, e.Data, e.StoreName, e.LegacyId,
@@ -113,6 +127,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
                 e.MintedCorrelationId)).ToList(),
             origin, preserveStoredCorrelationId: true, ct);
         Record(result, anchors);
+        changed.AddRange(ChangedSince(anchors, writtenSince));
 
         if (claim.Claims)
         {
@@ -136,9 +151,10 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         if (groups.Count == 0)
             return result;
 
-        Record(result, await _basalScheduleRepo.BulkUpsertByLegacyIdAsync(
+        var basal = await _basalScheduleRepo.BulkUpsertByLegacyIdAsync(
             groups.Select(g => MapToBasalSchedule(g.Entry.Profile, g.Entry.Data, g.Entry.StoreName, g.Entry.LegacyId, g.CorrelationId)).ToList(),
-            origin, ct: ct));
+            origin, ct: ct);
+        Record(result, basal);
         Record(result, await _carbRatioScheduleRepo.BulkUpsertByLegacyIdAsync(
             groups.Select(g => MapToCarbRatioSchedule(g.Entry.Profile, g.Entry.Data, g.Entry.StoreName, g.Entry.LegacyId, g.CorrelationId)).ToList(),
             origin, ct: ct));
@@ -146,8 +162,10 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             groups.Select(g => MapToSensitivitySchedule(g.Entry.Profile, g.Entry.Data, g.Entry.StoreName, g.Entry.LegacyId, g.CorrelationId)).ToList(),
             origin, ct: ct));
         Record(result, await _targetRangeScheduleRepo.BulkUpsertByLegacyIdAsync(
-            groups.Select(g => MapToTargetRangeSchedule(g.Entry.Profile, g.Entry.Data, g.Entry.StoreName, g.Entry.LegacyId, g.CorrelationId)).ToList(),
+            groups.Select(g => MapToTargetRangeSchedule(g.Entry.Profile, g.Entry.Data, g.Entry.StoreName, g.Entry.LegacyId, g.CorrelationId, Logger)).ToList(),
             origin, ct: ct));
+
+        changed.AddRange(ChangedSince(basal, writtenSince));
 
         return result;
     }
@@ -171,13 +189,13 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         var newest = entries
             .Select(e => e.Profile)
             .Distinct()
-            .OrderByDescending(p => p.Mills)
+            .OrderByDescending(VersionStart)
             .ThenByDescending(p => p.Id, StringComparer.Ordinal)
             .First();
 
         var storedNewest = await _therapySettingsRepo.GetNewestDocumentRowAsync(ct);
         var claims = storedNewest is null
-            || storedNewest.Mills <= newest.Mills
+            || storedNewest.Timestamp <= VersionStart(newest)
             || storedNewest.LegacyId?.StartsWith($"{newest.Id}:", StringComparison.Ordinal) == true;
         if (!claims)
             return new DefaultClaim(false, null);
@@ -192,6 +210,14 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// <summary>One named profile inside one legacy profile document, with the id minted for that document.</summary>
     private sealed record StoreEntry(
         Profile Profile, string StoreName, ProfileData Data, string LegacyId, Guid MintedCorrelationId);
+
+    /// <summary>The upserted versions a write created or changed, rather than left as they were.</summary>
+    private static IEnumerable<(string ProfileName, DateTime Start)> ChangedSince<TRecord>(
+        LegacyUpsertBatch<TRecord> batch, DateTime writtenSince)
+        where TRecord : class, V4Models.IV4Record, V4Models.IProfileScoped =>
+        batch.Outcomes.Values
+            .Where(o => o.Created || o.Record.ModifiedAt >= writtenSince)
+            .Select(o => (o.Record.ProfileName, o.Record.Timestamp));
 
     private static void Record<TRecord>(
         V4Models.DecompositionResult result, LegacyUpsertBatch<TRecord> batch)
@@ -209,6 +235,30 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
 
     #region Mapping Methods
 
+    /// <summary>
+    /// The instant every version decomposed from <paramref name="profile"/> starts: its <c>startDate</c>,
+    /// else its <c>mills</c>, else its <c>created_at</c>, else the epoch.
+    /// </summary>
+    /// <remarks>
+    /// <c>startDate</c> leads as in Nightscout, which sets a document's <c>mills</c> from it on load
+    /// (profilefunctions.js), so an editor that changes it and echoes the <c>mills</c> it read moves
+    /// the document.
+    /// </remarks>
+    internal static DateTime VersionStart(Profile profile)
+    {
+        if (UploaderTimestamp.ParseUtcDateTime(profile.StartDate) is { } start)
+            return start;
+
+        // NIGHTSCOUT-COMPAT: Nightscout gives a document with no readable startDate no time (NaN), so it
+        // is never in force at a time and is read only when it heads the list. Its mills or created_at
+        // place it where its client meant it instead. A zone-less startDate is read as UTC where
+        // Nightscout reads it in the server's zone, which is UTC in its container image.
+        if (profile.Mills != 0)
+            return DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime;
+
+        return UploaderTimestamp.ParseUtcDateTime(profile.CreatedAt) ?? DateTime.UnixEpoch;
+    }
+
     internal static V4Models.TherapySettings MapToTherapySettings(
         Profile profile,
         ProfileData profileData,
@@ -220,7 +270,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         return new V4Models.TherapySettings
         {
             LegacyId = legacyId,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime,
+            Timestamp = VersionStart(profile),
             ProfileName = storeName,
             Timezone = profileData.Timezone,
             Units = profileData.Units ?? profile.Units,
@@ -237,6 +287,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             LoopSettings = profile.LoopSettings,
             IsAPNSProduction = profile.IsAPNSProduction,
             IsDefault = isDefault,
+            DocumentDefaultProfile = profile.DefaultProfile,
             EnteredBy = profile.EnteredBy,
             IsExternallyManaged = profile.IsExternallyManaged,
             StartDate = profile.StartDate,
@@ -255,7 +306,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         return new V4Models.BasalSchedule
         {
             LegacyId = legacyId,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime,
+            Timestamp = VersionStart(profile),
             ProfileName = storeName,
             Entries = ConvertTimeValues(profileData.Basal),
             Device = profile.EnteredBy,
@@ -273,7 +324,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         return new V4Models.CarbRatioSchedule
         {
             LegacyId = legacyId,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime,
+            Timestamp = VersionStart(profile),
             ProfileName = storeName,
             Entries = ConvertTimeValues(profileData.CarbRatio),
             Device = profile.EnteredBy,
@@ -291,7 +342,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         return new V4Models.SensitivitySchedule
         {
             LegacyId = legacyId,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime,
+            Timestamp = VersionStart(profile),
             ProfileName = storeName,
             Entries = ConvertSensitivityValues(profileData.Sens, profileData.Units ?? profile.Units),
             Device = profile.EnteredBy,
@@ -304,14 +355,25 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         ProfileData profileData,
         string storeName,
         string legacyId,
-        Guid? correlationId)
+        Guid? correlationId,
+        ILogger? logger = null)
     {
+        var entries = MergeTargets(
+            profileData.TargetLow, profileData.TargetHigh, profileData.Units ?? profile.Units, out var undone);
+        if (undone)
+        {
+            logger?.LogWarning(
+                "Profile store {StoreName} ({LegacyId}) is labelled mmol but its targets are mg/dL: stored them as mg/dL. Its ISF is stored as uploaded and may be 18 times too large",
+                storeName,
+                legacyId);
+        }
+
         return new V4Models.TargetRangeSchedule
         {
             LegacyId = legacyId,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime,
+            Timestamp = VersionStart(profile),
             ProfileName = storeName,
-            Entries = MergeTargets(profileData.TargetLow, profileData.TargetHigh, profileData.Units ?? profile.Units),
+            Entries = entries,
             Device = profile.EnteredBy,
             CorrelationId = correlationId,
         };
@@ -382,12 +444,29 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// <see cref="V4Models.TargetRangeEntry"/> contract is mg/dL — every reader (alert engine,
     /// <c>TargetRangeResolver</c>, report statistics) compares against mg/dL. mmol profiles are
     /// therefore normalised to mg/dL here at write time, so no reader has to know the source units.
+    /// A mmol store whose targets come out above any real target is a client's stale copy carrying
+    /// mg/dL labelled mmol, and is stored with that conversion undone
+    /// (<see cref="UndoRepeatedTargetConversions"/>). Its ISF is not: a correct mmol ISF can convert to
+    /// the same numbers.
     /// </remarks>
     /// <param name="lows">The low-target time-value entries from the profile store.</param>
     /// <param name="highs">The high-target time-value entries from the profile store.</param>
     /// <param name="units">The profile's glucose units ("mg/dl" or "mmol"); mmol values are converted to mg/dL.</param>
     /// <returns>A merged list of <see cref="V4Models.TargetRangeEntry"/> with <c>Low</c> and <c>High</c> fields in mg/dL.</returns>
-    internal static List<V4Models.TargetRangeEntry> MergeTargets(List<TimeValue> lows, List<TimeValue> highs, string? units)
+    internal static List<V4Models.TargetRangeEntry> MergeTargets(List<TimeValue> lows, List<TimeValue> highs, string? units) =>
+        MergeTargets(lows, highs, units, out _);
+
+    /// <param name="undone">Whether an extra conversion was undone.</param>
+    internal static List<V4Models.TargetRangeEntry> MergeTargets(
+        List<TimeValue> lows, List<TimeValue> highs, string? units, out bool undone)
+    {
+        var merged = MergeTargetsConverted(lows, highs, units);
+        var targets = IsMmol(units) ? UndoRepeatedTargetConversions(merged) : merged;
+        undone = !ReferenceEquals(targets, merged);
+        return targets;
+    }
+
+    private static List<V4Models.TargetRangeEntry> MergeTargetsConverted(List<TimeValue> lows, List<TimeValue> highs, string? units)
     {
         var toMgdl = IsMmol(units)
             ? (Func<double, double>)(value => Math.Round(value * GlucoseConstants.MgdlPerMmol))
@@ -423,6 +502,51 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     internal static double FromMgdl(double mgdl, string? units) =>
         IsMmol(units) ? Math.Round(mgdl / GlucoseConstants.MgdlPerMmol, 1) : mgdl;
 
+    /// <summary>The highest stored mg/dL target one mmol conversion of a real target reaches (22.2 mmol/L).</summary>
+    internal const double MaxSingleConversionMgdl = 400;
+
+    private const int MaxRepeatedConversions = 4;
+
+    /// <summary>
+    /// Mmol targets that took the mmol-to-mg/dL conversion more than once, undone: <c>round(v / 18.0182)</c>
+    /// per extra conversion while every target exceeds <see cref="MaxSingleConversionMgdl"/>, each step
+    /// only when every value is <c>round(m * 18.0182)</c> of a whole <c>m</c>. Migration
+    /// <c>RepairDoubleConvertedMmolProfiles</c> applies the same rule to stored rows.
+    /// </summary>
+    /// <returns>The targets undone, or as given when there is nothing it can undo.</returns>
+    internal static List<V4Models.TargetRangeEntry> UndoRepeatedTargetConversions(
+        List<V4Models.TargetRangeEntry> targets)
+    {
+        var current = targets;
+        var steps = 0;
+        while (current.Count > 0
+               && current.Min(t => Math.Min(t.Low, t.High)) > MaxSingleConversionMgdl
+               && steps < MaxRepeatedConversions)
+        {
+            if (!current.All(t => IsConversionImage(t.Low) && IsConversionImage(t.High)))
+                return targets;
+
+            current = current.Select(t => new V4Models.TargetRangeEntry
+            {
+                Time = t.Time,
+                Low = UndoConversion(t.Low),
+                High = UndoConversion(t.High),
+                TimeAsSeconds = t.TimeAsSeconds,
+            }).ToList();
+            steps++;
+        }
+
+        return steps > 0 && current.Max(t => Math.Max(t.Low, t.High)) <= MaxSingleConversionMgdl
+            ? current
+            : targets;
+    }
+
+    private static double UndoConversion(double mgdl) =>
+        Math.Round(mgdl / GlucoseConstants.MgdlPerMmol, MidpointRounding.AwayFromZero);
+
+    private static bool IsConversionImage(double mgdl) =>
+        Math.Abs(UndoConversion(mgdl) * GlucoseConstants.MgdlPerMmol - mgdl) <= 0.5;
+
     #endregion
 
     /// <inheritdoc />
@@ -438,38 +562,44 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             return false;
 
         var documentId = profile.Id!;
-        var storedLegacyIds = new List<string>();
+        var stored = new List<(string LegacyId, string ProfileName, DateTime Start)>();
         foreach (var row in await _therapySettingsRepo.GetDocumentRowsAsync(documentId, ct))
         {
-            storedLegacyIds.Add(IsKeyedUnder(row, documentId)
-                ? row.LegacyId!
-                : await KeyUnderDocumentAsync(row, documentId, origin, ct));
+            stored.Add((
+                IsKeyedUnder(row, documentId) ? row.LegacyId! : await KeyUnderDocumentAsync(row, documentId, origin, ct),
+                row.ProfileName,
+                row.Timestamp));
         }
 
-        var result = await DecomposeAsync(profile, origin, ct);
+        var changed = new List<(string ProfileName, DateTime Start)>();
+        var result = await DecomposeCoreAsync([profile], origin, changed, ct);
         var written = result.CreatedRecords.Concat(result.UpdatedRecords).OfType<V4Models.TherapySettings>().Count();
         if (written < profile.Store.Count)
-            return false;
-
-        var carried = profile.Store.Keys.Select(store => $"{documentId}:{store}").ToHashSet(StringComparer.Ordinal);
-        foreach (var dropped in storedLegacyIds.Where(id => !carried.Contains(id)))
         {
-            await _therapySettingsRepo.DeleteByLegacyIdAsync(dropped, origin, ct);
-            await _basalScheduleRepo.DeleteByLegacyIdAsync(dropped, origin, ct);
-            await _carbRatioScheduleRepo.DeleteByLegacyIdAsync(dropped, origin, ct);
-            await _sensitivityScheduleRepo.DeleteByLegacyIdAsync(dropped, origin, ct);
-            await _targetRangeScheduleRepo.DeleteByLegacyIdAsync(dropped, origin, ct);
+            await _tempBasalRates.AfterSchedulesWrittenAsync(changed, ct);
+            return false;
         }
 
+        var carried = profile.Store.Keys.Select(store => $"{documentId}:{store}").ToHashSet(StringComparer.Ordinal);
+        foreach (var dropped in stored.Where(row => !carried.Contains(row.LegacyId)))
+        {
+            await _therapySettingsRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+            await _basalScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+            await _carbRatioScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+            await _sensitivityScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+            await _targetRangeScheduleRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);
+            changed.Add((dropped.ProfileName, dropped.Start));
+        }
+
+        await _tempBasalRates.AfterSchedulesWrittenAsync(changed, ct);
         return true;
     }
 
     /// <inheritdoc />
     public async Task<int> DeleteDocumentAsync(string documentId, WriteOrigin origin, CancellationToken ct = default)
     {
-        var unkeyed = (await _therapySettingsRepo.GetDocumentRowsAsync(documentId, ct))
-            .Where(row => !IsKeyedUnder(row, documentId))
-            .ToList();
+        var rows = await _therapySettingsRepo.GetDocumentRowsAsync(documentId, ct);
+        var unkeyed = rows.Where(row => !IsKeyedUnder(row, documentId)).ToList();
 
         var deleted = await DeleteByLegacyIdAsync(documentId, origin, ct);
         foreach (var row in unkeyed)
@@ -482,6 +612,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             deleted++;
         }
 
+        if (deleted > 0)
+            await _tempBasalRates.AfterSchedulesWrittenAsync(rows.Select(r => (r.ProfileName, r.Timestamp)).ToList(), ct);
         return deleted;
     }
 

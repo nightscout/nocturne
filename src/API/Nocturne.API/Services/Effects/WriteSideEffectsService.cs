@@ -254,19 +254,17 @@ public class WriteSideEffectsService : IWriteSideEffects
         }
     }
 
-    /// <summary>
-    /// Clears the configured tenant cache key families.
+    /// <inheritdoc />
+    /// <remarks>
     /// Exceptions are caught and logged as warnings — cache failures must not abort the write path.
-    /// </summary>
-    /// <param name="options">The effect options naming the families to clear.</param>
-    /// <param name="ct">Cancellation token.</param>
-    private async Task InvalidateCacheAsync(WriteEffectOptions options, CancellationToken ct)
+    /// </remarks>
+    public async Task InvalidateCacheAsync(WriteEffectOptions options, CancellationToken cancellationToken = default)
     {
         try
         {
             foreach (var family in options.CacheFamiliesToClear)
             {
-                await _cache.RemoveFamilyAsync(family, ct);
+                await _cache.RemoveFamilyAsync(family, cancellationToken);
             }
         }
         catch (Exception ex)

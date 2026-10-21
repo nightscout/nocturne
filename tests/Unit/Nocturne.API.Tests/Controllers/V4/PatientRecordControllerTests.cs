@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -55,6 +56,7 @@ public class PatientRecordControllerTests
             _trackerProvisioner.Object,
             _tenantAccessor.Object,
             _tenantCache.Object,
+            TempBasalTestDeps.NoReresolution(),
             NullLogger<PatientRecordController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },

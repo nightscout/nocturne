@@ -38,6 +38,8 @@ internal abstract class ConnectorPublisherBase
     /// </summary>
     protected void RecordSkippedDeleted(int count) => _skips.AddSkippedDeleted(count);
 
+    protected void RecordRefused(int count) => _skips.AddRefused(count);
+
     /// <summary>
     /// <paramref name="beforeWrite"/> runs inside the system audit scope: a preparation step that
     /// writes (an auto-created insulin, a reconcile of the source's window) is attributed to the sync,

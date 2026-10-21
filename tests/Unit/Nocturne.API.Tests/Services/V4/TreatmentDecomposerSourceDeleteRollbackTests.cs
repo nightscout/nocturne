@@ -60,6 +60,7 @@ public class TreatmentDecomposerSourceDeleteRollbackTests : IDisposable
             Mock.Of<IProfileDecomposer>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
+            TempBasalTestDeps.Unscheduled(),
             new AuditContext { IsSystem = true },
             NullLogger<TreatmentDecomposer>.Instance);
     }

@@ -104,7 +104,8 @@ public interface IActivityService
     /// Count <see cref="Activity"/> records in each of <paramref name="categories"/>, keyed by the
     /// same read scope <see cref="V4.IActivityDecomposer.RequiredReadScope"/> returns for records
     /// from that source. A source not named is not queried at all, and a name this service does not
-    /// recognize yields no entry.
+    /// recognize yields no entry. A find with field filters reads each source up to the cap
+    /// <see cref="GetActivitiesAsync"/> applies to the same filter, so its count stops there.
     /// </summary>
     /// <param name="categories">The sources to count, named by their read scope.</param>
     /// <param name="find">Optional MongoDB-style query filter string.</param>

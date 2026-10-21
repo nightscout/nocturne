@@ -273,6 +273,21 @@ public class ChatIdentityControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task GetPending_names_the_chat_account_the_token_would_link()
+    {
+        var token = await new ChatIdentityPendingLinkService(
+                _db.ContextFactory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityPendingLinkService>>())
+            .CreateAsync(Platform, CallerChatUser, "sam_t", null, "connect-slash", CancellationToken.None);
+
+        var result = await CreateController().GetPending(token, CancellationToken.None);
+
+        var pending = result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<PendingLinkViewResponse>().Subject;
+        pending.PlatformUserName.Should().Be("sam_t");
+        pending.PlatformUserId.Should().Be(CallerChatUser);
+    }
+
+    [Fact]
     public async Task ClaimLink_reports_the_new_link_as_owned()
     {
         var token = InsertPendingToken(CallerChatUser);

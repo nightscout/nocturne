@@ -63,14 +63,10 @@ public sealed class TenantlessDashboardPathsTests
     }
 
     [Fact]
-    public void The_sign_in_ceremonies_stay_gated()
+    public void The_passkey_sign_in_ceremonies_stay_gated()
     {
-        // Asserted against POST, the only method each is served under: the DELETE that revokes an
-        // authenticator is matched as a prefix, so asking "under any method" would answer for that
-        // instead.
         foreach (var path in new[]
                  {
-                     "/api/auth/totp/login",
                      "/api/auth/passkey/login/options",
                      "/api/auth/passkey/login/complete",
                      "/api/auth/passkey/login/discoverable/options",
@@ -81,15 +77,30 @@ public sealed class TenantlessDashboardPathsTests
         }
     }
 
+    /// <summary>
+    /// The authenticator step follows a passkey, which a single-tenant apex serves as the sole
+    /// tenant, and an identity provider, whose callback it serves without one. It is served as the
+    /// sole tenant where there is one and tenantlessly where there is not;
+    /// <c>TotpController.Login</c> reconciles the callback's binding with it.
+    /// </summary>
     [Fact]
-    public void Revoking_an_authenticator_is_admitted_without_admitting_its_sibling_login()
+    public void The_authenticator_step_is_admitted_tenantlessly_and_as_the_sole_tenant()
+    {
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/totp/login", HttpMethods.Post)
+            .Should().BeTrue();
+        TenantResolutionMiddleware.IsSoleTenantAtApex("/api/auth/totp/login", HttpMethods.Post)
+            .Should().BeTrue();
+        TenantResolutionMiddleware.IsSoleTenantAtApex("/api/auth/oidc/callback", HttpMethods.Get)
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void Revoking_an_authenticator_is_admitted_only_under_delete()
     {
         var totpCredential = "/api/auth/totp/0198f4a0-0000-7000-8000-000000000000";
 
         TenantResolutionMiddleware.IsTenantlessAllowed(totpCredential, HttpMethods.Delete)
             .Should().BeTrue();
-        TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/totp/login", HttpMethods.Post)
-            .Should().BeFalse();
         TenantResolutionMiddleware.IsTenantlessAllowed(totpCredential, HttpMethods.Post)
             .Should().BeFalse();
     }

@@ -22,7 +22,6 @@ public class TreatmentsHistoryHeaderTests
     private static TreatmentsController CreateController(Mock<ITreatmentService> treatmentService)
     {
         return new TreatmentsController(
-            Mock.Of<ITreatmentStore>(),
             Mock.Of<IDocumentProcessingService>(),
             treatmentService.Object,
             NullLogger<TreatmentsController>.Instance)

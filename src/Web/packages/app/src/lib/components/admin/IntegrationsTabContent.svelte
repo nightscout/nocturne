@@ -12,10 +12,13 @@
   import { Label } from "$lib/components/ui/label";
   import { Switch } from "$lib/components/ui/switch";
   import { Badge } from "$lib/components/ui/badge";
+  import * as Alert from "$lib/components/ui/alert";
+  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import Bot from "@lucide/svelte/icons/bot";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { toast } from "svelte-sonner";
   import type { PlatformSettingsSummary } from "$api";
+  import { errorMessage } from "$lib/forms/submit-error";
 
   const DISPLAY_NAMES: Record<string, string> = {
     discord: "Discord",
@@ -24,6 +27,9 @@
     whatsapp: "WhatsApp",
     resend: "Resend (Email)",
   };
+
+  const TELEGRAM_SET_WEBHOOK =
+    'curl "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" -d "url=https://<your-instance>/api/v4/webhooks/telegram" -d "secret_token=<WEBHOOK_SECRET_TOKEN>"';
 
   let {
     platforms,
@@ -82,8 +88,8 @@
         state.fieldValues[key] = "";
       }
       toast.success("Settings saved. Restart the frontend for changes to take effect.");
-    } catch {
-      toast.error("Failed to save settings");
+    } catch (err) {
+      toast.error("Failed to save settings", { description: errorMessage(err) });
     } finally {
       state.saving = false;
     }
@@ -144,6 +150,21 @@
         </CardHeader>
         <CardContent>
           <div class="space-y-4">
+            {#if category === "telegram" && !(platform.configuredFields ?? []).includes("webhookSecretToken")}
+              <Alert.Root>
+                <TriangleAlert class="h-4 w-4" />
+                <Alert.Title>A webhook secret token is required</Alert.Title>
+                <Alert.Description>
+                  <p>
+                    Telegram webhook calls are refused until one is set. Choose a random value of
+                    letters, digits, <code>_</code> or <code>-</code> (for example from
+                    <code>openssl rand -hex 32</code>), save it here with the bot enabled, then
+                    register the webhook again with the same value:
+                  </p>
+                  <code class="block whitespace-pre-wrap break-all">{TELEGRAM_SET_WEBHOOK}</code>
+                </Alert.Description>
+              </Alert.Root>
+            {/if}
             {#each platform.fields ?? [] as field (field.name)}
               {@const name = field.name ?? ""}
               {@const fieldConfigured = (platform.configuredFields ?? []).includes(name)}

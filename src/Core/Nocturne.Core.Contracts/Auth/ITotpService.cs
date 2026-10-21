@@ -30,7 +30,11 @@ public interface ITotpService
     /// enforces that, so a new call site is a security decision.
     /// </remarks>
     /// <param name="subjectId">The subject whose primary factor was just verified.</param>
-    Task<string> CreateStepUpTokenAsync(Guid subjectId);
+    /// <param name="tenantId">The tenant the primary factor was checked against, or null on a host
+    /// that resolves no tenant. The token is redeemable only on the same host.</param>
+    /// <param name="admittedByInvite">Whether the primary factor admitted a non-member of
+    /// <paramref name="tenantId"/> because the sign-in carried a valid invite.</param>
+    Task<string> CreateStepUpTokenAsync(Guid subjectId, Guid? tenantId, bool admittedByInvite);
 
     /// <summary>
     /// Verifies a TOTP code for the subject a step-up token was minted for and returns that subject,
@@ -62,7 +66,11 @@ public record TotpCredentialResult(Guid CredentialId, Guid SubjectId);
 /// <param name="SubjectId">The authenticated subject's ID.</param>
 /// <param name="Username">The authenticated subject's username.</param>
 /// <param name="DisplayName">The authenticated subject's display name.</param>
-public record TotpLoginResult(Guid SubjectId, string Username, string DisplayName);
+/// <param name="TenantId">The tenant the step-up token was bound to when minted, or null for a host
+/// that resolves no tenant.</param>
+/// <param name="AdmittedByInvite">Whether the primary factor admitted a non-member on an invite.</param>
+public record TotpLoginResult(
+    Guid SubjectId, string Username, string DisplayName, Guid? TenantId, bool AdmittedByInvite);
 
 /// <summary>Summary information about a registered TOTP credential.</summary>
 /// <param name="Id">The credential's ID.</param>

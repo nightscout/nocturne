@@ -35,13 +35,10 @@ public class CompressionLowDetectionServiceTests
     [Fact]
     public async Task DetectForNightAsync_doesNotDetectOnDefaultSettingsWhenTheSettingsReadFails()
     {
-        var sut = new CompressionLowDetectionService(
-            await BrokenSettingsProviderAsync(),
-            ActiveTenantSnapshotTestDoubles.Unread(),
-            NullLogger<CompressionLowDetectionService>.Instance
-        );
+        var sut = Detector();
+        await using var scope = (await BrokenSettingsProviderAsync()).CreateAsyncScope();
 
-        var created = await sut.DetectForNightAsync(NightOf);
+        var created = await sut.DetectForNightAsync(NightOf, scope.ServiceProvider, CancellationToken.None);
 
         created.Should().Be(0);
         _repository.Verify(
@@ -151,7 +148,7 @@ public class CompressionLowDetectionServiceTests
     /// A provider whose <see cref="IUISettingsService"/> is the real one over a database that can no
     /// longer be read, which is what a failed read looks like from inside the scope.
     /// </summary>
-    private async Task<IServiceProvider> BrokenSettingsProviderAsync()
+    private async Task<ServiceProvider> BrokenSettingsProviderAsync()
     {
         _entryService
             .Setup(e =>

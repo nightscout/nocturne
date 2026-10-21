@@ -191,9 +191,12 @@ public class ActivityControllerScopeTests
         attribute!.Scopes.Should().BeEquivalentTo(ActivityReadScopeGuard.AdmissionScopes);
     }
 
-    private static void Denied(object? result) =>
-        result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+    private static void Denied(object? result)
+    {
+        var denied = result.Should().BeOfType<ObjectResult>().Subject;
+        denied.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        denied.Value.Should().BeOfType<ProblemDetails>();
+    }
 
     private static PaginatedResponse<Activity> Payload(
         ActionResult<PaginatedResponse<Activity>> result) =>

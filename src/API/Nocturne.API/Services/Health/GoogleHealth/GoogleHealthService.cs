@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -242,9 +243,10 @@ public sealed class GoogleHealthService(
             var token = await oauth.ExchangeAuthorizationCodeAsync(
                 callback.Code, flow.Verifier, requestedScopes, ct);
             var stored = false;
+            string? account = null;
             try
             {
-                var account = await oauth.AccountKeyAsync(token.AccessToken!, ct);
+                account = await oauth.AccountKeyAsync(token.AccessToken!, ct);
                 if (await sessions.AccountKeyAsync(ct) is { } priorAccount && priorAccount != account)
                     throw new GoogleHealthException("account_mismatch");
 
@@ -255,8 +257,7 @@ public sealed class GoogleHealthService(
             {
                 // StartAsync refuses while a refresh token is stored, so this grant is not one the
                 // tenant still relies on, and unrevoked it would stay live at Google.
-                if (!stored && !await sessions.TryRevokeAsync(token.RefreshToken, CancellationToken.None))
-                    logger.LogWarning("Google Health could not revoke an unstored grant for tenant {TenantId}", TenantId);
+                if (!stored) await DiscardUnstoredGrantAsync(token.RefreshToken, account);
             }
             await sessions.ActivateAsync(token, subject);
             await ForgetInventoryAsync(ct);
@@ -285,6 +286,20 @@ public sealed class GoogleHealthService(
         }
     }
 
+    private async Task DiscardUnstoredGrantAsync(string refreshToken, string? account)
+    {
+        try
+        {
+            await sessions.ReleaseUnstoredAsync(CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is DbException or InvalidOperationException)
+        {
+            logger.LogWarning(ex, "Google Health could not release the hold of tenant {TenantId} on an unstored grant", TenantId);
+        }
+        if (await sessions.RevokeAsync(refreshToken, account, CancellationToken.None) == GoogleHealthRevocation.Failed)
+            logger.LogWarning("Google Health could not revoke an unstored grant for tenant {TenantId}", TenantId);
+    }
+
     public async Task DisconnectAsync(Guid subject, CancellationToken ct)
     {
         var request = await coordinator.RequestDisconnectAsync(TenantId, subject, ct);
@@ -298,11 +313,14 @@ public sealed class GoogleHealthService(
         if ((await coordinator.DisconnectRequestAsync(TenantId, CancellationToken.None))?.RequestId != request) return;
         await coordinator.CompleteAsync(TenantId);
         var refreshToken = (await configurationLoader.LoadForTenantAsync(CancellationToken.None)).RefreshToken;
+        var account = await sessions.AccountKeyAsync(CancellationToken.None);
         await ClearFlowAsync(CancellationToken.None);
         await sessions.ClearAsync(removeAccount: false, subject, revoke: false, CancellationToken.None);
         await ForgetInventoryAsync(CancellationToken.None);
+        // Only a grant no other tenant holds is worth revoking in Google by hand. An undetermined
+        // grant may be another tenant's, which that advice would cut off.
         var revokeFailed = !string.IsNullOrWhiteSpace(refreshToken) &&
-            !await sessions.TryRevokeAsync(refreshToken, CancellationToken.None);
+            await sessions.RevokeAsync(refreshToken, account, CancellationToken.None) == GoogleHealthRevocation.Failed;
         await connectorConfigurations.UpdateHealthStateAsync(
             ConnectorName,
             lastErrorMessage: revokeFailed ? "revoke_in_google" : string.Empty,

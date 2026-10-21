@@ -69,6 +69,15 @@ public class AlertDeliveryServiceMuteTests
         ActiveExcursionCount = 1,
     };
 
+    private static void AddMembers(NocturneDbContext db, params Guid[] subjectIds)
+    {
+        foreach (var subjectId in subjectIds)
+        {
+            db.Subjects.Add(new SubjectEntity { Id = subjectId, Name = "Member" });
+            db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.NewGuid(), TenantId = Tenant, SubjectId = subjectId, DirectPermissions = ["*"] });
+        }
+    }
+
     private static AlertRuleChannelSnapshot InApp(Guid subjectId) =>
         new(Guid.NewGuid(), Guid.NewGuid(), ChannelType.InApp, subjectId.ToString(), null, 0);
 
@@ -94,6 +103,7 @@ public class AlertDeliveryServiceMuteTests
         var other = Guid.NewGuid();
         await using (var seed = NewContext())
         {
+            AddMembers(seed, muter, other);
             seed.AlertExcursionMutes.Add(new AlertExcursionMuteEntity
             {
                 Id = Guid.NewGuid(), TenantId = Tenant, SubjectId = muter, AlertExcursionId = excursionId,
@@ -144,6 +154,7 @@ public class AlertDeliveryServiceMuteTests
         var muter = Guid.NewGuid();
         await using (var seed = NewContext())
         {
+            AddMembers(seed, muter);
             seed.AlertExcursionMutes.Add(new AlertExcursionMuteEntity
             {
                 Id = Guid.NewGuid(), TenantId = Tenant, SubjectId = muter, AlertExcursionId = Guid.NewGuid(),

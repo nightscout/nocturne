@@ -122,7 +122,6 @@ public class V3CacheControlTests
             .ReturnsAsync(new Treatment { EventType = "Note", SrvModified = Mills });
 
         var controller = new TreatmentsController(
-            Mock.Of<ITreatmentStore>(),
             Mock.Of<IDocumentProcessingService>(),
             treatments.Object,
             NullLogger<TreatmentsController>.Instance)

@@ -94,9 +94,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 )
             ).ToList();
 
-            var totalCount = await _projection.CountAsync(findQuery, cancellationToken);
-
-            var mappedData = deviceStatusList.Select(MapToV3Dto);
+            var mappedData = deviceStatusList.Select(MapToV3Dto).ToList();
 
             // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(deviceStatusList.Cast<object>());
@@ -112,7 +110,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             var response = CreateV3CollectionResponse(
                 mappedData,
                 parameters,
-                totalCount,
                 lastModified
             );
 

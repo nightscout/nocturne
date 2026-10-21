@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Middleware;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data.Services;
 using Scope = Nocturne.Core.Models.Authorization.Scope;
 
 namespace Nocturne.API.Extensions;
@@ -206,6 +207,21 @@ public static class HttpContextExtensions
     /// </summary>
     public static bool InheritHistoryClamp(this HttpContext context, bool requested) =>
         requested || context.IsCallerHistoryClamped();
+
+    private const string ReaderItemKey = "TenantReader";
+
+    /// <summary>
+    /// Records who the request reads as, once authentication and member scope have narrowed it.
+    /// Kept in <see cref="HttpContext.Items"/> because SignalR serves a long-polling connection from a
+    /// copy of the upgrade request: the copy keeps the items but gets a DI scope of its own that never
+    /// ran the middleware.
+    /// </summary>
+    public static void RecordReader(this HttpContext context) =>
+        context.Items[ReaderItemKey] = TenantReader.Of(context.RequestServices);
+
+    /// <summary>The reader <see cref="RecordReader"/> recorded, or null when the request recorded none.</summary>
+    public static TenantReader? GetRecordedReader(this HttpContext context) =>
+        context.Items.TryGetValue(ReaderItemKey, out var reader) ? reader as TenantReader : null;
 
     /// <summary>
     /// The tenant the request resolved to, or <see langword="null"/> when it resolved to none.

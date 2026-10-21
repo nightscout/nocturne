@@ -216,7 +216,6 @@ public class V3CursorETagTests
             .ReturnsAsync(new Treatment { EventType = "Note", SrvModified = mills });
 
         var controller = new TreatmentsController(
-            Mock.Of<ITreatmentStore>(),
             Mock.Of<IDocumentProcessingService>(),
             treatmentService.Object,
             NullLogger<TreatmentsController>.Instance)

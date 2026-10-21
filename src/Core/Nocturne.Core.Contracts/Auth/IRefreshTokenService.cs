@@ -20,11 +20,11 @@ public interface IRefreshTokenService
         string? userAgent = null);
 
     /// <summary>
-    /// Validate a refresh token and return subject ID if valid
+    /// Validate a refresh token and return its owner if valid
     /// </summary>
     /// <param name="refreshToken">Plain refresh token string</param>
-    /// <returns>Subject ID if valid, null if invalid/expired/revoked</returns>
-    Task<Guid?> ValidateRefreshTokenAsync(string refreshToken);
+    /// <returns>The token's subject and session, null if invalid/expired/revoked</returns>
+    Task<RefreshTokenSession?> ValidateRefreshTokenAsync(string refreshToken);
 
     /// <summary>
     /// Rotate a refresh token - invalidate old one and create new one
@@ -85,6 +85,13 @@ public interface IRefreshTokenService
     /// <returns>Number of tokens deleted</returns>
     Task<int> PruneExpiredRefreshTokensAsync(DateTime? olderThan = null);
 }
+
+/// <summary>
+/// The owner of a live refresh token.
+/// </summary>
+/// <param name="SessionId">The OIDC session id its rotation chain shares; null for a legacy token
+/// issued before sessions were tagged, whose chain has no stable id.</param>
+public sealed record RefreshTokenSession(Guid SubjectId, string? SessionId);
 
 /// <summary>
 /// Refresh token information for session management

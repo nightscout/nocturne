@@ -254,6 +254,9 @@ internal sealed class MigrationSourceException(string message, MigrationFailureC
     : Exception(message, inner)
 {
     public MigrationFailureCause Cause { get; } = cause;
+
+    /// <summary>The status the source answered with, when it answered.</summary>
+    public System.Net.HttpStatusCode? StatusCode { get; init; }
 }
 
 /// <summary>

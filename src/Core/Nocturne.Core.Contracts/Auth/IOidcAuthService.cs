@@ -230,6 +230,13 @@ public class OidcCallbackResult
     /// </summary>
     public Guid? ProviderId { get; set; }
 
+    /// <summary>
+    /// Set when the identity was accepted but the subject has an authenticator enrolled. No
+    /// session is issued; the token is redeemed with a code at <c>POST /api/auth/totp/login</c>,
+    /// as after a passkey assertion.
+    /// </summary>
+    public string? StepUpToken { get; set; }
+
     public static OidcCallbackResult Succeeded(
         OidcTokenResponse tokens,
         OidcUserInfo userInfo,
@@ -252,6 +259,18 @@ public class OidcCallbackResult
             Success = false,
             Error = error,
             ErrorDescription = description,
+        };
+
+    public static OidcCallbackResult SecondFactorRequired(
+        Guid subjectId, string stepUpToken, string? returnUrl, Guid providerId) =>
+        new()
+        {
+            Success = false,
+            Error = "totp_required",
+            SubjectId = subjectId,
+            StepUpToken = stepUpToken,
+            ReturnUrl = returnUrl,
+            ProviderId = providerId,
         };
 
     /// <summary>

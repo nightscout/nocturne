@@ -124,11 +124,69 @@ public class TreatmentServiceTests
     public async Task CreateTreatmentsAsync_ShouldInvalidateCacheAndPublishEvents()
     {
         var created = new List<Treatment> { new Treatment { Id = "1" } };
-        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>())).ReturnsAsync([.. created]);
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>(), It.IsAny<ICollection<Treatment>?>())).ReturnsAsync([.. created]);
         var result = await _treatmentService.CreateTreatmentsAsync(new List<Treatment> { new Treatment() }, CancellationToken.None);
         result.Should().ContainSingle();
         _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
         _mockEvents.Verify(x => x.OnCreatedAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateTreatmentsAsync_WhenTheBatchFails_AnnouncesWhatWasStoredAndRethrows()
+    {
+        BulkWrite<Treatment> stored = [new Treatment { Id = "1" }];
+        var failure = new TreatmentBatchFailedException(stored, 1, 2, failedOneStored: false, new InvalidOperationException("store down"));
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>(), It.IsAny<ICollection<Treatment>?>())).ThrowsAsync(failure);
+
+        var act = () => _treatmentService.CreateTreatmentsAsync([new Treatment(), new Treatment()], CancellationToken.None);
+
+        (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which.Should().BeSameAs(failure);
+        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnCreatedAsync(stored, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateTreatmentsAsync_WhenTheCallerCancelsMidBatch_AnnouncesWhatWasStoredAndThrowsCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        BulkWrite<Treatment> stored = [new Treatment { Id = "1" }];
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>(), It.IsAny<ICollection<Treatment>?>()))
+            .Returns(async () =>
+            {
+                await cts.CancelAsync();
+                throw new TreatmentBatchFailedException(stored, 1, 2, failedOneStored: false, new OperationCanceledException(cts.Token));
+            });
+
+        var act = () => _treatmentService.CreateTreatmentsAsync([new Treatment(), new Treatment()], cts.Token);
+
+        await act.Should().ThrowExactlyAsync<OperationCanceledException>();
+        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnCreatedAsync(stored, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateTreatmentsAsync_WhenAStoreTimeoutCancels_FailsTheBatchRatherThanCancelling()
+    {
+        BulkWrite<Treatment> stored = [new Treatment { Id = "1" }];
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>(), It.IsAny<ICollection<Treatment>?>()))
+            .ThrowsAsync(new TreatmentBatchFailedException(stored, 1, 2, failedOneStored: false, new TaskCanceledException()));
+
+        var act = () => _treatmentService.CreateTreatmentsAsync([new Treatment(), new Treatment()], CancellationToken.None);
+
+        await act.Should().ThrowAsync<TreatmentBatchFailedException>();
+    }
+
+    [Fact]
+    public async Task CreateTreatmentsAsync_WhenTheStoreThrowsAnythingElse_InvalidatesTheCache()
+    {
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>(), It.IsAny<ICollection<Treatment>?>()))
+            .ThrowsAsync(new NotSupportedException());
+
+        var act = () => _treatmentService.CreateTreatmentsAsync([new Treatment()], CancellationToken.None);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnCreatedAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -312,8 +370,8 @@ public class TreatmentServiceTests
 
         var treatment = new Treatment { EventType = "Meal Bolus", Insulin = 5.0 };
 
-        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
-            .Returns<IReadOnlyList<Treatment>, CancellationToken>((t, _) => Task.FromResult<BulkWrite<Treatment>>([.. t]));
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>(), It.IsAny<ICollection<Treatment>?>()))
+            .Returns<IReadOnlyList<Treatment>, CancellationToken, ICollection<Treatment>?>((t, _, _) => Task.FromResult<BulkWrite<Treatment>>([.. t]));
 
         // Act
         var result = (await _treatmentService.CreateTreatmentsAsync(new[] { treatment }, CancellationToken.None)).ToList();
@@ -336,8 +394,8 @@ public class TreatmentServiceTests
         // Arrange
         var treatment = new Treatment { EventType = "Note", Notes = "Feeling good" };
 
-        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
-            .Returns<IReadOnlyList<Treatment>, CancellationToken>((t, _) => Task.FromResult<BulkWrite<Treatment>>([.. t]));
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>(), It.IsAny<ICollection<Treatment>?>()))
+            .Returns<IReadOnlyList<Treatment>, CancellationToken, ICollection<Treatment>?>((t, _, _) => Task.FromResult<BulkWrite<Treatment>>([.. t]));
 
         // Act
         var result = (await _treatmentService.CreateTreatmentsAsync(new[] { treatment }, CancellationToken.None)).ToList();
@@ -370,8 +428,8 @@ public class TreatmentServiceTests
             InsulinContext = existingContext
         };
 
-        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
-            .Returns<IReadOnlyList<Treatment>, CancellationToken>((t, _) => Task.FromResult<BulkWrite<Treatment>>([.. t]));
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>(), It.IsAny<ICollection<Treatment>?>()))
+            .Returns<IReadOnlyList<Treatment>, CancellationToken, ICollection<Treatment>?>((t, _, _) => Task.FromResult<BulkWrite<Treatment>>([.. t]));
 
         // Act
         var result = (await _treatmentService.CreateTreatmentsAsync(new[] { treatment }, CancellationToken.None)).ToList();
@@ -405,8 +463,8 @@ public class TreatmentServiceTests
 
         var treatment = new Treatment { EventType = "Temp Basal", Rate = 0.8, Duration = 30 };
 
-        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
-            .Returns<IReadOnlyList<Treatment>, CancellationToken>((t, _) => Task.FromResult<BulkWrite<Treatment>>([.. t]));
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>(), It.IsAny<ICollection<Treatment>?>()))
+            .Returns<IReadOnlyList<Treatment>, CancellationToken, ICollection<Treatment>?>((t, _, _) => Task.FromResult<BulkWrite<Treatment>>([.. t]));
 
         // Act
         var result = (await _treatmentService.CreateTreatmentsAsync(new[] { treatment }, CancellationToken.None)).ToList();

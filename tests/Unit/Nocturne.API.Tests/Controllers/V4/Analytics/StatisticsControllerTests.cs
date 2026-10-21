@@ -10,6 +10,7 @@ using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.API.Services.Caching;
+using Nocturne.API.Tests.Services.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -37,7 +38,7 @@ public class StatisticsControllerTests
     private readonly Mock<ITherapySettingsResolver> _therapySettingsResolverMock = new();
     private readonly Mock<ITargetRangeScheduleRepository> _targetRangeScheduleRepoMock = new();
     private readonly Mock<IBasalInjectionRepository> _basalInjectionRepoMock = new();
-    private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock = new();
+    private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock = ActiveProfileResolverMock.WithDefault();
     private readonly Mock<IBasalSegmentService> _basalSegmentsMock = new();
     private readonly Mock<IPatientDeviceRepository> _patientDeviceRepoMock = new();
     private readonly Mock<IApsSnapshotRepository> _apsSnapshotRepoMock = new();
@@ -736,7 +737,7 @@ public class StatisticsControllerTests
 
         synthesized.Should().NotBeNull();
         synthesized!.Should().OnlyContain(t => t.Origin == TempBasalOrigin.Scheduled);
-        synthesized.Select(t => (t.StartTimestamp, t.EndTimestamp, t.Rate)).Should().Equal(
+        synthesized.Select(t => (t.StartTimestamp, t.EndTimestamp, t.Rate!.Value)).Should().Equal(
             segments.Select(s => (
                 DateTimeOffset.FromUnixTimeMilliseconds(s.StartMills).UtcDateTime,
                 (DateTime?)DateTimeOffset.FromUnixTimeMilliseconds(s.EndMills).UtcDateTime,

@@ -74,6 +74,71 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         rulesB.Should().OnlyContain(r => r.TenantId == tenantB);
     }
 
+    [Fact]
+    public async Task A_rule_whose_condition_type_or_severity_no_member_has_is_skipped_and_logged_not_the_tenants_other_rules()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var stale = await AuthTestHelpers.SeedTenantAsync(Fixture, $"stale-{suffix}", "Stale");
+        var other = await AuthTestHelpers.SeedTenantAsync(Fixture, $"other-{suffix}", "Other");
+
+        await using var dataSource = new NpgsqlDataSourceBuilder(Fixture.AppConnectionString).Build();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(dataSource)
+            .AddInterceptors(new TenantConnectionInterceptor())
+            .Options;
+        var factory = new InterceptingContextFactory(options);
+
+        await SeedRuleAsync(factory, stale, "Readable", AlertConditionType.Threshold);
+        await SeedRuleAsync(factory, other, "Other tenant", AlertConditionType.Threshold);
+        var legacyType = await SeedRawRuleAsync(dataSource, stale, "threshold_low", "warning");
+        var legacySeverity = await SeedRawRuleAsync(dataSource, stale, "threshold", "normal");
+
+        var logger = new ListLogger<AlertRepository>();
+        var repo = new AlertRepository(factory, logger);
+
+        var rules = await repo.GetEnabledRulesAsync(stale, CancellationToken.None);
+        rules.Select(r => r.Name).Should().Equal("Readable");
+
+        var all = await repo.GetAllEnabledRulesAsync(CancellationToken.None);
+        all.Select(r => r.Name).Should().Contain(["Readable", "Other tenant"]);
+
+        logger.Errors.Should().Contain(m => m.Contains(legacyType.ToString()) && m.Contains("threshold_low"));
+        logger.Errors.Should().Contain(m => m.Contains(legacySeverity.ToString()) && m.Contains("normal"));
+    }
+
+    private static async Task<Guid> SeedRawRuleAsync(
+        NpgsqlDataSource dataSource, Guid tenantId, string conditionType, string severity)
+    {
+        var id = Guid.CreateVersion7();
+        await using var cmd = dataSource.CreateCommand($"""
+            SELECT set_config('app.current_tenant_id', '{tenantId}', false);
+            INSERT INTO alert_rules (id, tenant_id, name, condition_type, condition_params, auto_resolve_enabled,
+                                     severity, client_configuration, is_enabled, allow_through_dnd, scope_class,
+                                     sort_order, created_at, updated_at)
+            VALUES ('{id}', '{tenantId}', 'Stale', '{conditionType}', '{"{}"}', false,
+                    '{severity}', '{"{}"}', true, false, 'undirected', 1, now(), now());
+            """);
+        await cmd.ExecuteNonQueryAsync();
+        return id;
+    }
+
+    private sealed class ListLogger<T> : Microsoft.Extensions.Logging.ILogger<T>
+    {
+        public List<string> Errors { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
+            TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel >= Microsoft.Extensions.Logging.LogLevel.Error)
+                Errors.Add(formatter(state, exception));
+        }
+    }
+
     private static async Task SeedRuleAsync(
         InterceptingContextFactory factory, Guid tenantId, string name, AlertConditionType type)
     {

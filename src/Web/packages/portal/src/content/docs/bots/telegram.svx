@@ -36,6 +36,7 @@ At **Settings > Admin > Integrations**, fill in the **Telegram** card:
 | Field | Value |
 |-------|-------|
 | **Bot Token** | The token from BotFather |
+| **Webhook Secret Token** | A random string you choose (1-256 letters, digits, `_` or `-`), e.g. from `openssl rand -hex 32` |
 
 Turn **Enabled** on, click **Save**, and restart the Nocturne web service.
 
@@ -43,25 +44,25 @@ Turn **Enabled** on, click **Save**, and restart the Nocturne web service.
 
 ```bash
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
-# Optional: a secret token Telegram echoes back on each webhook call so
-# Nocturne can confirm the request really came from Telegram.
+# A secret token Telegram echoes back on each webhook call so Nocturne can
+# confirm the request really came from Telegram.
 TELEGRAM_WEBHOOK_SECRET_TOKEN=...
 ```
+
+<Callout type="warning" title="The webhook secret token is required">
+
+  Nocturne refuses every Telegram webhook call until a webhook secret token is configured, and
+  every call that does not carry it.
+
+</Callout>
 
 Then restart Nocturne.
 
 ## 3. Register the webhook
 
 Telegram pushes updates to a webhook URL you register through its Bot API. Point it at your
-instance:
-
-```bash
-curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
-  -d "url=https://your-instance.com/api/v4/webhooks/telegram"
-```
-
-If you set `TELEGRAM_WEBHOOK_SECRET_TOKEN`, pass the same value here so Telegram includes it
-on every call:
+instance, passing the same webhook secret token you configured so Telegram includes it on every
+call:
 
 ```bash
 curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \

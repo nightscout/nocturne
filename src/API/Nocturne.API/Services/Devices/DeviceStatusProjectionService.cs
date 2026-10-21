@@ -112,6 +112,7 @@ public class DeviceStatusProjectionService
                 return new ModifiedSearch.Page<DeviceStatus>(page, page.Count == 0 ? null : page[^1].SrvModified, page.Count < limit);
             },
             status => status.IsValid == false,
+            status => status.Id,
             after,
             ModifiedSearch.ArrivesInOrder(sort, descending) ? (long)count + skip : null,
             ModifiedSearch.MaxRead,
@@ -339,18 +340,6 @@ public class DeviceStatusProjectionService
         }
 
         return statuses;
-    }
-
-    /// <summary>
-    /// Returns the number of <see cref="DeviceStatus"/> documents <see cref="GetAsync"/> projects for
-    /// <paramref name="find"/> without a page limit.
-    /// </summary>
-    /// <param name="find">MongoDB-style query filter (same format as <see cref="GetAsync"/>).</param>
-    /// <param name="ct">Cancellation token.</param>
-    public async Task<long> CountAsync(string? find, CancellationToken ct)
-    {
-        var (device, from, to) = ParseFindQuery(find);
-        return await _groupRepo.CountAsync(from, to, device, ct);
     }
 
     /// <summary>

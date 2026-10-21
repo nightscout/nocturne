@@ -55,4 +55,8 @@ internal sealed class EnumMemberValueConverter<TEnum>()
 
     private static TEnum FromProvider(string value) =>
         FromStringMap.TryGetValue(value, out var e) ? e : Enum.Parse<TEnum>(value, ignoreCase: true);
+
+    /// <summary>Whether reading <paramref name="value"/> from the database succeeds rather than throws.</summary>
+    public static bool CanRead(string value) =>
+        FromStringMap.ContainsKey(value) || Enum.TryParse<TEnum>(value, ignoreCase: true, out _);
 }

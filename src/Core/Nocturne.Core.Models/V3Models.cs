@@ -27,7 +27,7 @@ public class V3QueryParameters
     /// </summary>
     public string[]? Fields { get; set; }
 
-    public int Limit { get; set; } = 100;
+    public int Limit { get; set; }
 
     /// <summary>
     /// Number of records to skip (offset)

@@ -5,8 +5,12 @@ import { buildConfig } from './lib/config-builder.js';
 import SocketIOServer from './lib/socketio-server.js';
 import SignalRClient from './lib/signalr-client.js';
 import MessageTranslator from './lib/message-translator.js';
+import TenantRegistry, { type DiscoveredTenant, type TenantDirectory } from './lib/tenant-registry.js';
 import logger from './lib/logger.js';
 import { isRecord, stringField } from './lib/payload.js';
+
+const DISCOVERY_TIMEOUT_MS = 10_000;
+const DEFAULT_TENANT_REFRESH_INTERVAL_MS = 5_000;
 
 /** Derive the API base URL from a SignalR hub URL (".../hubs/data" -> "..."). */
 function apiBaseFromHubUrl(hubUrl: string): string {
@@ -17,7 +21,7 @@ function apiBaseFromHubUrl(hubUrl: string): string {
 async function discoverTenants(
   apiBaseUrl: string,
   instanceKeyHash: string,
-): Promise<string[]> {
+): Promise<DiscoveredTenant[]> {
   const url = `${apiBaseUrl}/api/v4/admin/tenants`;
   logger.info(`Discovering tenants from ${url}`);
 
@@ -28,6 +32,7 @@ async function discoverTenants(
       'X-Instance-Key': instanceKeyHash,
       'X-Instance-Service': 'nocturne-bridge',
     },
+    signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -40,13 +45,14 @@ async function discoverTenants(
   if (!Array.isArray(tenants)) {
     throw new Error('Tenant discovery returned no tenant list');
   }
-  const activeSlugs = tenants.flatMap((t) => {
+  const active = tenants.flatMap((t) => {
+    const id = stringField(t, 'id');
     const slug = stringField(t, 'slug');
-    return isRecord(t) && t.isActive && slug ? [slug] : [];
+    return isRecord(t) && t.isActive && id && slug ? [{ id, slug }] : [];
   });
 
-  logger.info(`Discovered ${activeSlugs.length} active tenant(s): ${activeSlugs.join(', ')}`);
-  return activeSlugs;
+  logger.info(`Discovered ${active.length} active tenant(s): ${active.map((t) => t.slug).join(', ')}`);
+  return active;
 }
 
 /** The tenant the API serves on the apex domain, or null when it serves none.
@@ -58,6 +64,7 @@ async function discoverApexTenant(
 ): Promise<string | null> {
   const response = await fetch(`${apiBaseUrl}/api/v4/status`, {
     headers: { 'X-Forwarded-Host': baseDomain },
+    signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -66,9 +73,7 @@ async function discoverApexTenant(
     );
   }
 
-  const slug = stringField(await response.json(), 'tenantSlug') ?? null;
-  logger.info(`Apex domain serves tenant: ${slug ?? '(none)'}`);
-  return slug;
+  return stringField(await response.json(), 'tenantSlug') ?? null;
 }
 
 /** Create a SignalR client for a specific tenant. */
@@ -76,7 +81,9 @@ function createTenantClient(
   socketIOServer: SocketIOServer,
   config: ReturnType<typeof buildConfig>,
   tenantSlug: string,
+  tenantId: string,
   baseDomain: string,
+  confirmReconnect: () => Promise<boolean>,
 ): SignalRClient {
   const tenantHost = `${tenantSlug}.${baseDomain}`;
   const messageTranslator = new MessageTranslator(socketIOServer, tenantSlug);
@@ -89,7 +96,9 @@ function createTenantClient(
     reconnectDelay: config.signalr.reconnectDelay,
     maxReconnectDelay: config.signalr.maxReconnectDelay,
     instanceKey: config.instanceKey,
-    connectionHeaders: { 'X-Forwarded-Host': tenantHost },
+    // See TenantAwareHub.ExpectedTenantHeader in the API.
+    connectionHeaders: { 'X-Forwarded-Host': tenantHost, 'X-Expected-Tenant-Id': tenantId },
+    confirmReconnect,
   });
 }
 
@@ -146,15 +155,38 @@ export async function setupBridge(
   await socketIOServer.start();
   logger.info('Socket.IO server started');
 
-  const clients: SignalRClient[] = [];
-  /** slug → client, so the v3 `/alarm` ack forwarder can reach the right
-   *  tenant's AlarmHub connection without scanning the clients array. */
-  const clientsBySlug = new Map<string, SignalRClient>();
+  const instanceKeyHash = createHash('sha256')
+    .update(config.instanceKey)
+    .digest('hex')
+    .toLowerCase();
+
+  const registry: TenantRegistry<SignalRClient> = new TenantRegistry({
+    discover: async (): Promise<TenantDirectory> => {
+      const [tenants, apexSlug] = await Promise.all([
+        discoverTenants(apiBaseUrl, instanceKeyHash),
+        discoverApexTenant(apiBaseUrl, baseDomain),
+      ]);
+      return { tenants, apexSlug };
+    },
+    createConnection: (slug, id) => {
+      const client: SignalRClient = createTenantClient(
+        socketIOServer, config, slug, id, baseDomain, () => registry.confirm(slug, client));
+      return client;
+    },
+    refreshIntervalMs: userConfig.tenantRefreshIntervalMs ?? DEFAULT_TENANT_REFRESH_INTERVAL_MS,
+    onTenantRemoved: (slug) => socketIOServer.disconnectTenant(slug),
+    onApexChanged: (slug) => socketIOServer.setApexTenantSlug(slug),
+  });
+
+  socketIOServer.onTenantAdmitted = (slug) => registry.ensure(slug);
+  socketIOServer.onApexUnresolved = async () => {
+    await registry.refresh();
+  };
 
   // Forward v3 `/alarm` ack events (AAPS silencing an alarm) to the API's
   // AlarmHub via the matching tenant's SignalR client.
   socketIOServer.onAlarmAck = (tenantSlug, level, group, silenceTime) => {
-    const client = clientsBySlug.get(tenantSlug);
+    const client = registry.get(tenantSlug);
     if (client) {
       void client.invokeAlarmAck(level, group, silenceTime);
     } else {
@@ -164,71 +196,33 @@ export async function setupBridge(
     }
   };
 
-  // Discover tenants and connect their SignalR clients in the background so a
-  // slow or temporarily-unavailable API doesn't prevent the Socket.IO server
-  // from accepting browser connections.
+  // Discover tenants in the background so a slow or temporarily-unavailable API
+  // doesn't prevent the Socket.IO server from accepting browser connections.
   logger.info(`Bridge tenant discovery starting (baseDomain: ${baseDomain})`);
 
-  const instanceKeyHash = createHash('sha256')
-    .update(config.instanceKey)
-    .digest('hex')
-    .toLowerCase();
-
   let cancelled = false;
-
-  const connectWithRetry = async () => {
+  const discoverWithRetry = async () => {
     let delay = config.signalr.reconnectDelay;
-    const maxDelay = config.signalr.maxReconnectDelay;
-
-    while (!cancelled) {
-      try {
-        const tenantSlugs = await discoverTenants(apiBaseUrl, instanceKeyHash);
-        socketIOServer.setApexTenantSlug(await discoverApexTenant(apiBaseUrl, baseDomain));
-
-        for (const slug of tenantSlugs) {
-          if (cancelled) return;
-          const client = createTenantClient(socketIOServer, config, slug, baseDomain);
-          clients.push(client);
-          clientsBySlug.set(slug, client);
-          await client.connect();
-          logger.info(`SignalR client connected for tenant: ${slug}`);
-        }
-
-        logger.info(`WebSocket Bridge setup completed (${clients.length} tenant connections)`);
-        return;
-      } catch (error) {
-        // Clean up any partially-connected clients before retrying
-        for (const client of clients) {
-          try { await client.disconnect(); } catch { /* ignore cleanup errors */ }
-        }
-        clients.length = 0;
-        clientsBySlug.clear();
-
-        if (cancelled) return;
-        const message = error instanceof Error ? error.message : String(error);
-        logger.warn(`Bridge setup attempt failed, retrying in ${delay}ms: ${message}`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        delay = Math.min(delay * 2, maxDelay);
-      }
+    while (!cancelled && !(await registry.refresh())) {
+      if (cancelled) return;
+      logger.warn(`Bridge tenant discovery failed, retrying in ${delay}ms`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(delay * 2, config.signalr.maxReconnectDelay);
     }
   };
-
-  // Fire-and-forget — don't block the HTTP server from starting
-  connectWithRetry();
+  void discoverWithRetry();
 
   return {
     io: socketIOServer.getIO()!,
     disconnect: async () => {
       cancelled = true;
-      for (const client of clients) {
-        await client.disconnect();
-      }
+      await registry.stop();
       await socketIOServer.stop();
     },
-    isConnected: () => clients.some((c) => c.isConnected()),
+    isConnected: () => registry.connections().some((c) => c.isConnected()),
     getStats: () => ({
       ...socketIOServer.getStats(),
-      signalrConnected: clients.some((c) => c.isConnected()),
+      signalrConnected: registry.connections().some((c) => c.isConnected()),
     }),
   };
 }

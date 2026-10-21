@@ -272,6 +272,7 @@ public class ChartDataService : IChartDataService
     )
     {
         return tempBasals
+            .Where(tb => tb.Origin == TempBasalOrigin.Suspended || tb.Rate is not null)
             .Select(tb =>
             {
                 var origin = BasalSeriesBuilder.MapTempBasalOrigin(tb.Origin);
@@ -280,7 +281,7 @@ public class ChartDataService : IChartDataService
                     Id = tb.LegacyId ?? tb.Id.ToString(),
                     StartMills = tb.StartMills,
                     EndMills = tb.EndMills,
-                    Rate = origin == BasalDeliveryOrigin.Suspended ? 0 : tb.Rate,
+                    Rate = origin == BasalDeliveryOrigin.Suspended ? 0 : tb.Rate!.Value,
                     Origin = origin,
                     Source = tb.DataSource,
                     FillColor = ChartColorMapper.FillFromBasalOrigin(origin),

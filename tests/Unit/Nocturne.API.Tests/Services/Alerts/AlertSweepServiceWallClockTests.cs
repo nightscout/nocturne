@@ -457,6 +457,7 @@ public class AlertSweepServiceWallClockTests
             services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
             services.AddScoped<IAuditContext, AuditContext>();
             services.AddSingleton<ConditionVersionLog>();
+            services.AddSingleton<IAlertRuleConditionValidator, AlertRuleConditionValidator>();
             services.AddSingleton<ILogger<AlertOrchestrator>>(OrchestratorLogger);
             services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
 

@@ -2,15 +2,20 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Moq;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Infrastructure.Cache.Configuration;
+using Nocturne.Infrastructure.Cache.Services;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -23,7 +28,7 @@ namespace Nocturne.API.Tests.Middleware.Handlers;
 /// <summary>
 /// Verifies that <see cref="PlatformAccessCookieHandler"/> only confers platform-access
 /// authentication for a genuine, platform-access-marked grant pinned to the resolved tenant,
-/// whose subject is still a platform admin — and skips (falls through to the normal auth chain)
+/// whose subject is still a platform admin and whose token has not been revoked — and skips (falls through to the normal auth chain)
 /// for anything else.
 /// </summary>
 public class PlatformAccessCookieHandlerTests : IDisposable
@@ -35,6 +40,7 @@ public class PlatformAccessCookieHandlerTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly IJwtService _jwt;
+    private readonly IOAuthTokenRevocationCache _revocations;
     private readonly PlatformAccessCookieHandler _handler;
     private readonly OidcOptions _oidc = new();
 
@@ -57,8 +63,19 @@ public class PlatformAccessCookieHandlerTests : IDisposable
             ctx.SaveChanges();
         }
 
+        _revocations = new OAuthTokenRevocationCache(
+            new MemoryCacheService(
+                new MemoryCache(new MemoryCacheOptions()),
+                Options.Create(new CacheConfiguration()),
+                NullLogger<MemoryCacheService>.Instance),
+            NullLogger<OAuthTokenRevocationCache>.Instance);
+
         var services = new ServiceCollection();
         services.AddSingleton(_jwt);
+        services.AddSingleton(_revocations);
+        services.AddSingleton(Mock.Of<IOAuthGrantService>());
+        services.AddSingleton<ILogger<JwtCredentialValidator>>(NullLogger<JwtCredentialValidator>.Instance);
+        services.AddScoped<IJwtCredentialValidator, JwtCredentialValidator>();
         services.AddDbContextFactory<NocturneDbContext>(o => o
             .UseSqlite(_db.Connection)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
@@ -86,6 +103,35 @@ public class PlatformAccessCookieHandlerTests : IDisposable
         result.AuthContext!.AuthType.Should().Be(AuthType.PlatformAccess);
         result.AuthContext.SubjectId.Should().Be(_subjectId);
         result.AuthContext.Permissions.Should().Contain("*");
+    }
+
+    [Fact]
+    public async Task RevokedGrant_Skips()
+    {
+        var token = MintGrant(_subjectId, tenantId: _tenantId, platformAccess: true);
+        var claims = _jwt.ValidateAccessToken(token).Claims!;
+        await _revocations.RevokeAsync(claims.JwtId!, claims.ExpiresAt - DateTimeOffset.UtcNow);
+        var context = BuildContext(_tenantId, cookieValue: token);
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        result.ShouldSkip.Should().BeTrue();
+        result.Succeeded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RevokingAnotherGrant_LeavesThisOneWorking()
+    {
+        var other = MintGrant(_subjectId, tenantId: _tenantId, platformAccess: true);
+        var otherClaims = _jwt.ValidateAccessToken(other).Claims!;
+        await _revocations.RevokeAsync(otherClaims.JwtId!, otherClaims.ExpiresAt - DateTimeOffset.UtcNow);
+        var token = MintGrant(_subjectId, tenantId: _tenantId, platformAccess: true);
+        var context = BuildContext(_tenantId, cookieValue: token);
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        result.Succeeded.Should().BeTrue();
+        result.AuthContext!.AuthType.Should().Be(AuthType.PlatformAccess);
     }
 
     [Fact]

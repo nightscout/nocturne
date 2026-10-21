@@ -149,7 +149,7 @@ public class GlookoProfileMapper
         return DateTime.TryParse(
             timestamp,
             CultureInfo.InvariantCulture,
-            DateTimeStyles.RoundtripKind,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
             out var parsed) ? parsed : null;
     }
 
@@ -167,7 +167,7 @@ public class GlookoProfileMapper
         if (!DateTime.TryParse(
                 timestamp,
                 CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
                 out var syncTime))
         {
             _logger.LogWarning("Failed to parse profile timestamp: '{Timestamp}'", timestamp);
