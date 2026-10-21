@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  assertAcceptableCustomSound,
+  resolveCustomSoundType,
   CustomSoundRejectedError,
   MAX_CUSTOM_SOUND_SIZE_MB,
   type CustomSoundRejection,
@@ -11,7 +11,7 @@ const fileOf = (type: string, size = 1024, name = "sound") =>
 
 const rejectionOf = (file: File): CustomSoundRejection | undefined => {
   try {
-    assertAcceptableCustomSound(file);
+    resolveCustomSoundType(file);
     return undefined;
   } catch (err) {
     if (err instanceof CustomSoundRejectedError) return err.reason;
@@ -19,7 +19,7 @@ const rejectionOf = (file: File): CustomSoundRejection | undefined => {
   }
 };
 
-describe("assertAcceptableCustomSound", () => {
+describe("resolveCustomSoundType", () => {
   it.each(["audio/mpeg", "audio/wav", "audio/ogg", "audio/flac", "audio/webm", "audio/mp4", "audio/aac"])(
     "accepts %s",
     (type) => {
@@ -28,11 +28,14 @@ describe("assertAcceptableCustomSound", () => {
   );
 
   it.each([
-    ["audio/x-m4a", "alarm.m4a"],
-    ["video/webm", "alarm.webm"],
-    ["", "alarm.FLAC"],
-  ])("accepts a browser-specific type %j when the extension is known (%s)", (type, name) => {
-    expect(rejectionOf(fileOf(type, 1024, name))).toBeUndefined();
+    ["audio/flac", "alarm.flac", "audio/flac"],
+    ["", "alarm.FLAC", "audio/flac"],
+    ["audio/x-flac", "a.flac", "audio/flac"],
+    ["audio/vnd.dlna.adts", "a.aac", "audio/aac"],
+    ["audio/x-m4a", "a.m4a", "audio/mp4"],
+    ["video/webm", "a.webm", "audio/webm"],
+  ])("resolves %j named %s to %s", (type, name, expected) => {
+    expect(resolveCustomSoundType(fileOf(type, 1024, name))).toBe(expected);
   });
 
   it("rejects an unknown type with an unknown extension", () => {

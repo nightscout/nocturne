@@ -661,15 +661,27 @@ export function getVibrationPattern(soundId: string): number[] {
 
 const CUSTOM_SOUNDS_STORAGE_KEY = 'nocturne-custom-alarm-sounds';
 export const MAX_CUSTOM_SOUND_SIZE_MB = 5;
-const CUSTOM_SOUND_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/webm', 'audio/mp4', 'audio/aac'];
 /**
- * Browsers disagree on these files' MIME types (`video/webm`, `audio/x-m4a`, an empty type, ...),
- * so a known extension is enough; the decode check in {@link uploadCustomSound} still refuses non-audio.
+ * Browsers report these files under differing or empty MIME types (`video/webm`, `audio/x-m4a`,
+ * `audio/vnd.dlna.adts`, ...), and a data URL decodes only under the canonical one, so a file
+ * reported under any other type is stored under the canonical type of its extension.
  */
-const CUSTOM_SOUND_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.flac', '.webm', '.m4a', '.aac'];
+const CUSTOM_SOUND_TYPE_BY_EXTENSION: Readonly<Record<string, string>> = {
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.flac': 'audio/flac',
+  '.aac': 'audio/aac',
+  '.m4a': 'audio/mp4',
+  '.webm': 'audio/webm',
+};
+const CUSTOM_SOUND_TYPES = new Set(Object.values(CUSTOM_SOUND_TYPE_BY_EXTENSION));
 
 /** The file input's `accept` value for custom sounds. */
-export const CUSTOM_SOUND_ACCEPT = [...CUSTOM_SOUND_TYPES, ...CUSTOM_SOUND_EXTENSIONS].join(',');
+export const CUSTOM_SOUND_ACCEPT = [
+  ...CUSTOM_SOUND_TYPES,
+  ...Object.keys(CUSTOM_SOUND_TYPE_BY_EXTENSION),
+].join(',');
 
 export type CustomSoundRejection = 'unsupported-type' | 'too-large' | 'undecodable' | 'timed-out';
 
@@ -681,15 +693,25 @@ export class CustomSoundRejectedError extends Error {
   }
 }
 
-/** @throws {CustomSoundRejectedError} when the file's type or size is not accepted. */
-export function assertAcceptableCustomSound(file: File): void {
-  const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
-  if (!CUSTOM_SOUND_TYPES.includes(file.type) && !CUSTOM_SOUND_EXTENSIONS.includes(extension)) {
+/**
+ * The canonical MIME type a custom sound is stored and decoded as.
+ *
+ * @throws {CustomSoundRejectedError} when the file's type or size is not accepted.
+ */
+export function resolveCustomSoundType(file: File): string {
+  const dot = file.name.lastIndexOf('.');
+  const type = CUSTOM_SOUND_TYPES.has(file.type)
+    ? file.type
+    : dot < 0
+      ? undefined
+      : CUSTOM_SOUND_TYPE_BY_EXTENSION[file.name.slice(dot).toLowerCase()];
+  if (!type) {
     throw new CustomSoundRejectedError('unsupported-type');
   }
   if (file.size > MAX_CUSTOM_SOUND_SIZE_MB * 1024 * 1024) {
     throw new CustomSoundRejectedError('too-large');
   }
+  return type;
 }
 
 export interface CustomAlarmSound {
@@ -819,10 +841,10 @@ async function saveToIndexedDB(sounds: CustomAlarmSound[]): Promise<void> {
  * Upload a custom alarm sound from a File
  */
 export async function uploadCustomSound(file: File, name?: string): Promise<CustomAlarmSound> {
-  assertAcceptableCustomSound(file);
-
-  // Read file as data URL
-  const dataUrl = await readFileAsDataUrl(file);
+  const mimeType = resolveCustomSoundType(file);
+  const dataUrl = await readFileAsDataUrl(
+    file.type === mimeType ? file : new Blob([file], { type: mimeType })
+  );
 
   // Validate that the audio can be decoded
   await validateAudioFile(dataUrl);
@@ -831,7 +853,7 @@ export async function uploadCustomSound(file: File, name?: string): Promise<Cust
     id: `custom-${randomUUID()}`,
     name: name || file.name.replace(/\.[^.]+$/, ''), // Remove extension for display name
     fileName: file.name,
-    mimeType: file.type,
+    mimeType,
     size: file.size,
     dataUrl,
     createdAt: new Date().toISOString(),
@@ -886,7 +908,7 @@ export async function getCustomSounds(): Promise<CustomAlarmSound[]> {
 /**
  * Read a File as a data URL
  */
-function readFileAsDataUrl(file: File): Promise<string> {
+function readFileAsDataUrl(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () =>
