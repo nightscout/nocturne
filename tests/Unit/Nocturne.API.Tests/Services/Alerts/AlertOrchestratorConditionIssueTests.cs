@@ -126,6 +126,33 @@ public class AlertOrchestratorConditionIssueTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task A_failing_issue_check_does_not_stop_the_tenants_other_rules()
+    {
+        var harness = new Harness();
+        harness.Validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([]);
+        harness.Validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), WizardUrgentLow, It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>()))
+            .Throws(new InvalidOperationException("validator failed"));
+        var first = Rule(WizardUrgentLow);
+        var second = Rule("""{"direction": "below", "value": 54}""") with
+        {
+            Id = Guid.Parse("85385385-0000-7000-8000-0000000000a2"),
+        };
+
+        await harness.EvaluateAsync(first, second);
+
+        harness.Engine.Verify(
+            e => e.EvaluateRuleAsync(It.Is<AlertRuleSnapshot>(r => r.Id == second.Id), It.IsAny<SensorContext>(),
+                It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        harness.Logger.Entries.Should().Contain(e => e.Level == LogLevel.Error);
+    }
+
     private static AlertRuleSnapshot Rule(string conditionParams, AlertConditionType type = AlertConditionType.Threshold) =>
         new(RuleId, Tenant, "Urgent Low", type, conditionParams,
             AlertRuleSeverity.Critical, "{}", 0, false, null);
@@ -168,7 +195,7 @@ public class AlertOrchestratorConditionIssueTests
                 Logger);
         }
 
-        public Task EvaluateAsync(AlertRuleSnapshot rule) =>
-            _orchestrator.EvaluateRulesAsync([rule], new HashSet<Guid> { rule.Id }, Reading(40), CancellationToken.None);
+        public Task EvaluateAsync(params AlertRuleSnapshot[] rules) =>
+            _orchestrator.EvaluateRulesAsync(rules, rules.Select(r => r.Id).ToHashSet(), Reading(40), CancellationToken.None);
     }
 }

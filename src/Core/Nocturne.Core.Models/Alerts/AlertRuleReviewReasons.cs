@@ -18,6 +18,12 @@ public static class AlertRuleReviewReasons
     public const string LegacyConditionConverted = "legacy_condition_converted";
 
     /// <summary>
+    /// <see cref="LegacyConditionConverted"/> for a rule with a glucose threshold below 40 mg/dL
+    /// once converted: likely a mmol/L value typed into an mg/dL field, or none at all.
+    /// </summary>
+    public const string LegacyThresholdImplausible = "legacy_threshold_implausible";
+
+    /// <summary>
     /// A rule whose condition type no evaluator knows. It was disabled; its condition is kept.
     /// </summary>
     public const string ConditionTypeUnrecognized = "condition_type_unrecognized";

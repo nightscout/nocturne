@@ -22,14 +22,29 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 public class RepairPreRedesignAlertRulesFixture : IAsyncLifetime
 {
     /// <summary>The migration immediately before the one under test.</summary>
-    private const string PriorMigration = "20261021130540_AddGoogleHealthGrantHolders";
+    private const string PriorMigration = "20261021145304_AddTherapySettingsDocumentDefaultProfile";
 
-    private const string UnderTest = "20261021150923_RepairPreRedesignAlertRules";
+    private const string UnderTest = "20261021161830_RepairPreRedesignAlertRules";
 
     private string _migratorConnectionString = string.Empty;
 
     internal static readonly Guid Wizard = Guid.Parse("85385385-0000-7000-8000-00000000000a");
     internal static readonly Guid Editor = Guid.Parse("85385385-0000-7000-8000-00000000000b");
+
+    /// <summary>An instance where AlertsRedesign did run, holding what it wrote.</summary>
+    internal static readonly Guid Redesigned = Guid.Parse("85385385-0000-7000-8000-00000000000c");
+
+    private static readonly Guid[] Tenants = [Wizard, Editor, Redesigned];
+
+    internal static readonly Guid RanUrgentLow = Rule(21);
+    internal static readonly Guid RanSustainedLow = Rule(22);
+    internal static readonly Guid RanThresholdWithAutoResolve = Rule(23);
+    internal static readonly Guid RanSensorLost = Rule(24);
+    internal static readonly Guid OldEditorLow = Rule(25);
+    internal static readonly Guid MmolLow = Rule(26);
+    internal static readonly Guid FractionalSignalLoss = Rule(27);
+    internal static readonly Guid StringThreshold = Rule(28);
+    internal static readonly Guid CamelCaseChild = Rule(29);
 
     internal static readonly Guid UrgentLow = Rule(1);
     internal static readonly Guid High = Rule(2);
@@ -69,9 +84,10 @@ public class RepairPreRedesignAlertRulesFixture : IAsyncLifetime
 
         await MigrateToAsync(UnderTest);
         FirstRun = await RulesAsync();
-        var wizard = await ReadEnumsThroughEfAsync(Wizard);
-        var editor = await ReadEnumsThroughEfAsync(Editor);
-        ReadAfter = [.. wizard.Rows ?? [], .. editor.Rows ?? []];
+        var read = new List<(AlertConditionType, AlertRuleSeverity)>();
+        foreach (var tenantId in Tenants)
+            read.AddRange((await ReadEnumsThroughEfAsync(tenantId)).Rows ?? []);
+        ReadAfter = read;
 
         await MigrateToAsync(PriorMigration);
         await MigrateToAsync(UnderTest);
@@ -113,14 +129,15 @@ public class RepairPreRedesignAlertRulesFixture : IAsyncLifetime
     private async Task<Dictionary<Guid, StoredRule>> RulesAsync()
     {
         var rules = new Dictionary<Guid, StoredRule>();
-        foreach (var tenantId in new[] { Wizard, Editor })
+        foreach (var tenantId in Tenants)
         {
             await using var conn = new NpgsqlConnection(_migratorConnectionString);
             await conn.OpenAsync();
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
                 SELECT set_config('app.current_tenant_id', '{tenantId}', false);
-                SELECT id, condition_type, condition_params::text, severity, is_enabled, review_reason
+                SELECT id, condition_type, condition_params::text, severity, is_enabled, review_reason,
+                       auto_resolve_params::text, pre_repair::text
                   FROM alert_rules;
                 """;
             await using var reader = await cmd.ExecuteReaderAsync();
@@ -132,7 +149,9 @@ public class RepairPreRedesignAlertRulesFixture : IAsyncLifetime
                     JsonNode.Parse(reader.GetString(2)),
                     reader.GetString(3),
                     reader.GetBoolean(4),
-                    reader.IsDBNull(5) ? null : reader.GetString(5));
+                    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    reader.IsDBNull(6) ? null : JsonNode.Parse(reader.GetString(6)),
+                    reader.IsDBNull(7) ? null : JsonNode.Parse(reader.GetString(7)));
             }
         }
         return rules;
@@ -147,12 +166,15 @@ public class RepairPreRedesignAlertRulesFixture : IAsyncLifetime
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static string RuleRow(Guid tenantId, Guid ruleId, string conditionType, string conditionParams, string severity) => $"""
+    private static string RuleRow(
+        Guid tenantId, Guid ruleId, string conditionType, string conditionParams, string severity,
+        string? autoResolve = null) => $"""
         INSERT INTO alert_rules (id, tenant_id, name, condition_type, condition_params, auto_resolve_enabled,
-                                 severity, client_configuration, is_enabled, allow_through_dnd, scope_class,
-                                 sort_order, created_at, updated_at)
-        VALUES ('{ruleId}', '{tenantId}', 'Rule', '{conditionType}', '{conditionParams}'::jsonb, false,
-                '{severity}', '{"{}"}', true, false, 'undirected', 0, now() - interval '200 days', now() - interval '200 days');
+                                 auto_resolve_params, severity, client_configuration, is_enabled, allow_through_dnd,
+                                 scope_class, sort_order, created_at, updated_at)
+        VALUES ('{ruleId}', '{tenantId}', 'Rule', '{conditionType}', '{conditionParams}'::jsonb, {(autoResolve is null ? "false" : "true")},
+                {(autoResolve is null ? "NULL" : $"'{autoResolve}'::jsonb")}, '{severity}', '{"{}"}', true, false,
+                'undirected', 0, now() - interval '200 days', now() - interval '200 days');
         """;
 
     private async Task SeedAsync()
@@ -160,8 +182,21 @@ public class RepairPreRedesignAlertRulesFixture : IAsyncLifetime
         await ExecuteAsync(Guid.Empty, $"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES
               ('{Wizard}', 'wizard-853', 'Wizard', true, now(), now()),
-              ('{Editor}', 'editor-853', 'Editor', true, now(), now());
+              ('{Editor}', 'editor-853', 'Editor', true, now(), now()),
+              ('{Redesigned}', 'redesigned-853', 'Redesigned', true, now(), now());
             """);
+
+        const string ranAutoResolve = """{"type": "sustained", "sustained": {"minutes": 15, "child": {"type": "not", "not": {"child": {"type": "threshold", "threshold": {"threshold": 54, "direction": "below"}}}}}}""";
+        await ExecuteAsync(Redesigned, string.Concat(
+            RuleRow(Redesigned, RanUrgentLow, "composite", """{"operator": "and", "conditions": [{"threshold": 54, "direction": "below"}]}""", "critical"),
+            RuleRow(Redesigned, RanSustainedLow, "composite", """{"operator": "and", "conditions": [{"type": "sustained", "sustained": {"minutes": 10, "child": {"threshold": 70, "direction": "below"}}}]}""", "warning"),
+            RuleRow(Redesigned, RanThresholdWithAutoResolve, "composite", """{"operator": "and", "conditions": [{"type": "threshold", "threshold": {"threshold": 54, "direction": "below"}}]}""", "critical", ranAutoResolve),
+            RuleRow(Redesigned, RanSensorLost, "composite", """{"operator": "and", "conditions": [{"type": "staleness", "staleness": {"operator": ">", "value": 15}}]}""", "warning"),
+            RuleRow(Redesigned, OldEditorLow, "threshold_low", """{"direction": "below", "value": 70, "threshold": 70}""", "warning"),
+            RuleRow(Redesigned, MmolLow, "threshold_low", """{"direction": "below", "value": 3.9, "threshold": 3.9}""", "critical"),
+            RuleRow(Redesigned, FractionalSignalLoss, "signal_loss", """{"minutes": 12.6}""", "warning"),
+            RuleRow(Redesigned, StringThreshold, "threshold_low", """{"threshold": "54", "direction": "below"}""", "critical"),
+            RuleRow(Redesigned, CamelCaseChild, "composite", """{"operator": "or", "conditions": [{"type": "RateOfChange", "rateOfChange": {"direction": "falling", "rate": 2}}]}""", "warning")));
 
         (Guid Id, string Type, string Params, string Severity)[] wizard =
         [
@@ -191,7 +226,8 @@ public class RepairPreRedesignAlertRulesFixture : IAsyncLifetime
 
 /// <summary>An alert rule's repaired columns, read under its tenant's context.</summary>
 public sealed record StoredRule(
-    string ConditionType, JsonNode? ConditionParams, string Severity, bool IsEnabled, string? ReviewReason);
+    string ConditionType, JsonNode? ConditionParams, string Severity, bool IsEnabled, string? ReviewReason,
+    JsonNode? AutoResolveParams, JsonNode? PreRepair);
 
 /// <inheritdoc cref="RepairPreRedesignAlertRulesFixture"/>
 [Trait("Category", "Integration")]
@@ -216,9 +252,93 @@ public class RepairPreRedesignAlertRulesTests(RepairPreRedesignAlertRulesFixture
     }
 
     [Fact]
-    public void After_the_repair_every_rule_of_both_tenants_is_read()
+    public void After_the_repair_every_rule_of_every_tenant_is_read()
     {
-        fixture.ReadAfter.Should().HaveCount(14);
+        fixture.ReadAfter.Should().HaveCount(23);
+    }
+
+    [Fact]
+    public void A_repaired_rule_keeps_what_it_held_before()
+    {
+        JsonNode.DeepEquals(After(RepairPreRedesignAlertRulesFixture.High).PreRepair, JsonNode.Parse("""
+            {"condition_type": "threshold_high", "condition_params": {"threshold": 250, "direction": "above"},
+             "auto_resolve_enabled": false, "auto_resolve_params": null, "severity": "normal", "is_enabled": true}
+            """)).Should().BeTrue(After(RepairPreRedesignAlertRulesFixture.High).PreRepair?.ToJsonString());
+        After(RepairPreRedesignAlertRulesFixture.CurrentLow).PreRepair.Should().BeNull();
+    }
+
+    [Fact]
+    public void A_type_less_threshold_alerts_redesign_wrapped_into_a_composite_becomes_a_threshold()
+    {
+        var rule = After(RepairPreRedesignAlertRulesFixture.RanUrgentLow);
+        ShouldHold(rule, "composite", """
+            {"operator": "and", "conditions": [{"type": "threshold", "threshold": {"direction": "below", "value": 54}}]}
+            """);
+        rule.ReviewReason.Should().Be(Converted);
+    }
+
+    [Fact]
+    public void A_type_less_threshold_under_alerts_redesigns_sustained_becomes_a_threshold()
+    {
+        ShouldHold(After(RepairPreRedesignAlertRulesFixture.RanSustainedLow), "composite", """
+            {"operator": "and", "conditions": [{"type": "sustained", "sustained": {"minutes": 10,
+              "child": {"type": "threshold", "threshold": {"direction": "below", "value": 70}}}}]}
+            """);
+    }
+
+    [Fact]
+    public void A_threshold_alerts_redesign_wrapped_without_a_value_is_repaired_in_its_auto_resolve_tree_too()
+    {
+        var rule = After(RepairPreRedesignAlertRulesFixture.RanThresholdWithAutoResolve);
+        ShouldHold(rule, "composite", """
+            {"operator": "and", "conditions": [{"type": "threshold", "threshold": {"direction": "below", "value": 54}}]}
+            """);
+        JsonNode.DeepEquals(rule.AutoResolveParams, JsonNode.Parse("""
+            {"type": "sustained", "sustained": {"minutes": 15, "child": {"type": "not", "not": {"child":
+              {"type": "threshold", "threshold": {"direction": "below", "value": 54}}}}}}
+            """)).Should().BeTrue(rule.AutoResolveParams?.ToJsonString());
+    }
+
+    [Fact]
+    public void Alerts_redesigns_staleness_is_already_readable_and_left_alone()
+    {
+        After(RepairPreRedesignAlertRulesFixture.RanSensorLost).ReviewReason.Should().BeNull();
+    }
+
+    [Fact]
+    public void The_old_editors_threshold_low_drops_its_alias()
+    {
+        var rule = After(RepairPreRedesignAlertRulesFixture.OldEditorLow);
+        ShouldHold(rule, "threshold", """{"direction": "below", "value": 70}""");
+        rule.ReviewReason.Should().Be(Converted);
+    }
+
+    [Fact]
+    public void A_threshold_below_40_mg_dl_is_flagged_as_implausible()
+    {
+        var rule = After(RepairPreRedesignAlertRulesFixture.MmolLow);
+        ShouldHold(rule, "threshold", """{"direction": "below", "value": 3.9}""");
+        rule.ReviewReason.Should().Be(AlertRuleReviewReasons.LegacyThresholdImplausible);
+    }
+
+    [Fact]
+    public void A_fractional_timeout_is_rounded_to_whole_minutes()
+    {
+        ShouldHold(After(RepairPreRedesignAlertRulesFixture.FractionalSignalLoss), "signal_loss", """{"timeout_minutes": 13}""");
+    }
+
+    [Fact]
+    public void A_numeric_string_threshold_becomes_a_number()
+    {
+        ShouldHold(After(RepairPreRedesignAlertRulesFixture.StringThreshold), "threshold", """{"direction": "below", "value": 54}""");
+    }
+
+    [Fact]
+    public void A_camel_case_kind_gets_its_wire_name_and_payload_key()
+    {
+        ShouldHold(After(RepairPreRedesignAlertRulesFixture.CamelCaseChild), "composite", """
+            {"operator": "or", "conditions": [{"type": "rate_of_change", "rate_of_change": {"direction": "falling", "rate": 2}}]}
+            """);
     }
 
     [Fact]
@@ -342,7 +462,9 @@ public class RepairPreRedesignAlertRulesTests(RepairPreRedesignAlertRulesFixture
                 $"rule {id} held {first.ConditionParams?.ToJsonString()} and then {again.ConditionParams?.ToJsonString()}");
             again.Severity.Should().Be(first.Severity);
             again.IsEnabled.Should().Be(first.IsEnabled);
+            JsonNode.DeepEquals(again.AutoResolveParams, first.AutoResolveParams).Should().BeTrue();
             again.ReviewReason.Should().BeNull("a rule the first run repaired needs nothing the second time");
+            again.PreRepair.Should().BeNull();
         }
     }
 }

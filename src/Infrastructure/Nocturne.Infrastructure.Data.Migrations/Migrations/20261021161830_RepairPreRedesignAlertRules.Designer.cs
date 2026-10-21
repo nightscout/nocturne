@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20261021150923_RepairPreRedesignAlertRules")]
+    [Migration("20261021161830_RepairPreRedesignAlertRules")]
     partial class RepairPreRedesignAlertRules
     {
         /// <inheritdoc />
@@ -548,6 +548,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("name");
+
+                    b.Property<string>("PreRepair")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("pre_repair");
 
                     b.Property<string>("ReviewReason")
                         .HasMaxLength(64)
@@ -8782,6 +8786,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<double>("Dia")
                         .HasColumnType("double precision")
                         .HasColumnName("dia");
+
+                    b.Property<string>("DocumentDefaultProfile")
+                        .HasColumnType("text")
+                        .HasColumnName("document_default_profile");
 
                     b.Property<string>("EnteredBy")
                         .HasMaxLength(100)

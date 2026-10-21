@@ -71,9 +71,9 @@ internal sealed class AlertOrchestrator(
 
         foreach (var rule in evaluable)
         {
-            ReportConditionIssues(rule, tenantId);
             try
             {
+                ReportConditionIssues(rule, tenantId);
                 await EvaluateRuleAsync(rule, enriched, tenantId, ct);
             }
             catch (Exception ex) when (ex is ConditionTreeFaultException

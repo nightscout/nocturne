@@ -13,6 +13,10 @@ describe("reviewReasonMessage", () => {
 		);
 	});
 
+	it("asks for a converted threshold below 40 mg/dL to be checked", () => {
+		expect(reviewReasonMessage("legacy_threshold_implausible")).toContain("below 40 mg/dL");
+	});
+
 	it("explains a rule turned off for an unknown condition type", () => {
 		expect(reviewReasonMessage("condition_type_unrecognized")).toContain("turned off");
 	});

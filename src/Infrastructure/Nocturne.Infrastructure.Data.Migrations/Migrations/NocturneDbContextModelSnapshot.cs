@@ -546,6 +546,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
+                    b.Property<string>("PreRepair")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("pre_repair");
+
                     b.Property<string>("ReviewReason")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
