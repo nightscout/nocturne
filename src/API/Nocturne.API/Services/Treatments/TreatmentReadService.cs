@@ -152,6 +152,9 @@ public class TreatmentReadService : ITreatmentStore
                 "Find-filtered treatment query hit the {MaxFetch}-row window; matches beyond it are not returned",
                 MaxFilterFetch);
 
+        if (find.HasAbandonedRegex)
+            _logger.LogWarning("A find $regex ran out of its time budget; treatment matches may be incomplete");
+
         return OrderByTime(matching, descending)
             .Skip(skip)
             .Take(count)

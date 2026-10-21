@@ -60,6 +60,7 @@ public static class ParityDivergences
 
     public static readonly IReadOnlyList<Divergence> All =
     [
+        new("V1.AlexaParityTests.PostAlexa_InvalidRequest_ReturnsSameShape", "POST /api/v1/alexa", 200, JsonValueKind.Object, UndefinedPropertyCrash),
         new("V1.CountParityTests.CountActivity_Empty_ReturnsSameShape", "GET /api/v1/count/activity/where", 200, JsonValueKind.Array, CountCrashes),
         new("V1.CountParityTests.CountDeviceStatus_Empty_ReturnsSameShape", "GET /api/v1/count/devicestatus/where", 200, JsonValueKind.Array, CountCrashes),
         new("V1.CountParityTests.CountDeviceStatus_WithData_ReturnsSameShape", "GET /api/v1/count/devicestatus/where", 200, JsonValueKind.Array, CountCrashes),

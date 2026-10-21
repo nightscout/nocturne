@@ -196,6 +196,9 @@ public class TimeQueryService : ITimeQueryService
     /// <c>$in</c> compares literally. Repeated <c>$regex</c> keys on one field stay separate
     /// conditions in <see cref="Nocturne.Core.Models.Queries.FindQuery"/>.
     /// </summary>
+    /// <exception cref="TimePatternRejectedException">
+    /// A composed pattern would not compile as a <c>$regex</c>, so it would silently match nothing.
+    /// </exception>
     private static string BuildFind(
         string? find,
         string field,
@@ -210,6 +213,11 @@ public class TimeQueryService : ITimeQueryService
         var expanded = (timePatterns.InPatterns ?? []).Where(p => p.Length > 0).ToArray();
         if (expanded.Length > 0)
             patterns.Add(string.Join('|', expanded));
+
+        if (patterns.Any(p => !BoundedRegex.Create(p).IsCompiled))
+            throw new TimePatternRejectedException(
+                "The time pattern is not a supported regular expression: it may not use backreferences "
+                    + "or lookarounds, or expand to too large a pattern");
 
         var terms = patterns
             .Select(p => $"find[{field}][$regex]={Uri.EscapeDataString(p)}")

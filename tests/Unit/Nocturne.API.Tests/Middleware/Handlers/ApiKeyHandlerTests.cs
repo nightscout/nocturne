@@ -9,6 +9,7 @@ using Moq;
 using Nocturne.API.Authorization;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Middleware.Handlers;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -293,8 +294,7 @@ public class ApiKeyHandlerTests : IDisposable
         Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
         Assert.Contains("health.readwrite", result.AuthContext.Scopes);
 
-        await Task.Delay(200);
-
+        Assert.False(_requestServices!.ScopeFactoryRequested);
         mockNotificationService.Verify(s => s.CreateNotificationAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
@@ -567,6 +567,7 @@ public class ApiKeyHandlerTests : IDisposable
             await ctx.SaveChangesAsync();
         }
 
+        var nudged = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var mockNotificationService = new Mock<IInAppNotificationService>();
         mockNotificationService
             .Setup(s => s.CreateNotificationAsync(
@@ -576,6 +577,7 @@ public class ApiKeyHandlerTests : IDisposable
                 It.IsAny<string?>(), It.IsAny<List<NotificationActionDto>?>(),
                 It.IsAny<ResolutionConditions?>(), It.IsAny<Dictionary<string, object>?>(),
                 It.IsAny<CancellationToken>()))
+            .Callback(() => nudged.TrySetResult())
             .ReturnsAsync(new InAppNotificationDto());
 
         var context = CreateHttpContextWithServices(mockNotificationService.Object);
@@ -584,10 +586,9 @@ public class ApiKeyHandlerTests : IDisposable
         var result = await _handler.AuthenticateAsync(context);
 
         Assert.True(result.Succeeded);
+        await nudged.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
-        // Allow the fire-and-forget task to complete
-        await Task.Delay(200);
-
+        Assert.True(_requestServices!.ScopeFactoryRequested);
         mockNotificationService.Verify(s => s.CreateNotificationAsync(
             _subjectId.ToString(),
             "api-key-rotation",
@@ -662,8 +663,7 @@ public class ApiKeyHandlerTests : IDisposable
 
         Assert.True(result.Succeeded);
 
-        await Task.Delay(200);
-
+        Assert.False(_requestServices!.ScopeFactoryRequested);
         mockNotificationService.Verify(s => s.CreateNotificationAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
@@ -681,6 +681,7 @@ public class ApiKeyHandlerTests : IDisposable
     }
 
     private Guid? _nudgeTenantId;
+    private ScopeFactoryRecordingServiceProvider? _requestServices;
 
     private DefaultHttpContext CreateHttpContextWithServices(
         IInAppNotificationService notificationService, Guid? ownerSubjectId = null)
@@ -695,11 +696,11 @@ public class ApiKeyHandlerTests : IDisposable
             _nudgeTenantId = sp.GetRequiredService<ITenantAccessor>().TenantId;
             return notificationService;
         });
-        var serviceProvider = services.BuildServiceProvider();
+        _requestServices = new ScopeFactoryRecordingServiceProvider(services.BuildServiceProvider());
 
         var context = new DefaultHttpContext
         {
-            RequestServices = serviceProvider,
+            RequestServices = _requestServices,
         };
         context.Items["TenantContext"] = new TenantContext(_testTenantId, "default", "Default", true, IsDemo: false);
         return context;

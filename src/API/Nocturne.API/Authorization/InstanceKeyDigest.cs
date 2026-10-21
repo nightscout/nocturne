@@ -37,6 +37,29 @@ public static class InstanceKeyDigest
         ?? "";
 
     /// <summary>
+    /// The shortest instance key the API starts with. The key signs JWTs (HMAC-SHA256, which
+    /// <see cref="Services.Auth.JwtService"/> refuses below this length) and seeds every other
+    /// derived secret, so a short key is refused at startup rather than on the first sign-in.
+    /// </summary>
+    public const int MinimumLength = 32;
+
+    /// <summary>
+    /// Returns the configured instance key, throwing when it is missing or shorter than
+    /// <see cref="MinimumLength"/>.
+    /// </summary>
+    public static string RequireKey(IConfiguration configuration)
+    {
+        var key = ResolveKey(configuration);
+        if (key.Length == 0)
+            throw new InvalidOperationException(
+                $"The instance key is not configured. Set {ServiceNames.ConfigKeys.InstanceKey} (or Parameters:{ServiceNames.Parameters.InstanceKey}).");
+        if (key.Length < MinimumLength)
+            throw new InvalidOperationException(
+                $"The instance key is {key.Length} characters; it must be at least {MinimumLength}. Set {ServiceNames.ConfigKeys.InstanceKey} to a long random value, e.g. `openssl rand -hex 32`.");
+        return key;
+    }
+
+    /// <summary>
     /// Returns a stable identifier for the configured instance key suitable for an audit trail, or
     /// null when no instance key is configured. Two different keys yield two different values.
     /// </summary>

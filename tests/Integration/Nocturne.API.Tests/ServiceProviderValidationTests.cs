@@ -44,7 +44,7 @@ public class ServiceProviderValidationTests(ServiceProviderValidationTests.Migra
             builder.UseEnvironment(environment);
             builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}", database.AppConnectionString);
             builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}-migrator", database.MigratorConnectionString);
-            builder.UseSetting("INSTANCE_KEY", "di-validation-instance-key");
+            builder.UseSetting("INSTANCE_KEY", "di-validation-instance-key-of-at-least-32-chars");
             builder.UseSetting("BASE_DOMAIN", "localhost");
             builder.UseSetting("DemoService:Enabled", "false");
             builder.ConfigureTestServices(services =>

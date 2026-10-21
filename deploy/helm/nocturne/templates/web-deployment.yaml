@@ -50,6 +50,10 @@ spec:
             - name: BASE_DOMAIN
               value: {{ .Values.baseDomain | quote }}
             {{- end }}
+            {{- with .Values.web.allowedFrameAncestors }}
+            - name: ALLOWED_FRAME_ANCESTORS
+              value: {{ . | quote }}
+            {{- end }}
             - name: INSTANCE_KEY
               valueFrom:
                 secretKeyRef:

@@ -37,6 +37,9 @@ web:
   # Above 1, the ingress must pin each client to one pod (session affinity): see the README, "Web replicas".
   replicaCount: 1
   containerPort: 5173    # Dockerfile.web ENV PORT=5173
+  # Space-separated origins allowed to embed the signed-in app in an iframe (e.g. a Home Assistant
+  # dashboard). Empty forbids it; share links and the clock face can always be embedded.
+  allowedFrameAncestors: ""
   service:
     type: ClusterIP
     port: 80

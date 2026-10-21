@@ -42,8 +42,10 @@ const COLOR_THEMES = ["nocturne", "trio", "aaps", "classic"] as const;
 /** Color theme - visual styling */
 export type ColorTheme = (typeof COLOR_THEMES)[number];
 
+const COLOR_SCHEMES = ["system", "light", "dark"] as const;
+
 /** Color scheme - light/dark mode preference */
-export type ColorScheme = "system" | "light" | "dark";
+export type ColorScheme = (typeof COLOR_SCHEMES)[number];
 
 const GLUCOSE_UNITS = ["mg/dl", "mmol"] as const;
 
@@ -473,6 +475,7 @@ if (browser) {
  */
 export function setColorScheme(value: ColorScheme): void {
   setMode(value);
+  mirrorColorScheme();
 }
 
 /**
@@ -806,10 +809,17 @@ function writePreferenceCookie(name: string, value: string, maxAge: number): voi
   }
 }
 
+/**
+ * The scheme rides in the prefs cookie beside the synced preferences but is not one of them:
+ * mode-watcher owns it, and it is never sent to the backend, so the server can read it from the
+ * first request and render the right theme.
+ */
+const COLOR_SCHEME_COOKIE_KEY = "colorScheme";
+
 function writePrefsCookie(prefs: UserDisplayPreferences): void {
   writePreferenceCookie(
     PREFS_COOKIE_NAME,
-    encodeURIComponent(JSON.stringify(prefs)),
+    encodeURIComponent(JSON.stringify({ ...prefs, [COLOR_SCHEME_COOKIE_KEY]: getColorScheme() })),
     PREFS_COOKIE_MAX_AGE
   );
 }
@@ -843,6 +853,17 @@ export function readCookieFrom(header: string, name: string): string | null {
   return match ? match.slice(name.length + 1) : null;
 }
 
+/** The scheme stored in a raw `nocturne-prefs` cookie value, or `null` when absent or unreadable. */
+export function parseColorSchemeCookie(value: string | null | undefined): ColorScheme | null {
+  const prefs = parsePrefsCookie(value);
+  const raw = isRecord(prefs) ? prefs[COLOR_SCHEME_COOKIE_KEY] : undefined;
+  return COLOR_SCHEMES.find((scheme) => scheme === raw) ?? null;
+}
+
+function mirrorColorScheme(): void {
+  writePrefsCookie(readPrefsCookie() ?? {});
+}
+
 function readCookie(name: string): string | null {
   return browser ? readCookieFrom(document.cookie, name) : null;
 }
@@ -856,6 +877,7 @@ function readPrefsCookie(): UserDisplayPreferences | null {
 // (via reconcilePreferences in +layout) then confirms/corrects.
 if (browser) {
   applyPreferences(readPrefsCookie());
+  mirrorColorScheme();
 
   // Cross-tab sync: mirror another tab's change into this tab's store.
   window.addEventListener("storage", (event) => {

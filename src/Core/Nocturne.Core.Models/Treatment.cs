@@ -22,7 +22,6 @@ namespace Nocturne.Core.Models;
 /// <seealso cref="ProcessableDocumentBase"/>
 /// <seealso cref="Entry"/>
 /// <seealso cref="DeviceStatus"/>
-/// <seealso cref="TreatmentEventType"/>
 /// <seealso cref="CalculationType"/>
 public class Treatment : ProcessableDocumentBase
 {

@@ -16,7 +16,7 @@ public class TherapySettingsResolverTests : IDisposable
     private readonly Mock<ITherapySettingsRepository> _repo = new();
     private readonly Mock<IPatientInsulinRepository> _insulinRepo = new();
     private readonly Mock<IPatientRecordRepository> _patientRecordRepo = new();
-    private readonly Mock<IActiveProfileResolver> _activeProfileResolver = new();
+    private readonly Mock<IActiveProfileResolver> _activeProfileResolver = ActiveProfileResolverMock.WithDefault();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
     private readonly TherapySettingsResolver _sut;
 
