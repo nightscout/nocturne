@@ -5,6 +5,7 @@ using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Realtime;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Notifications;
 

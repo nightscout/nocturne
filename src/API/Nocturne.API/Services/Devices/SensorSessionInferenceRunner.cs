@@ -1,6 +1,7 @@
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Devices;
 

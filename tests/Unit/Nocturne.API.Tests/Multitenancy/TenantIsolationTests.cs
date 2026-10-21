@@ -17,6 +17,7 @@ using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 using Nocturne.API.Services.Realtime;
 
@@ -213,10 +214,16 @@ public class TenantIsolationTests
         mockAccessorB.Verify(a => a.SetTenant(TenantA), Times.Never);
     }
 
+    /// <summary>The upgrade request's scope: a non-share with no clamp.</summary>
+    private static IServiceProvider HandshakeServices() => new ServiceCollection()
+        .AddSingleton<ITenantAccessor>(new HttpContextTenantAccessor())
+        .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
+        .BuildServiceProvider();
+
     private static (HubInvocationContext, Mock<HubCallerContext>) CreateHubInvocationContext(
         TenantContext? tenantContext, ITenantAccessor accessor)
     {
-        var httpContext = new DefaultHttpContext();
+        var httpContext = new DefaultHttpContext { RequestServices = HandshakeServices() };
         if (tenantContext != null)
             httpContext.Items["TenantContext"] = tenantContext;
 
@@ -240,7 +247,7 @@ public class TenantIsolationTests
     private static HubLifetimeContext CreateHubLifetimeContext(
         TenantContext? tenantContext, ITenantAccessor accessor)
     {
-        var httpContext = new DefaultHttpContext();
+        var httpContext = new DefaultHttpContext { RequestServices = HandshakeServices() };
         if (tenantContext != null)
             httpContext.Items["TenantContext"] = tenantContext;
 

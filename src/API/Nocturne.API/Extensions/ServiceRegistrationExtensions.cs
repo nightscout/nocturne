@@ -948,9 +948,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ICompressionLowRepository, CompressionLowRepository>();
         services.AddScoped<ICompressionLowService, CompressionLowService>();
         services.AddSingleton<CompressionLowDetectionService>();
-        services.AddSingleton<ICompressionLowDetectionService>(sp =>
-            sp.GetRequiredService<CompressionLowDetectionService>()
-        );
+        services.AddScoped<ICompressionLowDetectionService, CompressionLowDetection>();
         services.AddHostedService(sp => sp.GetRequiredService<CompressionLowDetectionService>());
 
         // Webhook infrastructure (reused by new alert engine)

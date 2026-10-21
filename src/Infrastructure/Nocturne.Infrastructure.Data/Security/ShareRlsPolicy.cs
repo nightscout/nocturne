@@ -56,8 +56,14 @@ public static class ShareRlsPolicy
     /// <param name="spanEndColumn">For a table of spans, the end column the clamp applies to by
     /// overlap instead: a row whose end is null (still running) or inside the last 24 hours stays
     /// visible. Exclusive with <paramref name="recencyColumn"/>.</param>
+    /// <param name="recencyIsUnixMillis">True when <paramref name="recencyColumn"/> holds Unix
+    /// milliseconds rather than a timestamp.</param>
     public static string BuildPolicySql(
-        string table, string? governingScope, string? recencyColumn = null, string? spanEndColumn = null)
+        string table,
+        string? governingScope,
+        string? recencyColumn = null,
+        string? spanEndColumn = null,
+        bool recencyIsUnixMillis = false)
     {
         SqlIdentifier.Require(table, nameof(table));
         if (governingScope is not null && !ScopePattern.IsMatch(governingScope))
@@ -76,8 +82,15 @@ public static class ShareRlsPolicy
                 $"({usingExpr} OR '{governingScope}' = ANY(string_to_array(current_setting('app.visible_categories', true), ',')))";
         }
 
+        if (recencyIsUnixMillis && recencyColumn is null)
+            throw new ArgumentException("Only a recency column can hold Unix milliseconds.", nameof(recencyIsUnixMillis));
+
+        var windowStart = recencyIsUnixMillis
+            ? "(extract(epoch from now() - interval '24 hours') * 1000)::bigint"
+            : "now() - interval '24 hours'";
+
         var recent = recencyColumn is not null
-            ? $"\"{recencyColumn}\" >= now() - interval '24 hours'"
+            ? $"\"{recencyColumn}\" >= {windowStart}"
             : spanEndColumn is not null
                 ? $"(\"{spanEndColumn}\" IS NULL OR \"{spanEndColumn}\" >= now() - interval '24 hours')"
                 : null;

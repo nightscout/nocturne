@@ -10,6 +10,8 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Hubs;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Hubs;
@@ -48,6 +50,7 @@ public class TenantHubFilterTests
         var handshakeAccessor = new HttpContextTenantAccessor();
         var handshakeServices = new ServiceCollection()
             .AddSingleton<ITenantAccessor>(handshakeAccessor)
+            .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
             .BuildServiceProvider();
 
         var httpContext = new DefaultHttpContext { RequestServices = handshakeServices };
@@ -68,6 +71,7 @@ public class TenantHubFilterTests
         var invocationAccessor = new HttpContextTenantAccessor();
         var invocationServices = new ServiceCollection()
             .AddSingleton<ITenantAccessor>(invocationAccessor)
+            .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
             .BuildServiceProvider();
 
         return (caller.Object, handshakeAccessor, invocationServices, invocationAccessor);
@@ -129,5 +133,88 @@ public class TenantHubFilterTests
             invocation, _ => ValueTask.FromResult<object?>(null));
 
         invocationAccessor.IsResolved.Should().BeFalse();
+    }
+
+    private static HubInvocationContext Invocation(HubCallerContext caller, IServiceProvider services) => new(
+        caller,
+        services,
+        hub: new StubHub(),
+        hubMethod: typeof(StubHub).GetMethod(nameof(StubHub.Method), BindingFlags.Public | BindingFlags.Instance)!,
+        hubMethodArguments: []);
+
+    private static ICategoryReadContext HandshakeReader(HubCallerContext caller) =>
+        caller.GetHttpContext()!.RequestServices.GetRequiredService<ICategoryReadContext>();
+
+    [Fact]
+    public async Task A_share_connection_invokes_as_the_share()
+    {
+        var (caller, _, invocationServices, _) = CreateConnection();
+        var handshake = HandshakeReader(caller);
+        handshake.MarkShare();
+        handshake.SetVisibleCategories("glucose.read");
+        handshake.SetFullHistory(true);
+
+        await new TenantHubFilter().InvokeMethodAsync(
+            Invocation(caller, invocationServices), _ => ValueTask.FromResult<object?>(null));
+
+        var invocation = invocationServices.GetRequiredService<ICategoryReadContext>();
+        invocation.IsShare.Should().BeTrue("a share connection's method must not read as a non-share");
+        invocation.VisibleCategoriesCsv.Should().Be("glucose.read");
+        invocation.FullHistory.Should().BeTrue();
+        invocation.IsHistoryClamped.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_share_without_full_history_invokes_clamped()
+    {
+        var (caller, _, invocationServices, _) = CreateConnection();
+        var handshake = HandshakeReader(caller);
+        handshake.MarkShare();
+        handshake.SetVisibleCategories("glucose.read");
+
+        await new TenantHubFilter().InvokeMethodAsync(
+            Invocation(caller, invocationServices), _ => ValueTask.FromResult<object?>(null));
+
+        invocationServices.GetRequiredService<ICategoryReadContext>().IsHistoryClamped.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_clamped_connection_invokes_clamped()
+    {
+        var (caller, _, invocationServices, _) = CreateConnection();
+        HandshakeReader(caller).ClampMemberHistory();
+
+        await new TenantHubFilter().InvokeMethodAsync(
+            Invocation(caller, invocationServices), _ => ValueTask.FromResult<object?>(null));
+
+        var invocation = invocationServices.GetRequiredService<ICategoryReadContext>();
+        invocation.IsHistoryClamped.Should().BeTrue("the 24-hour clamp fails open in a scope that never hears of it");
+        invocation.IsShare.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task An_in_band_clamp_reaches_the_next_invocation()
+    {
+        var (caller, _, _, _) = CreateConnection();
+        var filter = new TenantHubFilter();
+        var first = new ServiceCollection()
+            .AddSingleton<ITenantAccessor>(new HttpContextTenantAccessor())
+            .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
+            .BuildServiceProvider();
+        var second = new ServiceCollection()
+            .AddSingleton<ITenantAccessor>(new HttpContextTenantAccessor())
+            .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
+            .BuildServiceProvider();
+
+        await filter.InvokeMethodAsync(Invocation(caller, first), _ =>
+        {
+            HubAuthorizationState.Grant(caller, new HubAuthorization(
+                Tenant, Scope.Normalize([Scope.GlucoseRead]),
+                HubCredentialKind.Subject, Guid.NewGuid(), HistoryClamped: true));
+            return ValueTask.FromResult<object?>(null);
+        });
+        await filter.InvokeMethodAsync(Invocation(caller, second), _ => ValueTask.FromResult<object?>(null));
+
+        second.GetRequiredService<ICategoryReadContext>().IsHistoryClamped.Should().BeTrue();
     }
 }

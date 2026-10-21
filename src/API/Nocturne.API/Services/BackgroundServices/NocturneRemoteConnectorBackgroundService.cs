@@ -5,6 +5,7 @@ using Nocturne.Connectors.NocturneRemote.Configurations;
 using Nocturne.Connectors.NocturneRemote.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using System.Collections.Concurrent;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;
 

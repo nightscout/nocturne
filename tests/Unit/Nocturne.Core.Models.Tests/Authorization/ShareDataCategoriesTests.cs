@@ -135,6 +135,22 @@ public class ShareDataCategoriesTests
     }
 
     [Fact]
+    public void CompressionLowSuggestions_AreHiddenFromSharesButClampedForMembersByTheirEnd()
+    {
+        ShareDataCategories.GoverningScopeFor("compression_low_suggestions").Should().BeNull();
+        ShareDataCategories.RecencyColumnFor("compression_low_suggestions").Should().Be("end_mills");
+        ShareDataCategories.RecencyIsUnixMillis("compression_low_suggestions").Should().BeTrue();
+        ShareDataCategories.RecencyIsUnixMillis("notes").Should().BeFalse();
+    }
+
+    [Fact]
+    public void UnixMillisRecencyTables_HaveARecencyColumn()
+    {
+        ShareDataCategories.UnixMillisRecencyTables
+            .Should().OnlyContain(t => ShareDataCategories.RecencyColumnFor(t) != null);
+    }
+
+    [Fact]
     public void HiddenRecencyColumns_ReferenceOnlyUngovernedTables()
     {
         ShareDataCategories.HiddenRecencyColumns.Keys

@@ -398,6 +398,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "heart_rates",
         "step_counts",
         "sleep_sessions",
+        "compression_low_suggestions",
         // A Nightscout import records what it has run, which a second import reads.
         "migration_runs",
         "migration_sources",

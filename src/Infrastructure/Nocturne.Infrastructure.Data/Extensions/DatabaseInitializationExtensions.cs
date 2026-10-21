@@ -195,7 +195,9 @@ public static class DatabaseInitializationExtensions
                 await using (var command = connection.CreateCommand())
                 {
                     command.Transaction = transaction;
-                    command.CommandText = ShareRlsPolicy.BuildPolicySql(table, governingScope, recencyColumn, spanEndColumn);
+                    command.CommandText = ShareRlsPolicy.BuildPolicySql(
+                        table, governingScope, recencyColumn, spanEndColumn,
+                        ShareDataCategories.RecencyIsUnixMillis(table));
                     await command.ExecuteNonQueryAsync(cancellationToken);
                 }
                 await transaction.CommitAsync(cancellationToken);
