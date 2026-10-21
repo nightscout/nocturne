@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -57,11 +58,12 @@ public class AlertCustomSoundsController : ControllerBase
         if (file.Length > 512_000)
             return Problem(detail: "File exceeds 500KB limit", statusCode: 400, title: "Bad Request");
 
-        if (!file.ContentType.StartsWith("audio/"))
-            return Problem(detail: "File must be an audio type", statusCode: 400, title: "Bad Request");
-
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms, ct);
+        var data = ms.ToArray();
+
+        if (AudioFormat.Detect(data) is not { } mimeType)
+            return Problem(detail: "File must be MP3, WAV, Ogg, FLAC, WebM, M4A or AAC audio", statusCode: 400, title: "Bad Request");
 
         await using var db = await _contextFactory.CreateAsync(ct);
 
@@ -70,9 +72,9 @@ public class AlertCustomSoundsController : ControllerBase
             Id = Guid.CreateVersion7(),
             TenantId = db.TenantId,
             Name = file.FileName,
-            MimeType = file.ContentType,
-            Data = ms.ToArray(),
-            FileSize = (int)file.Length,
+            MimeType = mimeType,
+            Data = data,
+            FileSize = data.Length,
             CreatedAt = DateTime.UtcNow,
         };
 
@@ -134,8 +136,8 @@ public class AlertCustomSoundsController : ControllerBase
         if (entity is null)
             return NotFound();
 
-        Response.Headers.CacheControl = "max-age=86400";
-        return File(entity.Data, entity.MimeType);
+        Response.Headers.CacheControl = "private, max-age=86400";
+        return File(entity.Data, AudioFormat.Detect(entity.Data) ?? "application/octet-stream");
     }
 
     /// <summary>

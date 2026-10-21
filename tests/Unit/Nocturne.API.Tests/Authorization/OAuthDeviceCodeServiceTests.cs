@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -563,6 +565,7 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
             _mockSubjectService.Object,
             _mockGrantService.Object,
             Mock.Of<IOAuthTokenRevocationCache>(),
+            new FakeTimeProvider(DateTimeOffset.UtcNow),
             _mockLogger.Object
         );
     }
@@ -760,6 +763,82 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
         Assert.False(result.Success);
         Assert.Equal("authorization_pending", result.Error);
         Assert.Contains("pending", result.ErrorDescription, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExchangeDeviceCodeAsync_ApprovedCodeExchangedTwice_IssuesTokensOnceAndRevokesTheGrant()
+    {
+        _mockJwtService.SetupSequence(j => j.GenerateRefreshToken())
+            .Returns("first-refresh-token")
+            .Returns("second-refresh-token");
+        _mockJwtService.Setup(j => j.HashRefreshToken(It.Is<string>(t => t.EndsWith("-refresh-token"))))
+            .Returns((string t) => t + "-hash");
+
+        using (var seed = CreateDbContext())
+        {
+            await SeedClientAsync(seed);
+            await SeedSubjectAsync(seed);
+            await SeedGrantAsync(seed);
+            await SeedDeviceCodeAsync(seed,
+                approvedAt: DateTime.UtcNow.AddMinutes(-1),
+                grantId: _testGrantId,
+                subjectId: _testSubjectId);
+        }
+
+        using var firstPoll = CreateDbContext();
+        var first = await CreateService(firstPoll).ExchangeDeviceCodeAsync(TestDeviceCode, TestClientId);
+        using var secondPoll = CreateDbContext();
+        var second = await CreateService(secondPoll).ExchangeDeviceCodeAsync(TestDeviceCode, TestClientId);
+
+        Assert.True(first.Success);
+        Assert.False(second.Success);
+        Assert.Equal("invalid_grant", second.Error);
+        Assert.Equal(1, await secondPoll.OAuthRefreshTokens.CountAsync());
+        _mockGrantService.Verify(g => g.RevokeGrantAsync(_testGrantId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExchangeDeviceCodeAsync_CodeRedeemedByARivalPollMidExchange_FailsAndRevokesTheGrant()
+    {
+        // The rival redeems the code after this poll has read it as approved and unredeemed, so
+        // only the conditional claim can stop a second token pair.
+        var rivalRedemption = new RedeemOnNextSave();
+        using var racedDb = TestDbContextFactory.CreateSqliteWithTenant(_testTenantId, "test", rivalRedemption);
+        using var db = racedDb.CreateContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        await SeedGrantAsync(db);
+        await SeedDeviceCodeAsync(db,
+            approvedAt: DateTime.UtcNow.AddMinutes(-1),
+            grantId: _testGrantId,
+            subjectId: _testSubjectId);
+
+        rivalRedemption.Armed = true;
+        var result = await CreateService(db).ExchangeDeviceCodeAsync(TestDeviceCode, TestClientId);
+
+        Assert.False(rivalRedemption.Armed);
+        Assert.False(result.Success);
+        Assert.Equal("invalid_grant", result.Error);
+        Assert.False(await db.OAuthRefreshTokens.AnyAsync());
+        _mockGrantService.Verify(g => g.RevokeGrantAsync(_testGrantId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private sealed class RedeemOnNextSave : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+
+        public override async ValueTask<int> SavedChangesAsync(
+            SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
+        {
+            if (Armed)
+            {
+                Armed = false;
+                await eventData.Context!.Database.ExecuteSqlRawAsync(
+                    "UPDATE oauth_device_codes SET redeemed_at = CURRENT_TIMESTAMP", cancellationToken);
+            }
+
+            return result;
+        }
     }
 
     [Fact]

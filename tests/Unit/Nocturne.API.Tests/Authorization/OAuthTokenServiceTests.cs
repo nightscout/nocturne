@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -25,6 +26,7 @@ public class OAuthTokenServiceTests : IDisposable
     private readonly Mock<IOAuthGrantService> _mockGrantService;
     private readonly Mock<IOAuthTokenRevocationCache> _mockRevocationCache;
     private readonly Mock<ILogger<OAuthTokenService>> _mockLogger;
+    private readonly FakeTimeProvider _clock = new(DateTimeOffset.UtcNow);
 
     // Deterministic test values
     private const string TestAccessToken = "test-access-token-jwt";
@@ -122,6 +124,7 @@ public class OAuthTokenServiceTests : IDisposable
             _mockSubjectService.Object,
             grantService ?? _mockGrantService.Object,
             _mockRevocationCache.Object,
+            _clock,
             _mockLogger.Object
         );
     }
@@ -831,8 +834,191 @@ public class OAuthTokenServiceTests : IDisposable
         Assert.NotNull(stored.RevokedAt);
     }
 
+    /// <summary>
+    /// Runs a refresh of a live token while <paramref name="rival"/> changes that token after the
+    /// refresh has read it as live but before it claims it: the window two concurrent refreshes
+    /// of one token share.
+    /// </summary>
+    private async Task<(OAuthTokenResult Result, Guid GrantId)> RefreshWhileRivalActsAsync(
+        Action<NocturneDbContext, string> rival)
+    {
+        const string racedToken = "raced-refresh-token";
+        const string racedTokenHash = "raced-refresh-token-hash";
+        _mockJwtService.Setup(j => j.HashRefreshToken(racedToken)).Returns(racedTokenHash);
+        _mockJwtService.Setup(j => j.HashRefreshToken(TestNewRefreshToken)).Returns(TestNewRefreshTokenHash);
+        _mockJwtService.Setup(j => j.GenerateRefreshToken())
+            .Returns(() =>
+            {
+                using var rivalDb = CreateDbContext();
+                rival(rivalDb, racedTokenHash);
+                return TestNewRefreshToken;
+            });
+
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        var grantId = await SeedGrantAsync(db);
+        await SeedRefreshTokenAsync(db, racedTokenHash, grantId: grantId);
+
+        return (await CreateService(db).RefreshAccessTokenAsync(racedToken, TestClientId), grantId);
+    }
+
     [Fact]
-    public async Task RefreshAccessTokenAsync_RevokedTokenReuse_RevokesEntireGrant()
+    public async Task RefreshAccessTokenAsync_LosingTheClaimToARotation_MintsASiblingAndKeepsTheGrant()
+    {
+        var (result, _) = await RefreshWhileRivalActsAsync((rivalDb, hash) =>
+        {
+            var successor = new OAuthRefreshTokenEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = _testTenantId,
+                GrantId = _testGrantId,
+                TokenHash = "rival-successor-hash",
+                ExpiresAt = DateTime.UtcNow.AddDays(90),
+            };
+            rivalDb.OAuthRefreshTokens.Add(successor);
+            rivalDb.SaveChanges();
+            rivalDb.OAuthRefreshTokens
+                .Where(t => t.TokenHash == hash)
+                .ExecuteUpdate(u => u
+                    .SetProperty(t => t.RevokedAt, DateTime.UtcNow)
+                    .SetProperty(t => t.ReplacedById, successor.Id));
+        });
+
+        Assert.True(result.Success);
+        Assert.Equal(TestNewRefreshToken, result.RefreshToken);
+        _mockGrantService.Verify(g => g.RevokeGrantAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        using var verifyDb = CreateDbContext();
+        var live = await verifyDb.OAuthRefreshTokens.AsNoTracking()
+            .Where(t => t.RevokedAt == null).Select(t => t.TokenHash).ToListAsync();
+        Assert.Equivalent(new[] { "rival-successor-hash", TestNewRefreshTokenHash }, live);
+        var raced = await verifyDb.OAuthRefreshTokens.AsNoTracking().SingleAsync(t => t.TokenHash == "raced-refresh-token-hash");
+        Assert.Equal(1, raced.GraceRedemptions);
+    }
+
+    [Fact]
+    public async Task RefreshAccessTokenAsync_LosingTheClaimToARevocation_FailsWithoutRevokingTheGrant()
+    {
+        var (result, _) = await RefreshWhileRivalActsAsync((rivalDb, hash) =>
+            rivalDb.OAuthRefreshTokens
+                .Where(t => t.TokenHash == hash)
+                .ExecuteUpdate(u => u.SetProperty(t => t.RevokedAt, DateTime.UtcNow)));
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_grant", result.Error);
+        _mockGrantService.Verify(g => g.RevokeGrantAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        VerifyMintedHistoryLimit(false, Times.Never());
+        using var verifyDb = CreateDbContext();
+        Assert.False(await verifyDb.OAuthRefreshTokens.AnyAsync(t => t.RevokedAt == null));
+    }
+
+    private const string RotatedToken = "recently-rotated-token";
+    private const string RotatedTokenHash = "recently-rotated-token-hash";
+
+    /// <summary>
+    /// Seeds a token rotated five seconds ago into a successor, which is live unless
+    /// <paramref name="successorSignedOut"/>, and returns the grant and successor ids.
+    /// </summary>
+    private async Task<(Guid GrantId, Guid SuccessorId)> SeedRecentlyRotatedTokenAsync(
+        NocturneDbContext db, bool successorSignedOut = false)
+    {
+        _mockJwtService.Setup(j => j.HashRefreshToken(RotatedToken)).Returns(RotatedTokenHash);
+        _mockJwtService.Setup(j => j.GenerateRefreshToken()).Returns(TestNewRefreshToken);
+        _mockJwtService.Setup(j => j.HashRefreshToken(TestNewRefreshToken)).Returns(TestNewRefreshTokenHash);
+
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        var grantId = await SeedGrantAsync(db);
+        var successorId = await SeedRefreshTokenAsync(db, "successor-hash",
+            grantId: grantId,
+            revokedAt: successorSignedOut ? DateTime.UtcNow : null);
+        await SeedRefreshTokenAsync(db, RotatedTokenHash,
+            grantId: grantId,
+            revokedAt: _clock.GetUtcNow().UtcDateTime.AddSeconds(-5),
+            replacedById: successorId);
+        return (grantId, successorId);
+    }
+
+    [Fact]
+    public async Task RefreshAccessTokenAsync_RotatedTokenWithinTheGraceWindow_MintsASiblingAndKeepsTheGrant()
+    {
+        using var db = CreateDbContext();
+        var (_, successorId) = await SeedRecentlyRotatedTokenAsync(db);
+
+        var result = await CreateService(db).RefreshAccessTokenAsync(RotatedToken, TestClientId);
+
+        Assert.True(result.Success);
+        Assert.Equal(TestNewRefreshToken, result.RefreshToken);
+        _mockGrantService.Verify(g => g.RevokeGrantAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        using var verifyDb = CreateDbContext();
+        var live = await verifyDb.OAuthRefreshTokens.AsNoTracking()
+            .Where(t => t.RevokedAt == null).Select(t => t.TokenHash).ToListAsync();
+        Assert.Equivalent(new[] { "successor-hash", TestNewRefreshTokenHash }, live);
+        var rotated = await verifyDb.OAuthRefreshTokens.AsNoTracking().SingleAsync(t => t.TokenHash == RotatedTokenHash);
+        Assert.Equal(successorId, rotated.ReplacedById);
+        Assert.Equal(1, rotated.GraceRedemptions);
+    }
+
+    [Fact]
+    public async Task RefreshAccessTokenAsync_RotatedTokenPresentedPastTheGraceCap_RevokesTheGrant()
+    {
+        using var db = CreateDbContext();
+        var (grantId, _) = await SeedRecentlyRotatedTokenAsync(db);
+        _mockJwtService.SetupSequence(j => j.GenerateRefreshToken())
+            .Returns(TestNewRefreshToken)
+            .Returns("sibling-two");
+
+        var first = await CreateService(db).RefreshAccessTokenAsync(RotatedToken, TestClientId);
+        using var secondDb = CreateDbContext();
+        var second = await CreateService(secondDb).RefreshAccessTokenAsync(RotatedToken, TestClientId);
+
+        Assert.True(first.Success);
+        Assert.False(second.Success);
+        Assert.Equal("invalid_grant", second.Error);
+        _mockGrantService.Verify(g => g.RevokeGrantAsync(grantId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RefreshAccessTokenAsync_RotatedTokenWhoseSuccessorWasSignedOut_IsRefusedWithoutRevokingTheGrant()
+    {
+        using var db = CreateDbContext();
+        await SeedRecentlyRotatedTokenAsync(db, successorSignedOut: true);
+
+        var result = await CreateService(db).RefreshAccessTokenAsync(RotatedToken, TestClientId);
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_grant", result.Error);
+        _mockGrantService.Verify(g => g.RevokeGrantAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        using var verifyDb = CreateDbContext();
+        Assert.False(await verifyDb.OAuthRefreshTokens.AnyAsync(t => t.RevokedAt == null));
+    }
+
+    [Fact]
+    public async Task RefreshAccessTokenAsync_RotatedTokenPresentedOnceTheWindowHasPassed_RevokesTheGrant()
+    {
+        const string oldToken = "rotated-then-aged-token";
+        _mockJwtService.Setup(j => j.HashRefreshToken(oldToken)).Returns("rotated-then-aged-token-hash");
+        _mockJwtService.Setup(j => j.GenerateRefreshToken()).Returns(TestNewRefreshToken);
+        _mockJwtService.Setup(j => j.HashRefreshToken(TestNewRefreshToken)).Returns(TestNewRefreshTokenHash);
+
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        var grantId = await SeedGrantAsync(db);
+        await SeedRefreshTokenAsync(db, "rotated-then-aged-token-hash", grantId: grantId);
+
+        var rotation = await CreateService(db).RefreshAccessTokenAsync(oldToken, TestClientId);
+        _clock.Advance(TimeSpan.FromSeconds(11));
+        using var laterDb = CreateDbContext();
+        var replay = await CreateService(laterDb).RefreshAccessTokenAsync(oldToken, TestClientId);
+
+        Assert.True(rotation.Success);
+        Assert.False(replay.Success);
+        _mockGrantService.Verify(g => g.RevokeGrantAsync(grantId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RefreshAccessTokenAsync_RotatedTokenOutsideTheGraceWindow_RevokesEntireGrant()
     {
         // Arrange: simulate a rotation chain where the old token was already rotated
         // (has ReplacedById set), then someone tries to reuse the old token.

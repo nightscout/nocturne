@@ -60,13 +60,12 @@ internal sealed class BasalRateResolver : IBasalRateResolver
         // 1. One query for all profile spans covering the range.
         var spans = await _activeProfileResolver.GetActiveProfileSpansForRangeAsync(fromMs, toMs, ct);
 
-        // 2. Pre-fetch schedule + timezone per distinct profile (typically just "Default").
-        //    Fetch at range start — same convention as BasalSegmentService.
+        // 2. Pre-fetch schedule + timezone per distinct profile, and the default store that fills
+        //    the time no span covers. Fetch at range start — same convention as BasalSegmentService.
         var rangeStart = DateTimeOffset.FromUnixTimeMilliseconds(fromMs).UtcDateTime;
 
-        var distinctProfiles = spans.Select(s => s.ProfileName).Distinct().ToList();
-        if (distinctProfiles.Count == 0)
-            distinctProfiles.Add("Default");
+        var defaultProfile = await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
+        var distinctProfiles = spans.Select(s => s.ProfileName).Append(defaultProfile).Distinct().ToList();
 
         var schedules = new Dictionary<string, Core.Models.V4.BasalSchedule?>(StringComparer.OrdinalIgnoreCase);
         var timezones = new Dictionary<string, TimeZoneInfo?>(StringComparer.OrdinalIgnoreCase);
@@ -100,7 +99,7 @@ internal sealed class BasalRateResolver : IBasalRateResolver
                 span.StartMills <= timeMills &&
                 (!span.EndMills.HasValue || span.EndMills.Value > timeMills));
 
-            var profileName  = active?.ProfileName ?? "Default";
+            var profileName  = active?.ProfileName ?? defaultProfile;
             var adjustment   = active?.Adjustment;
             var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
 

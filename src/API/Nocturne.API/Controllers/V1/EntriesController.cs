@@ -35,6 +35,7 @@ public class EntriesController : ControllerBase
     private readonly IEntryService _entryService;
     private readonly IDocumentProcessingService _documentProcessingService;
     private readonly ICanonicalAlertEvaluator _alertEvaluator;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<EntriesController> _logger;
 
     /// <summary>
@@ -43,17 +44,20 @@ public class EntriesController : ControllerBase
     /// <param name="entryService">Service handling glucose entry operations.</param>
     /// <param name="documentProcessingService">Service for async document processing and ingestion.</param>
     /// <param name="alertEvaluator">Evaluates alert rules against the canonical stream after writes.</param>
+    /// <param name="timeProvider">Clock the default read window is measured from.</param>
     /// <param name="logger">Logger instance.</param>
     public EntriesController(
         IEntryService entryService,
         IDocumentProcessingService documentProcessingService,
         ICanonicalAlertEvaluator alertEvaluator,
+        TimeProvider timeProvider,
         ILogger<EntriesController> logger
     )
     {
         _entryService = entryService;
         _documentProcessingService = documentProcessingService;
         _alertEvaluator = alertEvaluator;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -285,6 +289,12 @@ public class EntriesController : ControllerBase
             queryString.Contains("find[") || queryString.Contains("find%5B") ? queryString
             : string.IsNullOrEmpty(find) ? null
             : find;
+
+        if (string.IsNullOrEmpty(dateString))
+        {
+            findQuery = LegacyFindDateWindow.Apply(
+                findQuery, _timeProvider.GetUtcNow(), "date", windowUnfiltered: true);
+        }
 
         // ReverseResults stays false (newest-first): legacy Nightscout ignores the cache-busting
         // "rr" query parameter, so a nonzero "rr" value must never flip the sort order.
@@ -831,7 +841,7 @@ public class EntriesController : ControllerBase
     /// </summary>
     /// <param name="id">The entry ID to delete, an entry type, or <c>*</c> for every type</param>
     /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>The <see cref="LegacyDeleteStatus"/> body for an id, the <see cref="BulkDeleteEntries"/> body for a type</returns>
+    /// <returns>The <see cref="LegacyDeleteStatus"/> body</returns>
     /// <remarks>
     /// A type spec is the bulk delete with the path type replacing any <c>find[type]</c>.
     /// </remarks>
@@ -895,7 +905,7 @@ public class EntriesController : ControllerBase
     /// </summary>
     /// <param name="find">MongoDB-style find query filters (JSON format)</param>
     /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>Confirmation of bulk deletion</returns>
+    /// <returns>The <see cref="LegacyDeleteStatus"/> body</returns>
     [HttpDelete]
     [Authorize]
     [RequireScope(Scope.FullAccess)]
@@ -964,14 +974,6 @@ public class EntriesController : ControllerBase
         var deletedCount = await _entryService.DeleteEntriesAsync(deleteFind, cancellationToken);
 
         _logger.LogDebug("Successfully deleted {Count} entries with query", deletedCount);
-        return Ok(
-            new
-            {
-                status = 200,
-                message = $"Deleted {deletedCount} entries",
-                type = "success",
-                deletedCount = deletedCount,
-            }
-        );
+        return Ok(LegacyDeleteStatus.For(deletedCount));
     }
 }

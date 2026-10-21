@@ -967,8 +967,9 @@ public class OAuthController : ControllerBase
     /// <summary>
     /// RFC 7591 Dynamic Client Registration. Allows third-party native apps
     /// (Trio, xDrip+, Loop, AAPS) to obtain a tenant-scoped <c>client_id</c> without
-    /// any out-of-band registration step. Idempotent on <c>(tenant, software_id)</c>:
-    /// re-registering with the same <c>software_id</c> returns the existing <c>client_id</c>.
+    /// any out-of-band registration step. Idempotent on <c>(tenant, software_id)</c> for a
+    /// registration whose redirect URIs the existing client already accepts; see
+    /// <see cref="OAuthClientService.RegisterClientAsync"/>.
     /// </summary>
     /// <param name="request">The client registration metadata including redirect URIs, scopes, and optional software ID.</param>
     /// <param name="redirectUriValidator">Injected validator that enforces RFC 8252 redirect URI policies.</param>

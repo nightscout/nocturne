@@ -7,7 +7,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.API.Tests.GoldenFiles.V1;
 
-public class EntriesGoldenTests : GoldenFileTestBase
+public class EntriesGoldenTests : GoldenFileTestBase, IClassFixture<FixedClockGoldenFileWebAppFactory>
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
@@ -15,7 +15,7 @@ public class EntriesGoldenTests : GoldenFileTestBase
     // 2024-03-26T12:00:00Z = 1711454400000
     private const long BaseMillis = 1711454400000;
 
-    public EntriesGoldenTests(GoldenFileWebAppFactory factory) : base(factory) { }
+    public EntriesGoldenTests(FixedClockGoldenFileWebAppFactory factory) : base(factory) { }
 
     #region Helper Methods
 
@@ -168,6 +168,27 @@ public class EntriesGoldenTests : GoldenFileTestBase
         var captured = await CaptureResponse(response);
 
         await Verify(captured);
+    }
+
+    private const int InsideWindowIndex = 1000;
+    private const int OutsideWindowIndex = 1440;
+
+    [Theory]
+    [InlineData("/api/v1/entries.json?count=10", 2)]
+    [InlineData("/api/v1/entries/sgv.json?count=10", 2)]
+    [InlineData("/api/v1/entries.json?count=10&find[date][$gte]=0", 3)]
+    [InlineData("/api/v1/entries/sgv.json?count=10&find[date][$gte]=0", 3)]
+    [InlineData("/api/v1/entries.json?count=10&find[dateString][$gte]=2000-01-01", 3)]
+    public async Task GetEntries_DefaultWindowDropsReadingsOlderThanFourDays(string url, int expected)
+    {
+        await SeedSensorGlucose(
+            CreateSgvEntry(0), CreateSgvEntry(InsideWindowIndex), CreateSgvEntry(OutsideWindowIndex));
+
+        var response = await Client.GetAsync(url);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        body.RootElement.GetArrayLength().Should().Be(expected);
     }
 
     [Fact]

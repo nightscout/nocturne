@@ -205,12 +205,20 @@ jobs:
             -i sdk/openapi-v4.json
             -c sdk/kotlin/config.yaml
             -o sdk/kotlin/out
+            --ignore-file-override sdk/kotlin/.openapi-generator-ignore
             --additional-properties=artifactVersion=${{ needs.generate-spec.outputs.sdk_version }}
 
       - name: Fix file permissions
         run: |
           sudo chown -R "$USER:$USER" sdk/kotlin/out
           chmod +x sdk/kotlin/out/gradlew
+
+      - name: Verify no Apache Oltu in generated sources
+        run: |
+          if grep -rn "org.apache.oltu" sdk/kotlin/out; then
+            echo "Generated Kotlin SDK references Apache Oltu"
+            exit 1
+          fi
 
       - name: Apply publish overlay
         run: cat sdk/kotlin/publish.gradle >> sdk/kotlin/out/build.gradle

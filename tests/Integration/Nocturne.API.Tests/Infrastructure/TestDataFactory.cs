@@ -102,18 +102,21 @@ public static class TestDataFactory
     /// </summary>
     /// <param name="id">Custom ID (generates unique if null)</param>
     /// <param name="defaultProfile">Profile name</param>
+    /// <param name="timestamp">Start date (uses TestTimeProvider if null)</param>
     /// <returns>Profile with dynamic data</returns>
-    public static Profile CreateProfile(string? id = null, string? defaultProfile = null)
+    public static Profile CreateProfile(
+        string? id = null, string? defaultProfile = null, DateTimeOffset? timestamp = null)
     {
         var uniqueSuffix = Guid.NewGuid().ToString()[..8];
         var profileName = defaultProfile ?? $"test-profile-{uniqueSuffix}";
+        var startDate = timestamp ?? TestTimeProvider.GetTestTime();
 
         return new Profile
         {
             Id = id ?? Guid.NewGuid().ToString(),
             DefaultProfile = profileName,
-            Mills = TestTimeProvider.GetTestTime().ToUnixTimeMilliseconds(),
-            StartDate = TestTimeProvider.GetTestTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            Mills = startDate.ToUnixTimeMilliseconds(),
+            StartDate = startDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             Units = "mg/dL",
             Store = new Dictionary<string, ProfileData>
             {
@@ -180,6 +183,7 @@ public static class TestDataFactory
             Mills = testTime.ToUnixTimeMilliseconds(),
             CreatedAt = testTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             Device = device ?? $"test-device-{uniqueSuffix}",
+            Uploader = new UploaderStatus { Battery = 80 },
         };
     }
 
@@ -233,22 +237,34 @@ public static class TestDataFactory
             entries.Add(CreateEntry(timestamp: baseTime, type: "sgv", sgv: 120));
         }
 
+        // A meter reading carries mbg and a calibration slope/intercept/scale, with none of a
+        // sensor reading's sgv, direction, noise, delta or rssi, as uploaders send them.
         if (includeMeterBg)
         {
-            entries.Add(CreateEntry(timestamp: baseTime.AddMinutes(-5), type: "mbg", sgv: 115));
+            var meter = CreateEntry(timestamp: baseTime.AddMinutes(-5), type: "mbg");
+            meter.Mbg = 115;
+            entries.Add(WithoutSensorFields(meter));
         }
 
         if (includeCalibration)
         {
-            entries.Add(
-                CreateEntry(
-                    timestamp: baseTime.AddMinutes(-10),
-                    type: "cal",
-                    sgv: null // Calibrations don't have SGV
-                )
-            );
+            var calibration = CreateEntry(timestamp: baseTime.AddMinutes(-10), type: "cal");
+            calibration.Slope = 850;
+            calibration.Intercept = 32000;
+            calibration.Scale = 1;
+            entries.Add(WithoutSensorFields(calibration));
         }
 
         return entries.ToArray();
+    }
+
+    private static Entry WithoutSensorFields(Entry entry)
+    {
+        entry.Sgv = null;
+        entry.Direction = null;
+        entry.Noise = null;
+        entry.Delta = null;
+        entry.Rssi = null;
+        return entry;
     }
 }

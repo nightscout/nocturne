@@ -20505,9 +20505,8 @@ msgstr "Navigate to <0>App Templates</0> in the sidebar."
 msgid "Find <0>Nocturne</0> in the list and click it."
 msgstr "Find <0>Nocturne</0> in the list and click it."
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 12 characters). Use the generator below for each secret field."
-msgstr "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 12 characters). Use the generator below for each secret field."
+#~ msgid "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 12 characters). Use the generator below for each secret field."
+#~ msgstr "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 12 characters). Use the generator below for each secret field."
 
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
@@ -27177,3 +27176,11 @@ msgstr "Portion <0/>"
 #: src/lib/components/alerts/DndNoticeStrip.svelte
 msgid "Do Not Disturb is on. Only critical rules and rules allowed through Do Not Disturb will fire."
 msgstr "Do Not Disturb is on. Only critical rules and rules allowed through Do Not Disturb will fire."
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 32 characters). Use the generator below for each secret field."
+msgstr "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 32 characters). Use the generator below for each secret field."
+
+#: src/routes/(authenticated)/oauth/consent/+page.svelte
+msgid "Approving sends access to <0/>"
+msgstr "Approving sends access to <0/>"

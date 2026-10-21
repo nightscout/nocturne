@@ -158,6 +158,9 @@ public class DeviceStatusProjectionService
                 "Find-filtered device status query hit the {MaxFetch}-row window; older matches are not returned",
                 MaxFilterFetch);
 
+        if (find.HasAbandonedRegex)
+            _logger.LogWarning("A find $regex ran out of its time budget; device status matches may be incomplete");
+
         return matching.Skip(skip).Take(count).ToList();
     }
 

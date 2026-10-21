@@ -7,6 +7,7 @@ using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Controllers.V3;
@@ -218,7 +219,10 @@ public class FoodController : BaseV3Controller<Food>
             if (filter.Field.Equals("type", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            foods = foods.Where(f => MatchesFilter(f, filter)).ToList();
+            var regex = filter is { Operator: "re", Value: string pattern } ? BoundedRegex.Create(pattern) : null;
+            foods = foods.Where(f => MatchesFilter(f, filter, regex)).ToList();
+            if (regex?.Abandoned == true)
+                _logger.LogWarning("A food $re filter ran out of its time budget; matches may be incomplete");
         }
 
         return foods;
@@ -227,7 +231,7 @@ public class FoodController : BaseV3Controller<Food>
     /// <summary>
     /// Check if a food record matches a filter criterion
     /// </summary>
-    private bool MatchesFilter(Food food, V3FilterCriteria filter)
+    private bool MatchesFilter(Food food, V3FilterCriteria filter, BoundedRegex? regex)
     {
         var fieldValue = GetFieldValue(food, filter.Field);
         if (fieldValue == null && filter.Value == null)
@@ -245,11 +249,7 @@ public class FoodController : BaseV3Controller<Food>
             "lte" => CompareValues(fieldValue, filter.Value) <= 0,
             "in" => filter.Value is string s && s.Split(',').Contains(fieldValue.ToString()),
             "nin" => filter.Value is string s2 && !s2.Split(',').Contains(fieldValue.ToString()),
-            "re" => filter.Value is string pattern
-                && System.Text.RegularExpressions.Regex.IsMatch(
-                    fieldValue.ToString() ?? "",
-                    pattern
-                ),
+            "re" => regex?.IsMatch(fieldValue.ToString() ?? "") == true,
             _ => true,
         };
     }

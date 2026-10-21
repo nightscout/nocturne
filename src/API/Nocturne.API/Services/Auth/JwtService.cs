@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Nocturne.API.Authorization;
 using Nocturne.API.Helpers;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Configuration;
@@ -13,7 +14,7 @@ namespace Nocturne.API.Services.Auth;
 /// <summary>
 /// JWT service implementation for access token generation, refresh token management,
 /// and token validation. Uses HMAC-SHA256 signing with a symmetric key derived from
-/// <see cref="JwtOptions.SecretKey"/> (minimum 32 characters enforced at construction).
+/// <see cref="JwtOptions.SecretKey"/> (at least <see cref="InstanceKeyDigest.MinimumLength"/> characters).
 /// </summary>
 /// <seealso cref="IJwtService"/>
 /// <seealso cref="OAuthTokenService"/>
@@ -32,16 +33,16 @@ public class JwtService : IJwtService
     /// <param name="options">JWT configuration options including secret key, issuer, audience, and token lifetimes.</param>
     /// <param name="logger">The logger instance.</param>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when <see cref="JwtOptions.SecretKey"/> is null, empty, or shorter than 32 characters.
+    /// Thrown when <see cref="JwtOptions.SecretKey"/> is null, empty, or shorter than <see cref="InstanceKeyDigest.MinimumLength"/>.
     /// </exception>
     public JwtService(IOptions<JwtOptions> options, ILogger<JwtService> logger)
     {
         _options = options.Value;
         _logger = logger;
 
-        if (string.IsNullOrEmpty(_options.SecretKey) || _options.SecretKey.Length < 32)
+        if (string.IsNullOrEmpty(_options.SecretKey) || _options.SecretKey.Length < InstanceKeyDigest.MinimumLength)
         {
-            throw new InvalidOperationException("JWT secret key must be at least 32 characters.");
+            throw new InvalidOperationException($"JWT secret key must be at least {InstanceKeyDigest.MinimumLength} characters.");
         }
 
         _signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SecretKey));

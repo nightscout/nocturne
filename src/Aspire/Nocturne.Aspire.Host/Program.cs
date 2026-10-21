@@ -249,7 +249,7 @@ class Program
         var instanceKey = builder.AddParameter(ServiceNames.Parameters.InstanceKey, secret: true)
             .WithPublishMetadata(
                 "Instance key",
-                "Minimum 12 characters: used for JWT signing and service authentication");
+                "Minimum 32 characters: used for JWT signing and service authentication");
 
         // Discord bot credentials. Optional — only required if Discord bot
         // features are enabled for a deployment. Empty-string defaults let
@@ -281,6 +281,13 @@ class Program
                 "Trusted proxy ranges",
                 "Space-separated CIDRs of a CDN in front of this deployment, e.g. Cloudflare's published ranges. Decides whose CF-Connecting-IP header is believed; leave as-is unless a CDN is present, and never set it empty.",
                 defaultValue: "127.0.0.1/32");
+
+        // Sources allowed to frame the signed-in app. Empty forbids framing it; share links and
+        // the clock face are frameable regardless (see security-headers.ts in the web app).
+        var allowedFrameAncestors = builder.AddParameter("allowed-frame-ancestors", "", secret: false)
+            .WithPublishMetadata(
+                "Allowed frame ancestors",
+                "Space-separated origins allowed to embed the signed-in app in an iframe, e.g. https://ha.example.com:8123 for a Home Assistant dashboard. Leave empty to forbid it; share links can always be embedded.");
 
         // Chat platform credentials. All optional — a deployment that only
         // uses Discord shouldn't need to supply Telegram/Slack/WhatsApp
@@ -350,8 +357,9 @@ class Program
         // pinned so the generated compose bakes a concrete
         // http://nocturne-api:8080 (mirrors the web service's fixed internal
         // port) instead of an empty NOCTURNE_API_PORT placeholder. This port is
-        // never host-published — YARP is the only entry point. Production images
-        // default to Production.
+        // never host-published — YARP is the only entry point. The bundle pins
+        // Production rather than leaving it to the image default: the Development-only
+        // surface must never be one stray variable away in a deployed stack.
         IResourceBuilder<IResourceWithServiceDiscovery> api;
         if (builder.ExecutionContext.IsRunMode)
         {
@@ -378,6 +386,7 @@ class Program
             api = builder
                 .AddProject<Projects.Nocturne_API>(ServiceNames.NocturneApi, launchProfileName: null)
                 .WithHttpEndpoint(name: "http", targetPort: 8080)
+                .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")
                 .PublishAsDockerComposeService((_, _) => { })
                 .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
                 .WithRemoteImageTag("latest")
@@ -482,6 +491,7 @@ class Program
                 .WithEnvironment("DISCORD_APPLICATION_ID", discordApplicationId)
                 .WithEnvironment("DISCORD_CLIENT_SECRET", discordClientSecret)
                 .WithEnvironment("BASE_DOMAIN", baseDomain)
+                .WithEnvironment("ALLOWED_FRAME_ANCESTORS", allowedFrameAncestors)
                 // NOTE: BOT_LINK_HMAC_SECRET is not injected — oauth-state.ts
                 // reuses INSTANCE_KEY (already wired above) to sign the
                 // Discord OAuth2 state parameter. See src/Web/packages/app/

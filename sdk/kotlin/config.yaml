@@ -1,5 +1,8 @@
 generatorName: kotlin
 outputDir: ./out
+# Overrides and the reason for each: sdk/kotlin/templates/README.md.
+# Path is relative to the CI working directory (repo root).
+templateDir: sdk/kotlin/templates
 globalProperties:
   skipFormModel: true
 additionalProperties:

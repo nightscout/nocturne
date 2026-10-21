@@ -407,6 +407,58 @@ public class FindQueryTests
         query.Matches(Doc("""{"eventType":"High Temp"}""")).Should().BeFalse();
     }
 
+    [Fact]
+    public void Regex_NestedQuantifier_MatchesInLinearTime()
+    {
+        var query = FindQuery.Parse("""{"notes":{"$regex":"^(a+)+$"}}""");
+        var document = Doc($$"""{"notes":"{{new string('a', 20_000)}}!"}""");
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        for (var row = 0; row < 50; row++)
+            query.Matches(document).Should().BeFalse();
+
+        stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
+        query.Matches(Doc("""{"notes":"aaaa"}""")).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(@"(a)\1")]
+    [InlineData("(?=a)a")]
+    [InlineData("(?<!b)a")]
+    [InlineData("a{100000}")]
+    [InlineData("(unclosed")]
+    public void Regex_ThatDoesNotCompile_MatchesNothingAndIsInexact(string pattern)
+    {
+        var query = FindQuery.Parse($"find[notes][$regex]={Uri.EscapeDataString(pattern)}");
+
+        query.Matches(Doc("""{"notes":"aa"}""")).Should().BeFalse();
+        query.HasInexactCondition.Should().BeTrue();
+        BoundedRegex.Create(pattern).IsCompiled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Regex_LongerThanTheCap_MatchesNothing()
+    {
+        const string letter = "[a-z]";
+        var underCap = string.Concat(Enumerable.Repeat(letter, BoundedRegex.MaxLength / letter.Length));
+        var pastCap = underCap + letter;
+
+        BoundedRegex.Create(underCap).IsCompiled.Should().BeTrue();
+        BoundedRegex.Create(pastCap).IsCompiled.Should().BeFalse();
+        var value = new string('a', pastCap.Length / letter.Length);
+        FindQuery.Parse($"find[notes][$regex]={Uri.EscapeDataString(pastCap)}").Matches(Doc($$"""{"notes":"{{value}}"}"""))
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void Regex_OrdinaryPatterns_StillMatch()
+    {
+        FindQuery.Parse("find[dateString][$regex]=^2015-04.*T1[34]:0[0-5]")
+            .Matches(Doc("""{"dateString":"2015-04-02T13:05:00.000Z"}""")).Should().BeTrue();
+        FindQuery.Parse("""{"notes":{"$regex":"\\bsite\\b","$options":"i"}}""")
+            .Matches(Doc("""{"notes":"Pump SITE changed"}""")).Should().BeTrue();
+    }
+
     #endregion
 
     #region $and / $or groups

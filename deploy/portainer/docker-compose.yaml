@@ -48,7 +48,11 @@ services:
       OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       HTTP_PORTS: "8080"
+      ASPNETCORE_ENVIRONMENT: "Production"
       INSTANCE_KEY: "${INSTANCE_KEY}"
+      GOOGLE_HEALTH_CLIENT_ID: "${GOOGLE_HEALTH_CLIENT_ID}"
+      GOOGLE_HEALTH_CLIENT_SECRET: "${GOOGLE_HEALTH_CLIENT_SECRET}"
+      GOOGLE_HEALTH_REDIRECT_URI: "${GOOGLE_HEALTH_REDIRECT_URI}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
       OTEL_EXPORTER_OTLP_PROTOCOL: "${OTEL_EXPORTER_OTLP_PROTOCOL}"
       ConnectionStrings__nocturne-postgres: "Host=nocturne-postgres-server;Port=5432;Database=nocturne;Username=nocturne_app;Password=${POSTGRES_APP_PASSWORD}"
@@ -85,6 +89,7 @@ services:
       DISCORD_APPLICATION_ID: "${DISCORD_APPLICATION_ID}"
       DISCORD_CLIENT_SECRET: "${DISCORD_CLIENT_SECRET}"
       BASE_DOMAIN: "${BASE_DOMAIN}"
+      ALLOWED_FRAME_ANCESTORS: "${ALLOWED_FRAME_ANCESTORS}"
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       TELEGRAM_WEBHOOK_SECRET_TOKEN: "${TELEGRAM_WEBHOOK_SECRET_TOKEN}"
       SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN}"
@@ -193,6 +198,8 @@ services:
       REVERSEPROXY__ROUTES__route12__TRANSFORMS__1__RequestHeaderOriginalHost: "True"
       REVERSEPROXY__CLUSTERS__cluster_nocturne-api__DESTINATIONS__destination1__ADDRESS: "http://nocturne-api"
       REVERSEPROXY__CLUSTERS__cluster_nocturne-web__DESTINATIONS__destination1__ADDRESS: "http://nocturne-web"
+      Logging__LogLevel__Yarp: "Warning"
+      Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics: "Warning"
       NOCTURNE_API_HTTP: "http://nocturne-api:8080"
       services__nocturne-api__http__0: "http://nocturne-api:8080"
       NOCTURNE_WEB_HTTP: "http://nocturne-web:8000"
@@ -399,7 +406,15 @@ configs:
       	}
       }
 
+      # HSTS goes on each site Caddy serves, never with includeSubDomains or preload: BASE_DOMAIN may be
+      # the operator's own domain, and its other hosts are not Nocturne's to pin to HTTPS. nosniff is a
+      # default (set only when the upstream sent none) for the static assets served before the web
+      # app's own headers apply.
       (to_gateway) {
+      	header {
+      		Strict-Transport-Security "max-age=31536000"
+      		?X-Content-Type-Options nosniff
+      	}
       	reverse_proxy gateway:5000 {
       		header_up X-Forwarded-For {http.request.client_ip}
       	}

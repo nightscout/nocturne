@@ -36,8 +36,9 @@ public interface IOAuthClientService
     Task SeedKnownOAuthClientsAsync(Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
-    /// RFC 7591 Dynamic Client Registration. Registers a new OAuth client or returns an existing
-    /// row for the same (tenant, software_id) pair.
+    /// RFC 7591 Dynamic Client Registration. Registers a new OAuth client, or returns the existing
+    /// row for the same (tenant, software_id) pair when it already accepts every submitted
+    /// redirect URI.
     /// </summary>
     /// <param name="softwareId">RFC 7591 software_id (reverse-DNS), or null for anonymous clients.</param>
     /// <param name="clientName">Display name shown on the consent screen.</param>

@@ -162,6 +162,14 @@ public class OAuthClientService : IOAuthClientService
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Registration is anonymous, so the redirect URIs are the only thing tying a registrant to
+    /// the app it names. A <paramref name="softwareId"/> already registered on the tenant is
+    /// returned only when the submitted URIs are ones it already redirects to, and the
+    /// known-directory identity goes only to a registrant whose URIs the directory lists. Anyone
+    /// else gets a fresh unverified client that does not hold the <paramref name="softwareId"/>,
+    /// so it can neither borrow nor squat the identity of the app it names.
+    /// </remarks>
     public async Task<OAuthClientInfo> RegisterClientAsync(
         string? softwareId,
         string? clientName,
@@ -173,57 +181,36 @@ public class OAuthClientService : IOAuthClientService
         CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        // Idempotent on (tenant, software_id) when software_id is supplied — but only for
-        // clients that completed a real registration. Known-directory seeds ship with an
-        // empty RedirectUris list (the real value is only knowable once the client
-        // registers), so returning such a seed unchanged would silently discard the
-        // submitted redirect_uris and permanently break /authorize for that client.
-        // A seed therefore adopts the incoming registration data instead.
-        if (!string.IsNullOrEmpty(softwareId))
+
+        var existing = string.IsNullOrEmpty(softwareId)
+            ? null
+            : await db.OAuthClients.FirstOrDefaultAsync(c => c.SoftwareId == softwareId, ct);
+
+        if (existing != null && Covers(DeserializeRedirectUris(existing.RedirectUris), redirectUris))
         {
-            var existing = await db.OAuthClients
-                .FirstOrDefaultAsync(c => c.SoftwareId == softwareId, ct);
-            if (existing != null)
-            {
-                if (existing.IsKnown && DeserializeRedirectUris(existing.RedirectUris).Count == 0)
-                {
-                    existing.RedirectUris = JsonSerializer.Serialize(redirectUris);
-                    existing.ClientName = clientName ?? existing.ClientName;
-                    existing.ClientUri = clientUri ?? existing.ClientUri;
-                    existing.LogoUri = logoUri ?? existing.LogoUri;
-                    existing.DisplayName = clientName ?? existing.DisplayName;
-                    existing.UpdatedAt = DateTime.UtcNow;
-                    await db.SaveChangesAsync(ct);
-
-                    _logger.LogInformation(
-                        "DCR: known-directory seed {SoftwareId} adopted registration redirect_uris ({Count} URIs)",
-                        SanitizeForLog(softwareId), redirectUris.Count);
-                    return MapToInfo(existing);
-                }
-
-                _logger.LogDebug(
-                    "DCR: returning existing client for software_id {SoftwareId} (tenant {TenantId})",
-                    SanitizeForLog(softwareId), existing.TenantId);
-                return MapToInfo(existing);
-            }
+            _logger.LogDebug(
+                "DCR: returning existing client for software_id {SoftwareId} (tenant {TenantId})",
+                SanitizeForLog(softwareId), existing.TenantId);
+            return MapToInfo(existing);
         }
 
-        // Look up the known directory entry to mark is_known and pull display defaults.
         var known = string.IsNullOrEmpty(softwareId)
             ? null
             : KnownOAuthClients.MatchBySoftwareId(softwareId);
+        var verified = existing == null && known != null && Covers(known.RedirectUris, redirectUris);
+        var holdsSoftwareId = existing == null && (known == null || verified);
 
         var entity = new OAuthClientEntity
         {
             Id = Guid.CreateVersion7(),
             // client_id is opaque to clients; use the entity Id as a stable string.
             ClientId = Guid.CreateVersion7().ToString(),
-            SoftwareId = softwareId,
-            ClientName = clientName ?? known?.DisplayName,
-            ClientUri = clientUri ?? known?.Homepage,
-            LogoUri = logoUri ?? known?.LogoUri,
-            DisplayName = clientName ?? known?.DisplayName,
-            IsKnown = known != null,
+            SoftwareId = holdsSoftwareId ? softwareId : null,
+            ClientName = verified ? known!.DisplayName : clientName,
+            ClientUri = verified ? known!.Homepage : clientUri,
+            LogoUri = verified ? known!.LogoUri : logoUri,
+            DisplayName = verified ? known!.DisplayName : clientName,
+            IsKnown = verified,
             RedirectUris = JsonSerializer.Serialize(redirectUris),
             CreatedFromIp = createdFromIp,
         };
@@ -237,6 +224,14 @@ public class OAuthClientService : IOAuthClientService
 
         return MapToInfo(entity);
     }
+
+    /// <summary>
+    /// Whether every submitted redirect URI is one <paramref name="registered"/> already accepts at
+    /// authorize time. An empty submission is covered by anything: it can only be redirected to
+    /// URIs that were registered before it.
+    /// </summary>
+    private bool Covers(IReadOnlyCollection<string> registered, IReadOnlyList<string> submitted) =>
+        submitted.All(s => registered.Any(r => _redirectUriValidator.IsValidForAuthorize(r, s)));
 
     /// <summary>
     /// Strips control characters (including CR/LF) from a user-supplied value before it reaches a

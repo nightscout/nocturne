@@ -130,17 +130,21 @@ it("recovers all real hubs after partial handshake failure and a prolonged outag
     refuseAlarmHandshake = false;
     available = true;
     await vi.waitFor(() => expect(client.isConnected()).toBe(true));
-    for (const hub of ["data", "alarms", "config"]) {
-      expect(active.get(`/hubs/${hub}`)?.size).toBe(1);
-    }
-    expect(subscriptions).toEqual(
-      expect.arrayContaining([
-        "/hubs/data:Authorize",
-        "/hubs/data:Subscribe",
-        "/hubs/alarms:Subscribe",
-        "/hubs/config:SubscribeAll",
-      ]),
-    );
+    // isConnected() turns true when the config hub's connection starts, before its SubscribeAll
+    // invocation has reached this server.
+    await vi.waitFor(() => {
+      for (const hub of ["data", "alarms", "config"]) {
+        expect(active.get(`/hubs/${hub}`)?.size).toBe(1);
+      }
+      expect(subscriptions).toEqual(
+        expect.arrayContaining([
+          "/hubs/data:Authorize",
+          "/hubs/data:Subscribe",
+          "/hubs/alarms:Subscribe",
+          "/hubs/config:SubscribeAll",
+        ]),
+      );
+    });
     emit("/hubs/data", "create", {
       collection: "entries",
       document: { sgv: 120 },
