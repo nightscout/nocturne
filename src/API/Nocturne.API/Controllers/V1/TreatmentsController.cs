@@ -230,6 +230,11 @@ public class TreatmentsController : ControllerBase
             _logger.LogWarning(ex, "Invalid JSON in create treatments request");
             return BadRequest("Invalid JSON format");
         }
+        catch (TreatmentBatchFailedException ex)
+        {
+            // cgm-remote-monitor answers a failed insert with sendJSONStatus(res, 500, 'Mongo Error', err).
+            return StatusCode(500, new { status = 500, message = "Mongo Error", description = ex.Message });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating treatments");

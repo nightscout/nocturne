@@ -211,23 +211,21 @@ public class TreatmentReadService : ITreatmentStore
         var results = new List<Treatment>();
         var skippedDeleted = 0;
 
-        foreach (var treatment in treatments)
+        for (var i = 0; i < treatments.Count; i++)
         {
+            var treatment = treatments[i];
             try
             {
                 var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
                 skippedDeleted += result.SkippedDeleted;
                 results.Add(await ToCreatedAsync(treatment, result, ct));
             }
-            catch (OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Every later call on a canceled token throws too, so catching it here would log
-                // each remaining treatment as a failure instead of ending the batch.
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to decompose treatment {Id}", treatment.Id);
+                _logger.LogError(ex, "Failed to store treatment {Id}; ending the batch", treatment.Id);
+                _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
+                throw new TreatmentBatchFailedException(
+                    new BulkWrite<Treatment>(results, skippedDeleted), i, treatments.Count, ex);
             }
         }
 

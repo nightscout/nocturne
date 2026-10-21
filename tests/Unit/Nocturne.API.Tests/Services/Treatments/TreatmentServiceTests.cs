@@ -132,6 +132,20 @@ public class TreatmentServiceTests
     }
 
     [Fact]
+    public async Task CreateTreatmentsAsync_WhenTheBatchFails_AnnouncesWhatWasStoredAndRethrows()
+    {
+        BulkWrite<Treatment> stored = [new Treatment { Id = "1" }];
+        var failure = new TreatmentBatchFailedException(stored, 1, 2, new InvalidOperationException("store down"));
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+
+        var act = () => _treatmentService.CreateTreatmentsAsync([new Treatment(), new Treatment()], CancellationToken.None);
+
+        (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which.Should().BeSameAs(failure);
+        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnCreatedAsync(stored, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task UpdateTreatmentAsync_ShouldInvalidateCacheAndPublishEvent()
     {
         var updated = new Treatment { Id = "id", EventType = "Meal Bolus" };

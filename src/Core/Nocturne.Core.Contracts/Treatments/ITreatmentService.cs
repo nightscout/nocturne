@@ -81,6 +81,9 @@ public interface ITreatmentService
     /// Created treatments with assigned IDs, carrying how many of their records were not written
     /// because the user had deleted them.
     /// </returns>
+    /// <exception cref="TreatmentBatchFailedException">
+    /// A treatment could not be stored. The ones before it are stored and announced.
+    /// </exception>
     Task<BulkWrite<Treatment>> CreateTreatmentsAsync(
         IEnumerable<Treatment> treatments,
         CancellationToken cancellationToken = default

@@ -156,7 +156,18 @@ public class TreatmentService : ITreatmentService
 
         await PopulateInsulinContextAsync(treatmentList, cancellationToken);
 
-        var created = await _store.CreateAsync(treatmentList, cancellationToken);
+        BulkWrite<Treatment> created;
+        try
+        {
+            created = await _store.CreateAsync(treatmentList, cancellationToken);
+        }
+        catch (TreatmentBatchFailedException failed)
+        {
+            // The treatments before the failing one are stored, so reads and write-back must see them.
+            await _cache.InvalidateAsync(CancellationToken.None);
+            await _events.OnCreatedAsync(failed.Written, CancellationToken.None);
+            throw;
+        }
 
         await _cache.InvalidateAsync(cancellationToken);
         await _events.OnCreatedAsync(created, cancellationToken);

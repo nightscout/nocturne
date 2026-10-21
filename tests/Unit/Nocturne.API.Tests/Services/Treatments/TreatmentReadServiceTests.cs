@@ -316,23 +316,30 @@ public class TreatmentReadServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_WhenDecompositionFailsForOneRecord_SkipsItAndContinues()
+    public async Task CreateAsync_WhenATreatmentFailsToStore_StopsTheBatchAndCarriesWhatWasStored()
     {
-        var bad = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
-        var good = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+        var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var bad = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+        var last = new Treatment { Id = "t3", Mills = 3000, EventType = "Note" };
+        var boom = new InvalidOperationException("boom");
 
+        _decomposer
+            .Setup(d => d.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult { CorrelationId = Guid.NewGuid(), SkippedDeleted = 1 });
         _decomposer
             .Setup(d => d.DecomposeAsync(bad, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("boom"));
-        _decomposer
-            .Setup(d => d.DecomposeAsync(good, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult { CorrelationId = Guid.NewGuid() });
+            .ThrowsAsync(boom);
 
-        var result = await _service.CreateAsync([bad, good]);
+        var act = () => _service.CreateAsync([first, bad, last]);
 
-        // A genuine per-record failure is still isolated: the bad record is dropped,
-        // the good one is kept.
-        result.Should().ContainSingle().Which.Id.Should().Be("t2");
+        var failed = (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which;
+        failed.FailedIndex.Should().Be(1);
+        failed.InnerException.Should().BeSameAs(boom);
+        failed.Written.Should().ContainSingle().Which.Id.Should().Be("t1");
+        failed.Written.SkippedDeleted.Should().Be(1);
+        _decomposer.Verify(
+            d => d.DecomposeAsync(last, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

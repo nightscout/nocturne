@@ -66,6 +66,7 @@ public interface ITreatmentStore
     /// The created <see cref="Treatment"/> records, each under the id reads serve for it, carrying
     /// how many of their records were not written because the user had deleted them.
     /// </returns>
+    /// <exception cref="TreatmentBatchFailedException">A treatment could not be stored.</exception>
     Task<BulkWrite<Treatment>> CreateAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
 
     /// <summary>
