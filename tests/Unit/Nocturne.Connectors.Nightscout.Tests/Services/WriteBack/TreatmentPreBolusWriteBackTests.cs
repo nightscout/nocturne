@@ -1,7 +1,4 @@
 using System.Globalization;
-using System.Net;
-using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,6 +7,7 @@ using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
+using Nocturne.Connectors.Nightscout.Tests.TestSupport;
 using Nocturne.Core.Models;
 using Xunit;
 
@@ -17,13 +15,14 @@ namespace Nocturne.Connectors.Nightscout.Tests.Services.WriteBack;
 
 /// <summary>
 /// A written-back treatment must leave upstream exactly one document, carrying its carbs under the
-/// id the connector's pull matches back to the record. Nightscout splits a document carrying a
-/// non-zero <c>preBolus</c> (<see cref="PreBolusSplittingNightscout"/>).
+/// id the connector's pull matches back to the record, however Nightscout splits a document carrying
+/// a <c>preBolus</c> (<see cref="PreBolusSplittingNightscout"/>).
 /// </summary>
 [Trait("Category", "Unit")]
 public class TreatmentPreBolusWriteBackTests
 {
     private const string BolusTime = "2026-09-30T10:00:00.000Z";
+    private const string Key = "6a1f00000000000000000001";
 
     private readonly NightscoutConnectorConfiguration _config = new()
     {
@@ -33,22 +32,20 @@ public class TreatmentPreBolusWriteBackTests
         WriteBackBatchSize = 50,
     };
 
-    private readonly PreBolusSplittingNightscout _upstream = new();
-
-    private NightscoutTreatmentWriteBackSink Sink()
+    private NightscoutTreatmentWriteBackSink Sink(PreBolusSplittingNightscout upstream)
     {
         var loader = new Mock<IConnectorConfigurationLoader<NightscoutConnectorConfiguration>>();
         loader.Setup(l => l.LoadForTenantAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_config);
         return new NightscoutTreatmentWriteBackSink(
-            new HttpClient(_upstream) { BaseAddress = new Uri(_config.Url) },
+            new HttpClient(upstream) { BaseAddress = new Uri(_config.Url) },
             loader.Object,
             new NightscoutCircuitBreaker(new FakeTimeProvider(DateTimeOffset.Parse(BolusTime, CultureInfo.InvariantCulture))),
             NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
     }
 
-    private static Treatment MealBolus(double? carbs, double preBolus, string eventType = "Meal Bolus") => new()
+    private static Treatment MealBolus(double? carbs, double preBolus, string eventType = "Meal Bolus", string id = Key) => new()
     {
-        Id = "6a1f00000000000000000001",
+        Id = id,
         EventType = eventType,
         CreatedAt = BolusTime,
         Mills = DateTimeOffset.Parse(BolusTime, CultureInfo.InvariantCulture).ToUnixTimeMilliseconds(),
@@ -56,204 +53,135 @@ public class TreatmentPreBolusWriteBackTests
         Carbs = carbs,
         PreBolus = preBolus,
         Notes = "lunch",
-        DataSource = "nocturne",
+        DataSource = "careportal",
     };
 
-    [Fact]
-    public void The_fake_splits_a_preBolus_document_as_Nightscout_does()
-    {
-        _upstream.Post(JsonNode.Parse($$"""
-            [{"_id":"6a1f00000000000000000001","eventType":"Meal Bolus","created_at":"{{BolusTime}}","carbs":30,"insulin":2,"preBolus":15,"notes":"lunch"}]
-            """)!.AsArray());
+    /// <summary>What a write-back sent before preBolus was left out: the treatment as it stands.</summary>
+    private static JsonArray SentWithPreBolus(double carbs, double preBolus, string eventType = "Meal Bolus") => JsonNode.Parse($$"""
+        [{"_id":"{{Key}}","identifier":"{{Key}}","eventType":"{{eventType}}","created_at":"{{BolusTime}}","carbs":{{carbs}},"insulin":2,"preBolus":{{preBolus}},"notes":"lunch"}]
+        """)!.AsArray();
 
-        _upstream.Documents.Should().HaveCount(2);
-        var bolus = _upstream.Documents[0];
-        bolus["_id"]!.GetValue<string>().Should().Be("6a1f00000000000000000001");
+    private static string? Str(JsonObject document, string name) => document[name]?.GetValue<string>();
+
+    /// <summary>The copy the pull matches to the record: by _id up to 15.0.6, by identifier from 15.0.7.</summary>
+    private static string? KeyOf(JsonObject document, bool v15_0_8) => Str(document, v15_0_8 ? "identifier" : "_id");
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void The_fake_splits_a_preBolus_document_as_Nightscout_does(bool v15_0_8)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+
+        upstream.Post(SentWithPreBolus(carbs: 30, preBolus: 15));
+
+        upstream.Documents.Should().HaveCount(2);
+        var bolus = upstream.Documents[0];
+        KeyOf(bolus, v15_0_8).Should().Be(Key);
         bolus["carbs"].Should().BeNull();
         bolus["insulin"]!.GetValue<double>().Should().Be(2);
 
-        var carbs = _upstream.Documents[1];
-        carbs["_id"]!.GetValue<string>().Should().NotBe("6a1f00000000000000000001");
+        var carbs = upstream.Documents[1];
+        Str(carbs, "_id").Should().NotBe(Key);
         carbs["identifier"].Should().BeNull();
-        carbs["created_at"]!.GetValue<string>().Should().Be("2026-09-30T10:15:00.000Z");
-        carbs["eventType"]!.GetValue<string>().Should().Be("Meal Bolus");
+        Str(carbs, "created_at").Should().Be("2026-09-30T10:15:00.000Z");
+        Str(carbs, "eventType").Should().Be("Meal Bolus");
         carbs["carbs"]!.GetValue<double>().Should().Be(30);
-        carbs["notes"]!.GetValue<string>().Should().Be("lunch");
+        Str(carbs, "notes").Should().Be("lunch");
     }
 
     [Theory]
-    [InlineData(15)]
-    [InlineData(-10)]
-    public async Task A_created_treatment_with_carbs_and_a_preBolus_leaves_one_document_carrying_its_carbs(double preBolus)
+    [InlineData(false, 15)]
+    [InlineData(false, -10)]
+    [InlineData(true, 15)]
+    [InlineData(true, -10)]
+    public async Task A_created_treatment_with_carbs_and_a_preBolus_leaves_one_document_carrying_its_carbs(
+        bool v15_0_8, double preBolus)
     {
-        var treatment = MealBolus(carbs: 30, preBolus);
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
 
-        await Sink().OnCreatedAsync([treatment]);
+        await Sink(upstream).OnCreatedAsync([MealBolus(carbs: 30, preBolus)]);
 
-        _upstream.Documents.Should().ContainSingle();
-        var copy = _upstream.Documents[0];
-        copy["_id"]!.GetValue<string>().Should().Be(treatment.Id);
-        copy["created_at"]!.GetValue<string>().Should().Be(BolusTime);
+        var copy = upstream.Documents.Should().ContainSingle().Subject;
+        KeyOf(copy, v15_0_8).Should().Be(Key);
+        Str(copy, "created_at").Should().Be(BolusTime);
         copy["carbs"]!.GetValue<double>().Should().Be(30);
         copy["insulin"]!.GetValue<double>().Should().Be(2);
     }
 
-    [Fact]
-    public async Task A_batch_holding_a_preBolus_treatment_leaves_one_document_per_treatment()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_batch_holding_a_preBolus_treatment_leaves_one_document_per_treatment(bool v15_0_8)
     {
-        var withPreBolus = MealBolus(carbs: 30, preBolus: 15);
-        var plain = MealBolus(carbs: 12, preBolus: 0, eventType: "Carb Correction");
-        plain.Id = "6a1f00000000000000000002";
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        var plain = MealBolus(carbs: 12, preBolus: 0, eventType: "Carb Correction", id: "6a1f00000000000000000002");
 
-        await Sink().OnCreatedAsync([withPreBolus, plain]);
+        await Sink(upstream).OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15), plain]);
 
-        _upstream.Documents.Select(d => d["_id"]!.GetValue<string>())
-            .Should().BeEquivalentTo([withPreBolus.Id, plain.Id]);
+        upstream.Documents.Select(d => KeyOf(d, v15_0_8)).Should().BeEquivalentTo([Key, plain.Id]);
     }
 
-    [Fact]
-    public async Task A_created_treatment_with_a_preBolus_and_no_carbs_leaves_one_document()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_created_treatment_with_a_preBolus_and_no_carbs_leaves_one_document(bool v15_0_8)
     {
-        await Sink().OnCreatedAsync([MealBolus(carbs: null, preBolus: 15, eventType: "Bolus Wizard")]);
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
 
-        _upstream.Documents.Should().ContainSingle();
+        await Sink(upstream).OnCreatedAsync([MealBolus(carbs: null, preBolus: 15, eventType: "Bolus Wizard")]);
+
+        upstream.Documents.Should().ContainSingle();
     }
 
-    [Fact]
-    public async Task An_edited_treatment_with_carbs_and_a_preBolus_keeps_its_carbs_upstream()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_edited_treatment_with_carbs_and_a_preBolus_keeps_its_carbs_upstream(bool v15_0_8)
     {
-        var treatment = MealBolus(carbs: 45, preBolus: 20, eventType: "Bolus Wizard");
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
 
-        await Sink().OnUpdatedAsync(treatment);
+        await Sink(upstream).OnUpdatedAsync(MealBolus(carbs: 45, preBolus: 20, eventType: "Bolus Wizard"));
 
-        _upstream.Documents.Should().ContainSingle();
-        _upstream.Documents[0]["carbs"]!.GetValue<double>().Should().Be(45);
+        upstream.Documents.Should().ContainSingle().Which["carbs"]!.GetValue<double>().Should().Be(45);
     }
 
-    /// <summary>
-    /// The v1 treatment writes of Nightscout's <c>lib/server/treatments.js</c> (15.0.x) as far as
-    /// <c>preBolus</c> reaches them. <c>prepareData</c> moves the carbs of a document with a non-zero
-    /// <c>preBolus</c> into <c>preBolusCarbs</c> and deletes them; <c>upsert</c> (POST, an array
-    /// one document at a time) then upserts a second document,
-    /// <c>{created_at: created_at + preBolus minutes, eventType, carbs: preBolusCarbs, notes}</c>, by
-    /// <c>created_at</c> and <c>eventType</c> under a minted <c>_id</c>, carbs or not. <c>save</c>
-    /// (PUT) runs <c>prepareData</c> and writes no second document, so the carbs are lost.
-    /// </summary>
-    private sealed class PreBolusSplittingNightscout : HttpMessageHandler
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Writing_again_a_treatment_an_earlier_write_back_split_removes_the_split_off_carbs(
+        bool v15_0_8, bool edit)
     {
-        private int _minted;
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        upstream.Post(SentWithPreBolus(carbs: 30, preBolus: 15));
+        var treatment = MealBolus(carbs: 35, preBolus: 15);
 
-        public List<JsonObject> Documents { get; } = [];
+        if (edit)
+            await Sink(upstream).OnUpdatedAsync(treatment);
+        else
+            await Sink(upstream).OnCreatedAsync([treatment]);
 
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
-        {
-            request.RequestUri!.AbsolutePath.Should().Be("/api/v1/treatments");
-            var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
+        var copy = upstream.Documents.Should().ContainSingle().Subject;
+        KeyOf(copy, v15_0_8).Should().Be(Key);
+        copy["carbs"]!.GetValue<double>().Should().Be(35);
+        copy["preBolus"].Should().BeNull();
+    }
 
-            if (request.Method == HttpMethod.Post)
-                Post(body is JsonArray array ? array : new JsonArray(body.DeepClone()));
-            else if (request.Method == HttpMethod.Put)
-                Save(body.AsObject());
-            else
-                return new HttpResponseMessage(HttpStatusCode.MethodNotAllowed);
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Documents_at_the_split_slot_that_are_not_a_split_copy_are_kept(bool v15_0_8)
+    {
+        var upstream = new PreBolusSplittingNightscout(v15_0_8);
+        upstream.Post(JsonNode.Parse("""
+            [{"eventType":"Carb Correction","created_at":"2026-09-30T10:15:00.000Z","carbs":10,"enteredBy":"careportal"},
+             {"identifier":"aaps-1","eventType":"Meal Bolus","created_at":"2026-09-30T10:15:00.000Z","carbs":12,"enteredBy":"aaps"}]
+            """)!.AsArray());
 
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("[]", Encoding.UTF8, "application/json"),
-            };
-        }
+        await Sink(upstream).OnCreatedAsync([MealBolus(carbs: 30, preBolus: 15)]);
 
-        public void Post(JsonArray documents)
-        {
-            foreach (var node in documents)
-            {
-                var obj = node!.DeepClone().AsObject();
-                var (createdAt, preBolusCarbs) = PrepareData(obj);
-                var eventType = obj["eventType"]?.GetValue<string>();
-                Upsert(createdAt, eventType, obj);
-
-                if (obj["preBolus"] is { } preBolus)
-                {
-                    var pbCreatedAt = Iso(DateTimeOffset.Parse(createdAt, CultureInfo.InvariantCulture)
-                        .AddMinutes(preBolus.GetValue<double>()));
-                    var pbTreat = new JsonObject
-                    {
-                        ["created_at"] = pbCreatedAt,
-                        ["eventType"] = eventType,
-                        ["carbs"] = preBolusCarbs?.DeepClone() ?? JsonValue.Create(""),
-                    };
-                    if (obj["notes"] is { } notes)
-                        pbTreat["notes"] = notes.DeepClone();
-                    Upsert(pbCreatedAt, eventType, pbTreat);
-                }
-            }
-        }
-
-        private void Save(JsonObject obj)
-        {
-            PrepareData(obj);
-            var id = obj["_id"]?.GetValue<string>();
-            var stored = Documents.FindIndex(d => id is not null && d["_id"]?.GetValue<string>() == id);
-            obj["_id"] ??= Mint();
-            if (stored >= 0)
-                Documents[stored] = obj;
-            else
-                Documents.Add(obj);
-        }
-
-        private void Upsert(string createdAt, string? eventType, JsonObject obj)
-        {
-            var stored = Documents.FindIndex(d =>
-                d["created_at"]?.GetValue<string>() == createdAt && d["eventType"]?.GetValue<string>() == eventType);
-            if (stored >= 0)
-            {
-                obj["_id"] = Documents[stored]["_id"]!.DeepClone();
-                Documents[stored] = obj;
-                return;
-            }
-
-            obj["_id"] ??= Mint();
-            Documents.Add(obj);
-        }
-
-        private static (string CreatedAt, JsonNode? PreBolusCarbs) PrepareData(JsonObject obj)
-        {
-            var createdAt = Iso(DateTimeOffset.Parse(obj["created_at"]!.GetValue<string>(), CultureInfo.InvariantCulture));
-            obj["created_at"] = createdAt;
-
-            var preBolus = Number(obj["preBolus"]);
-            var carbs = Number(obj["carbs"]);
-            JsonNode? preBolusCarbs = null;
-            if (preBolus is not (0 or double.NaN) && carbs is not (0 or double.NaN))
-            {
-                preBolusCarbs = JsonValue.Create(carbs);
-                obj.Remove("carbs");
-            }
-
-            foreach (var (field, value) in new[] { ("carbs", carbs), ("insulin", Number(obj["insulin"])), ("preBolus", preBolus) })
-            {
-                if (value is 0 or double.NaN)
-                    obj.Remove(field);
-                else if (obj.ContainsKey(field))
-                    obj[field] = value;
-            }
-
-            return (createdAt, preBolusCarbs);
-        }
-
-        private static double Number(JsonNode? node) => node?.GetValueKind() switch
-        {
-            JsonValueKind.Number => node.GetValue<double>(),
-            JsonValueKind.String => double.TryParse(node.GetValue<string>(), CultureInfo.InvariantCulture, out var parsed)
-                ? parsed
-                : node.GetValue<string>().Length == 0 ? 0 : double.NaN,
-            JsonValueKind.Null => 0,
-            _ => double.NaN,
-        };
-
-        private static string Iso(DateTimeOffset at) =>
-            at.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
-
-        private string Mint() => $"{++_minted:x24}";
+        upstream.Documents.Should().HaveCount(3);
     }
 }
