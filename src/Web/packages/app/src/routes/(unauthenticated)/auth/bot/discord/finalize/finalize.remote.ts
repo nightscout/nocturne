@@ -8,6 +8,7 @@ import {
 	type DiscordLinkClaim,
 } from "$lib/server/bot/oauth-state";
 import { extractTenantSlug } from "$lib/server/request-host";
+import { errorStatus } from "$lib/forms/submit-error";
 
 function claimForThisRequest(claim: string): DiscordLinkClaim | null {
 	const { locals, url, cookies } = getRequestEvent();
@@ -38,7 +39,12 @@ export const confirmDiscordLink = command(z.string(), async (claim) => {
 	);
 	if (!token) throw error(502, "Failed to issue claim token.");
 
-	const link = await locals.apiClient.chatIdentity.claimLink({ token });
+	const link = await locals.apiClient.chatIdentity.claimLink({ token }).catch((err: unknown) => {
+		const status = errorStatus(err);
+		if (status === 400) throw error(400, "Invalid or expired Discord link claim.");
+		if (status === 409) throw error(409, "This Discord account is already linked to another member.");
+		throw err;
+	});
 	cookies.delete(DISCORD_LINK_COOKIE, { path: "/" });
 	return { label: link.label ?? "", displayName: link.displayName ?? "" };
 });

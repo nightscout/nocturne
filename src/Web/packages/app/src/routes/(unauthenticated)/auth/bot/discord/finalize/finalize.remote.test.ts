@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { isHttpError } from "@sveltejs/kit";
 import { errorStatus } from "$lib/forms/submit-error";
 import {
 	DISCORD_LINK_COOKIE,
@@ -111,5 +112,28 @@ describe("finalizing a Discord link", () => {
 
 		await expect(rejectionStatus(() => confirmDiscordLink(claim))).resolves.toBe(400);
 		expect(claim_link).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		["the chat account is linked to another member", 409],
+		["the API refuses the pending token", 400],
+	])("answers %s with the API's status, which reaches the page", async (_name, status) => {
+		const { nonce, claim } = startFlow();
+		const { claim_link } = browser(nonce);
+		claim_link.mockRejectedValue({ status, title: "Refused", detail: "refused" });
+
+		const rejection = await confirmDiscordLink(claim).catch((err: unknown) => err);
+
+		expect(isHttpError(rejection, status)).toBe(true);
+	});
+
+	it("passes any other API failure through untouched", async () => {
+		const { nonce, claim } = startFlow();
+		const { jar, claim_link } = browser(nonce);
+		const failure = new Error("upstream down");
+		claim_link.mockRejectedValue(failure);
+
+		await expect(confirmDiscordLink(claim)).rejects.toBe(failure);
+		expect(jar.has(DISCORD_LINK_COOKIE)).toBe(true);
 	});
 });
