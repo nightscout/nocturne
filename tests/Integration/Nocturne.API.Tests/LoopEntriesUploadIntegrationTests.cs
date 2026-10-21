@@ -47,8 +47,38 @@ public class LoopEntriesUploadIntegrationTests : ApiIntegrationTestBase
         string.Create(
             CultureInfo.InvariantCulture,
             $$"""
-            {"date":{{at.ToUnixTimeMilliseconds()}}{{fractionMs.ToString(".###", CultureInfo.InvariantCulture)}},"dateString":"{{IsoSeconds(at)}}","device":"{{device}}","type":"sgv","sgv":{{sgv}},"trend":4,"direction":"Flat","trendRate":0.29999999999999999,"isCalibration":false,"isBackfill":false,"receivedTime":"{{IsoSeconds(at.AddSeconds(2))}}"}
+            {"date":{{at.ToUnixTimeMilliseconds()}}{{fractionMs.ToString(".###", CultureInfo.InvariantCulture)}},"dateString":"{{IsoSeconds(at)}}","device":"{{device}}","type":"sgv","sgv":{{sgv}},"trend":4,"direction":"Flat","trendRate":0.29999999999999999,"isCalibration":false}
             """);
+
+    private static string LoopMeterJson(DateTimeOffset at, int mbg) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""
+            {"date":{{at.ToUnixTimeMilliseconds()}}.5,"dateString":"{{IsoSeconds(at)}}","device":"loop://iPhone","type":"mbg","mbg":{{mbg}},"isCalibration":false}
+            """);
+
+    private static async Task<JsonDocument> PostOkAsync(HttpClient client, string body, int expectedEcho)
+    {
+        using var post = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/api/v1/entries", post);
+        var content = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, content);
+
+        var echo = JsonDocument.Parse(content);
+        echo.RootElement.GetArrayLength().Should().Be(expectedEcho);
+        echo.RootElement.EnumerateArray()
+            .Should()
+            .OnlyContain(e => !string.IsNullOrEmpty(e.GetProperty("_id").GetString()));
+        return echo;
+    }
+
+    private static async Task<int> CountAsync(HttpClient client, string type)
+    {
+        var response = await client.GetAsync($"/api/v1/entries/{type}.json?count=5000&find[date][$gte]=0");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var rows = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return rows.RootElement.GetArrayLength();
+    }
 
     [Fact]
     public async Task LoopUpload_IsStored_AndServedOnEveryReadLoopAndTheDashboardUse()
@@ -121,27 +151,58 @@ public class LoopEntriesUploadIntegrationTests : ApiIntegrationTestBase
             + string.Join(
                 ",",
                 Enumerable.Range(0, 1000)
-                    .Select(i => LoopEntryJson(newest.AddMinutes(-5 * i), 0.25, 80 + i % 150, "Dexcom G7 DXCMxx")))
+                    .Select(i => LoopEntryJson(newest.AddMinutes(-5.0 * i), 0.25, 80 + i % 150, "Dexcom G7 DXCMxx")))
             + "]";
 
         for (var attempt = 0; attempt < 2; attempt++)
-        {
-            using var post = new StringContent(body, Encoding.UTF8, "application/json");
-            var response = await client.PostAsync("/api/v1/entries", post);
-            var content = await response.Content.ReadAsStringAsync();
-            response.StatusCode.Should().Be(HttpStatusCode.OK, content);
+            (await PostOkAsync(client, body, 1000)).Dispose();
 
-            using var echo = JsonDocument.Parse(content);
-            echo.RootElement.GetArrayLength().Should().Be(1000);
+        (await CountAsync(client, "sgv")).Should().Be(1000);
+    }
+
+    /// <summary>
+    /// A user-entered reading reaches Loop's glucose batch as an <c>mbg</c> entry alongside the CGM's
+    /// <c>sgv</c> entries, and a retried batch carries the readings it already sent ahead of new ones.
+    /// </summary>
+    [Fact]
+    public async Task LoopBatchMixingMeterAndSensorReadings_StoredAndNew_EchoesOneObjectPerReading()
+    {
+        using var client = await CreateLoopClientAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        var first =
+            "["
+            + LoopEntryJson(now.AddMinutes(-20), 0.1, 110, "Dexcom G7 DXCMxx")
+            + "," + LoopMeterJson(now.AddMinutes(-18), 115)
+            + "," + LoopEntryJson(now.AddMinutes(-15), 0.2, 112, "Dexcom G7 DXCMxx")
+            + "]";
+        using (var echo = await PostOkAsync(client, first, 3))
+        {
             echo.RootElement.EnumerateArray()
+                .Select(e => e.GetProperty("type").GetString())
                 .Should()
-                .OnlyContain(e => !string.IsNullOrEmpty(e.GetProperty("_id").GetString()));
+                .Equal("sgv", "mbg", "sgv");
         }
 
-        var stored = await client.GetAsync("/api/v1/entries/sgv.json?count=5000&find[date][$gte]=0");
-        stored.StatusCode.Should().Be(HttpStatusCode.OK);
-        using var rows = JsonDocument.Parse(await stored.Content.ReadAsStringAsync());
-        rows.RootElement.GetArrayLength().Should().Be(1000);
+        var retried =
+            "["
+            + LoopEntryJson(now.AddMinutes(-20), 0.1, 110, "Dexcom G7 DXCMxx")
+            + "," + LoopMeterJson(now.AddMinutes(-18), 115)
+            + "," + LoopEntryJson(now.AddMinutes(-15), 0.2, 112, "Dexcom G7 DXCMxx")
+            + "," + LoopEntryJson(now.AddMinutes(-10), 0.3, 114, "Dexcom G7 DXCMxx")
+            + "," + LoopMeterJson(now.AddMinutes(-8), 120)
+            + "," + LoopEntryJson(now.AddMinutes(-5), 0.4, 116, "Dexcom G7 DXCMxx")
+            + "]";
+        using (var echo = await PostOkAsync(client, retried, 6))
+        {
+            echo.RootElement.EnumerateArray()
+                .Select(e => e.GetProperty("type").GetString())
+                .Should()
+                .Equal("sgv", "mbg", "sgv", "sgv", "mbg", "sgv");
+        }
+
+        (await CountAsync(client, "sgv")).Should().Be(4);
+        (await CountAsync(client, "mbg")).Should().Be(2);
     }
 
     private async Task AssertLoopReadAsync(
