@@ -433,78 +433,90 @@ public class PasskeyControllerTests : IDisposable
 
     #region Recovery-mode enrolment
 
-    [Fact]
-    public async Task RecoveryModeOptions_WhenTenantIsNotInRecoveryMode_IsRefused()
+    private Mock<ILoginCodeService> LoginCodesRedeeming(Guid? subjectId)
     {
-        // A tenant whose only member has a passkey is not in recovery mode.
+        var loginCodes = new Mock<ILoginCodeService>();
+        loginCodes
+            .Setup(s => s.RedeemAsync(
+                It.IsAny<NocturneDbContext>(), "issued-code",
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(subjectId);
+        return loginCodes;
+    }
+
+    private void StubRecoveryTokenMinting() =>
+        _jwtService
+            .Setup(s => s.GenerateAccessToken(
+                It.IsAny<SubjectInfo>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>(),
+                It.IsAny<IEnumerable<string>>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
+                It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<Guid?>()))
+            .Returns("recovery-token");
+
+    private string? RecoveryCookieSet() =>
+        _controller.ControllerContext.HttpContext.Response.Headers.SetCookie
+            .SingleOrDefault(h => h!.StartsWith(".Nocturne.RecoverySession=", StringComparison.Ordinal));
+
+    [Fact]
+    public async Task RecoveryModeRedeem_WithAnIssuedCode_StartsARecoverySessionForItsSubject()
+    {
         await SeedMemberAsync("rhys", withPasskey: true);
+        var orphanId = await SeedMemberAsync("orphan");
+        StubRecoveryTokenMinting();
 
-        var result = await _controller.RecoveryModeOptions(new PasskeyLoginOptionsRequest { Username = "rhys" });
+        var result = await _controller.RecoveryModeRedeem(
+            new RecoveryModeRedeemRequest { Code = "issued-code" }, LoginCodesRedeeming(orphanId).Object);
 
-        var objectResult = Assert.IsType<ObjectResult>(result.Result);
-        objectResult.StatusCode.Should().Be(400);
-        _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
-            Times.Never);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        ((RecoveryModeRedeemResponse)ok.Value!).Username.Should().Be("orphan");
+        RecoveryCookieSet().Should().StartWith(".Nocturne.RecoverySession=recovery-token");
+        _jwtService.Verify(s => s.GenerateAccessToken(
+            It.Is<SubjectInfo>(i => i.Id == orphanId),
+            It.Is<IEnumerable<string>>(p => p.SequenceEqual(new[] { "passkey:manage" })),
+            It.IsAny<IEnumerable<string>>(),
+            It.Is<IEnumerable<string>>(sc => sc.SequenceEqual(new[] { "auth:recovery:enrol" })),
+            It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
+            It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<Guid?>()), Times.Once);
     }
 
     [Fact]
-    public async Task RecoveryModeOptions_WhenTheNamedAccountStillHasAPasskey_IsRefused()
+    public async Task RecoveryModeRedeem_WithACodeThatDoesNotRedeem_IsRefusedWithoutASession()
     {
-        // Recovery mode is active because of the orphan, but the named account is not the orphan.
-        var withPasskey = await SeedMemberAsync("rhys", withPasskey: true);
-        await SeedMemberAsync("orphan", withPasskey: false);
-        _subjectService
-            .Setup(s => s.CountPrimaryAuthFactorsAsync(withPasskey))
-            .ReturnsAsync(1);
+        await SeedMemberAsync("orphan");
 
-        var result = await _controller.RecoveryModeOptions(new PasskeyLoginOptionsRequest { Username = "rhys" });
-
-        var objectResult = Assert.IsType<ObjectResult>(result.Result);
-        objectResult.StatusCode.Should().Be(400);
-        _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
-            Times.Never,
-            "an account that can still sign in must not be enrollable without a session");
-    }
-
-    [Fact]
-    public async Task RecoveryModeOptions_ForALockedOutAccount_MintsAChallengeForTheResolvedSubject()
-    {
-        await SeedMemberAsync("rhys", withPasskey: true);
-        var orphanId = await SeedMemberAsync("orphan", withPasskey: false);
-        _subjectService
-            .Setup(s => s.CountPrimaryAuthFactorsAsync(orphanId))
-            .ReturnsAsync(0);
-        _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(orphanId, "orphan"))
-            .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
-
-        var result = await _controller.RecoveryModeOptions(new PasskeyLoginOptionsRequest { Username = "orphan" });
-
-        Assert.IsType<OkObjectResult>(result.Result);
-        _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(orphanId, "orphan"),
-            Times.Once,
-            "the subject comes from the server's lookup, not from the request");
-    }
-
-    [Fact]
-    public async Task RecoveryModeOptions_ForAnotherTenantsMember_IsRefused()
-    {
-        // Subjects are global; membership is what scopes them. A locked-out subject in another
-        // tenant must not be claimable from this one.
-        await SeedMemberAsync("rhys", withPasskey: true);
-        await SeedMemberAsync("orphan", withPasskey: false);
-        var elsewhereId = await SeedMemberAsync("elsewhere", tenantId: Guid.CreateVersion7());
-        _subjectService.Setup(s => s.CountPrimaryAuthFactorsAsync(elsewhereId)).ReturnsAsync(0);
-
-        var result = await _controller.RecoveryModeOptions(new PasskeyLoginOptionsRequest { Username = "elsewhere" });
+        var result = await _controller.RecoveryModeRedeem(
+            new RecoveryModeRedeemRequest { Code = "issued-code" }, LoginCodesRedeeming(null).Object);
 
         Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
-        _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(elsewhereId, It.IsAny<string>()),
-            Times.Never);
+        RecoveryCookieSet().Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RecoveryModeRedeem_WithoutACode_IsRefusedBeforeAnyRedemption()
+    {
+        var loginCodes = LoginCodesRedeeming(Guid.CreateVersion7());
+
+        var result = await _controller.RecoveryModeRedeem(
+            new RecoveryModeRedeemRequest { Code = " " }, loginCodes.Object);
+
+        Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        loginCodes.VerifyNoOtherCalls();
+        RecoveryCookieSet().Should().BeNull();
+    }
+
+    [Fact]
+    public void The_only_anonymous_recovery_mode_action_spends_an_issued_code()
+    {
+        // A username is public, so naming one must never decide whose account an anonymous caller
+        // enrols a passkey onto.
+        var anonymousEnrolments = typeof(PasskeyController).GetMethods()
+            .Where(m => m.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute), true).Length > 0)
+            .Where(m => m.GetCustomAttributes(typeof(HttpPostAttribute), true)
+                .Cast<HttpPostAttribute>()
+                .Any(a => a.Template!.StartsWith("recovery-mode", StringComparison.Ordinal)))
+            .ToList();
+
+        anonymousEnrolments.Should().ContainSingle()
+            .Which.Name.Should().Be(nameof(PasskeyController.RecoveryModeRedeem));
     }
 
     #endregion

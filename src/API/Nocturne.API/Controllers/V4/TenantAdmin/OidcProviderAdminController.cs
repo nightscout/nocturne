@@ -7,6 +7,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
@@ -101,10 +102,18 @@ public class OidcProviderAdminController : ControllerBase
     [RemoteCommand(Invalidates = ["GetAll", "GetById"])]
     [ProducesResponseType(typeof(OidcProviderResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateOidcProviderRequest request)
     {
         var existing = await _providerService.GetProviderByIdAsync(id);
         if (existing is null) return NotFound();
+
+        if (existing.IsEnabled && !request.IsEnabled)
+        {
+            await using var db = await _contexts.CreateAsync();
+            var conflict = await CheckWouldLockOutUsersAsync(db, id, disable: true);
+            if (conflict is not null) return conflict;
+        }
 
         existing.Name = request.Name;
         existing.ProviderType = request.ProviderType;
@@ -248,37 +257,32 @@ public class OidcProviderAdminController : ControllerBase
     }
 
     /// <summary>
-    /// Checks whether deleting or disabling the given provider would leave zero enabled providers
-    /// while OIDC-only users exist. Returns a 409 Conflict result if so, or null if the operation is safe.
+    /// Refuses with 409 when deleting or disabling the provider would leave any account with no
+    /// sign-in method (<see cref="OrphanedSubjectFilter"/>): one whose only passkey-free way in is
+    /// this provider. Returns <see langword="null"/> when the operation strands nobody.
     /// </summary>
     private async Task<IActionResult?> CheckWouldLockOutUsersAsync(NocturneDbContext db, Guid providerId, bool disable)
     {
-        var allProviders = await _providerService.GetAllProvidersAsync();
-
-        // Count how many enabled providers would remain after this operation
-        int remainingEnabled = disable
-            ? allProviders.Count(p => p.IsEnabled && p.Id != providerId)
-            : allProviders.Count(p => p.IsEnabled && p.Id != providerId);
-
-        if (remainingEnabled > 0)
-            return null;
-
-        // Zero enabled providers would remain. Check for OIDC-only users.
-        var oidcOnlyUserCount = await db.Subjects
-            .Where(s => s.OidcIdentities.Any())
-            .Where(s => !db.PasskeyCredentials.Any(p => p.SubjectId == s.Id))
-            .Where(s => !db.TotpCredentials.Any(t => t.SubjectId == s.Id))
+        var strandedCount = await db.WorkingOidcIdentities()
+            .Where(i => i.ProviderId == providerId)
+            .Select(i => i.Subject!)
+            .Where(s => s.IsActive
+                && !s.IsSystemSubject
+                && !db.PasskeyCredentials.Any(p => p.SubjectId == s.Id)
+                && !db.WorkingOidcIdentities().Any(o => o.SubjectId == s.Id && o.ProviderId != providerId))
+            .Select(s => s.Id)
+            .Distinct()
             .CountAsync();
 
-        if (oidcOnlyUserCount == 0)
+        if (strandedCount == 0)
             return null;
 
         var action = disable ? "Disabling" : "Deleting";
         return Conflict(new
         {
-            Error = $"{action} this provider would leave no enabled OIDC providers",
-            AffectedUserCount = oidcOnlyUserCount,
-            Message = $"{oidcOnlyUserCount} user(s) authenticate exclusively via OIDC and would be locked out"
+            Error = $"{action} this provider would leave accounts with no way to sign in",
+            AffectedUserCount = strandedCount,
+            Message = $"{strandedCount} user(s) sign in only through this provider and would be locked out"
         });
     }
 }

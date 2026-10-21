@@ -203,6 +203,7 @@ public class V4WriteScopeGatingTests
             ["ConnectedAppsController"] = NotDataCategory.IdentityAndDelegation,
             ["GuestLinkController"] = NotDataCategory.IdentityAndDelegation,
             ["MemberInviteController"] = NotDataCategory.IdentityAndDelegation,
+            ["MemberRecoveryController"] = NotDataCategory.IdentityAndDelegation,
             ["MembershipRequestController"] = NotDataCategory.IdentityAndDelegation,
             ["RoleController"] = NotDataCategory.IdentityAndDelegation,
             ["SessionsController"] = NotDataCategory.IdentityAndDelegation,
