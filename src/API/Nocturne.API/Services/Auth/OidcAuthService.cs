@@ -32,6 +32,7 @@ public class OidcAuthService : IOidcAuthService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly IMemberInviteService _memberInviteService;
+    private readonly ITotpService _totpService;
     private readonly IDataProtector _stateProtector;
     private readonly OidcOptions _options;
     private readonly BaseDomainOptions _baseDomain;
@@ -48,6 +49,7 @@ public class OidcAuthService : IOidcAuthService
     /// <param name="httpClientFactory">Factory for the <c>OidcProvider</c> named HTTP client.</param>
     /// <param name="tenantMemberService">Service for verifying tenant membership before issuing a login session.</param>
     /// <param name="memberInviteService">Service for accepting an invite named by the login's return URL.</param>
+    /// <param name="totpService">Service that withholds the session behind an authenticator code when one is enrolled.</param>
     /// <param name="dataProtectionProvider">Provider for the protector that authenticates the state parameter.</param>
     /// <param name="options">OIDC session and state configuration options.</param>
     /// <param name="baseDomainOptions">Base domain configuration for building the public redirect URIs.</param>
@@ -61,6 +63,7 @@ public class OidcAuthService : IOidcAuthService
         IHttpClientFactory httpClientFactory,
         ITenantMemberService tenantMemberService,
         IMemberInviteService memberInviteService,
+        ITotpService totpService,
         IDataProtectionProvider dataProtectionProvider,
         IOptions<OidcOptions> options,
         IOptions<BaseDomainOptions> baseDomainOptions,
@@ -75,6 +78,7 @@ public class OidcAuthService : IOidcAuthService
         _httpClientFactory = httpClientFactory;
         _tenantMemberService = tenantMemberService;
         _memberInviteService = memberInviteService;
+        _totpService = totpService;
         _stateProtector = dataProtectionProvider.CreateProtector("Nocturne.Oidc.State");
         _options = options.Value;
         _baseDomain = baseDomainOptions.Value;
@@ -296,12 +300,6 @@ public class OidcAuthService : IOidcAuthService
     /// issued — otherwise any external identity could mint a session on any tenant's subdomain.
     /// Extracted from <see cref="HandleCallbackAsync"/> so the membership gate can be unit-tested
     /// without exercising the OIDC code exchange.
-    /// <para>
-    /// No TOTP second-factor gate here. <c>PasskeyController.LoginComplete</c> withholds the session
-    /// when the subject has an authenticator enrolled; this path issues one regardless, so a subject
-    /// with TOTP and a linked provider signs in through the provider without a code. Adding the gate
-    /// needs a pending-second-factor state that survives the provider redirect.
-    /// </para>
     /// </summary>
     internal async Task<OidcCallbackResult> CompleteLoginAsync(
         OidcStateData stateData,
@@ -338,16 +336,21 @@ public class OidcAuthService : IOidcAuthService
         // minted by a tenant login and must have been bounced to that subdomain, so an
         // unresolved tenant means something upstream failed — and treating that as "nothing to
         // check" is how the gate silently disappeared when the state encoding changed.
+        var admittedByInvite = false;
         if (currentTenantId is { } tenantId)
         {
-            if (!await _tenantMemberService.IsMemberAsync(subject.Id, tenantId)
-                && !await IsInvitedByReturnUrlAsync(stateData.ReturnUrl, tenantId))
+            if (!await _tenantMemberService.IsMemberAsync(subject.Id, tenantId))
             {
-                _logger.LogWarning(
-                    "OIDC login denied: subject {SubjectId} is not a member of tenant {TenantId}",
-                    subject.Id,
-                    tenantId);
-                return OidcCallbackResult.NotAMember(subject.Id, stateData.ReturnUrl);
+                if (!await IsInvitedByReturnUrlAsync(stateData.ReturnUrl, tenantId))
+                {
+                    _logger.LogWarning(
+                        "OIDC login denied: subject {SubjectId} is not a member of tenant {TenantId}",
+                        subject.Id,
+                        tenantId);
+                    return OidcCallbackResult.NotAMember(subject.Id, stateData.ReturnUrl);
+                }
+
+                admittedByInvite = true;
             }
         }
         else if (!string.IsNullOrEmpty(stateData.TenantSlug))
@@ -359,6 +362,15 @@ public class OidcAuthService : IOidcAuthService
             return OidcCallbackResult.Failed(
                 "invalid_state",
                 "The login could not be completed against the tenant it was started from.");
+        }
+
+        if (await _totpService.GetCredentialCountAsync(subject.Id) > 0)
+        {
+            return OidcCallbackResult.SecondFactorRequired(
+                subject.Id,
+                await _totpService.CreateStepUpTokenAsync(subject.Id, currentTenantId, admittedByInvite),
+                stateData.ReturnUrl,
+                provider.Id);
         }
 
         // Update last login

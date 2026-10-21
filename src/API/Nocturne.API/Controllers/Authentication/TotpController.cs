@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -23,14 +24,9 @@ namespace Nocturne.API.Controllers.Authentication;
 /// TOTP is never a sole factor: <see cref="Setup"/> requires at least one primary auth factor
 /// (passkey or OIDC link) to already be configured, and <see cref="Login"/> requires a step-up
 /// token minted by a completed primary factor, so a code on its own can never produce a session.
-/// <para>
-/// Known limitation — TOTP is only <em>demanded</em> on the passkey sign-in path.
-/// <c>PasskeyController.LoginComplete</c> checks <see cref="ITotpService.GetCredentialCountAsync"/>
-/// and withholds the session until a code is supplied here. The OIDC login callback
-/// (<c>OidcAuthService.CompleteLoginAsync</c>) does not: a subject with TOTP enrolled and a linked
-/// provider signs in through that provider with no code. Closing it needs a pending-second-factor
-/// state carried across the provider redirect, which the web app has no route for today.
-/// </para>
+/// Both primary factors, <c>PasskeyController.LoginComplete</c> and
+/// <c>OidcAuthService.CompleteLoginAsync</c>, withhold the session from a subject with an
+/// authenticator enrolled and mint that token instead.
 /// </remarks>
 /// <seealso cref="ITotpService"/>
 /// <seealso cref="ISessionService"/>
@@ -48,6 +44,12 @@ public class TotpController : ControllerBase
     /// </summary>
     private const string CodeNotAccepted = "That code wasn't accepted. Please sign in again.";
 
+    /// <summary>
+    /// The 403 <c>detail</c> for a verified sign-in that this host will not admit. Both factors
+    /// passed, so the caller is the account holder and learns nothing about anyone else.
+    /// </summary>
+    public const string NotAMember = "not_a_member";
+
     private readonly ITotpService _totpService;
     private readonly ISessionService _sessionService;
     private readonly ISubjectService _subjectService;
@@ -55,6 +57,7 @@ public class TotpController : ControllerBase
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly OidcOptions _oidcOptions;
+    private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<TotpController> _logger;
 
     /// <summary>
@@ -68,6 +71,7 @@ public class TotpController : ControllerBase
         ITenantAccessor tenantAccessor,
         ITenantMemberService tenantMemberService,
         IOptions<OidcOptions> oidcOptions,
+        IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<TotpController> logger)
     {
         _totpService = totpService;
@@ -77,6 +81,7 @@ public class TotpController : ControllerBase
         _tenantAccessor = tenantAccessor;
         _tenantMemberService = tenantMemberService;
         _oidcOptions = oidcOptions.Value;
+        _baseDomain = baseDomainOptions.Value;
         _logger = logger;
     }
 
@@ -238,7 +243,7 @@ public class TotpController : ControllerBase
     /// <returns>A <see cref="TotpLoginResponse"/> with access token on success.</returns>
     /// <remarks>
     /// TOTP is a second factor, so this endpoint needs a step-up token from a completed passkey
-    /// assertion — it cannot be reached with a code alone. The token names the subject; a
+    /// assertion or OIDC callback — it cannot be reached with a code alone. The token names the subject; a
     /// caller-supplied username is not accepted.
     /// Rate-limited via the "totp-login" policy.
     /// On success: issues session cookies, updates last login time, and logs
@@ -246,12 +251,15 @@ public class TotpController : ControllerBase
     /// </remarks>
     /// <response code="200">Login successful with access token.</response>
     /// <response code="400">Invalid step-up token or code.</response>
+    /// <response code="403">Both factors passed, but this host does not admit the subject;
+    /// <c>detail</c> is <see cref="NotAMember"/>.</response>
     [HttpPost("login")]
     [AllowAnonymous]
     [EnableRateLimiting("totp-login")]
     [RemoteCommand]
     [ProducesResponseType(typeof(TotpLoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<TotpLoginResponse>> Login([FromBody] TotpLoginRequest request)
     {
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
@@ -266,16 +274,18 @@ public class TotpController : ControllerBase
             return Problem(detail: CodeNotAccepted, statusCode: 400, title: "Bad Request");
         }
 
-        // The step-up token is minted by the passkey assertion, which is not tenant-scoped, so a
-        // member of another tenant could otherwise be issued a session here. Require membership of
-        // the tenant being logged into; respond as for an invalid code so the failure does not
-        // reveal that the account exists on a different tenant.
-        if (!await _tenantMemberService.IsMemberAsync(result.SubjectId, _tenantAccessor.TenantId))
+        // The primary factor decided who may sign in where, and the token carries that decision:
+        // redeem it only on the host it was minted for. A membership revoked since then still
+        // denies, unless the primary factor admitted this subject on an invite.
+        if (!IsMintingHost(result.TenantId)
+            || (result.TenantId is { } tenantId
+                && !result.AdmittedByInvite
+                && !await _tenantMemberService.IsMemberAsync(result.SubjectId, tenantId)))
         {
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, result.SubjectId, success: false,
                 ipAddress: ip, userAgent: ua,
                 detailsJson: JsonSerializer.Serialize(new { method = "totp", reason = "not_a_member" }));
-            return Problem(detail: CodeNotAccepted, statusCode: 400, title: "Bad Request");
+            return Problem(detail: NotAMember, statusCode: 403, title: "Forbidden");
         }
 
         var session = await _sessionService.IssueSessionAsync(
@@ -285,10 +295,8 @@ public class TotpController : ControllerBase
                 IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                 UserAgent: Request.Headers.UserAgent.ToString()));
 
+        // The sign-in hint names the primary factor, which wrote it when it minted the step-up token.
         Response.SetSessionCookies(session, _oidcOptions);
-        // The passkey was the method chosen at the login form; this step is its second factor.
-        Response.SetLastSignInCookie(
-            SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions);
 
         await _subjectService.UpdateLastLoginAsync(result.SubjectId);
 
@@ -302,6 +310,24 @@ public class TotpController : ControllerBase
             AccessToken = session.AccessToken,
             ExpiresIn = session.ExpiresInSeconds,
         });
+    }
+
+    /// <summary>
+    /// Whether this request is on the host a step-up token bound to <paramref name="boundTenantId"/>
+    /// was minted on.
+    /// </summary>
+    /// <remarks>
+    /// The apex of a single-tenant install is one host with two answers: this endpoint and the
+    /// passkey ceremonies resolve it as the sole tenant, while the OIDC callback is served there
+    /// without a tenant (<see cref="TenantResolutionMiddleware"/>). So a token minted with no tenant
+    /// also matches the apex when it resolves a tenant, and nowhere else that does.
+    /// </remarks>
+    private bool IsMintingHost(Guid? boundTenantId)
+    {
+        Guid? hostTenantId = _tenantAccessor.IsResolved ? _tenantAccessor.TenantId : null;
+        return boundTenantId == hostTenantId
+            || (boundTenantId is null
+                && SubdomainParser.Extract(Request.Host.Host, _baseDomain.BaseDomain) is null);
     }
 
 }

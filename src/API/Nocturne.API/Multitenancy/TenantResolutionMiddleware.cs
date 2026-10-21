@@ -157,10 +157,9 @@ public class TenantResolutionMiddleware
         // subject_avatars) carry no tenant column — one person's credential is the same credential
         // in every tenant they belong to, so managing it from a tenant subdomain was arbitrary.
         //
-        // The sign-in ceremonies are deliberately absent. TotpController.Login gates on membership
-        // of the resolved tenant and the passkey login/* paths likewise, so authenticating on a
-        // tenantless host remains identity-provider-only; these enrol and revoke factors for a
-        // caller who is already authenticated.
+        // The passkey sign-in ceremonies are deliberately absent: they gate on membership of the
+        // resolved tenant, so a primary factor on a tenantless host is identity-provider-only.
+        // These enrol and revoke factors for a caller who is already authenticated.
         new TenantlessPath("/api/auth/passkey/register/options", HttpMethods.Post, SoleTenantAtApex: true),
         new TenantlessPath("/api/auth/passkey/register/complete", HttpMethods.Post, SoleTenantAtApex: true),
         new TenantlessPath("/api/auth/passkey/recovery/status", HttpMethods.Get, SoleTenantAtApex: true),
@@ -168,10 +167,12 @@ public class TenantResolutionMiddleware
         new TenantlessPath("/api/auth/totp/setup", HttpMethods.Post, SoleTenantAtApex: true),
         new TenantlessPath("/api/auth/totp/verify-setup", HttpMethods.Post, SoleTenantAtApex: true),
         new TenantlessPath("/api/auth/totp", HttpMethods.Get, SoleTenantAtApex: true),
+        // The authenticator step after an identity-provider sign-in on a tenantless host. Served
+        // as the sole tenant like the passkey ceremonies it also follows; TotpController.Login
+        // matches a token the tenantless OIDC callback minted at that same apex.
+        new TenantlessPath("/api/auth/totp/login", HttpMethods.Post, SoleTenantAtApex: true),
         // Revoking one authenticator, whose route carries its id. Narrowed to DELETE so the sibling
-        // /login, which gates on membership of the resolved tenant, is not admitted under the POST
-        // it is served on. Asked without a method this prefix answers for its own DELETE, so a
-        // coverage sweep sees /login as reachable; routing has no DELETE there to reach.
+        // /login is admitted only by its own entry above. Routing has no DELETE beneath /login.
         new TenantlessPath("/api/auth/totp/", HttpMethods.Delete, Prefix: true, SoleTenantAtApex: true),
         // GET the list and DELETE one by id; nothing else is routed beneath either.
         new TenantlessPath("/api/auth/passkey/credentials", Prefix: true, SoleTenantAtApex: true),

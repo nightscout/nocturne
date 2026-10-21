@@ -196,10 +196,8 @@ msgstr "<0/> Device authorized successfully. Waiting for data..."
 msgid "<0/> Authorization denied. The device will not be granted access."
 msgstr "<0/> Authorization denied. The device will not be granted access."
 
-#: src/lib/components/PreludeQuickConnect.svelte
-#: src/lib/components/XdripQuickConnect.svelte
-msgid "<0/> wants access"
-msgstr "<0/> wants access"
+#~ msgid "<0/> wants access"
+#~ msgstr "<0/> wants access"
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
@@ -3352,15 +3350,12 @@ msgstr "The device will not be granted access."
 msgid "Authorize Application"
 msgstr "Authorize Application"
 
-#: src/lib/components/connectors/UploaderSetupView.svelte
 #: src/routes/(authenticated)/oauth/consent/+page.svelte
-#: src/routes/(authenticated)/oauth/device/+page.svelte
 msgid "<0/> wants to access your Nocturne data."
 msgstr "<0/> wants to access your Nocturne data."
 
-#: src/lib/components/connectors/UploaderSetupView.svelte
-msgid "This application is not in the Nocturne known app directory. Only approve if you trust it."
-msgstr "This application is not in the Nocturne known app directory. Only approve if you trust it."
+#~ msgid "This application is not in the Nocturne known app directory. Only approve if you trust it."
+#~ msgstr "This application is not in the Nocturne known app directory. Only approve if you trust it."
 
 #: src/lib/components/connectors/UploaderSetupView.svelte
 #: src/routes/(authenticated)/oauth/consent/+page.svelte
@@ -11039,17 +11034,15 @@ msgstr "Sidebar"
 msgid "Displays the mobile sidebar."
 msgstr "Displays the mobile sidebar."
 
-#. 0: appName
-#: src/routes/(authenticated)/oauth/device/+page.svelte
-msgid "Authorize {0}"
-msgstr "Authorize {0}"
+#~ msgid "Authorize {0}"
+#~ msgstr "Authorize {0}"
 
 #: src/routes/(authenticated)/oauth/device/+page.svelte
 #: src/routes/(authenticated)/oauth/device/+page.svelte
 msgid "Link a Device"
 msgstr "Link a Device"
 
-#. 0: deviceInfo ? `Authorize ${appName}` \\: "Link a Device"
+#. 0: deviceInfo ? "Authorize a Device" \\: "Link a Device"
 #. 0: dateDisplay ? `${dateDisplay} - Sleep Report` \\: "Sleep Report"
 #: src/routes/(authenticated)/oauth/device/+page.svelte
 #: src/routes/(authenticated)/reports/sleep/[date]/+page.svelte
@@ -15178,17 +15171,14 @@ msgstr "<0/> Connect"
 msgid "Your chat account is now linked to Nocturne. You can close this tab and head back to your chat app."
 msgstr "Your chat account is now linked to Nocturne. You can close this tab and head back to your chat app."
 
-#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
-msgid "We couldn't complete the Discord link. The token may have expired. Please try again from Settings."
-msgstr "We couldn't complete the Discord link. The token may have expired. Please try again from Settings."
+#~ msgid "We couldn't complete the Discord link. The token may have expired. Please try again from Settings."
+#~ msgstr "We couldn't complete the Discord link. The token may have expired. Please try again from Settings."
 
-#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
-msgid "Missing Token"
-msgstr "Missing Token"
+#~ msgid "Missing Token"
+#~ msgstr "Missing Token"
 
-#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
-msgid "Missing token parameter."
-msgstr "Missing token parameter."
+#~ msgid "Missing token parameter."
+#~ msgstr "Missing token parameter."
 
 #: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
 msgid "Discord account linked"
@@ -15203,9 +15193,8 @@ msgstr "Your Discord account is now linked as <0/> (label <1/>). Run <2/> in Dis
 msgid "Back to Settings"
 msgstr "Back to Settings"
 
-#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
-msgid "Link failed"
-msgstr "Link failed"
+#~ msgid "Link failed"
+#~ msgstr "Link failed"
 
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "Condition"
@@ -16603,10 +16592,7 @@ msgstr "Prelude displays a short code after it scans. Enter it here to approve."
 msgid "<0/> Device authorized successfully. Prelude is now connected."
 msgstr "<0/> Device authorized successfully. Prelude is now connected."
 
-#: src/lib/components/PreludeQuickConnect.svelte
-#: src/lib/components/XdripQuickConnect.svelte
 #: src/routes/(authenticated)/oauth/consent/+page.svelte
-#: src/routes/(authenticated)/oauth/device/+page.svelte
 msgid "This application is not in the Nocturne known app directory. Only approve if you trust this application."
 msgstr "This application is not in the Nocturne known app directory. Only approve if you trust this application."
 
@@ -21522,9 +21508,8 @@ msgstr "Your browser does not support passkeys. Use a recovery code, or try a di
 msgid "Or continue with a passkey"
 msgstr "Or continue with a passkey"
 
-#: src/lib/components/auth/LoginForm.svelte
-msgid "Your passkey was accepted. Enter the current code from your authenticator app to finish signing in."
-msgstr "Your passkey was accepted. Enter the current code from your authenticator app to finish signing in."
+#~ msgid "Your passkey was accepted. Enter the current code from your authenticator app to finish signing in."
+#~ msgstr "Your passkey was accepted. Enter the current code from your authenticator app to finish signing in."
 
 #: src/lib/components/clock/ClockFacePreview.svelte
 msgid "Failed to load preview"
@@ -27332,3 +27317,85 @@ msgstr "Clearing..."
 #: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 msgid "Remove the {0} rejected uploads on this page? Export them first to keep a copy. They are not in your data and cannot be recovered once cleared. Uploads not on this page are kept."
 msgstr "Remove the {0} rejected uploads on this page? Export them first to keep a copy. They are not in your data and cannot be recovered once cleared. Uploads not on this page are kept."
+
+#: src/lib/components/PreludeQuickConnect.svelte
+#: src/lib/components/XdripQuickConnect.svelte
+msgid "A device wants access"
+msgstr "A device wants access"
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "Telegram webhook calls are refused until one is set. Choose a random value of letters, digits, <0/> or <1/> (for example from <2/>), save it here with the bot enabled, then register the webhook again with the same value:"
+msgstr "Telegram webhook calls are refused until one is set. Choose a random value of letters, digits, <0/> or <1/> (for example from <2/>), save it here with the bot enabled, then register the webhook again with the same value:"
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "A webhook secret token is required"
+msgstr "A webhook secret token is required"
+
+#: src/lib/components/auth/DeviceAppClaimNotice.svelte
+msgid "This request says it is from <0/>, but a device sign-in cannot prove which app started it. Only approve if you started this sign-in yourself on a device you trust."
+msgstr "This request says it is from <0/>, but a device sign-in cannot prove which app started it. Only approve if you started this sign-in yourself on a device you trust."
+
+#: src/lib/components/auth/LoginForm.svelte
+msgid "Enter the current code from your authenticator app to finish signing in."
+msgstr "Enter the current code from your authenticator app to finish signing in."
+
+#: src/lib/components/connectors/UploaderSetupView.svelte
+#: src/routes/(authenticated)/oauth/device/+page.svelte
+msgid "A device wants to access your Nocturne data."
+msgstr "A device wants to access your Nocturne data."
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "Unverified"
+msgstr "Unverified"
+
+#: src/routes/(authenticated)/oauth/device/+page.svelte
+msgid "Authorize a Device"
+msgstr "Authorize a Device"
+
+#: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
+msgid "Link the <0/> account <1/> to your Nocturne account? It will be able to read your glucose and acknowledge your alerts."
+msgstr "Link the <0/> account <1/> to your Nocturne account? It will be able to read your glucose and acknowledge your alerts."
+
+#: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
+msgid "Only continue if you started this link yourself."
+msgstr "Only continue if you started this link yourself."
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "We couldn't complete the Discord link. It may have expired. Please try again from Settings."
+msgstr "We couldn't complete the Discord link. It may have expired. Please try again from Settings."
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "Missing link details"
+msgstr "Missing link details"
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "Start linking your Discord account again from Settings."
+msgstr "Start linking your Discord account again from Settings."
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "Can't complete this link"
+msgstr "Can't complete this link"
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "This link has expired, or was started from another browser or account. Start linking your Discord account again from Settings."
+msgstr "This link has expired, or was started from another browser or account. Start linking your Discord account again from Settings."
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "Link the Discord account <0/> to your Nocturne account?"
+msgstr "Link the Discord account <0/> to your Nocturne account?"
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "Link the Discord account you just signed in with to your Nocturne account?"
+msgstr "Link the Discord account you just signed in with to your Nocturne account?"
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "Link Discord account"
+msgstr "Link Discord account"
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "<0/> It will be able to read your glucose and acknowledge your alerts."
+msgstr "<0/> It will be able to read your glucose and acknowledge your alerts."
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "<0/> Link account"
+msgstr "<0/> Link account"

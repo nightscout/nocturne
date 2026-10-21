@@ -5314,6 +5314,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<bool>("AdmittedByInvite")
+                        .HasColumnType("boolean")
+                        .HasColumnName("admitted_by_invite");
+
+                    b.Property<Guid?>("BoundTenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bound_tenant_id");
+
                     b.Property<DateTime?>("ConsumedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("consumed_at");
