@@ -18,6 +18,12 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// wrote. The one exception is a referential clean-up that must reach hidden rows and returns only a
 /// count (<see cref="StateSpanSupersessionExtensions.ClearSupersededByAsync"/>). Its callers are
 /// pinned by <c>HistoryClampLiftAllowlistTests</c>.
+/// <para>
+/// The transaction it opens is retried with no <c>verifySucceeded</c>: a commit that reported failure
+/// but landed is replayed, and its client-generated keys then fail with 23505 rather than writing
+/// twice, as an unlifted save retried by the execution strategy does. A check of the landed rows
+/// would run clamped and miss the backdated rows it looks for.
+/// </para>
 /// </remarks>
 internal static class HistoryClampLiftExtensions
 {

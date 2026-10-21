@@ -160,6 +160,15 @@ public class ShareDataCategoriesTests
         ShareDataCategories.SpanEndColumnFor(table).Should().Be(end);
     }
 
+    [Fact]
+    public void InAppNotifications_StayVisibleWhileOpenForAWeekFromWhenTheyWereRaised()
+    {
+        ShareDataCategories.SpanEndColumnFor("in_app_notifications").Should().Be("archived_at");
+        ShareDataCategories.OpenSpanBoundFor("in_app_notifications").Should().Be(new OpenSpanBound("created_at", 7));
+        ShareDataCategories.HiddenOpenSpanBounds.Keys
+            .Should().OnlyContain(t => ShareDataCategories.SpanEndColumnFor(t) != null);
+    }
+
     [Theory]
     [InlineData("treatment_foods", "carb_intakes", "carb_intake_id")]
     [InlineData("sleep_stages", "sleep_sessions", "sleep_session_id")]

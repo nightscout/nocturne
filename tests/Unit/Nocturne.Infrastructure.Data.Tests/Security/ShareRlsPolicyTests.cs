@@ -154,6 +154,36 @@ public class ShareRlsPolicyTests
     }
 
     [Fact]
+    public void BuildPolicySql_OpenSpanBound_ShowsAnOpenSpanOnlyWithinTheBound()
+    {
+        var sql = ShareRlsPolicy.BuildPolicySql(
+            "in_app_notifications", null, spanEndColumn: "archived_at",
+            openSpanBound: new OpenSpanBound("created_at", 7));
+
+        sql.Should().Contain(
+            " AND (((\"archived_at\" IS NULL AND \"created_at\" >= now() - interval '7 days')" +
+            " OR \"archived_at\" >= now() - interval '24 hours') OR NOT (");
+    }
+
+    [Fact]
+    public void BuildPolicySql_OpenSpanBoundWithoutASpan_Throws()
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql(
+            "notes", null, "timestamp", openSpanBound: new OpenSpanBound("created_at", 7));
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData("created_at\"; DROP TABLE x", 7)]
+    [InlineData("created_at", 0)]
+    public void BuildPolicySql_InvalidOpenSpanBound_Throws(string startColumn, int days)
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql(
+            "in_app_notifications", null, spanEndColumn: "archived_at", openSpanBound: new OpenSpanBound(startColumn, days));
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void BuildPolicySql_ParentWithBothClampColumns_Throws()
     {
         var act = () => ShareRlsPolicy.BuildPolicySql(
@@ -223,6 +253,7 @@ public class ShareRlsPolicyTests
             Expect(ShareDataCategories.RecencyColumnFor(table), "recency",
                 ShareDataCategories.RecencyIsUnixMillis(table) ? [typeof(long)] : timestamp);
             Expect(ShareDataCategories.SpanEndColumnFor(table), "span end", timestamp);
+            Expect(ShareDataCategories.OpenSpanBoundFor(table)?.StartColumn, "open-span start", timestamp);
             if (ShareDataCategories.ParentRecencyFor(table) is { } parent)
             {
                 Expect(parent.ForeignKeyColumn, "foreign key", typeof(Guid));

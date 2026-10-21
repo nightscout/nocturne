@@ -8,6 +8,13 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// unclamped reader would, so it is limited to the members listed here; its remarks say what a lifted
 /// write may reach. A new caller is added here deliberately or not at all.
 /// </summary>
+/// <remarks>
+/// The <c>NocturneDbContext.SaveChangesAsync</c> entry is not one write but all of them: every save
+/// by a clamped reader that only inserts runs lifted, wherever it is made. That is safe while an
+/// insert can return nothing but the row it wrote, which <see cref="HistoryClampLiftPremiseTests"/>
+/// holds: no <c>ON CONFLICT</c> (which would update and return an existing row), no trigger, and no
+/// column default but a literal or the clock.
+/// </remarks>
 [Trait("Category", "Unit")]
 public class HistoryClampLiftAllowlistTests
 {

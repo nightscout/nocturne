@@ -232,6 +232,7 @@ public class HiddenTableHistoryClampTests(RlsCompletenessFixture fx)
         db.InAppNotifications.AddRange(
             new InAppNotificationEntity { Id = Track("in_app_notifications", true), UserId = "member", Type = "info", Title = "now", CreatedAt = now.AddHours(-1) },
             new InAppNotificationEntity { Id = Track("in_app_notifications", true), UserId = "member", Type = "alert.firing", Title = "still in the inbox, raised three days ago", CreatedAt = now.AddDays(-3) },
+            new InAppNotificationEntity { Id = Track("in_app_notifications", false), UserId = "member", Type = "glucose.compression_low_review", Title = "never archived, raised three months ago", CreatedAt = now.AddDays(-90) },
             new InAppNotificationEntity
             {
                 Id = Track("in_app_notifications", false), UserId = "member", Type = "info", Title = "archived two days ago",

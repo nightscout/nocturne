@@ -129,11 +129,12 @@ public static class ShareDataCategories
     /// <remarks>
     /// The same rule keeps an open alert (<c>alert_instances</c> unresolved, <c>alert_excursions</c>
     /// not ended), an active tracker (<c>tracker_instances</c> not completed) and a notification still
-    /// in its recipient's inbox (<c>in_app_notifications</c> not archived) in front of a clamped
-    /// member, and keeps a sleep session that ended inside the window whole however early it began. A
-    /// row that never ends stays visible for good: a tracker nobody completes, or an excursion the
-    /// alert engine never closed. A clamped request has no cache partition, so no cache serves it these
-    /// rows; see <c>IReaderCachePartition</c>.
+    /// in its recipient's inbox (<c>in_app_notifications</c> not archived, within
+    /// <see cref="HiddenOpenSpanBounds"/>) in front of a clamped member, and keeps a sleep session that
+    /// ended inside the window whole however early it began. A row that never ends and has no bound
+    /// stays visible for good: a tracker nobody completes, or an excursion the alert engine never
+    /// closed. A clamped request has no cache partition, so no cache serves it these rows; see
+    /// <c>IReaderCachePartition</c>.
     /// </remarks>
     public static readonly IReadOnlyDictionary<string, string> HiddenSpanEndColumns =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -148,12 +149,32 @@ public static class ShareDataCategories
         };
 
     /// <summary>
+    /// How long a still-open span of a <see cref="HiddenSpanEndColumns"/> table stays visible to a
+    /// clamped member, counted from its start column; one that ended inside the last 24 hours stays
+    /// visible regardless. An <c>in_app_notifications</c> row embeds glucose-derived text and can sit
+    /// unarchived for months, so an open one is shown for 7 days from when it was raised: long enough
+    /// for an alert or tracker nudge still awaiting action across a week. Nothing active is lost past
+    /// it: an alert's notifications are archived when its excursion closes, and an open alert or
+    /// tracker itself stays visible on its own table however old.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, OpenSpanBound> HiddenOpenSpanBounds =
+        new Dictionary<string, OpenSpanBound>(StringComparer.Ordinal)
+        {
+            ["in_app_notifications"] = new("created_at", 7),
+        };
+
+    /// <summary>
     /// Hidden tables whose rows are parts of a parent row, which a history-clamped member reads exactly
     /// while the clamp shows the parent: by the parent's column in <see cref="RecencyColumns"/> or
     /// <see cref="HiddenSpanEndColumns"/>. A <c>treatment_foods</c> line is part of its carb intake and
     /// follows an edit to the intake's time with no copy to keep in step; the stages and samples of a
     /// sleep session stay with the session, so a night shown is shown whole.
     /// </summary>
+    /// <remarks>
+    /// The policy tests the clamp before the <c>EXISTS</c>, so only a clamped reader runs it, as one
+    /// primary-key probe of the parent per row. Children are read by their indexed foreign key, so a
+    /// night's few thousand biometric samples probe the same parent row and page.
+    /// </remarks>
     public static readonly IReadOnlyDictionary<string, ParentRecency> HiddenParentRecency =
         new Dictionary<string, ParentRecency>(StringComparer.Ordinal)
         {
@@ -196,6 +217,12 @@ public static class ShareDataCategories
     /// <see cref="HiddenParentRecency"/>.
     /// </summary>
     public static ParentRecency? ParentRecencyFor(string table) => HiddenParentRecency.GetValueOrDefault(table);
+
+    /// <summary>
+    /// Returns the bound on how long an open span of <paramref name="table"/> stays visible, or
+    /// <c>null</c> when it has none. See <see cref="HiddenOpenSpanBounds"/>.
+    /// </summary>
+    public static OpenSpanBound? OpenSpanBoundFor(string table) => HiddenOpenSpanBounds.GetValueOrDefault(table);
 
     /// <summary>
     /// Every table hidden from shares whose rows a history-clamped member reads only inside the window:
@@ -261,9 +288,29 @@ public static class ShareDataCategories
             }
         }
 
+        foreach (var (table, bound) in HiddenOpenSpanBounds)
+        {
+            if (!HiddenSpanEndColumns.ContainsKey(table) || bound.MaxOpenDays <= 0)
+            {
+                throw new InvalidOperationException(
+                    $"Open-span bound on '{table}' needs a span end column in {nameof(HiddenSpanEndColumns)} and a positive day count.");
+            }
+            if (HiddenParentRecency.Values.Any(p => p.Table == table))
+            {
+                throw new InvalidOperationException(
+                    $"'{table}' is a parent in {nameof(HiddenParentRecency)}, whose clamp does not apply an open-span bound.");
+            }
+        }
+
         return map;
     }
 }
+
+/// <summary>
+/// How long an open span stays visible to a clamped member: <paramref name="MaxOpenDays"/> days from
+/// its <paramref name="StartColumn"/>.
+/// </summary>
+public sealed record OpenSpanBound(string StartColumn, int MaxOpenDays);
 
 /// <summary>
 /// The parent row a hidden table is clamped through: <paramref name="Table"/> is the parent table and

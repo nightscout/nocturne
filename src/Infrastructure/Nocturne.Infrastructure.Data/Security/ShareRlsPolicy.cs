@@ -66,6 +66,8 @@ public static class ShareRlsPolicy
     /// <param name="parentRecencyColumn">The parent's recency column.</param>
     /// <param name="parentSpanEndColumn">The parent's span end column; exactly one of the two goes
     /// with <paramref name="parent"/>.</param>
+    /// <param name="openSpanBound">With <paramref name="spanEndColumn"/>, how long a still-open span
+    /// stays visible, counted from its start column.</param>
     public static string BuildPolicySql(
         string table,
         string? governingScope,
@@ -74,8 +76,18 @@ public static class ShareRlsPolicy
         bool recencyIsUnixMillis = false,
         ParentRecency? parent = null,
         string? parentRecencyColumn = null,
-        string? parentSpanEndColumn = null)
+        string? parentSpanEndColumn = null,
+        OpenSpanBound? openSpanBound = null)
     {
+        if (openSpanBound is not null)
+        {
+            if (spanEndColumn is null)
+                throw new ArgumentException("Only a span end column can bound an open span.", nameof(openSpanBound));
+            if (openSpanBound.MaxOpenDays <= 0)
+                throw new ArgumentException("An open-span bound needs a positive day count.", nameof(openSpanBound));
+            SqlIdentifier.Require(openSpanBound.StartColumn, nameof(openSpanBound));
+        }
+
         SqlIdentifier.Require(table, nameof(table));
         if (governingScope is not null && !ScopePattern.IsMatch(governingScope))
             throw new ArgumentException($"Unsafe scope identifier '{governingScope}'.", nameof(governingScope));
@@ -115,9 +127,12 @@ public static class ShareRlsPolicy
 
         var recent = recencyColumn is not null
             ? $"\"{recencyColumn}\" >= {windowStart}"
-            : spanEndColumn is not null
-                ? $"(\"{spanEndColumn}\" IS NULL OR \"{spanEndColumn}\" >= now() - interval '24 hours')"
-                : null;
+            : spanEndColumn is null
+                ? null
+                : openSpanBound is null
+                    ? $"(\"{spanEndColumn}\" IS NULL OR \"{spanEndColumn}\" >= now() - interval '24 hours')"
+                    : $"((\"{spanEndColumn}\" IS NULL AND \"{openSpanBound.StartColumn}\" >= now() - interval '{openSpanBound.MaxOpenDays} days')" +
+                      $" OR \"{spanEndColumn}\" >= now() - interval '24 hours')";
 
         // IS [NOT] DISTINCT FROM keeps the clamp test non-null when a GUC is unset, so an
         // unset app.history_clamped leaves a non-share unclamped instead of hiding the row.

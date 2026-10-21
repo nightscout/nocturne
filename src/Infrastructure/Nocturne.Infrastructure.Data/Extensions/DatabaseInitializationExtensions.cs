@@ -201,7 +201,8 @@ public static class DatabaseInitializationExtensions
                         ShareDataCategories.RecencyIsUnixMillis(table),
                         parent,
                         parent is null ? null : ShareDataCategories.RecencyColumnFor(parent.Table),
-                        parent is null ? null : ShareDataCategories.SpanEndColumnFor(parent.Table));
+                        parent is null ? null : ShareDataCategories.SpanEndColumnFor(parent.Table),
+                        ShareDataCategories.OpenSpanBoundFor(table));
                     await command.ExecuteNonQueryAsync(cancellationToken);
                 }
                 await transaction.CommitAsync(cancellationToken);
