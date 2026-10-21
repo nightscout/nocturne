@@ -28,11 +28,14 @@ public class V4GoldenFixture : IAsyncLifetime
 
     public string MigratorConnectionString { get; private set; } = string.Empty;
 
+    /// <summary>The runtime role's connection string, which the repositories under test use.</summary>
+    public string AppConnectionString { get; private set; } = string.Empty;
+
     public async Task InitializeAsync()
     {
         var database = await SharedPostgres.CreateMigratedDatabaseAsync("v4_goldens");
         MigratorConnectionString = database.MigratorConnectionString;
-        var appConnectionString = database.AppConnectionString;
+        AppConnectionString = database.AppConnectionString;
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -43,7 +46,8 @@ public class V4GoldenFixture : IAsyncLifetime
         // own scope to a user without leaking that attribution into the next test.
         services.AddScoped<TestAuditContext>();
         services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<TestAuditContext>());
-        services.AddPostgreSqlInfrastructure(appConnectionString, configuration: null);
+        services.AddPostgreSqlInfrastructure(
+            AppConnectionString, configuration: null, configure: c => c.HistoryCommitMarginMilliseconds = 0);
         // Capturing broadcaster: the V4 repos resolve IV4RecordBroadcaster<T> via the open generic, so
         // the real chokepoint fires into BroadcastCapture (additive — existing goldens ignore it).
         services.AddSingleton<BroadcastCapture>();

@@ -202,6 +202,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
     )
     {
         var entities = await HistoryPage.GetAsync(
+            context,
             table(context).IncludingDeleted().AsNoTracking().ExcludeNonPrimaryKeepingDeleted(context, dedupType),
             e => e.SysUpdatedAt,
             e => e.Id,
@@ -344,6 +345,7 @@ internal sealed class LegacyStateSpanTable(
     )
     {
         var spans = await HistoryPage.GetAsync(
+            context,
             Served(context.StateSpans.IncludingDeleted().AsNoTracking()),
             s => s.UpdatedAt, s => s.Id, cursorMills, limit, logger, RecordType, ct);
 
@@ -453,6 +455,7 @@ internal sealed class LegacyProfileActivationTable : ILegacyTreatmentTable
     )
     {
         var rows = await HistoryPage.GetAsync(
+            context,
             Served(context.ProfileActivations.IncludingDeleted().AsNoTracking()),
             a => a.SysUpdatedAt, a => a.Id, cursorMills, limit, logger, RecordType, ct);
 

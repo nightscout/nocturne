@@ -218,6 +218,7 @@ public class FoodRepository : IFoodRepository
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var entities = await HistoryPage.GetAsync(
+            db,
             db.Foods.IncludingDeleted().AsNoTracking(),
             f => f.SysUpdatedAt,
             f => f.Id,

@@ -10,7 +10,8 @@ public static class RlsPinningExtensions
 {
     /// <summary>
     /// Pins <paramref name="context"/> to <paramref name="tenantId"/> and writes the
-    /// <c>app.current_tenant_id</c> GUC on its current connection, for a tenant known only once
+    /// <c>app.current_tenant_id</c> GUC and the history tag (<see cref="HistoryHorizon.SessionTag"/>)
+    /// on its current connection, for a tenant known only once
     /// the connection is open (see <see cref="TenantReadContext"/>). A tenant known before the
     /// first query comes from <see cref="INocturneDbContextFactory.CreateForTenantAsync"/>.
     /// </summary>
@@ -33,8 +34,8 @@ public static class RlsPinningExtensions
         }
 
         await context.Database.ExecuteSqlRawAsync(
-            "SELECT set_config('app.current_tenant_id', {0}, false)",
-            [tenantId.ToString()],
+            "SELECT set_config('app.current_tenant_id', {0}, false), set_config('application_name', {1}, false)",
+            [tenantId.ToString(), HistoryHorizon.SessionTag(tenantId)],
             ct);
     }
 }

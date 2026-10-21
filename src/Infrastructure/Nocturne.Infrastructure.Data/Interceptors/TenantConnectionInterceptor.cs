@@ -18,6 +18,10 @@ namespace Nocturne.Infrastructure.Data.Interceptors;
 /// <c>DatabaseInitializationExtensions.VerifyPoolResetOnClose</c> refuses to start the API
 /// on a connection string that would turn that reset off.
 ///
+/// A tenant-pinned connection is also named after its tenant in <c>application_name</c>, so a
+/// transaction it holds open holds back only that tenant's v3 history (<see cref="HistoryHorizon"/>);
+/// the pool reset returns the name to the connection string's before the next lessee.
+///
 /// The same open path carries app.current_subject_id for a subject pin, for policies that
 /// may read it; none does today. Both are set only when non-empty, so an unpinned context
 /// leaves the GUC unset.
@@ -64,6 +68,8 @@ public class TenantConnectionInterceptor : DbConnectionInterceptor
         {
             clauses.Add("set_config('app.current_tenant_id', @tenant_id, false)");
             AddParameter(cmd, "tenant_id", ctx.TenantId.ToString());
+            clauses.Add("set_config('application_name', @history_tag, false)");
+            AddParameter(cmd, "history_tag", HistoryHorizon.SessionTag(ctx.TenantId));
         }
 
         if (ctx.SubjectId != Guid.Empty)
