@@ -369,6 +369,68 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
+    public async Task GetInAppRecipients_ClinicianWithAlertsRead_IsForbidden()
+    {
+        // Arrange - a member whose only role is clinician, which grants alerts.read
+        var connStr = await GetPostgresConnectionStringAsync();
+        await using var conn = new NpgsqlConnection(connStr);
+        await conn.OpenAsync();
+        var (clinicianId, token) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Clinician");
+        var clinicianRole = await AuthTestHelpers.GetTenantRoleIdAsync(conn, _tenantId, "clinician");
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                DELETE FROM subject_roles WHERE subject_id = @subjectId;
+                UPDATE tenant_members SET direct_permissions = '[]'::jsonb
+                 WHERE tenant_id = @tenantId AND subject_id = @subjectId;
+                INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id)
+                SELECT gen_random_uuid(), id, @roleId FROM tenant_members
+                 WHERE tenant_id = @tenantId AND subject_id = @subjectId;
+                """;
+            cmd.Parameters.AddWithValue("subjectId", clinicianId);
+            cmd.Parameters.AddWithValue("tenantId", _tenantId);
+            cmd.Parameters.AddWithValue("roleId", clinicianRole);
+            await cmd.ExecuteNonQueryAsync();
+        }
+        using var client = AuthTestHelpers.CreateBearerClient(Fixture, token);
+
+        // Act
+        var rules = await client.GetAsync("/api/v4/alert-rules");
+        var recipients = await client.GetAsync("/api/v4/alert-rules/in-app-recipients");
+
+        // Assert
+        rules.StatusCode.Should().Be(HttpStatusCode.OK, "the clinician reads alert rules");
+        recipients.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetInAppRecipients_GuestLinkWithAlertsRead_IsForbidden()
+    {
+        // Arrange - a guest link granted alerts.read, activated into a session cookie
+        var session = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, _subjectId);
+        using var owner = AuthTestHelpers.CreateBearerClient(Fixture, session);
+        var link = await owner.PostAsJsonAsync("/api/v4/guest-links", new
+        {
+            label = "Alerts guest",
+            scopes = new[] { "glucose.read", "alerts.read" },
+        });
+        link.StatusCode.Should().Be(HttpStatusCode.OK);
+        var code = (await link.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString();
+
+        using var guest = Fixture.CreateHttpClient(new HttpClientHandler { UseCookies = true });
+        (await guest.PostAsJsonAsync("/api/v4/guest-links/activate", new { code }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Act
+        var rules = await guest.GetAsync("/api/v4/alert-rules");
+        var recipients = await guest.GetAsync("/api/v4/alert-rules/in-app-recipients");
+
+        // Assert
+        rules.StatusCode.Should().Be(HttpStatusCode.OK, "the guest session reads alert rules");
+        recipients.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task CreateAlertRule_WebPushChannel_IsRejectedWithItsReplacement()
     {
         using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);

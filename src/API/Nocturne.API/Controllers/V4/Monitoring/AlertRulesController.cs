@@ -700,15 +700,12 @@ public class AlertRulesController : ControllerBase
     }
 
     /// <summary>
-    /// The subject id an in-app channel delivers to: the named subject, or the caller when none is
-    /// named, provided <see cref="InAppRecipients.ResolveAsync"/> accepts it.
-    /// </summary>
-    /// <summary>
     /// The member an in-app channel delivers to: the member it names, or the caller when it names
     /// none. Null when it names a subject who may not receive (<see cref="InAppRecipients"/>).
     /// </summary>
     /// <remarks>
-    /// A stored recipient who has since left the site goes to the caller as well, rather than
+    /// A stored recipient who has since left the site, or can no longer receive, goes to the
+    /// caller as well, rather than
     /// failing the save: the editor sends back the destination it loaded, so refusing it would
     /// leave the rule uneditable, and keeping it would leave the channel reaching no one.
     /// </remarks>
@@ -817,8 +814,9 @@ public class AlertRulesController : ControllerBase
         (await ToResponsesAsync(db, [rule], ct))[0];
 
     /// <summary>
-    /// Maps rules to responses and names each in-app channel's recipient. The name goes only to a
-    /// caller who may edit the rule: <c>alerts.read</c> alone is held by guest-link sessions.
+    /// Maps rules to responses and, for a caller who may edit the rules, describes each in-app
+    /// channel's recipient. Only the rule editor reads it, so other callers are spared the lookup.
+    /// This is not a privacy boundary: member names are readable more widely (issue #2359).
     /// </summary>
     private async Task<List<AlertRuleResponse>> ToResponsesAsync(
         NocturneDbContext db, IEnumerable<AlertRuleEntity> rules, CancellationToken ct)
@@ -828,26 +826,22 @@ public class AlertRulesController : ControllerBase
             .SelectMany(r => r.Channels)
             .Where(c => c.ChannelType == ChannelType.InApp)
             .ToList();
-        if (inApp.Count == 0)
+        if (inApp.Count == 0 || HttpContext?.HasScope(Scope.AlertsReadWrite) != true)
         {
             return responses;
         }
 
-        var members = await InAppRecipients.ListAsync(db, db.TenantId, ct);
-        var named = HttpContext?.HasScope(Scope.AlertsReadWrite) == true;
+        var recipients = await InAppRecipients.ListAsync(db, db.TenantId, ct);
         foreach (var channel in inApp)
         {
-            if (!Guid.TryParse(channel.Destination, out var subjectId))
-            {
-                continue;
-            }
-
-            var isMember = members.TryGetValue(subjectId, out var name);
+            Guid? subjectId = Guid.TryParse(channel.Destination, out var parsed) ? parsed : null;
+            string? name = null;
+            var canReceive = subjectId is { } id && recipients.TryGetValue(id, out name);
             channel.Recipient = new InAppRecipientResponse
             {
                 SubjectId = subjectId,
-                Name = named && isMember ? name : null,
-                IsMember = isMember,
+                Name = name,
+                CanReceive = canReceive,
             };
         }
 
@@ -867,7 +861,7 @@ public class AlertRulesController : ControllerBase
 
         var members = await InAppRecipients.ListAsync(db, db.TenantId, ct);
         return Ok(members
-            .Select(m => new InAppRecipientResponse { SubjectId = m.Key, Name = m.Value, IsMember = true })
+            .Select(m => new InAppRecipientResponse { SubjectId = m.Key, Name = m.Value, CanReceive = true })
             .OrderBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase)
             .ToList());
     }
@@ -1130,21 +1124,22 @@ public class AlertRuleChannelResponse
     /// <summary>Whether a webhook signing secret is stored for this channel. The secret itself is
     /// never returned.</summary>
     public bool HasSecret { get; set; }
-    /// <summary>The member an <c>in_app</c> channel is sent to. Null for other channel types and
-    /// for an in-app channel that names no subject.</summary>
+    /// <summary>Who an <c>in_app</c> channel is sent to. Set only for in-app channels, and only
+    /// for a caller who may edit alert rules.</summary>
     public InAppRecipientResponse? Recipient { get; set; }
 }
 
-/// <summary>A subject an <c>in_app</c> alert channel is sent to.</summary>
+/// <summary>The recipient of an <c>in_app</c> alert channel.</summary>
 public class InAppRecipientResponse
 {
-    public Guid SubjectId { get; set; }
-    /// <summary>The name the site knows the member by. Null when the subject is no longer a
-    /// member, or the caller cannot edit alert rules.</summary>
+    /// <summary>The subject the channel names. Null when it names none.</summary>
+    public Guid? SubjectId { get; set; }
+    /// <summary>The name the site knows the member by. Null when they cannot receive.</summary>
     public string? Name { get; set; }
-    /// <summary>Whether the subject is still a member who can receive the alert. A channel
-    /// naming a former member is sent to whoever next saves the rule.</summary>
-    public bool IsMember { get; set; }
+    /// <summary>Whether the channel reaches someone: the subject is a member of the site whose
+    /// roles grant any access. A channel that does not is sent to whoever next saves the
+    /// rule.</summary>
+    public bool CanReceive { get; set; }
 }
 
 public class CreateAlertRuleRequest

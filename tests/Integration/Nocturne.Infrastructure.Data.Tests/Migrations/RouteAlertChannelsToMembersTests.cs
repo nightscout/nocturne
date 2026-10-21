@@ -29,12 +29,16 @@ public class RouteAlertChannelsToMembersFixture : IAsyncLifetime
     internal static readonly Guid Caregiver = Guid.Parse("77777777-0000-7000-8000-00000000a002");
     internal static readonly Guid TrackerOwner = Guid.Parse("77777777-0000-7000-8000-00000000a003");
     internal static readonly Guid FormerMember = Guid.Parse("77777777-0000-7000-8000-00000000a004");
+    internal static readonly Guid DeniedMember = Guid.Parse("77777777-0000-7000-8000-00000000a005");
 
     private static readonly Guid OwnerRole = Guid.Parse("77777777-0000-7000-8000-00000000c001");
+    private static readonly Guid DeniedRole = Guid.Parse("77777777-0000-7000-8000-00000000c002");
+    private static readonly Guid DeniedMembership = Guid.Parse("77777777-0000-7000-8000-00000000b002");
     private static readonly Guid OwnerMembership = Guid.Parse("77777777-0000-7000-8000-00000000b001");
 
     private static readonly Guid TrackerDefinition = Guid.Parse("77777777-0000-7000-8000-00000000d001");
     private static readonly Guid OrphanedTrackerDefinition = Guid.Parse("77777777-0000-7000-8000-00000000d002");
+    private static readonly Guid DeniedTrackerDefinition = Guid.Parse("77777777-0000-7000-8000-00000000d003");
 
     internal static readonly Guid EditorInApp = Rule(1);
     internal static readonly Guid WebPushOnly = Rule(2);
@@ -42,6 +46,7 @@ public class RouteAlertChannelsToMembersFixture : IAsyncLifetime
     internal static readonly Guid TwoWebPush = Rule(4);
     internal static readonly Guid TrackerSynced = Rule(5);
     internal static readonly Guid TrackerOfFormerMember = Rule(6);
+    internal static readonly Guid TrackerOfDeniedMember = Rule(8);
     internal static readonly Guid AlreadyRouted = Rule(7);
     internal static readonly Guid OwnerlessInApp = Guid.Parse("88888888-0000-7000-8000-000000000e01");
 
@@ -149,23 +154,28 @@ public class RouteAlertChannelsToMembersFixture : IAsyncLifetime
               ('{Owner}',        'Owner',        true, false, now(), now(), 'Approved'),
               ('{Caregiver}',    'Caregiver',    true, false, now(), now(), 'Approved'),
               ('{TrackerOwner}', 'TrackerOwner', true, false, now(), now(), 'Approved'),
-              ('{FormerMember}', 'FormerMember', true, false, now(), now(), 'Approved');
+              ('{FormerMember}', 'FormerMember', true, false, now(), now(), 'Approved'),
+              ('{DeniedMember}', 'DeniedMember', true, false, now(), now(), 'Approved');
 
             INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours) VALUES
               (gen_random_uuid(),   '{Routes}',    '{Caregiver}',    '[]'::jsonb, now() - interval '2 days', now(), false),
               ('{OwnerMembership}', '{Routes}',    '{Owner}',        '[]'::jsonb, now() - interval '1 day',  now(), false),
-              (gen_random_uuid(),   '{Routes}',    '{TrackerOwner}', '[]'::jsonb, now(),                     now(), false),
+              (gen_random_uuid(),   '{Routes}',    '{TrackerOwner}', '["glucose.read"]'::jsonb, now(),      now(), false),
+              ('{DeniedMembership}', '{Routes}',   '{DeniedMember}', '[]'::jsonb, now(),                     now(), false),
               (gen_random_uuid(),   '{Ownerless}', '{Owner}',        '[]'::jsonb, now(),                     now(), false);
 
             INSERT INTO tenant_roles (id, tenant_id, name, slug, permissions, is_system, sys_created_at, sys_updated_at)
-            VALUES ('{OwnerRole}', '{Routes}', 'Owner', 'owner', '["*"]'::jsonb, true, now(), now());
+            VALUES ('{OwnerRole}',  '{Routes}', 'Owner',  'owner',  '["*"]'::jsonb, true, now(), now()),
+                   ('{DeniedRole}', '{Routes}', 'Denied', 'denied', '[]'::jsonb,    true, now(), now());
             INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id)
-            VALUES (gen_random_uuid(), '{OwnerMembership}', '{OwnerRole}');
+            VALUES (gen_random_uuid(), '{OwnerMembership}',  '{OwnerRole}'),
+                   (gen_random_uuid(), '{DeniedMembership}', '{DeniedRole}');
             """);
 
         await ExecuteAsync(Routes, $"""
             {TrackerRow(Routes, TrackerDefinition, TrackerOwner.ToString())}
             {TrackerRow(Routes, OrphanedTrackerDefinition, FormerMember.ToString())}
+            {TrackerRow(Routes, DeniedTrackerDefinition, DeniedMember.ToString())}
 
             {RuleRow(Routes, EditorInApp)}
             {ChannelRow(Routes, EditorInApp, Channel(1, 1), "in_app", "", 0)}
@@ -187,6 +197,9 @@ public class RouteAlertChannelsToMembersFixture : IAsyncLifetime
 
             {RuleRow(Routes, TrackerOfFormerMember, $"tracker:{OrphanedTrackerDefinition}")}
             {ChannelRow(Routes, TrackerOfFormerMember, Channel(6, 1), "in_app", "", 0)}
+
+            {RuleRow(Routes, TrackerOfDeniedMember, $"tracker:{DeniedTrackerDefinition}")}
+            {ChannelRow(Routes, TrackerOfDeniedMember, Channel(8, 1), "in_app", "", 0)}
 
             {RuleRow(Routes, AlreadyRouted)}
             {ChannelRow(Routes, AlreadyRouted, Channel(7, 1), "in_app", Caregiver.ToString(), 0)}
@@ -253,6 +266,13 @@ public class RouteAlertChannelsToMembersTests(RouteAlertChannelsToMembersFixture
     public async Task A_tracker_owned_by_someone_no_longer_a_member_falls_back_to_the_owner()
     {
         (await ChannelsAsync(RouteAlertChannelsToMembersFixture.TrackerOfFormerMember))
+            .Should().Equal(("in_app", Owner));
+    }
+
+    [Fact]
+    public async Task A_tracker_owned_by_a_denied_member_falls_back_to_the_owner()
+    {
+        (await ChannelsAsync(RouteAlertChannelsToMembersFixture.TrackerOfDeniedMember))
             .Should().Equal(("in_app", Owner));
     }
 

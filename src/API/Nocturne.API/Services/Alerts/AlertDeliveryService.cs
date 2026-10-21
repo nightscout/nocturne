@@ -373,7 +373,7 @@ internal sealed class AlertDeliveryService(
 
         await using var db = await contextFactory.CreateAsync(ct);
         return await InAppRecipients.ResolveAsync(db, tenantAccessor.TenantId, destination, ct) is null
-            ? "In-app recipient is not a member of this site"
+            ? "In-app recipient is not a member of this site who holds any access"
             : null;
     }
 

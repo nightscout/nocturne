@@ -17,7 +17,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
         /// <c>in_app</c> channel; every other <c>web_push</c> channel is dropped, as the rule already
         /// reaches the notification centre. A blank <c>in_app</c> destination then goes to the
         /// tracker definition's owner for a tracker-synced rule, when they are still an active
-        /// member, and otherwise to the tenant's earliest owner. A tenant with no owner keeps the
+        /// member whose roles or direct permissions grant any access (the denied role grants
+        /// none), and otherwise to the tenant's earliest owner. A tenant with no owner keeps the
         /// blank, which is recorded failed on delivery. Every table touched is tenant-scoped, hence
         /// the per-tenant GUC.
         /// </remarks>
@@ -82,6 +83,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                                  WHERE r.id = c.alert_rule_id
                                    AND s.is_active
                                    AND NOT s.is_system_subject
+                                   AND (jsonb_array_length(COALESCE(tm.direct_permissions, '[]'::jsonb)) > 0
+                                        OR EXISTS (
+                                            SELECT 1
+                                              FROM tenant_member_roles mr
+                                              JOIN tenant_roles mrr ON mrr.id = mr.tenant_role_id
+                                             WHERE mr.tenant_member_id = tm.id
+                                               AND jsonb_array_length(mrr.permissions) > 0))
                                  LIMIT 1),
                                owner_id::text,
                                '')

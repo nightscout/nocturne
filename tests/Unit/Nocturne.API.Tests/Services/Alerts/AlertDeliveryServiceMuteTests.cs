@@ -74,7 +74,7 @@ public class AlertDeliveryServiceMuteTests
         foreach (var subjectId in subjectIds)
         {
             db.Subjects.Add(new SubjectEntity { Id = subjectId, Name = "Member" });
-            db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.NewGuid(), TenantId = Tenant, SubjectId = subjectId });
+            db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.NewGuid(), TenantId = Tenant, SubjectId = subjectId, DirectPermissions = ["*"] });
         }
     }
 

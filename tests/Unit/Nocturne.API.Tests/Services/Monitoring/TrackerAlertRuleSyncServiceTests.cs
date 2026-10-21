@@ -67,7 +67,10 @@ public class TrackerAlertRuleSyncServiceTests
         await using var db = Db();
         if (await db.Subjects.AnyAsync(s => s.Id == subjectId))
             return;
-        var membership = new TenantMemberEntity { Id = Guid.NewGuid(), TenantId = _tenantId, SubjectId = subjectId };
+        var membership = new TenantMemberEntity
+        {
+            Id = Guid.NewGuid(), TenantId = _tenantId, SubjectId = subjectId, DirectPermissions = ["*"],
+        };
         db.Subjects.Add(new SubjectEntity { Id = subjectId, Name = "Member", IsSystemSubject = isSystemSubject });
         db.TenantMembers.Add(membership);
         if (isOwner)

@@ -192,7 +192,7 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
         await using (var db = await _factory.CreateDbContextAsync())
         {
             db.Subjects.Add(new SubjectEntity { Id = member, Name = "Member" });
-            db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.NewGuid(), TenantId = Tenant, SubjectId = member });
+            db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.NewGuid(), TenantId = Tenant, SubjectId = member, DirectPermissions = ["*"] });
             await db.SaveChangesAsync();
         }
 

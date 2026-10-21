@@ -352,7 +352,8 @@ public class AlertRulesControllerChannelDestinationTests
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    private static async Task AddMemberAsync(NocturneDbContext db, Guid subjectId, bool isSystemSubject = false)
+    private static async Task AddMemberAsync(
+        NocturneDbContext db, Guid subjectId, bool isSystemSubject = false, bool denied = false)
     {
         db.Subjects.Add(new SubjectEntity
         {
@@ -360,12 +361,26 @@ public class AlertRulesControllerChannelDestinationTests
             Name = subjectId.ToString(),
             IsSystemSubject = isSystemSubject,
         });
-        db.TenantMembers.Add(new TenantMemberEntity
+        var membership = new TenantMemberEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = Tenant,
             SubjectId = subjectId,
-        });
+            DirectPermissions = denied ? [] : ["*"],
+        };
+        db.TenantMembers.Add(membership);
+        if (denied)
+        {
+            var role = new TenantRoleEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = Tenant, Name = "Denied", Slug = RoleSeeds.Denied,
+            };
+            db.TenantRoles.Add(role);
+            db.TenantMemberRoles.Add(new TenantMemberRoleEntity
+            {
+                Id = Guid.CreateVersion7(), TenantMemberId = membership.Id, TenantRoleId = role.Id,
+            });
+        }
         await db.SaveChangesAsync();
     }
 
@@ -413,6 +428,7 @@ public class AlertRulesControllerChannelDestinationTests
             Id = Guid.CreateVersion7(),
             TenantId = Guid.CreateVersion7(),
             SubjectId = outsider,
+            DirectPermissions = ["*"],
         });
         await db.SaveChangesAsync();
 
@@ -549,70 +565,160 @@ public class AlertRulesControllerChannelDestinationTests
     }
 
     [Fact]
+    public async Task UpdateRule_keeps_a_stored_recipient_who_is_still_a_member_when_another_member_saves()
+    {
+        var (controller, db) = CreateController();
+        var caregiver = Guid.CreateVersion7();
+        await AddMemberAsync(db, Subject);
+        await AddMemberAsync(db, caregiver);
+        var rule = await SeedInAppRuleAsync(db, caregiver);
+
+        var result = await controller.UpdateRule(
+            rule.Id, RenameWithInApp("Renamed", caregiver.ToString()), CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Subject.Value.Should().BeOfType<AlertRuleResponse>()
+            .Subject.Channels.Should().ContainSingle()
+            .Which.Destination.Should().Be(caregiver.ToString());
+    }
+
+    [Fact]
+    public async Task UpdateRule_treats_a_stored_denied_recipient_like_a_departed_one()
+    {
+        var (controller, db) = CreateController();
+        var denied = Guid.CreateVersion7();
+        await AddMemberAsync(db, Subject);
+        await AddMemberAsync(db, denied, denied: true);
+        var rule = await SeedInAppRuleAsync(db, denied);
+
+        var result = await controller.UpdateRule(
+            rule.Id, RenameWithInApp("Renamed", denied.ToString()), CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Subject.Value.Should().BeOfType<AlertRuleResponse>()
+            .Subject.Channels.Should().ContainSingle()
+            .Which.Destination.Should().Be(Subject.ToString());
+    }
+
+    [Fact]
+    public async Task CreateRule_rejects_an_in_app_channel_routed_to_a_denied_member()
+    {
+        var (controller, db) = CreateController();
+        var denied = Guid.CreateVersion7();
+        await AddMemberAsync(db, Subject);
+        await AddMemberAsync(db, denied, denied: true);
+
+        var result = await controller.CreateRule(
+            RuleWith(ChannelType.InApp, denied.ToString()), CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task TestFireDryRun_fires_a_departed_stored_recipients_channel_at_the_caller()
+    {
+        var delivery = new Mock<IAlertDeliveryService>();
+        IReadOnlyList<AlertRuleChannelSnapshot>? fired = null;
+        delivery
+            .Setup(d => d.TestFireDryRunAsync(
+                It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
+                It.IsAny<AlertPayload>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<AlertRuleChannelSnapshot>, AlertPayload, CancellationToken>(
+                (channels, _, _) => fired = channels)
+            .Returns(Task.CompletedTask);
+        var (controller, db) = CreateController(delivery.Object);
+        await AddMemberAsync(db, Subject);
+        var departed = Guid.CreateVersion7();
+        await SeedInAppRuleAsync(db, departed);
+
+        var result = await controller.TestFireDryRun(
+            new TestFireDryRunRequest("Low", AlertRuleSeverity.Warning,
+            [
+                new CreateAlertRuleChannelRequest { ChannelType = ChannelType.InApp, Destination = departed.ToString() },
+            ]),
+            CancellationToken.None);
+
+        result.Should().BeOfType<AcceptedResult>();
+        fired.Should().ContainSingle().Which.Destination.Should().Be(Subject.ToString());
+    }
+
+    private static InAppRecipientResponse? RecipientOf(ActionResult<AlertRuleResponse> result) =>
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Subject.Value.Should().BeOfType<AlertRuleResponse>()
+            .Subject.Channels.Should().ContainSingle().Subject.Recipient;
+
+    [Fact]
     public async Task GetRule_names_the_in_app_recipient_for_a_caller_who_may_edit()
     {
         var (controller, db) = CreateController();
         await AddMemberAsync(db, Subject);
         var rule = await SeedInAppRuleAsync(db, Subject);
 
-        var result = await controller.GetRule(rule.Id, CancellationToken.None);
+        var recipient = RecipientOf(await controller.GetRule(rule.Id, CancellationToken.None));
 
-        var recipient = result.Result.Should().BeOfType<OkObjectResult>()
-            .Subject.Value.Should().BeOfType<AlertRuleResponse>()
-            .Subject.Channels.Should().ContainSingle().Subject.Recipient;
         recipient.Should().BeEquivalentTo(new InAppRecipientResponse
         {
             SubjectId = Subject,
             Name = Subject.ToString(),
-            IsMember = true,
+            CanReceive = true,
         });
     }
 
     [Fact]
-    public async Task GetRule_withholds_the_recipients_name_from_a_read_only_caller()
+    public async Task GetRule_describes_no_recipient_to_a_read_only_caller()
     {
         var (controller, db) = CreateController(grantedScope: Scope.AlertsRead);
         await AddMemberAsync(db, Subject);
         var rule = await SeedInAppRuleAsync(db, Subject);
 
-        var result = await controller.GetRule(rule.Id, CancellationToken.None);
-
-        var recipient = result.Result.Should().BeOfType<OkObjectResult>()
-            .Subject.Value.Should().BeOfType<AlertRuleResponse>()
-            .Subject.Channels.Should().ContainSingle().Subject.Recipient;
-        recipient!.Name.Should().BeNull();
-        recipient.IsMember.Should().BeTrue();
+        RecipientOf(await controller.GetRule(rule.Id, CancellationToken.None)).Should().BeNull();
     }
 
     [Fact]
-    public async Task GetRule_marks_a_departed_recipient()
+    public async Task GetRule_marks_a_recipient_who_cannot_receive()
     {
         var (controller, db) = CreateController();
         var departed = Guid.CreateVersion7();
-        var rule = await SeedInAppRuleAsync(db, departed);
+        var denied = Guid.CreateVersion7();
+        await AddMemberAsync(db, denied, denied: true);
+        var departedRule = await SeedInAppRuleAsync(db, departed);
+        var deniedRule = await SeedInAppRuleAsync(db, denied);
 
-        var result = await controller.GetRule(rule.Id, CancellationToken.None);
-
-        var recipient = result.Result.Should().BeOfType<OkObjectResult>()
-            .Subject.Value.Should().BeOfType<AlertRuleResponse>()
-            .Subject.Channels.Should().ContainSingle().Subject.Recipient;
-        recipient.Should().BeEquivalentTo(new InAppRecipientResponse { SubjectId = departed, Name = null, IsMember = false });
+        RecipientOf(await controller.GetRule(departedRule.Id, CancellationToken.None))
+            .Should().BeEquivalentTo(new InAppRecipientResponse { SubjectId = departed, Name = null, CanReceive = false });
+        RecipientOf(await controller.GetRule(deniedRule.Id, CancellationToken.None))
+            .Should().BeEquivalentTo(new InAppRecipientResponse { SubjectId = denied, Name = null, CanReceive = false });
     }
 
     [Fact]
-    public async Task GetInAppRecipients_lists_the_people_who_are_members()
+    public async Task GetRule_marks_a_stored_channel_that_names_no_one()
+    {
+        var (controller, db) = CreateController();
+        var rule = await SeedInAppRuleAsync(db, Guid.Empty);
+        rule = await db.AlertRules.Include(r => r.Channels).SingleAsync(r => r.Id == rule.Id);
+        rule.Channels.Single().Destination = string.Empty;
+        await db.SaveChangesAsync();
+
+        RecipientOf(await controller.GetRule(rule.Id, CancellationToken.None))
+            .Should().BeEquivalentTo(new InAppRecipientResponse { SubjectId = null, Name = null, CanReceive = false });
+    }
+
+    [Fact]
+    public async Task GetInAppRecipients_lists_the_people_who_may_receive()
     {
         var (controller, db) = CreateController();
         var caregiver = Guid.CreateVersion7();
         await AddMemberAsync(db, Subject);
         await AddMemberAsync(db, caregiver);
         await AddMemberAsync(db, Guid.CreateVersion7(), isSystemSubject: true);
+        await AddMemberAsync(db, Guid.CreateVersion7(), denied: true);
 
         var result = await controller.GetInAppRecipients(CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>()
             .Subject.Value.Should().BeAssignableTo<List<InAppRecipientResponse>>()
-            .Subject.Select(r => r.SubjectId).Should().BeEquivalentTo([Subject, caregiver]);
+            .Subject.Select(r => r.SubjectId).Should().BeEquivalentTo(new Guid?[] { Subject, caregiver });
     }
 
     [Fact]

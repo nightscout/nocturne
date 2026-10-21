@@ -157,13 +157,27 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
         _inApp.VerifyNoOtherCalls();
     }
 
-    private async Task AddMemberAsync(Guid tenantId, Guid subjectId)
+    private async Task AddMemberAsync(Guid tenantId, Guid subjectId, List<string>? permissions = null)
     {
         await using var db = await _factory.CreateDbContextAsync();
         if (!await db.Subjects.AnyAsync(s => s.Id == subjectId))
             db.Subjects.Add(new SubjectEntity { Id = subjectId, Name = "Member" });
-        db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.NewGuid(), TenantId = tenantId, SubjectId = subjectId });
+        db.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, SubjectId = subjectId, DirectPermissions = permissions ?? ["*"],
+        });
         await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task An_in_app_channel_naming_a_member_who_holds_no_access_creates_nothing_and_is_recorded_failed()
+    {
+        await AddMemberAsync(Tenant, Member, permissions: []);
+
+        var delivery = await DispatchOneAsync(Channel(ChannelType.InApp, Member.ToString()));
+
+        delivery.Status.Should().Be("failed");
+        _inApp.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -174,7 +188,7 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
         var delivery = await DispatchOneAsync(Channel(ChannelType.InApp, Member.ToString()));
 
         delivery.Status.Should().Be("failed");
-        delivery.LastError.Should().Be("In-app recipient is not a member of this site");
+        delivery.LastError.Should().Be("In-app recipient is not a member of this site who holds any access");
         _inApp.VerifyNoOtherCalls();
     }
 
