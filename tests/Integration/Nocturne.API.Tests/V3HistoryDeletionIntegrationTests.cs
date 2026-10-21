@@ -403,6 +403,33 @@ public partial class V3HistoryDeletionIntegrationTests : ApiIntegrationTestBase
             .Should().BeGreaterThanOrEqualTo(tombstone.GetProperty("srvModified").GetInt64());
     }
 
+    [Fact]
+    public async Task NotesEditedAlone_MoveTheTreatmentsETagAndAreResentByHistory()
+    {
+        await CreateAsync("treatments", new
+        {
+            eventType = "Correction Bolus", insulin = 1.7, notes = "before", date = Date,
+            app = "it", device = "it-v3", utcOffset = 0,
+        });
+        var (synced, cursor) = await HistoryAsync("treatments", 0);
+        var id = IdOf(synced.Single(doc => !IsTombstone(doc) && Number(doc, "insulin") == 1.7));
+        var before = (await AuthenticatedClient.GetAsync($"/api/v3/treatments/{id}")).Headers.ETag;
+        await Task.Delay(5);
+
+        var patched = await AuthenticatedClient.PatchAsJsonAsync($"/api/v3/treatments/{id}", new { notes = "after" });
+        patched.IsSuccessStatusCode.Should().BeTrue(await patched.Content.ReadAsStringAsync());
+
+        var read = await AuthenticatedClient.GetAsync($"/api/v3/treatments/{id}");
+        read.Headers.ETag.Should().NotBe(before);
+        var body = await read.Content.ReadFromJsonAsync<JsonElement>();
+        (body.TryGetProperty("result", out var result) ? result : body).GetProperty("notes")
+            .GetString().Should().Be("after");
+
+        var (next, _) = await HistoryAsync("treatments", cursor);
+        next.Should().ContainSingle(doc => IdOf(doc) == id && !IsTombstone(doc))
+            .Which.GetProperty("notes").GetString().Should().Be("after");
+    }
+
     /// <summary>
     /// Syncs <paramref name="collection"/> from the start, deletes the document
     /// <paramref name="match"/> finds by the identifier history served, and returns that document as

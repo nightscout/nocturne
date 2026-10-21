@@ -8,6 +8,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -130,10 +131,10 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         if (page.Count > 0)
             page = ExtendToMillisecondAsync(page, ordered);
 
+        var newest = page.Count == 0 ? (DateTime?)null : page.Max(r => r.Modified);
         page = await WithLiveMealPartnersAsync(db, page, ct);
-        page = await WithNoteHoldersAsync(db, page, ct);
 
-        var treatments = await AssembleAsync(db, page, ct);
+        var treatments = await AssembleAsync(db, page, ct, newest);
 
         return treatments.OrderBy(t => t.SrvModified ?? t.Mills);
     }
@@ -202,51 +203,6 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         }
 
         return [.. page, .. partners];
-    }
-
-    /// <summary>
-    /// Adds to <paramref name="page"/> the live records that serve a Note in it as their own notes,
-    /// stamped no older than that Note, which <see cref="AssembleAsync"/> then leaves out. Editing
-    /// only a treatment's notes moves the Note's row alone, so without this the client never sees
-    /// the change. Stamped at or below the page's newest row, the added rows leave its cursor where
-    /// it was.
-    /// </summary>
-    private async Task<List<FetchedRecord>> WithNoteHoldersAsync(
-        NocturneDbContext db,
-        List<FetchedRecord> page, CancellationToken ct)
-    {
-        var noteStamps = new Dictionary<string, DateTime>(StringComparer.Ordinal);
-        foreach (var row in page)
-        {
-            if (row.Record is not Note { LegacyId: { } key })
-                continue;
-            if (!noteStamps.TryGetValue(key, out var stamp) || row.Modified > stamp)
-                noteStamps[key] = row.Modified;
-        }
-
-        if (noteStamps.Count == 0)
-            return page;
-
-        var holders = new List<FetchedRecord>();
-        foreach (var table in LegacyTreatmentTables.All.Where(t => t.RecordType != nameof(Note)))
-            holders.AddRange(await FetchSafe(table, t => t.LiveByTreatmentKeyAsync(db, noteStamps.Keys, ct)));
-
-        if (holders.Count == 0)
-            return page;
-
-        var stampOf = holders.ToDictionary(
-            RecordId, row => noteStamps[LegacyTreatmentTables.ServedKey(row.Record)!]);
-        var held = page
-            .Select(row => stampOf.TryGetValue(RecordId(row), out var stamp) && stamp > row.Modified
-                ? row with { Modified = stamp }
-                : row)
-            .ToList();
-        var seen = held.Select(RecordId).ToHashSet();
-        held.AddRange(holders
-            .Where(row => seen.Add(RecordId(row)))
-            .Select(row => row with { Modified = stampOf[RecordId(row)] }));
-
-        return held;
     }
 
     private static Guid RecordId(FetchedRecord row) => row.Id;
@@ -327,13 +283,18 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         long? fromMills, long? toMills, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var notes = LegacyTreatmentTables.NotesServedApart(db).AsNoTracking().ExcludeNonPrimary(db, RecordType.Note);
-        if (MillsToDateTime(fromMills) is { } lower)
-            notes = notes.Where(n => n.Timestamp >= lower);
-        if (MillsToDateTime(toMills) is { } upper)
-            notes = notes.Where(n => n.Timestamp <= upper);
+        IQueryable<NoteEntity> InWindow(IQueryable<NoteEntity> notes)
+        {
+            notes = notes.AsNoTracking().ExcludeNonPrimary(db, RecordType.Note);
+            if (MillsToDateTime(fromMills) is { } lower)
+                notes = notes.Where(n => n.Timestamp >= lower);
+            if (MillsToDateTime(toMills) is { } upper)
+                notes = notes.Where(n => n.Timestamp <= upper);
+            return notes;
+        }
 
-        return await notes.LongCountAsync(ct);
+        return await InWindow(db.Notes).LongCountAsync(ct)
+            - await InWindow(LegacyTreatmentTables.NotesServedWithAnotherRecord(db)).LongCountAsync(ct);
     }
 
     private static IQueryable<StateSpanEntity> MatchingId(IQueryable<StateSpanEntity> rows, string id)
@@ -375,13 +336,23 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     }
 
     /// <summary>
-    /// Assembles a page, serving the Note a record's treatment wrote beside it as part of that
-    /// record (<see cref="LegacyTreatmentTables.NotesServedWithAnotherRecord"/>). A deleted Note goes
-    /// with a record of its treatment on the page too, which carries the delete.
+    /// Assembles a page, serving the Note a record's treatment wrote beside it as part of that record
+    /// (<see cref="LegacyTreatmentTables.NotesServedWithAnotherRecord"/>), stamped no older than the
+    /// Note's row, deleted or not, so a conditional read sees an edit of the notes alone.
     /// </summary>
+    /// <param name="historyCursor">
+    /// The newest row stamp of a history page, or null for any other read. A history page also serves:
+    /// the records holding a Note on it that the page does not, since editing only the notes moves the
+    /// Note's row alone; a held Note as a tombstone under its own id, which a client that synced it as
+    /// a treatment of its own before it was served as part of its record still holds; and the live
+    /// Note of a record deleted on the page that leaves no other, which a search now serves apart. No
+    /// row is stamped above <paramref name="historyCursor"/>, so the client's cursor stays where the
+    /// page put it.
+    /// </param>
     private async Task<List<Treatment>> AssembleAsync(
         NocturneDbContext db,
-        IReadOnlyList<FetchedRecord> rows, CancellationToken ct
+        IReadOnlyList<FetchedRecord> rows, CancellationToken ct,
+        DateTime? historyCursor = null
     )
     {
         var noteKeys = rows
@@ -397,19 +368,45 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
                 .Select(r => LegacyTreatmentTables.ServedKey(r.Record))
                 .OfType<string>()
                 .ToHashSet(StringComparer.Ordinal);
-            var live = new HashSet<string>(StringComparer.Ordinal);
+            var holders = new List<FetchedRecord>();
             foreach (var table in LegacyTreatmentTables.All.Where(t => t.RecordType != nameof(Note)))
-            {
-                live.UnionWith((await FetchSafe(table, t => t.LiveByTreatmentKeyAsync(db, noteKeys, ct)))
-                    .Select(r => LegacyTreatmentTables.ServedKey(r.Record))
-                    .OfType<string>());
-            }
+                holders.AddRange(await FetchSafe(table, t => t.LiveByTreatmentKeyAsync(db, noteKeys, ct)));
+            var live = holders
+                .Select(r => LegacyTreatmentTables.ServedKey(r.Record))
+                .OfType<string>()
+                .ToHashSet(StringComparer.Ordinal);
 
-            rows = rows
-                .Where(r => r.Record is not Note { LegacyId: { } key }
-                    || !(live.Contains(key) || (r.Deleted && onPage.Contains(key))))
-                .ToList();
+            // A span or activation served its treatment's Note before records did, so no client
+            // holds that Note apart.
+            var heldByRecords = holders
+                .Concat(rows.Where(r => r.Deleted))
+                .Where(r => r.Record is not (Note or StateSpanEntity or ProfileActivation))
+                .Select(r => LegacyTreatmentTables.ServedKey(r.Record))
+                .OfType<string>()
+                .ToHashSet(StringComparer.Ordinal);
+
+            bool Held(FetchedRecord row) =>
+                row.Record is Note { LegacyId: { } key } && (live.Contains(key) || (row.Deleted && onPage.Contains(key)));
+
+            if (historyCursor is null)
+            {
+                rows = rows.Where(r => !Held(r)).ToList();
+            }
+            else
+            {
+                var seen = rows.Select(RecordId).ToHashSet();
+                rows =
+                [
+                    .. rows
+                        .Where(r => !Held(r) || heldByRecords.Contains(((Note)r.Record).LegacyId!))
+                        .Select(r => Held(r) ? r with { Deleted = true } : r),
+                    .. holders.Where(h => seen.Add(RecordId(h))),
+                ];
+            }
         }
+
+        if (historyCursor is not null)
+            rows = await WithNotesOfDeletedRecordsAsync(db, rows, ct);
 
         var keys = rows
             .Select(r => LegacyTreatmentTables.ServedKey(r.Record))
@@ -417,18 +414,84 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             .Distinct()
             .ToList();
         Dictionary<string, string>? notes = null;
+        Dictionary<string, DateTime> noteStamps = [];
         if (keys.Count > 0)
         {
-            notes = (await db.Notes.AsNoTracking()
-                    .Where(n => n.LegacyId != null && keys.Contains(n.LegacyId))
-                    .OrderBy(n => n.Id)
-                    .Select(n => new { Key = n.LegacyId!, n.Text })
-                    .ToListAsync(ct))
+            var written = await db.Notes.IncludingDeleted().AsNoTracking()
+                .Where(n => n.LegacyId != null && keys.Contains(n.LegacyId))
+                .OrderBy(n => n.Id)
+                .Select(n => new { Key = n.LegacyId!, n.Text, Live = n.DeletedAt == null, n.SysUpdatedAt })
+                .ToListAsync(ct);
+            notes = written
+                .Where(n => n.Live)
                 .GroupBy(n => n.Key, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => g.First().Text, StringComparer.Ordinal);
+            noteStamps = written
+                .GroupBy(n => n.Key, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.Max(n => n.SysUpdatedAt), StringComparer.Ordinal);
+        }
+
+        rows = rows.Select(r => r with { Modified = StampOf(r) }).ToList();
+
+        DateTime StampOf(FetchedRecord row)
+        {
+            var stamp = row.Modified;
+            if (row.Record is not Note
+                && LegacyTreatmentTables.ServedKey(row.Record) is { } key
+                && noteStamps.TryGetValue(key, out var noteStamp)
+                && noteStamp > stamp)
+                stamp = noteStamp;
+            return historyCursor is { } cursor && stamp > cursor ? cursor : stamp;
         }
 
         return LegacyTreatmentTables.Assemble(rows, await LoadCarbFoodsAsync(rows, ct), notes);
+    }
+
+    /// <summary>
+    /// Adds the live Notes of the records deleted on a history page whose treatment keeps no other
+    /// live record, stamped with that delete: a search serves such a Note as a treatment of its own,
+    /// and its row did not move.
+    /// </summary>
+    private async Task<IReadOnlyList<FetchedRecord>> WithNotesOfDeletedRecordsAsync(
+        NocturneDbContext db, IReadOnlyList<FetchedRecord> rows, CancellationToken ct)
+    {
+        var deletes = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+        foreach (var row in rows.Where(r => r.Deleted && r.Record is not Note))
+        {
+            if (LegacyTreatmentTables.ServedKey(row.Record) is not { } key)
+                continue;
+            if (!deletes.TryGetValue(key, out var stamp) || row.Modified > stamp)
+                deletes[key] = row.Modified;
+        }
+
+        foreach (var row in rows.Where(r => !r.Deleted && r.Record is not Note))
+        {
+            if (LegacyTreatmentTables.ServedKey(row.Record) is { } key)
+                deletes.Remove(key);
+        }
+
+        if (deletes.Count == 0)
+            return rows;
+
+        var keys = deletes.Keys.ToList();
+        foreach (var table in LegacyTreatmentTables.All.Where(t => t.RecordType != nameof(Note)))
+        {
+            foreach (var holder in await FetchSafe(table, t => t.LiveByTreatmentKeyAsync(db, keys, ct)))
+            {
+                if (LegacyTreatmentTables.ServedKey(holder.Record) is { } key)
+                    deletes.Remove(key);
+            }
+        }
+
+        if (deletes.Count == 0)
+            return rows;
+
+        var noteTable = LegacyTreatmentTables.All.Single(t => t.RecordType == nameof(Note));
+        var seen = rows.Select(RecordId).ToHashSet();
+        var notes = (await FetchSafe(noteTable, t => t.LiveByTreatmentKeyAsync(db, deletes.Keys, ct)))
+            .Where(n => seen.Add(RecordId(n)))
+            .Select(n => n with { Modified = deletes[((Note)n.Record).LegacyId!] });
+        return [.. rows, .. notes];
     }
 
     private async Task<CarbFoodIndex> LoadCarbFoodsAsync(

@@ -1,6 +1,7 @@
 using Nocturne.API.Tests.Infrastructure;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -40,6 +41,8 @@ public class LegacyTreatmentRoundTripTests : IDisposable
     private readonly NocturneDbContext _context;
     private readonly TreatmentReadService _store;
     private readonly TreatmentService _service;
+    private readonly BolusRepository _bolusRepo;
+    private readonly NoteRepository _noteRepo;
 
     public LegacyTreatmentRoundTripTests()
     {
@@ -56,19 +59,14 @@ public class LegacyTreatmentRoundTripTests : IDisposable
 
         var dedup = new Mock<IDeduplicationService>().Object;
         var ctxFactory = new TestNocturneDbContextFactory(_context);
-        var bolusRepo = new BolusRepository(ctxFactory, dedup, caller, NullLogger<BolusRepository>.Instance);
+        var bolusRepo = _bolusRepo = new BolusRepository(ctxFactory, dedup, caller, NullLogger<BolusRepository>.Instance);
         var carbRepo = new CarbIntakeRepository(ctxFactory, dedup, caller, NullLogger<CarbIntakeRepository>.Instance);
         var bgCheckRepo = new BGCheckRepository(ctxFactory, dedup, caller, NullLogger<BGCheckRepository>.Instance);
-        var noteRepo = new NoteRepository(ctxFactory, dedup, caller, NullLogger<NoteRepository>.Instance);
+        var noteRepo = _noteRepo = new NoteRepository(ctxFactory, dedup, caller, NullLogger<NoteRepository>.Instance);
         var deviceEventRepo = new DeviceEventRepository(ctxFactory, dedup, caller, NullLogger<DeviceEventRepository>.Instance);
         var bolusCalcRepo = new BolusCalculationRepository(ctxFactory, dedup, caller, NullLogger<BolusCalculationRepository>.Instance);
 
-        var tempBasalRepo = new Mock<ITempBasalRepository>();
-        tempBasalRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+        var tempBasalRepo = new TempBasalRepository(ctxFactory, dedup, caller, NullLogger<TempBasalRepository>.Instance);
 
         var foods = new Mock<ITreatmentFoodService>();
         foods
@@ -84,7 +82,7 @@ public class LegacyTreatmentRoundTripTests : IDisposable
 
         var decomposer = new TreatmentDecomposer(
             _context.AsFactory(),
-            bolusRepo, tempBasalRepo.Object,
+            bolusRepo, tempBasalRepo,
             carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             Mock.Of<IStateSpanService>(),
             ProfileActivationTestDeps.Repository(_context),
@@ -100,7 +98,7 @@ public class LegacyTreatmentRoundTripTests : IDisposable
 
         var projection = new V4ToLegacyProjectionService(
             bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo,
-            tempBasalRepo.Object, bolusCalcRepo,
+            tempBasalRepo, bolusCalcRepo,
             foods.Object,
             _context.AsFactory(),
             NullLogger<V4ToLegacyProjectionService>.Instance);
@@ -111,7 +109,7 @@ public class LegacyTreatmentRoundTripTests : IDisposable
 
         _store = new TreatmentReadService(
             projection, decomposer, pipeline,
-            tempBasalRepo.Object, bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
+            tempBasalRepo, bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             Mock.Of<IProfileActivationRepository>(),
             Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
@@ -211,8 +209,136 @@ public class LegacyTreatmentRoundTripTests : IDisposable
     {
         await UploadAsync(Upload("Correction Bolus", insulin: 2.0, notes: "after the walk"));
 
-        var served = (await _service.GetTreatmentsModifiedSinceAsync(0)).Should().ContainSingle().Subject;
+        var history = (await _service.GetTreatmentsModifiedSinceAsync(0)).ToList();
+        var served = history.Where(t => t.IsValid != false).Should().ContainSingle().Subject;
         (served.EventType, served.Insulin, served.Notes).Should().Be(("Correction Bolus", 2.0, "after the walk"));
+    }
+
+    /// <summary>
+    /// A client that synced before notes were served on their record holds the Note as a treatment
+    /// of its own; history tombstones it whenever it moves.
+    /// </summary>
+    [Fact]
+    public async Task RecordWithNotes_HistoryTombstonesTheNoteUnderItsOwnId()
+    {
+        await UploadAsync(Upload("Correction Bolus", insulin: 2.0, notes: "after the walk"));
+
+        var history = (await _service.GetTreatmentsModifiedSinceAsync(0)).ToList();
+
+        history.Where(t => t.IsValid == false).Select(t => t.Id).Should().Equal((await NoteIdAsync()).ToString());
+    }
+
+    private async Task<Guid> NoteIdAsync()
+    {
+        await using var ctx = _db.CreateContext();
+        return ctx.Notes.IgnoreQueryFilters().Single().Id;
+    }
+
+    private static long Stamp(IEnumerable<Treatment> treatments) =>
+        treatments.Where(t => t.IsValid != false).Should().ContainSingle().Subject.SrvModified!.Value;
+
+    [Fact]
+    public async Task NotesEditedAlone_MovesTheTreatmentsStampOnEveryRead()
+    {
+        var created = await UploadAsync(Upload("Correction Bolus", insulin: 2.0, notes: "before"));
+        var searched = Stamp(await ReadAsync());
+        await Task.Delay(5);
+
+        await _service.UpdateTreatmentAsync(
+            created.Id!, JsonSerializer.Deserialize<Treatment>(Upload("Correction Bolus", insulin: 2.0, notes: "after"))!);
+
+        Stamp(await ReadAsync()).Should().BeGreaterThan(searched);
+        (await _service.GetTreatmentByIdAsync(created.Id!))!.SrvModified.Should().BeGreaterThan(searched);
+        Stamp(await ReadAsync()).Should().Be(Stamp(await _service.GetTreatmentsModifiedSinceAsync(0)));
+    }
+
+    [Fact]
+    public async Task NotesCleared_MovesTheTreatmentsStamp()
+    {
+        var created = await UploadAsync(Upload("Correction Bolus", insulin: 2.0, notes: "before"));
+        var searched = Stamp(await ReadAsync());
+        await Task.Delay(5);
+
+        await _service.UpdateTreatmentAsync(
+            created.Id!, JsonSerializer.Deserialize<Treatment>(Upload("Correction Bolus", insulin: 2.0))!);
+
+        Stamp(await ReadAsync()).Should().BeGreaterThan(searched);
+    }
+
+    [Fact]
+    public async Task NoteEditedInV4_IsServedOnItsTreatmentWithAMovedStamp()
+    {
+        await UploadAsync(Upload("Site Change", notes: "left arm"));
+        var searched = Stamp(await ReadAsync());
+        await Task.Delay(5);
+
+        var note = (await _noteRepo.GetByIdAsync(await NoteIdAsync()))!;
+        note.Text = "right arm";
+        await _noteRepo.UpdateAsync(note.Id, note, WriteOrigin.Live);
+
+        var served = (await ReadAsync()).Should().ContainSingle().Subject;
+        (served.EventType, served.Notes).Should().Be(("Site Change", "right arm"));
+        served.SrvModified.Should().BeGreaterThan(searched);
+    }
+
+    [Fact]
+    public async Task NoteDeletedInV4_LeavesItsTreatmentWithoutNotes()
+    {
+        await UploadAsync(Upload("Correction Bolus", insulin: 2.0, notes: "after the walk"));
+
+        await _noteRepo.DeleteAsync(await NoteIdAsync(), WriteOrigin.Live);
+
+        var served = (await ReadAsync()).Should().ContainSingle().Subject;
+        (served.Insulin, served.Notes).Should().Be((2.0, null));
+        (await _store.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RecordDeletedInV4_LeavesItsNoteServedApart_InSearchAndHistory()
+    {
+        var created = await UploadAsync(Upload("Correction Bolus", insulin: 2.0, notes: "after the walk"));
+        var cursor = (await _service.GetTreatmentsModifiedSinceAsync(0)).Max(t => t.SrvModified!.Value);
+        await Task.Delay(5);
+
+        await _bolusRepo.DeleteAsync(Guid.Parse(created.Id!), WriteOrigin.Live);
+
+        var noteId = (await NoteIdAsync()).ToString();
+        var searched = (await ReadAsync()).Should().ContainSingle().Subject;
+        (searched.Id, searched.Notes).Should().Be((noteId, "after the walk"));
+        (await _store.CountAsync()).Should().Be(1);
+
+        var history = (await _service.GetTreatmentsModifiedSinceAsync(cursor)).ToList();
+        history.Select(t => (t.Id, t.IsValid)).Should().BeEquivalentTo(new[]
+        {
+            (created.Id, (bool?)false),
+            (noteId, (bool?)null),
+        });
+    }
+
+    [Theory]
+    [InlineData("Site Change", "Site Change")]
+    [InlineData("Bolus Wizard", "Bolus Wizard")]
+    public async Task OtherRecordsWithNotes_ServeThemWithoutANoteApart(string eventType, string served)
+    {
+        await UploadAsync(Upload(eventType, insulin: eventType == "Bolus Wizard" ? 2.0 : null, notes: "with notes"));
+
+        var read = await ReadAsync();
+        read.Should().Contain(t => t.EventType == served)
+            .And.OnlyContain(t => t.Notes == "with notes");
+        (await _store.CountAsync()).Should().Be(read.Count);
+    }
+
+    [Fact]
+    public async Task TempBasalWithNotes_ServesThemWithoutANoteApart()
+    {
+        await UploadAsync(JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["eventType"] = "Temp Basal", ["created_at"] = At, ["duration"] = 30, ["absolute"] = 0.5,
+            ["notes"] = "exercise",
+        }));
+
+        var served = (await ReadAsync()).Should().ContainSingle().Subject;
+        (served.EventType, served.Notes).Should().Be(("Temp Basal", "exercise"));
     }
 
     [Fact]
@@ -225,7 +351,8 @@ public class LegacyTreatmentRoundTripTests : IDisposable
         await _service.UpdateTreatmentAsync(
             created.Id!, JsonSerializer.Deserialize<Treatment>(Upload("Correction Bolus", insulin: 2.0, notes: "after"))!);
 
-        var resent = (await _service.GetTreatmentsModifiedSinceAsync(cursor)).Should().ContainSingle().Subject;
+        var resent = (await _service.GetTreatmentsModifiedSinceAsync(cursor))
+            .Where(t => t.IsValid != false).Should().ContainSingle().Subject;
         (resent.Id, resent.Notes, resent.IsValid).Should().Be((created.Id, "after", (bool?)null));
     }
 
@@ -305,6 +432,14 @@ public class LegacyTreatmentRoundTripTests : IDisposable
 
         (await _service.GetTreatmentsModifiedSinceAsync(0)).Should().ContainSingle()
             .Which.EventType.Should().Be("Meal Bolus");
+    }
+
+    [Fact]
+    public async Task BgCheckWithInsulinAndCarbs_KeepsItsEventTypeOnTheBgCheckAlone()
+    {
+        await UploadAsync(Upload("BG Check", insulin: 2.0, carbs: 20, glucose: 120));
+
+        (await ReadAsync()).Select(t => t.EventType).Should().BeEquivalentTo("BG Check", "Meal Bolus");
     }
 
     [Fact]

@@ -584,13 +584,6 @@ internal static class LegacyTreatmentTables
         return context.Notes.Where(n => n.LegacyId != null && keys.Contains(n.LegacyId));
     }
 
-    /// <summary>The Notes served as treatments of their own: those not in <see cref="NotesServedWithAnotherRecord"/>.</summary>
-    internal static IQueryable<NoteEntity> NotesServedApart(NocturneDbContext context)
-    {
-        var keys = TreatmentKeysOfRecords(context);
-        return context.Notes.Where(n => n.LegacyId == null || !keys.Contains(n.LegacyId));
-    }
-
     /// <summary>
     /// Every state span <see cref="StateSpanTables"/> serves that starts inside the window, bounds
     /// inclusive, as one tracked-entity query a bulk update can run against.
@@ -803,8 +796,8 @@ internal static class LegacyTreatmentTables
     /// </summary>
     /// <remarks>
     /// <c>notes</c> holds the text of the Note a served record's treatment wrote beside it, by
-    /// treatment id, served on the record when it keeps none itself; see
-    /// <see cref="NotesServedWithAnotherRecord"/>.
+    /// treatment id, served on the record over any copy the record keeps, which a V4 edit of the
+    /// Note does not reach; see <see cref="NotesServedWithAnotherRecord"/>.
     /// </remarks>
     internal static List<Treatment> Assemble(
         IReadOnlyList<FetchedRecord> rows,
@@ -829,7 +822,7 @@ internal static class LegacyTreatmentTables
     private static Treatment WithNotes(
         Treatment treatment, string? key, IReadOnlyDictionary<string, string>? notes)
     {
-        if (treatment.Notes is null && key is not null && notes?.GetValueOrDefault(key) is { } text)
+        if (key is not null && notes?.GetValueOrDefault(key) is { } text)
             treatment.Notes = text;
         return treatment;
     }
