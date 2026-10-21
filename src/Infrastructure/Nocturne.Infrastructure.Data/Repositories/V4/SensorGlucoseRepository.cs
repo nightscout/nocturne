@@ -88,6 +88,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
                 Filtered = e.Filtered,
                 Unfiltered = e.Unfiltered,
                 Delta = e.Delta,
+                Rssi = e.Rssi,
             })
             .ToListAsync(ct);
     }

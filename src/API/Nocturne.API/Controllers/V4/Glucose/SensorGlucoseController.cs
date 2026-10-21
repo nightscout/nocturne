@@ -122,6 +122,7 @@ public class SensorGlucoseController(
         Filtered = request.Filtered,
         Unfiltered = request.Unfiltered,
         Delta = request.Delta,
+        Rssi = request.Rssi,
     };
 
     protected override SensorGlucose MapUpdateToModel(Guid id, UpsertSensorGlucoseRequest request, SensorGlucose existing) => new()
@@ -139,6 +140,7 @@ public class SensorGlucoseController(
         Filtered = request.Filtered,
         Unfiltered = request.Unfiltered,
         Delta = request.Delta,
+        Rssi = request.Rssi,
         SyncIdentifier = existing.SyncIdentifier,
         CorrelationId = existing.CorrelationId,
         LegacyId = existing.LegacyId,

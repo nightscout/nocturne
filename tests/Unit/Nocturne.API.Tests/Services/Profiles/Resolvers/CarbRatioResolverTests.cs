@@ -16,7 +16,7 @@ public class CarbRatioResolverTests : IDisposable
     private readonly Mock<ICarbRatioScheduleRepository> _repo = new();
     private readonly Mock<ITherapySettingsRepository> _therapyRepo = new();
     private readonly Mock<IPatientRecordRepository> _patientRecordRepo = new();
-    private readonly Mock<IActiveProfileResolver> _activeProfileResolver = new();
+    private readonly Mock<IActiveProfileResolver> _activeProfileResolver = ActiveProfileResolverMock.WithDefault();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
     private readonly CarbRatioResolver _sut;
 
