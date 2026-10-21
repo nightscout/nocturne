@@ -1346,11 +1346,9 @@ public class OidcAuthService : IOidcAuthService
             }
         }
 
-        public override void Write(Utf8JsonWriter writer, bool? value, JsonSerializerOptions options)
-        {
-            if (value is { } b) writer.WriteBooleanValue(b);
-            else writer.WriteNullValue();
-        }
+        /// <summary>Claims are only ever read.</summary>
+        public override void Write(Utf8JsonWriter writer, bool? value, JsonSerializerOptions options) =>
+            throw new NotSupportedException();
     }
 
     #endregion

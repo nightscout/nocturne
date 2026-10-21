@@ -17,7 +17,8 @@
   import IntegrationsTabContent from "$lib/components/admin/IntegrationsTabContent.svelte";
   import OidcProvidersTabContent from "$lib/components/admin/OidcProvidersTabContent.svelte";
   import OidcProviderDialog from "$lib/components/admin/OidcProviderDialog.svelte";
-  import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
+  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { withLockoutOverride } from "$lib/components/admin/lockout-override";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import type {
     TenantRoleDto,
@@ -97,28 +98,6 @@
     } catch (err: unknown) {
       console.error("Failed to save provider:", err);
       throw err;
-    }
-  }
-
-  /**
-   * Runs a delete or disable, and when the API refuses it because some members sign in only
-   * through this provider, asks before going ahead anyway. Those members then need a recovery
-   * code to get back in.
-   */
-  async function withLockoutOverride(
-    providerName: string | undefined,
-    run: (force: boolean) => Promise<unknown>
-  ): Promise<boolean> {
-    try {
-      await run(false);
-      return true;
-    } catch (err: unknown) {
-      if (errorStatus(err) !== 409) throw err;
-      const proceed = confirm(
-        `Some members sign in only through "${providerName}". They will be locked out until an administrator gives them a recovery code. Continue anyway?`
-      );
-      if (proceed) await run(true);
-      return proceed;
     }
   }
 

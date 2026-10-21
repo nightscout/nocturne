@@ -80,6 +80,24 @@ public class OidcIdTokenParsingTests
     }
 
     [Fact]
+    public void A_token_without_an_issuer_is_refused()
+    {
+        var token = Token(new { sub = "ext-1", aud = "nocturne", exp = Now.AddMinutes(5).ToUnixTimeSeconds() });
+
+        var act = () => OidcAuthService.ParseIdToken(token, Provider, Provider.IssuerUrl, Now);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*issued by the provider*");
+    }
+
+    [Fact]
+    public void A_token_that_is_not_three_segments_is_refused()
+    {
+        var act = () => OidcAuthService.ParseIdToken("not-a-jwt", Provider, Provider.IssuerUrl, Now);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*format*");
+    }
+
+    [Fact]
     public void A_token_for_another_client_is_refused()
     {
         var act = () => OidcAuthService.ParseIdToken(
@@ -126,6 +144,7 @@ public class OidcIdTokenParsingTests
     [InlineData("\"email_verified\":\"False\"", false)]
     [InlineData("\"email_verified\":\"yes\"", null)]
     [InlineData("\"email_verified\":null", null)]
+    [InlineData("\"email_verified\":{\"value\":true}", null)]
     [InlineData("\"other\":1", null)]
     public void Email_verified_is_read_from_its_snake_case_claim_in_either_form(string claim, bool? expected)
     {
