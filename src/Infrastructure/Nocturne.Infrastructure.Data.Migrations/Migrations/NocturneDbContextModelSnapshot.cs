@@ -8309,6 +8309,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("patient_device_id");
 
+                    b.Property<int?>("Rssi")
+                        .HasColumnType("integer")
+                        .HasColumnName("rssi");
+
                     b.Property<double?>("SmoothedMgdl")
                         .HasColumnType("double precision")
                         .HasColumnName("smoothed_mgdl");

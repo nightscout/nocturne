@@ -21,14 +21,9 @@ Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.GetDeviceStatus
 Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.GetDeviceStatus_WithCreatedAtDateRangeFilter_ReturnsSameShape | devicestatus reads return nothing after a POST
 Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.GetDeviceStatus_WithData_ReturnsSameShape | devicestatus reads return nothing after a POST
 Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.GetDeviceStatus_WithFindFilter_ReturnsSameShape | devicestatus reads return nothing after a POST
-Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntriesByType_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntriesCurrent_WithData_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_TopLevelTypeParam_IsIgnored_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithCountAndFindType_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithCount_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithData_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithFindFilter_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithFindTypeFilter_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntriesByType_ReturnsSameShape | mbg and cal entries drop sgv, direction, noise, rssi and delta posted with them (#2328)
+Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_TopLevelTypeParam_IsIgnored_ReturnsSameShape | mbg and cal entries drop sgv, direction, noise, rssi and delta posted with them (#2328)
+Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithFindTypeFilter_ReturnsSameShape | mbg and cal entries drop sgv, direction, noise, rssi and delta posted with them (#2328)
 Nocturne.API.Tests.Integration.Parity.V1.FoodParityTests.GetFoodQuickpicks_WithData_ReturnsSameShape | food/quickpicks returns a food Nightscout does not list
 Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfileCurrent_WithData_ReturnsSameShape | null-valued profile store fields (perGIvalues, carbs_hr_*, delay_*) are dropped
 Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfile_MultipleProfiles_ReturnsSameShape | null-valued profile store fields (perGIvalues, carbs_hr_*, delay_*) are dropped
@@ -66,25 +61,10 @@ Nocturne.API.Tests.Integration.Parity.V3.DeviceStatusParityTests.Search_WithData
 Nocturne.API.Tests.Integration.Parity.V3.DeviceStatusParityTests.Search_WithLimit_ReturnsSameShape | devicestatus reads return nothing after a POST
 Nocturne.API.Tests.Integration.Parity.V3.DeviceStatusParityTests.Search_WithSkip_ReturnsSameShape | devicestatus reads return nothing after a POST
 Nocturne.API.Tests.Integration.Parity.V3.DeviceStatusParityTests.Search_WithSort_ReturnsSameShape | devicestatus reads return nothing after a POST
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Read_Exists_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Eq_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Gt_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Gte_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_In_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Lt_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Lte_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Ne_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Nin_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Re_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_In_ReturnsSameShape | mbg and cal entries drop sgv, direction, noise, rssi and delta posted with them (#2328)
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Ne_ReturnsSameShape | mbg and cal entries drop sgv, direction, noise, rssi and delta posted with them (#2328)
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Nin_ReturnsSameShape | mbg and cal entries drop sgv, direction, noise, rssi and delta posted with them (#2328)
 Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_InvalidLimit_ReturnsSameShape | v3 search with an out-of-tolerance limit answers 500; Nightscout 400
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_MultipleFilters_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithData_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithIfModifiedSince_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithLimitAndSkip_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithLimit_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithSkip_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithSortAsc_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithSortDesc_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
 Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_Filter_EventType_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
 Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_Filter_In_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
 Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_Filter_Insulin_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
