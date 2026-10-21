@@ -1426,6 +1426,42 @@ public class GoogleHealthTests : IDisposable
     }
 
     [Fact]
+    public async Task A_sign_in_that_never_stored_its_grant_does_not_keep_holding_the_account()
+    {
+        var revoked = new List<string>();
+        var holders = new InMemoryGoogleHealthGrantHolders();
+        var failedTenant = Guid.NewGuid();
+        var failedStore = new TestConnectorStore { FailTokenSaves = true };
+        var failed = Service(failedStore, Google(revoked, _ => "shared-account"), failedTenant, holders: holders);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ConnectAsync(failed));
+        Assert.DoesNotContain(failedTenant, holders.Holders.Keys);
+        revoked.Clear();
+        var other = Service(new TestConnectorStore(), Google(revoked, _ => "shared-account"), Guid.NewGuid(), holders: holders);
+        await ConnectAsync(other);
+
+        await other.DisconnectAsync(Guid.NewGuid(), default);
+
+        Assert.Equal(["token=refresh-1"], revoked);
+    }
+
+    [Fact]
+    public async Task A_disconnect_that_cannot_tell_who_else_holds_the_account_keeps_the_grant_without_advising_revocation()
+    {
+        var revoked = new List<string>();
+        var holders = new InMemoryGoogleHealthGrantHolders();
+        var service = Service(new TestConnectorStore(), Google(revoked, _ => "account"), Guid.NewGuid(), holders: holders);
+        await ConnectAsync(service);
+        holders.Readable = false;
+
+        await service.DisconnectAsync(Guid.NewGuid(), default);
+
+        Assert.Empty(revoked);
+        var status = await service.StatusAsync(default);
+        Assert.False(status.Connected);
+        Assert.Null(status.ErrorCode);
+    }
+
+    [Fact]
     public async Task A_grant_whose_account_cannot_be_identified_is_not_revoked()
     {
         var revoked = new List<string>();
@@ -1601,7 +1637,8 @@ public class GoogleHealthTests : IDisposable
             new GoogleHealthClient(http),
             oauth,
             new GoogleHealthSessionStore(store.Configurations, oauth,
-                holders ?? new InMemoryGoogleHealthGrantHolders(), tenant.Object, platformOptions),
+                holders ?? new InMemoryGoogleHealthGrantHolders(), tenant.Object, platformOptions,
+                NullLogger<GoogleHealthSessionStore>.Instance),
             store.Configurations,
             store.Loader,
             tenant.Object,
@@ -1643,6 +1680,7 @@ public class GoogleHealthTests : IDisposable
         public bool? IsActive => response?.IsActive;
         public Action? OnSave { get; set; }
         public bool FailConfigurationSaves { get; set; }
+        public bool FailTokenSaves { get; set; }
 
         private ConnectorSyncCursor? runtimeCursor;
         public IConnectorSyncCursorStore Cursors { get; }
@@ -1691,6 +1729,8 @@ public class GoogleHealthTests : IDisposable
                 .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, ct) =>
                 {
                     ct.ThrowIfCancellationRequested();
+                    if (FailTokenSaves && values.ContainsKey("refreshToken"))
+                        throw new InvalidOperationException("secret store unavailable");
                     secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
                     OnSave?.Invoke();
                 })

@@ -15,12 +15,17 @@ public interface IGoogleHealthGrantHolders
     /// <summary>Records that <paramref name="tenantId"/> holds a token for <paramref name="accountKey"/>.</summary>
     Task HoldAsync(Guid tenantId, string accountKey, CancellationToken ct);
 
-    /// <summary>Records that <paramref name="tenantId"/> no longer holds a token.</summary>
+    /// <summary>Records that <paramref name="tenantId"/> holds no token.</summary>
     Task ReleaseAsync(Guid tenantId, CancellationToken ct);
 
-    /// <summary>
-    /// Whether a tenant other than <paramref name="tenantId"/> holds a token for
-    /// <paramref name="accountKey"/>; true as well when that cannot be determined.
-    /// </summary>
-    Task<bool> MayBeHeldByAnotherTenantAsync(Guid tenantId, string accountKey, CancellationToken ct);
+    /// <summary>Whether a tenant other than <paramref name="tenantId"/> holds a token for <paramref name="accountKey"/>.</summary>
+    Task<GoogleHealthGrantSharing> SharingAsync(Guid tenantId, string accountKey, CancellationToken ct);
+}
+
+public enum GoogleHealthGrantSharing
+{
+    NotShared,
+    Shared,
+    /// <summary>The holders could not be read; the grant must be treated as possibly shared.</summary>
+    Undetermined
 }

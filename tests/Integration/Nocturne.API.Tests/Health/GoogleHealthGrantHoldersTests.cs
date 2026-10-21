@@ -13,7 +13,18 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Connectors.GoogleHealth.Services;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Nocturne.API.Services.Audit;
+using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.Realtime;
+using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Health;
+using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Shared.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -78,21 +89,34 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
         var holders = Holders();
         await holders.HoldAsync(first, "account-a", default);
 
-        Assert.False(await holders.MayBeHeldByAnotherTenantAsync(second, "account-b", default));
-        Assert.False(await holders.MayBeHeldByAnotherTenantAsync(first, "account-a", default));
-        Assert.True(await holders.MayBeHeldByAnotherTenantAsync(second, "account-a", default));
+        Assert.Equal(GoogleHealthGrantSharing.NotShared, await holders.SharingAsync(second, "account-b", default));
+        Assert.Equal(GoogleHealthGrantSharing.NotShared, await holders.SharingAsync(first, "account-a", default));
+        Assert.Equal(GoogleHealthGrantSharing.Shared, await holders.SharingAsync(second, "account-a", default));
     }
 
     [Fact]
-    public async Task A_token_stored_before_its_tenant_was_recorded_as_a_holder_keeps_the_grant()
+    public async Task Adoption_reads_encrypted_secrets_through_each_tenants_row_level_security()
     {
-        secrets[first] = new() { ["refreshToken"] = "refresh-first", ["accountKey"] = "legacy-account" };
-        secrets[second] = new() { ["accountKey"] = "disconnected-account" };
+        await using var real = RealSecretsServices();
+        foreach (var (tenant, stored) in new[]
+                 {
+                     (first, new Dictionary<string, string> { ["refreshToken"] = "refresh-first", ["accountKey"] = "encrypted-account" }),
+                     (second, new Dictionary<string, string> { ["accountKey"] = "disconnected-account" })
+                 })
+        {
+            await using var scope = TenantJobScope.Open(real, new TenantContext(tenant, "", "", true, false), "test:google-health");
+            await scope.ServiceProvider.GetRequiredService<IConnectorConfigurationService>()
+                .SaveSecretsAsync("GoogleHealth", stored);
+        }
+        await using (var db = SuperuserContext())
+            Assert.DoesNotContain("encrypted-account", await db.ConnectorConfigurations.IgnoreQueryFilters()
+                .Where(row => row.TenantId == first).Select(row => row.SecretsJson).SingleAsync());
 
-        var holders = Holders();
+        var holders = new PostgresGoogleHealthGrantHolders(real.GetRequiredService<IServiceScopeFactory>(),
+            real.GetRequiredService<INocturneDbContextFactory>(), NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
 
-        Assert.True(await holders.MayBeHeldByAnotherTenantAsync(second, "legacy-account", default));
-        Assert.False(await holders.MayBeHeldByAnotherTenantAsync(first, "disconnected-account", default));
+        Assert.Equal(GoogleHealthGrantSharing.Shared, await holders.SharingAsync(second, "encrypted-account", default));
+        Assert.Equal(GoogleHealthGrantSharing.NotShared, await holders.SharingAsync(first, "disconnected-account", default));
     }
 
     [Fact]
@@ -104,11 +128,12 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
         await using (var db = SuperuserContext())
             await db.Tenants.Where(tenant => tenant.Id == first).ExecuteDeleteAsync();
 
-        Assert.False(await holders.MayBeHeldByAnotherTenantAsync(second, "deleted-account", default));
+        Assert.Equal(GoogleHealthGrantSharing.NotShared, await holders.SharingAsync(second, "deleted-account", default));
     }
 
     private PostgresGoogleHealthGrantHolders Holders() =>
-        new(provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
+        new(provider.GetRequiredService<IServiceScopeFactory>(), provider.GetRequiredService<INocturneDbContextFactory>(),
+            NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
 
     private async Task StoreAsync(Guid tenant, GoogleHealthSessionStore sessions, string refreshToken, string account)
     {
@@ -143,7 +168,8 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
         var oauth = new GoogleHealthAuthTokenProvider(http, new ConnectorTokenCache(),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
             accessor.Object, platform, NullLogger<GoogleHealthAuthTokenProvider>.Instance);
-        return new GoogleHealthSessionStore(SecretsOf(tenant), oauth, holders, accessor.Object, platform);
+        return new GoogleHealthSessionStore(SecretsOf(tenant), oauth, holders, accessor.Object, platform,
+            NullLogger<GoogleHealthSessionStore>.Instance);
     }
 
     private IConnectorConfigurationService SecretsOf(Guid tenant)
@@ -162,14 +188,39 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
 
     private ServiceProvider Services()
     {
+        var services = DatabaseServices();
+        services.AddScoped(scope => SecretsOf(scope.GetRequiredService<ITenantAccessor>().TenantId));
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>The production secrets path: AES-GCM secrets read by the app role under each tenant's RLS.</summary>
+    private ServiceProvider RealSecretsServices()
+    {
+        var services = DatabaseServices();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            [ServiceNames.ConfigKeys.InstanceKey] = "synthetic-instance-key"
+        }).Build();
+        services.AddSingleton<IConfiguration>(configuration);
+        services.AddSingleton<ISecretEncryptionService>(
+            new SecretEncryptionService(configuration, NullLogger<SecretEncryptionService>.Instance));
+        services.AddSingleton(Mock.Of<ISignalRBroadcastService>());
+        services.AddSingleton(Mock.Of<IHostEnvironment>());
+        services.AddScoped<IAuditContext, AuditContext>();
+        services.AddLogging();
+        services.AddScoped<IConnectorConfigurationService, ConnectorConfigurationService>();
+        return services.BuildServiceProvider();
+    }
+
+    private ServiceCollection DatabaseServices()
+    {
         var services = new ServiceCollection();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.Database.AppConnectionString));
         services.AddDbContextFactory<NocturneDbContext>((provider, options) => options
             .UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()).AddInterceptors(new TenantConnectionInterceptor()));
         services.AddDataServices();
-        services.AddScoped(scope => SecretsOf(scope.GetRequiredService<ITenantAccessor>().TenantId));
-        return services.BuildServiceProvider();
+        return services;
     }
 
     private NocturneDbContext SuperuserContext() => new(new DbContextOptionsBuilder<NocturneDbContext>()

@@ -16,7 +16,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 columns: table => new
                 {
                     tenant_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    account_key = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
+                    account_key = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true)
                 },
                 constraints: table =>
                 {

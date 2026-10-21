@@ -22,6 +22,13 @@ internal sealed class InMemoryGoogleHealthGrantHolders : IGoogleHealthGrantHolde
         return Task.CompletedTask;
     }
 
-    public Task<bool> MayBeHeldByAnotherTenantAsync(Guid tenantId, string accountKey, CancellationToken ct) =>
-        Task.FromResult(holders.Any(holder => holder.Key != tenantId && holder.Value == accountKey));
+    /// <summary>False to answer as if the holders could not be read.</summary>
+    public bool Readable { get; set; } = true;
+
+    public Task<GoogleHealthGrantSharing> SharingAsync(Guid tenantId, string accountKey, CancellationToken ct) =>
+        Task.FromResult(!Readable
+            ? GoogleHealthGrantSharing.Undetermined
+            : holders.Any(holder => holder.Key != tenantId && holder.Value == accountKey)
+                ? GoogleHealthGrantSharing.Shared
+                : GoogleHealthGrantSharing.NotShared);
 }

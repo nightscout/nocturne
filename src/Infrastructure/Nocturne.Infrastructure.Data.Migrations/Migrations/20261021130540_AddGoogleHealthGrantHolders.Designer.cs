@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20261021114903_AddGoogleHealthGrantHolders")]
+    [Migration("20261021130540_AddGoogleHealthGrantHolders")]
     partial class AddGoogleHealthGrantHolders
     {
         /// <inheritdoc />
@@ -2074,7 +2074,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("tenant_id");
 
                     b.Property<string>("AccountKey")
-                        .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("account_key");
@@ -8339,6 +8338,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<Guid?>("PatientDeviceId")
                         .HasColumnType("uuid")
                         .HasColumnName("patient_device_id");
+
+                    b.Property<int?>("Rssi")
+                        .HasColumnType("integer")
+                        .HasColumnName("rssi");
 
                     b.Property<double?>("SmoothedMgdl")
                         .HasColumnType("double precision")

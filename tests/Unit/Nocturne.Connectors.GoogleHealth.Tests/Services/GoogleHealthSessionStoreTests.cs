@@ -103,7 +103,8 @@ public class GoogleHealthSessionStoreTests : IDisposable
             TestPlatform.Options(),
             NullLogger<GoogleHealthAuthTokenProvider>.Instance);
         return new GoogleHealthSessionStore(
-            configurations.Object, oauth, holders.Object, tenant.Object, TestPlatform.Options(), revokeTimeout);
+            configurations.Object, oauth, holders.Object, tenant.Object, TestPlatform.Options(),
+            NullLogger<GoogleHealthSessionStore>.Instance, revokeTimeout);
     }
 
     [Fact]
@@ -125,8 +126,8 @@ public class GoogleHealthSessionStoreTests : IDisposable
     [Fact]
     public async Task Clearing_releases_the_tenants_hold_without_revoking_an_account_another_tenant_holds()
     {
-        holders.Setup(value => value.MayBeHeldByAnotherTenantAsync(tenantId, "account", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        holders.Setup(value => value.SharingAsync(tenantId, "account", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(GoogleHealthGrantSharing.Shared);
         var store = Store(out _);
 
         await store.ClearAsync(removeAccount: false, Guid.NewGuid(), revoke: true, default);
@@ -144,7 +145,65 @@ public class GoogleHealthSessionStoreTests : IDisposable
 
         var outcome = await store.RevokeAsync("refresh", accountKey, default);
 
-        outcome.Should().Be(GoogleHealthRevocation.Retained);
+        outcome.Should().Be(GoogleHealthRevocation.Undetermined);
+    }
+
+    [Fact]
+    public async Task A_grant_whose_holders_cannot_be_read_is_kept()
+    {
+        holders.Setup(value => value.SharingAsync(tenantId, "account", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(GoogleHealthGrantSharing.Undetermined);
+        var store = Store(out _);
+
+        (await store.RevokeAsync("refresh", "account", default)).Should().Be(GoogleHealthRevocation.Undetermined);
+    }
+
+    [Fact]
+    public async Task Clearing_releases_the_hold_before_asking_who_else_holds_the_account()
+    {
+        var order = new List<string>();
+        holders.Setup(value => value.ReleaseAsync(tenantId, It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("release")).Returns(Task.CompletedTask);
+        holders.Setup(value => value.SharingAsync(tenantId, "account", It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("sharing")).ReturnsAsync(GoogleHealthGrantSharing.Shared);
+        var store = Store(out _);
+
+        await store.ClearAsync(removeAccount: false, Guid.NewGuid(), revoke: true, default);
+
+        order.Should().Equal("release", "sharing");
+    }
+
+    public static TheoryData<string?, string?, string?> StoredSessions => new()
+    {
+        { "refresh", "account", "account" },
+        { "refresh", null, null },
+        { "refresh", "", null },
+        { null, "account", null },
+        { " ", "account", null },
+    };
+
+    [Theory]
+    [MemberData(nameof(StoredSessions))]
+    public void Only_a_stored_token_with_its_account_is_held(string? refreshToken, string? accountKey, string? held)
+    {
+        var stored = new Dictionary<string, string>();
+        if (refreshToken is not null) stored["refreshToken"] = refreshToken;
+        if (accountKey is not null) stored["accountKey"] = accountKey;
+
+        GoogleHealthSessionStore.HeldAccount(stored).Should().Be(held);
+    }
+
+    [Theory]
+    [InlineData(true, 0)]
+    [InlineData(false, 1)]
+    public async Task An_unstored_sign_in_releases_the_hold_only_when_no_token_is_stored(bool tokenStored, int releases)
+    {
+        if (!tokenStored) secrets.Remove("refreshToken");
+        var store = Store(out _);
+
+        await store.ReleaseUnstoredAsync(default);
+
+        holders.Verify(value => value.ReleaseAsync(tenantId, It.IsAny<CancellationToken>()), Times.Exactly(releases));
     }
 
     [Fact]

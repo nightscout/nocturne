@@ -2071,7 +2071,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("tenant_id");
 
                     b.Property<string>("AccountKey")
-                        .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("account_key");

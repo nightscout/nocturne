@@ -15,8 +15,11 @@ public class GoogleHealthGrantHolderEntity
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 
-    /// <summary>Hex SHA-256 of the Google account's subject.</summary>
+    /// <summary>
+    /// Hex SHA-256 of the Google account's subject, or null once the tenant holds no token. A row
+    /// with no account still records the tenant's state, so adopting stored tokens leaves it alone.
+    /// </summary>
     [Column("account_key")]
     [MaxLength(64)]
-    public string AccountKey { get; set; } = string.Empty;
+    public string? AccountKey { get; set; }
 }
