@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  asCanonicalCustomSound,
   resolveCustomSoundType,
   CustomSoundRejectedError,
   MAX_CUSTOM_SOUND_SIZE_MB,
@@ -47,5 +48,22 @@ describe("resolveCustomSoundType", () => {
     const limit = MAX_CUSTOM_SOUND_SIZE_MB * 1024 * 1024;
     expect(rejectionOf(fileOf("audio/flac", limit))).toBeUndefined();
     expect(rejectionOf(fileOf("audio/flac", limit + 1))).toBe("too-large");
+  });
+});
+
+describe("asCanonicalCustomSound", () => {
+  it("returns a file already under its canonical type unchanged", () => {
+    const file = fileOf("audio/flac", 1024, "alarm.flac");
+    expect(asCanonicalCustomSound(file)).toBe(file);
+  });
+
+  it.each([
+    ["", "alarm.FLAC", "audio/flac"],
+    ["audio/vnd.dlna.adts", "a.aac", "audio/aac"],
+  ])("re-types %j named %s as %s, keeping its bytes", async (type, name, expected) => {
+    const file = new File([new Uint8Array([1, 2, 3])], name, { type });
+    const audio = asCanonicalCustomSound(file);
+    expect(audio.type).toBe(expected);
+    expect(new Uint8Array(await audio.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
   });
 });

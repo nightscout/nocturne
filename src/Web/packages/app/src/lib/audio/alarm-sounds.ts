@@ -714,6 +714,16 @@ export function resolveCustomSoundType(file: File): string {
   return type;
 }
 
+/**
+ * The file typed as {@link resolveCustomSoundType} resolves it, which is what its data URL needs to decode.
+ *
+ * @throws {CustomSoundRejectedError} when the file's type or size is not accepted.
+ */
+export function asCanonicalCustomSound(file: File): Blob {
+  const type = resolveCustomSoundType(file);
+  return file.type === type ? file : new Blob([file], { type });
+}
+
 export interface CustomAlarmSound {
   id: string;
   name: string;
@@ -841,10 +851,8 @@ async function saveToIndexedDB(sounds: CustomAlarmSound[]): Promise<void> {
  * Upload a custom alarm sound from a File
  */
 export async function uploadCustomSound(file: File, name?: string): Promise<CustomAlarmSound> {
-  const mimeType = resolveCustomSoundType(file);
-  const dataUrl = await readFileAsDataUrl(
-    file.type === mimeType ? file : new Blob([file], { type: mimeType })
-  );
+  const audio = asCanonicalCustomSound(file);
+  const dataUrl = await readFileAsDataUrl(audio);
 
   // Validate that the audio can be decoded
   await validateAudioFile(dataUrl);
@@ -853,7 +861,7 @@ export async function uploadCustomSound(file: File, name?: string): Promise<Cust
     id: `custom-${randomUUID()}`,
     name: name || file.name.replace(/\.[^.]+$/, ''), // Remove extension for display name
     fileName: file.name,
-    mimeType,
+    mimeType: audio.type,
     size: file.size,
     dataUrl,
     createdAt: new Date().toISOString(),
