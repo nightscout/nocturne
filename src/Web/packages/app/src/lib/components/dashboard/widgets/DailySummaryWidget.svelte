@@ -1,6 +1,7 @@
 <script lang="ts">
   import { timeDay } from "d3-time";
   import WidgetCard from "./WidgetCard.svelte";
+  import WidgetStatSkeleton from "./WidgetStatSkeleton.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
@@ -81,7 +82,9 @@
 </script>
 
 <WidgetCard title="Today's Summary">
-  {#if dailyStats}
+  {#if !realtimeStore.currentReadingLoaded}
+    <WidgetStatSkeleton shape="summary" />
+  {:else if dailyStats}
     <div class="space-y-2">
       <!-- Average with TIR -->
       <div class="flex items-baseline justify-between">

@@ -1,7 +1,15 @@
 using System.Globalization;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Platform;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Services.Platform;
 
@@ -12,8 +20,22 @@ namespace Nocturne.API.Services.Platform;
 /// <seealso cref="IAlexaService"/>
 public class AlexaService : IAlexaService
 {
+    private const string SuccessfulMatch = "ER_SUCCESS_MATCH";
+    private const long RecentLoopWindowMills = 6 * 60 * 60 * 1000;
+    private static readonly long RecentPumpWindowMills =
+        new PumpPreferences().UrgentClock * 2 * 60 * 1000L;
+
     private readonly IEntryStore _store;
+    private readonly IPropertiesService _properties;
+    private readonly IDDataService _ddata;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IShareAppearanceReader _appearanceReader;
+    private readonly ITenantAccessor _tenantAccessor;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<AlexaService> _logger;
+    private readonly Dictionary<string, MetricAnswer> _metricAnswers;
+    private readonly MetricAnswer _fullStatus;
+    private readonly MetricAnswer _lastLoop;
 
     // Translation mappings for supported locales (simplified implementation)
     private readonly Dictionary<string, Dictionary<string, string>> _translations = new()
@@ -26,6 +48,47 @@ public class AlexaService : IAlexaService
             ["virtAsstUnknownIntentTitle"] = "Unknown Request",
             ["virtAsstUnknownIntentText"] =
                 "I'm sorry, I didn't understand that request. Please try again.",
+            ["FortyFiveDown"] = "slightly dropping",
+            ["FortyFiveUp"] = "slightly rising",
+            ["Flat"] = "holding",
+            ["SingleUp"] = "rising",
+            ["SingleDown"] = "dropping",
+            ["DoubleDown"] = "rapidly dropping",
+            ["DoubleUp"] = "rapidly rising",
+            ["virtAsstUnknown"] =
+                "That value is unknown at the moment. Please see your Nightscout site for more details.",
+            ["virtAsstTitleAR2Forecast"] = "AR2 Forecast",
+            ["virtAsstTitleCurrentBasal"] = "Current Basal",
+            ["virtAsstTitleCurrentCOB"] = "Current COB",
+            ["virtAsstTitleCurrentIOB"] = "Current IOB",
+            ["virtAsstTitleLastLoop"] = "Last Loop",
+            ["virtAsstTitlePumpReservoir"] = "Insulin Remaining",
+            ["virtAsstTitlePumpBattery"] = "Pump Battery",
+            ["virtAsstTitleUploaderBattery"] = "Uploader Battery",
+            ["virtAsstTitleCurrentBG"] = "Current BG",
+            ["virtAsstTitleDelta"] = "Blood Glucose Delta",
+            ["virtAsstDelta"] = "Your delta was %1 between %2 and %3.",
+            ["virtAsstDeltaEstimated"] = "Your estimated delta was %1 between %2 and %3.",
+            ["virtAsstTitleFullStatus"] = "Full Status",
+            ["virtAsstStatus"] = "%1 and %2 as of %3.",
+            ["virtAsstBasal"] = "%1 current basal is %2 units per hour",
+            ["virtAsstBasalTemp"] = "%1 temp basal of %2 units per hour will end %3",
+            ["virtAsstIob"] = "and you have %1 insulin on board.",
+            ["virtAsstIobIntent"] = "You have %1 insulin on board",
+            ["virtAsstIobUnits"] = "%1 units of",
+            ["virtAsstPreamble"] = "Your",
+            ["virtAsstPreamble3person"] = "%1 has a ",
+            ["virtAsstNoInsulin"] = "no",
+            ["virtAsstReservoir"] = "You have %1 units remaining",
+            ["virtAsstPumpBattery"] = "Your pump battery is at %1 %2",
+            ["virtAsstUploaderBattery"] = "Your uploader battery is at %1",
+            ["virtAsstLastLoop"] = "The last successful loop was %1",
+            ["virtAsstAR2ForecastAround"] =
+                "According to the AR2 forecast you are expected to be around %1 over the next %2",
+            ["virtAsstAR2ForecastBetween"] =
+                "According to the AR2 forecast you are expected to be between %1 and %2 over the next %3",
+            ["virtAsstCob3person"] = "%1 has %2 carbohydrates on board",
+            ["virtAsstCob"] = "You have %1 carbohydrates on board",
         },
         ["es"] = new Dictionary<string, string>
         {
@@ -47,10 +110,36 @@ public class AlexaService : IAlexaService
         },
     };
 
-    public AlexaService(IEntryStore store, ILogger<AlexaService> logger)
+    public AlexaService(
+        IEntryStore store,
+        IPropertiesService properties,
+        IDDataService ddata,
+        IHttpContextAccessor httpContextAccessor,
+        IShareAppearanceReader appearanceReader,
+        ITenantAccessor tenantAccessor,
+        TimeProvider timeProvider,
+        ILogger<AlexaService> logger
+    )
     {
         _store = store;
+        _properties = properties;
+        _ddata = ddata;
+        _httpContextAccessor = httpContextAccessor;
+        _appearanceReader = appearanceReader;
+        _tenantAccessor = tenantAccessor;
+        _timeProvider = timeProvider;
         _logger = logger;
+        _metricAnswers = BuildMetricAnswers();
+        _fullStatus = new MetricAnswer(
+            "virtAsstTitleFullStatus",
+            [Scope.GlucoseRead],
+            SpeakFullStatusAsync
+        );
+        _lastLoop = new MetricAnswer(
+            "virtAsstTitleLastLoop",
+            [Scope.DevicesRead],
+            SpeakLastLoopAsync
+        );
     }
 
     /// <inheritdoc/>
@@ -142,24 +231,11 @@ public class AlexaService : IAlexaService
     {
         _logger.LogDebug("Received intent request: {IntentName}", intent.Name);
 
-        // Process metric slot if present (legacy slot processing logic)
         string? metric = null;
-        if (intent.Slots?.ContainsKey("metric") == true)
+        if (intent.Slots?.TryGetValue("metric", out var metricSlot) == true)
         {
-            var metricSlot = intent.Slots["metric"];
-
-            // Legacy resolution processing - checking for ER_SUCCESS_MATCH
-            // This replicates the JavaScript logic:
-            // var slotStatus = slots?.metric?.resolutions?.resolutionsPerAuthority?.[0]?.status?.code;
-            // var slotName = slots?.metric?.resolutions?.resolutionsPerAuthority?.[0]?.values?.[0]?.value?.name;
-
-            // For now, we'll use the direct value since Alexa.NET handles resolution differently
-            // CHECKME - The legacy implementation expects resolution data that may need custom handling
-            if (!string.IsNullOrEmpty(metricSlot.Value))
-            {
-                metric = metricSlot.Value;
-            }
-            else
+            metric = ResolveMetric(metricSlot);
+            if (metric == null)
             {
                 return BuildSpeechletResponse(
                     Translate("virtAsstUnknownIntentTitle", locale),
@@ -170,8 +246,6 @@ public class AlexaService : IAlexaService
             }
         }
 
-        // Get intent handler - in legacy this calls ctx.alexa.getIntentHandler(intentName, metric)
-        // For now, we'll handle basic intents directly
         var handler = GetIntentHandler(intent.Name, metric);
         if (handler != null)
         {
@@ -259,10 +333,28 @@ public class AlexaService : IAlexaService
     }
 
     /// <summary>
-    /// Translate text using simple locale mapping
-    /// Replicates legacy ctx.language.translate functionality
+    /// Translate text using simple locale mapping, substituting <c>%1</c>, <c>%2</c>... with
+    /// <paramref name="args"/> as legacy <c>ctx.language.translate</c> does
     /// </summary>
-    private string Translate(string key, string locale)
+    private string Translate(string key, string locale, params object[] args)
+    {
+        var text = LookupTranslation(key, locale);
+        return args.Length == 0
+            ? text
+            : Regex.Replace(
+                text,
+                @"%(\d+)",
+                match =>
+                {
+                    var index = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) - 1;
+                    return index < args.Length
+                        ? Convert.ToString(args[index], CultureInfo.InvariantCulture) ?? string.Empty
+                        : match.Value;
+                }
+            );
+    }
+
+    private string LookupTranslation(string key, string locale)
     {
         if (
             _translations.TryGetValue(locale, out var localeTranslations)
@@ -272,7 +364,6 @@ public class AlexaService : IAlexaService
             return translation;
         }
 
-        // Fallback to English
         if (
             _translations.TryGetValue("en", out var englishTranslations)
             && englishTranslations.TryGetValue(key, out var englishTranslation)
@@ -281,105 +372,454 @@ public class AlexaService : IAlexaService
             return englishTranslation;
         }
 
-        // Ultimate fallback
         return key;
     }
 
     /// <summary>
-    /// Get intent handler for specific intent and metric
-    /// Replicates legacy ctx.alexa.getIntentHandler(intentName, metric) functionality
+    /// The metric a <c>metric</c> slot names: the canonical name of an <c>ER_SUCCESS_MATCH</c>
+    /// resolution, else the raw utterance. Null when the slot carries neither.
     /// </summary>
+    private static string? ResolveMetric(AlexaSlot slot)
+    {
+        var authority = slot.Resolutions?.ResolutionsPerAuthority.FirstOrDefault();
+        var name = authority?.Values.FirstOrDefault()?.Value?.Name;
+        if (authority?.Status?.Code == SuccessfulMatch && !string.IsNullOrEmpty(name))
+        {
+            return name;
+        }
+
+        return string.IsNullOrEmpty(slot.Value) ? null : slot.Value;
+    }
+
     private Func<AlexaIntent, string, CancellationToken, Task<AlexaResponse>>? GetIntentHandler(
         string intentName,
         string? metric
     )
     {
-        // Legacy intent handlers would be set up via ctx.virtAsstBase.setupMutualIntents(ctx.alexa)
-        // For now, we'll implement basic handlers directly
         return intentName switch
         {
-            "NSStatus" => HandleNSStatusIntent,
-            "NSBg" => HandleNSBgIntent,
+            "NSStatus" => (_, locale, ct) => AnswerAsync(_fullStatus, locale, null, ct),
+            "LastLoop" => (_, locale, ct) => AnswerAsync(_lastLoop, locale, null, ct),
+            "MetricNow" when metric != null && _metricAnswers.TryGetValue(metric, out var answer) =>
+                (intent, locale, ct) => AnswerAsync(answer, locale, PwdOf(intent), ct),
             "AMAZON.HelpIntent" => HandleHelpIntent,
             "AMAZON.StopIntent" or "AMAZON.CancelIntent" => HandleStopIntent,
             _ => null,
         };
     }
 
-    /// <summary>
-    /// Handle Nightscout status intent
-    /// </summary>
-    private Task<AlexaResponse> HandleNSStatusIntent(
-        AlexaIntent intent,
+    private async Task<AlexaResponse> AnswerAsync(
+        MetricAnswer answer,
         string locale,
+        string? pwd,
         CancellationToken cancellationToken
     )
     {
-        try
-        {
-            // Get basic system status
-            var response = "Nightscout system is running and available.";
+        var speech = CanRead(answer.Scopes)
+            ? await answer.Speak(
+                new SpeechRequest(locale, _timeProvider.GetUtcNow(), pwd, cancellationToken)
+            )
+            : null;
 
-            return Task.FromResult(
-                BuildSpeechletResponse("Nightscout Status", response, string.Empty, true)
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting Nightscout status");
-            return Task.FromResult(
-                BuildSpeechletResponse(
-                    "Status Error",
-                    "Sorry, I couldn't get the system status right now.",
-                    string.Empty,
-                    true
-                )
-            );
-        }
+        return BuildSpeechletResponse(
+            Translate(answer.TitleKey, locale),
+            speech ?? Translate("virtAsstUnknown", locale),
+            string.Empty,
+            true
+        );
     }
 
-    /// <summary>
-    /// Handle blood glucose reading intent
-    /// </summary>
-    private async Task<AlexaResponse> HandleNSBgIntent(
-        AlexaIntent intent,
-        string locale,
-        CancellationToken cancellationToken
-    )
+    private bool CanRead(IEnumerable<string> scopes) =>
+        _httpContextAccessor.HttpContext is { } context && scopes.All(context.HasScope);
+
+    private static string? PwdOf(AlexaIntent intent) =>
+        intent.Slots?.TryGetValue("pwd", out var slot) == true && !string.IsNullOrEmpty(slot.Value)
+            ? slot.Value
+            : null;
+
+    private sealed record SpeechRequest(
+        string Locale,
+        DateTimeOffset Now,
+        string? Pwd,
+        CancellationToken CancellationToken
+    );
+
+    private sealed record MetricAnswer(
+        string TitleKey,
+        string[] Scopes,
+        Func<SpeechRequest, Task<string?>> Speak
+    );
+
+    private static readonly string[] BasalScopes = [Scope.TreatmentsRead, Scope.TherapyRead];
+
+    private Dictionary<string, MetricAnswer> BuildMetricAnswers()
     {
-        try
+        var bg = new MetricAnswer("virtAsstTitleCurrentBG", [Scope.GlucoseRead], SpeakBgAsync);
+        var iob = new MetricAnswer("virtAsstTitleCurrentIOB", [Scope.TreatmentsRead], SpeakIobAsync);
+        var cob = new MetricAnswer("virtAsstTitleCurrentCOB", [Scope.TreatmentsRead], SpeakCobAsync);
+        var basal = new MetricAnswer("virtAsstTitleCurrentBasal", BasalScopes, SpeakBasalAsync);
+        var reservoir = new MetricAnswer(
+            "virtAsstTitlePumpReservoir",
+            [Scope.DevicesRead],
+            SpeakReservoirAsync
+        );
+        var pumpBattery = new MetricAnswer(
+            "virtAsstTitlePumpBattery",
+            [Scope.DevicesRead],
+            SpeakPumpBatteryAsync
+        );
+        var uploaderBattery = new MetricAnswer(
+            "virtAsstTitleUploaderBattery",
+            [Scope.DevicesRead],
+            SpeakUploaderBatteryAsync
+        );
+        var ar2 = new MetricAnswer("virtAsstTitleAR2Forecast", [Scope.GlucoseRead], SpeakAr2Async);
+        var delta = new MetricAnswer("virtAsstTitleDelta", [Scope.GlucoseRead], SpeakDeltaAsync);
+
+        return new Dictionary<string, MetricAnswer>(StringComparer.OrdinalIgnoreCase)
         {
-            // Get latest glucose reading using the correct method
-            var entries = await _store.QueryAsync(
-                new EntryQuery { Type = "sgv", Count = 1 },
-                cancellationToken);
-            var latest = entries.FirstOrDefault();
-            if (latest == null)
+            ["bg"] = bg,
+            ["blood glucose"] = bg,
+            ["number"] = bg,
+            ["iob"] = iob,
+            ["insulin on board"] = iob,
+            ["cob"] = cob,
+            ["carbs on board"] = cob,
+            ["carbohydrates on board"] = cob,
+            ["basal"] = basal,
+            ["current basal"] = basal,
+            ["pump reservoir"] = reservoir,
+            ["pump battery"] = pumpBattery,
+            ["uploader battery"] = uploaderBattery,
+            ["ar2 forecast"] = ar2,
+            ["forecast"] = ar2,
+            ["delta"] = delta,
+            ["bg delta"] = delta,
+            ["blood sugar delta"] = delta,
+            ["blood glucose delta"] = delta,
+        };
+    }
+
+    private async Task<string?> SpeakBgAsync(SpeechRequest request)
+    {
+        var entries = await _store.QueryAsync(
+            new EntryQuery { Type = "sgv", Count = 1 },
+            request.CancellationToken
+        );
+        var latest = entries.FirstOrDefault();
+        if (latest == null)
+        {
+            return null;
+        }
+
+        return Translate(
+            "virtAsstStatus",
+            request.Locale,
+            GlucoseUnits.Scale(
+                latest.Sgv ?? latest.Mgdl,
+                await GlucoseUnits.UsesMmolAsync(
+                    _appearanceReader,
+                    _tenantAccessor,
+                    request.CancellationToken
+                )
+            ),
+            Translate(latest.Direction ?? "NONE", request.Locale),
+            MomentRelativeTime.From(
+                DateTimeOffset.FromUnixTimeMilliseconds(latest.Mills),
+                request.Now
+            )
+        );
+    }
+
+    private async Task<string?> SpeakFullStatusAsync(SpeechRequest request)
+    {
+        var parts = new List<(int Priority, string Speech)>();
+
+        if (await SpeakBgAsync(request) is { } bg)
+        {
+            parts.Add((-1, bg));
+        }
+
+        var wantsBasal = CanRead(BasalScopes);
+        var wantsIob = CanRead([Scope.TreatmentsRead]);
+        if (wantsBasal || wantsIob)
+        {
+            var properties = await _properties.GetPropertiesAsync(
+                ["basal", "iob"],
+                request.CancellationToken
+            );
+            if (wantsBasal && BasalSentence(properties, request) is { } basal)
             {
-                return BuildSpeechletResponse(
-                    "Blood Sugar",
-                    "Sorry, I couldn't find any recent blood sugar readings.",
-                    string.Empty,
-                    true
-                );
+                parts.Add((1, basal));
             }
 
-            var response =
-                $"Your latest blood sugar reading is {latest.Sgv} taken {GetTimeAgo(latest.Mills)}.";
-
-            return BuildSpeechletResponse("Blood Sugar", response, string.Empty, true);
+            if (wantsIob && IobUnits(properties, request.Locale) is { } iobUnits)
+            {
+                parts.Add((2, Translate("virtAsstIob", request.Locale, iobUnits)));
+            }
         }
-        catch (Exception ex)
+
+        return parts.Count == 0
+            ? null
+            : string.Join(' ', parts.OrderBy(part => part.Priority).Select(part => part.Speech));
+    }
+
+    private async Task<string?> SpeakIobAsync(SpeechRequest request)
+    {
+        var properties = await _properties.GetPropertiesAsync(["iob"], request.CancellationToken);
+        return IobUnits(properties, request.Locale) is { } units
+            ? Translate("virtAsstIobIntent", request.Locale, units)
+            : null;
+    }
+
+    private string? IobUnits(Dictionary<string, object> properties, string locale)
+    {
+        if (NumberOf(properties, "iob", "iob") is not { } iob)
         {
-            _logger.LogError(ex, "Error getting blood glucose reading");
-            return BuildSpeechletResponse(
-                "Blood Sugar Error",
-                "Sorry, I couldn't get your blood sugar reading right now.",
-                string.Empty,
-                true
+            return null;
+        }
+
+        return iob == 0
+            ? Translate("virtAsstNoInsulin", locale)
+            : Translate(
+                "virtAsstIobUnits",
+                locale,
+                iob.ToString("F2", CultureInfo.InvariantCulture)
+            );
+    }
+
+    private async Task<string?> SpeakCobAsync(SpeechRequest request)
+    {
+        var properties = await _properties.GetPropertiesAsync(["cob"], request.CancellationToken);
+        var cob = NumberOf(properties, "cob", "cob") ?? 0;
+
+        return request.Pwd is { } pwd
+            ? Translate("virtAsstCob3person", request.Locale, pwd.Replace("'s", string.Empty), cob)
+            : Translate("virtAsstCob", request.Locale, cob);
+    }
+
+    private async Task<string?> SpeakBasalAsync(SpeechRequest request) =>
+        BasalSentence(
+            await _properties.GetPropertiesAsync(["basal"], request.CancellationToken),
+            request
+        );
+
+    private string? BasalSentence(Dictionary<string, object> properties, SpeechRequest request)
+    {
+        if (
+            !properties.TryGetValue("basal", out var basal)
+            || basal is not Dictionary<string, object> basalProperties
+            || basalProperties["current"] is not Dictionary<string, object> current
+        )
+        {
+            return null;
+        }
+
+        var preamble = request.Pwd is { } pwd
+            ? Translate("virtAsstPreamble3person", request.Locale, pwd)
+            : Translate("virtAsstPreamble", request.Locale);
+        var totalBasal = Convert.ToDouble(current["totalbasal"], CultureInfo.InvariantCulture);
+
+        if (current["treatment"] is Treatment { Duration: { } duration } tempBasal)
+        {
+            var end = DateTimeOffset.FromUnixTimeMilliseconds(
+                tempBasal.Mills + (long)(duration * 60_000)
+            );
+            return Translate(
+                "virtAsstBasalTemp",
+                request.Locale,
+                preamble,
+                totalBasal,
+                MomentRelativeTime.From(end, request.Now)
             );
         }
+
+        return Translate("virtAsstBasal", request.Locale, preamble, totalBasal);
     }
+
+    private async Task<string?> SpeakReservoirAsync(SpeechRequest request)
+    {
+        var reservoir = (await RecentPumpStatusesAsync(request))
+            .Select(status => status.Pump?.Reservoir)
+            .FirstOrDefault(value => value != null);
+
+        return reservoir is { } units
+            ? Translate("virtAsstReservoir", request.Locale, units)
+            : null;
+    }
+
+    private async Task<string?> SpeakPumpBatteryAsync(SpeechRequest request)
+    {
+        var battery = (await RecentPumpStatusesAsync(request))
+            .Select(status => status.Pump?.Battery)
+            .FirstOrDefault(value => value?.Percent != null || value?.Voltage != null);
+
+        if (battery?.Percent is { } percent)
+        {
+            return Translate("virtAsstPumpBattery", request.Locale, percent, "percent");
+        }
+
+        return battery?.Voltage is { } volts
+            ? Translate("virtAsstPumpBattery", request.Locale, volts, "volts")
+            : null;
+    }
+
+    private async Task<string?> SpeakUploaderBatteryAsync(SpeechRequest request)
+    {
+        var properties = await _properties.GetPropertiesAsync(["upbat"], request.CancellationToken);
+        return
+            properties.TryGetValue("upbat", out var upbat)
+            && upbat is Dictionary<string, object> battery
+            && battery["display"] is string display
+            ? Translate("virtAsstUploaderBattery", request.Locale, display)
+            : null;
+    }
+
+    private async Task<string?> SpeakAr2Async(SpeechRequest request)
+    {
+        var properties = await _properties.GetPropertiesAsync(["ar2"], request.CancellationToken);
+        if (
+            !properties.TryGetValue("ar2", out var ar2)
+            || ar2 is not Dictionary<string, object> ar2Properties
+            || !ar2Properties.TryGetValue("forecast", out var forecast)
+            || forecast is not Dictionary<string, object> forecastProperties
+        )
+        {
+            return null;
+        }
+
+        var predicted = JsonSerializer
+            .SerializeToElement(forecastProperties["predicted"])
+            .EnumerateArray()
+            .Select(point => (
+                Mgdl: point.GetProperty("mgdl").GetDouble(),
+                Mills: point.GetProperty("mills").GetInt64()
+            ))
+            .ToList();
+        if (predicted.Count == 0)
+        {
+            return null;
+        }
+
+        var min = Math.Round(predicted.Min(point => point.Mgdl));
+        var max = Math.Round(predicted.Max(point => point.Mgdl));
+        var horizon = MomentRelativeTime.From(
+            DateTimeOffset.FromUnixTimeMilliseconds(predicted.Max(point => point.Mills)),
+            request.Now
+        );
+
+        return min == max
+            ? Translate("virtAsstAR2ForecastAround", request.Locale, max, horizon)
+            : Translate("virtAsstAR2ForecastBetween", request.Locale, min, max, horizon);
+    }
+
+    private async Task<string?> SpeakLastLoopAsync(SpeechRequest request)
+    {
+        var now = request.Now.ToUnixTimeMilliseconds();
+        var lastLoop = (await LatestDeviceStatusesAsync(request))
+            .Where(status => status.Mills >= now - RecentLoopWindowMills && status.Mills <= now)
+            .SelectMany(LoopMoments)
+            .Max();
+
+        return lastLoop is { } mills
+            ? Translate(
+                "virtAsstLastLoop",
+                request.Locale,
+                MomentRelativeTime.From(DateTimeOffset.FromUnixTimeMilliseconds(mills), request.Now)
+            )
+            : null;
+    }
+
+    private static IEnumerable<long?> LoopMoments(DeviceStatus status)
+    {
+        if (
+            status.Loop is { } loop
+            && string.IsNullOrEmpty(loop.FailureReason)
+            && UploaderTimestamp.TryParse(loop.Timestamp, out var loopTime)
+        )
+        {
+            yield return loopTime.ToUnixTimeMilliseconds();
+        }
+
+        if (status.OpenAps is { } openAps)
+        {
+            if (openAps.Enacted is { } enacted && (enacted.Received == true || enacted.Recieved == true))
+            {
+                yield return CommandMoment(enacted);
+            }
+
+            if (openAps.Suggested is { } suggested)
+            {
+                yield return CommandMoment(suggested);
+            }
+        }
+    }
+
+    private static long? CommandMoment(OpenApsSuggested command) =>
+        command.Mills
+        ?? (
+            UploaderTimestamp.TryParse(command.Timestamp, out var time)
+                ? time.ToUnixTimeMilliseconds()
+                : null
+        );
+
+    private async Task<string?> SpeakDeltaAsync(SpeechRequest request)
+    {
+        var properties = await _properties.GetPropertiesAsync(["delta"], request.CancellationToken);
+        if (
+            !properties.TryGetValue("delta", out var value)
+            || value is not Dictionary<string, object> delta
+            || delta["times"] is not Dictionary<string, long> times
+        )
+        {
+            return null;
+        }
+
+        var mgdl = Convert.ToDouble(delta["mgdl"], CultureInfo.InvariantCulture);
+        var useMmol = await GlucoseUnits.UsesMmolAsync(
+            _appearanceReader,
+            _tenantAccessor,
+            request.CancellationToken
+        );
+        var display = useMmol
+            ? $"{(mgdl >= 0 ? "+" : string.Empty)}{GlucoseUnits.Scale(mgdl, true).ToString("F1", CultureInfo.InvariantCulture)}"
+            : (string)delta["display"];
+
+        return Translate(
+            delta["interpolated"] is true ? "virtAsstDeltaEstimated" : "virtAsstDelta",
+            request.Locale,
+            display == "+0" ? "0" : display,
+            MomentRelativeTime.From(DateTimeOffset.FromUnixTimeMilliseconds(times["recent"]), request.Now),
+            MomentRelativeTime.From(DateTimeOffset.FromUnixTimeMilliseconds(times["previous"]), request.Now)
+        );
+    }
+
+    private async Task<IEnumerable<DeviceStatus>> RecentPumpStatusesAsync(SpeechRequest request)
+    {
+        var now = request.Now.ToUnixTimeMilliseconds();
+        return (await LatestDeviceStatusesAsync(request)).Where(status =>
+            status.Pump != null
+            && status.Mills >= now - RecentPumpWindowMills
+            && status.Mills <= now
+        );
+    }
+
+    private async Task<IEnumerable<DeviceStatus>> LatestDeviceStatusesAsync(SpeechRequest request)
+    {
+        var ddata = await _ddata.GetDDataAsync(
+            request.Now.ToUnixTimeMilliseconds(),
+            request.CancellationToken
+        );
+        return ddata.DeviceStatus.OrderByDescending(status => status.Mills);
+    }
+
+    private static double? NumberOf(Dictionary<string, object> properties, string name, string key) =>
+        properties.TryGetValue(name, out var value)
+        && value is Dictionary<string, object?> dictionary
+        && dictionary.TryGetValue(key, out var number)
+        && number != null
+            ? Convert.ToDouble(number, CultureInfo.InvariantCulture)
+            : null;
 
     /// <summary>
     /// Handle help intent
@@ -411,23 +851,5 @@ public class AlexaService : IAlexaService
         await Task.CompletedTask;
 
         return BuildSpeechletResponse("Goodbye", "Goodbye!", string.Empty, true);
-    }
-
-    /// <summary>
-    /// Get human-readable time ago from timestamp
-    /// </summary>
-    private static string GetTimeAgo(long timestamp)
-    {
-        var date = DateTimeOffset.FromUnixTimeMilliseconds(timestamp);
-        var now = DateTimeOffset.UtcNow;
-        var diff = now - date;
-
-        if (diff.TotalMinutes < 1)
-            return "just now";
-        if (diff.TotalMinutes < 60)
-            return $"{(int)diff.TotalMinutes} minutes ago";
-        if (diff.TotalHours < 24)
-            return $"{(int)diff.TotalHours} hours ago";
-        return $"{(int)diff.TotalDays} days ago";
     }
 }

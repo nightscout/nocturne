@@ -17,6 +17,7 @@ public class CarbRatioResolverTests : IDisposable
     private readonly Mock<IPatientRecordRepository> _patientRecordRepo = new();
     private readonly Mock<IActiveProfileResolver> _activeProfileResolver = new();
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
+    private readonly Mock<ICategoryReadContext> _categoryReadContext = new();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
     private readonly CarbRatioResolver _sut;
 
@@ -32,8 +33,7 @@ public class CarbRatioResolverTests : IDisposable
             _therapyRepo.Object,
             _patientRecordRepo.Object,
             _activeProfileResolver.Object,
-            _tenantAccessor.Object,
-            _cache,
+            new ProfileVersionCache(_tenantAccessor.Object, _categoryReadContext.Object, _cache),
             NullLogger<CarbRatioResolver>.Instance);
     }
 
@@ -54,8 +54,8 @@ public class CarbRatioResolverTests : IDisposable
     public async Task ReturnsCorrectValueFromSchedule()
     {
         var schedule = MakeSchedule((0, 10.0), (6 * 3600, 12.0), (22 * 3600, 15.0));
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(schedule);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { schedule });
 
         var result = await _sut.GetCarbRatioAsync(NoonMills);
 
@@ -66,8 +66,8 @@ public class CarbRatioResolverTests : IDisposable
     public async Task AppliesInverseCcpPercentageScaling()
     {
         var schedule = MakeSchedule((0, 12.0));
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(schedule);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { schedule });
         _activeProfileResolver.Setup(r => r.GetCircadianAdjustmentAsync(NoonMills, default))
             .ReturnsAsync(new CircadianAdjustment(150, 0));
 
@@ -79,8 +79,8 @@ public class CarbRatioResolverTests : IDisposable
     [Fact]
     public async Task ReturnsDefaultWhenNoScheduleExists()
     {
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync((CarbRatioSchedule?)null);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(Array.Empty<CarbRatioSchedule>());
 
         var result = await _sut.GetCarbRatioAsync(NoonMills);
 
@@ -93,8 +93,8 @@ public class CarbRatioResolverTests : IDisposable
         _activeProfileResolver.Setup(r => r.GetActiveProfileNameAsync(NoonMills, default))
             .ReturnsAsync("Weekday");
         var schedule = MakeSchedule((0, 8.0));
-        _repo.Setup(r => r.GetActiveAtAsync("Weekday", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(schedule);
+        _repo.Setup(r => r.GetByProfileNameAsync("Weekday", default))
+            .ReturnsAsync(new[] { schedule });
 
         var result = await _sut.GetCarbRatioAsync(NoonMills);
 
@@ -105,12 +105,45 @@ public class CarbRatioResolverTests : IDisposable
     public async Task UsesSpecProfileWhenProvided()
     {
         var schedule = MakeSchedule((0, 20.0));
-        _repo.Setup(r => r.GetActiveAtAsync("Custom", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(schedule);
+        _repo.Setup(r => r.GetByProfileNameAsync("Custom", default))
+            .ReturnsAsync(new[] { schedule });
 
         var result = await _sut.GetCarbRatioAsync(NoonMills, specProfile: "Custom");
 
         result.Should().Be(20.0);
         _activeProfileResolver.Verify(r => r.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LookupsAcrossAScheduleEditEachGetTheirOwnVersion(bool earlyLookupFirst)
+    {
+        var olderVersion = MakeSchedule((0, 10.0));
+        olderVersion.Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(NoonMills).UtcDateTime.AddDays(-1);
+        var editedVersion = MakeSchedule((0, 14.0));
+        editedVersion.Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(NoonMills).UtcDateTime.AddHours(-1);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { editedVersion, olderVersion });
+        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
+            .ReturnsAsync((string _, DateTime at, CancellationToken _) =>
+                at < editedVersion.Timestamp ? olderVersion : editedVersion);
+        var beforeEdit = NoonMills - 2 * 3_600_000;
+
+        double early;
+        double late;
+        if (earlyLookupFirst)
+        {
+            early = await _sut.GetCarbRatioAsync(beforeEdit);
+            late = await _sut.GetCarbRatioAsync(NoonMills);
+        }
+        else
+        {
+            late = await _sut.GetCarbRatioAsync(NoonMills);
+            early = await _sut.GetCarbRatioAsync(beforeEdit);
+        }
+
+        early.Should().Be(10.0);
+        late.Should().Be(14.0);
     }
 }

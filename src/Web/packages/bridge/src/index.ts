@@ -5,7 +5,7 @@ export {
   normalizeHandshakeHost,
   HANDSHAKE_TICKET_LIFETIME_MS,
 } from './lib/handshake-ticket.js';
-export type { HandshakeTicketPayload } from './lib/handshake-ticket.js';
+export type { HandshakeTicketPayload, RealtimeGrant } from './lib/handshake-ticket.js';
 export type {
   BridgeConfig,
   BridgeInstance,

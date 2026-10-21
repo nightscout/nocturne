@@ -1551,8 +1551,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     /// <summary>How far back the per-sync clock probe reads recent uploads.</summary>
     private static readonly TimeSpan ClockProbeLookback = TimeSpan.FromHours(48);
 
-    private const string InitialGuid = "00000000-0000-0000-0000-000000000000";
-
     /// <summary>
     ///     Gathers device-clock evidence for this sync: the account's profile offset (the phone app
     ///     writes the device's real offset to the vendor profile when it drifts) plus upload-batch
@@ -1593,9 +1591,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 observations.Add(profile);
 
             var since = DateTime.UtcNow - ClockProbeLookback;
-            var egvs = await FetchClockPageAsync<GlookoClockEgvsPage>(
-                context, GlookoConstants.V2CgmEgvsPath, since);
-            var boluses = await FetchClockPageAsync<GlookoClockBolusPage>(
+            var egvs = await FetchClockPageAsync<GlookoEgvPage>(context, GlookoConstants.Ssv2EgvsPath, since);
+            var boluses = await FetchClockPageAsync<GlookoNormalBolusPage>(
                 context, GlookoConstants.NormalBolusesPath, since);
             observations.AddRange(
                 GlookoDeviceClockMapper.MapUploadBatches(ClockConnectorId, egvs?.Egvs, boluses?.NormalBoluses));
@@ -1629,21 +1626,21 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     ///     real UTC (server-side), so a wall-clock offset can never clip the window.
     /// </summary>
     private Task<T?> FetchClockPageAsync<T>(GlookoSyncContext context, string path, DateTime sinceUtc)
-        where T : class =>
-        FetchClockPageAsync<T>(context, path, sinceUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"), InitialGuid);
+        where T : GlookoSsv2Page =>
+        FetchClockPageAsync<T>(context, path, FormatSsv2Cursor(sinceUtc), GlookoConstants.Ssv2InitialLastGuid);
 
     private async Task<T?> FetchClockPageAsync<T>(
         GlookoSyncContext context, string path, string cursor, string guid)
-        where T : class
+        where T : GlookoSsv2Page
     {
-        var url = $"{path}?lastUpdatedAt={cursor}&lastGuid={guid}"
-                  + "&limit=500&sendSoftDeleted=false&allDevicesFlag=true";
-        var result = await FetchFromGlookoEndpoint(context, url);
+        var result = await FetchFromGlookoEndpoint(context, ConstructSsv2Url(path, null, cursor, guid));
         if (!result.HasValue)
             return null;
 
         return JsonSerializer.Deserialize<T>(result.Value.GetRawText());
     }
+
+    private static string FormatSsv2Cursor(DateTime utc) => utc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
 
     /// <summary>Page budget for the one-time historical scan: 12 × 500 boluses ≈ years of pump use.</summary>
     private const int HistoricalScanMaxPages = 12;
@@ -1651,16 +1648,15 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     private async Task<IReadOnlyList<DeviceClockObservation>> ScanHistoricalBolusClocksAsync(
         GlookoSyncContext context, CancellationToken cancellationToken)
     {
-        var records = new List<GlookoClockBolus>();
-        var cursor = (DateTime.UtcNow - TimeSpan.FromDays(IDeviceClockService.RetentionDays))
-            .ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
-        var guid = InitialGuid;
+        var records = new List<GlookoBolus>();
+        var cursor = FormatSsv2Cursor(DateTime.UtcNow - TimeSpan.FromDays(IDeviceClockService.RetentionDays));
+        var guid = GlookoConstants.Ssv2InitialLastGuid;
 
         for (var page = 0; page < HistoricalScanMaxPages; page++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var result = await FetchClockPageAsync<GlookoClockBolusPage>(
+            var result = await FetchClockPageAsync<GlookoNormalBolusPage>(
                 context, GlookoConstants.NormalBolusesPath, cursor, guid);
             if (result?.NormalBoluses is not { Length: > 0 } boluses)
                 break;
@@ -1672,7 +1668,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 break;
 
             cursor = result.LastUpdatedAt;
-            guid = result.LastGuid ?? InitialGuid;
+            guid = result.LastGuid ?? GlookoConstants.Ssv2InitialLastGuid;
         }
 
         _logger.LogInformation(

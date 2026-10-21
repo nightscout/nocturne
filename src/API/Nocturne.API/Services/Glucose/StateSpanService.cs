@@ -2,7 +2,9 @@ using Nocturne.API.Services.Health;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Glucose;
@@ -114,6 +116,24 @@ public class StateSpanService : IStateSpanService
 
         return (await _repository.DeleteStateSpanAsync(id, cancellationToken)).Count > 0;
     }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyDictionary<Guid, DeletedStateSpan>> ResolveDeletedAsync(
+        IReadOnlyCollection<string> ids,
+        CancellationToken cancellationToken = default)
+        => _repository.ResolveDeletedAsync(ids, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<StateSpan> RestoreStateSpanAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => _repository.RestoreAsync(id, WriteOrigin.Live, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<BulkRestoreResult<StateSpan>> BulkRestoreStateSpansAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken cancellationToken = default)
+        => _repository.BulkRestoreAsync(ids, WriteOrigin.Live, cancellationToken);
 
     /// <inheritdoc />
     public async Task<StateSpan?> UpdateStateSpanAsync(

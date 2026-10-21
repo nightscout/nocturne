@@ -16,35 +16,40 @@ import { isRecord } from './payload.js';
  * payload and the bridge verifies it locally with the shared INSTANCE_KEY.
  *
  * Wire format: `base64url(json).hexSig`.
- * Payload: `{ h, exp, tenantRelay, subjectId? }`. `h` is the normalized host
- * the ticket authorizes, `exp` is a unix-ms deadline, and `tenantRelay` is the
- * API's admission for the credential the ticket was minted for. `subjectId` is
- * the subject whose per-subject room the socket may join, present only when the
- * credential belongs to one. Binding to the host (not just the tenant slug) means a ticket
- * minted for one tenant cannot be replayed on a connection that arrives on a
- * different host. The minting endpoint and the handshake both derive the host
+ * Payload: `{ h, exp, ...RealtimeGrant }`. `h` is the normalized host the
+ * ticket authorizes, `exp` is a unix-ms deadline, and the rest is the API's
+ * admission for the credential the ticket was minted for. Binding to the host
+ * (not just the tenant slug) means a ticket minted for one tenant cannot be
+ * replayed on a connection that arrives on a different host. The minting endpoint and the handshake both derive the host
  * from X-Forwarded-Host behind the gateway, so they agree for tenant subdomains
  * and the apex single-tenant case alike.
  * Signature: HMAC-SHA256 over the base64url payload using INSTANCE_KEY.
  */
 
-export interface HandshakeTicketPayload {
+/**
+ * What the API's realtime admission at {@link REALTIME_ADMISSION_PATH} lets a
+ * socket receive. Carried inside the signed ticket so a client cannot grant
+ * itself a room.
+ */
+export interface RealtimeGrant {
+  /** Whether the socket may join the tenant-wide room. */
+  tenantRelay: boolean;
+  /**
+   * The subject whose per-subject room the socket may join. Present only when
+   * the credential belongs to a subject; a guest link or share has none.
+   */
+  subjectId?: string;
+  /** The API broadcast categories whose storage events the socket may receive. */
+  categories: string[];
+  /** Whether the credential may read only the last 24 hours. */
+  historyClamped: boolean;
+}
+
+export interface HandshakeTicketPayload extends RealtimeGrant {
   /** Normalized host (lowercased, port-stripped) the ticket authorizes. */
   h: string;
   /** Expiration timestamp in unix milliseconds. */
   exp: number;
-  /**
-   * Whether the socket may join the tenant-wide room, as the API decided it at
-   * {@link REALTIME_ADMISSION_PATH}. Inside the signed payload so a client
-   * cannot grant itself the room; a ticket without it verifies as false.
-   */
-  tenantRelay: boolean;
-  /**
-   * The subject whose per-subject room the socket may join, as the API returned
-   * it at {@link REALTIME_ADMISSION_PATH}. Present only when the credential
-   * belongs to a subject; a guest link or share has none.
-   */
-  subjectId?: string;
 }
 
 const CANONICAL_SUBJECT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -55,10 +60,27 @@ export function canonicalSubjectId(value: unknown): string | undefined {
 }
 
 /**
- * The API endpoint answering whether a credential may read glucose live and
- * whether it may join the tenant-wide room. The ticket endpoint and the legacy
- * `authorize` path both admit a socket on it, so the bridge applies the same
- * rule as the API's SignalR hub.
+ * Reads an admission, from the API or a ticket, failing closed: anything absent
+ * or malformed grants no room, and a missing clamp reads as clamped.
+ */
+export function readRealtimeGrant(value: unknown): RealtimeGrant {
+  if (!isRecord(value)) return { tenantRelay: false, categories: [], historyClamped: true };
+  const { categories } = value;
+  return {
+    tenantRelay: value.tenantRelay === true,
+    subjectId: canonicalSubjectId(value.subjectId),
+    categories: Array.isArray(categories)
+      ? categories.filter((c): c is string => typeof c === 'string')
+      : [],
+    historyClamped: value.historyClamped !== false,
+  };
+}
+
+/**
+ * The API endpoint answering whether a credential may read glucose live,
+ * whether it may join the tenant-wide room and which category rooms it may
+ * join. The ticket endpoint and the legacy `authorize` path both admit a socket
+ * on it, so the bridge applies the same rule as the API's SignalR hub.
  */
 export const REALTIME_ADMISSION_PATH = '/api/v4/me/realtime-admission';
 
@@ -74,17 +96,15 @@ export function normalizeHandshakeHost(host: string): string {
 export function signHandshakeTicket(
   secret: string,
   host: string,
-  tenantRelay: boolean,
-  subjectId?: string,
+  grant: RealtimeGrant,
   ttlMs: number = HANDSHAKE_TICKET_LIFETIME_MS,
   now: number = Date.now(),
 ): string {
   const payload: HandshakeTicketPayload = {
     h: normalizeHandshakeHost(host),
     exp: now + ttlMs,
-    tenantRelay,
+    ...grant,
   };
-  if (subjectId) payload.subjectId = subjectId;
   const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64url');
   const sig = createHmac('sha256', secret).update(payloadB64).digest('hex');
   return `${payloadB64}.${sig}`;
@@ -129,14 +149,9 @@ export function verifyHandshakeTicket(
   }
 
   if (!isRecord(parsed)) return null;
-  const { h, exp, subjectId } = parsed;
+  const { h, exp } = parsed;
   if (typeof h !== 'string' || typeof exp !== 'number') return null;
   if (exp < now) return null;
 
-  return {
-    h,
-    exp,
-    tenantRelay: parsed.tenantRelay === true,
-    subjectId: canonicalSubjectId(subjectId),
-  };
+  return { h, exp, ...readRealtimeGrant(parsed) };
 }

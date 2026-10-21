@@ -1,7 +1,6 @@
 <script lang="ts">
   import { a1cLabel } from "$lib/utils/a1c-formatting";
   import { time } from "$lib/utils/formatting";
-  import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import {
     getColorTheme,
     setColorTheme,
@@ -44,6 +43,8 @@
   import GlucoseSourceDefaultsDialog from "$lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
   import type { FeatureSettings } from "$lib/api/generated/nocturne-api-client";
   import { getUiSettings, saveFeatureSettings } from "$api/ui-settings.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { SETTINGS_LOAD_FAILED } from "$lib/api/ui-settings-messages";
   import { toast } from "svelte-sonner";
   import {
     Card,
@@ -85,7 +86,6 @@
   import { coachmark } from "@nocturne/coach";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
-  const store = getSettingsStore();
   const realtimeStore = getRealtimeStore();
 
   // Dashboard widgets - use persisted state for immediate localStorage persistence
@@ -170,9 +170,6 @@
         display: { ...current.display, ...patch.display },
         trackerPills: { ...current.trackerPills, ...patch.trackerPills },
       });
-      // The dashboard still reads these through the shared settings store; reload
-      // it so the change it renders matches what was persisted.
-      await store.reload();
     } catch (err) {
       toast.error(
         describeSubmitError(err, "Could not save. Check your connection and try again.")
@@ -198,13 +195,13 @@
     </div>
   </div>
 
-  {#if store.isLoading}
+  {#if uiSettingsQuery?.loading}
     <SettingsPageSkeleton cardCount={4} />
-  {:else if store.hasError}
+  {:else if uiSettingsQuery?.error}
     <Card variant="destructive">
       <CardContent class="flex items-center gap-3 py-6">
         <AlertCircle class="h-5 w-5 text-destructive" />
-        <p class="font-medium">{store.error}</p>
+        <p class="font-medium">{remoteErrorMessage(uiSettingsQuery.error, SETTINGS_LOAD_FAILED)}</p>
       </CardContent>
     </Card>
   {:else}

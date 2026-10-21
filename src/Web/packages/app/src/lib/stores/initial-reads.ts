@@ -15,7 +15,8 @@ declare global {
 
 /** The age the prefetch is built for is the JS download wait; a wider bound only widens the gap between the reads' `to` and the socket connecting. */
 const MAX_AGE_MS = 15_000;
-const DAY_MS = 24 * 60 * 60 * 1000;
+/** The span the store's starting reads cover, ending now. */
+export const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function initialReadsStash(): InitialReads | undefined {
   return typeof window === "undefined" ? undefined : window.__nocturneInitialReads;

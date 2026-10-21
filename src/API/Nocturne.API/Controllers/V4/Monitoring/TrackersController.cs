@@ -669,14 +669,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
             request.DefinitionId
         );
 
-        // Broadcast via SignalR
-        await _broadcast.BroadcastTrackerUpdateAsync(
-            "create",
-            TrackerInstanceDto.FromEntity(instance),
-            instance.UserId,
-            definition.Visibility
-        );
-
         return CreatedAtAction(nameof(GetActiveInstances), TrackerInstanceDto.FromEntity(instance));
     }
 
@@ -723,7 +715,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
 
         // Broadcast via SignalR
         await _broadcast.BroadcastTrackerUpdateAsync(
-            "complete",
+            TrackerRealtimeAction.Complete,
             TrackerInstanceDto.FromEntity(completed),
             existing.UserId,
             existing.Definition.Visibility
@@ -767,7 +759,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             if (updated != null)
             {
                 await _broadcast.BroadcastTrackerUpdateAsync(
-                    "ack",
+                    TrackerRealtimeAction.Ack,
                     TrackerInstanceDto.FromEntity(updated),
                     updated.UserId,
                     updated.Definition.Visibility
@@ -802,7 +794,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
 
         // Broadcast via SignalR
         await _broadcast.BroadcastTrackerUpdateAsync(
-            "delete",
+            TrackerRealtimeAction.Delete,
             dto,
             existing.UserId,
             existing.Definition.Visibility
@@ -909,13 +901,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
             "Applied preset {PresetId}, created instance {InstanceId}",
             id,
             instance.Id
-        );
-
-        await _broadcast.BroadcastTrackerUpdateAsync(
-            "create",
-            TrackerInstanceDto.FromEntity(instance),
-            instance.UserId,
-            preset.Definition.Visibility
         );
 
         return Ok(TrackerInstanceDto.FromEntity(instance));

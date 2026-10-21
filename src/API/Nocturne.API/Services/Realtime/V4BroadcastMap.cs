@@ -6,9 +6,11 @@ namespace Nocturne.API.Services.Realtime;
 /// Maps each V4 domain model type to its broadcast category and <c>recordType</c> discriminator.
 /// </summary>
 /// <remarks>
-/// The treatment family (Bolus, CarbIntake, BG check, calculations, basal, notes, device events) rides
-/// the <c>care</c> category despite some names; the glucose family rides <c>glucose</c>; device snapshots
-/// ride <c>device</c>. The <c>therapy</c> category (schedules/therapy settings) is intentionally
+/// The treatment family (Bolus, CarbIntake, BG check, calculations, basal, notes) rides the <c>care</c>
+/// category; the glucose family rides <c>glucose</c>; device snapshots and device events ride
+/// <c>device</c>. A type rides the category whose governing scope in
+/// <see cref="RealtimeCategories.GoverningScopes"/> its HTTP read requires, because a broadcast reaches
+/// every subscriber of the category. The <c>therapy</c> category (schedules/therapy settings) is intentionally
 /// unmapped — defined and subscribable but dormant until wired — so those writes broadcast nothing.
 /// </remarks>
 internal static class V4BroadcastMap
@@ -26,8 +28,8 @@ internal static class V4BroadcastMap
         [typeof(BasalInjection)] = (RealtimeCategories.Care, "basalInjection"),
         [typeof(TempBasal)] = (RealtimeCategories.Care, "tempBasal"),
         [typeof(Note)] = (RealtimeCategories.Care, "note"),
-        [typeof(DeviceEvent)] = (RealtimeCategories.Care, "deviceEvent"),
 
+        [typeof(DeviceEvent)] = (RealtimeCategories.Device, "deviceEvent"),
         [typeof(ApsSnapshot)] = (RealtimeCategories.Device, "apsSnapshot"),
         [typeof(PumpSnapshot)] = (RealtimeCategories.Device, "pumpSnapshot"),
         [typeof(UploaderSnapshot)] = (RealtimeCategories.Device, "uploaderSnapshot"),

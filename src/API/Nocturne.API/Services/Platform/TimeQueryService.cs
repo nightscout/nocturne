@@ -1,8 +1,10 @@
+using Microsoft.AspNetCore.WebUtilities;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.API.Services.Devices;
 
 namespace Nocturne.API.Services.Platform;
@@ -81,11 +83,11 @@ public class TimeQueryService : ITimeQueryService
                 )
             ).Select(t => ConvertTreatmentToEntry(t)),
             "devicestatus" => (
-                await _deviceStatuses.GetAsync(
+                await _deviceStatuses.GetMatchingAsync(
+                    DeviceStatusProjectionService.ParseFind(findQuery),
                     count: 1000,
                     skip: 0,
-                    find: findQuery,
-                    ct: cancellationToken
+                    cancellationToken
                 )
             ).Select(ds => ConvertDeviceStatusToEntry(ds)),
             _ => throw new ArgumentException($"Unsupported storage type: {storage}"),
@@ -138,11 +140,11 @@ public class TimeQueryService : ITimeQueryService
                 )
             ).Select(t => ConvertTreatmentToEntry(t)),
             "devicestatus" => (
-                await _deviceStatuses.GetAsync(
+                await _deviceStatuses.GetMatchingAsync(
+                    DeviceStatusProjectionService.ParseFind(findQuery),
                     count: 1000,
                     skip: 0,
-                    find: findQuery,
-                    ct: cancellationToken
+                    cancellationToken
                 )
             ).Select(ds => ConvertDeviceStatusToEntry(ds)),
             _ => throw new ArgumentException($"Unsupported storage type: {storage}"),
@@ -157,9 +159,8 @@ public class TimeQueryService : ITimeQueryService
         string? regex,
         string storage = "entries",
         string fieldName = "dateString",
-        Dictionary<string, object>? queryParameters = null
-    )
-    {
+        string? queryString = null
+    ) {
         _logger.LogDebug(
             "Generating time query echo - prefix: {Prefix}, regex: {Regex}, storage: {Storage}, field: {Field}",
             prefix,
@@ -171,56 +172,35 @@ public class TimeQueryService : ITimeQueryService
         // Prepare time patterns
         var timePatterns = _braceExpansionService.PrepareTimePatterns(prefix, regex, fieldName);
 
-        // Build the query structure that matches legacy MongoDB format for compatibility
-        var queryStructure = new Dictionary<string, object>();
+        var queryParameters = QueryHelpers.ParseQuery(queryString ?? "");
+        var findParameters = queryParameters.Where(parameter =>
+            parameter.Key.StartsWith("find[", StringComparison.OrdinalIgnoreCase));
+        var findQueryString = QueryString.Create(findParameters);
+        string findText = findQueryString.Value?.TrimStart('?') ?? "";
 
-        if (
-            timePatterns.CanOptimizeWithIndex
-            && !string.IsNullOrEmpty(timePatterns.SingleRegexPattern)
-        )
-        {
-            // Use MongoDB-style $regex operator for compatibility
-            queryStructure[fieldName] = new Dictionary<string, object>
-            {
-                ["$regex"] = timePatterns.SingleRegexPattern,
-            };
-        }
-        else if (timePatterns.InPatterns?.Any() == true)
-        {
-            // Use MongoDB-style $in operator for compatibility
-            queryStructure[fieldName] = new Dictionary<string, object>
-            {
-                ["$in"] = timePatterns.InPatterns,
-            };
-        }
+        string mergedFindText = BuildFind(findText, fieldName, timePatterns, type: null);
+        var parsedQuery = FindQuery.Parse(mergedFindText);
+        var echoQuery = parsedQuery.ToQueryObject();
 
-        // Add any additional query parameters
-        if (queryParameters != null)
-        {
-            foreach (var kvp in queryParameters)
-            {
-                if (kvp.Key != "find" && kvp.Key != "count" && kvp.Key != "sort")
-                {
-                    queryStructure[kvp.Key] = kvp.Value;
-                }
+        var requestQuery = new Dictionary<string, object>();
+        foreach (var parameter in queryParameters) {
+            if (parameter.Key != "storage" && parameter.Key != "field") {
+                requestQuery[parameter.Key] = parameter.Value.ToString();
             }
         }
 
-        return new TimeQueryEcho
-        {
-            Req = new TimeQueryRequest
-            {
-                Params = new Dictionary<string, string?>
-                {
+        return new TimeQueryEcho {
+            Req = new TimeQueryRequest {
+                Params = new Dictionary<string, string?> {
                     ["prefix"] = prefix,
                     ["regex"] = regex,
                     ["storage"] = storage,
                     ["field"] = fieldName,
                 },
-                Query = queryParameters ?? new Dictionary<string, object>(),
+                Query = requestQuery,
             },
             Pattern = timePatterns.Patterns,
-            Query = queryStructure,
+            Query = echoQuery,
         };
     }
 

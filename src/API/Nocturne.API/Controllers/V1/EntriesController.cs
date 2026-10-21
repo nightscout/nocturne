@@ -96,7 +96,7 @@ public class EntriesController : ControllerBase
         if (currentEntry is null)
         {
             _logger.LogDebug("No current entry found, returning empty array");
-            return Ok(Array.Empty<Entry>());
+            return EntriesResult([]);
         }
 
         _logger.LogDebug(
@@ -107,7 +107,7 @@ public class EntriesController : ControllerBase
         );
 
         // Return as array to match legacy API format with V1 response structure
-        return Ok(new[] { currentEntry }.ToV1Responses());
+        return EntriesResult([currentEntry]);
     }
 
     /// <summary>
@@ -158,11 +158,11 @@ public class EntriesController : ControllerBase
             if (entry is null)
             {
                 _logger.LogDebug("Entry with ID {Id} not found", spec);
-                return Ok(Array.Empty<Entry>());
+                return EntriesResult([]);
             }
 
             _logger.LogDebug("Found entry with ID: {Id}", spec);
-            return Ok(found.ToV1Responses());
+            return EntriesResult(found);
         }
 
         var entriesArray = await QueryEntriesAsync(
@@ -176,7 +176,7 @@ public class EntriesController : ControllerBase
         // Nightscout's format_entries stamps no Last-Modified and never answers 304 on an empty result.
         if (entriesArray.Length == 0)
         {
-            return Ok(Array.Empty<Entry>());
+            return EntriesResult([]);
         }
 
         if (NotModifiedSince(entriesArray) is { } notModified)
@@ -189,7 +189,7 @@ public class EntriesController : ControllerBase
             entriesArray.Length,
             spec
         );
-        return Ok(entriesArray.ToV1Responses());
+        return EntriesResult(entriesArray);
     }
 
     /// <summary>
@@ -250,68 +250,11 @@ public class EntriesController : ControllerBase
 
         _logger.LogDebug("Found {Count} entries", entriesArray.Length);
 
-        // Determine format from format parameter or Accept header (content negotiation)
-        var effectiveFormat = format;
-        if (
-            string.IsNullOrEmpty(effectiveFormat)
-            || effectiveFormat.Equals("json", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            // Check Accept header for content negotiation (Nightscout compatibility)
-            var acceptHeader = Request.Headers.Accept.ToString().ToLowerInvariant();
-            if (acceptHeader.Contains("text/tab-separated-values"))
-            {
-                effectiveFormat = "tsv";
-            }
-            else if (acceptHeader.Contains("text/csv"))
-            {
-                effectiveFormat = "csv";
-            }
-            else if (
-                acceptHeader.Contains("text/plain")
-                && !acceptHeader.Contains("application/json")
-            )
-            {
-                // text/plain returns TSV for Nightscout compatibility
-                effectiveFormat = "tsv";
-            }
-        }
-
-        // Handle different output formats
-        if (
-            !string.IsNullOrEmpty(effectiveFormat)
-            && !effectiveFormat.Equals("json", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            try
-            {
-                var formattedData = DataFormatService.FormatEntries(
-                    entriesArray,
-                    effectiveFormat
-                );
-                var contentType = DataFormatService.GetContentType(effectiveFormat);
-                return Content(formattedData, contentType);
-            }
-            catch (ArgumentException ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Unsupported format requested: {Format}",
-                    effectiveFormat
-                );
-                return BadRequest(
-                    new
-                    {
-                        status = 400,
-                        message = $"Unsupported format: {effectiveFormat}. Supported formats: json, csv, tsv, txt",
-                        type = "client",
-                    }
-                );
-            }
-        }
-
-        return Ok(entriesArray.ToV1Responses());
+        return EntriesResult(entriesArray, format);
     }
+
+    private ActionResult EntriesResult(Entry[] entries, string? format = null) =>
+        this.EntriesText(entries, format) ?? Ok(entries.ToV1Responses());
 
     /// <summary>
     /// The v1 entries query shared by <see cref="GetEntries"/> and <see cref="GetEntry"/>.

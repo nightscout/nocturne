@@ -1,6 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { remoteQuery } from "$lib/test-stubs/remote-resource";
 
 const { now, store, settings } = vi.hoisted(() => {
   const now = Date.UTC(2026, 5, 14, 9, 30, 0);
@@ -31,8 +32,8 @@ vi.mock("$lib/stores/realtime-store.svelte", () => ({
   tryGetRealtimeStore: () => store,
 }));
 
-vi.mock("$lib/stores/settings-store.svelte", () => ({
-  getSettingsStore: () => settings,
+vi.mock("$api/ui-settings.remote", () => ({
+  getUiSettings: () => remoteQuery(() => settings),
 }));
 
 // The value indicator uses Tooltip.Root, whose provider Sidebar.Provider supplies in the
@@ -48,6 +49,29 @@ describe("CurrentBGDisplay", () => {
 
   it("renders status text without reading a Symbol timeSinceReading value", () => {
     expect(() => render(CurrentBGDisplay, { showPills: false })).not.toThrow();
+  });
+
+  it("hides the tracker pills while the tenant's settings turn them off", async () => {
+    await page.viewport(1280, 900);
+    settings.features.trackerPills.enabled = false;
+    store.trackerDefinitions = [
+      { id: "def-1", name: "Sensor", category: "Sensor", dashboardVisibility: "Always", lifespanHours: 240 },
+    ];
+    store.trackerInstances = [
+      {
+        id: "inst-1",
+        definitionId: "def-1",
+        definitionName: "Sensor",
+        category: "Sensor",
+        startedAt: new Date(now - 48 * 3600_000).toISOString(),
+        ageHours: 48,
+        isActive: true,
+      },
+    ];
+    render(CurrentBGDisplay, { showPills: false });
+
+    await expect.element(page.getByText("123")).toBeVisible();
+    expect(page.getByRole("button", { name: /Sensor/ }).elements()).toHaveLength(0);
   });
 
   it("loads the tracker completion dialog when a tracker pill is first completed", async () => {

@@ -267,8 +267,8 @@ public class DataHub : TenantAwareHub
 
     /// <summary>
     /// Subscribe to storage collections (replaces socket.io '/storage' namespace 'subscribe' event).
-    /// Each collection is joined only when the connection's credential satisfies the read scope
-    /// governing it, so the returned list may be narrower than the one requested.
+    /// Each collection is joined only when <see cref="HubAuthorization.MayReceiveCategory"/> allows
+    /// it, so the returned list may be narrower than the one requested.
     /// </summary>
     /// <param name="request">Storage subscription request</param>
     /// <returns>Subscription result</returns>
@@ -276,25 +276,17 @@ public class DataHub : TenantAwareHub
     {
         try
         {
-            var governingScopes = RealtimeCategories.GoverningScopes;
             var collections = request.Collections ?? RealtimeCategories.All;
             var authorization = HubAuthorizationState.Resolve(Context)!;
             var subscribed = new List<string>();
 
             foreach (var collection in collections)
             {
-                // An unclassified collection has no governing scope and cannot be subscribed to.
-                if (!governingScopes.TryGetValue(collection, out var requiredScope))
-                {
-                    continue;
-                }
-
-                if (!authorization.Satisfies(requiredScope))
+                if (!authorization.MayReceiveCategory(collection))
                 {
                     _logger.LogDebug(
-                        "Client {ConnectionId} lacks {RequiredScope} for collection {Collection}",
+                        "Client {ConnectionId} may not receive collection {Collection}",
                         Context.ConnectionId,
-                        requiredScope,
                         collection
                     );
                     continue;

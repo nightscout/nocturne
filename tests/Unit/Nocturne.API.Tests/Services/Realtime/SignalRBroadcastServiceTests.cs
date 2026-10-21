@@ -470,7 +470,7 @@ public class SignalRBroadcastServiceTests
         var instance = new TrackerInstanceDto { Id = Guid.NewGuid() };
 
         await _service.BroadcastTrackerUpdateAsync(
-            "create",
+            TrackerRealtimeAction.Create,
             instance,
             Guid.NewGuid().ToString(),
             TrackerVisibility.Public
@@ -493,7 +493,7 @@ public class SignalRBroadcastServiceTests
         var instance = new TrackerInstanceDto { Id = Guid.NewGuid() };
 
         await _service.BroadcastTrackerUpdateAsync(
-            "create",
+            TrackerRealtimeAction.Create,
             instance,
             owner.ToString(),
             TrackerVisibility.Private

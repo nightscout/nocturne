@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.AspNetCore.SignalR;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 
@@ -78,6 +79,20 @@ public sealed record HubAuthorization(
 {
     /// <summary>Whether the credential satisfies <paramref name="scope"/>.</summary>
     public bool Satisfies(string scope) => Scope.Satisfies(Scopes, scope);
+
+    /// <summary>
+    /// Whether the credential may receive the live broadcasts of <paramref name="category"/>, one of
+    /// <see cref="RealtimeCategories.All"/>.
+    /// </summary>
+    /// <remarks>
+    /// A history-clamped credential receives none: a broadcast carries whatever record was just
+    /// written, including a backdated one older than the 24 hours its reads are limited to, and it
+    /// catches up on its own clamped reads instead.
+    /// </remarks>
+    public bool MayReceiveCategory(string category) =>
+        !HistoryClamped
+        && RealtimeCategories.GoverningScopes.TryGetValue(category, out var scope)
+        && Satisfies(scope);
 
     /// <summary>
     /// Whether the credential may join a group carrying the whole tenant's live payloads rather than

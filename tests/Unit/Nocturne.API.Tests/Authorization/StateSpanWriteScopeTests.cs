@@ -5,6 +5,8 @@ using Moq;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
@@ -33,6 +35,7 @@ public class StateSpanWriteScopeTests
     [InlineData(StateSpanCategory.Illness, Scope.TreatmentsReadWrite)]
     [InlineData(StateSpanCategory.Travel, Scope.TreatmentsReadWrite)]
     [InlineData(StateSpanCategory.TemporaryTarget, Scope.TreatmentsReadWrite)]
+    [InlineData(StateSpanCategory.Motion, Scope.TreatmentsReadWrite)]
     public void EveryCategory_MapsToItsDataCategoryScope(StateSpanCategory category, string expected)
     {
         StateSpanWriteScopeGuard.RequiredWriteScope(category).Should().Be(expected);
@@ -169,6 +172,98 @@ public class StateSpanWriteScopeTests
         var result = await controller.UpdateStateSpan("s1", new UpdateStateSpanRequest { State = "walk" });
 
         result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task Restore_ScopesOnTheDeletedRecordsCategory()
+    {
+        var rowId = Guid.NewGuid();
+        var service = new Mock<IStateSpanService>(MockBehavior.Strict);
+        service.Setup(s => s.ResolveDeletedAsync(
+                It.Is<IReadOnlyCollection<string>>(ids => ids.Single() == "glooko-1"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, DeletedStateSpan> { [rowId] = new("glooko-1", StateSpanCategory.PumpMode) });
+        var controller = Build(service, TreatmentsOnly);
+
+        var result = await controller.RestoreStateSpan("glooko-1");
+
+        Denied(result.Result);
+        service.Verify(s => s.RestoreStateSpanAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Restore_ByTheIdAReadReturned_RestoresTheRowItNames()
+    {
+        var rowId = Guid.NewGuid();
+        var service = new Mock<IStateSpanService>(MockBehavior.Strict);
+        service.Setup(s => s.ResolveDeletedAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, DeletedStateSpan> { [rowId] = new("glooko-1", StateSpanCategory.Exercise) });
+        service.Setup(s => s.RestoreStateSpanAsync(rowId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateSpan { Id = "glooko-1", Category = StateSpanCategory.Exercise });
+        var controller = Build(service, TreatmentsOnly);
+
+        var result = await controller.RestoreStateSpan("glooko-1");
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task Restore_OfAnUnknownId_IsNotFound()
+    {
+        var service = new Mock<IStateSpanService>(MockBehavior.Strict);
+        service.Setup(s => s.ResolveDeletedAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, DeletedStateSpan>());
+        var controller = Build(service, TreatmentsOnly);
+
+        var result = await controller.RestoreStateSpan("unknown");
+
+        result.Result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task BulkRestore_NeedsTheScopeOfEverySpanRestored()
+    {
+        var allowed = Guid.NewGuid();
+        var denied = Guid.NewGuid();
+        var service = new Mock<IStateSpanService>(MockBehavior.Strict);
+        service.Setup(s => s.ResolveDeletedAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, DeletedStateSpan>
+            {
+                [allowed] = new("a", StateSpanCategory.Exercise),
+                [denied] = new("b", StateSpanCategory.DataExclusion),
+            });
+        var controller = Build(service, TreatmentsOnly);
+
+        var result = await controller.BulkRestoreStateSpans(["a", "b"]);
+
+        Denied(result.Result);
+        service.Verify(s => s.BulkRestoreStateSpansAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task BulkRestore_ReportsAConflictByTheIdTheCallerSent()
+    {
+        var clashing = Guid.NewGuid();
+        var restoredId = Guid.NewGuid();
+        var service = new Mock<IStateSpanService>(MockBehavior.Strict);
+        service.Setup(s => s.ResolveDeletedAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, DeletedStateSpan>
+            {
+                [clashing] = new("glooko-1", StateSpanCategory.Exercise),
+                [restoredId] = new("glooko-2", StateSpanCategory.Exercise),
+            });
+        service.Setup(s => s.BulkRestoreStateSpansAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BulkRestoreResult<StateSpan>
+            {
+                Restored = [new StateSpan { Id = "glooko-2", Category = StateSpanCategory.Exercise }],
+                Conflicts = [clashing],
+            });
+        var controller = Build(service, TreatmentsOnly);
+
+        var result = await controller.BulkRestoreStateSpans(["glooko-1", "glooko-2"]);
+
+        var body = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<StateSpanBulkRestoreResult>().Subject;
+        body.Conflicts.Should().Equal("glooko-1");
+        body.Restored.Should().ContainSingle();
     }
 
     private static void Denied(object? result) =>

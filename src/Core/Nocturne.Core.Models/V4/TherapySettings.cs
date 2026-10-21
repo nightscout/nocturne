@@ -109,6 +109,9 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     /// </summary>
     public LoopProfileSettings? LoopSettings { get; set; }
 
+    /// <inheritdoc cref="Profile.IsAPNSProduction"/>
+    public bool? IsAPNSProduction { get; set; }
+
     /// <summary>
     /// Whether this is the tenant's default profile: at most one row per tenant carries it.
     /// </summary>

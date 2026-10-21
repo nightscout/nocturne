@@ -4,6 +4,7 @@ using Nocturne.Core.Clinical.Devices;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Constants;
@@ -826,10 +827,7 @@ public class StatisticsController : ControllerBase
     {
         var cacheKey = $"statistics:multi-period:{TenantCacheId}";
 
-        // A history-clamped request bypasses the cache, for the reason given on
-        // EntryCacheAdapter. So does a share: its categories decide what the body counts, and the key
-        // carries only the tenant.
-        var useCache = !_categoryReadContext.IsHistoryClamped && !_categoryReadContext.IsShare;
+        var useCache = !_categoryReadContext.BypassesTenantCaches;
         var cachedResult = useCache
             ? await _cacheService.GetAsync<MultiPeriodStatistics>(cacheKey, cancellationToken)
             : null;
@@ -1085,9 +1083,17 @@ public class StatisticsController : ControllerBase
             "July", "August", "September", "October", "November", "December"
         ];
 
-        for (var day = startLocalDate.Date; day <= endLocalDate.Date; day = day.AddDays(1))
+        var days = new List<DateTime>();
+        for (var day = startLocalDate.Date; day <= endLocalDate.Date; day = day.AddDays(1)) days.Add(day);
+        var windows = days.Select(d => PunchCardDayWindow.For(d, tz)).ToList();
+        var glucoseByDay = PunchCardDayBuckets.Bucket(glucoseData, windows, e => e.Mills);
+        var bolusesByDay = PunchCardDayBuckets.Bucket(manualBoluses, windows, b => b.Mills);
+        var carbsByDay = PunchCardDayBuckets.Bucket(carbs, windows, c => c.Mills);
+
+        for (var i = 0; i < days.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var day = days[i];
 
             var monthKey = $"{day.Year}-{day.Month - 1}";
             if (!monthsMap.TryGetValue(monthKey, out var monthBucket))
@@ -1101,22 +1107,10 @@ public class StatisticsController : ControllerBase
                 monthsMap[monthKey] = monthBucket;
             }
 
-            var dayStartLocal = DateTime.SpecifyKind(day, DateTimeKind.Unspecified);
-            var dayEndLocal = dayStartLocal.AddDays(1).AddTicks(-1);
-            var dayStartUtc = TimeZoneInfo.ConvertTimeToUtc(dayStartLocal, tz);
-            var dayEndUtc = TimeZoneInfo.ConvertTimeToUtc(dayEndLocal, tz);
-            var dayStartMs = new DateTimeOffset(dayStartUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
-            var dayEndMs = new DateTimeOffset(dayEndUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
-
-            var dayEntries = glucoseData
-                .Where(e => e.Mills >= dayStartMs && e.Mills <= dayEndMs)
-                .ToList();
-            var dayBoluses = manualBoluses
-                .Where(b => b.Mills >= dayStartMs && b.Mills <= dayEndMs)
-                .ToList();
-            var dayCarbs = carbs
-                .Where(c => c.Mills >= dayStartMs && c.Mills <= dayEndMs)
-                .ToList();
+            var dayStartMs = windows[i].StartMs;
+            var dayEntries = glucoseByDay[i];
+            var dayBoluses = bolusesByDay[i];
+            var dayCarbs = carbsByDay[i];
 
             TimeInRangeMetrics? tir = dayEntries.Count > 0
                 ? _statisticsService.CalculateTimeInRange(dayEntries)

@@ -257,6 +257,8 @@ public class V4WriteScopeGatingTests
             ["StateSpansController.CreateStateSpan"] = NotDataCategory.PerRecordGuard,
             ["StateSpansController.UpdateStateSpan"] = NotDataCategory.PerRecordGuard,
             ["StateSpansController.DeleteStateSpan"] = NotDataCategory.PerRecordGuard,
+            ["StateSpansController.RestoreStateSpan"] = NotDataCategory.PerRecordGuard,
+            ["StateSpansController.BulkRestoreStateSpans"] = NotDataCategory.PerRecordGuard,
 
             // The rest of DiscrepancyController is [RequireSuperuser]; the ingest route is deliberately
             // [AllowAnonymous], so there is no credential whose scopes could be checked.
@@ -641,10 +643,12 @@ public class V4WriteScopeGatingTests
     {
         var covered = new[]
         {
-            // StateSpanWriteScopeTests drives all three through the real handler.
+            // StateSpanWriteScopeTests drives all five through the real handler.
             "StateSpansController.CreateStateSpan",
             "StateSpansController.UpdateStateSpan",
             "StateSpansController.DeleteStateSpan",
+            "StateSpansController.RestoreStateSpan",
+            "StateSpansController.BulkRestoreStateSpans",
             // ActivityControllerV4Tests drives all three through the real handler.
             "ActivityController.CreateActivities",
             "ActivityController.UpdateActivity",

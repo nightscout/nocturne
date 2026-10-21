@@ -19,7 +19,7 @@ public sealed class SignalRV4RecordBroadcaster<TModel>(ISignalRBroadcastService 
             return;
 
         foreach (var item in items)
-            await broadcast.BroadcastStorageCreateAsync(category, new { recordType, doc = item });
+            await broadcast.BroadcastStorageCreateAsync(category, new { colName = category, recordType, doc = item });
     }
 
     public async Task BroadcastUpdatedAsync(IReadOnlyList<TModel> items, CancellationToken ct = default)
@@ -28,7 +28,7 @@ public sealed class SignalRV4RecordBroadcaster<TModel>(ISignalRBroadcastService 
             return;
 
         foreach (var item in items)
-            await broadcast.BroadcastStorageUpdateAsync(category, new { recordType, doc = item });
+            await broadcast.BroadcastStorageUpdateAsync(category, new { colName = category, recordType, doc = item });
     }
 
     public async Task BroadcastDeletedAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
@@ -37,6 +37,6 @@ public sealed class SignalRV4RecordBroadcaster<TModel>(ISignalRBroadcastService 
             return;
 
         foreach (var id in ids)
-            await broadcast.BroadcastStorageDeleteAsync(category, new { recordType, id });
+            await broadcast.BroadcastStorageDeleteAsync(category, new { colName = category, recordType, id });
     }
 }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
@@ -120,7 +121,7 @@ public class SettingsController : BaseV3Controller<Settings>
     /// <returns>Single settings record in V3 format</returns>
     [HttpGet("{id}")]
     [NightscoutEndpoint("/api/v3/settings/{id}")]
-    [ProducesResponseType(typeof(Settings), 200)]
+    [ProducesResponseType(typeof(V3Envelope<Settings>), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 403)]
     [ProducesResponseType(500)]
@@ -151,12 +152,12 @@ public class SettingsController : BaseV3Controller<Settings>
         }
 
         var parameters = ParseV3QueryParameters(); // Apply field selection if specified
-        var result = ApplyFieldSelection(new[] { settings }, parameters.Fields)
-            .FirstOrDefault();
+        var result = ApplyFieldSelection(new[] { settings }, parameters.Fields).First();
 
         _logger.LogDebug("Successfully returned settings with ID {Id}", id);
 
-        return Ok(result);
+        // Upstream's v3 READ answers {status, result}; AAPS reads the document from result.
+        return CreateV3SuccessResponse(result);
     }
 
     /// <summary>
@@ -227,26 +228,27 @@ public class SettingsController : BaseV3Controller<Settings>
     }
 
     /// <summary>
-    /// Update a settings record by ID with V3 format
-    /// Requires admin permissions as per legacy API v3 behavior
+    /// Replace the settings document with this identifier, or insert it when none is stored:
+    /// upstream's v3 UPDATE, which AAPS uses to keep its <c>aaps</c> document and its
+    /// client-control pairing offers.
     /// </summary>
-    /// <param name="id">Settings ID to update</param>
-    /// <param name="settings">Updated settings data</param>
+    /// <param name="id">Identifier of the document, which is its key</param>
+    /// <param name="settingsData">The whole document</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Updated settings record</returns>
+    /// <returns>201 with the identifier on insert, 200 on replace</returns>
     [HttpPut("{id}")]
     [Authorize]
     [RequireScope(Scope.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/settings/{id}")]
-    [ProducesResponseType(typeof(Settings), 200)]
-    [ProducesResponseType(typeof(V3ErrorResponse), 404)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(typeof(V3ErrorResponse), 403)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
     public async Task<ActionResult> UpdateSettings(
         string id,
-        [FromBody] Settings settings,
+        [FromBody] JsonElement settingsData,
         CancellationToken cancellationToken = default
     )
     {
@@ -256,46 +258,64 @@ public class SettingsController : BaseV3Controller<Settings>
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
+        var validationError = ValidateV3CommonFields(settingsData);
+        if (validationError != null)
+        {
+            return validationError;
+        }
+
+        Settings? settings;
         try
         {
-            // CHECKME: Should validate admin permissions here
-
-            if (settings == null)
-            {
-                return CreateV3ErrorResponse(
-                    400,
-                    "Invalid request body",
-                    "Request body must contain valid settings data"
-                );
-            }
-
-            ProcessSettingsForCreation(settings);
-
-            var updatedSettings = await _settings.UpdateSettingsAsync(
-                id,
-                settings,
-                cancellationToken
-            );
-
-            if (updatedSettings == null)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Settings not found",
-                    $"Settings with ID '{id}' was not found"
-                );
-            }
-
-            _logger.LogDebug("Successfully updated settings with ID {Id}", id);
-
-            return Ok(updatedSettings);
+            settings = NightscoutJsonBody.ReadObject<Settings>(WithoutServerFields(settingsData));
         }
-        catch (ArgumentException ex)
+        catch (JsonException ex)
         {
-            _logger.LogWarning(ex, "Invalid V3 settings update request for ID {Id}", id);
+            _logger.LogWarning(ex, "Invalid JSON in V3 settings update request for ID {Id}", id);
             return CreateV3ErrorResponse(400, "Invalid request data", ex.Message);
         }
+
+        if (settings == null)
+        {
+            return CreateV3ErrorResponse(
+                400,
+                "Invalid request body",
+                "Request body must contain valid settings data"
+            );
+        }
+
+        settings.SrvModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        if (!await _settings.PutSettingsAsync(id, settings, cancellationToken))
+        {
+            _logger.LogDebug("Replaced settings with ID {Id}", id);
+            return V3Replaced();
+        }
+
+        _logger.LogDebug("Inserted settings with ID {Id}", id);
+        return V3Inserted(nameof(GetSettingsById), id);
     }
+
+    /// <summary>
+    /// The document without the fields the server owns. A writer echoes back what it last read,
+    /// and upstream sets these itself on every write rather than taking them from the body.
+    /// </summary>
+    private static JsonElement WithoutServerFields(JsonElement document)
+    {
+        var fields = new JsonObject();
+        foreach (var field in document.EnumerateObject())
+        {
+            // Case-insensitive, as the body binds: "_ID" would otherwise reach Settings.Id.
+            if (!ServerFields.Contains(field.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                fields[field.Name] = JsonNode.Parse(field.Value.GetRawText());
+            }
+        }
+
+        return JsonSerializer.SerializeToElement(fields);
+    }
+
+    private static readonly string[] ServerFields =
+        ["_id", "identifier", "key", "srvCreated", "srvModified", "subject"];
 
     /// <summary>
     /// Delete a settings record by ID
@@ -371,7 +391,7 @@ public class SettingsController : BaseV3Controller<Settings>
         // Unlike other collections, settings collection in legacy API doesn't use fallbackGetDate
 
         // Set server timestamps if not present
-        var now = DateTimeOffset.UtcNow;
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         if (!settings.SrvModified.HasValue)
         {

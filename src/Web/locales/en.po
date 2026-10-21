@@ -394,9 +394,8 @@ msgstr "Failed to sync missed data"
 msgid "Failed to save settings"
 msgstr "Failed to save settings"
 
-#: src/lib/stores/settings-store.svelte.ts
-msgid "Validation error"
-msgstr "Validation error"
+#~ msgid "Validation error"
+#~ msgstr "Validation error"
 
 #~ msgid "Failed to save alarm configuration"
 #~ msgstr "Failed to save alarm configuration"
@@ -3010,10 +3009,8 @@ msgstr "{0} is syncing..."
 #~ msgid "Sync completed successfully"
 #~ msgstr "Sync completed successfully"
 
-#. 0: manualSyncResult.successfulConnectors; 1: manualSyncResult.totalConnectors; 2: elapsedSeconds
-#: src/lib/components/connectors/ManualSyncDialog.svelte
-msgid "{0} of {1} connectors synced in {2}s"
-msgstr "{0} of {1} connectors synced in {2}s"
+#~ msgid "{0} of {1} connectors synced in {2}s"
+#~ msgstr "{0} of {1} connectors synced in {2}s"
 
 #: src/lib/components/connectors/ManualSyncDialog.svelte
 msgid "Connector Results"
@@ -13107,7 +13104,6 @@ msgid "Failed to load services"
 msgstr "Failed to load services"
 
 #: src/routes/(authenticated)/alerts/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Unknown error"
 msgstr "Unknown error"
 
@@ -21024,9 +21020,8 @@ msgstr "Invalid {0}"
 msgid "Reconnected to real-time data"
 msgstr "Reconnected to real-time data"
 
-#: src/lib/stores/settings-store.svelte.ts
-msgid "We couldn't save your alarm settings. Please try again."
-msgstr "We couldn't save your alarm settings. Please try again."
+#~ msgid "We couldn't save your alarm settings. Please try again."
+#~ msgstr "We couldn't save your alarm settings. Please try again."
 
 #: src/routes/(authenticated)/alerts/+page.svelte
 msgid "Changing alerts requires the alerts.readwrite permission."
@@ -21580,7 +21575,6 @@ msgstr "The desktop app opens the CareLink sign-in in its own window and capture
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "We couldn't start the sync. Please try again."
 msgstr "We couldn't start the sync. Please try again."
 
@@ -21588,7 +21582,7 @@ msgstr "We couldn't start the sync. Please try again."
 msgid "We couldn't download the food data. Please try again."
 msgstr "We couldn't download the food data. Please try again."
 
-#. 0: manualSyncResult.failedConnectors
+#. 0: failedConnectors
 #: src/lib/components/connectors/ManualSyncDialog.svelte
 msgid "Sync finished with {0} failed"
 msgstr "Sync finished with {0} failed"
@@ -21601,9 +21595,8 @@ msgstr "Nothing to sync"
 msgid "No enabled connectors were found."
 msgstr "No enabled connectors were found."
 
-#: src/lib/components/connectors/ManualSyncDialog.svelte
-msgid "The sync could not be started."
-msgstr "The sync could not be started."
+#~ msgid "The sync could not be started."
+#~ msgstr "The sync could not be started."
 
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "This data source has no data left to delete."
@@ -21642,9 +21635,8 @@ msgstr "Accepting…"
 msgid "Add a backup way to sign in"
 msgstr "Add a backup way to sign in"
 
-#: src/lib/components/layout/BackupSignInPrompt.svelte
-msgid "There is one way into this account. Add a second passkey, link a sign-in method, or save recovery codes — one-time codes you can type in if you lose your device."
-msgstr "There is one way into this account. Add a second passkey, link a sign-in method, or save recovery codes — one-time codes you can type in if you lose your device."
+#~ msgid "There is one way into this account. Add a second passkey, link a sign-in method, or save recovery codes — one-time codes you can type in if you lose your device."
+#~ msgstr "There is one way into this account. Add a second passkey, link a sign-in method, or save recovery codes — one-time codes you can type in if you lose your device."
 
 #: src/lib/components/layout/BackupSignInPrompt.svelte
 msgid "Account settings"
@@ -23848,17 +23840,17 @@ msgstr "Print"
 msgid "Glucose target range {0}"
 msgstr "Glucose target range {0}"
 
-#. 0: bg(FALLBACK_GLUCOSE_THRESHOLDS.low)
+#. 0: bg(thresholds.low)
 #: src/lib/components/ambulatory-glucose-profile/AmbulatoryGlucoseProfile.svelte
 msgid "Low {0}"
 msgstr "Low {0}"
 
-#. 0: bg(FALLBACK_GLUCOSE_THRESHOLDS.high)
+#. 0: bg(thresholds.high)
 #: src/lib/components/ambulatory-glucose-profile/AmbulatoryGlucoseProfile.svelte
 msgid "High {0}"
 msgstr "High {0}"
 
-#. 0: bgRange(FALLBACK_GLUCOSE_THRESHOLDS.low, FALLBACK_GLUCOSE_THRESHOLDS.high)
+#. 0: bgRange(thresholds.low, thresholds.high)
 #: src/lib/components/ambulatory-glucose-profile/AmbulatoryGlucoseProfile.svelte
 msgid "Target range {0}"
 msgstr "Target range {0}"
@@ -27027,3 +27019,17 @@ msgstr "Tab"
 #: ../cms/src/lib/components/edra/shadcn/components/toolbar/QuickColors.svelte
 msgid "{0} background-color: {1}50; border: {2} {3};"
 msgstr "{0} background-color: {1}50; border: {2} {3};"
+
+#: src/lib/components/layout/BackupSignInPrompt.svelte
+msgid "There is one way into this account. Add a second passkey, link a sign-in method, or save recovery codes, which are one-time codes you can type in if you lose your device."
+msgstr "There is one way into this account. Add a second passkey, link a sign-in method, or save recovery codes, which are one-time codes you can type in if you lose your device."
+
+#. 0: successfulConnectors; 1: totalConnectors
+#: src/lib/components/connectors/ManualSyncDialog.svelte
+msgid "{0} of {1} connectors synced"
+msgstr "{0} of {1} connectors synced"
+
+#. 0: result.durationMs
+#: src/lib/components/connectors/ManualSyncDialog.svelte
+msgid "{0}ms"
+msgstr "{0}ms"

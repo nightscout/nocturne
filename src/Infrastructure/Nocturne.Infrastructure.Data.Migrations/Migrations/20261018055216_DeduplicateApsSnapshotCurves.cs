@@ -1,59 +1,24 @@
 ﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Nocturne.Infrastructure.Data.Services;
 
 #nullable disable
 
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     /// <summary>
-    /// Rewrites stored APS snapshots into the shape <c>ApsSnapshotCurves</c> in the API writes and
-    /// reads: curves the <c>predicted_*</c> columns hold leave the command blobs, Loop's copies of
-    /// <c>loop.recommended</c>, <c>loop.enacted</c> and <c>loop.predicted.values</c> go, and
-    /// null-valued keys go. FORCE ROW LEVEL SECURITY binds the migrator, hence the per-tenant GUC;
-    /// each tenant commits on its own (which resets the GUC), so an interrupted run keeps its
-    /// progress, and a rerun leaves rewritten rows as they are.
+    /// Marks the move to the stored shape <c>ApsSnapshotCurves</c> in the API writes and reads. Up
+    /// changes no rows: the API reads both shapes, and <see cref="ApsSnapshotCurvesRewriter"/>
+    /// rewrites stored rows a page at a time after startup, since one statement over a large table
+    /// can outlast the migration command timeout. Down returns every row to the shape the code
+    /// before it reads, in one pass per tenant.
     /// </summary>
     public partial class DeduplicateApsSnapshotCurves : Migration
     {
-        private const string Curves = """
-            NULLIF(jsonb_strip_nulls(jsonb_build_object(
-                'IOB', predicted_iob_json, 'ZT', predicted_zt_json,
-                'COB', predicted_cob_json, 'UAM', predicted_uam_json)), '{}'::jsonb)
-            """;
+        private const string Curves = ApsSnapshotCurvesRewriter.Curves;
 
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql($$"""
-                DO $$
-                DECLARE
-                    t RECORD;
-                BEGIN
-                    FOR t IN SELECT id FROM tenants LOOP
-                        PERFORM set_config('app.current_tenant_id', t.id::text, true);
-
-                        WITH c AS (
-                            SELECT id, {{Curves}} AS curves
-                            FROM aps_snapshots
-                            WHERE loop_json IS NULL AND (suggested_json ? 'predBGs' OR enacted_json ? 'predBGs'))
-                        UPDATE aps_snapshots a
-                        SET suggested_json = {{StripCommand("a.suggested_json")}},
-                            enacted_json = {{StripCommand("a.enacted_json")}}
-                        FROM c
-                        WHERE c.id = a.id;
-
-                        UPDATE aps_snapshots
-                        SET suggested_json = CASE WHEN suggested_json = loop_json -> 'recommended' THEN NULL ELSE suggested_json END,
-                            enacted_json = CASE WHEN enacted_json = loop_json -> 'enacted' THEN NULL ELSE enacted_json END,
-                            loop_json = jsonb_strip_nulls(CASE WHEN loop_json #> '{predicted,values}' = predicted_default_json
-                                                               THEN loop_json #- '{predicted,values}' ELSE loop_json END)
-                        WHERE loop_json IS NOT NULL
-                          AND (suggested_json IS NOT NULL OR enacted_json IS NOT NULL
-                               OR loop_json #> '{predicted,values}' IS NOT NULL);
-
-                        COMMIT;
-                    END LOOP;
-                END $$;
-                """, suppressTransaction: true);
         }
 
         /// <inheritdoc />
@@ -89,12 +54,5 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 END $$;
                 """, suppressTransaction: true);
         }
-
-        private static string StripCommand(string column) => $$"""
-            CASE WHEN jsonb_strip_nulls({{column}} -> 'predBGs') = c.curves THEN jsonb_strip_nulls({{column}} - 'predBGs')
-                 WHEN {{column}} -> 'predBGs' = 'null'::jsonb AND c.curves IS NOT NULL
-                     THEN jsonb_strip_nulls({{column}}) || '{"predBGs": null}'::jsonb
-                 ELSE jsonb_strip_nulls({{column}}) END
-            """;
     }
 }

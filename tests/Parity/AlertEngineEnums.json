@@ -114,7 +114,8 @@
     "Illness",
     "Travel",
     "DataExclusion",
-    "TemporaryTarget"
+    "TemporaryTarget",
+    "Motion"
   ],
   "TempBasalMetric": [
     "rate",

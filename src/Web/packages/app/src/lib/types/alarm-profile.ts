@@ -1,5 +1,4 @@
 import { randomUUID } from "$lib/utils";
-import type { UserAlarmConfiguration as ApiUserAlarmConfiguration } from "$lib/api";
 
 /**
  * xDrip+-inspired Alarm Profile Types
@@ -30,10 +29,8 @@ const ALARM_TRIGGER_TYPES = [
 /** Types of alarm triggers */
 export type AlarmTriggerType = (typeof ALARM_TRIGGER_TYPES)[number];
 
-const ALARM_PRIORITIES = ["Low", "Normal", "High", "Critical"] as const;
-
 /** Priority levels for alarms */
-export type AlarmPriority = (typeof ALARM_PRIORITIES)[number];
+export type AlarmPriority = "Low" | "Normal" | "High" | "Critical";
 
 /** Audio settings for an alarm */
 export interface AlarmAudioSettings {
@@ -217,31 +214,6 @@ export interface NotificationChannelsConfig {
   pushover?: PushoverChannelConfig;
 }
 
-/**
- * Complete user alarm configuration containing all profiles and global settings.
- * This is the root object stored in JSONB.
- */
-export interface UserAlarmConfiguration {
-  /** Version for migration purposes */
-  version: number;
-  /** Global master switch for all alarms */
-  enabled: boolean;
-  /** Global sound enabled setting */
-  soundEnabled: boolean;
-  /** Global vibration enabled setting */
-  vibrationEnabled: boolean;
-  /** Global volume level (0-100) */
-  globalVolume: number;
-  /** List of all configured alarm profiles */
-  profiles: AlarmProfileConfiguration[];
-  /** Custom sounds uploaded by the user */
-  customSounds: CustomSoundReference[];
-  /** Emergency contacts to notify for urgent alarms */
-  emergencyContacts: EmergencyContactConfig[];
-  /** Notification channels configuration */
-  channels: NotificationChannelsConfig;
-}
-
 /** Built-in sound presets */
 export interface SoundPreset {
   id: string;
@@ -334,25 +306,6 @@ export function normalizeAlarmType(value: string | null | undefined): AlarmTrigg
     (key) => ALARM_TYPE_LABELS[key].toLowerCase() === lowered
   );
   return labelMatch ?? "High";
-}
-
-export function normalizeAlarmPriority(
-  value: string | null | undefined
-): AlarmPriority {
-  if (!value) {
-    return "Normal";
-  }
-
-  const exact = ALARM_PRIORITIES.find((priority) => priority === value);
-  if (exact) {
-    return exact;
-  }
-
-  const lowered = value.trim().toLowerCase();
-  const labelMatch = ALARM_PRIORITIES.find(
-    (key) => PRIORITY_LABELS[key].toLowerCase() === lowered
-  );
-  return labelMatch ?? "Normal";
 }
 
 /** Colors for alarm types in UI */
@@ -560,53 +513,4 @@ function getDefaultsForType(type: AlarmTriggerType): {
         priority: "Normal",
       };
   }
-}
-
-/** Create a default user alarm configuration */
-export function createDefaultUserAlarmConfiguration(): UserAlarmConfiguration {
-  return {
-    version: 1,
-    enabled: true,
-    soundEnabled: true,
-    vibrationEnabled: true,
-    globalVolume: 80,
-    profiles: [
-      createDefaultAlarmProfile("UrgentHigh"),
-      createDefaultAlarmProfile("High"),
-      createDefaultAlarmProfile("Low"),
-      createDefaultAlarmProfile("UrgentLow"),
-    ],
-    customSounds: [],
-    emergencyContacts: [],
-    channels: {
-      push: { enabled: true, minPriority: "Normal" },
-      email: { enabled: false, minPriority: "High" },
-      sms: { enabled: false, minPriority: "Critical" },
-    },
-  };
-}
-
-/**
- * The seam between this hand-written alarm model and the generated one it
- * mirrors. They agree at runtime: the generated enums are these same strings,
- * and its `Date` fields arrive and leave as ISO strings (the client parses with
- * no reviver). TypeScript cannot relate a string union to a string enum, nor
- * this model's required fields to the generated optional ones, so the
- * conversion is asserted here and nowhere else. The API side leaves fields
- * unset that this model requires; retiring this model for the generated types
- * is the real fix.
- */
-export function toApiAlarmConfiguration(
-  config: UserAlarmConfiguration
-): ApiUserAlarmConfiguration {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- see the doc comment: same JSON, enum vs union typing
-  return config as unknown as ApiUserAlarmConfiguration;
-}
-
-/** The inverse of {@link toApiAlarmConfiguration}. */
-export function fromApiAlarmConfiguration(
-  config: ApiUserAlarmConfiguration
-): UserAlarmConfiguration {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- see toApiAlarmConfiguration
-  return config as unknown as UserAlarmConfiguration;
 }

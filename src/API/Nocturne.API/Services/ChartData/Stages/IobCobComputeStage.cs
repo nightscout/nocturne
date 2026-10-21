@@ -35,7 +35,9 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// Results are cached in <see cref="Microsoft.Extensions.Caching.Memory.IMemoryCache"/> for
 /// one minute. The cache key is a 64-bit SHA-256 prefix of the treatment fingerprint (mills,
 /// insulin, carbs, temp basal rate) combined with the tenant ID, rounded time boundaries,
-/// and interval. The tenant ID component prevents cross-tenant cache leakage.
+/// and interval. The tenant ID component prevents cross-tenant cache leakage. The key does not carry
+/// the therapy timeline the series is computed with, so a request that
+/// <see cref="ICategoryReadContext.BypassesTenantCaches"/> neither reads nor writes it.
 /// </para>
 /// <para>
 /// Basal series construction is delegated to <see cref="IBasalSeriesBuilder"/>, which uses
@@ -58,6 +60,7 @@ internal sealed class IobCobComputeStage(
     ITherapyTimelineResolver therapyTimelineResolver,
     IMemoryCache cache,
     ITenantAccessor tenantAccessor,
+    ICategoryReadContext categoryReadContext,
     ILogger<IobCobComputeStage> logger
 ) : IChartDataStage
 {
@@ -121,12 +124,14 @@ internal sealed class IobCobComputeStage(
     )
     {
 
-        // Generate cache key based on data hash and time range
-        var cacheKey = GenerateIobCobCacheKey(boluses, carbIntakes, startTime, endTime, intervalMinutes, tempBasals, apsSnapshots);
+        var useCache = !categoryReadContext.BypassesTenantCaches;
+        var cacheKey = useCache
+            ? GenerateIobCobCacheKey(boluses, carbIntakes, startTime, endTime, intervalMinutes, tempBasals, apsSnapshots)
+            : null;
 
-        // Try to get from cache
         if (
-            cache.TryGetValue(
+            cacheKey is not null
+            && cache.TryGetValue(
                 cacheKey,
                 out (
                     List<TimeSeriesPoint> iob,
@@ -289,9 +294,9 @@ internal sealed class IobCobComputeStage(
                 maxCob = cob;
         }
 
-        // Cache the result
         var result = (iobSeries, cobSeries, maxIob, maxCob);
-        cache.Set(cacheKey, result, IobCobCacheExpiration);
+        if (cacheKey is not null)
+            cache.Set(cacheKey, result, IobCobCacheExpiration);
 
         return result;
     }
