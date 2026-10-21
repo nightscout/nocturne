@@ -15,8 +15,9 @@ public class ProfileStoreTimelineTests
 
     private static DateTime At(long offset) => DateTimeOffset.FromUnixTimeMilliseconds(T0 + offset).UtcDateTime;
 
-    private static ProfileStoreRow Document(string id, long at, string store, bool isDefault = false) =>
-        new(id, true, store, At(at), isDefault);
+    private static ProfileStoreRow Document(
+        string id, long at, string store, bool isDefault = false, string? documentDefault = null) =>
+        new(id, true, store, At(at), isDefault, documentDefault);
 
     private static ProfileStoreRow V4Row(long at, string store, bool isDefault = false) =>
         new(Guid.NewGuid().ToString(), false, store, At(at), isDefault);
@@ -110,6 +111,34 @@ public class ProfileStoreTimelineTests
         timeline.StoreFor("Default", T0 - 48 * Hour).Should().Be("Default");
         timeline.StoreFor("Default", T0).Should().Be("Renamed");
         timeline.Holds("Default", T0).Should().BeFalse();
-        timeline.Holds("Default", T0 - 96 * Hour).Should().BeFalse("no document is in force before the first");
+        timeline.DefaultAt(T0 - 96 * Hour).Should().Be("Renamed", "before the first document the newest is in force");
+        timeline.Holds("Default", T0 - 96 * Hour).Should().BeFalse();
+    }
+
+    [Fact]
+    public void AnOlderDocument_ReadsItsRecordedDefault()
+    {
+        var timeline = ProfileStoreTimeline.From(
+        [
+            Document("a", -48 * Hour, "Day", documentDefault: "Night"),
+            Document("a", -48 * Hour, "Night", documentDefault: "Night"),
+            Document("b", -24 * Hour, "Day", isDefault: true, documentDefault: "Day"),
+            Document("b", -24 * Hour, "Night", documentDefault: "Day"),
+        ]);
+
+        timeline.DefaultAt(T0 - 36 * Hour).Should().Be("Night");
+        timeline.DefaultAt(T0).Should().Be("Day");
+    }
+
+    [Fact]
+    public void ADefaultPickedSinceTheNewestUpload_IsTheNewestDocumentsDefault()
+    {
+        var timeline = ProfileStoreTimeline.From(
+        [
+            Document("a", -24 * Hour, "Day", documentDefault: "Day"),
+            Document("a", -24 * Hour, "Night", isDefault: true, documentDefault: "Day"),
+        ]);
+
+        timeline.DefaultAt(T0).Should().Be("Night");
     }
 }

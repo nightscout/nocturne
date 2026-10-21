@@ -20,10 +20,7 @@ internal sealed class ProfileVersionCache
         _cache = cache;
     }
 
-    /// <summary>
-    /// The newest version at-or-before <paramref name="timestamp"/>, matching
-    /// <see cref="IProfileScopedRepository{TRecord}.GetActiveAtAsync"/>.
-    /// </summary>
+    /// <summary>The version in force at <paramref name="timestamp"/>; see <see cref="ActiveAt{TRecord}"/>.</summary>
     public async Task<TRecord?> GetActiveAtAsync<TRecord>(
         IProfileScopedRepository<TRecord> repo,
         string profileName,
@@ -45,8 +42,12 @@ internal sealed class ProfileVersionCache
                 .ToArray(),
             Ttl);
 
-    /// <summary>The newest of <paramref name="newestFirst"/> at-or-before <paramref name="timestamp"/>.</summary>
+    /// <summary>
+    /// The newest of <paramref name="newestFirst"/> at-or-before <paramref name="timestamp"/>; before the
+    /// first, the newest, as Nightscout reads its newest profile document (<c>data[0]</c>) for a time
+    /// before every document.
+    /// </summary>
     public static TRecord? ActiveAt<TRecord>(TRecord[] newestFirst, DateTime timestamp)
         where TRecord : class, IV4Record =>
-        newestFirst.FirstOrDefault(v => v.Timestamp <= timestamp);
+        newestFirst.FirstOrDefault(v => v.Timestamp <= timestamp) ?? newestFirst.FirstOrDefault();
 }

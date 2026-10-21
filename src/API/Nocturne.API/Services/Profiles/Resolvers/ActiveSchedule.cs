@@ -44,10 +44,11 @@ internal static class ActiveSchedule
         var adjustment = await active.GetCircadianAdjustmentAsync(timeMills, ct);
         var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
 
-        var secondsFromMidnight = snapshot is not null
-            ? await ScheduleTimeHelper.GetSecondsFromMidnightAsync(shiftedMills, snapshot.Timezone, patientRecordRepo, ct)
-            : await ScheduleTimeHelper.GetSecondsFromMidnightAsync(
-                shiftedMills, profileName, timestamp, therapyRepo, patientRecordRepo, ct);
+        var timezone = snapshot is not null
+            ? snapshot.Timezone
+            : (await versions.GetActiveAtAsync(therapyRepo, profileName, timestamp, ct))?.Timezone;
+        var secondsFromMidnight = await ScheduleTimeHelper.GetSecondsFromMidnightAsync(
+            shiftedMills, timezone, patientRecordRepo, ct);
 
         return new At<TEntry>(entries, secondsFromMidnight, adjustment);
     }

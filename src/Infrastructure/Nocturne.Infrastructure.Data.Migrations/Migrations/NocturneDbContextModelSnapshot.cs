@@ -8775,6 +8775,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("dia");
 
+                    b.Property<string>("DocumentDefaultProfile")
+                        .HasColumnType("text")
+                        .HasColumnName("document_default_profile");
+
                     b.Property<string>("EnteredBy")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")

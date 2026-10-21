@@ -236,9 +236,10 @@ public class ProfileProjectionService : IProfileProjectionService
     /// One legacy profile document, with a store per row of <paramref name="rows"/>.
     /// </summary>
     /// <remarks>
-    /// A document's own <c>defaultProfile</c> is not stored, only the tenant's one
-    /// <see cref="TherapySettings.IsDefault"/> row, so the document names that row's store when it
-    /// holds it and its newest store otherwise, and reads its document-level fields off that store's row.
+    /// The document names the tenant's <see cref="TherapySettings.IsDefault"/> row's store when it holds
+    /// that row, as <see cref="Resolvers.ProfileStoreTimeline"/> reads it; else its recorded
+    /// <see cref="TherapySettings.DocumentDefaultProfile"/>; else, for a row decomposed before that was
+    /// recorded, its newest store. It reads its document-level fields off its first store's row.
     /// </remarks>
     private async Task<Profile> AssembleDocumentAsync(IReadOnlyList<TherapySettings> rows, CancellationToken ct)
     {
@@ -261,7 +262,9 @@ public class ProfileProjectionService : IProfileProjectionService
         return new Profile
         {
             Id = TherapySettings.DocumentIdOf(head),
-            DefaultProfile = head.ProfileName,
+            DefaultProfile = head.IsDefault
+                ? head.ProfileName
+                : rows.Select(r => r.DocumentDefaultProfile).FirstOrDefault(d => d is not null) ?? head.ProfileName,
             StartDate = head.StartDate ?? head.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             Mills = head.Mills,
             CreatedAt = head.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),

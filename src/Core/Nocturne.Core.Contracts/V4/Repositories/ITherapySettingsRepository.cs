@@ -97,5 +97,7 @@ public interface ITherapySettingsRepository : IProfileScopedRepository<TherapySe
 /// being written on its own through the V4 API.
 /// </param>
 /// <param name="IsDefault">See <see cref="TherapySettings.IsDefault"/>.</param>
+/// <param name="DocumentDefault">See <see cref="TherapySettings.DocumentDefaultProfile"/>.</param>
 public sealed record ProfileStoreRow(
-    string DocumentId, bool FromDocument, string ProfileName, DateTime Timestamp, bool IsDefault);
+    string DocumentId, bool FromDocument, string ProfileName, DateTime Timestamp, bool IsDefault,
+    string? DocumentDefault = null);

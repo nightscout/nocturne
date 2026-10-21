@@ -166,16 +166,24 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         var anchorDt = DateTimeOffset.FromUnixTimeMilliseconds(anchorMills).UtcDateTime;
 
         // Sequential: see INocturneDbContextFactory.
-        var dia = await _therapySettings.GetDIAAsync(anchorMills, profileName, ct);
-        var carbsHr = await _therapySettings.GetCarbAbsorptionRateAsync(anchorMills, profileName, ct);
-        var timezoneId = await _therapySettings.GetTimezoneAsync(profileName, ct);
+        // An activation's own DIA, carb rate and timezone win over the stored profile's, as
+        // TherapySettingsResolver reads them at a point.
+        var dia = schedules is not null && (schedules.Insulin?.Dia ?? schedules.Dia) is > 0 and var snapshotDia
+            ? snapshotDia
+            : await _therapySettings.GetDIAAsync(anchorMills, profileName, ct);
+        var carbsHr = schedules is { CarbsHr: > 0 }
+            ? schedules.CarbsHr.Value
+            : await _therapySettings.GetCarbAbsorptionRateAsync(anchorMills, profileName, ct);
+        var timezoneId = schedules is not null
+            ? await _therapySettings.GetTimezoneAtAsync(anchorMills, ct: ct) ?? schedules.Timezone
+            : await _therapySettings.GetTimezoneAtAsync(anchorMills, profileName, ct);
         if (schedules is not null)
         {
             return new TherapySnapshot(
                 dia: dia,
                 peakMinutes: TherapySnapshot.DefaultPeakMinutes,
                 carbsPerHour: carbsHr,
-                timezone: ResolveTimezone(timezoneId ?? schedules.Timezone),
+                timezone: ResolveTimezone(timezoneId),
                 ccpPercentage: ccp?.Percentage,
                 ccpTimeshiftMs: ccp?.TimeshiftMs ?? 0,
                 sensitivityEntries: schedules.Sensitivity,

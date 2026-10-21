@@ -42,8 +42,9 @@ public interface IActiveProfileResolver
 
     /// <summary>
     /// Returns [fromMs, toMs) cut wherever the stored profile read (<see cref="GetProfileNameAsync"/>)
-    /// or the activation applying changes, in chronological order without overlap or gap. Used by
-    /// batch resolvers to avoid per-timestamp DB queries.
+    /// or the activation applying changes, in chronological order without overlap or gap. An empty
+    /// range is read as the instant <paramref name="fromMs"/>. Used by batch resolvers to avoid
+    /// per-timestamp DB queries.
     /// </summary>
     Task<IReadOnlyList<ProfileSpan>> GetProfileSpansForRangeAsync(
         long fromMs, long toMs, CancellationToken ct = default);

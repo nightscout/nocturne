@@ -3,9 +3,14 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.Json.Nodes;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Basal;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Xunit;
 using Xunit.Abstractions;
@@ -305,5 +310,121 @@ public class DefaultProfileStoreResolutionIntegrationTests : ApiIntegrationTestB
         ShouldBe(await ResolveAtAsync(at), new Store(45, 9, 0.75, 99, 117, 6, 28), "Mmol Profile");
         (await WithTenantScopeAsync(services => services.GetRequiredService<ITherapySettingsResolver>().GetUnitsAsync()))
             .Should().Be("mmol");
+    }
+
+    [Fact]
+    public async Task AnEmptyBatchRange_ReadsTheStoreAtItsInstant()
+    {
+        await SeedAsync(Document("5f8d0c1e8a7b4c3d9e5f1883", "Loop Profile", Now.AddDays(-2), new() { ["Loop Profile"] = Day }));
+        var at = Now.AddHours(-1).ToUnixTimeMilliseconds();
+
+        var rate = await WithTenantScopeAsync(async services =>
+            (await services.GetRequiredService<IBasalRateResolver>().BuildResolverAsync(at, at))(at));
+
+        rate.Should().Be(Day.Basal);
+    }
+
+    [Fact]
+    public async Task AScheduledBasalPublishedAlone_KeepsItsOriginAndReadsTheProgrammedRate()
+    {
+        await SeedAsync(Document("5f8d0c1e8a7b4c3d9e5f1884", "Loop Profile", Now.AddDays(-2), new() { ["Loop Profile"] = Day }));
+        var start = Now.AddHours(-1).UtcDateTime;
+
+        var stored = await WithTenantScopeAsync(async services =>
+        {
+            var published = await services.GetRequiredService<ITreatmentPublisher>().PublishTempBasalsAsync(
+                [
+                    new TempBasal
+                    {
+                        LegacyId = "scheduled-basal-1876",
+                        StartTimestamp = start,
+                        EndTimestamp = start.AddMinutes(30),
+                        Rate = Day.Basal,
+                        Origin = TempBasalOrigin.Scheduled,
+                        DataSource = "test-connector",
+                    },
+                ],
+                "test-connector",
+                WriteOrigin.Live);
+            published.Should().BeTrue();
+            return await services.GetRequiredService<ITempBasalRepository>().GetByLegacyIdAsync("scheduled-basal-1876");
+        });
+
+        stored!.Origin.Should().Be(TempBasalOrigin.Scheduled);
+        stored.ScheduledRate.Should().Be(Day.Basal);
+    }
+
+    [Fact]
+    public async Task BeforeTheFirstProfileDocument_TheNewestDocumentIsRead()
+    {
+        await SeedAsync(Document("5f8d0c1e8a7b4c3d9e5f1885", "Loop Profile", Now.AddHours(-1), new() { ["Loop Profile"] = Day }));
+        var past = Now.AddDays(-60).ToUnixTimeMilliseconds();
+
+        ShouldBe(await ResolveAtAsync(past), Day, "Loop Profile");
+
+        var range = await WithTenantScopeAsync(async services =>
+        {
+            var from = Now.AddDays(-90).ToUnixTimeMilliseconds();
+            var to = Now.ToUnixTimeMilliseconds();
+            var batch = await services.GetRequiredService<IBasalRateResolver>().BuildResolverAsync(from, to);
+            var timeline = await services.GetRequiredService<ITherapyTimelineResolver>().BuildAsync(from, to + 1);
+            return (Basal: batch(past), Snapshot: timeline.SnapshotAt(past));
+        });
+        range.Basal.Should().Be(Day.Basal);
+        range.Snapshot.SensitivityAt(past).Should().Be(Day.Sens);
+        range.Snapshot.BasalRateAt(past).Should().Be(Day.Basal);
+        range.Snapshot.Dia.Should().Be(Day.Dia);
+    }
+
+    [Fact]
+    public async Task AnOlderDocumentReadsTheDefaultItWasUploadedWith()
+    {
+        var stores = new Dictionary<string, Store> { ["Day"] = Day, ["Night"] = Night };
+        var client = await SeedAsync(
+            Document("5f8d0c1e8a7b4c3d9e5f1886", "Night", Now.AddDays(-3), stores),
+            Document("5f8d0c1e8a7b4c3d9e5f1887", "Day", Now.AddDays(-2), stores));
+
+        ShouldBe(await ResolveAtAsync(Now.AddHours(-60).ToUnixTimeMilliseconds()), Night, "Night");
+        ShouldBe(await ResolveAtAsync(Now.AddHours(-1).ToUnixTimeMilliseconds()), Day, "Day");
+
+        var documents = JsonNode.Parse(await client.GetStringAsync("/api/v1/profile?count=10"))!.AsArray();
+        documents.Select(d => (d!["_id"]!.GetValue<string>(), d["defaultProfile"]!.GetValue<string>()))
+            .Should().BeEquivalentTo([("5f8d0c1e8a7b4c3d9e5f1887", "Day"), ("5f8d0c1e8a7b4c3d9e5f1886", "Night")]);
+    }
+
+    [Fact]
+    public async Task AnAapsSwitchCarryingItsOwnDia_IsReadWithItByTheTherapyTimeline()
+    {
+        var client = await SeedAsync(Document(
+            "5f8d0c1e8a7b4c3d9e5f1888", "Loop Profile", Now.AddDays(-2), new() { ["Loop Profile"] = Day }));
+        var switchedAt = Now.AddHours(-3);
+        const string profileJson =
+            """{"units":"mg/dl","dia":7,"timezone":"UTC","sens":[{"time":"00:00","value":55}],"carbratio":[{"time":"00:00","value":11}],"basal":[{"time":"00:00","value":0.9}],"target_low":[{"time":"00:00","value":100}],"target_high":[{"time":"00:00","value":120}]}""";
+        (await client.PostAsJsonAsync("/api/v1/treatments", new[]
+        {
+            new
+            {
+                eventType = "Profile Switch",
+                profile = "Rhys",
+                duration = 180,
+                profileJson,
+                created_at = switchedAt.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                mills = switchedAt.ToUnixTimeMilliseconds(),
+                enteredBy = "openaps://AndroidAPS",
+            },
+        })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var at = Now.AddHours(-1).ToUnixTimeMilliseconds();
+        var (point, timeline) = await WithTenantScopeAsync(async services =>
+        {
+            var dia = await services.GetRequiredService<ITherapySettingsResolver>().GetDIAAsync(at);
+            var built = await services.GetRequiredService<ITherapyTimelineResolver>()
+                .BuildAsync(Now.AddHours(-24).ToUnixTimeMilliseconds(), Now.ToUnixTimeMilliseconds());
+            return (dia, built.SnapshotAt(at));
+        });
+
+        point.Should().Be(7);
+        timeline.Dia.Should().Be(7);
+        timeline.BasalRateAt(at).Should().Be(0.9);
     }
 }

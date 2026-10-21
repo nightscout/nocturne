@@ -89,10 +89,10 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         foreach (var name in spans.Select(s => s.ProfileName).Distinct(StringComparer.Ordinal))
         {
             var schedules = (await _scheduleRepo.GetByProfileNameAsync(name, ct))
-                .Where(s => s.Timestamp <= toUtc)
                 .OrderBy(s => s.Timestamp)
                 .ToList();
-            var therapy = await _therapyRepo.GetActiveAtAsync(name, toUtc, ct);
+            var therapy = await _therapyRepo.GetActiveAtAsync(name, toUtc, ct)
+                ?? (await _therapyRepo.GetByProfileNameAsync(name, ct)).MaxBy(t => t.Timestamp);
             byProfile[name] = new ProfileResources(schedules, therapy?.Timezone);
         }
 
@@ -157,15 +157,14 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         }
         else
         {
-            // No schedule existed at fromMills. Emit a leading slice with no entries up to the
-            // first schedule's effective time; the calculator falls back to the default rate
-            // there, matching legacy IBasalRateResolver behavior at instants before any schedule.
+            // No schedule existed at fromMills: up to the first one, the newest is read, as
+            // ProfileVersionCache.ActiveAt reads it for IBasalRateResolver.
             var firstStartMs = new DateTimeOffset(schedules[0].Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
             var leadingEnd = Math.Min(firstStartMs, toMills);
             if (leadingEnd > sliceStart)
             {
                 yield return new ScheduleAssignment(
-                    sliceStart, leadingEnd, profileName, [], percentage, timeshiftMs, resources.TimeZoneId);
+                    sliceStart, leadingEnd, profileName, schedules[^1].Entries, percentage, timeshiftMs, resources.TimeZoneId);
                 sliceStart = leadingEnd;
             }
             if (sliceStart >= toMills) yield break;

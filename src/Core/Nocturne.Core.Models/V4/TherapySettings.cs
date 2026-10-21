@@ -128,6 +128,13 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     public bool IsDefault { get; set; }
 
     /// <summary>
+    /// The <c>defaultProfile</c> of the legacy profile document this row was decomposed from, shared
+    /// by every row of that document; null for a row written on its own, or decomposed before it was
+    /// recorded. An update that leaves it null keeps the stored value.
+    /// </summary>
+    public string? DocumentDefaultProfile { get; set; }
+
+    /// <summary>
     /// Who entered this profile (e.g., "Loop", "Trio")
     /// </summary>
     public string? EnteredBy { get; set; }

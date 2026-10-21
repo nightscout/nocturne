@@ -8,16 +8,18 @@ namespace Nocturne.API.Services.Profiles.Resolvers;
 /// Nightscout reads them off the profile document in force (<c>profileFromTime</c>,
 /// <c>activeProfileToTime</c> in lib/profilefunctions.js): a document's stores replace the previous
 /// document's, and a profile switch naming a store the document does not hold reads its default.
+/// Before the first document, the newest one is in force, as Nightscout's <c>profileFromTime</c>
+/// falls back to <c>data[0]</c>.
 /// </summary>
 /// <remarks>
-/// A document's own <c>defaultProfile</c> is not stored, only the tenant's one
-/// <see cref="TherapySettings.IsDefault"/> row: the newest document's default, or the store a user
-/// picked since. So the newest document, and the one holding that row, default to its store. Any
-/// other document defaults to the first of these it holds, since a document usually keeps the
-/// <c>defaultProfile</c> of the one before it: that row's store; the store the document before it
-/// defaulted to; a store named <c>Default</c>, which is what a Nightscout document without a
-/// <c>defaultProfile</c> reads; else its newest store, which is the <c>defaultProfile</c>
-/// <see cref="ProfileProjectionService"/> serves it with.
+/// The newest document, and the one holding the tenant's <see cref="TherapySettings.IsDefault"/>
+/// row, default to that row's store: a user who picks another default changes the newest document's,
+/// as Nightscout's in-place PUT of the document does. Any other document defaults to its recorded
+/// <see cref="TherapySettings.DocumentDefaultProfile"/> when it holds that store. A row decomposed
+/// before that was recorded defaults to the first of these it holds, since a document usually keeps
+/// the <c>defaultProfile</c> of the one before it: the IsDefault row's store; the store the document
+/// before it defaulted to; a store named <c>Default</c>, which is what a Nightscout document without
+/// a <c>defaultProfile</c> reads; else its newest store.
 /// A row written on its own through the V4 API adds its store to the document in force and, unless it
 /// is that row or the newest, leaves the default as it was.
 /// </remarks>
@@ -60,11 +62,15 @@ internal sealed class ProfileStoreTimeline
                 ? names
                 : new HashSet<string>(stores.Concat(names), StringComparer.Ordinal);
 
+            var recorded = fromDocument
+                ? document.Rows.Select(r => r.DocumentDefault).FirstOrDefault(d => d is not null && names.Contains(d))
+                : null;
             var defaultStore = chosen is not null && (i == documents.Count - 1 || document.Rows.Any(r => r.IsDefault))
                 ? chosen
-                : fromDocument || previous is null
-                    ? DocumentDefault(document.Rows, names, previous, chosen)
-                    : previous;
+                : recorded
+                    ?? (fromDocument || previous is null
+                        ? DocumentDefault(document.Rows, names, previous, chosen)
+                        : previous);
 
             if (!stores.Contains(defaultStore))
                 stores = new HashSet<string>(stores.Append(defaultStore), StringComparer.Ordinal);
@@ -92,12 +98,8 @@ internal sealed class ProfileStoreTimeline
             .ProfileName;
     }
 
-    /// <summary>
-    /// The store read at <paramref name="timeMills"/> when no profile switch names one. Before the first
-    /// document, the first document's.
-    /// </summary>
-    public string DefaultAt(long timeMills) =>
-        EpochAt(timeMills)?.Default ?? (_epochs.Length > 0 ? _epochs[0].Default : ImplicitDefault);
+    /// <summary>The store read at <paramref name="timeMills"/> when no profile switch names one.</summary>
+    public string DefaultAt(long timeMills) => EpochAt(timeMills)?.Default ?? ImplicitDefault;
 
     /// <summary>Whether the document in force at <paramref name="timeMills"/> holds <paramref name="store"/>.</summary>
     public bool Holds(string store, long timeMills) => EpochAt(timeMills)?.Stores.Contains(store) == true;
@@ -105,7 +107,7 @@ internal sealed class ProfileStoreTimeline
     /// <summary>
     /// The store read at <paramref name="timeMills"/> for a profile switch naming
     /// <paramref name="requested"/>, or for none when it is null: the store it names when the document
-    /// in force holds it, else that document's default. Before the first document, the store it names.
+    /// in force holds it, else that document's default. With no document at all, the store it names.
     /// </summary>
     public string StoreFor(string? requested, long timeMills)
     {
@@ -137,7 +139,9 @@ internal sealed class ProfileStoreTimeline
             }
         }
 
-        return found < 0 ? null : _epochs[found];
+        if (found >= 0)
+            return _epochs[found];
+        return _epochs.Length > 0 ? _epochs[^1] : null;
     }
 
     private static long ToMills(DateTime utc) =>

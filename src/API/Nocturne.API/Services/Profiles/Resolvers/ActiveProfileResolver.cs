@@ -42,7 +42,7 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
         long fromMs, long toMs, CancellationToken ct = default)
     {
         if (toMs <= fromMs)
-            return [];
+            toMs = fromMs + 1;
 
         var stores = await _stores.GetAsync(ct);
         var spans = new List<ProfileSpan>();

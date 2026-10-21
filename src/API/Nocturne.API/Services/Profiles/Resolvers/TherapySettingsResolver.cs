@@ -85,7 +85,10 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
         return settings?.CarbsHr > 0 ? settings.CarbsHr : DefaultCarbsHr;
     }
 
-    public async Task<string?> GetTimezoneAsync(string? specProfile = null, CancellationToken ct = default)
+    public Task<string?> GetTimezoneAsync(string? specProfile = null, CancellationToken ct = default) =>
+        GetTimezoneAtAsync(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), specProfile, ct);
+
+    public async Task<string?> GetTimezoneAtAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
     {
         // PatientRecord is the canonical source — a patient lives in one timezone regardless of
         // how many therapy profiles they have. The per-profile TherapySettings.Timezone field
@@ -96,13 +99,13 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
         if (!string.IsNullOrEmpty(patient?.Timezone))
             return patient.Timezone;
 
-        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         if (specProfile is null
-            && await _activeProfileResolver.GetActiveSchedulesAsync(nowMills, ct) is { Timezone: { Length: > 0 } snapshotTimezone })
+            && await _activeProfileResolver.GetActiveSchedulesAsync(timeMills, ct) is { Timezone: { Length: > 0 } snapshotTimezone })
             return snapshotTimezone;
 
-        var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(nowMills, ct);
-        var settings = await GetCachedSettingsAsync(profileName, DateTime.UtcNow, ct);
+        var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(timeMills, ct);
+        var settings = await GetCachedSettingsAsync(
+            profileName, DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime, ct);
         return settings?.Timezone;
     }
 

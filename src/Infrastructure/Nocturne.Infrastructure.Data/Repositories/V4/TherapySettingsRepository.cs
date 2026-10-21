@@ -137,7 +137,8 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await DocumentRows(ctx)
             .Select(d => new ProfileStoreRow(
-                d.DocumentId, d.Row.LegacyId != null, d.Row.ProfileName, d.Row.Timestamp, d.Row.IsDefault))
+                d.DocumentId, d.Row.LegacyId != null, d.Row.ProfileName, d.Row.Timestamp, d.Row.IsDefault,
+                d.Row.DocumentDefaultProfile))
             .ToListAsync(ct);
     }
 
