@@ -165,17 +165,6 @@ public sealed class MemberRecoveryControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task A_delegated_token_cannot_issue_a_code_whatever_its_scopes()
-    {
-        SignIn(AuthType.DirectGrant, Scope.FullAccess);
-
-        var result = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
-
-        result.Should().BeOfType<ForbidResult>();
-        NoCodeIssued();
-    }
-
-    [Fact]
     public async Task A_caller_cannot_recover_a_member_holding_more_than_they_do()
     {
         _roles.Setup(r => r.GetEffectivePermissionsAsync(_orphanMemberId, It.IsAny<CancellationToken>()))

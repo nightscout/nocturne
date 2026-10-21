@@ -31,18 +31,6 @@ namespace Nocturne.API.Controllers.V4.Identity;
 [AllowDuringSetup]
 public class MemberRecoveryController : ControllerBase
 {
-    /// <summary>
-    /// The credentials that are the person rather than a delegation they handed out, as in
-    /// <see cref="PlatformAdminCredentials"/>. A recovery code puts a passkey on someone else's
-    /// account, so a token or api-secret holding <see cref="Scope.MembersManage"/> must not mint one.
-    /// </summary>
-    private static readonly IReadOnlySet<AuthType> InteractiveCredentials = new HashSet<AuthType>
-    {
-        AuthType.SessionCookie,
-        AuthType.OidcToken,
-        AuthType.LegacyJwt,
-    };
-
     private const string OperatorOnlyDetail =
         "This account is an instance administrator or also belongs to another space, so only the operator can issue its recovery code.";
 
@@ -115,6 +103,7 @@ public class MemberRecoveryController : ControllerBase
     /// </para>
     /// </remarks>
     [HttpPost("{subjectId:guid}/code")]
+    [RequireInteractiveSession]
     [RemoteCommand(Invalidates = ["GetLockedOutMembers"])]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(LoginCode), StatusCodes.Status200OK)]
@@ -124,8 +113,7 @@ public class MemberRecoveryController : ControllerBase
     public async Task<IActionResult> IssueRecoveryCode(Guid subjectId, CancellationToken ct)
     {
         var auth = HttpContext.GetAuthContext();
-        if (auth is null || !InteractiveCredentials.Contains(auth.AuthType)
-            || !HttpContext.HasScope(Scope.MembersManage))
+        if (auth is null || !HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;

@@ -54,6 +54,7 @@ public class RequireInteractiveSessionTests
         { typeof(ShareLinkController), nameof(ShareLinkController.SetShareLinkScopes) },
         { typeof(ShareLinkController), nameof(ShareLinkController.SetShareLinkFullHistory) },
         { typeof(MemberInviteController), nameof(MemberInviteController.CreateInvite) },
+        { typeof(MemberRecoveryController), nameof(MemberRecoveryController.IssueRecoveryCode) },
     };
 
     [Theory]
