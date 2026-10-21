@@ -615,9 +615,10 @@ public class StatisticsController : ControllerBase
     private async Task<TargetRangeSchedule?> GetActiveTargetRangeScheduleAsync(CancellationToken ct)
     {
         var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var profileName = await _activeProfileResolver.GetActiveProfileNameAsync(nowMills, ct)
-            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
-        return await _targetRangeScheduleRepository.GetActiveAtAsync(profileName, DateTime.UtcNow, ct);
+        var profileName = await _activeProfileResolver.GetProfileNameAsync(nowMills, ct);
+        // Before the store's first version, its newest, as ProfileVersionCache.ActiveAt reads it.
+        return await _targetRangeScheduleRepository.GetActiveAtAsync(profileName, DateTime.UtcNow, ct)
+            ?? (await _targetRangeScheduleRepository.GetByProfileNameAsync(profileName, ct)).MaxBy(s => s.Timestamp);
     }
 
     /// <summary>

@@ -9,16 +9,23 @@ namespace Nocturne.Core.Contracts.Profiles.Resolvers;
 public interface IActiveProfileResolver
 {
     /// <summary>
-    /// Returns the name of the stored profile active at the given time, or null if no profile
-    /// activation applies, when <see cref="GetDefaultProfileNameAsync"/> is the one in force.
+    /// Returns the name of the stored profile the activation applying at the given time names, or null
+    /// if none applies. The store read then is <see cref="GetProfileNameAsync"/>.
     /// </summary>
     Task<string?> GetActiveProfileNameAsync(long timeMills, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the name of the stored profile in force when no profile activation applies: the
-    /// tenant's default store, or "Default" when it has none.
+    /// Returns the name of the stored profile read at the given time: the one the activation applying
+    /// then names, when the profile store in force holds it, else
+    /// <see cref="GetDefaultProfileNameAsync"/>.
     /// </summary>
-    Task<string> GetDefaultProfileNameAsync(CancellationToken ct = default);
+    Task<string> GetProfileNameAsync(long timeMills, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the name of the default store of the profile store in force at the given time, or
+    /// "Default" when there is no stored profile.
+    /// </summary>
+    Task<string> GetDefaultProfileNameAsync(long timeMills, CancellationToken ct = default);
 
     /// <summary>
     /// Returns the percentage and timeshift to apply to the active profile's schedules at the given
@@ -34,10 +41,12 @@ public interface IActiveProfileResolver
     Task<ProfileActivationSnapshot?> GetActiveSchedulesAsync(long timeMills, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the stretches of [fromMs, toMs] a profile activation applies over, in chronological
-    /// order without overlap. Used by batch resolvers to avoid per-timestamp DB queries.
+    /// Returns [fromMs, toMs) cut wherever the stored profile read (<see cref="GetProfileNameAsync"/>)
+    /// or the activation applying changes, in chronological order without overlap or gap. An empty or
+    /// inverted range is read as the instant <paramref name="fromMs"/>. Used by batch resolvers to avoid
+    /// per-timestamp DB queries.
     /// </summary>
-    Task<IReadOnlyList<ProfileSpan>> GetActiveProfileSpansForRangeAsync(
+    Task<IReadOnlyList<ProfileSpan>> GetProfileSpansForRangeAsync(
         long fromMs, long toMs, CancellationToken ct = default);
 
     /// <summary>
@@ -55,8 +64,11 @@ public interface IActiveProfileResolver
 public record CircadianAdjustment(double Percentage, long TimeshiftMs);
 
 /// <summary>
-/// A stretch of time one profile activation applies over, for batch resolution.
+/// A stretch of time one stored profile is read over, under one profile activation or none, for batch
+/// resolution.
 /// </summary>
+/// <param name="ProfileName">The stored profile read; see <see cref="IActiveProfileResolver.GetProfileNameAsync"/>.</param>
+/// <param name="Adjustment">The activation's percentage and timeshift, or null; see <see cref="IActiveProfileResolver.GetCircadianAdjustmentAsync"/>.</param>
 /// <param name="Schedules">The schedules to read in place of the store's; see <see cref="ResolvedProfileActivation.Schedules"/>.</param>
 public record ProfileSpan(
     string ProfileName,
