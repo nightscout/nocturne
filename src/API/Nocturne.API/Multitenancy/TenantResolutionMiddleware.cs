@@ -167,10 +167,10 @@ public class TenantResolutionMiddleware
         new TenantlessPath("/api/auth/totp/setup", HttpMethods.Post, SoleTenantAtApex: true),
         new TenantlessPath("/api/auth/totp/verify-setup", HttpMethods.Post, SoleTenantAtApex: true),
         new TenantlessPath("/api/auth/totp", HttpMethods.Get, SoleTenantAtApex: true),
-        // The authenticator step after an identity-provider sign-in on a tenantless host. Its
-        // step-up token is bound to the host it was minted on, so one minted for a tenant is
-        // refused here. Not served as the sole tenant: the callback that minted it is not either.
-        new TenantlessPath("/api/auth/totp/login", HttpMethods.Post),
+        // The authenticator step after an identity-provider sign-in on a tenantless host. Served
+        // as the sole tenant like the passkey ceremonies it also follows; TotpController.Login
+        // matches a token the tenantless OIDC callback minted at that same apex.
+        new TenantlessPath("/api/auth/totp/login", HttpMethods.Post, SoleTenantAtApex: true),
         // Revoking one authenticator, whose route carries its id. Narrowed to DELETE so the sibling
         // /login is admitted only by its own entry above. Routing has no DELETE beneath /login.
         new TenantlessPath("/api/auth/totp/", HttpMethods.Delete, Prefix: true, SoleTenantAtApex: true),

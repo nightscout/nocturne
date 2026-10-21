@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -56,6 +57,7 @@ public class TotpController : ControllerBase
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly OidcOptions _oidcOptions;
+    private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<TotpController> _logger;
 
     /// <summary>
@@ -69,6 +71,7 @@ public class TotpController : ControllerBase
         ITenantAccessor tenantAccessor,
         ITenantMemberService tenantMemberService,
         IOptions<OidcOptions> oidcOptions,
+        IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<TotpController> logger)
     {
         _totpService = totpService;
@@ -78,6 +81,7 @@ public class TotpController : ControllerBase
         _tenantAccessor = tenantAccessor;
         _tenantMemberService = tenantMemberService;
         _oidcOptions = oidcOptions.Value;
+        _baseDomain = baseDomainOptions.Value;
         _logger = logger;
     }
 
@@ -273,9 +277,8 @@ public class TotpController : ControllerBase
         // The primary factor decided who may sign in where, and the token carries that decision:
         // redeem it only on the host it was minted for. A membership revoked since then still
         // denies, unless the primary factor admitted this subject on an invite.
-        Guid? hostTenantId = _tenantAccessor.IsResolved ? _tenantAccessor.TenantId : null;
-        if (result.TenantId != hostTenantId
-            || (hostTenantId is { } tenantId
+        if (!IsMintingHost(result.TenantId)
+            || (result.TenantId is { } tenantId
                 && !result.AdmittedByInvite
                 && !await _tenantMemberService.IsMemberAsync(result.SubjectId, tenantId)))
         {
@@ -307,6 +310,24 @@ public class TotpController : ControllerBase
             AccessToken = session.AccessToken,
             ExpiresIn = session.ExpiresInSeconds,
         });
+    }
+
+    /// <summary>
+    /// Whether this request is on the host a step-up token bound to <paramref name="boundTenantId"/>
+    /// was minted on.
+    /// </summary>
+    /// <remarks>
+    /// The apex of a single-tenant install is one host with two answers: this endpoint and the
+    /// passkey ceremonies resolve it as the sole tenant, while the OIDC callback is served there
+    /// without a tenant (<see cref="TenantResolutionMiddleware"/>). So a token minted with no tenant
+    /// also matches the apex when it resolves a tenant, and nowhere else that does.
+    /// </remarks>
+    private bool IsMintingHost(Guid? boundTenantId)
+    {
+        Guid? hostTenantId = _tenantAccessor.IsResolved ? _tenantAccessor.TenantId : null;
+        return boundTenantId == hostTenantId
+            || (boundTenantId is null
+                && SubdomainParser.Extract(Request.Host.Host, _baseDomain.BaseDomain) is null);
     }
 
 }

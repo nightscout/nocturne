@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
@@ -27,6 +28,11 @@ public class TotpControllerLoginGateTests
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
     private readonly Mock<ITenantMemberService> _tenantMemberService = new();
 
+    private const string Apex = "nocturne.example.com";
+    private const string TenantHost = "erik.nocturne.example.com";
+    private const string DashboardHost = "app.nocturne.example.com";
+    private string _host = TenantHost;
+
     private TotpController CreateController()
         => new(
             _totpService.Object,
@@ -36,9 +42,13 @@ public class TotpControllerLoginGateTests
             _tenantAccessor.Object,
             _tenantMemberService.Object,
             Options.Create(new OidcOptions()),
+            Options.Create(new BaseDomainOptions { BaseDomain = Apex }),
             NullLogger<TotpController>.Instance)
         {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { Request = { Host = new HostString(_host) } },
+            }
         };
 
     [Fact]
@@ -66,8 +76,10 @@ public class TotpControllerLoginGateTests
             "TOTP must never mint a session without a completed primary factor");
     }
 
-    private void OnHost(Guid? tenantId)
+    /// <summary>The request's host, and the tenant the middleware resolved for it, if any.</summary>
+    private void OnHost(Guid? tenantId, string host = TenantHost)
     {
+        _host = host;
         _tenantAccessor.Setup(a => a.IsResolved).Returns(tenantId.HasValue);
         _tenantAccessor.Setup(a => a.TenantId).Returns(tenantId ?? Guid.Empty);
     }
@@ -151,12 +163,14 @@ public class TotpControllerLoginGateTests
         AssertSessionIssued(await LoginAsync(), subjectId);
     }
 
-    [Fact]
+    [Theory]
     [Trait("Category", "Unit")]
-    public async Task Login_OnATenantlessHostWithATokenMintedThere_IssuesSession()
+    [InlineData(Apex)]
+    [InlineData(DashboardHost)]
+    public async Task Login_OnATenantlessHostWithATokenMintedThere_IssuesSession(string host)
     {
         var subjectId = Guid.NewGuid();
-        OnHost(null);
+        OnHost(null, host);
         TokenBoundTo(subjectId, tenantId: null);
         SetupSessionIssuance();
 
@@ -166,14 +180,57 @@ public class TotpControllerLoginGateTests
             Times.Never);
     }
 
-    public static TheoryData<Guid?, Guid?> MismatchedHosts()
+    /// <summary>
+    /// The passkey ceremony on a single-tenant apex resolves the sole tenant, and so does the
+    /// authenticator step that follows it there.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Login_OnASingleTenantApexAfterAPasskey_IssuesSession()
+    {
+        var subjectId = Guid.NewGuid();
+        var soleTenant = Guid.NewGuid();
+        OnHost(soleTenant, Apex);
+        TokenBoundTo(subjectId, soleTenant);
+        SetupMembership(subjectId, soleTenant, isMember: true);
+        SetupSessionIssuance();
+
+        AssertSessionIssued(await LoginAsync(), subjectId);
+    }
+
+    /// <summary>
+    /// The OIDC callback on a single-tenant apex runs without a tenant and binds none, while the
+    /// authenticator step there resolves the sole tenant. It is the same host, and the callback
+    /// checked no membership, so neither does this.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Login_OnASingleTenantApexAfterAnIdentityProvider_IssuesSession()
+    {
+        var subjectId = Guid.NewGuid();
+        OnHost(Guid.NewGuid(), Apex);
+        TokenBoundTo(subjectId, tenantId: null);
+        SetupSessionIssuance();
+
+        AssertSessionIssued(await LoginAsync(), subjectId);
+        _tenantMemberService.Verify(
+            t => t.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    public static TheoryData<Guid?, Guid?, string> MismatchedHosts()
     {
         var tenant = Guid.NewGuid();
-        return new TheoryData<Guid?, Guid?>
+        return new TheoryData<Guid?, Guid?, string>
         {
-            { tenant, null },
-            { null, tenant },
-            { tenant, Guid.NewGuid() },
+            // Minted on a tenant, redeemed on a multi-tenant apex or a dashboard host.
+            { tenant, null, Apex },
+            { tenant, null, DashboardHost },
+            // Minted with no tenant, redeemed on a tenant's own subdomain.
+            { null, tenant, TenantHost },
+            // Minted on one tenant, redeemed on another, including another's sole-tenant apex.
+            { tenant, Guid.NewGuid(), TenantHost },
+            { tenant, Guid.NewGuid(), Apex },
         };
     }
 
@@ -181,13 +238,13 @@ public class TotpControllerLoginGateTests
     [Trait("Category", "Unit")]
     [MemberData(nameof(MismatchedHosts))]
     public async Task Login_OnAHostOtherThanTheOneTheTokenWasMintedFor_IsDenied(
-        Guid? mintedFor, Guid? host)
+        Guid? mintedFor, Guid? hostTenant, string host)
     {
         var subjectId = Guid.NewGuid();
-        OnHost(host);
+        OnHost(hostTenant, host);
         TokenBoundTo(subjectId, mintedFor, admittedByInvite: true);
-        if (host is { } hostTenant)
-            SetupMembership(subjectId, hostTenant, isMember: true);
+        if (hostTenant is { } resolved)
+            SetupMembership(subjectId, resolved, isMember: true);
 
         AssertDeniedAsNotAMember(await LoginAsync());
     }

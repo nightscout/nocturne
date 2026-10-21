@@ -78,17 +78,18 @@ public sealed class TenantlessDashboardPathsTests
     }
 
     /// <summary>
-    /// The authenticator step that follows an identity-provider sign-in on a tenantless host. Its
-    /// step-up token is bound to the host that minted it, and the OIDC callback is not served as
-    /// the sole tenant, so neither may this be or a token minted at the apex would never match.
+    /// The authenticator step follows a passkey, which a single-tenant apex serves as the sole
+    /// tenant, and an identity provider, whose callback it serves without one. It is served as the
+    /// sole tenant where there is one and tenantlessly where there is not;
+    /// <c>TotpController.Login</c> reconciles the callback's binding with it.
     /// </summary>
     [Fact]
-    public void The_authenticator_step_is_admitted_tenantlessly_but_not_as_the_sole_tenant()
+    public void The_authenticator_step_is_admitted_tenantlessly_and_as_the_sole_tenant()
     {
         TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/totp/login", HttpMethods.Post)
             .Should().BeTrue();
         TenantResolutionMiddleware.IsSoleTenantAtApex("/api/auth/totp/login", HttpMethods.Post)
-            .Should().BeFalse();
+            .Should().BeTrue();
         TenantResolutionMiddleware.IsSoleTenantAtApex("/api/auth/oidc/callback", HttpMethods.Get)
             .Should().BeFalse();
     }
