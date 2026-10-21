@@ -101,7 +101,7 @@ public class AlertRulesController : ControllerBase
             .OrderBy(r => r.SortOrder)
             .ToListAsync(ct);
 
-        return Ok(rules.Select(MapToResponse).ToList());
+        return Ok(await ToResponsesAsync(db, rules, ct));
     }
 
     /// <summary>
@@ -123,7 +123,7 @@ public class AlertRulesController : ControllerBase
         if (rule is null)
             return NotFound();
 
-        return Ok(MapToResponse(rule));
+        return Ok(await ToResponseAsync(db, rule, ct));
     }
 
     /// <summary>
@@ -146,7 +146,7 @@ public class AlertRulesController : ControllerBase
         // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
         await using var db = await _contextFactory.CreateAsync(ct);
 
-        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+        if (await ResolveAndValidateChannelsAsync(request.Channels, NoStoredRecipients, db, ct) is { } badChannel)
             return badChannel;
 
         if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
@@ -193,7 +193,7 @@ public class AlertRulesController : ControllerBase
             .Include(r => r.Channels)
             .FirstAsync(r => r.Id == rule.Id, ct);
 
-        return CreatedAtAction(nameof(GetRule), new { id = created.Id }, MapToResponse(created));
+        return CreatedAtAction(nameof(GetRule), new { id = created.Id }, await ToResponseAsync(db, created, ct));
     }
 
     /// <summary>
@@ -228,7 +228,7 @@ public class AlertRulesController : ControllerBase
             return invalid;
         var trees = new CanonicalTrees(check.ConditionParams, check.AutoResolveParams, check.ClientConfiguration);
 
-        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+        if (await ResolveAndValidateChannelsAsync(request.Channels, InAppRecipientsOf(rule.Channels), db, ct) is { } badChannel)
             return badChannel;
 
         if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
@@ -310,7 +310,7 @@ public class AlertRulesController : ControllerBase
             .Include(r => r.Channels)
             .FirstAsync(r => r.Id == id, ct);
 
-        return Ok(MapToResponse(updated));
+        return Ok(await ToResponseAsync(db, updated, ct));
     }
 
     /// <summary>
@@ -385,7 +385,7 @@ public class AlertRulesController : ControllerBase
         if (wasEnabled)
             await _retirement.CloseAsync([id], db.TenantId, CancellationToken.None);
 
-        return Ok(MapToResponse(rule));
+        return Ok(await ToResponseAsync(db, rule, ct));
     }
 
     /// <summary>
@@ -435,8 +435,16 @@ public class AlertRulesController : ControllerBase
         await using var db = await _contextFactory.CreateAsync(ct);
 
         // Held to the same rules as a save: a preview that accepted a destination the editor
-        // would refuse to store would report success for a channel that cannot deliver.
-        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+        // would refuse to store would report success for a channel that cannot deliver. The
+        // request names no rule, so any in-app recipient stored on this site counts as stored.
+        var storedRecipients = (await db.AlertRuleChannels
+                .AsNoTracking()
+                .Where(c => c.ChannelType == ChannelType.InApp)
+                .Select(c => c.Destination)
+                .Distinct()
+                .ToListAsync(ct))
+            .ToHashSet();
+        if (await ResolveAndValidateChannelsAsync(request.Channels, storedRecipients, db, ct) is { } badChannel)
             return badChannel;
 
         var tenantId = db.TenantId;
@@ -494,16 +502,24 @@ public class AlertRulesController : ControllerBase
 
     /// <summary>
     /// Fills in a DM channel's destination from the caller's linked identity on that channel's
-    /// platform and rejects a channel list whose destinations cannot deliver: a
-    /// <c>device_action</c> channel naming an unknown kind or capability, a channel type with no
-    /// delivery path, a channel type that needs a destination and was given none, or a destination
-    /// the platform adapter cannot address. Nothing downstream inspects a destination, so an
-    /// unrejected one becomes a channel that stores fine and never delivers. Returns a 400
+    /// platform, routes an in-app channel (see <see cref="ResolveInAppRecipientAsync"/>), and
+    /// rejects a channel list whose destinations cannot deliver: an in-app channel naming no
+    /// member, a <c>device_action</c> channel naming an unknown kind or capability, a channel type
+    /// with no delivery path, a channel type that needs a destination and was given none, or a
+    /// destination the platform adapter cannot address. Nothing downstream inspects a destination,
+    /// so an unrejected one becomes a channel that stores fine and never delivers. Returns a 400
     /// <see cref="BadRequestObjectResult"/> on the first offender, or null when all channels are
     /// valid.
     /// </summary>
+    /// <param name="storedRecipients">
+    /// The in-app recipients already stored where these channels come from, which may have left
+    /// the site since.
+    /// </param>
     private async Task<ActionResult?> ResolveAndValidateChannelsAsync(
-        List<CreateAlertRuleChannelRequest>? channels, NocturneDbContext db, CancellationToken ct)
+        List<CreateAlertRuleChannelRequest>? channels,
+        IReadOnlySet<string> storedRecipients,
+        NocturneDbContext db,
+        CancellationToken ct)
     {
         if (channels is null)
         {
@@ -534,6 +550,28 @@ public class AlertRulesController : ControllerBase
                     message = $"A {WireName(ch.ChannelType)} channel has no delivery path. Use "
                         + $"{string.Join(" or ", replacements.Select(WireName))} instead.",
                 });
+            }
+
+            if (ChannelDestinations.RoutesToMember(ch.ChannelType))
+            {
+                var goesToSaver = string.IsNullOrWhiteSpace(ch.Destination)
+                                  || storedRecipients.Contains(ch.Destination);
+                var member = await ResolveInAppRecipientAsync(db, ch.Destination, storedRecipients, ct);
+                if (member is null)
+                {
+                    return BadRequest(new
+                    {
+                        message = goesToSaver
+                            ? $"A {WireName(ch.ChannelType)} channel without a member to name is "
+                                + "delivered to the member who saves it, and this caller is not a "
+                                + "member of this site."
+                            : $"A {WireName(ch.ChannelType)} channel's destination must be the subject "
+                                + $"id of a member of this site; got '{ch.Destination}'.",
+                    });
+                }
+
+                ch.Destination = member.Value.ToString();
+                continue;
             }
 
             if (ChannelDestinations.ResolvesFromLinkedIdentity(ch.ChannelType)
@@ -661,11 +699,44 @@ public class AlertRulesController : ControllerBase
             .FirstOrDefaultAsync(ct);
     }
 
+    /// <summary>
+    /// The member an in-app channel delivers to: the member it names, or the caller when it names
+    /// none. Null when it names a subject who may not receive (<see cref="InAppRecipients"/>).
+    /// </summary>
+    /// <remarks>
+    /// A stored recipient who has since left the site, or can no longer receive, goes to the
+    /// caller as well, rather than
+    /// failing the save: the editor sends back the destination it loaded, so refusing it would
+    /// leave the rule uneditable, and keeping it would leave the channel reaching no one.
+    /// </remarks>
+    private async Task<Guid?> ResolveInAppRecipientAsync(
+        NocturneDbContext db, string? destination, IReadOnlySet<string> storedRecipients, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(destination)
+            && await InAppRecipients.ResolveAsync(db, db.TenantId, destination, ct) is { } named)
+        {
+            return named;
+        }
+
+        if (!string.IsNullOrWhiteSpace(destination) && !storedRecipients.Contains(destination))
+        {
+            return null;
+        }
+
+        return await InAppRecipients.ResolveAsync(db, db.TenantId, HttpContext?.GetSubjectId()?.ToString(), ct);
+    }
+
+    /// <summary>The in-app recipients stored on <paramref name="channels"/>.</summary>
+    private static HashSet<string> InAppRecipientsOf(IEnumerable<AlertRuleChannelEntity> channels) =>
+        channels.Where(c => c.ChannelType == ChannelType.InApp).Select(c => c.Destination).ToHashSet();
+
     /// <summary>Serialised name of a channel type, so error text matches the request wire format.</summary>
     private static string WireName(ChannelType channelType) =>
         JsonSerializer.Serialize(channelType).Trim('"');
 
     private static readonly Dictionary<(ChannelType, string), string> NoRetainedSecrets = [];
+
+    private static readonly IReadOnlySet<string> NoStoredRecipients = new HashSet<string>();
 
     private AlertRuleChannelEntity BuildChannel(
         CreateAlertRuleChannelRequest req, Guid ruleId, Guid tenantId, int sortOrder,
@@ -737,6 +808,63 @@ public class AlertRulesController : ControllerBase
 
     private static string? SerializeMetadata(object? metadata) =>
         metadata is not null ? JsonSerializer.Serialize(metadata) : null;
+
+    private async Task<AlertRuleResponse> ToResponseAsync(
+        NocturneDbContext db, AlertRuleEntity rule, CancellationToken ct) =>
+        (await ToResponsesAsync(db, [rule], ct))[0];
+
+    /// <summary>
+    /// Maps rules to responses and, for a caller who may edit the rules, describes each in-app
+    /// channel's recipient. Only the rule editor reads it, so other callers are spared the lookup.
+    /// This is not a privacy boundary: member names are readable more widely (issue #2359).
+    /// </summary>
+    private async Task<List<AlertRuleResponse>> ToResponsesAsync(
+        NocturneDbContext db, IEnumerable<AlertRuleEntity> rules, CancellationToken ct)
+    {
+        var responses = rules.Select(MapToResponse).ToList();
+        var inApp = responses
+            .SelectMany(r => r.Channels)
+            .Where(c => c.ChannelType == ChannelType.InApp)
+            .ToList();
+        if (inApp.Count == 0 || HttpContext?.HasScope(Scope.AlertsReadWrite) != true)
+        {
+            return responses;
+        }
+
+        var recipients = await InAppRecipients.ListAsync(db, db.TenantId, ct);
+        foreach (var channel in inApp)
+        {
+            Guid? subjectId = Guid.TryParse(channel.Destination, out var parsed) ? parsed : null;
+            string? name = null;
+            var canReceive = subjectId is { } id && recipients.TryGetValue(id, out name);
+            channel.Recipient = new InAppRecipientResponse
+            {
+                SubjectId = subjectId,
+                Name = name,
+                CanReceive = canReceive,
+            };
+        }
+
+        return responses;
+    }
+
+    /// <summary>
+    /// The members an in-app channel may be sent to, for the rule editor's recipient picker.
+    /// </summary>
+    [HttpGet("in-app-recipients")]
+    [RequireScope(Scope.AlertsReadWrite)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(List<InAppRecipientResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<InAppRecipientResponse>>> GetInAppRecipients(CancellationToken ct)
+    {
+        await using var db = await _contextFactory.CreateAsync(ct);
+
+        var members = await InAppRecipients.ListAsync(db, db.TenantId, ct);
+        return Ok(members
+            .Select(m => new InAppRecipientResponse { SubjectId = m.Key, Name = m.Value, CanReceive = true })
+            .OrderBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList());
+    }
 
     private static AlertRuleResponse MapToResponse(AlertRuleEntity entity) => new()
     {
@@ -996,6 +1124,22 @@ public class AlertRuleChannelResponse
     /// <summary>Whether a webhook signing secret is stored for this channel. The secret itself is
     /// never returned.</summary>
     public bool HasSecret { get; set; }
+    /// <summary>Who an <c>in_app</c> channel is sent to. Set only for in-app channels, and only
+    /// for a caller who may edit alert rules.</summary>
+    public InAppRecipientResponse? Recipient { get; set; }
+}
+
+/// <summary>The recipient of an <c>in_app</c> alert channel.</summary>
+public class InAppRecipientResponse
+{
+    /// <summary>The subject the channel names. Null when it names none.</summary>
+    public Guid? SubjectId { get; set; }
+    /// <summary>The name the site knows the member by. Null when they cannot receive.</summary>
+    public string? Name { get; set; }
+    /// <summary>Whether the channel reaches someone: the subject is a member of the site whose
+    /// roles grant any access. A channel that does not is sent to whoever next saves the
+    /// rule.</summary>
+    public bool CanReceive { get; set; }
 }
 
 public class CreateAlertRuleRequest

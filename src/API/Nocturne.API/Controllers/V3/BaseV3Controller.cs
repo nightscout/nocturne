@@ -317,15 +317,13 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// </summary>
     /// <param name="data">Response data</param>
     /// <param name="parameters">Query parameters</param>
-    /// <param name="totalCount">Total count of items (for pagination)</param>
     /// <param name="lastModified">
     /// Newest record timestamp when the caller already knows it (e.g. computed from domain
     /// models before mapping to DTOs the timestamp reflection can't read).
     /// </param>
     protected void SetV3ResponseHeaders<TItem>(
-        IEnumerable<TItem> data,
+        IReadOnlyCollection<TItem> data,
         V3QueryParameters parameters,
-        long totalCount,
         DateTimeOffset? lastModified = null
     )
     {
@@ -337,8 +335,6 @@ public abstract class BaseV3Controller<T> : ControllerBase
             effectiveLastModified.ToUnixTimeMilliseconds()
         );
 
-        // Set pagination headers
-        Response.Headers["X-Total-Count"] = totalCount.ToString();
         Response.Headers["X-Limit"] = parameters.Limit.ToString();
         Response.Headers["X-Offset"] = parameters.Offset.ToString();
 
@@ -352,7 +348,8 @@ public abstract class BaseV3Controller<T> : ControllerBase
             links.Add($"<{baseUrl}?limit={parameters.Limit}&offset={prevOffset}>; rel=\"prev\"");
         }
 
-        if (parameters.Offset + parameters.Limit < totalCount)
+        // A search does not count the collection; a full page is the only sign of another.
+        if (data.Count >= parameters.Limit)
         {
             var nextOffset = parameters.Offset + parameters.Limit;
             links.Add($"<{baseUrl}?limit={parameters.Limit}&offset={nextOffset}>; rel=\"next\"");
@@ -589,35 +586,19 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// Returns the Nightscout V3-compatible envelope: <c>{"status": 200, "result": [...]}</c>.
     /// </summary>
     /// <typeparam name="TItem">The type of items in the collection.</typeparam>
-    /// <returns>A <see cref="V3CollectionResponse{T}"/> wrapped in the Nightscout V3 envelope.</returns>
+    /// <returns>The Nightscout V3 envelope around <paramref name="data"/>.</returns>
     protected IActionResult CreateV3CollectionResponse<TItem>(
-        IEnumerable<TItem> data,
+        IReadOnlyCollection<TItem> data,
         V3QueryParameters parameters,
-        long totalCount,
         DateTimeOffset? lastModified = null
     )
     {
-        // Apply field selection
         var responseData =
             parameters.Fields != null
                 ? ApplyFieldSelection(data, parameters.Fields)
                 : data.Cast<object>();
 
-        var response = new V3CollectionResponse<object>
-        {
-            Data = responseData.ToList(),
-            Meta = new V3ResponseMetadata
-            {
-                TotalCount = (int)totalCount,
-                Limit = parameters.Limit,
-                Offset = parameters.Offset,
-                Timestamp = DateTimeOffset.UtcNow,
-                Version = "3.0",
-            },
-        };
-
-        // Set response headers
-        SetV3ResponseHeaders(data, parameters, totalCount, lastModified);
+        SetV3ResponseHeaders(data, parameters, lastModified);
 
         // Nightscout V3 API returns {"status": 200, "result": [...]}
         return Ok(

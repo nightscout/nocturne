@@ -81,13 +81,6 @@ public class SettingsController : BaseV3Controller<Settings>
 
             var settingsList = settings.ToList();
 
-            // Get total count for pagination (approximation for performance)
-            var totalCount = await GetTotalCountAsync(
-                null,
-                findQuery,
-                cancellationToken,
-                "settings"
-            ); // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(settingsList.Cast<object>());
 
             if (lastModified.HasValue && ShouldReturn304(lastModified.Value, parameters))
@@ -102,7 +95,7 @@ public class SettingsController : BaseV3Controller<Settings>
 
             // CreateV3CollectionResponse returns the {status, result} envelope IActionResult;
             // wrapping it in Ok(...) again would serialize the ActionResult object itself.
-            return (ActionResult)CreateV3CollectionResponse(settingsList, parameters, totalCount);
+            return (ActionResult)CreateV3CollectionResponse(settingsList, parameters);
         }
         catch (ArgumentException ex)
         {
@@ -438,30 +431,5 @@ public class SettingsController : BaseV3Controller<Settings>
 
         // Fallback to GUID for unique identification
         return Guid.CreateVersion7().ToString();
-    }
-
-    /// <summary>
-    /// Get total count for pagination support
-    /// </summary>
-    private async Task<long> GetTotalCountAsync(
-        string? type,
-        string? findQuery,
-        CancellationToken cancellationToken,
-        string collection = "settings"
-    )
-    {
-        try
-        {
-            return await _settings.CountSettingsAsync(findQuery, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Could not get total count for {Collection}, using approximation",
-                collection
-            );
-            return 0; // Return 0 for count errors to maintain API functionality
-        }
     }
 }

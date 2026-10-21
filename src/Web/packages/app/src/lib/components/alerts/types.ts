@@ -11,6 +11,7 @@ import {
 } from "$api-clients";
 import type {
 	AlertRuleResponse,
+	InAppRecipientResponse,
 	ThresholdCondition,
 	RateOfChangeCondition,
 	SignalLossCondition,
@@ -832,6 +833,8 @@ export interface ChannelDef {
 	 * serialises it; do not pre-stringify.
 	 */
 	metadata?: DeviceActionMetadata | null;
+	/** The member a stored in-app channel is sent to, as the API resolved it. Read-only. */
+	recipient?: InAppRecipientResponse | null;
 	/** Signing secret typed into the webhook editor. Write-only; never read back. */
 	secret?: string;
 	/**
@@ -897,7 +900,7 @@ export function defaultChannels(): ChannelDef[] {
 	return [
 		{
 			_uid: newUid(),
-			channelType: ChannelType.WebPush,
+			channelType: ChannelType.InApp,
 			destination: "",
 			destinationLabel: "",
 		},
@@ -1023,11 +1026,12 @@ export function parseRule(r: AlertRuleResponse | null): RuleEditorState {
 			.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
 			.map((c) => ({
 				_uid: newUid(),
-				channelType: c.channelType ?? ChannelType.WebPush,
+				channelType: c.channelType ?? ChannelType.InApp,
 				destination: c.destination ?? "",
 				destinationLabel: c.destinationLabel ?? "",
 				metadata: parseChannelMetadata(c.metadata),
 				hasSecret: c.hasSecret ?? false,
+				recipient: c.recipient ?? null,
 			}));
 
 	return {
