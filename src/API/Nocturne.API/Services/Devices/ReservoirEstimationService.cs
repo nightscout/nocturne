@@ -158,10 +158,10 @@ internal sealed class ReservoirEstimationService(
         {
             var start = Math.Max(tb.StartMills, fromMs);
             var end = Math.Min(effectiveEndMills, toMs);
-            if (end <= start)
+            if (end <= start || tb.Rate is not { } rate)
                 continue;
             anyTempBasalDelivery = true;
-            total += tb.Rate * ((end - start) / (1000.0 * 60 * 60));
+            total += rate * ((end - start) / (1000.0 * 60 * 60));
         }
 
         // No temp basal delivery and no algorithm boluses means basal isn't recorded

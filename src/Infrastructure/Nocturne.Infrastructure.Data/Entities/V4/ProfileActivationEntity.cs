@@ -46,6 +46,7 @@ public class ProfileActivationEntity
 
     [Column("entered_by")]
     [MaxLength(256)]
+    [FitToColumn]
     public string? EnteredBy { get; set; }
 
     [Column("sync_identifier")]

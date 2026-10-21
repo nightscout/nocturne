@@ -144,6 +144,7 @@ public class OverviewHubAuthorizeTests
             IsAuthenticated = true,
             SubjectId = Subject,
             AuthType = AuthType.SessionCookie,
+            SessionId = "laptop",
         };
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string> { Scope.GlucoseRead };
         overview
@@ -156,6 +157,7 @@ public class OverviewHubAuthorizeTests
         grant.Should().NotBeNull();
         grant!.SubjectId.Should().Be(Subject);
         grant.AuthType.Should().Be(AuthType.SessionCookie);
+        grant.SessionId.Should().Be("laptop");
         grant.TenantIds.Should().BeEquivalentTo(new[] { TenantA, TenantB });
     }
 

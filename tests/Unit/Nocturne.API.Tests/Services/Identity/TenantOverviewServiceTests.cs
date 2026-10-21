@@ -456,7 +456,7 @@ public class TenantOverviewServiceTests
             () => sp.GetRequiredService<ITenantAccessor>().TenantId,
             sp.GetRequiredService<ICategoryReadContext>(),
             contextClampSeen));
-        services.AddScoped<ICategoryReadContext, Nocturne.Infrastructure.Data.Services.CategoryReadContext>();
+        services.AddScoped<ICategoryReadContext>(_ => new Nocturne.Infrastructure.Data.Services.CategoryReadContext());
         services.AddScoped<ITenantAccessor>(_ => new RecordingTenantAccessor());
         services.AddScoped(sp =>
         {
@@ -475,7 +475,7 @@ public class TenantOverviewServiceTests
 
         var service = new TenantOverviewService(
             (new InMemoryContextFactory(options)).AsNocturneFactory(),
-            provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
             NullLogger<TenantOverviewService>.Instance);
@@ -597,12 +597,13 @@ public class TenantOverviewServiceTests
         var services = new ServiceCollection();
         services.AddScoped(_ => canonical.Object);
         services.AddScoped(_ => accessor.Object);
+        services.AddScoped<ICategoryReadContext>(_ => new Nocturne.Infrastructure.Data.Services.CategoryReadContext());
         services.AddScoped<INocturneDbContextFactory>(_ => new ScopeContextFactory(options, () => current!.TenantId));
         var provider = services.BuildServiceProvider();
 
         return new TenantOverviewService(
             (new InMemoryContextFactory(options)).AsNocturneFactory(),
-            provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
             NullLogger<TenantOverviewService>.Instance);

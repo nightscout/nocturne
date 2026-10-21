@@ -90,7 +90,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         Mock.Of<IBolusCalculationRepository>(), Mock.Of<IStateSpanService>(),
         ProfileActivationTestDeps.Repository(context), ProfileActivationTestDeps.Writer(context), Mock.Of<ITreatmentFoodService>(),
         Mock.Of<IDeviceService>(), Mock.Of<IPatientDeviceStamper>(), profiles, Mock.Of<IActiveProfileResolver>(),
-        Mock.Of<IPatientInsulinRepository>(), _auditContext, NullLogger<TreatmentDecomposer>.Instance);
+        Mock.Of<IPatientInsulinRepository>(), TempBasalTestDeps.Unscheduled(), _auditContext, NullLogger<TreatmentDecomposer>.Instance);
 
     private static Profile ProfileDocument(string id, string storeName) => new()
     {
@@ -248,6 +248,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
                 new CarbRatioScheduleRepository(factory, _auditContext, NullLogger<CarbRatioScheduleRepository>.Instance),
                 new SensitivityScheduleRepository(factory, _auditContext, NullLogger<SensitivityScheduleRepository>.Instance),
                 new TargetRangeScheduleRepository(factory, _auditContext, NullLogger<TargetRangeScheduleRepository>.Instance),
+                TempBasalTestDeps.NoReresolution(),
                 NullLogger<ProfileDecomposer>.Instance);
             await profiles.DecomposeAsync(ProfileDocument("ps-1", storeName), WriteOrigin.Live);
             await profiles.DecomposeAsync(ProfileDocument("ps-2", storeName), WriteOrigin.Live);

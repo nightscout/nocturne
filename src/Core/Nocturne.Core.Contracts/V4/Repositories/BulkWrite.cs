@@ -27,6 +27,12 @@ public sealed class BulkWrite<TRecord>(IReadOnlyList<TRecord> written, int skipp
     /// </summary>
     public IReadOnlyList<TRecord> Updated { get; init; } = [];
 
+    /// <summary>
+    /// Submitted records not written because writing them fails the same way every time, in
+    /// submission order. The rest of the batch was still written.
+    /// </summary>
+    public IReadOnlyList<BulkWriteRejection<TRecord>> Rejected { get; init; } = [];
+
     public int Count => written.Count;
 
     public TRecord this[int index] => written[index];
@@ -35,6 +41,12 @@ public sealed class BulkWrite<TRecord>(IReadOnlyList<TRecord> written, int skipp
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
+
+/// <summary>A submitted record a bulk write refused, and why.</summary>
+/// <param name="Index">Its zero-based position in the submitted batch.</param>
+/// <param name="Record">The record as submitted.</param>
+/// <param name="Reason">Why it cannot be stored, fit to show the client.</param>
+public sealed record BulkWriteRejection<TRecord>(int Index, TRecord Record, string Reason);
 
 /// <summary>Builds a <see cref="BulkWrite{TRecord}"/> from a collection expression.</summary>
 public static class BulkWrite

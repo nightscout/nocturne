@@ -8,10 +8,12 @@ using OpenTelemetry.Logs;
 namespace Microsoft.Extensions.Hosting;
 
 /// <summary>
-/// Rewrites a request path whose segments carry a credential, for a service whose routes take one.
+/// Rewrites the credentials a request path or query string carries, for a service whose routes or
+/// query parameters take one.
 /// </summary>
 /// <remarks>
-/// It recognises only a path starting with <c>/</c>, optionally followed by a query string. The
+/// It recognises only a path starting with <c>/</c>, optionally followed by a query string, or a
+/// bare query string starting with <c>?</c>, such as the hosting request line's. The
 /// telemetry appliers in this file also redact the path of an absolute URL (see
 /// <see cref="RequestPathRedactionExtensions.TryRedactValue"/>). Code that composes anything else
 /// around a path, such as <c>"GET /api/..."</c>, redacts the path with
@@ -43,12 +45,13 @@ public static class RequestPathRedactionExtensions
         return services;
     }
 
-    /// <summary>Returns <paramref name="path"/> with its credential segments redacted.</summary>
+    /// <summary>Returns <paramref name="path"/> with its credentials redacted.</summary>
     public static string Redact(this IRequestPathRedactor redactor, string path) =>
         redactor.TryRedact(path, out var redacted) ? redacted : path;
 
     /// <summary>
-    /// Redacts a telemetry value that is a path or an absolute URL, whose path is redacted in place.
+    /// Redacts a telemetry value that is a path, a query string or an absolute URL, whose path and
+    /// query are redacted in place.
     /// </summary>
     internal static bool TryRedactValue(
         this IRequestPathRedactor redactor,
@@ -56,7 +59,7 @@ public static class RequestPathRedactionExtensions
         [NotNullWhen(true)] out string? redacted
     )
     {
-        if (value.StartsWith('/'))
+        if (value.StartsWith('/') || value.StartsWith('?'))
         {
             return redactor.TryRedact(value, out redacted);
         }
@@ -79,6 +82,18 @@ public static class RequestPathRedactionExtensions
         redacted = string.Concat(value.AsSpan(0, pathStart), redactedPath, fragment < 0 ? "" : value[fragment..]);
         return true;
     }
+
+    /// <summary>
+    /// The text a log formatter renders for a string, <see cref="Uri"/> or
+    /// <see cref="Microsoft.AspNetCore.Http.PathString"/> attribute, else null.
+    /// </summary>
+    internal static string? RedactableText(object? value) =>
+        value switch
+        {
+            string text => text,
+            Uri or Microsoft.AspNetCore.Http.PathString => value.ToString(),
+            _ => null,
+        };
 }
 
 /// <summary>
@@ -166,9 +181,11 @@ internal sealed class RequestPathRedactingLogProcessor(IRequestPathRedactor? red
         {
             for (var i = 0; i < attributes.Count; i++)
             {
-                if (attributes[i].Value is string raw && !Equals(raw, redacted[i].Value))
+                if (!ReferenceEquals(attributes[i].Value, redacted[i].Value)
+                    && RequestPathRedactionExtensions.RedactableText(attributes[i].Value) is { } raw
+                    && redacted[i].Value is string replacement)
                 {
-                    message = message.Replace(raw, (string)redacted[i].Value!, StringComparison.Ordinal);
+                    message = message.Replace(raw, replacement, StringComparison.Ordinal);
                 }
             }
 
@@ -187,7 +204,8 @@ internal sealed class RequestPathRedactingLogProcessor(IRequestPathRedactor? red
         redacted = null;
         for (var i = 0; i < values.Count; i++)
         {
-            if (values[i].Value is string value && redactor.TryRedactValue(value, out var redactedValue))
+            if (RequestPathRedactionExtensions.RedactableText(values[i].Value) is { } value
+                && redactor.TryRedactValue(value, out var redactedValue))
             {
                 redacted ??= [.. values];
                 redacted[i] = new(values[i].Key, redactedValue);

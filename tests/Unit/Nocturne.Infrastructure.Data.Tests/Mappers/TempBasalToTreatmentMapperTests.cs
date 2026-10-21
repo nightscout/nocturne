@@ -303,6 +303,78 @@ public class TempBasalToTreatmentMapperTests
         result.AdditionalProperties.Should().NotContainKey("other");
     }
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToTreatment_RelativeTemp_ServesPercentAndRateButNoAbsolute()
+    {
+        var tempBasal = CreateTempBasal(TempBasalOrigin.Manual, 0.4);
+        tempBasal.ScheduledRate = 0.8;
+        tempBasal.Percent = -50;
+
+        var result = TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        result.Percent.Should().Be(-50);
+        result.Absolute.Should().BeNull("a Nightscout client takes absolute over percent");
+        result.Rate.Should().Be(0.4);
+        result.Temp.Should().BeNull();
+        result.Duration.Should().BeApproximately(30.0, 0.001);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToTreatment_RelativeTempWithRateFromSchedule_ServesOnlyPercent()
+    {
+        var tempBasal = CreateTempBasal(TempBasalOrigin.Manual, 0.4);
+        tempBasal.ScheduledRate = 0.8;
+        tempBasal.Percent = -50;
+        tempBasal.RateFromSchedule = true;
+
+        var result = TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        result.Percent.Should().Be(-50);
+        result.Rate.Should().BeNull("the upload carried no rate");
+        result.Absolute.Should().BeNull();
+        result.DeliveredRate.Should().Be(0.4);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToTreatment_RelativeTempOfUnknownRate_ServesOnlyPercent()
+    {
+        var tempBasal = CreateTempBasal(TempBasalOrigin.Manual, 0);
+        tempBasal.Rate = null;
+        tempBasal.Percent = -50;
+
+        var result = TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        result.Percent.Should().Be(-50);
+        result.Absolute.Should().BeNull();
+        result.Rate.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToTreatment_AbsoluteTemp_ServesNoPercent()
+    {
+        var result = TempBasalToTreatmentMapper.ToTreatment(CreateTempBasal(TempBasalOrigin.Manual, 1.4));
+
+        result.Percent.Should().BeNull();
+        result.Absolute.Should().Be(1.4);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToTreatment_SuspendedRelativeTemp_ServesAbsoluteZero()
+    {
+        var tempBasal = CreateTempBasal(TempBasalOrigin.Suspended, 0.4);
+        tempBasal.Percent = -50;
+
+        var result = TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        result.Absolute.Should().Be(0);
+        result.Rate.Should().Be(0);
+    }
+
     #region Helper Methods
 
     private static TempBasal CreateTempBasal(TempBasalOrigin origin, double rate)

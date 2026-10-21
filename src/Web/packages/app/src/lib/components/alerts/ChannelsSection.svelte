@@ -9,8 +9,16 @@
   import { getLinkedPlatforms } from "$api/generated/linkedPlatforms.generated.remote";
   import { getChannelStatuses } from "$api/generated/systems.generated.remote";
   import { getCapabilityCatalog } from "$api/generated/clientDevices.generated.remote";
+  import { getInAppRecipients } from "$api/generated/alertRules.generated.remote";
+  import * as Select from "$lib/components/ui/select";
+  import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import { ChannelType, AlertRuleSeverity } from "$api-clients";
-  import type { ChannelStatusEntry, DeviceCapabilityCatalog } from "$api-clients";
+  import type {
+    ChannelStatusEntry,
+    DeviceCapabilityCatalog,
+    InAppRecipientResponse,
+  } from "$api-clients";
   import DeviceChannelEditor from "./DeviceChannelEditor.svelte";
   import { applyChannelDestination, type ChannelDef } from "./types";
   import {
@@ -101,6 +109,41 @@
     });
   }
 
+  // An in-app channel left without a recipient goes to whoever saves the rule.
+  const SAVER = "saver";
+
+  const mySubjectId = $derived(page.data.user?.subjectId);
+  const canEdit = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite"),
+  );
+  const hasInApp = $derived(channels.some((c) => c.channelType === ChannelType.InApp));
+  const recipientsQuery = $derived(canEdit && hasInApp ? getInAppRecipients() : null);
+  const others = $derived<InAppRecipientResponse[]>(
+    (recipientsQuery?.current ?? []).filter((r) => r.subjectId !== mySubjectId),
+  );
+
+  /** The stored recipient the API says cannot receive, while the channel still names it. */
+  function cannotReceive(ch: ChannelDef): boolean {
+    return (
+      ch.recipient?.canReceive === false &&
+      (ch.recipient.subjectId ?? "") === ch.destination
+    );
+  }
+
+  function recipientValue(ch: ChannelDef): string {
+    return !ch.destination || ch.destination === mySubjectId ? SAVER : ch.destination;
+  }
+
+  function recipientLabel(ch: ChannelDef): string {
+    if (cannotReceive(ch)) return ch.destination ? "Unavailable member" : "No recipient";
+    if (recipientValue(ch) === SAVER) return "Me";
+    return (
+      others.find((r) => r.subjectId === ch.destination)?.name ??
+      ch.recipient?.name ??
+      "Member"
+    );
+  }
+
   function removeChannel(index: number): void {
     channels.splice(index, 1);
   }
@@ -159,6 +202,46 @@
             {severity}
             index={i}
           />
+        {:else if ch.channelType === ChannelType.InApp}
+          {@const unavailable = cannotReceive(ch)}
+          <div class="space-y-1.5">
+            <Label size="sm" for="channel-recipient-{i}">Recipient</Label>
+            <Select.Root
+              type="single"
+              value={unavailable ? "" : recipientValue(ch)}
+              onValueChange={(v) => {
+                channels[i].destination = v === SAVER ? "" : v;
+              }}
+            >
+              <Select.Trigger
+                id="channel-recipient-{i}"
+                size="sm"
+                class="w-56"
+                data-testid="in-app-recipient-trigger"
+              >
+                {recipientLabel(ch)}
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value={SAVER} label="Me" />
+                {#each others as r (r.subjectId)}
+                  <Select.Item value={r.subjectId ?? ""} label={r.name ?? ""} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
+            {#if unavailable && !ch.destination}
+              <p class="text-xs text-status-warning">
+                This channel has no recipient. Saving the rule sends it to you.
+              </p>
+            {:else if unavailable}
+              <p class="text-xs text-status-warning">
+                This person can no longer receive alerts on this site. Saving the rule sends this channel to you.
+              </p>
+            {:else}
+              <p class="text-xs text-muted-foreground">
+                Shown in this person's Nocturne notification centre.
+              </p>
+            {/if}
+          </div>
         {:else}
           {#if opt && needsDestination(ch.channelType)}
             {@const error = destinationError(opt, ch.destination)}

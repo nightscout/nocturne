@@ -763,21 +763,12 @@ public class PropertiesService : IPropertiesService
         {
             result.Treatment = tempBasalTreatment;
 
-            // Calculate temp basal rate - exact legacy logic
-            if (tempBasalTreatment.Percent != null)
-            {
-                // Percentage-based temp basal: percent field contains the target percentage (e.g., 150 for 150%)
-                result.TempBasal = result.Basal * tempBasalTreatment.Percent.Value / 100;
-            }
-            else if (tempBasalTreatment.Absolute != null)
-            {
-                // Absolute temp basal rate
-                result.TempBasal = tempBasalTreatment.Absolute.Value;
-            }
+            if (tempBasalTreatment.Absolute is { } absolute)
+                result.TempBasal = absolute;
+            else if (tempBasalTreatment.Percent is { } percent and not 0)
+                result.TempBasal = Nocturne.Core.Models.V4.TempBasal.RateRelativeTo(result.Basal, percent);
             else
-            {
                 result.TempBasal = result.Basal;
-            }
 
             result.TotalBasal = result.TempBasal;
         }

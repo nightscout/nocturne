@@ -82,11 +82,12 @@ public class DeviceCodeInfo
     /// <summary>The OAuth client_id that initiated the device authorization request.</summary>
     public string ClientId { get; set; } = string.Empty;
 
-    /// <summary>Display name of the requesting client, if available.</summary>
+    /// <summary>
+    /// Display name of the client the request names, if available. Only a claim, whether or not
+    /// that client is in the known-app directory: the device flow has no redirect URI, so nothing
+    /// ties the software that started it to the <see cref="ClientId"/> it presented.
+    /// </summary>
     public string? ClientDisplayName { get; set; }
-
-    /// <summary>Whether the client comes from the bundled known-app directory.</summary>
-    public bool IsKnownClient { get; set; }
 
     public List<string> Scopes { get; set; } = new();
 

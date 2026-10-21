@@ -173,8 +173,7 @@ public class ActivityService : IActivityService
             // The sleep read bounds by overlap; every other source bounds by start, as the find does.
             var sleepActivities = sleepSessions
                 .Select(ActivityStateSpanMapper.SleepSessionToActivity)
-                .Where(a => (query.FromMills is not { } lower || a.Mills >= lower)
-                    && (query.ToMills is not { } upper || a.Mills <= upper));
+                .Where(a => StartsWithin(a, query));
 
             var sources = stateSpanActivities
                 .Concat(heartRateActivities)
@@ -628,35 +627,81 @@ public class ActivityService : IActivityService
                 string.Join(",", categories),
                 sanitizedFindForLog);
 
-            // Sleep sessions are merged into GetActivitiesAsync only when `find` is
-            // empty or a sleep type; the count applies the same gate
-            var countSleep = string.IsNullOrEmpty(find) || ActivityStateSpanMapper.IsSleepType(find);
+            // A find with conditions is read as the list reads it. Any other find is an activity type,
+            // which narrows the state spans, and every heart rate and step count is counted regardless.
+            var query = FindQuery.Parse(find);
+            var structured = !query.IsEmpty;
+            var type = structured ? null : find;
+            var from = query.FromMills is { } fromMills
+                ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime
+                : (DateTime?)null;
+            var to = query.ToMills is { } toMills
+                ? DateTimeOffset.FromUnixTimeMilliseconds(toMills).UtcDateTime
+                : (DateTime?)null;
+
+            // Sleep sessions are counted for a structured find, an empty type or a sleep type.
+            var countSleep = structured || string.IsNullOrEmpty(type) || ActivityStateSpanMapper.IsSleepType(type);
+            var fetchCount = query.HasFieldFilters ? MaxFilteredFetch : int.MaxValue;
 
             // Sequential: the services share one DbContext.
             var counts = new Dictionary<string, long>(StringComparer.Ordinal);
             if (categories.Contains(Scope.TreatmentsRead))
-                counts[Scope.TreatmentsRead] = (await _stateSpanService.GetActivitiesAsync(
-                    type: find,
-                    count: int.MaxValue,
+            {
+                var stateSpans = await _stateSpanService.GetActivitiesAsync(
+                    type: type,
+                    count: fetchCount,
                     skip: 0,
-                    cancellationToken: cancellationToken)).Count();
+                    from: from,
+                    to: to,
+                    cancellationToken: cancellationToken);
+                counts[Scope.TreatmentsRead] = Narrow(stateSpans, query).Count();
+            }
 
             if (categories.Contains(Scope.HeartRateRead))
-                counts[Scope.HeartRateRead] = (await _heartRateService.GetHeartRatesAsync(
-                    count: int.MaxValue,
+            {
+                var heartRates = await _heartRateService.GetHeartRatesAsync(
+                    count: fetchCount,
                     skip: 0,
-                    cancellationToken: cancellationToken)).Count();
+                    from: from,
+                    to: to,
+                    cancellationToken: cancellationToken);
+                counts[Scope.HeartRateRead] = query.HasFieldFilters
+                    ? Narrow(heartRates.Select(ActivityDecomposer.HeartRateToActivity), query).Count()
+                    : heartRates.Count();
+            }
 
             if (categories.Contains(Scope.StepCountRead))
-                counts[Scope.StepCountRead] = (await _stepCountService.GetStepCountsAsync(
-                    count: int.MaxValue,
+            {
+                var stepCounts = await _stepCountService.GetStepCountsAsync(
+                    count: fetchCount,
                     skip: 0,
-                    cancellationToken: cancellationToken)).Count();
+                    from: from,
+                    to: to,
+                    cancellationToken: cancellationToken);
+                counts[Scope.StepCountRead] = query.HasFieldFilters
+                    ? Narrow(stepCounts.Select(ActivityDecomposer.StepCountToActivity), query).Count()
+                    : stepCounts.Count();
+            }
 
             if (categories.Contains(Scope.SleepRead))
-                counts[Scope.SleepRead] = countSleep
-                    ? await _sleepService.CountSessionsAsync(cancellationToken: cancellationToken)
-                    : 0;
+            {
+                if (!countSleep)
+                    counts[Scope.SleepRead] = 0;
+                else if (!structured)
+                    counts[Scope.SleepRead] = await _sleepService.CountSessionsAsync(cancellationToken: cancellationToken);
+                else
+                {
+                    var sessions = await _sleepService.GetSessionsAsync(
+                        from: from,
+                        to: to,
+                        limit: fetchCount,
+                        offset: 0,
+                        descending: true,
+                        cancellationToken: cancellationToken);
+                    counts[Scope.SleepRead] = Narrow(
+                        sessions.Select(ActivityStateSpanMapper.SleepSessionToActivity), query).Count();
+                }
+            }
 
             _logger.LogDebug("Counted {Total} activity records", counts.Values.Sum());
             return counts;
@@ -666,5 +711,16 @@ public class ActivityService : IActivityService
             _logger.LogError(ex, "Error counting activity records");
             throw;
         }
+    }
+
+    /// <summary>The find bounds every activity by its start, though the sleep read bounds by overlap.</summary>
+    private static bool StartsWithin(Activity activity, FindQuery query) =>
+        (query.FromMills is not { } lower || activity.Mills >= lower)
+        && (query.ToMills is not { } upper || activity.Mills <= upper);
+
+    private static IEnumerable<Activity> Narrow(IEnumerable<Activity> activities, FindQuery query)
+    {
+        var bounded = activities.Where(a => StartsWithin(a, query));
+        return query.HasFieldFilters ? bounded.Where(a => query.MatchesResidual(a)) : bounded;
     }
 }

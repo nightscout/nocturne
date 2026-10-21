@@ -13,9 +13,10 @@ namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
 /// Creates one delivery row per channel attached to a fired alert rule and dispatches each
-/// to the matching channel provider (<c>web_push</c>, <c>in_app</c>, <c>webhook</c>,
-/// chat-bot variants). Delivery rows are persisted before the provider call so the audit
-/// trail is complete on provider failure.
+/// to the matching channel provider (<c>in_app</c>, <c>webhook</c>, chat-bot variants). Delivery
+/// rows are persisted before the provider call so the audit trail is complete on provider
+/// failure. A row is marked delivered only when its provider reached a recipient; a channel type
+/// no provider claims is marked failed.
 /// </summary>
 /// <remarks>
 /// DND suppression is the caller's responsibility — by the time DispatchAsync is called we
@@ -75,26 +76,9 @@ internal sealed class AlertDeliveryService(
 
         var payloadJson = JsonSerializer.Serialize(payload);
 
-        // Zero-channel rules still leave an audit anchor: an InApp delivery row marked
-        // delivered immediately. Without this row the History/Replay page cannot tell the
-        // difference between "alert fired but every provider is broken" and "user explicitly
-        // chose no channels", and the SignalR alert_dispatch broadcast (which fires
-        // unconditionally above) would be the only attribution surface.
         if (channels.Count == 0)
         {
-            db.AlertDeliveries.Add(new AlertDeliveryEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = tenantId,
-                AlertInstanceId = alertInstanceId,
-                AlertRuleChannelId = null,
-                ChannelType = ChannelType.InApp,
-                Destination = string.Empty,
-                Payload = payloadJson,
-                Status = "delivered",
-                DeliveredAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
-            });
+            db.AlertDeliveries.Add(NoChannelAnchor(tenantId, alertInstanceId, payloadJson, DateTime.UtcNow, isTest: false));
             await db.SaveChangesAsync(ct);
             return;
         }
@@ -251,21 +235,7 @@ internal sealed class AlertDeliveryService(
 
         if (channels.Count == 0)
         {
-            // Same audit-anchor pattern as the zero-channel real-fire path.
-            db.AlertDeliveries.Add(new AlertDeliveryEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = tenantId,
-                AlertInstanceId = instance.Id,
-                AlertRuleChannelId = null,
-                ChannelType = ChannelType.InApp,
-                Destination = string.Empty,
-                Payload = JsonSerializer.Serialize(payload),
-                Status = "delivered",
-                DeliveredAt = now,
-                CreatedAt = now,
-                IsTest = true,
-            });
+            db.AlertDeliveries.Add(NoChannelAnchor(tenantId, instance.Id, JsonSerializer.Serialize(payload), now, isTest: true));
             await db.SaveChangesAsync(ct);
             return;
         }
@@ -344,6 +314,27 @@ internal sealed class AlertDeliveryService(
         }
     }
 
+    /// <summary>
+    /// The delivery row a fire of a rule with no channels leaves behind. Without it History cannot
+    /// tell "every provider is broken" from "no channels were chosen", and the <c>alert_dispatch</c>
+    /// broadcast would be the fire's only trace. It reached no one, so it is recorded failed.
+    /// </summary>
+    private static AlertDeliveryEntity NoChannelAnchor(
+        Guid tenantId, Guid alertInstanceId, string payloadJson, DateTime now, bool isTest) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        TenantId = tenantId,
+        AlertInstanceId = alertInstanceId,
+        AlertRuleChannelId = null,
+        ChannelType = ChannelType.InApp,
+        Destination = string.Empty,
+        Payload = payloadJson,
+        Status = "failed",
+        LastError = "The rule has no delivery channels",
+        CreatedAt = now,
+        IsTest = isTest,
+    };
+
     public async Task MarkDeliveredAsync(Guid deliveryId, string? platformMessageId, string? platformThreadId, CancellationToken ct)
     {
         await using var db = await contextFactory.CreateAsync(ct);
@@ -369,26 +360,38 @@ internal sealed class AlertDeliveryService(
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// Why an in-app channel cannot reach its recipient, or null when it can. Re-checked at
+    /// delivery, not only on save: the member a channel names may since have left the site.
+    /// </summary>
+    private async Task<string?> InAppRecipientProblemAsync(string destination, CancellationToken ct)
+    {
+        if (!Guid.TryParse(destination, out _))
+        {
+            return "In-app channel names no recipient";
+        }
+
+        await using var db = await contextFactory.CreateAsync(ct);
+        return await InAppRecipients.ResolveAsync(db, tenantAccessor.TenantId, destination, ct) is null
+            ? "In-app recipient is not a member of this site who holds any access"
+            : null;
+    }
+
     private async Task DispatchToProviderAsync(
         AlertDeliveryEntity delivery, AlertRuleChannelSnapshot channel, AlertPayload payload, CancellationToken ct)
     {
         switch (delivery.ChannelType)
         {
-            case ChannelType.WebPush:
-                var webPushProvider = serviceProvider.GetService<Providers.WebPushProvider>();
-                if (webPushProvider is not null)
-                {
-                    await webPushProvider.SendAsync(payload, ct);
-                    await MarkDeliveredAsync(delivery.Id, null, null, ct);
-                }
-                break;
-
             case ChannelType.InApp:
                 var inAppProvider = serviceProvider.GetService<Providers.InAppProvider>();
                 if (inAppProvider is not null)
                 {
-                    await inAppProvider.SendAsync(delivery.Destination, payload, ct);
-                    await MarkDeliveredAsync(delivery.Id, null, null, ct);
+                    if (await InAppRecipientProblemAsync(delivery.Destination, ct) is { } problem)
+                        await MarkFailedAsync(delivery.Id, problem, ct);
+                    else if (await inAppProvider.SendAsync(delivery.Destination, payload, ct))
+                        await MarkDeliveredAsync(delivery.Id, null, null, ct);
+                    else
+                        await MarkFailedAsync(delivery.Id, "In-app channel names no recipient", ct);
                 }
                 break;
 
@@ -441,6 +444,7 @@ internal sealed class AlertDeliveryService(
             default:
                 logger.LogWarning("Unsupported channel type '{ChannelType}' for delivery {DeliveryId}",
                     delivery.ChannelType, delivery.Id);
+                await MarkFailedAsync(delivery.Id, $"Channel type '{delivery.ChannelType}' has no delivery path", ct);
                 break;
         }
     }

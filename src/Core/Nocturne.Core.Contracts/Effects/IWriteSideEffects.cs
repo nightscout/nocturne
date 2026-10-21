@@ -75,6 +75,12 @@ public interface IWriteSideEffects
         WriteEffectOptions? options = null,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Clears <see cref="WriteEffectOptions.CacheFamiliesToClear"/> and nothing else, for a write
+    /// whose only effect on this process is stale cached data.
+    /// </summary>
+    Task InvalidateCacheAsync(WriteEffectOptions options, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

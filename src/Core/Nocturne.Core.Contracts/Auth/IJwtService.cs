@@ -8,13 +8,20 @@ namespace Nocturne.Core.Contracts.Auth;
 /// </summary>
 public interface IJwtService
 {
+    /// <summary>
+    /// Generate a first-party session access token. This overload is the only one that mints the
+    /// session shape (<c>SessionCookieHandler.IsGrantShaped</c>).
+    /// </summary>
     /// <param name="permissions">Resolved permissions to include</param>
     /// <param name="roles">Role names to include</param>
+    /// <param name="sessionId">The refresh-token family the session belongs to, emitted as
+    /// <c>sid</c>; null for a family with no session id.</param>
     /// <param name="lifetime">Optional custom lifetime (defaults to configuration)</param>
     string GenerateAccessToken(
         SubjectInfo subject,
         IEnumerable<string> permissions,
         IEnumerable<string> roles,
+        string? sessionId = null,
         TimeSpan? lifetime = null
     );
 
@@ -161,6 +168,12 @@ public class JwtClaims
     /// them. When set, the grant's revocation state decides whether the token is still usable.
     /// </summary>
     public Guid? GrantId { get; set; }
+
+    /// <summary>
+    /// The refresh-token family (<c>sid</c>) a session token was minted for. Null for every other
+    /// token, and for a session token minted before the claim existed.
+    /// </summary>
+    public string? SessionId { get; set; }
 
     /// <summary>
     /// JWT ID (jti claim)

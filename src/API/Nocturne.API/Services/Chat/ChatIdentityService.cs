@@ -110,6 +110,7 @@ public sealed class ChatIdentityService(
         {
             Platform = row.Platform,
             PlatformUserId = row.PlatformUserId,
+            PlatformUserName = row.PlatformUserName,
             TenantSlug = row.TenantSlug,
             Source = row.Source,
         };
@@ -125,6 +126,7 @@ public class ChatIdentityPendingLinkView
 {
     public string Platform { get; set; } = string.Empty;
     public string PlatformUserId { get; set; } = string.Empty;
+    public string? PlatformUserName { get; set; }
     public string? TenantSlug { get; set; }
     public string Source { get; set; } = string.Empty;
 }

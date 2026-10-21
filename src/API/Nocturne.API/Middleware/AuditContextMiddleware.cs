@@ -34,6 +34,7 @@ public class AuditContextMiddleware
             mutableContext.TraceId = httpContext.TraceIdentifier;
             mutableContext.Endpoint =
                 $"{httpContext.Request.Method} {pathRedactor.Redact(httpContext.Request.Path.ToString())}";
+            httpContext.Items[AuditContext.HttpItemKey] = mutableContext;
         }
 
         await _next(httpContext);

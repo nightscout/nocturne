@@ -834,6 +834,7 @@ internal class MigrationJob
 
         var collectionsToMigrate = allCollections
             .Where(c => _request.Collections.Count == 0 || _request.Collections.Contains(c.name))
+            .OrderBy(c => ImportRank(c.name))
             .ToList();
 
         // Fetch counts upfront so we can show real X / Y progress
@@ -1064,12 +1065,18 @@ internal class MigrationJob
                 NightscoutMessages.ForStatus(response.StatusCode, label, read),
                 response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden
                     ? MigrationFailureCause.ApiSecretRejected
-                    : MigrationFailureCause.Status);
+                    : MigrationFailureCause.Status)
+            {
+                StatusCode = response.StatusCode,
+            };
         }
     }
 
     private const string SubjectsNeedAdminSecretMessage =
         "Skipped: listing the people and devices that can sign in needs an admin API secret.";
+
+    private const string NoProfileEndpointMessage =
+        "Skipped: this Nightscout has no profile to hand over.";
 
     private const string PartialAccessMessage =
         "Nightscout refused to hand this over. The API secret was accepted for other data, so it "
@@ -1417,8 +1424,18 @@ internal class MigrationJob
         var totalFailed = 0L;
         var tally = new DecompositionTally();
 
-        var documents = await ReadPageFromSourceAsync<System.Text.Json.JsonElement>(
-            httpClient, "api/v1/profile.json", collectionName, ct);
+        System.Text.Json.JsonElement[] documents;
+        try
+        {
+            documents = await ReadPageFromSourceAsync<System.Text.Json.JsonElement>(
+                httpClient, "api/v1/profile.json", collectionName, ct);
+        }
+        catch (MigrationSourceException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _logger.LogInformation("Skipping profile migration: the source has no profile endpoint");
+            RecordCollectionSkipped(collectionName, NoProfileEndpointMessage);
+            return;
+        }
         var (profiles, newlyFailed) = ParseDocuments<Profile>(documents, collectionName, 1, []);
         totalFailed += newlyFailed;
 
@@ -1542,6 +1559,19 @@ internal class MigrationJob
         _logger.LogInformation("Migrated {Count} food items via API", totalMigrated);
     }
 
+    /// <summary>
+    /// Where a collection falls in the import: subjects first, then entries and treatments, then the
+    /// rest in their listed order, the Mongo listing included. The profile lands after the
+    /// treatments, so its write re-resolves every percent temp basal they hold
+    /// (<see cref="V4.TempBasalRateReresolver"/>).
+    /// </summary>
+    internal static int ImportRank(string collection) => collection switch
+    {
+        "subjects" => 0,
+        "entries" or "treatments" => 1,
+        _ => 2,
+    };
+
     private async Task ExecuteMongoMigrationAsync(CancellationToken ct)
     {
         _currentOperation = "Connecting to MongoDB";
@@ -1558,11 +1588,12 @@ internal class MigrationJob
 
         // Filter to requested collections
         var collectionsToMigrate =
-            _request.Collections.Count > 0
-                ? collectionList.Where(c => _request.Collections.Contains(c)).ToList()
+            (_request.Collections.Count > 0
+                ? collectionList.Where(c => _request.Collections.Contains(c))
                 : collectionList
-                    .Where(c => c is "entries" or "treatments" or "devicestatus" or "profile" or "food" or "activity")
-                    .ToList();
+                    .Where(c => c is "entries" or "treatments" or "devicestatus" or "profile" or "food" or "activity"))
+            .OrderBy(ImportRank)
+            .ToList();
 
         var totalCollections = collectionsToMigrate.Count;
         var processedCollections = 0;
@@ -1868,7 +1899,12 @@ internal class MigrationJob
         {
             Id = originalId ?? Guid.CreateVersion7().ToString(),
             DefaultProfile = defaultProfile,
-            StartDate = doc.Contains("startDate") ? doc["startDate"].AsString : DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            StartDate = doc.GetValue("startDate", BsonNull.Value) switch
+            {
+                { IsString: true } value => value.AsString,
+                { IsValidDateTime: true } value => value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                _ => null,
+            },
             Mills = mills,
             CreatedAt = doc.Contains("created_at") ? doc["created_at"].AsString : null,
             Units = doc.Contains("units") ? doc["units"].AsString : "mg/dl",

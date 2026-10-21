@@ -230,16 +230,22 @@ public static class HubAuthorizationState
     /// method reads tenant data through. An in-band credential never passed
     /// <see cref="Middleware.MemberScopeMiddleware"/>, so without this its reads would run unclamped.
     /// The clamp is applied before the credential is recorded, so a clamp that throws leaves the
-    /// connection unauthorized rather than authorized and unclamped. It lives only on the handshake
-    /// scope, so a hub method must read tenant data through that scope and not through
-    /// <see cref="HubInvocationContext.ServiceProvider"/>.
+    /// connection unauthorized rather than authorized and unclamped. It also narrows the connection's
+    /// <see cref="HubConnectionReader"/>, which <see cref="TenantHubFilter"/> sets on the invocation
+    /// scope of every later call; the call that authenticates in-band already has its invocation
+    /// scope, so it reads tenant data through the handshake scope. The credential's principal becomes
+    /// the connection's audit actor (<see cref="HubConnectionActor"/>).
     /// </remarks>
     /// <param name="context">The connection to record the credential on.</param>
     /// <param name="authorization">The verified credential.</param>
     public static HubAuthorization Grant(HubCallerContext context, HubAuthorization authorization)
     {
         if (authorization.HistoryClamped)
+        {
             context.GetHttpContext()?.ClampMemberHistory();
+            HubConnectionReader.ClampToDay(context);
+        }
+        HubConnectionActor.Record(context, authorization);
         context.Items[ItemKey] = authorization;
         return authorization;
     }
@@ -311,7 +317,8 @@ public static class HubAuthorizationState
                 authContext.TokenId,
                 Middleware.AuthenticationMiddleware.CredentialScopes(authContext),
                 authContext.LimitTo24Hours,
-                authContext.ExpiresAt),
+                authContext.ExpiresAt,
+                authContext.SessionId),
         };
     }
 }
@@ -324,7 +331,8 @@ public static class HubAuthorizationState
 /// <remarks>
 /// The hubs are <c>[AllowAnonymous]</c> because in-band authentication requires the connection to be
 /// accepted before the credential arrives, and <see cref="TenantAwareHub.OnConnectedAsync"/> accepts
-/// any connection whose tenant resolves and is active. Authorization therefore has to happen at the
+/// any connection whose tenant resolves, is active and is the one it names in
+/// <see cref="TenantAwareHub.ExpectedTenantHeader"/>, if it names one. Authorization therefore has to happen at the
 /// method boundary. It lives in a filter rather than in each method so a method added later is
 /// denied unless it explicitly opts out with <see cref="HubAuthenticationMethodAttribute"/>.
 /// <para>

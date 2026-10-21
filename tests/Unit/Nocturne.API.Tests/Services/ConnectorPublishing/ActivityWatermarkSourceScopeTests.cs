@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.Caching;
@@ -119,7 +120,7 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             Mock.Of<ITenantAccessor>(),
             _context.AsFactory(),
             Mock.Of<IProfileActivationRepository>(),
-            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>()),
+            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>(), TempBasalTestDeps.NoReresolution()),
             Mock.Of<IAuditContext>(),
             new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance);

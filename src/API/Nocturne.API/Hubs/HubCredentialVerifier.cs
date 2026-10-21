@@ -23,13 +23,15 @@ namespace Nocturne.API.Hubs;
 /// A grant-backed token or a session login is renewed while its record stands, so its token's
 /// lifetime says nothing about whether the access behind it does.
 /// </param>
+/// <param name="SessionId">The refresh-token family a session login belongs to.</param>
 public sealed record HubCredentialSource(
     AuthType AuthType,
     Guid? SubjectId,
     Guid? GrantId,
     IReadOnlySet<string> CredentialScopes,
     bool LimitTo24Hours,
-    DateTimeOffset? ExpiresAt);
+    DateTimeOffset? ExpiresAt,
+    string? SessionId = null);
 
 /// <summary>
 /// The tenants an <see cref="OverviewHub"/> connection was admitted to, and the credential that
@@ -39,12 +41,13 @@ public sealed record OverviewGrant(
     Guid SubjectId,
     AuthType AuthType,
     IReadOnlySet<string> TokenScopes,
-    IReadOnlyCollection<Guid> TenantIds);
+    IReadOnlyCollection<Guid> TenantIds,
+    string? SessionId = null);
 
 /// <summary>
-/// Proves hub credentials again from server-side state: the grant or guest link is live, the
-/// subject is active, a session login still has a session, and the membership still exists. Scopes
-/// and the history clamp are recomputed as <see cref="Middleware.MemberScopeMiddleware"/> does.
+/// Proves hub credentials again from server-side state: the tenant still exists and is active, the
+/// grant or guest link is live, the subject is active, a session login still has a session, and the
+/// membership still exists. Scopes and the history clamp are recomputed as <see cref="Middleware.MemberScopeMiddleware"/> does.
 /// </summary>
 /// <remarks>
 /// One instance serves one sweep, and memoizes every lookup for it, so connections that share a
@@ -87,12 +90,23 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
                 .FirstOrDefaultAsync();
         });
 
-    private async Task<bool> HasSessionAsync(Guid subjectId) =>
-        await Memo<object>(("session", subjectId), async () =>
+    /// <summary>
+    /// Whether the session a login belongs to still has a live refresh token. A connection admitted
+    /// on a session token that names no session (<paramref name="sessionId"/> null: minted before
+    /// the claim, or from a chain not yet tagged) can only be matched to the subject, so any live
+    /// session of the subject keeps it for as long as the connection stays open. With refresh-token
+    /// rotation on, rotation tags an untagged chain, so such tokens stop being minted within one
+    /// refresh.
+    /// </summary>
+    private async Task<bool> HasSessionAsync(Guid subjectId, string? sessionId) =>
+        await Memo<object>(("session", subjectId, sessionId), async () =>
         {
             await using var db = await Contexts.CreateForSubjectAsync(subjectId);
             return await db.RefreshTokens.AnyAsync(t =>
-                t.SubjectId == subjectId && t.RevokedAt == null && t.ExpiresAt > _now);
+                t.SubjectId == subjectId
+                && (sessionId == null || t.OidcSessionId == sessionId)
+                && t.RevokedAt == null
+                && t.ExpiresAt > _now);
         }) is true;
 
     private Task<TenantMemberAccess?> MembershipAsync(Guid subjectId, Guid tenantId) =>
@@ -111,6 +125,13 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
         await Memo<object>(("jti", jti), async () =>
             await services.GetRequiredService<IOAuthTokenRevocationCache>().IsRevokedAsync(jti.ToString())) is true;
 
+    private async Task<bool> IsTenantActiveAsync(Guid tenantId) =>
+        await Memo<object>(("tenant", tenantId), async () =>
+        {
+            await using var db = await Contexts.CreatePlatformAsync();
+            return await db.Tenants.AnyAsync(t => t.Id == tenantId && t.IsActive);
+        }) is true;
+
     private bool IsLive(GrantState? grant) =>
         grant is { RevokedAt: null } && (grant.ExpiresAt is null || grant.ExpiresAt > _now);
 
@@ -123,6 +144,11 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
     public async Task<HubAuthorization?> ProveAsync(HubAuthorization granted, TenantContext tenant)
     {
         if (granted.Source is not { } source || tenant.TenantId != granted.TenantId)
+            return null;
+
+        // The connection's tenant was read at its handshake. A slug resolves afresh on every request, so
+        // a tenant deleted and recreated under its slug is a different id, and the old one reads as gone.
+        if (!await IsTenantActiveAsync(tenant.TenantId))
             return null;
 
         switch (source.AuthType)
@@ -183,7 +209,7 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
         }
         else if (source.AuthType is AuthType.SessionCookie)
         {
-            if (!await HasSessionAsync(subjectId))
+            if (!await HasSessionAsync(subjectId, source.SessionId))
                 return null;
         }
         else if (source.ExpiresAt is not { } expiresAt || expiresAt <= timeProvider.GetUtcNow())
@@ -219,7 +245,7 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
         if (await SubjectAsync(grant.SubjectId) is not { IsActive: true })
             return false;
 
-        if (grant.AuthType is AuthType.SessionCookie && !await HasSessionAsync(grant.SubjectId))
+        if (grant.AuthType is AuthType.SessionCookie && !await HasSessionAsync(grant.SubjectId, grant.SessionId))
             return false;
 
         var tenants = await services.GetRequiredService<ITenantOverviewService>()

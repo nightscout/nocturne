@@ -74,13 +74,7 @@ public class FoodService : IFoodService
                 count,
                 skip
             );
-            return await _food.GetFoodWithAdvancedFilterAsync(
-                count,
-                skip,
-                find,
-                reverseResults: false,
-                cancellationToken
-            );
+            return await _food.SearchFoodAsync(find, count, skip, cancellationToken);
         }
         catch (Exception ex)
         {

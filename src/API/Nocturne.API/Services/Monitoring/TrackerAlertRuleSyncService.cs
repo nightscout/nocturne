@@ -83,6 +83,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         var managedRules = await db.AlertRules
             .Where(r => r.ManagedBy == tag)
             .ToDictionaryAsync(r => r.Id, ct);
+        var recipient = await InAppRecipientOfAsync(db, tenantId, definition, ct);
 
         // The threshold editor replaces the whole threshold list (new row ids), which
         // clears the AlertRuleId links. Adopt orphaned managed rules so a threshold keeps
@@ -185,27 +186,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
                     UpdatedAt = DateTime.UtcNow,
                 };
 
-                created.Channels.Add(new AlertRuleChannelEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenantId,
-                    AlertRuleId = created.Id,
-                    ChannelType = ChannelType.InApp,
-                    SortOrder = 0,
-                    CreatedAt = DateTime.UtcNow,
-                });
-                if (threshold.PushEnabled)
-                {
-                    created.Channels.Add(new AlertRuleChannelEntity
-                    {
-                        Id = Guid.CreateVersion7(),
-                        TenantId = tenantId,
-                        AlertRuleId = created.Id,
-                        ChannelType = ChannelType.WebPush,
-                        SortOrder = 1,
-                        CreatedAt = DateTime.UtcNow,
-                    });
-                }
+                created.Channels.Add(InAppChannel(tenantId, created.Id, recipient));
 
                 db.AlertRules.Add(created);
                 threshold.AlertRuleId = created.Id;
@@ -213,7 +194,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             }
         }
 
-        SyncReservoirLevelRule(db, tenantId, definition, tag, managedRules, keptRuleIds, changed);
+        SyncReservoirLevelRule(db, tenantId, definition, recipient, tag, managedRules, keptRuleIds, changed);
 
         var orphaned = managedRules.Values.Where(r => !keptRuleIds.Contains(r.Id)).ToList();
         var deleted = new List<Guid>();
@@ -311,6 +292,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         NocturneDbContext db,
         Guid tenantId,
         TrackerDefinitionEntity definition,
+        string recipient,
         string tag,
         IReadOnlyDictionary<Guid, AlertRuleEntity> managedRules,
         HashSet<Guid> keptRuleIds,
@@ -357,18 +339,35 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
-        created.Channels.Add(new AlertRuleChannelEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenantId,
-            AlertRuleId = created.Id,
-            ChannelType = ChannelType.InApp,
-            SortOrder = 0,
-            CreatedAt = DateTime.UtcNow,
-        });
+        created.Channels.Add(InAppChannel(tenantId, created.Id, recipient));
         db.AlertRules.Add(created);
         keptRuleIds.Add(created.Id);
     }
+
+    /// <summary>
+    /// Who a synced rule's in-app channel is sent to: the member who owns the tracker definition,
+    /// or the tenant's longest-standing owner when that is not a person who may receive, as for a
+    /// definition created through a site token, which belongs to the device account. Empty when
+    /// the tenant has neither, which delivery records as failed.
+    /// </summary>
+    private static async Task<string> InAppRecipientOfAsync(
+        NocturneDbContext db, Guid tenantId, TrackerDefinitionEntity definition, CancellationToken ct)
+    {
+        var recipient = await InAppRecipients.ResolveAsync(db, tenantId, definition.UserId, ct)
+            ?? await InAppRecipients.EarliestOwnerAsync(db, tenantId, ct);
+        return recipient?.ToString() ?? string.Empty;
+    }
+
+    private static AlertRuleChannelEntity InAppChannel(Guid tenantId, Guid ruleId, string recipient) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        TenantId = tenantId,
+        AlertRuleId = ruleId,
+        ChannelType = ChannelType.InApp,
+        Destination = recipient,
+        SortOrder = 0,
+        CreatedAt = DateTime.UtcNow,
+    };
 
     /// <summary>
     /// The baked minutes of a managed rule's stored condition, or null when the stored

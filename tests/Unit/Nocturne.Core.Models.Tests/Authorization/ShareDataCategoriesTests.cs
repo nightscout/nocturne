@@ -134,6 +134,84 @@ public class ShareDataCategoriesTests
         ShareDataCategories.RecencyColumnFor("notes").Should().Be("timestamp");
     }
 
+    [Theory]
+    [InlineData("body_weights", "mills", true)]
+    [InlineData("lab_hba1c_results", "measured_at", false)]
+    [InlineData("system_events", "mills", true)]
+    [InlineData("device_clock_observations", "observed_at", false)]
+    public void HiddenTimeSeries_AreClampedForMembersByTheirRecencyColumn(string table, string column, bool millis)
+    {
+        ShareDataCategories.GoverningScopeFor(table).Should().BeNull();
+        ShareDataCategories.RecencyColumnFor(table).Should().Be(column);
+        ShareDataCategories.RecencyIsUnixMillis(table).Should().Be(millis);
+        ShareDataCategories.SpanEndColumnFor(table).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("sleep_sessions", "end_time")]
+    [InlineData("alert_excursions", "ended_at")]
+    [InlineData("alert_instances", "resolved_at")]
+    [InlineData("tracker_instances", "completed_at")]
+    [InlineData("in_app_notifications", "archived_at")]
+    public void HiddenSpans_AreClampedForMembersByOverlap(string table, string end)
+    {
+        ShareDataCategories.GoverningScopeFor(table).Should().BeNull();
+        ShareDataCategories.RecencyColumnFor(table).Should().BeNull();
+        ShareDataCategories.SpanEndColumnFor(table).Should().Be(end);
+    }
+
+    [Fact]
+    public void InAppNotifications_StayVisibleWhileOpenForAWeekFromWhenTheyWereRaised()
+    {
+        ShareDataCategories.SpanEndColumnFor("in_app_notifications").Should().Be("archived_at");
+        ShareDataCategories.OpenSpanBoundFor("in_app_notifications").Should().Be(new OpenSpanBound("created_at", 7));
+        ShareDataCategories.HiddenOpenSpanBounds.Keys
+            .Should().OnlyContain(t => ShareDataCategories.SpanEndColumnFor(t) != null);
+    }
+
+    [Theory]
+    [InlineData("treatment_foods", "carb_intakes", "carb_intake_id")]
+    [InlineData("sleep_stages", "sleep_sessions", "sleep_session_id")]
+    [InlineData("sleep_biometric_samples", "sleep_sessions", "sleep_session_id")]
+    public void PartsOfARow_AreClampedForMembersThroughTheirParent(string table, string parent, string foreignKey)
+    {
+        ShareDataCategories.GoverningScopeFor(table).Should().BeNull();
+        ShareDataCategories.RecencyColumnFor(table).Should().BeNull();
+        ShareDataCategories.SpanEndColumnFor(table).Should().BeNull();
+        ShareDataCategories.ParentRecencyFor(table).Should().Be(new ParentRecency(parent, foreignKey));
+    }
+
+    [Fact]
+    public void HiddenParentRecency_ReferencesUngovernedChildrenOfTimestampedParents()
+    {
+        ShareDataCategories.HiddenParentRecency.Should().AllSatisfy(entry =>
+        {
+            ShareDataCategories.GoverningScopeFor(entry.Key).Should().BeNull();
+            ShareDataCategories.RecencyColumnFor(entry.Key).Should().BeNull();
+            ShareDataCategories.SpanEndColumnFor(entry.Key).Should().BeNull();
+            (ShareDataCategories.RecencyColumnFor(entry.Value.Table)
+                ?? ShareDataCategories.SpanEndColumnFor(entry.Value.Table)).Should().NotBeNull();
+            ShareDataCategories.RecencyIsUnixMillis(entry.Value.Table).Should().BeFalse();
+            ShareDataCategories.ParentRecencyFor(entry.Value.Table).Should().BeNull();
+        });
+    }
+
+    [Fact]
+    public void CompressionLowSuggestions_AreHiddenFromSharesButClampedForMembersByTheirEnd()
+    {
+        ShareDataCategories.GoverningScopeFor("compression_low_suggestions").Should().BeNull();
+        ShareDataCategories.RecencyColumnFor("compression_low_suggestions").Should().Be("end_mills");
+        ShareDataCategories.RecencyIsUnixMillis("compression_low_suggestions").Should().BeTrue();
+        ShareDataCategories.RecencyIsUnixMillis("notes").Should().BeFalse();
+    }
+
+    [Fact]
+    public void UnixMillisRecencyTables_HaveARecencyColumn()
+    {
+        ShareDataCategories.UnixMillisRecencyTables
+            .Should().OnlyContain(t => ShareDataCategories.RecencyColumnFor(t) != null);
+    }
+
     [Fact]
     public void HiddenRecencyColumns_ReferenceOnlyUngovernedTables()
     {

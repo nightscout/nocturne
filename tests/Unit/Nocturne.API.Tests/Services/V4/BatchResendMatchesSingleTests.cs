@@ -107,6 +107,7 @@ public class BatchResendMatchesSingleTests : IDisposable
             Mock.Of<IProfileDecomposer>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
+            TempBasalTestDeps.Unscheduled(),
             _audit,
             NullLogger<TreatmentDecomposer>.Instance);
 

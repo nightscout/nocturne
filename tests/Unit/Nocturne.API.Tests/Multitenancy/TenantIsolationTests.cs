@@ -11,12 +11,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Extensions;
 using Nocturne.API.Hubs;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 using Nocturne.API.Services.Realtime;
 
@@ -213,12 +215,22 @@ public class TenantIsolationTests
         mockAccessorB.Verify(a => a.SetTenant(TenantA), Times.Never);
     }
 
+    /// <summary>The upgrade request's scope: a non-share with no clamp, recorded as the middleware records it.</summary>
+    private static IServiceProvider HandshakeServices() => new ServiceCollection()
+        .AddSingleton<ITenantAccessor>(new HttpContextTenantAccessor())
+        .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
+        .BuildServiceProvider();
+
     private static (HubInvocationContext, Mock<HubCallerContext>) CreateHubInvocationContext(
         TenantContext? tenantContext, ITenantAccessor accessor)
     {
-        var httpContext = new DefaultHttpContext();
+        var httpContext = new DefaultHttpContext { RequestServices = HandshakeServices() };
         if (tenantContext != null)
+        {
             httpContext.Items["TenantContext"] = tenantContext;
+            httpContext.RequestServices.GetRequiredService<ITenantAccessor>().SetTenant(tenantContext);
+        }
+        httpContext.RecordReader();
 
         var mockCallerContext = CreateMockHubCallerContext(httpContext, Guid.NewGuid().ToString());
 
@@ -240,9 +252,13 @@ public class TenantIsolationTests
     private static HubLifetimeContext CreateHubLifetimeContext(
         TenantContext? tenantContext, ITenantAccessor accessor)
     {
-        var httpContext = new DefaultHttpContext();
+        var httpContext = new DefaultHttpContext { RequestServices = HandshakeServices() };
         if (tenantContext != null)
+        {
             httpContext.Items["TenantContext"] = tenantContext;
+            httpContext.RequestServices.GetRequiredService<ITenantAccessor>().SetTenant(tenantContext);
+        }
+        httpContext.RecordReader();
 
         var mockCallerContext = CreateMockHubCallerContext(httpContext, Guid.NewGuid().ToString());
 

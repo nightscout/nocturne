@@ -21,7 +21,7 @@ namespace Nocturne.API.Middleware.Handlers;
 /// <remarks>
 /// Runs before <see cref="SessionCookieHandler"/> (priority 40 &lt; 50) so an active grant takes
 /// precedence over the operator's ordinary session on the granted tenant. If there is no grant
-/// cookie, the token is invalid, the marker is missing, or the pinned tenant doesn't match the
+/// cookie, the token is invalid or revoked, the marker is missing, or the pinned tenant doesn't match the
 /// resolved subdomain, this handler <see cref="AuthResult.Skip">skips</see> so the chain falls
 /// through to the normal session (which, for a non-member, is then rejected by the membership
 /// check in <see cref="AuthenticationMiddleware"/>). Requiring the <c>platform_access</c> marker
@@ -71,10 +71,10 @@ public class PlatformAccessCookieHandler : IAuthHandler
             return AuthResult.Skip();
 
         using var scope = _scopeFactory.CreateScope();
-        var jwtService = scope.ServiceProvider.GetRequiredService<IJwtService>();
-        var result = jwtService.ValidateAccessToken(grant);
+        var result = await scope.ServiceProvider.GetRequiredService<IJwtCredentialValidator>()
+            .ValidateAsync(grant, context.RequestAborted);
 
-        if (!result.IsValid || result.Claims is null)
+        if (result.Claims is null)
             return AuthResult.Skip();
 
         var claims = result.Claims;
@@ -85,9 +85,8 @@ public class PlatformAccessCookieHandler : IAuthHandler
         if (!claims.PlatformAccess || claims.TenantId != tenant.TenantId)
             return AuthResult.Skip();
 
-        // Defense in depth: a self-contained grant can't be revoked, so confirm the subject
-        // is STILL a platform admin on every request. Revoking the flag then ends access on
-        // the next request instead of lingering until the grant expires.
+        // Confirm the subject is STILL a platform admin on every request, so clearing the flag
+        // ends access on the next request instead of lingering until the grant expires.
         await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(context.RequestAborted);
         var stillPlatformAdmin = await db.Subjects
             .Where(s => s.Id == claims.SubjectId)

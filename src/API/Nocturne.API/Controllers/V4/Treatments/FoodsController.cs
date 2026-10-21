@@ -97,7 +97,7 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// <remarks>
     /// The picker and the food page ask for no <c>count</c> and render the whole catalog, so an
     /// absent <c>count</c> reads up to <see cref="V4ReadLimits.MaxPageSize"/> records rather than
-    /// every row. <c>find</c> matches name, category, and subcategory.
+    /// every row. <c>find</c> is free text matched against name, category, and subcategory.
     /// </remarks>
     [HttpGet]
     [RemoteQuery]

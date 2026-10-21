@@ -199,7 +199,6 @@ public class V3CreateResponseTests
             .ReturnsAsync((IEnumerable<Treatment> t, CancellationToken _) =>
                 new BulkWrite<Treatment>(t.Select(x => { x.Id = StoredId; return x; }).ToList(), 0));
         var controller = WithContext(new TreatmentsController(
-            Mock.Of<ITreatmentStore>(),
             processing.Object,
             service.Object,
             NullLogger<TreatmentsController>.Instance));

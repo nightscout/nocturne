@@ -90,6 +90,7 @@ public class HistoryPageTests : IDisposable
 
     private async Task<List<ApsSnapshotEntity>> PageAsync(long cursorMills, int limit) =>
         await HistoryPage.GetAsync(
+            _context,
             _context.ApsSnapshots.AsNoTracking(),
             e => e.Timestamp,
             e => e.Id,

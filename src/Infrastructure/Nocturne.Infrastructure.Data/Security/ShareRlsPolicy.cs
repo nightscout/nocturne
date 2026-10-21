@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Security;
@@ -56,9 +57,37 @@ public static class ShareRlsPolicy
     /// <param name="spanEndColumn">For a table of spans, the end column the clamp applies to by
     /// overlap instead: a row whose end is null (still running) or inside the last 24 hours stays
     /// visible. Exclusive with <paramref name="recencyColumn"/>.</param>
+    /// <param name="recencyIsUnixMillis">True when <paramref name="recencyColumn"/> holds Unix
+    /// milliseconds rather than a timestamp.</param>
+    /// <param name="parent">For a table whose rows are parts of a parent row, the parent it is
+    /// clamped through: a row stays visible while the clamp shows its parent, by
+    /// <paramref name="parentRecencyColumn"/> or by <paramref name="parentSpanEndColumn"/>, both
+    /// timestamps. Exclusive with the table's own clamp columns.</param>
+    /// <param name="parentRecencyColumn">The parent's recency column.</param>
+    /// <param name="parentSpanEndColumn">The parent's span end column; exactly one of the two goes
+    /// with <paramref name="parent"/>.</param>
+    /// <param name="openSpanBound">With <paramref name="spanEndColumn"/>, how long a still-open span
+    /// stays visible, counted from its start column.</param>
     public static string BuildPolicySql(
-        string table, string? governingScope, string? recencyColumn = null, string? spanEndColumn = null)
+        string table,
+        string? governingScope,
+        string? recencyColumn = null,
+        string? spanEndColumn = null,
+        bool recencyIsUnixMillis = false,
+        ParentRecency? parent = null,
+        string? parentRecencyColumn = null,
+        string? parentSpanEndColumn = null,
+        OpenSpanBound? openSpanBound = null)
     {
+        if (openSpanBound is not null)
+        {
+            if (spanEndColumn is null)
+                throw new ArgumentException("Only a span end column can bound an open span.", nameof(openSpanBound));
+            if (openSpanBound.MaxOpenDays <= 0)
+                throw new ArgumentException("An open-span bound needs a positive day count.", nameof(openSpanBound));
+            SqlIdentifier.Require(openSpanBound.StartColumn, nameof(openSpanBound));
+        }
+
         SqlIdentifier.Require(table, nameof(table));
         if (governingScope is not null && !ScopePattern.IsMatch(governingScope))
             throw new ArgumentException($"Unsafe scope identifier '{governingScope}'.", nameof(governingScope));
@@ -68,6 +97,22 @@ public static class ShareRlsPolicy
             SqlIdentifier.Require(spanEndColumn, nameof(spanEndColumn));
         if (recencyColumn is not null && spanEndColumn is not null)
             throw new ArgumentException("A table is clamped by a recency column or a span end column, not both.");
+        if (recencyIsUnixMillis && recencyColumn is null)
+            throw new ArgumentException("Only a recency column can hold Unix milliseconds.", nameof(recencyIsUnixMillis));
+        if (parent is not null)
+        {
+            if (recencyColumn is not null || spanEndColumn is not null)
+                throw new ArgumentException("A table clamped through its parent has no clamp column of its own.", nameof(parent));
+            if ((parentRecencyColumn is null) == (parentSpanEndColumn is null))
+                throw new ArgumentException("A parent clamp needs the parent's recency column or its span end column.", nameof(parent));
+            SqlIdentifier.Require(parent.Table, nameof(parent));
+            SqlIdentifier.Require(parent.ForeignKeyColumn, nameof(parent));
+            SqlIdentifier.Require((parentRecencyColumn ?? parentSpanEndColumn)!, nameof(parent));
+        }
+        else if (parentRecencyColumn is not null || parentSpanEndColumn is not null)
+        {
+            throw new ArgumentException("A parent clamp column needs a parent.", nameof(parent));
+        }
 
         var usingExpr = "current_setting('app.is_share', true) IS DISTINCT FROM 'true'";
         if (governingScope is not null)
@@ -76,23 +121,41 @@ public static class ShareRlsPolicy
                 $"({usingExpr} OR '{governingScope}' = ANY(string_to_array(current_setting('app.visible_categories', true), ',')))";
         }
 
+        var windowStart = recencyIsUnixMillis
+            ? "(extract(epoch from now() - interval '24 hours') * 1000)::bigint"
+            : "now() - interval '24 hours'";
+
         var recent = recencyColumn is not null
-            ? $"\"{recencyColumn}\" >= now() - interval '24 hours'"
-            : spanEndColumn is not null
-                ? $"(\"{spanEndColumn}\" IS NULL OR \"{spanEndColumn}\" >= now() - interval '24 hours')"
-                : null;
+            ? $"\"{recencyColumn}\" >= {windowStart}"
+            : spanEndColumn is null
+                ? null
+                : openSpanBound is null
+                    ? $"(\"{spanEndColumn}\" IS NULL OR \"{spanEndColumn}\" >= now() - interval '24 hours')"
+                    : $"((\"{spanEndColumn}\" IS NULL AND \"{openSpanBound.StartColumn}\" >= now() - interval '{openSpanBound.MaxOpenDays} days')" +
+                      $" OR \"{spanEndColumn}\" >= now() - interval '24 hours')";
+
+        // IS [NOT] DISTINCT FROM keeps the clamp test non-null when a GUC is unset, so an
+        // unset app.history_clamped leaves a non-share unclamped instead of hiding the row.
+        const string clamped =
+            "(current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'" +
+            " AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true')" +
+            " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true'";
 
         if (recent is not null)
         {
-            // IS [NOT] DISTINCT FROM keeps the clamp test non-null when a GUC is unset, so an
-            // unset app.history_clamped leaves a non-share unclamped instead of hiding the row.
-            const string clamped =
-                "(current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'" +
-                " AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true')" +
-                " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true'";
-
             // "timestamp" is quoted: it is a type keyword in PostgreSQL.
             usingExpr += $" AND ({recent} OR NOT ({clamped}))";
+        }
+        else if (parent is not null)
+        {
+            // The subquery reads the parent under the parent's own policies. The child's column is
+            // table-qualified: unqualified, a parent column of the same name would shadow it. The
+            // clamp test comes first so an unclamped reader is not sent into the subquery.
+            var parentShown = parentRecencyColumn is not null
+                ? $"p.\"{parentRecencyColumn}\" >= now() - interval '24 hours'"
+                : $"(p.\"{parentSpanEndColumn}\" IS NULL OR p.\"{parentSpanEndColumn}\" >= now() - interval '24 hours')";
+            usingExpr += $" AND (NOT ({clamped}) OR EXISTS (SELECT 1 FROM {parent.Table} p" +
+                $" WHERE p.id = {table}.\"{parent.ForeignKeyColumn}\" AND {parentShown}))";
         }
 
         return $"""

@@ -66,6 +66,7 @@ public class JwtService : IJwtService
         SubjectInfo subject,
         IEnumerable<string> permissions,
         IEnumerable<string> roles,
+        string? sessionId = null,
         TimeSpan? lifetime = null
     )
     {
@@ -96,6 +97,11 @@ public class JwtService : IJwtService
         if (!string.IsNullOrEmpty(subject.Email))
         {
             claims.Add(new Claim(JwtRegisteredClaimNames.Email, subject.Email));
+        }
+
+        if (!string.IsNullOrEmpty(sessionId))
+        {
+            claims.Add(new Claim(JwtRegisteredClaimNames.Sid, sessionId));
         }
 
         // Add roles
@@ -310,6 +316,8 @@ public class JwtService : IJwtService
                 PlatformAccess = platformAccess,
                 GrantId = grantId,
                 LimitTo24Hours = limitTo24Hours,
+                // Read off the raw token: the inbound claim map renames sid to ClaimTypes.Sid.
+                SessionId = jwtToken.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Sid)?.Value,
                 JwtId = jwtToken.Id,
                 IssuedAt = new DateTimeOffset(jwtToken.IssuedAt, TimeSpan.Zero),
                 ExpiresAt = new DateTimeOffset(jwtToken.ValidTo, TimeSpan.Zero),

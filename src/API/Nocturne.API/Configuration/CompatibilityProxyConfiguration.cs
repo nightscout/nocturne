@@ -243,17 +243,6 @@ public class RedactionSettings
     public string ReplacementText { get; set; } = "[REDACTED]";
 
     /// <summary>
-    /// Enable redaction of API keys in URLs
-    /// </summary>
-    public bool RedactUrlParameters { get; set; } = true;
-
-    /// <summary>
-    /// URL parameters to redact
-    /// </summary>
-    public List<string> UrlParametersToRedact { get; set; } =
-        new() { "token", "api_secret", "secret", "key" };
-
-    /// <summary>
     /// Gets all sensitive fields including mandatory ones
     /// </summary>
     public IEnumerable<string> GetAllSensitiveFields()

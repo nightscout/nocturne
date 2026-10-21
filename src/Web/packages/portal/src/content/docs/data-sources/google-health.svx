@@ -37,7 +37,9 @@ Access is read-only: Nocturne never writes to Google Health.
 
 ### Disconnecting and deleting
 
-**Disconnect** stops syncing and revokes Nocturne's access in Google. Data already imported stays
+**Disconnect** stops syncing and revokes Nocturne's access in Google. If the same Google account
+is still connected in another tenant on this server, Nocturne keeps that access so the other
+tenant keeps syncing; it is revoked when the last tenant disconnects. Data already imported stays
 in Nocturne. Once disconnected, **Delete imported Google Health data** removes everything that
 came from Google Health; your data in Google is not touched.
 

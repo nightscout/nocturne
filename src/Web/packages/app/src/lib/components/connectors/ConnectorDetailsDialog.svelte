@@ -453,6 +453,7 @@
                 {/if}
                 <SkippedRecordsNote
                   deleted={granularSyncResult.itemsSkipped}
+                  refused={granularSyncResult.itemsRefused}
                   class="mt-1 text-muted-foreground"
                 />
               </div>
@@ -507,6 +508,7 @@
                   {/if}
                   <SkippedRecordsNote
                     deleted={foodOnlySyncResult.itemsSkipped}
+                    refused={foodOnlySyncResult.itemsRefused}
                     class="mt-1 text-muted-foreground"
                   />
                 </div>

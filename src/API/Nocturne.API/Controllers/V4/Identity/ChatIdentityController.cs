@@ -199,6 +199,7 @@ public class ChatIdentityController : ControllerBase
         {
             Platform = pending.Platform,
             PlatformUserId = pending.PlatformUserId,
+            PlatformUserName = pending.PlatformUserName,
             Source = pending.Source,
         });
     }
@@ -276,6 +277,7 @@ public class PendingLinkViewResponse
 {
     public string Platform { get; set; } = string.Empty;
     public string PlatformUserId { get; set; } = string.Empty;
+    public string? PlatformUserName { get; set; }
     public string Source { get; set; } = string.Empty;
 }
 

@@ -39,22 +39,54 @@ internal static class ModifiedSearch
     /// <paramref name="needed"/> are held, or the store is exhausted when <paramref name="needed"/> is
     /// null, or <paramref name="maxRead"/> records have been read.
     /// </summary>
+    /// <param name="identity">
+    /// A record's identity. A page can carry a record it was not cut on (a treatment re-sent with the
+    /// Note it serves), so one record can arrive on two pages: the later arrival is its current
+    /// state, and it counts once toward <paramref name="needed"/>.
+    /// </param>
     internal static async Task<List<T>> CollectAsync<T>(
         Func<long, int, CancellationToken, Task<Page<T>>> fetch,
         Func<T, bool> isDeleted,
+        Func<T, string?> identity,
         long cursor,
         long? needed,
         int maxRead,
         CancellationToken ct)
     {
-        var live = new List<T>();
+        var latest = new Dictionary<string, (int Order, T Record, bool Deleted)>(StringComparer.Ordinal);
+        var anonymous = new List<(int Order, T Record)>();
+        var liveCount = 0;
         var read = 0;
 
-        while (read < maxRead && (needed is null || live.Count < needed))
+        while (read < maxRead && (needed is null || liveCount < needed))
         {
             var page = await fetch(cursor, PageSize, ct);
-            read += page.Records.Count;
-            live.AddRange(page.Records.Where(r => !isDeleted(r)));
+            foreach (var record in page.Records)
+            {
+                var order = read++;
+                var deleted = isDeleted(record);
+                if (identity(record) is not { } id)
+                {
+                    if (!deleted)
+                    {
+                        anonymous.Add((order, record));
+                        liveCount++;
+                    }
+
+                    continue;
+                }
+
+                if (latest.TryGetValue(id, out var earlier))
+                {
+                    order = earlier.Order;
+                    if (!earlier.Deleted)
+                        liveCount--;
+                }
+
+                latest[id] = (order, record, deleted);
+                if (!deleted)
+                    liveCount++;
+            }
 
             if (page.Last || page.NextCursor is not { } next || next <= cursor)
                 break;
@@ -62,6 +94,12 @@ internal static class ModifiedSearch
             cursor = next;
         }
 
-        return live;
+        return latest.Values
+            .Where(r => !r.Deleted)
+            .Select(r => (r.Order, r.Record))
+            .Concat(anonymous)
+            .OrderBy(r => r.Order)
+            .Select(r => r.Record)
+            .ToList();
     }
 }

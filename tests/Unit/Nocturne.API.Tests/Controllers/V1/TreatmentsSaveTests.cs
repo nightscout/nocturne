@@ -147,16 +147,20 @@ public class TreatmentsSaveTests
     }
 
     [Fact]
-    public async Task Put_WhenTheStoreKeepsNothing_Answers500()
+    public async Task Put_WhenTheStoreRefusesTheTreatment_Answers200WithTheRefusalOnItsEcho()
     {
         _service
             .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new BulkWrite<Treatment>([], 0));
+            .ReturnsAsync((IEnumerable<Treatment> submitted, CancellationToken _) => new BulkWrite<Treatment>([], 0)
+            {
+                Rejected = [new BulkWriteRejection<Treatment>(0, submitted.Single(), "value too long")],
+            });
 
         var result = await _controller.SaveTreatments(
             Body(new { eventType = "Note", created_at = "2026-09-30T01:00:00.000Z" }));
 
-        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(500);
+        Saved(result).AdditionalProperties.Should().ContainKey(Nocturne.API.Helpers.TreatmentEcho.RefusalMember)
+            .WhoseValue.Should().Be("value too long");
     }
 
     [Fact]

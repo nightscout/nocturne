@@ -52,6 +52,7 @@ public class OAuthGrantService : IOAuthGrantService
         string grantType = OAuthGrantTypes.App,
         string? label = null,
         bool limitTo24Hours = false,
+        bool approvedByDeviceCode = false,
         CancellationToken ct = default)
     {
         await using var db = await _dbContextFactory.CreateAsync(ct);
@@ -72,6 +73,7 @@ public class OAuthGrantService : IOAuthGrantService
 
             existingGrant.Scopes = mergedScopes;
             existingGrant.LimitTo24Hours = limitTo24Hours;
+            existingGrant.ApprovedByDeviceCode |= approvedByDeviceCode;
 
             if (label != null)
             {
@@ -98,6 +100,7 @@ public class OAuthGrantService : IOAuthGrantService
             Scopes = scopeList,
             Label = label,
             LimitTo24Hours = limitTo24Hours,
+            ApprovedByDeviceCode = approvedByDeviceCode,
         };
 
         db.OAuthGrants.Add(entity);
@@ -252,7 +255,7 @@ public class OAuthGrantService : IOAuthGrantService
             ClientDisplayName = entity.Client?.DisplayName,
             ClientUri = entity.Client?.ClientUri,
             LogoUri = entity.Client?.LogoUri,
-            IsKnownClient = entity.Client?.IsKnown ?? false,
+            ClientIdentity = entity.ClientIdentity,
             SubjectId = entity.SubjectId,
             GrantType = entity.GrantType,
             Scopes = entity.Scopes,

@@ -483,8 +483,8 @@ public class OidcAuthService : IOidcAuthService
                 return null;
 
             // Resolve subject ID from the new refresh token for the response
-            var rotatedSubjectId = await _refreshTokenService.ValidateRefreshTokenAsync(session.RefreshToken);
-            if (!rotatedSubjectId.HasValue)
+            var rotated = await _refreshTokenService.ValidateRefreshTokenAsync(session.RefreshToken);
+            if (rotated is null)
                 return null;
 
             return new OidcTokenResponse
@@ -495,26 +495,26 @@ public class OidcAuthService : IOidcAuthService
                 ExpiresIn = session.ExpiresInSeconds,
                 RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
                 ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(session.ExpiresInSeconds),
-                SubjectId = rotatedSubjectId.Value,
+                SubjectId = rotated.SubjectId,
             };
         }
 
         // Non-rotation path: validate and re-mint access token without creating a new refresh token
-        var subjectId = await _refreshTokenService.ValidateRefreshTokenAsync(refreshToken);
-        if (!subjectId.HasValue)
+        if (await _refreshTokenService.ValidateRefreshTokenAsync(refreshToken) is not { } owner)
             return null;
 
         await _refreshTokenService.UpdateLastUsedAsync(refreshToken);
 
-        var subject = await _subjectService.GetSubjectByIdAsync(subjectId.Value);
+        var subjectId = owner.SubjectId;
+        var subject = await _subjectService.GetSubjectByIdAsync(subjectId);
         if (subject == null || !subject.IsActive)
         {
             await _refreshTokenService.RevokeRefreshTokenAsync(refreshToken, "Subject inactive");
             return null;
         }
 
-        var permissions = await _subjectService.GetSubjectPermissionsAsync(subjectId.Value);
-        var roles = await _subjectService.GetSubjectRolesAsync(subjectId.Value);
+        var permissions = await _subjectService.GetSubjectPermissionsAsync(subjectId);
+        var roles = await _subjectService.GetSubjectRolesAsync(subjectId);
 
         var accessTokenLifetime = _options.Session.AccessTokenLifetime;
         var accessToken = _jwtService.GenerateAccessToken(
@@ -526,6 +526,7 @@ public class OidcAuthService : IOidcAuthService
             },
             permissions,
             roles,
+            owner.SessionId,
             accessTokenLifetime
         );
 
@@ -537,7 +538,7 @@ public class OidcAuthService : IOidcAuthService
             ExpiresIn = (int)accessTokenLifetime.TotalSeconds,
             RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
             ExpiresAt = DateTimeOffset.UtcNow.Add(accessTokenLifetime),
-            SubjectId = subjectId.Value,
+            SubjectId = subjectId,
         };
     }
 
@@ -619,7 +620,7 @@ public class OidcAuthService : IOidcAuthService
     /// <inheritdoc />
     public async Task<Guid?> ValidateSessionAsync(string refreshToken)
     {
-        return await _refreshTokenService.ValidateRefreshTokenAsync(refreshToken);
+        return (await _refreshTokenService.ValidateRefreshTokenAsync(refreshToken))?.SubjectId;
     }
 
     /// <inheritdoc />

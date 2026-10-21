@@ -116,7 +116,7 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
       },
     },
     pendingLinks: {
-      create: async (platform, platformUserId, tenantSlug, source, signal) => {
+      create: async (platform, platformUserId, platformUserName, tenantSlug, source, signal) => {
         // NSwag generates tenantSlug as `string | undefined`; the bot
         // interface uses `string | null` to be explicit about "no slug
         // provided". Convert at the boundary.
@@ -124,6 +124,7 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
           {
             platform,
             platformUserId,
+            platformUserName: platformUserName ?? undefined,
             tenantSlug: tenantSlug ?? undefined,
             source,
           },

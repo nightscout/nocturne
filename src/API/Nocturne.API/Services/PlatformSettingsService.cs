@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data;
@@ -57,6 +58,8 @@ public class PlatformSettingsService
         ["telegram"] =
         [
             new("botToken", "Bot Token", true),
+            // Must match the secret_token passed to Telegram's setWebhook.
+            new("webhookSecretToken", "Webhook Secret Token", true),
         ],
         ["whatsapp"] =
         [
@@ -74,6 +77,15 @@ public class PlatformSettingsService
         ],
     };
 
+    /// <summary>Formats a field's value must match when one is supplied, with the message shown otherwise.</summary>
+    private static readonly Dictionary<(string Category, string Field), (Regex Pattern, string Message)> FieldFormats = new()
+    {
+        // Telegram's setWebhook accepts only this alphabet and length for secret_token.
+        [("telegram", "webhookSecretToken")] = (
+            new Regex("^[A-Za-z0-9_-]{1,256}$", RegexOptions.CultureInvariant),
+            "Webhook Secret Token must be 1-256 characters of letters, digits, '_' or '-'"),
+    };
+
     public PlatformSettingsService(INocturneDbContextFactory contexts, ISecretEncryptionService encryption)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
@@ -88,6 +100,19 @@ public class PlatformSettingsService
         => CategorySchemas.TryGetValue(category, out var fields)
             ? fields.Select(f => f.Name).ToHashSet()
             : [];
+
+    /// <summary>Errors for supplied values that do not match their field's format; blank values are skipped.</summary>
+    public static Dictionary<string, string> ValidateFormats(string category, IReadOnlyDictionary<string, string> fields)
+    {
+        var errors = new Dictionary<string, string>();
+        foreach (var (key, value) in fields)
+        {
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            if (FieldFormats.TryGetValue((category, key), out var format) && !format.Pattern.IsMatch(value))
+                errors[key] = format.Message;
+        }
+        return errors;
+    }
 
     public async Task<List<PlatformSettingsSummary>> GetAllAsync()
     {
@@ -176,6 +201,10 @@ public class PlatformSettingsService
                 entity.EncryptedJson, JsonOptions) ?? [];
             existing = _encryption.DecryptSecrets(enc);
         }
+
+        var formatErrors = ValidateFormats(category, fields);
+        if (formatErrors.Count > 0)
+            return (false, formatErrors);
 
         var merged = new Dictionary<string, string>(existing);
         foreach (var (key, value) in fields)

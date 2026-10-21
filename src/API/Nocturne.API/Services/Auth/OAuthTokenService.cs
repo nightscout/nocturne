@@ -599,7 +599,7 @@ public class OAuthTokenService : IOAuthTokenService
             ClientDisplayName = grantEntity.Client?.DisplayName,
             ClientUri = grantEntity.Client?.ClientUri,
             LogoUri = grantEntity.Client?.LogoUri,
-            IsKnownClient = grantEntity.Client?.IsKnown ?? false,
+            ClientIdentity = grantEntity.ClientIdentity,
             SubjectId = grantEntity.SubjectId,
             GrantType = grantEntity.GrantType,
             Scopes = grantEntity.Scopes,

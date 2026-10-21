@@ -56,6 +56,14 @@ internal sealed class BasalSeriesBuilder(
             if (tbStart > currentTime)
                 series.AddRange(BuildFromProfile(currentTime, tbStart, defaultBasalRate, timeline, hasData));
 
+            // A relative temp of unknown rate still cancels the temp before it; the schedule shows
+            if (tb.Origin != TempBasalOrigin.Suspended && tb.Rate is null)
+            {
+                series.AddRange(BuildFromProfile(tbStart, tbEnd, defaultBasalRate, timeline, hasData));
+                currentTime = tbEnd;
+                continue;
+            }
+
             var origin = MapTempBasalOrigin(tb.Origin);
 
             var scheduledRate = tb.ScheduledRate
@@ -65,7 +73,7 @@ internal sealed class BasalSeriesBuilder(
                 new BasalPoint
                 {
                     Timestamp = tbStart,
-                    Rate = origin == BasalDeliveryOrigin.Suspended ? 0 : tb.Rate,
+                    Rate = origin == BasalDeliveryOrigin.Suspended ? 0 : tb.Rate!.Value,
                     ScheduledRate = scheduledRate,
                     Origin = origin,
                     FillColor = ChartColorMapper.FillFromBasalOrigin(origin),

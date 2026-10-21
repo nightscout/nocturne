@@ -21,7 +21,6 @@ public class NoteEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFinge
     /// Note text content
     /// </summary>
     [Column("text")]
-    [MaxLength(4096)]
     public string Text { get; set; } = string.Empty;
 
     /// <summary>
@@ -29,6 +28,7 @@ public class NoteEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFinge
     /// </summary>
     [Column("event_type")]
     [MaxLength(256)]
+    [FitToColumn]
     public string? EventType { get; set; }
 
     /// <summary>

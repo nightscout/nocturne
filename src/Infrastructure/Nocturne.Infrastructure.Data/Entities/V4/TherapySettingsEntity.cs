@@ -110,6 +110,12 @@ public class TherapySettingsEntity : V4TimeSeriesEntityBase
     public bool IsDefault { get; set; }
 
     /// <summary>
+    /// The <c>defaultProfile</c> of the legacy profile document this row came from
+    /// </summary>
+    [Column("document_default_profile")]
+    public string? DocumentDefaultProfile { get; set; }
+
+    /// <summary>
     /// User or system that created/modified this settings record
     /// </summary>
     [Column("entered_by")]

@@ -303,14 +303,11 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var removedSlugs = new List<string>();
         await using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "DELETE FROM tenants WHERE id <> @id RETURNING slug";
+            cmd.CommandText = "DELETE FROM tenants WHERE id <> @id";
             cmd.Parameters.AddWithValue("id", TenantId);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-                removedSlugs.Add(reader.GetString(0));
+            await cmd.ExecuteNonQueryAsync();
         }
 
         // Back to the seeded tenant as the seed left it: active, its owner and Public its only
@@ -334,10 +331,10 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // The API caches tenant resolution by slug, and a later test may seed the same slug anew.
-        var cache = Services.GetRequiredService<IMemoryCache>();
-        foreach (var slug in removedSlugs.Append(TenantSlug))
-            TenantResolutionMiddleware.EvictTenant(cache, slug);
+        // Every in-memory cache the API holds (tenant resolution by slug, the tenant caches behind
+        // ITenantCache, therapy settings and timezones) is derived from rows just truncated, so it
+        // goes with them: otherwise a test reads what the previous one cached.
+        ((MemoryCache)Services.GetRequiredService<IMemoryCache>()).Clear();
 
         await AuthTestHelpers.SeedApiSecretGrantAsync(conn, TenantId, OwnerSubjectId, ApiSecret);
 
@@ -381,6 +378,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "temp_basals",
         "basal_injections",
         "notes",
+        "rejected_uploads",
         "device_events",
         "state_spans",
         "profile_activations",
@@ -398,6 +396,10 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "heart_rates",
         "step_counts",
         "sleep_sessions",
+        "compression_low_suggestions",
+        // Health records a test may write directly through the v4 endpoints.
+        "lab_hba1c_results",
+        "body_weights",
         // A Nightscout import records what it has run, which a second import reads.
         "migration_runs",
         "migration_sources",

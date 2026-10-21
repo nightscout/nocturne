@@ -122,6 +122,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
             _profileDecomposer.Object,
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
+            TempBasalTestDeps.Unscheduled(),
             _audit,
             NullLogger<TreatmentDecomposer>.Instance);
     }

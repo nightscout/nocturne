@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
@@ -24,18 +25,15 @@ namespace Nocturne.API.Controllers.V3;
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class TreatmentsController : BaseV3Controller<Treatment>
 {
-    private readonly ITreatmentStore _treatmentStore;
     private readonly ITreatmentService _treatmentService;
 
     public TreatmentsController(
-        ITreatmentStore treatmentStore,
         IDocumentProcessingService documentProcessingService,
         ITreatmentService treatmentService,
         ILogger<TreatmentsController> logger
     )
         : base(documentProcessingService, logger)
     {
-        _treatmentStore = treatmentStore;
         _treatmentService = treatmentService;
     }
 
@@ -92,9 +90,6 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             );
 
             var treatmentsList = treatments.ToList();
-
-            // Get total count for pagination
-            var totalCount = await GetTotalCountAsync(findQuery, cancellationToken);
 
             // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(treatmentsList);
@@ -223,15 +218,10 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 cancellationToken
             );
 
-            var createdTreatment = created.FirstOrDefault();
-            if (createdTreatment == null)
-            {
-                return CreateV3ErrorResponse(
-                    500,
-                    "Failed to create treatment",
-                    "Treatment creation failed"
-                );
-            }
+            if (created.Rejected is [{ Reason: var reason }])
+                return CreateV3ErrorResponse(400, "Treatment cannot be stored", reason);
+
+            var createdTreatment = created[0];
 
             _logger.LogDebug("Successfully created V3 treatment {Id}", createdTreatment.Id);
 
@@ -300,10 +290,10 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 cancellationToken
             );
 
-            var createdArray = createdTreatments.ToArray();
+            var createdArray = TreatmentEcho.InSubmittedOrder(createdTreatments);
             _logger.LogDebug(
                 "Successfully created {Count} V3 treatments via bulk operation",
-                createdArray.Length
+                createdTreatments.Count
             );
 
             return StatusCode(201, createdArray);
@@ -524,23 +514,6 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
     #region Helper Methods
 
-    private async Task<long> GetTotalCountAsync(
-        string? findQuery,
-        CancellationToken cancellationToken
-    )
-    {
-        try
-        {
-            // Use the count endpoint to get total
-            return await _treatmentStore.CountAsync(findQuery, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to get total count for V3 treatments, using estimate");
-            // Return a reasonable estimate if count fails
-            return 1000;
-        }
-    }
 
     private DateTimeOffset GetLastModified(List<Treatment> treatments)
     {

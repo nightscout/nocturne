@@ -73,10 +73,6 @@ public class ProfileController : BaseV3Controller<Profile>
 
             var profilesList = profiles.ToList();
 
-            // Get total count for pagination
-            var totalCount = await _projectionService.CountProfilesAsync(
-                ct: cancellationToken
-            ); // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(profilesList.Cast<object>());
 
             if (lastModified.HasValue && ShouldReturn304(lastModified.Value, parameters))
@@ -94,7 +90,6 @@ public class ProfileController : BaseV3Controller<Profile>
             return (ActionResult)CreateV3CollectionResponse(
                 profilesList.Select(p => ToV3Document(p, p.Id)).ToList(),
                 parameters,
-                totalCount,
                 lastModified
             );
         }

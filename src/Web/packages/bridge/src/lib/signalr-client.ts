@@ -18,6 +18,10 @@ interface SignalRConfig {
   /** Extra headers sent on every SignalR HTTP request (negotiate + WebSocket
    *  upgrade). Used to pass X-Forwarded-Host for tenant resolution. */
   connectionHeaders?: Record<string, string>;
+  /** Asked before each reconnect; the client reconnects only on true and asks again on its next
+   *  attempt otherwise. A tenant's hubs are reached by slug, so a slug that came to name another
+   *  tenant would otherwise reconnect this client to that tenant's data. */
+  confirmReconnect?: () => Promise<boolean>;
 }
 
 function isSetupRequiredError(error: unknown): boolean {
@@ -37,6 +41,7 @@ class SignalRClient {
   private configHubUrl?: string;
   private instanceKey: string;
   private connectionHeaders: Record<string, string>;
+  private confirmReconnect?: () => Promise<boolean>;
   private isConnecting: boolean = false;
   private connectPromise: Promise<void> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -57,6 +62,7 @@ class SignalRClient {
     this.maxReconnectDelay = config.maxReconnectDelay;
     this.instanceKey = config.instanceKey;
     this.connectionHeaders = config.connectionHeaders ?? {};
+    this.confirmReconnect = config.confirmReconnect;
   }
 
   async connect(): Promise<void> {
@@ -350,6 +356,7 @@ class SignalRClient {
       logger.info("Successfully subscribed to ConfigHub");
     } catch (error) {
       logger.error("Error subscribing to ConfigHub:", error);
+      SignalRClient.rethrowIfClosed(this.configConnection, error);
     }
   }
 
@@ -382,6 +389,7 @@ class SignalRClient {
       }
     } catch (error) {
       logger.error("Error authenticating with SignalR DataHub:", error);
+      SignalRClient.rethrowIfClosed(this.dataConnection, error);
     }
   }
 
@@ -406,6 +414,7 @@ class SignalRClient {
       }
     } catch (error) {
       logger.error("Error subscribing to storage collections:", error);
+      SignalRClient.rethrowIfClosed(this.dataConnection, error);
     }
   }
 
@@ -435,7 +444,14 @@ class SignalRClient {
       }
     } catch (error) {
       logger.error("Error subscribing to SignalR AlarmHub:", error);
+      SignalRClient.rethrowIfClosed(this.alarmConnection, error);
     }
+  }
+
+  /** A hub that closes the connection under a call made while connecting refused the connection,
+   *  as the API does for a tenant other than the one the client expects; that fails the connect. */
+  private static rethrowIfClosed(connection: HubConnection | null, error: unknown): void {
+    if (connection?.state !== "Connected") throw error;
   }
 
   private async handleReconnect(isSetupRequired = false): Promise<void> {
@@ -461,12 +477,17 @@ class SignalRClient {
         if (this.connectPromise) await this.connectPromise;
         if (this.connectionLossPromise) await this.connectionLossPromise;
         if (
-          !this.disconnectRequested &&
-          !this.reconnectTimer &&
-          !this.isConnected()
+          this.disconnectRequested ||
+          this.reconnectTimer ||
+          this.isConnected()
         ) {
-          await this.connect();
+          return;
         }
+        if (this.confirmReconnect && !(await this.confirmReconnect().catch(() => false))) {
+          void this.handleReconnect();
+          return;
+        }
+        await this.connect();
       })();
     }, delay);
   }

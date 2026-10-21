@@ -1,5 +1,6 @@
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;
 
