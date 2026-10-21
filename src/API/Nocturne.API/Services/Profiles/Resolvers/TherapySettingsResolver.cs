@@ -52,7 +52,7 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
 
         var profileName = specProfile
             ?? await _activeProfileResolver.GetActiveProfileNameAsync(timeMills, ct)
-            ?? "Default";
+            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
 
         var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
         var settings = await GetCachedSettingsAsync(profileName, timestamp, ct);
@@ -81,7 +81,7 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
 
         var profileName = specProfile
             ?? await _activeProfileResolver.GetActiveProfileNameAsync(timeMills, ct)
-            ?? "Default";
+            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
 
         var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
         var settings = await GetCachedSettingsAsync(profileName, timestamp, ct);
@@ -107,14 +107,14 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
 
         var profileName = specProfile
             ?? await _activeProfileResolver.GetActiveProfileNameAsync(nowMills, ct)
-            ?? "Default";
+            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
         var settings = await GetCachedSettingsAsync(profileName, DateTime.UtcNow, ct);
         return settings?.Timezone;
     }
 
     public async Task<string?> GetUnitsAsync(string? specProfile = null, CancellationToken ct = default)
     {
-        var profileName = specProfile ?? "Default";
+        var profileName = specProfile ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
         var settings = await GetCachedSettingsAsync(profileName, DateTime.UtcNow, ct);
         return settings?.Units;
     }

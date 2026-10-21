@@ -144,7 +144,7 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
             );
         }
 
-        var resolvedProfile = profileName ?? "Default";
+        var resolvedProfile = profileName ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
         var anchorDt = DateTimeOffset.FromUnixTimeMilliseconds(anchorMills).UtcDateTime;
 
         // Sequential: see INocturneDbContextFactory.

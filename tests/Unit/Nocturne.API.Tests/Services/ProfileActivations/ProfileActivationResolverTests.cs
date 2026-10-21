@@ -45,6 +45,7 @@ public sealed class ProfileActivationResolverTests : IDisposable
                 .ToList());
 
         _therapy.Setup(r => r.GetByProfileNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        _therapy.Setup(r => r.GetDefaultsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
         _therapy.Setup(r => r.GetByProfileNameAsync("Rhys", It.IsAny<CancellationToken>()))
             .ReturnsAsync([new TherapySettings { ProfileName = "Rhys", Timestamp = At(-24 * Hour) }]);
         _basal.Setup(r => r.GetByProfileNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
@@ -103,7 +104,7 @@ public sealed class ProfileActivationResolverTests : IDisposable
         _basal.Object,
         _therapy.Object,
         Mock.Of<IPatientRecordRepository>(),
-        new ActiveProfileResolver(resolver, _repository.Object),
+        new ActiveProfileResolver(resolver, _repository.Object, _therapy.Object),
         new ProfileVersionCache(TestTenantCache.Create(_cache)),
         NullLogger<BasalRateResolver>.Instance);
 
@@ -189,6 +190,18 @@ public sealed class ProfileActivationResolverTests : IDisposable
 
         (await Resolver().GetAtAsync(T0)).Should().BeNull();
         (await BasalRates(Resolver()).GetBasalRateAsync(T0)).Should().Be(0.5);
+    }
+
+    [Fact]
+    public async Task NoActivationReadsTheTenantsDefaultStore_WhateverItIsNamed()
+    {
+        _therapy.Setup(r => r.GetDefaultsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TherapySettings { ProfileName = "Rhys", IsDefault = true, Timestamp = At(-24 * Hour) }]);
+        Store(Hour, "Weekend");
+
+        (await BasalRates(Resolver()).GetBasalRateAsync(T0)).Should().Be(1.0);
+        var batch = await BasalRates(Resolver()).BuildResolverAsync(T0, T0 + 2 * Hour);
+        batch(T0).Should().Be(1.0, "the time before the activation is the default store's");
     }
 
     [Fact]
@@ -355,7 +368,7 @@ public sealed class ProfileActivationResolverTests : IDisposable
         effective.RequestedActivationId = requested.Id;
         _repository.Setup(r => r.GetByIdAsync(requested.Id, It.IsAny<CancellationToken>())).ReturnsAsync(requested);
 
-        var insulin = await new ActiveProfileResolver(Resolver(), _repository.Object).GetActiveInsulinContextAsync(T0 + 2 * Hour);
+        var insulin = await new ActiveProfileResolver(Resolver(), _repository.Object, _therapy.Object).GetActiveInsulinContextAsync(T0 + 2 * Hour);
 
         insulin!.InsulinName.Should().Be("Fiasp");
     }

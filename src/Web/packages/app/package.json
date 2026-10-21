@@ -2,6 +2,7 @@
   "name": "@nocturne/app",
   "version": "1.0.0",
   "type": "module",
+  "sideEffects": ["**/*.css"],
   "main": "index.js",
   "exports": {
     "./src/app.css": "./src/app.css",

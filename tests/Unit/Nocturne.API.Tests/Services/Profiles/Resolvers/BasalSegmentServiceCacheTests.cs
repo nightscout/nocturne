@@ -16,7 +16,7 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
     private const long From = 1705320000000;
     private const long To = From + 3_600_000;
 
-    private readonly Mock<IActiveProfileResolver> _activeProfile = new();
+    private readonly Mock<IActiveProfileResolver> _activeProfile = ActiveProfileResolverMock.WithDefault();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
 
     public BasalSegmentServiceCacheTests() =>
