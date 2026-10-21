@@ -17,6 +17,7 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Cache.Abstractions;
@@ -80,10 +81,9 @@ public class StatisticsControllerTests
             timeProvider ?? new FakeTimeProvider(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero)),
             _loggerMock.Object);
 
-        controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext()
-        };
+        var httpContext = new DefaultHttpContext();
+        httpContext.Items["GrantedScopes"] = new HashSet<string> { Scope.FullAccess };
+        controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
         return controller;
     }

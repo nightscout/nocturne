@@ -1062,6 +1062,7 @@ public class StatusServiceTests
         enabledFeatures.Should().Contain("careportal");
         enabledFeatures.Should().Contain("basal");
         enabledFeatures.Should().Contain("dbsize");
+        enabledFeatures.Should().NotContain(EnabledFeatures.Cors, "the legacy API answers foreign origins only when the instance enables cors");
     }
 
     #endregion

@@ -41,7 +41,7 @@ public class ProfileHistoryTests
             .ReturnsAsync([]);
         _therapyRepo.Setup(r => r.GetByProfileNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        _therapyRepo.Setup(r => r.GetByLegacyIdPrefixAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _therapyRepo.Setup(r => r.GetDocumentRowsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         _sut = new ProfileProjectionService(
@@ -61,6 +61,7 @@ public class ProfileHistoryTests
         _basalRepo.Setup(r => r.GetModifiedSinceAsync(Mills(Cursor), 10, It.IsAny<CancellationToken>()))
             .ReturnsAsync([Live(basal)]);
         SetupProfile(settings, basal);
+        SetupDocument(settings);
 
         var page = await _sut.GetProfilesModifiedSinceAsync(Mills(Cursor), 10);
 
@@ -98,6 +99,7 @@ public class ProfileHistoryTests
         _basalRepo.Setup(r => r.GetModifiedSinceAsync(Mills(t1), 1, It.IsAny<CancellationToken>()))
             .ReturnsAsync([Live(basal)]);
         SetupProfile(settings, basal);
+        SetupDocument(settings);
 
         var page = await _sut.GetProfilesModifiedSinceAsync(Mills(Cursor), 1);
 
@@ -155,10 +157,9 @@ public class ProfileHistoryTests
         liveBasal.ProfileName = "Night";
         _therapyRepo.Setup(r => r.GetModifiedSinceAsync(Mills(Cursor), 10, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new HistoryRecord<TherapySettings>(deleted, Deleted: true)]);
-        _therapyRepo.Setup(r => r.GetByLegacyIdPrefixAsync($"{documentId}:", It.IsAny<CancellationToken>()))
-            .ReturnsAsync([live]);
         SetupProfile(deleted, Basal(deletedCorrelation, modified: deletedAt));
         SetupProfile(live, liveBasal);
+        SetupDocument(live);
 
         var page = await _sut.GetProfilesModifiedSinceAsync(Mills(Cursor), 10);
 
@@ -187,7 +188,51 @@ public class ProfileHistoryTests
         var profile = page.Records.Should().ContainSingle().Subject;
         profile.Id.Should().Be(documentId);
         profile.IsValid.Should().BeFalse();
-        _therapyRepo.Verify(r => r.GetByLegacyIdPrefixAsync($"{documentId}:", It.IsAny<CancellationToken>()), Times.Once);
+        _therapyRepo.Verify(r => r.GetDocumentRowsAsync(documentId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TwoStoresOfOneDocumentWritten_AreDeliveredOnce_CarryingBothStores()
+    {
+        const string documentId = "65f000000000000000000abf";
+        var modified = Cursor.AddMinutes(1);
+        var dayCorrelation = Guid.CreateVersion7();
+        var day = Settings(dayCorrelation, modified);
+        day.ProfileName = "Day";
+        day.LegacyId = $"{documentId}:Day";
+        var nightCorrelation = Guid.CreateVersion7();
+        var night = Settings(nightCorrelation, modified);
+        night.ProfileName = "Night";
+        night.LegacyId = $"{documentId}:Night";
+        night.IsDefault = true;
+        _therapyRepo.Setup(r => r.GetModifiedSinceAsync(Mills(Cursor), 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Live(day), Live(night)]);
+        SetupProfile(day, Basal(dayCorrelation, modified));
+        SetupProfile(night, Basal(nightCorrelation, modified));
+        SetupDocument(day, night);
+
+        var page = await _sut.GetProfilesModifiedSinceAsync(Mills(Cursor), 10);
+
+        var profile = page.Records.Should().ContainSingle().Subject;
+        profile.Id.Should().Be(documentId);
+        profile.DefaultProfile.Should().Be("Night");
+        profile.Store.Keys.Should().BeEquivalentTo("Day", "Night");
+    }
+
+    [Fact]
+    public async Task ProfileSwitchSnapshot_IsNotDelivered()
+    {
+        var correlationId = Guid.CreateVersion7();
+        var snapshot = Settings(correlationId, modified: Cursor.AddMinutes(1));
+        snapshot.ProfileName = $"Exercise{TherapySettings.ProfileSwitchStoreMarker}1727700000000";
+        snapshot.LegacyId = $"65f000000000000000000ac0:{snapshot.ProfileName}";
+        _therapyRepo.Setup(r => r.GetModifiedSinceAsync(Mills(Cursor), 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Live(snapshot)]);
+        SetupProfile(snapshot, Basal(correlationId, modified: Cursor.AddMinutes(1)));
+
+        var page = await _sut.GetProfilesModifiedSinceAsync(Mills(Cursor), 10);
+
+        page.Records.Should().BeEmpty();
     }
 
     private void SetupProfile(TherapySettings settings, BasalSchedule basal)
@@ -204,6 +249,10 @@ public class ProfileHistoryTests
         _targetRangeRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
     }
+
+    private void SetupDocument(params TherapySettings[] rows) =>
+        _therapyRepo.Setup(r => r.GetDocumentRowsAsync(TherapySettings.DocumentIdOf(rows[0]), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(rows);
 
     private static HistoryRecord<T> Live<T>(T record) => new(record, Deleted: false);
 

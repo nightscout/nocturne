@@ -290,6 +290,8 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()
             .AllowAnyHeader();
     });
+
+    options.AddPolicy(LegacyApiCorsPolicy.Name, LegacyApiCorsPolicy.Configure);
 });
 
 var app = builder.Build();
@@ -339,13 +341,19 @@ else
 // Configure middleware pipeline
 app.UseExceptionHandler();
 app.UseStatusCodePages();
-// Documentation paths get the any-origin policy, everything else the credentialed default.
-// The two branches are complementary so exactly one CORS middleware ever runs per request —
-// chaining both would emit conflicting Access-Control-Allow-Origin headers. Both sit ahead of
+// Documentation paths get the any-origin policy, foreign origins on the legacy API get
+// LegacyApiCorsPolicy when the instance enables cors, everything else the credentialed default.
+// The branches are complementary so exactly one CORS middleware ever runs per request:
+// chaining two would emit conflicting Access-Control-Allow-Origin headers. All sit ahead of
 // UseStaticFiles so the Scalar assets under wwwroot/scalar are covered, and ahead of
 // UseRouting so preflights short-circuit.
+bool UsesLegacyApiCors(HttpContext context) =>
+    LegacyApiCorsPolicy.Applies(context, app.Configuration, corsBaseDomain, corsAllowLocalhost);
 app.UseWhen(PublicDocsMiddleware.IsPublicDocsPath, branch => branch.UseCors(PublicDocsCorsPolicy));
-app.UseWhen(context => !PublicDocsMiddleware.IsPublicDocsPath(context), branch => branch.UseCors());
+app.UseWhen(UsesLegacyApiCors, branch => branch.UseCors(LegacyApiCorsPolicy.Name));
+app.UseWhen(
+    context => !PublicDocsMiddleware.IsPublicDocsPath(context) && !UsesLegacyApiCors(context),
+    branch => branch.UseCors());
 app.UseStaticFiles();
 app.UseNocturneForwardedHeaders(builder.Configuration);
 
