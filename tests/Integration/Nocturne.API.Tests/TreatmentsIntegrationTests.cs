@@ -798,6 +798,45 @@ public class TreatmentsIntegrationTests : ApiIntegrationTestBase
     }
 
     /// <summary>
+    /// AAPS sends a percent temp with its own conversion as <c>rate</c>, profile switch percentage
+    /// included; that rate is what the pump delivered, and it reads back as sent.
+    /// </summary>
+    [Fact]
+    public async Task AapsPercentTempBasal_KeepsTheRateItSentAndReadsBackAsSent()
+    {
+        var client = CreateAuthenticatedClient();
+        var createdAt = DistinctTime();
+        var mills = DateTimeOffset.Parse(createdAt).ToUnixTimeMilliseconds();
+
+        var post = await client.PostAsJsonAsync("/api/v1/treatments", new Dictionary<string, object>
+        {
+            ["eventType"] = "Temp Basal",
+            ["created_at"] = createdAt,
+            ["enteredBy"] = "openaps://AndroidAPS",
+            ["duration"] = 30,
+            ["durationInMilliseconds"] = 30 * 60_000,
+            ["percent"] = -30,
+            ["rate"] = 0.735,
+            ["type"] = "NORMAL",
+            ["pumpId"] = mills,
+        });
+        post.StatusCode.Should().Be(HttpStatusCode.OK, await post.Content.ReadAsStringAsync());
+
+        var served = (await client.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/treatments?find[created_at]={Uri.EscapeDataString(createdAt)}")).EnumerateArray().Single();
+        served.GetProperty("percent").GetDouble().Should().Be(-30);
+        served.GetProperty("rate").GetDouble().Should().Be(0.735);
+        served.TryGetProperty("absolute", out _).Should().BeFalse("AAPS reads a temp with absolute as an absolute temp");
+
+        var at = DateTimeOffset.Parse(createdAt).UtcDateTime;
+        var stored = await WithTenantScopeAsync(sp => sp.GetRequiredService<ITempBasalRepository>().GetAsync(
+            from: at.AddSeconds(-1), to: at.AddSeconds(1), device: null, source: null, limit: 10, offset: 0, descending: true, ct: default));
+        var tempBasal = stored.Should().ContainSingle().Which;
+        tempBasal.Rate.Should().Be(0.735);
+        tempBasal.Percent.Should().Be(-30);
+    }
+
+    /// <summary>
     /// AAPS's temp basal lifecycle: POST at start, then PATCH by the identifier the create returned
     /// when the pump cuts it short, then PATCH again by the identifier the first PATCH returned.
     /// AAPS stores the identifier from every response, so a PATCH that answers with a different
