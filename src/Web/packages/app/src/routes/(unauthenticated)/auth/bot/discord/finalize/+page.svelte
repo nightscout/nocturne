@@ -45,7 +45,7 @@
 					errorStatus(err) === 409
 						? "This Discord account is already linked to another member."
 						: errorStatus(err) === 400
-							? "This link is expired or invalid. Please run /connect in Discord again."
+							? "This link is expired or invalid. Please try again from Settings."
 							: describeSubmitError(
 									err,
 									"We couldn't complete the Discord link. The token may have expired. Please try again from Settings."
