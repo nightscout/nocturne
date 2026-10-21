@@ -100,6 +100,9 @@ internal sealed class ProfileActivationResolver : IProfileActivationResolver
         if (snapshot is { HasEverySchedule: true } && activation.SnapshotIsCustomized)
             return new ResolvedProfileActivation(activation, name, ProfileScheduleSource.CustomizedSnapshot, snapshot, null);
 
+        if (snapshot is { HasEverySchedule: true } && ProfileActivationSource.IsNative(activation))
+            return new ResolvedProfileActivation(activation, name, ProfileScheduleSource.BaseSnapshot, snapshot, scaling);
+
         // A snapshot missing a kind of schedule gives way to the stored profile, which has every kind.
         if (snapshot is not null && await _versions.GetActiveAtAsync(_therapySettings, name, ToUtc(atMills), ct) is null)
             return activation.SnapshotIsCustomized

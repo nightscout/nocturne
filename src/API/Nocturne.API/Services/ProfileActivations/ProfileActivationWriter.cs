@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json;
 using Nocturne.API.Services.Caching;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
@@ -36,6 +38,13 @@ public sealed class ProfileActivationWriter
     /// <summary>How many neighbours of a written activation are read on either side of it.</summary>
     private const int Neighbourhood = 200;
 
+    /// <summary>
+    /// Residue key (<see cref="IV4Record.AdditionalProperties"/>) of the moment, in Unix milliseconds, a
+    /// person ended a requested activation (<see cref="EndAsync"/>). It is part of the end the activation
+    /// brings with it, so a later re-settle keeps it.
+    /// </summary>
+    internal const string EndedAtKey = "endedAt";
+
     private readonly IProfileActivationRepository _repository;
     private readonly ITenantCache _cache;
 
@@ -72,6 +81,22 @@ public sealed class ProfileActivationWriter
             await ResettleNeighboursOfAsync([stored], ct);
         await InvalidateAsync(ct);
         return written;
+    }
+
+    /// <summary>
+    /// Ends the requested <paramref name="activation"/> at <paramref name="at"/>, or at its own length if
+    /// that is sooner, and writes it through <paramref name="store"/> as <see cref="WriteAsync"/> does.
+    /// </summary>
+    public Task<ProfileActivation?> EndAsync(
+        ProfileActivation activation,
+        DateTime at,
+        Func<ProfileActivation, Task<ProfileActivation?>> store,
+        CancellationToken ct)
+    {
+        var atMills = new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+        activation.AdditionalProperties = new Dictionary<string, object?>(
+            activation.AdditionalProperties ?? [], StringComparer.Ordinal) { [EndedAtKey] = atMills };
+        return WriteAsync(activation, activation, store, ct);
     }
 
     /// <summary>Settles again the live neighbours of the removed activations, then clears the cache.</summary>
@@ -213,14 +238,31 @@ public sealed class ProfileActivationWriter
 
     /// <summary>
     /// The end an activation being written brings with it: the end an effective one was reported with
-    /// (AAPS's for a temporary switch, a connector's next reading), or a temporary requested one's start
-    /// plus its length. A permanent requested one has none.
+    /// (AAPS's for a temporary switch, a connector's next reading), or a requested one's start plus its
+    /// length or the moment a person ended it, whichever is first. A permanent requested one that nobody
+    /// ended has none.
     /// </summary>
     private static DateTime? NaturalEnd(ProfileActivation activation) =>
         activation.Phase == ProfileActivationPhase.Effective
             ? activation.EndTimestamp
-            : activation.RequestedDurationMs is > 0 and var duration ? activation.StartTimestamp.AddMilliseconds(duration)
-            : null;
+            : Earliest(
+                activation.RequestedDurationMs is > 0 and var duration ? activation.StartTimestamp.AddMilliseconds(duration) : null,
+                EndedAt(activation));
+
+    private static DateTime? EndedAt(ProfileActivation activation)
+    {
+        if (activation.AdditionalProperties?.GetValueOrDefault(EndedAtKey) is not { } value)
+            return null;
+
+        long? mills = value switch
+        {
+            JsonElement { ValueKind: JsonValueKind.Number } element when element.TryGetInt64(out var l) => l,
+            JsonElement => null,
+            IConvertible convertible => convertible.ToInt64(CultureInfo.InvariantCulture),
+            _ => null,
+        };
+        return mills is { } m ? DateTimeOffset.FromUnixTimeMilliseconds(m).UtcDateTime : null;
+    }
 
     /// <summary>
     /// <see cref="NaturalEnd"/> of a stored activation, whose end its family has since settled: an

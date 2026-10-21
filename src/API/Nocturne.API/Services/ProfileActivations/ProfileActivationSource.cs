@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.ProfileActivations;
@@ -30,6 +31,13 @@ internal static class ProfileActivationSource
     public static bool IsAaps(string? app, string? enteredBy) =>
         string.Equals(app, Aaps, StringComparison.OrdinalIgnoreCase)
         || enteredBy?.StartsWith(AapsEnteredBy, StringComparison.OrdinalIgnoreCase) == true;
+
+    /// <summary>
+    /// Whether a person recorded <paramref name="activation"/> through Nocturne
+    /// (<see cref="NativeProfileSwitches"/>) rather than a treatment upload or a connector.
+    /// </summary>
+    public static bool IsNative(ProfileActivation activation) =>
+        activation is { Origin: ProfileActivationOrigin.User, LegacyId: null, DataSource: DataSources.ManualEntry };
 
     /// <summary>
     /// <see cref="ProfileActivationOrigin.Uploader"/> for an AID uploader's switch, else

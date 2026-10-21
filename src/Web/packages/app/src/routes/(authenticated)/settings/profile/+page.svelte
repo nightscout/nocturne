@@ -25,19 +25,28 @@
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { coachmark } from "@nocturne/coach";
   import ScheduleView from "$lib/components/schedule/ScheduleView.svelte";
+  import ProfileSwitchDialog from "$lib/components/profile/ProfileSwitchDialog.svelte";
+  import ActiveProfileActivation from "$lib/components/profile/ActiveProfileActivation.svelte";
   import TargetRangeCard from "$lib/components/schedule/TargetRangeCard.svelte";
 
   type Summary = Awaited<ReturnType<typeof getProfileSummary>>;
 
-  let switchingProfile = $state<string | null>(null);
+  let defaultingProfile = $state<string | null>(null);
+  let switchDialogOpen = $state(false);
+  let switchProfileName = $state("");
 
-  async function handleSetActive(profileName: string) {
-    switchingProfile = profileName;
+  async function handleMakeDefault(profileName: string) {
+    defaultingProfile = profileName;
     try {
       await setDefaultProfile(profileName);
     } finally {
-      switchingProfile = null;
+      defaultingProfile = null;
     }
+  }
+
+  function openSwitch(profileName: string) {
+    switchProfileName = profileName;
+    switchDialogOpen = true;
   }
 
   // Query for profile summary data. Read reactively via .current/.loading/.error
@@ -205,6 +214,8 @@
         </CardContent>
       </Card>
     {:else}
+      <ActiveProfileActivation />
+
       <!-- Profile Name Tabs (when multiple profiles exist) -->
       {#if profileNames.length > 1}
         <Card>
@@ -258,18 +269,25 @@
                       </span>
                       {#if isDefault}
                         <Badge variant="success">
-                          Active
+                          Default
                         </Badge>
                       {:else}
                         <Button
                           variant="subtle"
                           size="inline-xs"
-                          onclick={(e: MouseEvent) => { e.preventDefault(); handleSetActive(profileName); }}
-                          disabled={switchingProfile !== null}
+                          onclick={(e: MouseEvent) => { e.preventDefault(); handleMakeDefault(profileName); }}
+                          disabled={defaultingProfile !== null}
                         >
-                          {switchingProfile === profileName ? "Switching..." : "Set as active"}
+                          {defaultingProfile === profileName ? "Saving..." : "Make default"}
                         </Button>
                       {/if}
+                      <Button
+                        variant="subtle"
+                        size="inline-xs"
+                        onclick={(e: MouseEvent) => { e.preventDefault(); openSwitch(profileName); }}
+                      >
+                        Switch…
+                      </Button>
                       {#if isExternal}
                         <Badge variant="outline">
                           <Lock class="h-3 w-3" />
@@ -316,7 +334,7 @@
                   {selectedProfileName}
                   {#if therapy.isDefault}
                     <Badge variant="success">
-                      Active
+                      Default
                     </Badge>
                   {/if}
                   {#if therapy.isExternallyManaged}
@@ -335,6 +353,9 @@
                   </CardDescription>
                 {/if}
               </div>
+              <Button variant="outline" size="sm" onclick={() => openSwitch(selectedProfileName)}>
+                Switch…
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -452,3 +473,4 @@
   </div>
 {/if}
 
+<ProfileSwitchDialog bind:open={switchDialogOpen} profileName={switchProfileName} />

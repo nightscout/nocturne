@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.ProfileActivations;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
@@ -9,7 +11,10 @@ using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
 
-/// <summary>Reads the <see cref="ProfileActivation"/>s: each one stored, and the one in force.</summary>
+/// <summary>
+/// Reads the <see cref="ProfileActivation"/>s, each one stored and the one in force, and writes the
+/// profile switches a person records in Nocturne (<see cref="NativeProfileSwitches"/>).
+/// </summary>
 /// <remarks>
 /// Never response-cached: an activation an uploader posts must read back on the next poll, and the
 /// one in force changes with it. See <see cref="ProfileController.GetProfileSummary"/>.
@@ -26,11 +31,16 @@ public class ProfileActivationsController : ControllerBase
 
     private readonly IProfileActivationRepository _activations;
     private readonly IProfileActivationResolver _resolver;
+    private readonly NativeProfileSwitches _native;
 
-    public ProfileActivationsController(IProfileActivationRepository activations, IProfileActivationResolver resolver)
+    public ProfileActivationsController(
+        IProfileActivationRepository activations,
+        IProfileActivationResolver resolver,
+        NativeProfileSwitches native)
     {
         _activations = activations;
         _resolver = resolver;
+        _native = native;
     }
 
     /// <summary>
@@ -81,7 +91,8 @@ public class ProfileActivationsController : ControllerBase
     [RequireScope(Scope.TherapyRead)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(ProfileActivationDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    // Typed so the generated client reads no content as null instead of throwing.
+    [ProducesResponseType(typeof(ProfileActivationDto), StatusCodes.Status204NoContent)]
     public async Task<ActionResult<ProfileActivationDto>> GetActiveActivation(
         [FromQuery] DateTime? at = null,
         CancellationToken ct = default)
@@ -91,6 +102,72 @@ public class ProfileActivationsController : ControllerBase
             ? Ok(ProfileActivationDto.From(active.Activation))
             : NoContent();
     }
+
+    /// <summary>
+    /// Records a switch to a stored profile starting now. It is recorded only: it is not served on the
+    /// v1 or v3 treatments feed, so no uploader reads it back and no pump runs it.
+    /// </summary>
+    [HttpPost]
+    [RequireScope(Scope.TherapyReadWrite)]
+    [RemoteCommand(Invalidates = ["GetActivations", "GetActiveActivation"])]
+    [ProducesResponseType(typeof(ProfileActivationDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ProfileActivationDto>> CreateActivation(
+        [FromBody] CreateProfileActivationRequest request,
+        CancellationToken ct = default)
+    {
+        var (outcome, activation) = await _native.CreateAsync(request, ct);
+        return outcome switch
+        {
+            NativeProfileSwitchOutcome.ProfileNotFound => Problem(
+                statusCode: StatusCodes.Status404NotFound, title: "Profile not found",
+                detail: $"No stored profile is named '{request.BaseProfileName}'."),
+            NativeProfileSwitchOutcome.PatientDeviceNotFound => Problem(
+                statusCode: StatusCodes.Status400BadRequest, title: "Device not found",
+                detail: $"No patient device has id {request.PatientDeviceId}."),
+            _ when activation is not null => StatusCode(StatusCodes.Status201Created, ProfileActivationDto.From(activation)),
+            _ => Problem(statusCode: StatusCodes.Status409Conflict, title: "Not recorded"),
+        };
+    }
+
+    /// <summary>Ends a person's switch now. An uploader's or a connector's is its source's to end.</summary>
+    [HttpPost("{id:guid}/end")]
+    [RequireScope(Scope.TherapyReadWrite)]
+    [RemoteCommand(Invalidates = ["GetActivations", "GetActiveActivation"])]
+    [ProducesResponseType(typeof(ProfileActivationDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ProfileActivationDto>> EndActivation(Guid id, CancellationToken ct = default)
+    {
+        var (outcome, activation) = await _native.EndAsync(id, ct);
+        return outcome switch
+        {
+            NativeProfileSwitchOutcome.Written when activation is not null => Ok(ProfileActivationDto.From(activation)),
+            NativeProfileSwitchOutcome.AlreadyEnded => Problem(
+                statusCode: StatusCodes.Status409Conflict, title: "Already ended",
+                detail: "The activation has already ended."),
+            _ => Refused(outcome),
+        };
+    }
+
+    /// <summary>Deletes a person's switch. An uploader's or a connector's is its source's to delete.</summary>
+    [HttpDelete("{id:guid}")]
+    [RequireScope(Scope.TherapyReadWrite)]
+    [RemoteCommand(Invalidates = ["GetActivations", "GetActiveActivation"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult> DeleteActivation(Guid id, CancellationToken ct = default) =>
+        await _native.DeleteAsync(id, ct) is var outcome && outcome == NativeProfileSwitchOutcome.Written
+            ? NoContent()
+            : Refused(outcome);
+
+    private ObjectResult Refused(NativeProfileSwitchOutcome outcome) => outcome == NativeProfileSwitchOutcome.NotOwnedByUser
+        ? Problem(
+            statusCode: StatusCodes.Status409Conflict, title: "Owned by its source",
+            detail: "Only a switch a person recorded can be changed here; an uploader's or a connector's belongs to its source.")
+        : Problem(statusCode: StatusCodes.Status404NotFound, title: "Activation not found");
 
     private static long ToMills(DateTime utc) => new DateTimeOffset(utc).ToUnixTimeMilliseconds();
 }

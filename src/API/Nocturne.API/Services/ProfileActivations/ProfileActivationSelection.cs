@@ -10,6 +10,8 @@ namespace Nocturne.API.Services.ProfileActivations;
 /// temporary one and applies again once the temporary one ends. A source that has reported what its
 /// pump runs is read only from those reports from its first one on: its requested activations starting
 /// then or later never apply on their own, while those before it, from before it reported, still do.
+/// A person's activation is never one of a source's requests: no pump reports it, so it always takes
+/// part.
 /// </remarks>
 internal static class ProfileActivationSelection
 {
@@ -21,6 +23,7 @@ internal static class ProfileActivationSelection
         IEnumerable<ProfileActivation> activations, IReadOnlyDictionary<string, long> firstEffectiveMills) =>
         activations
             .Where(a => a.Phase == ProfileActivationPhase.Effective
+                || a.Origin == ProfileActivationOrigin.User
                 || !firstEffectiveMills.TryGetValue(ProfileActivationSource.KeyOf(a), out var first)
                 || a.Mills < first)
             .ToList();

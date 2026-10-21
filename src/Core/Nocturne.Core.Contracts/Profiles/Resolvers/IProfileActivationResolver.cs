@@ -28,7 +28,10 @@ public enum ProfileScheduleSource
     /// <summary>The stored profile it names, scaled by its percentage and shifted by its timeshift.</summary>
     ProfileStore,
 
-    /// <summary>The base profile it was uploaded with, scaled and shifted, because the store lacks it.</summary>
+    /// <summary>
+    /// The base profile it was uploaded with, scaled and shifted, because the store lacks it; or the base
+    /// profile as it stood when a person switched to it in Nocturne, so a later edit leaves that switch alone.
+    /// </summary>
     BaseSnapshot,
 }
 

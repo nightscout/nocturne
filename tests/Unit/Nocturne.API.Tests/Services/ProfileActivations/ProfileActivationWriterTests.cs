@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.Core.Models.V4;
@@ -73,5 +74,32 @@ public class ProfileActivationWriterTests
 
         settled.Confirms.Should().BeEmpty();
         settled.Ends[written.Id].Should().Be(T0.AddHours(2), "the next permanent request ends it");
+    }
+
+    [Fact]
+    public void ARequestAPersonEndedBringsThatEndWithItAsStoredJson()
+    {
+        var written = Activation(0, phase: ProfileActivationPhase.Requested, durationMs: 3 * 3_600_000, dataSource: "manual");
+        var endedAt = new DateTimeOffset(T0.AddHours(1)).ToUnixTimeMilliseconds();
+        written.AdditionalProperties = new Dictionary<string, object?>
+        {
+            [ProfileActivationWriter.EndedAtKey] = JsonSerializer.SerializeToElement(endedAt),
+        };
+
+        var settled = ProfileActivationWriter.Settle(written, [], [], []);
+
+        settled.Ends[written.Id].Should().Be(T0.AddHours(1));
+    }
+
+    [Fact]
+    public void ARequestsOwnLengthStillEndsItWhenItRunsOutBeforeAPersonEndedIt()
+    {
+        var written = Activation(0, phase: ProfileActivationPhase.Requested, durationMs: 3_600_000, dataSource: "manual");
+        written.AdditionalProperties = new Dictionary<string, object?>
+        {
+            [ProfileActivationWriter.EndedAtKey] = new DateTimeOffset(T0.AddHours(2)).ToUnixTimeMilliseconds(),
+        };
+
+        ProfileActivationWriter.Settle(written, [], [], []).Ends[written.Id].Should().Be(T0.AddHours(1));
     }
 }

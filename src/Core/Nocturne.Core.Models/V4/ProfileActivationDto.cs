@@ -18,6 +18,10 @@ public sealed class ProfileActivationDto
 
     public string? App { get; set; }
 
+    public string? DataSource { get; set; }
+
+    public string? Notes { get; set; }
+
     public bool IsTemporary { get; set; }
 
     public long StartMills { get; set; }
@@ -33,6 +37,8 @@ public sealed class ProfileActivationDto
         Phase = activation.Phase,
         Origin = activation.Origin,
         App = activation.App,
+        DataSource = activation.DataSource,
+        Notes = activation.AdditionalProperties?.GetValueOrDefault("notes")?.ToString(),
         IsTemporary = activation.IsTemporary,
         StartMills = activation.Mills,
         EndMills = activation.EndMills,
