@@ -1,14 +1,16 @@
 import { redirect } from "@sveltejs/kit";
 import { parseErrorBody } from "$lib/api/error-body";
-import { isGoogleHealthErrorCode } from "$lib/connectors/google-health-error-codes";
+import {
+  isGoogleHealthErrorCode,
+  type GoogleHealthErrorCode,
+} from "$lib/connectors/google-health-error-codes";
 import type { RequestHandler } from "./$types";
 
 /**
  * The problem `detail` the API answered with, when it is a code the page has a sentence for.
- * NSwag throws a declared status's ProblemDetails itself, and leaves any other status's body
- * unparsed on an `ApiException`.
+ * The body is read as in {@link parseErrorBody}.
  */
-function failureCode(err: unknown): string {
+function failureCode(err: unknown): GoogleHealthErrorCode | "failed" {
   const thrown = err && typeof err === "object" && "detail" in err ? err.detail : undefined;
   const detail = typeof thrown === "string" ? thrown : parseErrorBody(err)?.detail;
   return detail !== undefined && isGoogleHealthErrorCode(detail) ? detail : "failed";
