@@ -469,12 +469,11 @@ public class TenantResolutionMiddleware
     /// <para>
     /// The fresh-install answer — no tenant exists at all — is deliberately not cached, and is the
     /// one answer worth a query per request. It is true only until an install's first tenant is
-    /// created, and every way of holding it stale ends in an instance that answers
-    /// <c>setup_required</c> at its apex while its database has a tenant: the setup page's own
-    /// <c>/api/v4/status</c> poll can read zero tenants, lose the race to the create, and then write
-    /// the answer it read. Every
-    /// other answer changes only when a tenant is created, removed or toggled, all of which call
-    /// <see cref="EvictTenant"/>.
+    /// created, and a cached copy can outlive that: the setup page's own <c>/api/v4/status</c> poll
+    /// can read zero tenants, lose the race to the create, and then write the answer it read,
+    /// leaving an instance that answers <c>setup_required</c> at its apex while its database has a
+    /// tenant. Every other answer changes only when a tenant is created, removed or toggled, all of
+    /// which call <see cref="EvictTenant"/>.
     /// </para>
     /// </remarks>
     private async Task<ApexTenants> GetApexTenantsAsync(IServiceProvider services)

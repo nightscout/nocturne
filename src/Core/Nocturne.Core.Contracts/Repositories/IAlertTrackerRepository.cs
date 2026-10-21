@@ -94,9 +94,11 @@ public interface IAlertTrackerRepository
 
     /// <summary>
     /// Holds <paramref name="alertRuleId"/>'s transition lock until the transaction
-    /// (<see cref="ExecuteInTransactionAsync{T}"/>) it is taken in ends, so that one process at a
-    /// time reads and writes the rule's tracker state. The default, for a store no other process
-    /// shares, takes nothing.
+    /// (<see cref="ExecuteInTransactionAsync{T}"/>) it is taken in ends. Every writer of the rule's
+    /// tracker state already holds the API's in-process per-rule lease
+    /// (<c>AlertRuleEvaluationGate</c>), so this is a backstop for a second API process briefly
+    /// overlapping the first, such as a pod being drained while its replacement starts. The default,
+    /// for a store no other process shares, takes nothing.
     /// </summary>
     /// <param name="alertRuleId">The rule whose transition is about to be written.</param>
     /// <param name="ct">Cancellation token.</param>

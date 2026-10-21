@@ -4,10 +4,13 @@ namespace Nocturne.Infrastructure.Data.Migrations;
 
 /// <summary>
 /// Builds an index with <c>CONCURRENTLY</c>, which every index over one of the large record tables
-/// needs. A plain <c>CREATE INDEX</c> takes a <c>ShareLock</c>, which blocks every write to that
-/// table until the build finishes — on the tables the connectors ingest into, that is dropped
-/// uploads. Batching them into one transaction is worse on both counts: it holds every one of
-/// those locks until the commit, and a failure part-way discards all the completed work, so under
+/// needs. The API migrates before it serves, so its own writes never meet the build; the writers
+/// that can are a pod still serving through its termination grace period while its replacement
+/// migrates, and an API serving a database someone runs <c>dotnet ef database update</c> against.
+/// A plain <c>CREATE INDEX</c> takes a <c>ShareLock</c>, which blocks those writes until the build
+/// finishes — on the tables the connectors ingest into, that is dropped uploads. Batching the
+/// builds into one transaction is worse on both counts: it holds every one of those locks until the
+/// commit, and a failure part-way discards all the completed work, so under
 /// <c>restart: unless-stopped</c> each crash-loop iteration starts again from nothing. That is the
 /// same trap the hour-long command timeout in
 /// <see cref="Extensions.DatabaseInitializationExtensions.RunMigrationsAsync"/> exists to avoid.
