@@ -49,7 +49,7 @@ interface BridgeSocketData {
 type Readmission =
   | { kind: 'ticket' }
   | { kind: 'credential'; apiSecret?: string; token?: string }
-  | { kind: 'storage'; accessToken: string; collections: string[] }
+  | { kind: 'storage'; accessToken: string; collections: string[]; unanswered: string[] }
   | { kind: 'alarm'; accessToken: string };
 
 /**
@@ -58,6 +58,12 @@ type Readmission =
  * ticket expires instead.
  */
 export const ADMISSION_RECHECK_INTERVAL_MS = 60_000;
+
+/**
+ * How soon a /storage socket's collections whose probe went unanswered are probed again. A
+ * collection the API has not yet answered for is neither joined nor refused.
+ */
+export const UNANSWERED_COLLECTION_RETRY_MS = 10_000;
 
 /** How long a browser has to answer a request for a fresh ticket. */
 export const TICKET_REFRESH_TIMEOUT_MS = 10_000;
@@ -228,8 +234,21 @@ function queryValue(value: string | string[] | undefined): string | undefined {
   return single || undefined;
 }
 
-function isApexHost(host: string, baseDomain: string): boolean {
-  return host.split(':')[0] === baseDomain.split(':')[0];
+const APEX = Symbol('apex');
+
+/** The subdomain slug a host names, `APEX` for the apex domain, or null for a foreign host. */
+function hostTenant(host: string | undefined, baseDomain: string): string | typeof APEX | null {
+  if (!host) return null;
+
+  const hostname = host.split(':')[0];
+  const baseDomainHost = baseDomain.split(':')[0];
+
+  if (hostname.endsWith(`.${baseDomainHost}`)) {
+    const slug = hostname.slice(0, -(baseDomainHost.length + 1));
+    return slug || null;
+  }
+
+  return hostname === baseDomainHost ? APEX : null;
 }
 
 /** Resolve the tenant slug a host belongs to. A subdomain resolves to its slug;
@@ -241,21 +260,8 @@ export function resolveTenantSlug(
   baseDomain: string,
   apexTenantSlug: string | null,
 ): string | null {
-  if (!host) return null;
-
-  const hostname = host.split(':')[0];
-  const baseDomainHost = baseDomain.split(':')[0];
-
-  if (hostname.endsWith(`.${baseDomainHost}`)) {
-    const slug = hostname.slice(0, -(baseDomainHost.length + 1));
-    return slug || null;
-  }
-
-  if (hostname === baseDomainHost) {
-    return apexTenantSlug;
-  }
-
-  return null;
+  const tenant = hostTenant(host, baseDomain);
+  return tenant === APEX ? apexTenantSlug : tenant;
 }
 
 class SocketIOServer {
@@ -539,20 +545,24 @@ class SocketIOServer {
         return ADMISSION_RECHECK_INTERVAL_MS;
       }
       case 'storage': {
-        const kept: string[] = [];
-        for (const collection of readmission.collections) {
-          const answer = await this.probeAccessToken(
-            readmission.accessToken, tenantSlug, COLLECTION_READ_ENDPOINT[collection]);
-          if (answer === false) socket.leave(storageRoom(tenantSlug, collection));
-          else kept.push(collection);
-        }
-        if (kept.length === 0) {
+        const [joined, waiting] = await Promise.all([
+          this.probeCollections(readmission.accessToken, tenantSlug, readmission.collections),
+          this.probeCollections(readmission.accessToken, tenantSlug, readmission.unanswered),
+        ]);
+        for (const collection of joined.refused) socket.leave(storageRoom(tenantSlug, collection));
+        for (const collection of waiting.granted) socket.join(storageRoom(tenantSlug, collection));
+        if (waiting.granted.length > 0) this.onTenantAdmitted(tenantSlug);
+
+        const collections = readmission.collections.filter((c) => !joined.refused.includes(c))
+          .concat(waiting.granted);
+        const unanswered = waiting.unanswered;
+        if (collections.length === 0 && unanswered.length === 0) {
           logger.warn(`/storage client ${socket.id} lost every collection for tenant ${tenantSlug}; disconnecting`);
           socket.disconnect(true);
           return null;
         }
-        socket.data.readmission = { ...readmission, collections: kept };
-        return ADMISSION_RECHECK_INTERVAL_MS;
+        socket.data.readmission = { ...readmission, collections, unanswered };
+        return unanswered.length > 0 ? UNANSWERED_COLLECTION_RETRY_MS : ADMISSION_RECHECK_INTERVAL_MS;
       }
       case 'alarm': {
         const admission = await this.probeRealtimeAdmission(tenantSlug, readmission);
@@ -874,19 +884,24 @@ class SocketIOServer {
   onApexUnresolved: () => Promise<void> = async () => {};
 
   private async resolveTenant(host: string | undefined): Promise<string | null> {
-    const slug = resolveTenantSlug(host, this.baseDomain, this.apexTenantSlug);
-    if (slug || !host || !isApexHost(host, this.baseDomain)) return slug;
-    await this.onApexUnresolved();
-    return resolveTenantSlug(host, this.baseDomain, this.apexTenantSlug);
+    const tenant = hostTenant(host, this.baseDomain);
+    if (tenant !== APEX) return tenant;
+    if (this.apexTenantSlug === null) await this.onApexUnresolved();
+    return this.apexTenantSlug;
   }
 
-  /** Closes every socket bound to a tenant, in every namespace. */
+  /** Takes every socket bound to a tenant out of its rooms at once, then closes its transport, in
+   *  every namespace. A transport may finish closing only once its buffer drains. A client reconnects
+   *  from a closed transport and goes through its handshake again, where a browser fetches a fresh
+   *  ticket; a server-side disconnect would leave it closed for good. */
   disconnectTenant(tenantSlug: string): void {
     for (const nsp of [this.io?.of('/'), this.storageNsp, this.alarmNsp]) {
       for (const socket of nsp?.sockets.values() ?? []) {
-        if (socket.data.tenantSlug === tenantSlug || socket.data.pendingTenantSlug === tenantSlug) {
-          socket.disconnect(true);
+        if (socket.data.tenantSlug !== tenantSlug && socket.data.pendingTenantSlug !== tenantSlug) continue;
+        for (const room of [...socket.rooms]) {
+          if (room !== socket.id) socket.leave(room);
         }
+        socket.conn.close();
       }
     }
   }
@@ -931,7 +946,9 @@ class SocketIOServer {
     }
     try {
       const url = new URL(`${this.apiBaseUrl}${endpointPath}`);
-      url.searchParams.set('count', '1');
+      // v3 reads any parameter but its own (`limit`, `sort`, ...) as a field filter, which the
+      // API matches over up to the tenant's whole history.
+      url.searchParams.set('limit', '1');
       const probe = await fetch(url, {
         method: 'GET',
         headers: {
@@ -950,6 +967,22 @@ class SocketIOServer {
       logger.warn(`v3 namespace auth probe failed: ${reason}`);
       return UNANSWERED;
     }
+  }
+
+  /** Probes a token's read access to each collection at once, each against its own v3 read
+   *  endpoint, so access is per collection as the API's per-endpoint scopes are. */
+  private async probeCollections(
+    accessToken: string,
+    tenantSlug: string,
+    collections: readonly string[],
+  ): Promise<{ granted: string[]; refused: string[]; unanswered: string[] }> {
+    const answers = await Promise.all(collections.map((collection) =>
+      this.probeAccessToken(accessToken, tenantSlug, COLLECTION_READ_ENDPOINT[collection])));
+    return {
+      granted: collections.filter((_, i) => answers[i] === true),
+      refused: collections.filter((_, i) => answers[i] === false),
+      unanswered: collections.filter((_, i) => answers[i] === UNANSWERED),
+    };
   }
 
   /**
@@ -1002,6 +1035,10 @@ class SocketIOServer {
    * rejected outright — and the socket is disconnected so the client has to
    * re-establish the connection (going back through TLS/transport) rather than
    * immediately retrying `subscribe` as a credential-guessing oracle.
+   *
+   * A collection the API gave no answer for (timeout, 5xx, unreachable) is
+   * neither joined nor refused: re-admission probes it again and joins it once
+   * the API grants it, so an outage never reads as a refusal.
    */
   async handleStorageSubscribe(
     socket: BridgeSocket,
@@ -1035,17 +1072,10 @@ class SocketIOServer {
           .filter((name, i, all) => all.findIndex((other) => collectionIdentity(other) === collectionIdentity(name)) === i)
       : DEFAULT_STORAGE_COLLECTIONS;
 
-    // Probe each collection's read endpoint independently so authorization is
-    // per-collection, matching the API's per-endpoint RequireScope.
-    const authorized: string[] = [];
-    for (const collection of candidateCollections) {
-      const endpoint = COLLECTION_READ_ENDPOINT[collection];
-      if (await this.probeAccessToken(accessToken, tenantSlug, endpoint) === true) {
-        authorized.push(collection);
-      }
-    }
+    const { granted: authorized, unanswered } = await this.probeCollections(
+      accessToken, tenantSlug, candidateCollections);
 
-    if (authorized.length === 0) {
+    if (authorized.length === 0 && unanswered.length === 0) {
       logger.warn(
         `/storage subscribe denied for ${socket.id} (tenant ${tenantSlug}): token not authorized for any collection`,
       );
@@ -1059,11 +1089,13 @@ class SocketIOServer {
     }
     socket.data.tenantSlug = tenantSlug;
     socket.data.pendingTenantSlug = undefined;
-    this.onTenantAdmitted(tenantSlug);
-    socket.data.readmission = { kind: 'storage', accessToken, collections: authorized };
-    this.scheduleReadmission(socket, ADMISSION_RECHECK_INTERVAL_MS);
+    if (authorized.length > 0) this.onTenantAdmitted(tenantSlug);
+    socket.data.readmission = { kind: 'storage', accessToken, collections: authorized, unanswered };
+    this.scheduleReadmission(
+      socket, unanswered.length > 0 ? UNANSWERED_COLLECTION_RETRY_MS : ADMISSION_RECHECK_INTERVAL_MS);
     logger.info(
-      `/storage client ${socket.id} subscribed for tenant ${tenantSlug}: ${authorized.join(', ')}`,
+      `/storage client ${socket.id} subscribed for tenant ${tenantSlug}: ${authorized.join(', ')}`
+        + (unanswered.length > 0 ? ` (awaiting the API for ${unanswered.join(', ')})` : ''),
     );
     ack?.({ success: true, collections: authorized });
   }

@@ -101,7 +101,6 @@ public class V3FilterOperatorMergeTests
             .ReturnsAsync(Array.Empty<Treatment>());
 
         var controller = new TreatmentsController(
-            Mock.Of<ITreatmentStore>(),
             Mock.Of<IDocumentProcessingService>(),
             treatments.Object,
             NullLogger<TreatmentsController>.Instance)

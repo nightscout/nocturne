@@ -809,6 +809,28 @@ describe('SocketIOServer v3 /storage namespace', () => {
     expect(probedPaths.some((p) => p.includes('/api/v3/treatments'))).toBe(true);
   });
 
+  it('probes the requested collections concurrently', async () => {
+    const answers: Array<(response: unknown) => void> = [];
+    const fetchMock = vi.fn().mockImplementation(
+      () => new Promise((resolve) => answers.push(resolve)),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const server = makeStorageServer();
+    const socket = storageSocket('rhys');
+    const ack = vi.fn();
+
+    const subscribing = server.handleStorageSubscribe(
+      socket as never,
+      { accessToken: 'aaps-token', collections: ['entries', 'treatments', 'devicestatus'] },
+      ack,
+    );
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    for (const answer of answers) answer({ ok: true, status: 200 });
+    await subscribing;
+
+    expect(ack).toHaveBeenCalledWith({ success: true, collections: ['entries', 'treatments', 'devicestatus'] });
+  });
+
   it('probes the v3 endpoint with a Bearer token scoped to the tenant', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     vi.stubGlobal('fetch', fetchMock);
@@ -822,7 +844,7 @@ describe('SocketIOServer v3 /storage namespace', () => {
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(String(url)).toContain('/api/v3/entries');
-    expect(String(url)).toContain('count=1');
+    expect([...new URL(String(url)).searchParams]).toEqual([['limit', '1']]);
     expect(init.headers['Authorization']).toBe('Bearer aaps-token');
     expect(init.headers['X-Forwarded-Host']).toBe('rhys.nocturne.run');
     // The bridge must NOT use its instance key to authorize the client.
