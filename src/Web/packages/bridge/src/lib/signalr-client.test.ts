@@ -294,6 +294,33 @@ describe("SignalRClient reconnect confirmation", () => {
     });
   }
 
+  it("backs off from a hub that closes the connection right after its handshake, as from a failed connect", async () => {
+    // The API completes the handshake, then closes a connection whose host resolves to a tenant
+    // other than the expected one; the invocation in flight fails with it.
+    const refusing = () => {
+      const hub = new FakeHubConnection();
+      hub.invoke = vi.fn(async () => {
+        hub.emitClose();
+        throw new Error("Invocation canceled due to the underlying connection being closed.");
+      });
+      return hub;
+    };
+    queueConnections(...Array.from({ length: 4 }, refusing));
+    const client = confirmedClient(async () => true);
+
+    await client.connect();
+    expect(signalr.buildConnection).toHaveBeenCalledTimes(1);
+
+    for (const delay of [100, 200, 400]) {
+      const built = signalr.buildConnection.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(signalr.buildConnection).toHaveBeenCalledTimes(built);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(signalr.buildConnection).toHaveBeenCalledTimes(built + 1);
+    }
+    await client.disconnect();
+  });
+
   it("reconnects a lost connection only once its tenant is confirmed", async () => {
     const first = new FakeHubConnection();
     const second = new FakeHubConnection();

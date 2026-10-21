@@ -20,7 +20,7 @@ export interface TenantConnection {
 
 export interface TenantRegistryOptions<C extends TenantConnection> {
   discover: () => Promise<TenantDirectory>;
-  /** Opens a relay for the tenant `id` reached at `slug`; the relay must refuse any other tenant the slug comes to name. */
+  /** Opens a relay for the tenant `id` reached at `slug`, pinned to that id (see TenantAwareHub.ExpectedTenantHeader in the API). */
   createConnection: (slug: string, id: string) => C;
   /** The least time between the starts of two discoveries, which bounds what a burst of misses costs the API. */
   refreshIntervalMs: number;

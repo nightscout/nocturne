@@ -96,8 +96,7 @@ function createTenantClient(
     reconnectDelay: config.signalr.reconnectDelay,
     maxReconnectDelay: config.signalr.maxReconnectDelay,
     instanceKey: config.instanceKey,
-    // The API refuses the hubs when the slug resolves to any tenant but this one, as it does once the
-    // slug is deleted and created again between the tenant list being read and the hubs connecting.
+    // See TenantAwareHub.ExpectedTenantHeader in the API.
     connectionHeaders: { 'X-Forwarded-Host': tenantHost, 'X-Expected-Tenant-Id': tenantId },
     confirmReconnect,
   });
@@ -175,9 +174,6 @@ export async function setupBridge(
       return client;
     },
     refreshIntervalMs: userConfig.tenantRefreshIntervalMs ?? DEFAULT_TENANT_REFRESH_INTERVAL_MS,
-    // A slug's room may hold sockets of a tenant that is gone, or of the tenant a reused slug named
-    // before. Their clients reconnect through a fresh handshake, which the API admits only for a
-    // tenant they belong to.
     onTenantRemoved: (slug) => socketIOServer.disconnectTenant(slug),
     onApexChanged: (slug) => socketIOServer.setApexTenantSlug(slug),
   });
