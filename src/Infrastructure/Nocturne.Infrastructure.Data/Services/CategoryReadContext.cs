@@ -21,6 +21,8 @@ public sealed class CategoryReadContext : ICategoryReadContext
 
     public bool IsHistoryClamped => (IsShare && !FullHistory) || _memberHistoryClamped;
 
+    public bool BypassesTenantCaches => IsHistoryClamped || IsShare;
+
     public void MarkShare() => IsShare = true;
 
     public void SetVisibleCategories(string csv)

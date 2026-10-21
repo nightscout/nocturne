@@ -6,7 +6,7 @@
     RecentTreatmentsCard,
     WidgetGrid,
   } from "$lib/components/dashboard";
-  import { getSettingsStore } from "$lib/stores/settings-store.svelte";
+  import { getUiSettings } from "$api/ui-settings.remote";
   import { dashboardTopWidgets } from "$lib/stores/appearance-store.svelte";
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { isMainSectionEnabled } from "$lib/types/dashboard-widgets";
@@ -19,7 +19,9 @@
 
   const { data }: { data: PageData } = $props();
 
-  const settingsStore = getSettingsStore();
+  // svelte-ignore state_referenced_locally
+  const uiSettingsQuery = data.tenantless ? null : getUiSettings();
+  const featureSettings = $derived(uiSettingsQuery?.current?.features);
   const realtimeStore = tryGetRealtimeStore();
 
   // Whether we already know this instance has data: server-loaded recent glucose,
@@ -40,19 +42,19 @@
       (realtimeStore ? realtimeStore.currentBG > 0 : false)
   );
 
-  const widgets = $derived(settingsStore.features?.widgets);
+  const widgets = $derived(featureSettings?.widgets);
 
   // Get enabled top widgets from persisted appearance store
   const topWidgets = $derived(dashboardTopWidgets.current);
 
   // Get focusHours setting for chart default time range
   const focusHours = $derived(
-    settingsStore.features?.display?.focusHours ?? 12
+    featureSettings?.display?.focusHours ?? 12
   );
 
   // Algorithm prediction settings - controls whether predictions are calculated
   const predictionEnabled = $derived(
-    settingsStore.algorithm?.prediction?.enabled ?? true
+    uiSettingsQuery?.current?.algorithm?.prediction?.enabled ?? true
   );
 </script>
 

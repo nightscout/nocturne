@@ -1874,6 +1874,9 @@ internal class MigrationJob
             Store = store,
             EnteredBy = doc.Contains("enteredBy") ? doc["enteredBy"].AsString : null,
             LoopSettings = loopSettings,
+            IsAPNSProduction = doc.Contains("isAPNSProduction") && doc["isAPNSProduction"].IsBoolean
+                ? doc["isAPNSProduction"].AsBoolean
+                : null,
         };
 
         using var scope = CreateTenantScope();

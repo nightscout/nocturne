@@ -29,6 +29,26 @@ public class ProfileProjectionServiceTests
 
     #region GetCurrentProfileAsync
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(null)]
+    public async Task GetCurrentProfileAsync_ReturnsTheStoredApnsEnvironmentAndNothingWhenAbsent(bool? stored)
+    {
+        var correlationId = Guid.NewGuid();
+        var settings = CreateTherapySettings(correlationId: correlationId);
+        settings.IsAPNSProduction = stored;
+
+        SetupGetLatest(settings);
+        SetupCorrelationLookups(correlationId);
+
+        var result = await _sut.GetCurrentProfileAsync();
+
+        result!.IsAPNSProduction.Should().Be(stored);
+        System.Text.Json.JsonSerializer.Serialize(result).Contains("isAPNSProduction")
+            .Should().Be(stored.HasValue, "an upload that never said stays without the field on a legacy read");
+    }
+
     [Fact]
     public async Task GetCurrentProfileAsync_NoSettings_ReturnsNull()
     {
@@ -444,6 +464,65 @@ public class ProfileProjectionServiceTests
 
         result.Should().NotBeNull();
         result!.Id.Should().Be("507f1f77bcf86cd799439011");
+    }
+
+    #endregion
+
+    #region Glucose units
+
+    [Theory]
+    [InlineData("mmol")]
+    [InlineData("mmol/L")]
+    public async Task GetCurrentProfileAsync_MmolProfile_ReturnsGlucoseValuesInMmol(string units)
+    {
+        var correlationId = Guid.NewGuid();
+        var settings = CreateTherapySettings(correlationId: correlationId, units: units);
+        var sensitivity = CreateSensitivitySchedule(correlationId);
+        sensitivity.Entries =
+        [
+            new ScheduleEntry { Time = "00:00", Value = 63, TimeAsSeconds = 0 },
+            new ScheduleEntry { Time = "04:00", Value = 58, TimeAsSeconds = 14400 },
+        ];
+        var targetRange = CreateTargetRangeSchedule(correlationId);
+        targetRange.Entries = [new TargetRangeEntry { Time = "00:00", Low = 90, High = 99, TimeAsSeconds = 0 }];
+
+        SetupGetLatest(settings);
+        SetupCorrelationLookups(
+            correlationId,
+            basals: [CreateBasalSchedule(correlationId)],
+            carbRatios: [CreateCarbRatioSchedule(correlationId)],
+            sensitivities: [sensitivity],
+            targetRanges: [targetRange]);
+
+        var result = await _sut.GetCurrentProfileAsync();
+
+        result!.Units.Should().Be(units);
+        var data = result.Store["Default"];
+        data.Sens.Select(s => s.Value).Should().Equal(3.5, 3.2);
+        data.TargetLow.Single().Value.Should().Be(5.0);
+        data.TargetHigh.Single().Value.Should().Be(5.5);
+        data.Basal.Single().Value.Should().Be(1.0, "basal is U/h, not glucose-unit-dependent");
+        data.CarbRatio.Single().Value.Should().Be(10.0, "carb ratio is g/U, not glucose-unit-dependent");
+    }
+
+    [Fact]
+    public async Task GetCurrentProfileAsync_MgdlProfile_ReturnsGlucoseValuesUnchanged()
+    {
+        var correlationId = Guid.NewGuid();
+        var settings = CreateTherapySettings(correlationId: correlationId, units: "mg/dL");
+
+        SetupGetLatest(settings);
+        SetupCorrelationLookups(
+            correlationId,
+            sensitivities: [CreateSensitivitySchedule(correlationId)],
+            targetRanges: [CreateTargetRangeSchedule(correlationId)]);
+
+        var result = await _sut.GetCurrentProfileAsync();
+
+        var data = result!.Store["Default"];
+        data.Sens.Single().Value.Should().Be(50.0);
+        data.TargetLow.Single().Value.Should().Be(80);
+        data.TargetHigh.Single().Value.Should().Be(120);
     }
 
     #endregion

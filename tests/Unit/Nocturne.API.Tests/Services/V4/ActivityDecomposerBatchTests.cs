@@ -112,6 +112,32 @@ public class ActivityDecomposerBatchTests : IDisposable
     }
 
     [Fact]
+    public async Task DecomposeBatchAsync_XDripMotionClass_BecomesMotionSpansAtTimeStampWithTheClassAsState()
+    {
+        const long stillAt = 1_780_000_000_123;
+        const long walkingAt = stillAt + 600_000;
+        var activities = System.Text.Json.JsonSerializer.Deserialize<List<Activity>>($$"""
+            [
+              {"type":"motion-class","timeStamp":{{stillAt}},"created_at":"2026-05-28T20:26:40Z","class":"still"},
+              {"type":"motion-class","timeStamp":{{walkingAt}},"created_at":"2026-05-28T20:36:40Z","class":"walking"}
+            ]
+            """)!;
+        List<StateSpan>? written = null;
+        _stateSpanRepoMock
+            .Setup(x => x.CreateActivitiesAsStateSpansAsync(
+                It.IsAny<IEnumerable<StateSpan>>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<StateSpan> spans, CancellationToken _) => written = spans.ToList())
+            .ReturnsAsync((IEnumerable<StateSpan> spans, CancellationToken _) => spans);
+
+        await _decomposer.DecomposeBatchAsync(activities, WriteOrigin.Backfill);
+
+        written.Should().NotBeNull();
+        written!.Select(s => (s.Category, s.State, s.StartTimestamp, s.EndTimestamp)).Should().Equal(
+            (StateSpanCategory.Motion, "still", DateTimeOffset.FromUnixTimeMilliseconds(stillAt).UtcDateTime, (DateTime?)null),
+            (StateSpanCategory.Motion, "walking", DateTimeOffset.FromUnixTimeMilliseconds(walkingAt).UtcDateTime, (DateTime?)null));
+    }
+
+    [Fact]
     public async Task DecomposeBatchAsync_RoutesRegularActivityToStateSpans()
     {
         // Arrange

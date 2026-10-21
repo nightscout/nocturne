@@ -33,6 +33,7 @@ public class DeviceStatusController : ControllerBase
     private readonly IDeviceStatusDecomposer _decomposer;
     private readonly IWriteSideEffects _sideEffects;
     private readonly IDataEventSink<DeviceStatus> _events;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<DeviceStatusController> _logger;
 
     private const string CollectionName = "devicestatus";
@@ -50,6 +51,7 @@ public class DeviceStatusController : ControllerBase
         IDeviceStatusDecomposer decomposer,
         IWriteSideEffects sideEffects,
         IDataEventSink<DeviceStatus> events,
+        TimeProvider timeProvider,
         ILogger<DeviceStatusController> logger
     )
     {
@@ -57,6 +59,7 @@ public class DeviceStatusController : ControllerBase
         _decomposer = decomposer;
         _sideEffects = sideEffects;
         _events = events;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -104,26 +107,12 @@ public class DeviceStatusController : ControllerBase
                 skip = 0; // Normalize to 0 for Nightscout compatibility
             }
 
-            // Extract find query parameters from query string
-            string? findQuery = null;
-            var queryKeys = HttpContext?.Request?.Query?.Keys;
-            if (queryKeys != null)
-            {
-                var findParams = queryKeys
-                    .Where(k => k.StartsWith("find["))
-                    .ToList();
-
-                if (findParams.Count > 0)
-                {
-                    var queryParts = findParams
-                        .Select(k => $"{k}={HttpContext!.Request.Query[k]}")
-                        .ToList();
-                    findQuery = string.Join("&", queryParts);
-                }
-            }
-
-            var deviceStatusEntries = await _projection.GetAsync(
-                LegacyReadLimits.ClampMergedCount(count), skip, findQuery, cancellationToken
+            var find = DeviceStatusProjectionService.ParseFind(LegacyFindDateWindow.Apply(
+                LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null),
+                _timeProvider.GetUtcNow()
+            ));
+            var deviceStatusEntries = await _projection.GetMatchingAsync(
+                find, LegacyReadLimits.ClampMergedCount(count), skip, cancellationToken
             );
             var deviceStatusArray = deviceStatusEntries.ToArray();
 
@@ -359,23 +348,28 @@ public class DeviceStatusController : ControllerBase
         try
         {
             var findQuery = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
+            var find = DeviceStatusProjectionService.ParseFind(findQuery);
 
-            if (!LegacyFindQueryString.HasConditions(findQuery)
-                || DeviceStatusProjectionService.ParseDeleteFind(findQuery) is null)
+            if (find.IsEmpty || find.HasInexactCondition)
             {
                 _logger.LogWarning("Bulk delete device status refused: the query names no find it can apply");
                 return BadRequest(
-                    "A find on device or created_at is required for bulk delete, and every find key must be one of those"
+                    "A find is required for bulk delete, and every condition in it must be one it can evaluate"
                 );
             }
 
             // Find matching records via V4 projection, then delete each by legacy ID.
             // NOTE: hardcoded limit of 10,000 means bulk deletes silently truncate
             // if more records match. Nightscout legacy has the same limitation.
+            // Nightscout windows every delete naming no created_at or _id, a time-only one included.
             const int bulkDeleteLimit = 10_000;
-            var matchingRecords = (await _projection.GetAsync(
-                count: bulkDeleteLimit, skip: 0, find: findQuery, ct: cancellationToken
-            )).ToList();
+            var matchingRecords = await _projection.GetMatchingAsync(
+                DeviceStatusProjectionService.ParseFind(
+                    LegacyFindDateWindow.Apply(findQuery, _timeProvider.GetUtcNow(), windowUnfiltered: true)),
+                bulkDeleteLimit,
+                skip: 0,
+                cancellationToken
+            );
 
             if (matchingRecords.Count == bulkDeleteLimit)
             {

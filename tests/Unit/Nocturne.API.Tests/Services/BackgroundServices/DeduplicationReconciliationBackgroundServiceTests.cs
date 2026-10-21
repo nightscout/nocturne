@@ -103,7 +103,7 @@ public class DeduplicationReconciliationBackgroundServiceTests
     }
 
     [Fact]
-    public async Task ReconcileAllTenantsAsync_PrunesEachTenantAfterItsReconcile_AndNotOneWhoseReconcileFailed()
+    public async Task ReconcileAllTenantsAsync_RepairsAndPrunesEachTenantAfterItsReconcile_AndNotOneWhoseReconcileFailed()
     {
         using var db = TwoActiveTenantsAndOneInactive();
 
@@ -117,6 +117,13 @@ public class DeduplicationReconciliationBackgroundServiceTests
                 if (calls.Count == 1)
                     throw new InvalidOperationException("boom");
                 return Task.FromResult(new ReconcileResult(0, true));
+            });
+        dedupMock
+            .Setup(d => d.RepairStateSpanPrimariesAsync(It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                calls.Add("repair");
+                return Task.FromResult(0);
             });
         dedupMock
             .Setup(d => d.PruneSingletonLinksAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
@@ -135,7 +142,7 @@ public class DeduplicationReconciliationBackgroundServiceTests
 
         await sut.ReconcileAllTenantsAsync(CancellationToken.None);
 
-        calls.Should().Equal(["reconcile", "reconcile", "prune"],
+        calls.Should().Equal(["reconcile", "reconcile", "repair", "prune"],
             "a prune may only delete what reconcile has already passed");
     }
 }

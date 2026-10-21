@@ -13,8 +13,7 @@ namespace Nocturne.API.Services.Treatments;
 /// and demo-mode isolation for <see cref="Treatment"/> queries.
 /// Only caches skip=0 queries with common counts (10, 50, 100) and no find filter to keep
 /// cache cardinality bounded. Invalidation clears all recent-treatment entries for the tenant.
-/// A history-clamped request bypasses the cache, for the reason given on
-/// <see cref="Nocturne.API.Services.Entries.EntryCacheAdapter"/>.
+/// A request that <see cref="ICategoryReadContext.BypassesTenantCaches"/> skips the cache.
 /// </summary>
 /// <seealso cref="ITreatmentCache"/>
 /// <seealso cref="TreatmentService"/>
@@ -33,7 +32,7 @@ public class TreatmentCacheAdapter : ITreatmentCache
     /// <param name="cache">The distributed cache service for get/set/remove operations.</param>
     /// <param name="demoMode">Demo mode service used to isolate demo and real data cache keys.</param>
     /// <param name="tenant">Provides the current tenant context for scoping all cache keys.</param>
-    /// <param name="categoryReadContext">Says whether this request is history-clamped.</param>
+    /// <param name="categoryReadContext">Says whether this request bypasses the cache.</param>
     /// <param name="logger">The logger instance.</param>
     public TreatmentCacheAdapter(
         ICacheService cache,
@@ -58,7 +57,7 @@ public class TreatmentCacheAdapter : ITreatmentCache
         CancellationToken ct)
     {
         // Only cache skip=0 with common counts and no find filter
-        if (_categoryReadContext.IsHistoryClamped
+        if (_categoryReadContext.BypassesTenantCaches
             || query.Skip != 0
             || !IsCommonCount(query.Count)
             || query.Find is not null)

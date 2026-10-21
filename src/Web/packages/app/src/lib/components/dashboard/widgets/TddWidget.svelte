@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import WidgetCard from "./WidgetCard.svelte";
+  import WidgetStatSkeleton from "./WidgetStatSkeleton.svelte";
   import { PieChart } from "layerchart";
   import { getMultiPeriodStatistics } from "$api/generated/statistics.generated.remote";
   import { Button } from "$lib/components/ui/button";
@@ -37,14 +38,10 @@
   {/snippet}
 
   {#if !statsPromise}
-    <div class="flex items-center justify-center py-4">
-      <div class="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
-    </div>
+    <WidgetStatSkeleton shape="tdd" />
   {:else}
     {#await statsPromise}
-      <div class="flex items-center justify-center py-4">
-        <div class="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
-      </div>
+      <WidgetStatSkeleton shape="tdd" />
     {:then stats}
     {@const todayDelivery = stats?.lastDay?.insulinDelivery}
     {@const avgDelivery = stats?.last90Days?.insulinDelivery}
@@ -98,6 +95,11 @@
             <dd class="m-0 text-right">{basal.toFixed(1)} U</dd>
             <dt class="flex items-center gap-1.5 text-muted-foreground"><span class="size-2 rounded-full bg-carbs"></span>Carbs</dt>
             <dd class="m-0 text-right">{carbs.toFixed(0)} g</dd>
+            <!-- Holds the Auto row's height for accounts without automatic boluses, so the widget is as tall as the skeleton. -->
+            {#if auto <= 0}
+              <dt class="invisible" aria-hidden="true">&nbsp;</dt>
+              <dd class="invisible m-0" aria-hidden="true">&nbsp;</dd>
+            {/if}
           </dl>
         </div>
         {#if total > 0}

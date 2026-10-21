@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
@@ -2366,5 +2367,275 @@ public class StatisticsControllerTests
 
         result.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().NotBeSameAs(cached);
         cache.Invocations.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("Australia/Sydney", "2026-09-01", "2026-11-30")]
+    [InlineData("America/New_York", "2026-10-01", "2026-12-15")]
+    [InlineData("Europe/Stockholm", "2026-03-01", "2026-04-30")]
+    [InlineData("UTC", "2026-01-01", "2026-02-28")]
+    [InlineData("America/Asuncion", "2023-09-15", "2023-10-15")]
+    [InlineData("America/Asuncion", "2024-03-10", "2024-03-31")]
+    [InlineData("Asia/Amman", "2022-02-10", "2022-03-10")]
+    public async Task GetPunchCardData_BucketsEveryDayAsThePerDayScanDid(string zone, string from, string to)
+    {
+        var tz = TimeZoneInfo.FindSystemTimeZoneById(zone);
+        var start = DateOnly.Parse(from);
+        var end = DateOnly.Parse(to);
+        try
+        {
+            for (var date = start; date <= end; date = date.AddDays(1))
+            {
+                PunchCardDayWindow.For(date.ToDateTime(TimeOnly.MinValue), tz);
+            }
+        }
+        catch (ArgumentException) when (OperatingSystem.IsWindows())
+        {
+            // Windows time zone data skips local midnight for these zones, which the endpoint rejects; the overlap only exists in IANA data.
+            return;
+        }
+
+        var (glucose, boluses, carbs, injections) = PunchCardFixture(tz, start, end);
+
+        SetupEmptyTreatments();
+        SetupPunchCardGlucose(glucose);
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(zone);
+        _bolusRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), BolusKind.Manual,
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(boluses);
+        _carbIntakeRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(carbs);
+        _basalInjectionRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(injections);
+
+        var stats = new StatisticsService();
+        var result = await CreateController(statisticsService: stats).GetPunchCardData(start, end);
+
+        var days = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<PunchCardResponse>().Subject
+            .Months.SelectMany(m => m.Days).OrderBy(d => d.Date, StringComparer.Ordinal).ToList();
+        var expected = PerDayScanDays(glucose, boluses, carbs, injections, start, end, tz, stats);
+
+        days.Should().HaveCount(end.DayNumber - start.DayNumber + 1);
+        days.Should().Contain(d => d.TotalReadings == 0, "the fixture leaves days empty");
+        days.Should().Contain(d => d.TotalReadings > 0);
+        days.Should().BeEquivalentTo(expected, options => options.WithStrictOrdering());
+    }
+
+    [Fact]
+    public async Task GetPunchCardData_PutsARecordAtLocalMidnightOnTheDayItOpens()
+    {
+        var tz = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        var midnightUtc = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 10, 5, 0, 0, 0, DateTimeKind.Unspecified), tz);
+
+        SetupEmptyTreatments();
+        SetupPunchCardGlucose(
+        [
+            new SensorGlucose { Timestamp = midnightUtc.AddMilliseconds(-1), Mgdl = 100 },
+            new SensorGlucose { Timestamp = midnightUtc, Mgdl = 110 },
+        ]);
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Australia/Sydney");
+
+        var result = await CreateController(statisticsService: new StatisticsService())
+            .GetPunchCardData(new DateOnly(2026, 10, 4), new DateOnly(2026, 10, 5));
+
+        var days = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<PunchCardResponse>().Subject
+            .Months.Single().Days;
+        days.Single(d => d.Date == "2026-10-04").Entries.Select(e => e.Mgdl).Should().Equal(100);
+        days.Single(d => d.Date == "2026-10-05").Entries.Select(e => e.Mgdl).Should().Equal(110);
+    }
+
+    [Fact]
+    public void PunchCardDayBuckets_PutsARecordInEveryWindowContainingIt()
+    {
+        PunchCardDayWindow[] windows = [new(0, 99), new(60, 159), new(100, 199)];
+        long[] records = [10, 70, 99, 100, 120, 160, 250];
+
+        var buckets = PunchCardDayBuckets.Bucket(records, windows, r => r);
+
+        buckets.Select(b => b.ToArray()).Should().BeEquivalentTo(
+            windows.Select(w => records.Where(r => r >= w.StartMs && r <= w.EndMs).ToArray()),
+            options => options.WithStrictOrdering());
+    }
+
+    [Fact]
+    public void PunchCardDayBuckets_HandlesWindowsThatAreNotAscending()
+    {
+        PunchCardDayWindow[] windows = [new(100, 199), new(0, 149), new(120, 130), new(300, 399)];
+        long[] records = [5, 100, 125, 149, 150, 199, 200, 350, 400];
+
+        var buckets = PunchCardDayBuckets.Bucket(records, windows, r => r);
+
+        buckets.Select(b => b.ToArray()).Should().BeEquivalentTo(
+            windows.Select(w => records.Where(r => r >= w.StartMs && r <= w.EndMs).ToArray()),
+            options => options.WithStrictOrdering());
+    }
+
+    private static (List<SensorGlucose> Glucose, List<Bolus> Boluses, List<CarbIntake> Carbs, List<BasalInjection> Injections)
+        PunchCardFixture(TimeZoneInfo tz, DateOnly start, DateOnly end)
+    {
+        var glucose = new List<SensorGlucose>();
+        var boluses = new List<Bolus>();
+        var carbs = new List<CarbIntake>();
+        var injections = new List<BasalInjection>();
+
+        for (var date = start; date <= end; date = date.AddDays(1))
+        {
+            var n = date.DayNumber - start.DayNumber;
+            var localMidnight = new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, DateTimeKind.Unspecified);
+            var midnightUtc = TimeZoneInfo.ConvertTimeToUtc(localMidnight, tz);
+
+            if (n % 7 != 3 && n % 7 != 4)
+            {
+                for (var minute = -150; minute <= 150; minute += 15)
+                {
+                    var at = midnightUtc.AddMinutes(minute);
+                    glucose.Add(new SensorGlucose { Timestamp = at, Mgdl = 70 + (n * 7 + minute / 15 + 20) % 200 });
+                    boluses.Add(new Bolus { Timestamp = at, Insulin = 0.5 });
+                    carbs.Add(new CarbIntake { Timestamp = at, Carbs = 5 });
+                }
+            }
+
+            if (n % 7 != 3)
+            {
+                glucose.Add(new SensorGlucose { Timestamp = midnightUtc, Mgdl = 60 + n % 150 });
+                if ((n - 1) % 7 != 3)
+                {
+                    glucose.Add(new SensorGlucose { Timestamp = midnightUtc.AddMilliseconds(-1), Mgdl = 90 + n % 90 });
+                }
+                for (var minute = 17; minute < 24 * 60; minute += 83)
+                {
+                    glucose.Add(new SensorGlucose
+                    {
+                        Timestamp = midnightUtc.AddMinutes(minute),
+                        Mgdl = 40 + (n * 31 + minute) % 300,
+                    });
+                }
+            }
+
+            if (n % 5 != 1)
+            {
+                boluses.Add(new Bolus { Timestamp = midnightUtc, Insulin = 1 + n % 4 });
+                boluses.Add(new Bolus { Timestamp = midnightUtc.AddHours(13), Insulin = 2.5 });
+            }
+
+            if (n % 4 != 2)
+            {
+                if ((n - 1) % 4 != 2)
+                {
+                    carbs.Add(new CarbIntake { Timestamp = midnightUtc.AddMilliseconds(-1), Carbs = 10 + n % 20 });
+                }
+                carbs.Add(new CarbIntake { Timestamp = midnightUtc.AddHours(7), Carbs = 35 });
+            }
+
+            if (n % 6 == 0)
+            {
+                injections.Add(new BasalInjection { Timestamp = midnightUtc.AddHours(9), Units = 18 });
+            }
+        }
+
+        glucose.Sort((a, b) => a.Mills.CompareTo(b.Mills));
+        boluses.Sort((a, b) => a.Mills.CompareTo(b.Mills));
+        carbs.Sort((a, b) => a.Mills.CompareTo(b.Mills));
+        return (glucose, boluses, carbs, injections);
+    }
+
+    /// <summary>
+    /// The punch-card day loop as it was when each day filtered the whole of each list, kept so the
+    /// bucketed endpoint is held to the figures that loop produced.
+    /// </summary>
+    private static List<PunchCardDay> PerDayScanDays(
+        List<SensorGlucose> glucoseData,
+        List<Bolus> manualBoluses,
+        List<CarbIntake> carbs,
+        List<BasalInjection> injections,
+        DateOnly start,
+        DateOnly end,
+        TimeZoneInfo tz,
+        StatisticsService stats)
+    {
+        var dailyBasalMap = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var d in stats.CalculateDailyBasalBolusRatios(manualBoluses, [], [], tz, injections).DailyData)
+        {
+            if (!string.IsNullOrEmpty(d.Date)) dailyBasalMap[d.Date] = d.Basal;
+        }
+
+        var days = new List<PunchCardDay>();
+        for (var day = start.ToDateTime(TimeOnly.MinValue); day <= end.ToDateTime(TimeOnly.MinValue); day = day.AddDays(1))
+        {
+            var dayStartLocal = DateTime.SpecifyKind(day, DateTimeKind.Unspecified);
+            var dayEndLocal = dayStartLocal.AddDays(1).AddTicks(-1);
+            var dayStartMs = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(dayStartLocal, tz), TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var dayEndMs = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(dayEndLocal, tz), TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+            var dayEntries = glucoseData.Where(e => e.Mills >= dayStartMs && e.Mills <= dayEndMs).ToList();
+            var dayBoluses = manualBoluses.Where(b => b.Mills >= dayStartMs && b.Mills <= dayEndMs).ToList();
+            var dayCarbs = carbs.Where(c => c.Mills >= dayStartMs && c.Mills <= dayEndMs).ToList();
+
+            var tir = dayEntries.Count > 0 ? stats.CalculateTimeInRange(dayEntries) : null;
+            var treatment = dayBoluses.Count > 0 || dayCarbs.Count > 0
+                ? stats.CalculateTreatmentSummary(dayBoluses, dayCarbs)
+                : null;
+
+            var pct = tir?.Percentages;
+            var inRangePct = pct?.Target ?? 0;
+            var lowPct = (pct?.VeryLow ?? 0) + (pct?.Low ?? 0);
+            var highPct = (pct?.VeryHigh ?? 0) + (pct?.High ?? 0);
+
+            var dateStr = day.ToString("yyyy-MM-dd");
+            var totals = treatment?.Totals;
+            var totalBolus = totals?.Insulin?.Bolus ?? 0;
+            var totalBasal = dailyBasalMap.GetValueOrDefault(dateStr, 0.0);
+
+            var entries = dayEntries
+                .Where(e => GlucoseStatistics.IsPlausibleReading(e.Mgdl))
+                .OrderBy(e => e.Mills)
+                .Select(e => new PunchCardEntry { Mills = e.Mills, Mgdl = e.Mgdl })
+                .ToList();
+            var totalReadings = entries.Count;
+
+            days.Add(new PunchCardDay
+            {
+                Date = dateStr,
+                Timestamp = dayStartMs,
+                TotalReadings = totalReadings,
+                InRangeCount = (int)Math.Round(inRangePct / 100.0 * totalReadings),
+                LowCount = (int)Math.Round(lowPct / 100.0 * totalReadings),
+                HighCount = (int)Math.Round(highPct / 100.0 * totalReadings),
+                InRangePercent = inRangePct,
+                LowPercent = lowPct,
+                HighPercent = highPct,
+                AverageGlucose = totalReadings > 0 ? entries.Average(e => e.Mgdl) : 0,
+                TotalCarbs = totals?.Food?.Carbs ?? 0,
+                TotalInsulin = totalBolus + totalBasal,
+                TotalBolus = totalBolus,
+                TotalBasal = totalBasal,
+                CarbToInsulinRatio = treatment?.CarbToInsulinRatio ?? 0,
+                Entries = entries,
+            });
+        }
+
+        return days;
     }
 }

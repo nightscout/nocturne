@@ -53,6 +53,7 @@ public class DeviceStatusCreateIdentityTests
         _decomposer.Object,
         Mock.Of<IWriteSideEffects>(),
         Mock.Of<IDataEventSink<DeviceStatus>>(),
+        TimeProvider.System,
         NullLogger<V1DeviceStatusController>.Instance));
 
     private V3DeviceStatusController V3() => WithContext(new V3DeviceStatusController(

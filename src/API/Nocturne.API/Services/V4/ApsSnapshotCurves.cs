@@ -15,8 +15,8 @@ namespace Nocturne.API.Services.V4;
 /// A command's <c>predBGs</c> key is removed only when its value equals the curves the columns
 /// rebuild, and a command whose key is absent gets those curves back. A command uploaded without
 /// curves beside a sibling that carried them (Trio does this) is stored with an explicit
-/// <c>"predBGs": null</c>, so it reads back without them. The <c>DeduplicateApsSnapshotCurves</c>
-/// migration applies the same rule to rows stored before it.
+/// <c>"predBGs": null</c>, so it reads back without them. <c>ApsSnapshotCurvesRewriter</c>
+/// applies the same rule to rows stored before it, in the background.
 /// </remarks>
 internal static class ApsSnapshotCurves
 {

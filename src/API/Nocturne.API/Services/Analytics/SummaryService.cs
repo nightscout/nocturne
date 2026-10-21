@@ -1,7 +1,12 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Analytics;
@@ -16,16 +21,30 @@ public class SummaryService : ISummaryService
 {
     private readonly IDDataService _ddataService;
     private readonly IPropertiesService _propertiesService;
+    private readonly IActiveProfileResolver _activeProfileResolver;
+    private readonly ITherapySettingsRepository _therapySettingsRepository;
+    private readonly IProfileProjectionService _profileProjection;
     private readonly ILogger<SummaryService> _logger;
+
+    private static readonly JsonSerializerOptions StoredEntryOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
 
     public SummaryService(
         IDDataService ddataService,
         IPropertiesService propertiesService,
+        IActiveProfileResolver activeProfileResolver,
+        ITherapySettingsRepository therapySettingsRepository,
+        IProfileProjectionService profileProjection,
         ILogger<SummaryService> logger
     )
     {
         _ddataService = ddataService;
         _propertiesService = propertiesService;
+        _activeProfileResolver = activeProfileResolver;
+        _therapySettingsRepository = therapySettingsRepository;
+        _profileProjection = profileProjection;
         _logger = logger;
     }
 
@@ -40,18 +59,19 @@ public class SummaryService : ISummaryService
             var currentTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var ddata = await _ddataService.GetDDataAsync(currentTime, cancellationToken);
             var sgvs = ProcessSgvs(ddata.Sgvs, hours);
-            var profile = ddata.Profiles?.FirstOrDefault()?.Store?.FirstOrDefault().Value;
+            var switchedProfile = await _activeProfileResolver.GetActiveProfileNameAsync(
+                currentTime,
+                cancellationToken
+            );
+            var profile = await ResolveActiveProfileAsync(switchedProfile, cancellationToken);
             var treatments = ProcessTreatments(ddata.Treatments, profile, hours);
             var state = await ConstructStateAsync(cancellationToken);
-
-            // Remove timeAsSeconds property from profile to match legacy behavior
-            var processedProfile = RemoveTimeAsSecondsFromProfile(profile);
 
             return new SummaryResponse
             {
                 Sgvs = sgvs,
                 Treatments = treatments,
-                Profile = processedProfile,
+                Profile = ToStoredEntry(profile),
                 State = state,
             };
         }
@@ -445,30 +465,71 @@ public class SummaryService : ISummaryService
     }
 
     /// <summary>
-    /// Removes the timeAsSeconds property from profile to match legacy behavior
+    /// The store entry active now: the one an active Profile Switch names, else the default. A switch
+    /// naming no stored entry falls back to the default, as the legacy profile functions do. The default
+    /// is the <see cref="Nocturne.Core.Models.V4.TherapySettings.IsDefault"/> row, since a projected
+    /// document carries only its own store name as <see cref="Profile.DefaultProfile"/>. Entries are
+    /// assembled from their rows, not read out of the newest projected documents, which Profile Switch
+    /// snapshots can crowd out.
     /// </summary>
-    private object? RemoveTimeAsSecondsFromProfile(ProfileData? profileData)
+    private async Task<ProfileData?> ResolveActiveProfileAsync(
+        string? switchedProfile,
+        CancellationToken cancellationToken
+    )
     {
-        if (profileData == null)
+        if (switchedProfile is not null)
+        {
+            var switched = (
+                await _therapySettingsRepository.GetByProfileNameAsync(switchedProfile, cancellationToken)
+            ).FirstOrDefault();
+            if (await EntryOfAsync(switched, cancellationToken) is { } entry)
+                return entry;
+        }
+
+        var defaults = await _therapySettingsRepository.GetDefaultsAsync(cancellationToken);
+        return await EntryOfAsync(defaults.FirstOrDefault(), cancellationToken);
+    }
+
+    private async Task<ProfileData?> EntryOfAsync(
+        Nocturne.Core.Models.V4.TherapySettings? row,
+        CancellationToken cancellationToken
+    )
+    {
+        if (row is null)
             return null;
 
-        // Create a simple clone without timeAsSeconds properties
-        // This matches the legacy removeProps functionality
-        return new
+        var document = await _profileProjection.GetProfileByIdAsync(row.Id.ToString(), cancellationToken);
+        return document?.Store.GetValueOrDefault(row.ProfileName);
+    }
+
+    /// <summary>
+    /// The entry as a raw JSON object, so the response's camelCase policy cannot rename its keys,
+    /// without <c>timeAsSeconds</c>. An empty object when no profile is active.
+    /// </summary>
+    private static JsonObject ToStoredEntry(ProfileData? profile)
+    {
+        if (profile is null)
+            return new JsonObject();
+
+        var entry = JsonSerializer.SerializeToNode(profile, StoredEntryOptions)!.AsObject();
+        RemoveTimeAsSeconds(entry);
+        return entry;
+    }
+
+    private static void RemoveTimeAsSeconds(JsonNode? node)
+    {
+        switch (node)
         {
-            profileData.Dia,
-            profileData.CarbsHr,
-            profileData.Delay,
-            profileData.Timezone,
-            profileData.Units,
-            profileData.DelayHigh,
-            profileData.DelayLow,
-            Basal = profileData.Basal?.Select(b => new { b.Time, b.Value }),
-            CarbRatio = profileData.CarbRatio?.Select(c => new { c.Time, c.Value }),
-            Sens = profileData.Sens?.Select(s => new { s.Time, s.Value }),
-            TargetLow = profileData.TargetLow?.Select(t => new { t.Time, t.Value }),
-            TargetHigh = profileData.TargetHigh?.Select(t => new { t.Time, t.Value }),
-        };
+            case JsonObject obj:
+                obj.Remove("timeAsSeconds");
+                foreach (var child in obj.Select(p => p.Value))
+                    RemoveTimeAsSeconds(child);
+                break;
+            case JsonArray array:
+                foreach (var child in array)
+                    RemoveTimeAsSeconds(child);
+                break;
+        }
     }
 
     /// <summary>

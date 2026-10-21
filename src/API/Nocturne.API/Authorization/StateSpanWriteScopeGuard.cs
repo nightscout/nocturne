@@ -42,7 +42,8 @@ internal static class StateSpanWriteScopeGuard
     /// <see cref="StateSpanCategory.Illness"/>, <see cref="StateSpanCategory.Travel"/> and
     /// <see cref="StateSpanCategory.TemporaryTarget"/> are the decomposed form of the legacy
     /// treatment events, which V1 <c>ActivityController</c> and V3 <c>TreatmentsController</c>
-    /// both gate on the treatments scope.</item>
+    /// both gate on the treatments scope. <see cref="StateSpanCategory.Motion"/> is a V1 activity
+    /// too.</item>
     /// </list>
     /// </summary>
     public static readonly IReadOnlyDictionary<StateSpanCategory, string> CategoryWriteScopes =
@@ -57,6 +58,7 @@ internal static class StateSpanWriteScopeGuard
             [StateSpanCategory.Illness] = Scope.TreatmentsReadWrite,
             [StateSpanCategory.Travel] = Scope.TreatmentsReadWrite,
             [StateSpanCategory.TemporaryTarget] = Scope.TreatmentsReadWrite,
+            [StateSpanCategory.Motion] = Scope.TreatmentsReadWrite,
         };
 
     /// <summary>

@@ -344,6 +344,7 @@ public class LegacyReadCountCapTests
             Mock.Of<IDeviceStatusDecomposer>(),
             Mock.Of<IWriteSideEffects>(),
             Mock.Of<IDataEventSink<DeviceStatus>>(),
+            TimeProvider.System,
             Mock.Of<ILogger<DeviceStatusController>>()
         )
         {

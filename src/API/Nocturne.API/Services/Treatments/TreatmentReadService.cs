@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Glucose;
@@ -139,30 +140,19 @@ public class TreatmentReadService : ITreatmentStore
     private async Task<IReadOnlyList<Treatment>> QueryFilteredAsync(
         FindQuery find, int count, int skip, bool descending, CancellationToken ct)
     {
-        var needed = (long)count + skip;
-        var fetchLimit = (int)Math.Min(Math.Max(needed * 4, 100), MaxFilterFetch);
+        var (matching, truncated) = await FindFilteredFetch.MatchWindowAsync<Treatment>(
+            async limit => (await FetchWindowAsync(find, limit, descending, ct)).ToList(),
+            find.Matches, (long)count + skip, MaxFilterFetch);
 
-        while (true)
-        {
-            var projected = (await FetchWindowAsync(find, fetchLimit, descending, ct)).ToList();
+        if (truncated)
+            _logger.LogWarning(
+                "Find-filtered treatment query hit the {MaxFetch}-row window; matches beyond it are not returned",
+                MaxFilterFetch);
 
-            var matching = projected.Where(find.Matches).ToList();
-            var exhausted = projected.Count < fetchLimit || fetchLimit >= MaxFilterFetch;
-            if (matching.Count >= needed || exhausted)
-            {
-                if (matching.Count < needed && projected.Count >= fetchLimit)
-                    _logger.LogWarning(
-                        "Find-filtered treatment query hit the {MaxFetch}-row window; matches beyond it are not returned",
-                        MaxFilterFetch);
-
-                return OrderByTime(matching, descending)
-                    .Skip(skip)
-                    .Take(count)
-                    .ToList();
-            }
-
-            fetchLimit = (int)Math.Min((long)fetchLimit * 4, MaxFilterFetch);
-        }
+        return OrderByTime(matching, descending)
+            .Skip(skip)
+            .Take(count)
+            .ToList();
     }
 
     /// <inheritdoc />

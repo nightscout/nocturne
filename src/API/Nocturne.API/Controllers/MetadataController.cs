@@ -269,6 +269,27 @@ public class MetadataController : ControllerBase
     }
 
     /// <summary>
+    /// Get tracker realtime actions metadata
+    /// This endpoint ensures NSwag generates TypeScript types for TrackerRealtimeAction, the
+    /// <c>action</c> of every <c>trackerUpdate</c> event, which the web app validates against
+    /// </summary>
+    /// <returns>Tracker realtime actions metadata</returns>
+    [HttpGet("tracker-realtime-actions")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(TrackerRealtimeActionsMetadata), 200)]
+    public ActionResult<TrackerRealtimeActionsMetadata> GetTrackerRealtimeActions()
+    {
+        return Ok(
+            new TrackerRealtimeActionsMetadata
+            {
+                AvailableActions = Enum.GetValues<TrackerRealtimeAction>(),
+                Description = "Actions a trackerUpdate realtime event can carry",
+            }
+        );
+    }
+
+    /// <summary>
     /// Get TOTP setup failure codes metadata
     /// This endpoint ensures NSwag generates TypeScript types for TotpSetupFailure, which the
     /// verify-setup endpoint returns as the <c>detail</c> of its 400 and the web app turns into copy
@@ -562,6 +583,22 @@ public class PermissionAtomsMetadata
 
     /// <summary>
     /// Description of the permission atoms
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Metadata about tracker realtime actions for NSwag generation
+/// </summary>
+public class TrackerRealtimeActionsMetadata
+{
+    /// <summary>
+    /// Array of all actions a tracker update event can carry
+    /// </summary>
+    public TrackerRealtimeAction[] AvailableActions { get; set; } = [];
+
+    /// <summary>
+    /// Description of the tracker realtime actions
     /// </summary>
     public string Description { get; set; } = string.Empty;
 }

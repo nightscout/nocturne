@@ -457,7 +457,7 @@ public class TenantIsolationTests
         var (service, dataClients, _, _, _, _, _) = CreateBroadcastService(TenantA);
 
         await service.BroadcastTrackerUpdateAsync(
-            "created",
+            TrackerRealtimeAction.Create,
             new TrackerInstanceDto { Id = Guid.NewGuid() },
             "owner-123",
             TrackerVisibility.Public

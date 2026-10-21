@@ -324,6 +324,9 @@ public static class AuditedBulkDeleteExtensions
             };
         }
 
+        if (typeof(T) == typeof(StateSpanEntity))
+            await context.ClearSupersededByAsync(ids, ct);
+
         IReadOnlyList<Guid> promoted = recordType is { } type && duplicates == DuplicateDelete.PromoteSurvivor
             ? await DuplicateGroupPrimaries.RepointAwayFromAsync(
                 context, type, ids, deletedAt.AddMilliseconds(groups.Count), ct)

@@ -8576,6 +8576,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("entered_by");
 
+                    b.Property<bool?>("IsApnsProduction")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_apns_production");
+
                     b.Property<bool>("IsDefault")
                         .HasColumnType("boolean")
                         .HasColumnName("is_default");

@@ -1,7 +1,5 @@
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Clinical.Schedules;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 
@@ -17,11 +15,9 @@ internal sealed class SensitivityResolver : ISensitivityResolver
     private readonly ITherapySettingsRepository _therapyRepo;
     private readonly IPatientRecordRepository _patientRecordRepo;
     private readonly IActiveProfileResolver _activeProfileResolver;
-    private readonly ITenantAccessor _tenantAccessor;
-    private readonly IMemoryCache _cache;
+    private readonly ProfileVersionCache _versions;
     private readonly ILogger<SensitivityResolver> _logger;
 
-    private const int CacheTtlSeconds = 5;
     private const double DefaultSensitivity = 50.0;
 
     public SensitivityResolver(
@@ -29,16 +25,14 @@ internal sealed class SensitivityResolver : ISensitivityResolver
         ITherapySettingsRepository therapyRepo,
         IPatientRecordRepository patientRecordRepo,
         IActiveProfileResolver activeProfileResolver,
-        ITenantAccessor tenantAccessor,
-        IMemoryCache cache,
+        ProfileVersionCache versions,
         ILogger<SensitivityResolver> logger)
     {
         _repo = repo;
         _therapyRepo = therapyRepo;
         _patientRecordRepo = patientRecordRepo;
         _activeProfileResolver = activeProfileResolver;
-        _tenantAccessor = tenantAccessor;
-        _cache = cache;
+        _versions = versions;
         _logger = logger;
     }
 
@@ -78,16 +72,7 @@ internal sealed class SensitivityResolver : ISensitivityResolver
         return 10_000.0 / adjustment.Percentage;
     }
 
-    private async Task<Core.Models.V4.SensitivitySchedule?> GetCachedScheduleAsync(
-        string profileName, DateTime timestamp, CancellationToken ct)
-    {
-        var cacheKey = $"SensitivitySchedule:{_tenantAccessor.TenantId}:{profileName}";
-
-        if (_cache.TryGetValue(cacheKey, out Core.Models.V4.SensitivitySchedule? cached))
-            return cached;
-
-        var schedule = await _repo.GetActiveAtAsync(profileName, timestamp, ct);
-        _cache.Set(cacheKey, schedule, TimeSpan.FromSeconds(CacheTtlSeconds));
-        return schedule;
-    }
+    private Task<Core.Models.V4.SensitivitySchedule?> GetCachedScheduleAsync(
+        string profileName, DateTime timestamp, CancellationToken ct) =>
+        _versions.GetActiveAtAsync(_repo, profileName, timestamp, ct);
 }

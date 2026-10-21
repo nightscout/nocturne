@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Hubs;
+using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Identity;
@@ -15,8 +16,10 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// caller that could not read glucose over HTTP is refused realtime too,
 /// and an anonymous public share is admitted by its read scopes rather than 401'd by
 /// <c>[Authorize]</c>. <see cref="RealtimeAdmission.TenantRelay"/> then decides the tenant-wide
-/// room with <see cref="HubAuthorization.CanJoinTenantRelay"/>, the rule <see cref="DataHub"/>
-/// applies to its own groups.
+/// room with <see cref="HubAuthorization.CanJoinTenantRelay"/> and
+/// <see cref="RealtimeAdmission.Categories"/> the category rooms with
+/// <see cref="HubAuthorization.MayReceiveCategory"/>, the rules <see cref="DataHub"/> applies to its
+/// own groups.
 /// </remarks>
 [ApiController]
 [Tags("Identity")]
@@ -35,7 +38,11 @@ public class RealtimeAdmissionController : ControllerBase
         var authorization = HubAuthorizationState.FromRequest(HttpContext);
         return Ok(new RealtimeAdmission(
             authorization?.CanJoinTenantRelay ?? false,
-            authorization?.OwnSubjectId));
+            authorization?.OwnSubjectId,
+            authorization is { CanJoinTenantRelay: true }
+                ? [.. RealtimeCategories.All.Where(authorization.MayReceiveCategory)]
+                : [],
+            authorization?.HistoryClamped ?? false));
     }
 }
 
@@ -49,4 +56,14 @@ public class RealtimeAdmissionController : ControllerBase
 /// handshake ticket so a browser socket joins only that subject's room. Null for a guest link and a
 /// share, which own no subject.
 /// </param>
-public record RealtimeAdmission(bool TenantRelay, Guid? SubjectId);
+/// <param name="Categories">
+/// The <see cref="RealtimeCategories"/> whose storage broadcasts the caller may receive through the
+/// bridge. Empty for a caller that may not join the tenant room (a guest link or an anonymous share),
+/// whose socket the bridge keeps out of every room, and for a history-clamped caller.
+/// </param>
+/// <param name="HistoryClamped">Whether the caller may read only the last 24 hours.</param>
+public record RealtimeAdmission(
+    bool TenantRelay,
+    Guid? SubjectId,
+    IReadOnlyList<string> Categories,
+    bool HistoryClamped);

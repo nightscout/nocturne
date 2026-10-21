@@ -63,6 +63,21 @@ public interface ISettingsRepository
     );
 
     /// <summary>
+    /// Store <paramref name="settings"/> as the document <paramref name="id"/> addresses: replace
+    /// it when one is stored, keeping its key and <c>srvCreated</c>, or insert it under
+    /// <paramref name="id"/> as its key. The v3 UPDATE (PUT) semantics.
+    /// </summary>
+    /// <param name="id">A legacy id, row GUID, or key; a new document takes it as its key</param>
+    /// <param name="settings">The whole document, with <c>srvModified</c> set</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>True when the document was inserted, false when it replaced a stored one</returns>
+    Task<bool> PutSettingsAsync(
+        string id,
+        Settings settings,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Update a settings entry by ID
     /// </summary>
     /// <param name="id">The settings ID</param>

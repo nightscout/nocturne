@@ -460,9 +460,17 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// </summary>
     /// <param name="getAction">Name of the action that reads one document of the collection.</param>
     /// <param name="storedId">Stored id of the created document.</param>
-    protected ActionResult V3Created(string getAction, string? storedId)
+    protected ActionResult V3Created(string getAction, string? storedId) =>
+        V3Inserted(getAction, MongoObjectId.Coerce(storedId));
+
+    /// <summary>
+    /// The V3 answer to a write that stored a new document under <paramref name="identifier"/>,
+    /// already in its wire form: 201 with the identifier and the server's write time as
+    /// <c>lastModified</c>, <c>Location</c> pointing at <paramref name="getAction"/>, and
+    /// <c>Last-Modified</c>.
+    /// </summary>
+    protected ActionResult V3Inserted(string getAction, string? identifier)
     {
-        var identifier = MongoObjectId.Coerce(storedId);
         var lastModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
         return CreatedAtAction(
@@ -470,6 +478,53 @@ public abstract class BaseV3Controller<T> : ControllerBase
             new { id = identifier },
             new V3CreateResponse { Status = 201, Identifier = identifier, LastModified = lastModified }
         );
+    }
+
+    /// <summary>
+    /// The V3 answer to a PUT that replaced a stored document: 200 with the server's write time as
+    /// <c>lastModified</c>, and <c>Last-Modified</c>.
+    /// </summary>
+    protected ActionResult V3Replaced()
+    {
+        var lastModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
+        return Ok(new { status = 200, lastModified });
+    }
+
+    /// <summary>
+    /// Validates common V3 fields as per Nightscout API behavior.
+    /// Nightscout validates these fields before checking if the document exists.
+    /// </summary>
+    /// <param name="jsonData">The JSON data to validate</param>
+    /// <returns>ActionResult with error if validation fails, null if validation passes</returns>
+    protected ActionResult? ValidateV3CommonFields(JsonElement jsonData)
+    {
+        const long MinTimestamp = 946684800000; // Year 2000 in milliseconds
+
+        // A document is an object; any other body has no fields to read, and upstream refuses it.
+        if (jsonData.ValueKind != JsonValueKind.Object)
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing request body");
+        }
+
+        // Check for 'date' field - Nightscout requires this for all V3 operations
+        if (!jsonData.TryGetProperty("date", out var dateProperty))
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing date field");
+        }
+
+        // Date must be a number greater than MIN_TIMESTAMP
+        if (dateProperty.ValueKind != JsonValueKind.Number)
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing date field");
+        }
+
+        if (!dateProperty.TryGetInt64(out var dateValue) || dateValue <= MinTimestamp)
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing date field");
+        }
+
+        return null; // Validation passed
     }
 
     /// <summary>
@@ -711,12 +766,14 @@ public abstract class BaseV3Controller<T> : ControllerBase
                     itemModified = DateTimeOffset.FromUnixTimeMilliseconds(mills);
                 }
 
-                // Check for SrvModified property
-                var srvModifiedProperty = itemType.GetProperty("SrvModified");
-                if (
-                    srvModifiedProperty != null
-                    && srvModifiedProperty.GetValue(item) is DateTimeOffset srvModified
-                )
+                // Check for SrvModified property (DateTimeOffset or Unix milliseconds)
+                var srvModified = itemType.GetProperty("SrvModified")?.GetValue(item) switch
+                {
+                    DateTimeOffset dto => dto,
+                    long srvMills => DateTimeOffset.FromUnixTimeMilliseconds(srvMills),
+                    _ => (DateTimeOffset?)null,
+                };
+                if (srvModified != null)
                 {
                     itemModified = srvModified;
                 }

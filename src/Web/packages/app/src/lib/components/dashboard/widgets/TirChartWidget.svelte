@@ -2,6 +2,7 @@
   import { formatNumber } from "$lib/utils/formatting";
   import { onMount } from "svelte";
   import WidgetCard from "./WidgetCard.svelte";
+  import WidgetStatSkeleton from "./WidgetStatSkeleton.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { getMultiPeriodStatistics } from "$api/generated/statistics.generated.remote";
   import { MediaQuery } from "svelte/reactivity";
@@ -42,14 +43,10 @@
   {/snippet}
 
   {#if !statsPromise}
-    <div class="flex items-center justify-center py-4">
-      <div class="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
-    </div>
+    <WidgetStatSkeleton shape="tir" />
   {:else}
     {#await statsPromise}
-      <div class="flex items-center justify-center py-4">
-        <div class="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
-      </div>
+      <WidgetStatSkeleton shape="tir" />
     {:then stats}
     {@const tirToday = stats?.lastDay?.analytics?.timeInRange}
     {@const tir90 = stats?.last90Days?.analytics?.timeInRange}

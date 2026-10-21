@@ -98,6 +98,12 @@ public class TherapySettingsEntity : V4TimeSeriesEntityBase
     public string? LoopSettingsJson { get; set; }
 
     /// <summary>
+    /// APNs environment of the uploading Loop build; null when the upload did not say
+    /// </summary>
+    [Column("is_apns_production")]
+    public bool? IsApnsProduction { get; set; }
+
+    /// <summary>
     /// Whether this is the default/active profile
     /// </summary>
     [Column("is_default")]

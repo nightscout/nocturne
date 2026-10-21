@@ -37,13 +37,13 @@ public class StatisticsServiceInsufficientDataTests
     [Theory]
     [InlineData(10)]
     [InlineData(1)]
-    public void Lbgi_ReadingBelowTransformDomain_CountsAsMaximumLowRisk(double mgdl)
+    public void Lbgi_ReadingBelowTheScaleFloor_CountsAsMaximumLowRisk(double mgdl)
     {
         var lbgi = _service.CalculateLBGI([mgdl, 120]);
 
         double.IsFinite(lbgi).Should().BeTrue();
-        lbgi.Should().Be(_service.CalculateLBGI([18, 120]));
-        lbgi.Should().BeGreaterThan(_service.CalculateLBGI([20, 120]));
+        lbgi.Should().Be(_service.CalculateLBGI([20, 120]));
+        lbgi.Should().BeGreaterThan(_service.CalculateLBGI([25, 120]));
     }
 
     [Fact]

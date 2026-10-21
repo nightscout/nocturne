@@ -1,4 +1,7 @@
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Contracts.Repositories;
 
@@ -119,6 +122,31 @@ public interface IStateSpanRepository
     Task<IReadOnlyList<StateSpan>> DeleteStateSpanAsync(
         string id,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resolves each of <paramref name="ids"/>, as <see cref="StateSpan.Id"/> reads return it (the
+    /// original id or the row id), to the soft-deleted span it names, and returns each by row identifier
+    /// with the id sent and its category, which is what <see cref="RestoreAsync"/> takes. Of several deleted spans
+    /// sharing an original id, the latest deleted is the one named. An id naming no deleted span is
+    /// left out.
+    /// </summary>
+    /// <param name="ids">The identifiers to look up.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<IReadOnlyDictionary<Guid, DeletedStateSpan>> ResolveDeletedAsync(
+        IReadOnlyCollection<string> ids,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="IV4Repository{T}.RestoreAsync"/>
+    /// <remarks>
+    /// Refused only when a live span holds the same original id at restore time; nothing prevents one
+    /// being written afterwards, as no unique index backs it. A span another span superseded before
+    /// the delete is not re-pointed at; the link is not recoverable.
+    /// </remarks>
+    Task<StateSpan> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="IV4Repository{T}.BulkRestoreAsync"/>
+    Task<BulkRestoreResult<StateSpan>> BulkRestoreAsync(
+        IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes all state spans originating from the specified data source.

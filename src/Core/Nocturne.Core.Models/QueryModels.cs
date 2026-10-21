@@ -86,16 +86,6 @@ public class DeltaInfo
     public double? Scaled { get; set; }
 
     /// <summary>
-    /// Previous entry
-    /// </summary>
-    public Entry? Previous { get; set; }
-
-    /// <summary>
-    /// Current entry
-    /// </summary>
-    public Entry? Current { get; set; }
-
-    /// <summary>
     /// Time information for entries
     /// </summary>
     public Dictionary<string, long> Times { get; set; } = new();

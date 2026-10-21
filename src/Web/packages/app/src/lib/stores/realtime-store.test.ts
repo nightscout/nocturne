@@ -45,7 +45,7 @@ import type {
   TrackerUpdateEvent,
   WebSocketConnectionStatus,
 } from "$lib/websocket/types";
-import type { SensorGlucose, TrackerInstanceDto } from "$lib/api";
+import { TrackerRealtimeAction, type SensorGlucose, type TrackerInstanceDto } from "$lib/api";
 
 /** The realtime/backfill entry points, which the class keeps private. */
 interface StoreInternals {
@@ -86,7 +86,8 @@ type TestStore = StoreInternals &
     | "syncProgressByConnector"
     | "trackerInstances"
     | "apsSnapshots"
-    | "boluses"
+    | "carbIntakes"
+    | "treatmentRevision"
     | "profile"
     | "isReady"
     | "currentReadingLoaded"
@@ -698,6 +699,143 @@ describe("RealtimeStore events for a REST-backfilled reading", () => {
   });
 });
 
+describe("RealtimeStore native record broadcasts", () => {
+  const NOW = Date.parse("2026-10-20T12:00:00Z");
+  const minutesAgo = (minutes: number) => NOW - minutes * 60_000;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const care = (recordType: string, doc: object): StorageEvent => ({
+    colName: "care",
+    recordType,
+    doc,
+  });
+
+  it("adds a created bolus newest first", () => {
+    const store = makeStore();
+    store.boluses = [{ id: "older", insulin: 1, mills: minutesAgo(60) }];
+
+    store.handleCreate(care("bolus", { id: "b1", insulin: 2.5, mills: minutesAgo(5) }));
+
+    expect(store.boluses.map((b) => b.id)).toEqual(["b1", "older"]);
+    expect(store.boluses[0].insulin).toBe(2.5);
+    store.destroy();
+  });
+
+  it("replaces an updated bolus by id rather than adding a second copy", () => {
+    const store = makeStore();
+    store.boluses = [{ id: "b1", insulin: 2.5, mills: minutesAgo(5) }];
+
+    store.handleUpdate(care("bolus", { id: "b1", insulin: 3, mills: minutesAgo(5) }));
+
+    expect(store.boluses).toEqual([{ id: "b1", insulin: 3, mills: minutesAgo(5) }]);
+    store.destroy();
+  });
+
+  it.each(["create", "update", "delete"] as const)(
+    "bumps the treatment revision on a record %s, which an in-place edit gives no other signal of",
+    (action) => {
+      const store = makeStore();
+      store.boluses = [{ id: "b1", insulin: 2.5, mills: minutesAgo(5) }];
+      const before = store.treatmentRevision;
+      const event = { ...care("bolus", { id: "b1", insulin: 3, mills: minutesAgo(5) }), id: "b1" };
+
+      if (action === "create") store.handleCreate(event);
+      else if (action === "update") store.handleUpdate(event);
+      else store.handleDelete(event);
+
+      expect(store.treatmentRevision).toBe(before + 1);
+      store.destroy();
+    }
+  );
+
+  it("removes a deleted bolus by the id the delete carries", () => {
+    const store = makeStore();
+    store.boluses = [
+      { id: "b1", insulin: 2.5, mills: minutesAgo(5) },
+      { id: "b2", insulin: 1, mills: minutesAgo(10) },
+    ];
+
+    store.handleDelete({ colName: "care", recordType: "bolus", id: "b1", doc: {} });
+
+    expect(store.boluses.map((b) => b.id)).toEqual(["b2"]);
+    store.destroy();
+  });
+
+  it("creates, updates and deletes an APS snapshot by id", () => {
+    const store = makeStore();
+    const device = (doc: object): StorageEvent => ({ colName: "device", recordType: "apsSnapshot", doc });
+
+    store.handleCreate(device({ id: "a1", iob: 1.2, mills: minutesAgo(5) }));
+    expect(store.apsSnapshots).toEqual([{ id: "a1", iob: 1.2, mills: minutesAgo(5) }]);
+
+    store.handleUpdate(device({ id: "a1", iob: 0.8, mills: minutesAgo(5) }));
+    expect(store.apsSnapshots).toEqual([{ id: "a1", iob: 0.8, mills: minutesAgo(5) }]);
+
+    store.handleDelete({ colName: "device", recordType: "apsSnapshot", id: "a1", doc: {} });
+    expect(store.apsSnapshots).toEqual([]);
+    store.destroy();
+  });
+
+  it("merges each record type into its own array only", () => {
+    const store = makeStore();
+
+    store.handleCreate(care("carbIntake", { id: "c1", carbs: 30, mills: minutesAgo(5) }));
+
+    expect(store.carbIntakes.map((c) => c.id)).toEqual(["c1"]);
+    expect(store.boluses).toEqual([]);
+    store.destroy();
+  });
+
+  it("ignores a created record stamped before the store's window", () => {
+    const store = makeStore();
+
+    store.handleCreate(care("bolus", { id: "old", insulin: 2, mills: minutesAgo(25 * 60) }));
+
+    expect(store.boluses).toEqual([]);
+    store.destroy();
+  });
+
+  it("drops a held record an update moves before the store's window", () => {
+    const store = makeStore();
+    store.boluses = [{ id: "b1", insulin: 2, mills: minutesAgo(5) }];
+
+    store.handleUpdate(care("bolus", { id: "b1", insulin: 2, mills: minutesAgo(25 * 60) }));
+
+    expect(store.boluses).toEqual([]);
+    store.destroy();
+  });
+
+  it("leaves the arrays alone for a record type the store does not hold", () => {
+    const store = makeStore();
+    const boluses = store.boluses;
+
+    store.handleCreate({ colName: "glucose", recordType: "sensorGlucose", doc: { id: "s1", mgdl: 120, mills: minutesAgo(1) } });
+
+    expect(store.boluses).toBe(boluses);
+    expect(store.entries).toEqual([]);
+    store.destroy();
+  });
+
+  it("does not bump the treatment revision for a glucose reading or a record outside the window", () => {
+    const store = makeStore();
+    const before = store.treatmentRevision;
+
+    store.handleCreate({ colName: "glucose", recordType: "sensorGlucose", doc: { id: "s1", mgdl: 120, mills: minutesAgo(1) } });
+    store.handleCreate(care("bolus", { id: "old", insulin: 1, mills: minutesAgo(60 * 48) }));
+
+    expect(store.treatmentRevision).toBe(before);
+    store.destroy();
+  });
+});
+
 describe("RealtimeStore sync progress", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -823,7 +961,7 @@ describe("RealtimeStore tracker updates", () => {
       lastAckedAt: "2026-09-21T09:00:00Z",
       ackSnoozeMins: 30,
     });
-    emit(store, { action: "ack", instance: acked });
+    emit(store, { action: TrackerRealtimeAction.Ack, instance: acked });
 
     expect(store.trackerInstances).toEqual([acked, trackerInstance("sensor")]);
 
@@ -835,8 +973,8 @@ describe("RealtimeStore tracker updates", () => {
     store.trackerInstances = [trackerInstance("sensor")];
     vi.mocked(toast.info).mockClear();
 
-    emit(store, { action: "reopen", instance: trackerInstance("site") });
-    emit(store, { action: "reopen", instance: trackerInstance("site") });
+    emit(store, { action: TrackerRealtimeAction.Reopen, instance: trackerInstance("site") });
+    emit(store, { action: TrackerRealtimeAction.Reopen, instance: trackerInstance("site") });
 
     expect(store.trackerInstances).toEqual([
       trackerInstance("site"),
@@ -851,7 +989,7 @@ describe("RealtimeStore tracker updates", () => {
     const store = makeStore();
     store.trackerInstances = [trackerInstance("site")];
 
-    emit(store, { action: "ack", instance: trackerInstance("unknown") });
+    emit(store, { action: TrackerRealtimeAction.Ack, instance: trackerInstance("unknown") });
 
     expect(store.trackerInstances).toEqual([trackerInstance("site")]);
 
@@ -866,7 +1004,7 @@ describe("RealtimeStore tracker updates", () => {
     ];
 
     emit(store, {
-      action: "complete",
+      action: TrackerRealtimeAction.Complete,
       instance: trackerInstance("site", {
         completedAt: "2026-09-21T10:00:00Z",
         isActive: false,

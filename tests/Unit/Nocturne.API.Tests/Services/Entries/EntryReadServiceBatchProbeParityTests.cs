@@ -1,7 +1,5 @@
-using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Entries;
@@ -79,7 +77,7 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
         var results = await _sut.CheckDuplicatesAsync(probes);
 
         results.Should().HaveCount(288).And.OnlyContain(r => r != null);
-        _statements.SelectsAgainst("sensor_glucose").Should().Be(1);
+        _statements.Count("SELECT", s => s.Contains("sensor_glucose", StringComparison.OrdinalIgnoreCase)).Should().Be(1);
     }
 
     [Fact]
@@ -218,7 +216,7 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
 
         batch.Single()!.Mills.Should().Be(probe.Mills);
         batch.Single()!.Id.Should().Be(single?.Id);
-        _statements.SelectsAgainst("sensor_glucose").Should().Be(0);
+        _statements.Count("SELECT", s => s.Contains("sensor_glucose", StringComparison.OrdinalIgnoreCase)).Should().Be(0);
     }
 
     [Fact]
@@ -292,37 +290,5 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
             Device = device,
         });
         _context.SaveChanges();
-    }
-
-    /// <summary>
-    /// Counts the statements the context issues, so a test can assert how many queries a batch
-    /// cost — the property this change exists to alter, and the one row counts cannot show.
-    /// </summary>
-    private sealed class StatementRecorder : DbCommandInterceptor
-    {
-        private readonly List<string> _statements = [];
-
-        public void Clear() => _statements.Clear();
-
-        public int SelectsAgainst(string table) => _statements.Count(s =>
-            s.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
-            && s.Contains(table, StringComparison.OrdinalIgnoreCase));
-
-        public override InterceptionResult<DbDataReader> ReaderExecuting(
-            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
-        {
-            Record(command);
-            return result;
-        }
-
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
-            CancellationToken cancellationToken = default)
-        {
-            Record(command);
-            return ValueTask.FromResult(result);
-        }
-
-        private void Record(DbCommand command) => _statements.Add(command.CommandText.Trim());
     }
 }

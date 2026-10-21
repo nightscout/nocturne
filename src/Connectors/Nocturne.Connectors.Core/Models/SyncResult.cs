@@ -19,4 +19,9 @@ public class SyncResult
     /// </summary>
     public int ItemsSkipped { get; set; }
     public List<string> Errors { get; init; } = [];
+
+    /// <summary>
+    /// Null when the run was refused or never reached a connector.
+    /// </summary>
+    public long? DurationMs { get; set; }
 }

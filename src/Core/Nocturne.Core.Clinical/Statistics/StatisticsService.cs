@@ -19,10 +19,10 @@ namespace Nocturne.Core.Clinical.Statistics;
 public class StatisticsService : IStatisticsService
 {
     /// <summary>
-    /// The divisor the Kovatchev risk transform is published with. It is 18 exactly, not the
-    /// mg/dL-per-mmol/L conversion factor in <see cref="GlucoseConstants.MgdlPerMmol"/>.
+    /// The low end of the 20-600 mg/dL range the Kovatchev risk scale is constructed over, where
+    /// risk reaches 100. A reading below it is clamped to it.
     /// </summary>
-    private const double KovatchevMgdlPerMmol = 18.0;
+    private const double KovatchevFloorMgdl = 20.0;
 
     private static readonly string[] BolusTreatmentTypes = new[]
     {
@@ -642,6 +642,29 @@ public class StatisticsService : IStatisticsService
     public const int ClinicalMinimumDays = 14;
 
     /// <summary>
+    /// The analysis config a caller who passed none gets: the target range
+    /// <paramref name="population"/> is graded against, so that its time in range is measured over
+    /// the same range its target is a percentage of. The hypoglycaemia and hyperglycaemia
+    /// boundaries outside that range, and the 70-140 tight range, are population-independent.
+    /// </summary>
+    /// <seealso cref="ClinicalTargets.ForPopulation"/>
+    private static ExtendedAnalysisConfig ConfigForPopulation(DiabetesPopulation population)
+    {
+        var targets = ClinicalTargets.ForPopulation(population);
+
+        return new ExtendedAnalysisConfig
+        {
+            Thresholds = new GlycemicThresholds
+            {
+                Low = targets.TargetLow,
+                TargetBottom = targets.TargetLow,
+                TargetTop = targets.TargetHigh,
+                High = targets.TargetHigh,
+            },
+        };
+    }
+
+    /// <summary>
     /// Calculate extended glucose analytics including GMI, GRI, and clinical assessment
     /// </summary>
     public ExtendedGlucoseAnalytics AnalyzeGlucoseDataExtended(
@@ -664,7 +687,7 @@ public class StatisticsService : IStatisticsService
             bolusesList,
             carbIntakesList,
             windowDays,
-            config,
+            config ?? ConfigForPopulation(population),
             timeZone: timeZone
         );
 
@@ -1092,13 +1115,20 @@ public class StatisticsService : IStatisticsService
         KovatchevRisk(values, keepPositive: false);
 
     /// <summary>
-    /// Mean of the Kovatchev risk transform <c>f(BG) = 1.084 * (ln(BG/18)^1.084 - 1.928)</c> over
-    /// <paramref name="values"/>, counting only the readings whose <c>f(BG)</c> falls on one side
-    /// of zero: the hyperglycaemic side when <paramref name="keepPositive"/>, the hypoglycaemic
-    /// side otherwise. Zero for an empty series. A plausible reading below 18 mg/dL, where the
-    /// transform is undefined, is clamped to 18 mg/dL, the transform's maximum hypoglycaemic risk.
+    /// Mean of the Kovatchev risk transform over <paramref name="values"/> in mg/dL, counting only
+    /// the readings whose <c>f(BG)</c> falls on one side of zero: the hyperglycaemic side when
+    /// <paramref name="keepPositive"/>, the hypoglycaemic side otherwise. Zero for an empty series.
     /// </summary>
-    /// <seealso cref="KovatchevMgdlPerMmol"/>
+    /// <remarks>
+    /// The transform (Kovatchev et al., Diabetes Care 1997;20:1655) is published in a mg/dL form,
+    /// <c>f(BG) = 1.509 * ((ln BG)^1.084 - 5.381)</c>, and an equivalent mmol/L form,
+    /// <c>f(BG) = 1.794 * ((ln BG)^1.026 - 1.861)</c>. Risk is <c>10 * f(BG)^2</c>, symmetric
+    /// about 112.5 mg/dL and reaching 100 at each end of 20-600 mg/dL, which is the scale the
+    /// published bands (LBGI above 5, HBGI above 9) are calibrated against. The two forms are not
+    /// interchangeable term by term: a mg/dL exponent over a mmol/L argument is neither, and
+    /// understates risk by more than half.
+    /// </remarks>
+    /// <seealso cref="KovatchevFloorMgdl"/>
     private static double KovatchevRisk(IEnumerable<double> values, bool keepPositive)
     {
         var valuesList = values.ToList();
@@ -1107,9 +1137,8 @@ public class StatisticsService : IStatisticsService
 
         var riskSum = valuesList.Sum(glucose =>
         {
-            var bgInMmol = Math.Max(glucose, KovatchevMgdlPerMmol) / KovatchevMgdlPerMmol;
-            var logBG = Math.Log(bgInMmol);
-            var fBG = 1.084 * (Math.Pow(logBG, 1.084) - 1.928);
+            var logBG = Math.Log(Math.Max(glucose, KovatchevFloorMgdl));
+            var fBG = 1.509 * (Math.Pow(logBG, 1.084) - 5.381);
 
             var onSide = keepPositive ? fBG > 0 : fBG < 0;
             return onSide ? 10 * Math.Pow(fBG, 2) : 0;

@@ -3,7 +3,13 @@ import { WebSocketClient } from "$lib/websocket/websocket-client.svelte";
 import { entryIdentity, isSameEntry, unseenEntries } from "./entry-identity";
 import { markedRead } from "./notification-read";
 import { untilNow } from "$lib/utils/now";
-import { initialReadWindows, initialReadsClock, initialReadsStash, releaseInitialReads } from "./initial-reads";
+import {
+  DAY_MS,
+  initialReadWindows,
+  initialReadsClock,
+  initialReadsStash,
+  releaseInitialReads,
+} from "./initial-reads";
 import { toDate } from "$lib/utils/formatting";
 import { afterNextPaint } from "$lib/utils/after-next-paint";
 import type {
@@ -40,7 +46,7 @@ export interface DeviceStatus extends PillsDeviceStatus {
   _id?: string;
   uploader?: Record<string, unknown>;
 }
-import { NotificationUrgency } from "$lib/api";
+import { NotificationUrgency, TrackerRealtimeAction } from "$lib/api";
 import { reachedStep } from "$lib/components/trackers/schedule";
 import {
   mergeEntryRecords,
@@ -68,7 +74,7 @@ import {
   type DeviceStatus as PillsDeviceStatus,
   type ProcessedPillsData,
 } from "$api/pills-processor";
-import { isEntryDocument } from "$lib/websocket/payloads";
+import { isEntryDocument, isRecordDocument } from "$lib/websocket/payloads";
 import { isRecord } from "$lib/utils/type-guards";
 import { toIsoString } from "$lib/utils/api-date";
 import {
@@ -133,6 +139,36 @@ export async function loadInitialGlucose(
 
 function newestFirst<T extends { mills?: number }>(records: T[]): T[] {
   return records.sort((a, b) => (b.mills || 0) - (a.mills || 0));
+}
+
+/** The most records each care array holds. */
+const CARE_RECORD_CAP = 500;
+/** The most APS snapshots the store holds. */
+const APS_SNAPSHOT_CAP = 50;
+
+type StorageAction = "create" | "update" | "delete";
+
+/**
+ * `records` with one native record broadcast applied, newest first, or `records` itself when it
+ * changes nothing. A create or update replaces the record by id; one stamped before `windowStart`
+ * is outside the store's window, so it is dropped rather than added. A delete removes by id.
+ */
+function withRecordEvent<T extends { id?: string; mills?: number }>(
+  records: T[],
+  action: StorageAction,
+  event: StorageEvent,
+  windowStart: number,
+  cap: number
+): T[] {
+  const doc = action !== "delete" && isRecordDocument<T>(event.doc) ? event.doc : undefined;
+  const id = action === "delete" ? event.id : doc?.id;
+  if (!id) return records;
+
+  const others = records.filter((record) => record.id !== id);
+  if (!doc || (doc.mills ?? 0) < windowStart) {
+    return others.length === records.length ? records : others;
+  }
+  return newestFirst([doc, ...others]).slice(0, cap);
 }
 
 const REALTIME_STORE_KEY = Symbol("realtime-store");
@@ -211,10 +247,17 @@ export class RealtimeStore {
   trackerDefinitions = $state.raw<TrackerDefinitionDto[]>([]);
   inAppNotifications = $state.raw<InAppNotificationDto[]>([]);
 
-  /** Bumped on every treatments create/update/delete event, which the store does not otherwise apply. */
+  /**
+   * Bumped on every legacy treatments event, which the store does not otherwise apply, and on every
+   * native record event, whose in-place update leaves the record arrays' length and ends unchanged.
+   */
   treatmentRevision = $state(0);
 
-  /** App-originated v4 writes reach no socket the store listens to; the writing form calls this. */
+  /**
+   * The writing form calls this for its own v4 writes. Their record broadcast does not reach a
+   * session whose socket is down or whose history is clamped, so the writer's own chart would
+   * otherwise wait for a backfill.
+   */
   noteTreatmentWrite(): void {
     this.treatmentRevision++;
   }
@@ -441,7 +484,7 @@ export class RealtimeStore {
       } = initialReadWindows(initialReadsClock(initialReadsStash(), Date.now()));
       const currentReading = Promise.all([
         loadInitialGlucose(sensorGlucoseClient(), glucoseFrom),
-        apsSnapshotClient().getAll(oneDayAgo, now, 50).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load apsSnapshots:", e); return []; }),
+        apsSnapshotClient().getAll(oneDayAgo, now, APS_SNAPSHOT_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load apsSnapshots:", e); return []; }),
         currentTherapyStateClient().getCurrentTherapyState().catch((e) => { console.error("Failed to load currentTherapyState:", e); return null; }),
       ]);
       const rest = Promise.all([
@@ -449,11 +492,11 @@ export class RealtimeStore {
         trackersClient().getDefinitions().catch(() => []),
         trackersClient().getActiveInstances().catch(() => []),
         notificationsClient().getNotifications().catch(() => []),
-        bolusClient().getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load boluses:", e); return []; }),
-        nutritionClient().getCarbIntakes(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load carbIntakes:", e); return []; }),
-        bgCheckClient().getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load bgChecks:", e); return []; }),
-        noteClient().getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load notes:", e); return []; }),
-        deviceEventClient().getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load deviceEvents:", e); return []; }),
+        bolusClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load boluses:", e); return []; }),
+        nutritionClient().getCarbIntakes(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load carbIntakes:", e); return []; }),
+        bgCheckClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load bgChecks:", e); return []; }),
+        noteClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load notes:", e); return []; }),
+        deviceEventClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load deviceEvents:", e); return []; }),
       ]);
       this.websocketClient.prefetchTicket();
       releaseInitialReads();
@@ -628,12 +671,46 @@ export class RealtimeStore {
     }
   }
 
+  /** Apply a native record broadcast to the array its `recordType` names; the store holds no other. */
+  private handleRecordEvent(action: StorageAction, event: StorageEvent): void {
+    const windowStart = Date.now() - DAY_MS;
+    const apply = <T extends { id?: string; mills?: number }>(records: T[], cap: number): T[] => {
+      const next = withRecordEvent<T>(records, action, event, windowStart, cap);
+      if (next !== records) this.treatmentRevision++;
+      return next;
+    };
+    switch (event.recordType) {
+      case "bolus":
+        this.boluses = apply<Bolus>(this.boluses, CARE_RECORD_CAP);
+        break;
+      case "carbIntake":
+        this.carbIntakes = apply<CarbIntake>(this.carbIntakes, CARE_RECORD_CAP);
+        break;
+      case "bgCheck":
+        this.bgChecks = apply<BGCheck>(this.bgChecks, CARE_RECORD_CAP);
+        break;
+      case "note":
+        this.notes = apply<Note>(this.notes, CARE_RECORD_CAP);
+        break;
+      case "deviceEvent":
+        this.deviceEvents = apply<DeviceEvent>(this.deviceEvents, CARE_RECORD_CAP);
+        break;
+      case "apsSnapshot":
+        this.apsSnapshots = apply<ApsSnapshot>(this.apsSnapshots, APS_SNAPSHOT_CAP);
+        break;
+    }
+  }
+
   /** Handle storage create events */
   private handleCreate(event: StorageEvent): void {
+    this.updateLastDataReceived();
+    if (event.recordType) {
+      this.handleRecordEvent("create", event);
+      return;
+    }
+
     const { colName, doc } = event;
     if (colName === "treatments") this.treatmentRevision++;
-
-    this.updateLastDataReceived();
 
     if (colName === "entries" && this.isEntry(doc)) {
       this.queueEntryCreate(doc);
@@ -684,6 +761,11 @@ export class RealtimeStore {
 
   /** Handle storage update events */
   private handleUpdate(event: StorageEvent): void {
+    if (event.recordType) {
+      this.handleRecordEvent("update", event);
+      return;
+    }
+
     const { colName, doc } = event;
     if (colName === "treatments") this.treatmentRevision++;
 
@@ -704,6 +786,11 @@ export class RealtimeStore {
 
   /** Handle storage delete events */
   private handleDelete(event: StorageEvent): void {
+    if (event.recordType) {
+      this.handleRecordEvent("delete", event);
+      return;
+    }
+
     const { colName, doc } = event;
     if (colName === "treatments") this.treatmentRevision++;
 
@@ -755,7 +842,7 @@ export class RealtimeStore {
     const { action, instance } = event;
 
     switch (action) {
-      case "create":
+      case TrackerRealtimeAction.Create:
         // Add new instance if not exists
         if (!this.trackerInstances.some((i) => i.id === instance.id)) {
           this.trackerInstances = [instance, ...this.trackerInstances];
@@ -763,14 +850,14 @@ export class RealtimeStore {
         }
         break;
 
-      case "reopen":
+      case TrackerRealtimeAction.Reopen:
         // A run resumed because the change that replaced it was deleted: no new start to announce.
         if (!this.trackerInstances.some((i) => i.id === instance.id)) {
           this.trackerInstances = [instance, ...this.trackerInstances];
         }
         break;
 
-      case "ack": {
+      case TrackerRealtimeAction.Ack: {
         const index = this.trackerInstances.findIndex((i) => i.id === instance.id);
         if (index !== -1) {
           this.trackerInstances = this.trackerInstances.with(index, instance);
@@ -778,11 +865,11 @@ export class RealtimeStore {
         break;
       }
 
-      case "complete":
-      case "delete":
+      case TrackerRealtimeAction.Complete:
+      case TrackerRealtimeAction.Delete:
         // Remove from active instances
         this.trackerInstances = this.trackerInstances.filter((i) => i.id !== instance.id);
-        if (action === "complete") {
+        if (action === TrackerRealtimeAction.Complete) {
           toast.success(`Tracker completed: ${instance.definitionName}`);
         }
         break;
@@ -1078,7 +1165,7 @@ export class RealtimeStore {
       if (added.length > 0) {
         this.apsSnapshots = [...added, ...this.apsSnapshots]
           .sort((a, b) => (b.mills || 0) - (a.mills || 0))
-          .slice(0, 50);
+          .slice(0, APS_SNAPSHOT_CAP);
       }
     } catch {
       // Non-critical — pills will update on next backfill
@@ -1120,11 +1207,11 @@ export class RealtimeStore {
       const [entries, deviceStatuses, boluses, carbIntakes, bgChecks, notes, devEvents, newApsSnapshots] = await Promise.all([
         sensorGlucoseClient().getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch((): Entry[] => []),
         Promise.resolve<DeviceStatus[]>([]),
-        bolusClient().getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
-        nutritionClient().getCarbIntakes(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
-        bgCheckClient().getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
-        noteClient().getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
-        deviceEventClient().getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
+        bolusClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
+        nutritionClient().getCarbIntakes(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
+        bgCheckClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
+        noteClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
+        deviceEventClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
         apsSnapshotClient().getAll(backfillFromDate, nowDate, 20).then((r) => r.data ?? []).catch(() => []),
       ]);
       await reservoirRefresh;
@@ -1163,7 +1250,7 @@ export class RealtimeStore {
         if (newBoluses.length > 0) {
           this.boluses = [...this.boluses, ...newBoluses]
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
-            .slice(0, 500);
+            .slice(0, CARE_RECORD_CAP);
           backfilledCount += newBoluses.length;
         }
       }
@@ -1172,7 +1259,7 @@ export class RealtimeStore {
         if (newCarbs.length > 0) {
           this.carbIntakes = [...this.carbIntakes, ...newCarbs]
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
-            .slice(0, 500);
+            .slice(0, CARE_RECORD_CAP);
           backfilledCount += newCarbs.length;
         }
       }
@@ -1181,7 +1268,7 @@ export class RealtimeStore {
         if (newBg.length > 0) {
           this.bgChecks = [...this.bgChecks, ...newBg]
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
-            .slice(0, 500);
+            .slice(0, CARE_RECORD_CAP);
           backfilledCount += newBg.length;
         }
       }
@@ -1190,7 +1277,7 @@ export class RealtimeStore {
         if (newNotes.length > 0) {
           this.notes = [...this.notes, ...newNotes]
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
-            .slice(0, 500);
+            .slice(0, CARE_RECORD_CAP);
           backfilledCount += newNotes.length;
         }
       }
@@ -1199,7 +1286,7 @@ export class RealtimeStore {
         if (newDevEvents.length > 0) {
           this.deviceEvents = [...this.deviceEvents, ...newDevEvents]
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
-            .slice(0, 500);
+            .slice(0, CARE_RECORD_CAP);
           backfilledCount += newDevEvents.length;
         }
       }
@@ -1209,7 +1296,7 @@ export class RealtimeStore {
         if (addedSnapshots.length > 0) {
           this.apsSnapshots = [...this.apsSnapshots, ...addedSnapshots]
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
-            .slice(0, 50);
+            .slice(0, APS_SNAPSHOT_CAP);
         }
       }
 

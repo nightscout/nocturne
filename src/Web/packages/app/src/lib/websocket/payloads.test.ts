@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   isEntryDocument,
+  isRecordDocument,
   parseAlarm,
   parseAnnouncement,
   parseDataUpdate,
   parseNotification,
+  parseStorageEvent,
   parseSyncProgress,
   parseTrackerUpdate,
   parseUrgentAlarm,
@@ -32,6 +34,44 @@ describe("parseDataUpdate", () => {
     expect(parseDataUpdate({ sgv: 100 })).toEqual([{ sgv: 100 }]);
     expect(parseDataUpdate([{ sgv: 100 }, { sgv: "x" }, null])).toEqual([{ sgv: 100 }]);
     expect(parseDataUpdate("nope")).toEqual([]);
+  });
+});
+
+describe("isRecordDocument", () => {
+  it("accepts a record with a string id and numeric or absent mills", () => {
+    expect(isRecordDocument({ id: "b1", mills: 1 })).toBe(true);
+    expect(isRecordDocument({ id: "b1" })).toBe(true);
+  });
+
+  it("rejects a record without a string id or with mistyped mills", () => {
+    expect(isRecordDocument({ mills: 1 })).toBe(false);
+    expect(isRecordDocument({ id: 7, mills: 1 })).toBe(false);
+    expect(isRecordDocument({ id: "b1", mills: "1" })).toBe(false);
+    expect(isRecordDocument("b1")).toBe(false);
+  });
+});
+
+describe("parseStorageEvent", () => {
+  it("carries a native record broadcast's record type and document", () => {
+    const doc = { id: "b1", insulin: 2 };
+
+    expect(parseStorageEvent({ colName: "care", recordType: "bolus", doc })).toEqual({
+      colName: "care",
+      recordType: "bolus",
+      doc,
+      id: undefined,
+    });
+  });
+
+  it("carries the id of a native record delete", () => {
+    expect(parseStorageEvent({ colName: "care", recordType: "bolus", id: "b1" })).toMatchObject({
+      recordType: "bolus",
+      id: "b1",
+    });
+  });
+
+  it("names no record type on a legacy collection event", () => {
+    expect(parseStorageEvent({ colName: "treatments", doc: { _id: "t1" } }).recordType).toBeUndefined();
   });
 });
 

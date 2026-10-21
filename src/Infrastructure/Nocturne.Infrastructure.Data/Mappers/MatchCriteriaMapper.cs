@@ -70,14 +70,23 @@ public static class MatchCriteriaMapper
 
     /// <summary>
     /// Criteria for a state span. An unrecognised category yields a null
-    /// <see cref="MatchCriteria.Category"/> rather than throwing.
+    /// <see cref="MatchCriteria.Category"/> rather than throwing. The state of an override, temporary
+    /// target or profile span does not name its preset, so those carry their metadata for
+    /// <see cref="StateSpanMetadataExtensions.IsSamePresetAs"/>; a switch between two presets is two spans.
     /// </summary>
-    public static MatchCriteria From(StateSpanEntity entity) =>
-        new()
+    public static MatchCriteria From(StateSpanEntity entity)
+    {
+        StateSpanCategory? category = CategoriesByName.TryGetValue(entity.Category, out var parsed) ? parsed : null;
+        return new()
         {
-            Category = CategoriesByName.TryGetValue(entity.Category, out var category) ? category : null,
-            State = entity.State
+            Category = category,
+            State = entity.State,
+            Metadata = category is StateSpanCategory.Override or StateSpanCategory.TemporaryTarget
+                or StateSpanCategory.Profile
+                ? MapperHelpers.DeserializeJson<Dictionary<string, object>>(entity.MetadataJson)
+                : null
         };
+    }
 
     /// <summary>
     /// Categories keyed by name. A name lookup rather than <see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/>,

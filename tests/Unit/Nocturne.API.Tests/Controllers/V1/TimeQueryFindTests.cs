@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -240,6 +241,49 @@ public class TimeQueryFindTests
         var parsed = FindQuery.Parse(captured);
         parsed.Matches(Sgv("m", "2015-04-02&x+y%z|(a)", 100)).Should().BeTrue();
         parsed.Matches(Sgv("n", "2015-04-09&x+y%z|(a)", 100)).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("20{14..15}", "-04-02T{13..14}", "?find[sgv][$gte]=120&token=x&secret=y&_=1&type=mbg&device=ignored", "b,e")]
+    [InlineData("2015-04", null, "?find[dateString][$regex]=T13&find[dateString][$regex]=T14", "")]
+    [InlineData("2015-04", null, "?find[type][$regex]=%2F%2Fsgv%2Fi%2F", "")]
+    public async Task Echo_AppliedQueryMatchesTheNormalTimesQuery(
+        string prefix, string? regex, string query, string expectedIds)
+    {
+        var controller = Build(query);
+
+        ActionResult<TimeQueryEcho> result;
+        if (regex == null)
+        {
+            result = controller.GetTimeQueryEchoWithPrefix(prefix);
+        }
+        else
+        {
+            result = controller.GetTimeQueryEchoWithPrefixAndRegex(prefix, regex);
+        }
+
+        var response = result.Result.Should().BeOfType<OkObjectResult>().Which;
+        var echo = response.Value.Should().BeOfType<TimeQueryEcho>().Which;
+
+        string echoJson = JsonSerializer.Serialize(echo.Query);
+        var echoConditions = FindQuery.Parse(echoJson);
+        string[] expectedEntryIds = Array.Empty<string>();
+        if (expectedIds.Length != 0)
+        {
+            expectedEntryIds = expectedIds.Split(',');
+        }
+        Entries.Where(echoConditions.Matches).Select(e => e.Id).Should().BeEquivalentTo(expectedEntryIds);
+
+        ActionResult normalResult;
+        if (regex == null)
+        {
+            normalResult = await controller.GetTimeBasedEntriesWithPrefix(prefix, count: 100);
+        }
+        else
+        {
+            normalResult = await controller.GetTimeBasedEntriesWithPrefixAndRegex(prefix, regex, count: 100);
+        }
+        IdsOf(normalResult).Should().BeEquivalentTo(expectedEntryIds);
     }
 
     private static string[] IdsOf(ActionResult result) =>

@@ -85,16 +85,15 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
 
     /// <remarks>
     /// The cache holds the newest spans that overlap the minute, so the active span is picked at
-    /// the exact time and the answer does not depend on which lookup in the minute came first. It is keyed
-    /// by tenant, not history window, so a history-clamped request, which sees only the last 24 hours of
-    /// <c>state_spans</c>, neither reads nor writes it.
+    /// the exact time and the answer does not depend on which lookup in the minute came first. A request
+    /// that <see cref="ICategoryReadContext.BypassesTenantCaches"/> neither reads nor writes it.
     /// </remarks>
     private async Task<StateSpan?> GetActiveProfileSpanAsync(long timeMills, CancellationToken ct)
     {
         var minuteStart = timeMills / MillisPerMinute * MillisPerMinute;
         var tenantId = _tenantAccessor.TenantId;
         var cacheKey = $"ActiveProfile:{tenantId}:{minuteStart}";
-        var useCache = !_categoryReadContext.IsHistoryClamped;
+        var useCache = !_categoryReadContext.BypassesTenantCaches;
 
         if (!useCache || !_cache.TryGetValue(cacheKey, out IReadOnlyList<StateSpan>? candidates) || candidates is null)
         {
