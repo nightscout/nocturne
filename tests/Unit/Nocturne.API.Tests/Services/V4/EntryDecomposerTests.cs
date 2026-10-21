@@ -6,8 +6,10 @@ using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -118,6 +120,71 @@ public class EntryDecomposerTests : IDisposable
         sg.DataSource.Should().Be("dexcom-connector");
         sg.UtcOffset.Should().Be(-300);
         sg.CorrelationId.Should().Be(result.CorrelationId);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SgvEntryWithRawFields_ReadsBackAsTheLegacyEntryWithThem()
+    {
+        var entry = new Entry
+        {
+            Id = "sgv-raw-fields",
+            Type = "sgv",
+            Mills = 1700000000000,
+            Sgv = 120.0,
+            Delta = 0,
+            Rssi = 100,
+            Filtered = 125_000,
+            Unfiltered = 131_500.5,
+        };
+
+        await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
+
+        _context.ChangeTracker.Clear();
+        var stored = SensorGlucoseMapper.ToDomainModel(_context.SensorGlucose.Single(e => e.LegacyId == "sgv-raw-fields"));
+        var projected = EntryProjection.FromSensorGlucose(stored);
+        projected.Delta.Should().Be(0);
+        projected.Rssi.Should().Be(100);
+        projected.Filtered.Should().Be(125_000);
+        projected.Unfiltered.Should().Be(131_500.5);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ReSentSgvEntry_ReplacesTheRawFields()
+    {
+        var entry = new Entry
+        {
+            Id = "sgv-raw-update", Type = "sgv", Mills = 1700000000000, Sgv = 120.0,
+            Delta = 2, Rssi = 90, Filtered = 1, Unfiltered = 2,
+        };
+        await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
+
+        entry.Delta = -3.5;
+        entry.Rssi = null;
+        entry.Filtered = 3;
+        entry.Unfiltered = null;
+        await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
+
+        _context.ChangeTracker.Clear();
+        var stored = _context.SensorGlucose.Single(e => e.LegacyId == "sgv-raw-update");
+        stored.Delta.Should().Be(-3.5);
+        stored.Rssi.Should().BeNull();
+        stored.Filtered.Should().Be(3);
+        stored.Unfiltered.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SgvEntryWithoutRawFields_ReadsBackWithoutThem()
+    {
+        await _decomposer.DecomposeAsync(
+            new Entry { Id = "sgv-no-raw", Type = "sgv", Mills = 1700000000000, Sgv = 120.0 }, WriteOrigin.Live);
+
+        _context.ChangeTracker.Clear();
+        var projected = EntryProjection.FromSensorGlucose(
+            SensorGlucoseMapper.ToDomainModel(_context.SensorGlucose.Single(e => e.LegacyId == "sgv-no-raw")));
+        projected.Delta.Should().BeNull();
+        projected.Rssi.Should().BeNull();
+        projected.Filtered.Should().BeNull();
+        projected.Unfiltered.Should().BeNull();
     }
 
     [Fact]

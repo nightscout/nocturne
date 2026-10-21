@@ -95,6 +95,11 @@ public class SensorGlucose : V4RecordBase, IDeviceAttributed
     public double? Delta { get; set; }
 
     /// <summary>
+    /// Received signal strength the uploader reported for the reading
+    /// </summary>
+    public int? Rssi { get; set; }
+
+    /// <summary>
     /// Whether this glucose value has been algorithmically smoothed or is raw sensor output.
     /// <c>null</c> when the uploader did not declare.
     /// </summary>
