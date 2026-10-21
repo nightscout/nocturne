@@ -339,6 +339,11 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         foreach (var slug in removedSlugs.Append(TenantSlug))
             TenantResolutionMiddleware.EvictTenant(cache, slug);
 
+        // The tenant caches hold values read from the rows just emptied, such as the therapy
+        // timezone a profile set, which would otherwise outlive them into the next test.
+        if (cache is MemoryCache memory)
+            memory.Clear();
+
         await AuthTestHelpers.SeedApiSecretGrantAsync(conn, TenantId, OwnerSubjectId, ApiSecret);
 
         // The shared client starts every test as a client the rate limits have not seen.
@@ -400,6 +405,9 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "step_counts",
         "sleep_sessions",
         "compression_low_suggestions",
+        // Health records a test may write directly through the v4 endpoints.
+        "lab_hba1c_results",
+        "body_weights",
         // A Nightscout import records what it has run, which a second import reads.
         "migration_runs",
         "migration_sources",
