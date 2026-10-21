@@ -35,7 +35,7 @@ internal static class ActiveSchedule
         var snapshot = specProfile is null ? await active.GetActiveSchedulesAsync(timeMills, ct) : null;
         var profileName = specProfile
             ?? await active.GetActiveProfileNameAsync(timeMills, ct)
-            ?? "Default";
+            ?? await active.GetDefaultProfileNameAsync(ct);
 
         var entries = snapshot is not null
             ? snapshotEntries(snapshot)

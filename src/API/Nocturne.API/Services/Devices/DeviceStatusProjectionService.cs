@@ -342,18 +342,6 @@ public class DeviceStatusProjectionService
     }
 
     /// <summary>
-    /// Returns the number of <see cref="DeviceStatus"/> documents <see cref="GetAsync"/> projects for
-    /// <paramref name="find"/> without a page limit.
-    /// </summary>
-    /// <param name="find">MongoDB-style query filter (same format as <see cref="GetAsync"/>).</param>
-    /// <param name="ct">Cancellation token.</param>
-    public async Task<long> CountAsync(string? find, CancellationToken ct)
-    {
-        var (device, from, to) = ParseFindQuery(find);
-        return await _groupRepo.CountAsync(from, to, device, ct);
-    }
-
-    /// <summary>
     /// Projects each group, giving a status with an APS snapshot the override active at its time.
     /// <c>srvModified</c> is the group's <see cref="DeviceStatusGroup.ModifiedAt"/>, the stamp the
     /// history pages on, so a client's cursor never passes a status it has not seen.

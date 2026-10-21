@@ -7,7 +7,8 @@ namespace Nocturne.API.Hubs;
 /// <summary>
 /// Proves every authorized hub connection's credential again each <see cref="Interval"/> through
 /// <see cref="HubCredentialVerifier"/>, and closes a connection whose credential no longer covers
-/// what it connected with (<see cref="HubAuthorization.IsCoveredBy"/>): a removed member, a revoked
+/// what it connected with (<see cref="HubAuthorization.IsCoveredBy"/>): a deactivated or deleted
+/// tenant, whose connections include the realtime bridge's, a removed member, a revoked
 /// grant or guest link, a deactivated subject, a session logged out, narrowed scopes or a new
 /// history clamp. An <see cref="OverviewHub"/> connection is closed once any tenant it receives is
 /// out of its reach.

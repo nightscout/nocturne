@@ -42,9 +42,9 @@ public sealed record OverviewGrant(
     IReadOnlyCollection<Guid> TenantIds);
 
 /// <summary>
-/// Proves hub credentials again from server-side state: the grant or guest link is live, the
-/// subject is active, a session login still has a session, and the membership still exists. Scopes
-/// and the history clamp are recomputed as <see cref="Middleware.MemberScopeMiddleware"/> does.
+/// Proves hub credentials again from server-side state: the tenant still exists and is active, the
+/// grant or guest link is live, the subject is active, a session login still has a session, and the
+/// membership still exists. Scopes and the history clamp are recomputed as <see cref="Middleware.MemberScopeMiddleware"/> does.
 /// </summary>
 /// <remarks>
 /// One instance serves one sweep, and memoizes every lookup for it, so connections that share a
@@ -111,6 +111,13 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
         await Memo<object>(("jti", jti), async () =>
             await services.GetRequiredService<IOAuthTokenRevocationCache>().IsRevokedAsync(jti.ToString())) is true;
 
+    private async Task<bool> IsTenantActiveAsync(Guid tenantId) =>
+        await Memo<object>(("tenant", tenantId), async () =>
+        {
+            await using var db = await Contexts.CreatePlatformAsync();
+            return await db.Tenants.AnyAsync(t => t.Id == tenantId && t.IsActive);
+        }) is true;
+
     private bool IsLive(GrantState? grant) =>
         grant is { RevokedAt: null } && (grant.ExpiresAt is null || grant.ExpiresAt > _now);
 
@@ -123,6 +130,11 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
     public async Task<HubAuthorization?> ProveAsync(HubAuthorization granted, TenantContext tenant)
     {
         if (granted.Source is not { } source || tenant.TenantId != granted.TenantId)
+            return null;
+
+        // The connection's tenant was read at its handshake. A slug resolves afresh on every request, so
+        // a tenant deleted and recreated under its slug is a different id, and the old one reads as gone.
+        if (!await IsTenantActiveAsync(tenant.TenantId))
             return null;
 
         switch (source.AuthType)

@@ -291,6 +291,7 @@ public class LegacyPostBodyTests
             service.Object,
             Passthrough(),
             Mock.Of<ICanonicalAlertEvaluator>(),
+            TimeProvider.System,
             NullLogger<LegacyV1.EntriesController>.Instance));
         return new Handler(
             $$"""{"Type":"sgv","Sgv":"120","Mills":{{Millis}}}""",

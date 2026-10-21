@@ -18,7 +18,7 @@ namespace Nocturne.API.Tests.Integration.Migration;
 /// </summary>
 public sealed class RepairDoubleConvertedMmolProfilesFixture : IAsyncLifetime
 {
-    private const string PriorMigration = "20261021070559_UnverifyKnownClientsWithForeignRedirectUris";
+    private const string PriorMigration = "20261021130540_AddGoogleHealthGrantHolders";
 
     internal static readonly Guid TenantA = Guid.Parse("a1111111-1111-7111-8111-111111111836");
     internal static readonly Guid TenantB = Guid.Parse("b2222222-2222-7222-8222-222222221836");

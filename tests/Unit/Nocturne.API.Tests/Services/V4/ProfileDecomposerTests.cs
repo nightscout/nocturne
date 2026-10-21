@@ -500,4 +500,40 @@ public class ProfileDecomposerTests
     {
         ProfileDecomposer.ConvertSensitivityValues(At(mmol), "mmol").Single().Value.Should().Be(mgdl);
     }
+
+    /// <remarks>
+    /// Targets stop at 22.2 mmol/L, the highest one conversion keeps at or under 400 mg/dL; above it
+    /// <see cref="ProfileDecomposer.MergeTargets(List{TimeValue}, List{TimeValue}, string?)"/> reads
+    /// the values as mg/dL.
+    /// </remarks>
+    [Fact]
+    public void EveryOneDecimalMmolValue_SurvivesRepeatedReadAndReupload()
+    {
+        var drifted = new List<double>();
+        for (var tenths = 1; tenths <= 500; tenths++)
+        {
+            var uploaded = tenths / 10.0;
+            var value = uploaded;
+            for (var cycle = 0; cycle < 3; cycle++)
+            {
+                var sens = ProfileDecomposer.ConvertSensitivityValues(
+                    [new TimeValue { Time = "00:00", Value = value }], "mmol")[0].Value;
+                if (uploaded <= 22.2)
+                {
+                    var target = ProfileDecomposer.MergeTargets(
+                        [new TimeValue { Time = "00:00", Value = value }],
+                        [new TimeValue { Time = "00:00", Value = value }],
+                        "mmol/L")[0];
+                    sens.Should().Be(target.Low).And.Be(target.High);
+                }
+
+                value = ProfileDecomposer.FromMgdl(sens, "mmol");
+            }
+
+            if (value != uploaded)
+                drifted.Add(uploaded);
+        }
+
+        drifted.Should().BeEmpty();
+    }
 }

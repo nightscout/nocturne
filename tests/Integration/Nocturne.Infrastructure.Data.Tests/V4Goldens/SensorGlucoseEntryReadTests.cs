@@ -34,7 +34,7 @@ public class SensorGlucoseEntryReadTests(V4GoldenFixture fixture)
             Direction = i % 2 == 0 ? GlucoseDirection.SingleUp : null,
             TrendRate = i % 2 == 0 ? 1.5 : null, Noise = i % 2 == 0 ? 2 : null,
             Filtered = i % 2 == 0 ? 12345 : null, Unfiltered = i % 2 == 0 ? 23456 : null,
-            Delta = i % 2 == 0 ? -1.5 : null,
+            Delta = i % 2 == 0 ? -1.5 : null, Rssi = i % 2 == 0 ? 100 : null,
             AdditionalProperties = new() { ["ignored"] = "legacy projection does not read this" },
             SmoothedMgdl = 101, UnsmoothedMgdl = 99,
         }), WriteOrigin.Backfill);
