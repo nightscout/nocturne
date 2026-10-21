@@ -382,12 +382,22 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// <see cref="V4Models.TargetRangeEntry"/> contract is mg/dL — every reader (alert engine,
     /// <c>TargetRangeResolver</c>, report statistics) compares against mg/dL. mmol profiles are
     /// therefore normalised to mg/dL here at write time, so no reader has to know the source units.
+    /// A mmol store whose targets come out above any real target is a client's stale copy carrying
+    /// mg/dL labelled mmol, and is stored with that conversion undone
+    /// (<see cref="UndoRepeatedTargetConversions"/>). Its ISF is not: a correct mmol ISF can convert to
+    /// the same numbers.
     /// </remarks>
     /// <param name="lows">The low-target time-value entries from the profile store.</param>
     /// <param name="highs">The high-target time-value entries from the profile store.</param>
     /// <param name="units">The profile's glucose units ("mg/dl" or "mmol"); mmol values are converted to mg/dL.</param>
     /// <returns>A merged list of <see cref="V4Models.TargetRangeEntry"/> with <c>Low</c> and <c>High</c> fields in mg/dL.</returns>
     internal static List<V4Models.TargetRangeEntry> MergeTargets(List<TimeValue> lows, List<TimeValue> highs, string? units)
+    {
+        var merged = MergeTargetsConverted(lows, highs, units);
+        return IsMmol(units) ? UndoRepeatedTargetConversions(merged) : merged;
+    }
+
+    private static List<V4Models.TargetRangeEntry> MergeTargetsConverted(List<TimeValue> lows, List<TimeValue> highs, string? units)
     {
         var toMgdl = IsMmol(units)
             ? (Func<double, double>)(value => Math.Round(value * GlucoseConstants.MgdlPerMmol))
@@ -423,7 +433,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     internal static double FromMgdl(double mgdl, string? units) =>
         IsMmol(units) ? Math.Round(mgdl / GlucoseConstants.MgdlPerMmol, 1) : mgdl;
 
-    /// <summary>The highest stored mg/dL target or ISF one mmol conversion of a real value reaches (22.2 mmol/L).</summary>
+    /// <summary>The highest stored mg/dL target one mmol conversion of a real target reaches (22.2 mmol/L).</summary>
     internal const double MaxSingleConversionMgdl = 400;
 
     private const int MaxRepeatedConversions = 4;
@@ -434,8 +444,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// only when every value is <c>round(m * 18.0182)</c> of a whole <c>m</c>. Migration
     /// <c>RepairDoubleConvertedMmolProfiles</c> applies the same rule to stored rows.
     /// </summary>
-    /// <returns>The targets and the number of conversions undone; the targets as given and 0 when there is nothing it can undo.</returns>
-    internal static (List<V4Models.TargetRangeEntry> Targets, int Steps) UndoRepeatedTargetConversions(
+    /// <returns>The targets undone, or as given when there is nothing it can undo.</returns>
+    internal static List<V4Models.TargetRangeEntry> UndoRepeatedTargetConversions(
         List<V4Models.TargetRangeEntry> targets)
     {
         var current = targets;
@@ -445,7 +455,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
                && steps < MaxRepeatedConversions)
         {
             if (!current.All(t => IsConversionImage(t.Low) && IsConversionImage(t.High)))
-                return (targets, 0);
+                return targets;
 
             current = current.Select(t => new V4Models.TargetRangeEntry
             {
@@ -458,40 +468,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         }
 
         return steps > 0 && current.Max(t => Math.Max(t.Low, t.High)) <= MaxSingleConversionMgdl
-            ? (current, steps)
-            : (targets, 0);
-    }
-
-    /// <summary>
-    /// The ISF taken by the same uploads as targets <see cref="UndoRepeatedTargetConversions"/> undid
-    /// <paramref name="steps"/> conversions of, undone only when it took exactly that many: each step
-    /// is taken while every value exceeds <see cref="MaxSingleConversionMgdl"/>, so a correctly stored
-    /// mmol ISF (at most 22.2 mmol/L/U) is never divided.
-    /// </summary>
-    /// <returns>The ISF undone, or null when it is not <paramref name="steps"/> conversions it can undo.</returns>
-    internal static List<V4Models.ScheduleEntry>? UndoRepeatedSensitivityConversions(
-        List<V4Models.ScheduleEntry> sensitivity, int steps)
-    {
-        if (steps <= 0 || sensitivity.Count == 0)
-            return null;
-
-        var current = sensitivity;
-        var taken = 0;
-        while (current.Min(s => s.Value) > MaxSingleConversionMgdl && taken < MaxRepeatedConversions)
-        {
-            if (!current.All(s => IsConversionImage(s.Value)))
-                return null;
-
-            current = current.Select(s => new V4Models.ScheduleEntry
-            {
-                Time = s.Time,
-                Value = UndoConversion(s.Value),
-                TimeAsSeconds = s.TimeAsSeconds,
-            }).ToList();
-            taken++;
-        }
-
-        return taken == steps && current.Max(s => s.Value) <= MaxSingleConversionMgdl ? current : null;
+            ? current
+            : targets;
     }
 
     private static double UndoConversion(double mgdl) =>

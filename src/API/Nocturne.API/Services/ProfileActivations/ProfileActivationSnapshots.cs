@@ -10,14 +10,12 @@ namespace Nocturne.API.Services.ProfileActivations;
 /// with, normalised as <see cref="ProfileDecomposer"/> normalises a stored profile.
 /// </summary>
 /// <remarks>
-/// A mmol <c>profileJson</c> carrying mg/dL values (a client's copy of a profile read back before legacy
-/// reads converted it to mmol) converts once more than it should; the snapshot is built with that undone
-/// (<see cref="ProfileDecomposer.UndoRepeatedTargetConversions"/>), so re-sending the switch cannot
-/// rebuild what migration <c>RepairDoubleConvertedMmolProfiles</c> repaired.
-/// </remarks>
-/// <remarks>
-/// Migration <c>AddProfileActivations</c> builds the same snapshot in SQL for the Profile spans it
-/// converts; a change here is a change there.
+/// Targets go through <see cref="ProfileDecomposer.MergeTargets"/>, which undoes the extra conversion a
+/// mmol <c>profileJson</c> carrying mg/dL values (a client's copy of a profile read back before legacy
+/// reads converted it to mmol) would take, so re-sending a switch cannot rebuild targets migration
+/// <c>RepairDoubleConvertedMmolProfiles</c> repaired. Its ISF is converted as uploaded: a correct mmol ISF
+/// can convert to the same numbers. Migration <c>AddProfileActivations</c> built these snapshots in SQL
+/// without that undo; <c>RepairDoubleConvertedMmolProfiles</c> applies it to what it built.
 /// </remarks>
 internal static class ProfileActivationSnapshots
 {
@@ -65,18 +63,11 @@ internal static class ProfileActivationSnapshots
             targets = [];
         }
 
-        var sensitivity = ProfileDecomposer.ConvertSensitivityValues(data.Sens ?? [], data.Units);
-        if (ProfileDecomposer.IsMmol(data.Units))
-        {
-            (targets, var steps) = ProfileDecomposer.UndoRepeatedTargetConversions(targets);
-            sensitivity = ProfileDecomposer.UndoRepeatedSensitivityConversions(sensitivity, steps) ?? sensitivity;
-        }
-
         return new ProfileActivationSnapshot
         {
             Basal = ProfileDecomposer.ConvertTimeValues(data.Basal ?? []),
             CarbRatio = ProfileDecomposer.ConvertTimeValues(data.CarbRatio ?? []),
-            Sensitivity = sensitivity,
+            Sensitivity = ProfileDecomposer.ConvertSensitivityValues(data.Sens ?? [], data.Units),
             Targets = targets,
             Units = data.Units,
             Dia = data.Dia,

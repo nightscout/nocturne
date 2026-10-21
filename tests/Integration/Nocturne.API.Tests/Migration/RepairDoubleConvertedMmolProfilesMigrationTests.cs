@@ -103,6 +103,7 @@ public sealed class RepairDoubleConvertedMmolProfilesFixture : IAsyncLifetime
         var correlation = store.Correlation is { } c ? $"'{c}'" : "NULL";
         var deleted = store.Deleted ? $"'{Seeded:O}'" : "NULL";
         var isfUpdated = store.IsfUpdated ?? Seeded;
+        var isfTimestamp = store.IsfTimestamp ?? Seeded;
         await Execute(conn, $"""
             INSERT INTO therapy_settings
               (id, tenant_id, timestamp, profile_name, units, dia, carbs_hr, delay, per_gi_values, is_default,
@@ -115,12 +116,29 @@ public sealed class RepairDoubleConvertedMmolProfilesFixture : IAsyncLifetime
                {Key(store.LegacyId)}, {correlation}, '{Seeded:O}', '{Seeded:O}', {deleted});
             INSERT INTO sensitivity_schedules
               (id, tenant_id, timestamp, profile_name, entries_json, legacy_id, correlation_id, sys_created_at, sys_updated_at, deleted_at)
-            VALUES ('{store.SensitivityId}', '{store.Tenant}', '{Seeded:O}', '{store.Name}', '{store.Sensitivity}'::jsonb,
+            VALUES ('{store.SensitivityId}', '{store.Tenant}', '{isfTimestamp:O}', '{store.Name}', '{store.Sensitivity}'::jsonb,
                {Key(store.LegacyId)}, {correlation}, '{Seeded:O}', '{isfUpdated:O}', {deleted});
             """);
+        if (store.Audited is { } audit)
+        {
+            await Execute(conn, $"""
+                INSERT INTO mutation_audit_log (id, tenant_id, entity_type, entity_id, action, changes, correlation_id, created_at)
+                VALUES ('{Guid.CreateVersion7()}', '{store.Tenant}', 'TargetRangeSchedule', '{store.TargetId}', 'update',
+                   '{Changes(audit.TargetsBefore, store.Targets)}'::jsonb, '{audit.TargetTrace}', '{Seeded:O}'),
+                  ('{Guid.CreateVersion7()}', '{store.Tenant}', 'SensitivitySchedule', '{store.SensitivityId}', 'update',
+                   '{Changes(audit.IsfBefore, store.Sensitivity)}'::jsonb, '{audit.IsfTrace}', '{Seeded:O}');
+                """);
+        }
         Rows.Add((store.TargetId, store.Tenant, "target_range_schedules", store.Targets, Seeded));
         Rows.Add((store.SensitivityId, store.Tenant, "sensitivity_schedules", store.Sensitivity, isfUpdated));
     }
+
+    /// <summary>The <c>changes</c> <c>MutationAuditInterceptor</c> writes for an <c>EntriesJson</c> update.</summary>
+    private static string Changes(string before, string after) =>
+        JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["EntriesJson"] = new Dictionary<string, string> { ["old"] = before, ["new"] = after },
+        });
 
     private static Task Context(NpgsqlConnection conn, Guid tenant) =>
         Execute(conn, $"SELECT set_config('app.current_tenant_id', '{tenant}', false);");
@@ -158,13 +176,17 @@ public class RepairDoubleConvertedMmolProfilesTests : IClassFixture<RepairDouble
 
     internal sealed record Store(
         string Key, Guid Tenant, string Name, string Units, string? LegacyId, Guid? Correlation,
-        string Targets, string Sensitivity, DateTime? IsfUpdated = null, bool Deleted = false)
+        string Targets, string Sensitivity, DateTime? IsfUpdated = null, bool Deleted = false,
+        DateTime? IsfTimestamp = null, RepairDoubleConvertedMmolProfilesTests.Audit? Audited = null)
     {
         public Guid TargetId { get; } = Guid.CreateVersion7();
         public Guid SensitivityId { get; } = Guid.CreateVersion7();
     }
 
     internal sealed record Activation(string Key, Guid Id, Guid Tenant, string Snapshot);
+
+    /// <summary>The audit rows of the upload that converted a store's targets and ISF.</summary>
+    internal sealed record Audit(string TargetsBefore, string IsfBefore, string TargetTrace, string IsfTrace);
 
     private static readonly Guid TenantA = RepairDoubleConvertedMmolProfilesFixture.TenantA;
     private static readonly Guid TenantB = RepairDoubleConvertedMmolProfilesFixture.TenantB;
@@ -200,6 +222,18 @@ public class RepairDoubleConvertedMmolProfilesTests : IClassFixture<RepairDouble
         new("isf converted more than its targets", TenantA, "More", "mmol", "docA:More", null, OnceTargets, TwiceIsf),
         new("isf above 400 beside correct targets", TenantA, "NoWitness", "mmol", "docA:NoWitness", null, CorrectTargets, OnceIsf),
         new("deleted", TenantA, "Gone", "mmol", "docA:Gone", null, OnceTargets, OnceIsf, Deleted: true),
+        new("correct isf 23 and 25 mmol beside converted targets", TenantA, "Child23", "mmol", "docA:Child23", null,
+            OnceTargets, V(414, 450)),
+        new("isf 414 and 450 the audit log shows converted", TenantA, "Audited", "mmol", "docA:Audited", null,
+            OnceTargets, V(414, 450), Audited: new Audit(CorrectTargets, V(23, 25), "trace-1", "trace-1")),
+        new("isf 414 and 450 converted in another request", TenantA, "Apart", "mmol", "docA:Apart", null,
+            OnceTargets, V(414, 450), Audited: new Audit(CorrectTargets, V(23, 25), "trace-2", "trace-3")),
+        new("isf with another timestamp", TenantA, "Later", "mmol", "docA:Later", null, OnceTargets, OnceIsf,
+            IsfTimestamp: RepairDoubleConvertedMmolProfilesFixture.Seeded.AddHours(1)),
+        new("isf 59 s after its targets", TenantA, "Within", "mmol", "docA:Within", null, OnceTargets, OnceIsf,
+            IsfUpdated: RepairDoubleConvertedMmolProfilesFixture.Seeded.AddSeconds(59)),
+        new("isf 61 s after its targets", TenantA, "Outside", "mmol", "docA:Outside", null, OnceTargets, OnceIsf,
+            IsfUpdated: RepairDoubleConvertedMmolProfilesFixture.Seeded.AddSeconds(61)),
         new("other tenant, same key, correct", TenantB, "AAPS", "mmol", "docA:AAPS", null, CorrectTargets, CorrectIsf),
         new("other tenant, once", TenantB, "Night", "mmol", "docB:Night", null, OnceTargets, OnceIsf),
     ];
@@ -210,6 +244,8 @@ public class RepairDoubleConvertedMmolProfilesTests : IClassFixture<RepairDouble
             RepairDoubleConvertedMmolProfilesFixture.Snapshot("mmol", OnceTargets, OnceIsf)),
         new("snapshot correct isf", Guid.CreateVersion7(), TenantA,
             RepairDoubleConvertedMmolProfilesFixture.Snapshot("mmol", OnceTargets, V(108, 360))),
+        new("snapshot isf that could be correct", Guid.CreateVersion7(), TenantA,
+            RepairDoubleConvertedMmolProfilesFixture.Snapshot("mmol", OnceTargets, V(414, 450))),
         new("snapshot correct", Guid.CreateVersion7(), TenantA,
             RepairDoubleConvertedMmolProfilesFixture.Snapshot("mmol", CorrectTargets, CorrectIsf)),
         new("snapshot mg/dL", Guid.CreateVersion7(), TenantB,
@@ -278,6 +314,10 @@ public class RepairDoubleConvertedMmolProfilesTests : IClassFixture<RepairDouble
     [InlineData("correct isf 108 beside converted targets")]
     [InlineData("isf rewritten through v4")]
     [InlineData("isf converted more than its targets")]
+    [InlineData("correct isf 23 and 25 mmol beside converted targets")]
+    [InlineData("isf 414 and 450 converted in another request")]
+    [InlineData("isf with another timestamp")]
+    [InlineData("isf 61 s after its targets")]
     public void AnIsfWithoutTheWitnessOrTheSameConversions_IsLeftWhileItsTargetsAreRepaired(string key)
     {
         var store = StoreOf(key);
@@ -296,16 +336,31 @@ public class RepairDoubleConvertedMmolProfilesTests : IClassFixture<RepairDouble
         ShouldBeUntouched(StoreOf(key).SensitivityId);
     }
 
-    [Fact]
-    public void AMmolActivationSnapshotWithACorrectIsf_HasOnlyItsTargetsRepaired()
+    [Theory]
+    [InlineData("snapshot correct isf", new double[] { 108, 360 })]
+    [InlineData("snapshot isf that could be correct", new double[] { 414, 450 })]
+    public void AMmolActivationSnapshotWithAnIsfThatCouldBeCorrect_HasOnlyItsTargetsRepaired(string key, double[] isf)
     {
-        var snapshot = JsonNode.Parse(_fixture.AfterUp[Activations.Single(a => a.Key == "snapshot correct isf").Id].Json)!;
+        var snapshot = JsonNode.Parse(_fixture.AfterUp[Activations.Single(a => a.Key == key).Id].Json)!;
         Numbers(snapshot["Targets"]!.ToJsonString(), "Low").Should().Equal(90, 108);
-        Numbers(snapshot["Sensitivity"]!.ToJsonString(), "Value").Should().Equal(108, 360);
+        Numbers(snapshot["Sensitivity"]!.ToJsonString(), "Value").Should().Equal(isf);
     }
 
     [Fact]
     public void EachTenantIsRepaired_AndOnlyItsOwnRows() => ShouldBeRepaired(StoreOf("other tenant, once"));
+
+    [Fact]
+    public void AnIsfWrittenWithinAMinuteOfItsTargets_IsRepaired() => ShouldBeRepaired(StoreOf("isf 59 s after its targets"));
+
+    [Fact]
+    public void AnIsfThatCouldBeCorrect_IsRepairedWhenTheAuditLogShowsItsConversion()
+    {
+        var store = StoreOf("isf 414 and 450 the audit log shows converted");
+        var (low, high, isf) = After(store);
+        low.Should().Equal(90, 108);
+        high.Should().Equal(99, 126);
+        isf.Should().Equal(23, 25);
+    }
 
     [Fact]
     public void AMmolActivationSnapshot_HasItsTargetsAndIsfRepaired_AndKeepsTheRest()

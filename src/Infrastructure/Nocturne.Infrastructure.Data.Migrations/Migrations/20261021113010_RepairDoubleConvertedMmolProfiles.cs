@@ -12,7 +12,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Targets. A live target schedule is double-converted when a live owner's units are mmol and every
+    /// Targets. A live target schedule is repeat-converted when a live owner's units are mmol and every
     /// low and high target exceeds 400 mg/dL (22.2 mmol/L): one conversion of any target a client sends
     /// stays at or under that, and a second of any target of 23 mg/dL or more lands above it. Each
     /// conversion stored <c>round(m * 18.0182)</c> of a whole mg/dL <c>m</c>, so <c>round(v / 18.0182)</c>
@@ -20,26 +20,36 @@ namespace Nocturne.Infrastructure.Data.Migrations
     /// is such an image; the result must be back at or under 400 everywhere, else the row is left.
     /// </para>
     /// <para>
-    /// ISF. An ISF is divided only with a witness that it took the same uploads as the targets: it is
-    /// the live ISF schedule of the same store (same legacy id, or same correlation and profile name),
-    /// with the same <c>timestamp</c> and a <c>sys_updated_at</c> within a minute of the targets', which
-    /// <c>ProfileDecomposer</c> writes in one batch and a later V4 edit of either moves apart. It must
-    /// also take exactly as many steps as its targets under the same rule, so a step is taken only while
-    /// every ISF value exceeds 400 mg/dL/U: a correctly stored mmol ISF (at most 22.2 mmol/L/U) is never
-    /// divided, and an ISF converted more or fewer times than its targets is left. An ISF that fails
-    /// either test is left as it is, which errs towards an ISF too large rather than too small.
+    /// ISF. Numbers alone cannot tell a repeat-converted ISF from a correct one: a correct whole mmol ISF
+    /// of 23 or more converts once to 414 or more, an image above 400 like any repeat-converted value.
+    /// So an ISF is divided only when all of these hold:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>It is the live ISF schedule of a repaired target schedule's store (same legacy id, or same
+    /// correlation and profile name), with the same <c>timestamp</c> and a <c>sys_updated_at</c> within a
+    /// minute of the targets': <c>ProfileDecomposer</c> wrote both in one batch, and no V4 edit of either
+    /// came after.</item>
+    /// <item>It takes exactly as many steps as its targets, each step only while every value exceeds 400
+    /// and is an image; the result is at or under 400.</item>
+    /// <item>Its values before the last step all exceed 1000 mg/dL/U (55.5 mmol/L/U), above the largest
+    /// ISF AAPS accepts (1000 mg/dL/U) and Loop's limit (500), so they cannot be a correct ISF: a
+    /// repeat-converted ISF of 56 mg/dL/U or more is there. Below that, <c>mutation_audit_log</c> must
+    /// show the conversion: an update of this ISF whose entries went from <c>old</c> to
+    /// <c>round(old * 18.0182)</c> and ended at those values, in the same request (trace id) as an update
+    /// of the targets that did the same to theirs.</item>
+    /// </list>
+    /// <para>
+    /// An ISF that fails any of them is left, which errs towards an ISF too large (weaker corrections)
+    /// rather than too small. A profile-activation snapshot is one write, so its targets are its ISF's
+    /// batch; no audit row records how a snapshot was built, so its ISF is divided only above 1000. Its
+    /// <c>profileJson</c> is served as uploaded and is left alone.
     /// </para>
     /// <para>
-    /// A profile-activation snapshot, built from the switch's <c>profileJson</c> with the same
-    /// conversion, is one write, so its own targets are its ISF's witness; it takes the same rules. The
-    /// <c>profileJson</c> is served as uploaded and is left alone; <c>ProfileActivationSnapshots</c>
-    /// undoes the same conversion when it rebuilds a snapshot.
-    /// </para>
-    /// <para>
-    /// A repaired row is no longer selected, so running this again changes nothing. Every row it
-    /// selects but leaves, and every live mmol target or ISF still above 400 afterwards, is reported by a
-    /// notice. Repaired rows take a new <c>sys_updated_at</c>, so a v3 history client fetches the
-    /// corrected profile. FORCE ROW LEVEL SECURITY binds the migrator, hence the per-tenant GUC.
+    /// A repaired row is no longer selected, so running this again changes nothing. Soft-deleted rows are
+    /// not touched. Notices report every row it selects but leaves, every ISF left beside repaired targets
+    /// whatever its value, and every live mmol target, ISF or snapshot still above 400 afterwards.
+    /// Repaired rows take a new <c>sys_updated_at</c>, so a v3 history client fetches the corrected
+    /// profile. FORCE ROW LEVEL SECURITY binds the migrator, hence the per-tenant GUC.
     /// </para>
     /// </remarks>
     public partial class RepairDoubleConvertedMmolProfiles : Migration
@@ -65,18 +75,22 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 rid uuid;
                 sid uuid;
                 repaired_isf uuid[];
+                left_isf uuid[];
+                left_snapshots uuid[];
                 r_legacy text;
                 r_correlation uuid;
                 r_profile text;
-                r_timestamp timestamp;
-                r_updated timestamp;
-                s_timestamp timestamp;
-                s_updated timestamp;
+                r_timestamp timestamptz;
+                r_updated timestamptz;
+                s_timestamp timestamptz;
+                s_updated timestamptz;
                 entries jsonb;
                 isf jsonb;
+                before_last jsonb;
                 snap jsonb;
                 steps int;
                 taken int;
+                audited boolean;
                 left_over text;
                 n_targets int;
                 n_isf int;
@@ -87,6 +101,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     PERFORM set_config('app.current_tenant_id', t.id::text, true);
                     n_targets := 0; n_isf := 0; n_snapshots := 0; n_skipped := 0;
                     repaired_isf := ARRAY[]::uuid[];
+                    left_isf := ARRAY[]::uuid[];
+                    left_snapshots := ARRAY[]::uuid[];
 
                     SELECT array_agg(tr.id) INTO ids
                     FROM target_range_schedules tr
@@ -154,11 +170,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                             IF s_timestamp IS DISTINCT FROM r_timestamp
                                OR abs(extract(epoch FROM s_updated - r_updated)) > 60 THEN
                                 n_skipped := n_skipped + 1;
+                                left_isf := left_isf || sid;
                                 RAISE NOTICE 'tenant %: sensitivity_schedules % left as it is: not written with target_range_schedules %', t.id, sid, rid;
                                 CONTINUE;
                             END IF;
 
                             taken := 0;
+                            before_last := NULL;
                             IF jsonb_typeof(isf) = 'array' AND jsonb_array_length(isf) > 0 THEN
                                 WHILE (SELECT min((e->>'Value')::numeric) FROM jsonb_array_elements(isf) e) > 400
                                       AND taken < 4 LOOP
@@ -169,6 +187,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                                         taken := -1;
                                         EXIT;
                                     END IF;
+                                    before_last := isf;
                                     isf := (SELECT jsonb_agg(e || jsonb_build_object(
                                                     'Value', round((e->>'Value')::numeric / f)) ORDER BY o)
                                             FROM jsonb_array_elements(isf) WITH ORDINALITY x(e, o));
@@ -179,8 +198,57 @@ namespace Nocturne.Infrastructure.Data.Migrations
                             IF taken <> steps
                                OR (SELECT max((e->>'Value')::numeric) FROM jsonb_array_elements(isf) e) > 400 THEN
                                 n_skipped := n_skipped + 1;
+                                left_isf := left_isf || sid;
                                 RAISE NOTICE 'tenant %: sensitivity_schedules % left as it is: not the % conversions of its targets', t.id, sid, steps;
                                 CONTINUE;
+                            END IF;
+
+                            IF (SELECT min((e->>'Value')::numeric) FROM jsonb_array_elements(before_last) e) <= 1000 THEN
+                                BEGIN
+                                    audited := EXISTS (
+                                        SELECT 1 FROM mutation_audit_log a
+                                        WHERE a.tenant_id = t.id
+                                          AND a.entity_type = 'SensitivitySchedule'
+                                          AND a.entity_id = sid
+                                          AND a.action = 'update'
+                                          AND a.correlation_id IS NOT NULL
+                                          AND jsonb_typeof(a.changes->'EntriesJson'->'old') = 'string'
+                                          AND jsonb_typeof(a.changes->'EntriesJson'->'new') = 'string'
+                                          AND NOT EXISTS (
+                                              SELECT 1
+                                              FROM jsonb_array_elements((a.changes->'EntriesJson'->>'old')::jsonb) WITH ORDINALITY o(oe, i)
+                                              FULL JOIN jsonb_array_elements((a.changes->'EntriesJson'->>'new')::jsonb) WITH ORDINALITY n(ne, i) USING (i)
+                                              FULL JOIN jsonb_array_elements(before_last) WITH ORDINALITY p(pe, i) USING (i)
+                                              WHERE oe IS NULL OR ne IS NULL OR pe IS NULL
+                                                 OR (ne->>'Value')::numeric IS DISTINCT FROM (pe->>'Value')::numeric
+                                                 OR abs((ne->>'Value')::numeric - (oe->>'Value')::numeric * f) > 0.5)
+                                          AND EXISTS (
+                                              SELECT 1 FROM mutation_audit_log b
+                                              WHERE b.tenant_id = t.id
+                                                AND b.entity_type = 'TargetRangeSchedule'
+                                                AND b.entity_id = rid
+                                                AND b.action = 'update'
+                                                AND b.correlation_id = a.correlation_id
+                                                AND jsonb_typeof(b.changes->'EntriesJson'->'old') = 'string'
+                                                AND jsonb_typeof(b.changes->'EntriesJson'->'new') = 'string'
+                                                AND jsonb_array_length((b.changes->'EntriesJson'->>'new')::jsonb) > 0
+                                                AND NOT EXISTS (
+                                                    SELECT 1
+                                                    FROM jsonb_array_elements((b.changes->'EntriesJson'->>'old')::jsonb) WITH ORDINALITY o(oe, i)
+                                                    FULL JOIN jsonb_array_elements((b.changes->'EntriesJson'->>'new')::jsonb) WITH ORDINALITY n(ne, i) USING (i)
+                                                    WHERE oe IS NULL OR ne IS NULL
+                                                       OR abs((ne->>'Low')::numeric - (oe->>'Low')::numeric * f) > 0.5
+                                                       OR abs((ne->>'High')::numeric - (oe->>'High')::numeric * f) > 0.5)));
+                                EXCEPTION WHEN data_exception THEN
+                                    audited := false;
+                                END;
+
+                                IF NOT audited THEN
+                                    n_skipped := n_skipped + 1;
+                                    left_isf := left_isf || sid;
+                                    RAISE NOTICE 'tenant %: sensitivity_schedules % left as it is: it could be a correct ISF, and the audit log does not show its conversion', t.id, sid;
+                                    CONTINUE;
+                                END IF;
                             END IF;
 
                             UPDATE sensitivity_schedules SET entries_json = isf, sys_updated_at = now()
@@ -232,6 +300,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                         isf := snap->'Sensitivity';
                         taken := 0;
+                        before_last := NULL;
                         IF jsonb_typeof(isf) = 'array' AND jsonb_array_length(isf) > 0 THEN
                             WHILE (SELECT min((e->>'Value')::numeric) FROM jsonb_array_elements(isf) e) > 400
                                   AND taken < 4 LOOP
@@ -242,6 +311,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                                     taken := -1;
                                     EXIT;
                                 END IF;
+                                before_last := isf;
                                 isf := (SELECT jsonb_agg(e || jsonb_build_object(
                                                 'Value', round((e->>'Value')::numeric / f)) ORDER BY o)
                                         FROM jsonb_array_elements(isf) WITH ORDINALITY x(e, o));
@@ -249,11 +319,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                             END LOOP;
                         END IF;
 
-                        IF taken = steps AND (SELECT max((e->>'Value')::numeric) FROM jsonb_array_elements(isf) e) <= 400 THEN
+                        IF taken = steps
+                           AND (SELECT max((e->>'Value')::numeric) FROM jsonb_array_elements(isf) e) <= 400
+                           AND (SELECT min((e->>'Value')::numeric) FROM jsonb_array_elements(before_last) e) > 1000 THEN
                             snap := jsonb_set(snap, '{Sensitivity}', isf);
                         ELSIF jsonb_typeof(snap->'Sensitivity') = 'array' AND jsonb_array_length(snap->'Sensitivity') > 0 THEN
                             n_skipped := n_skipped + 1;
-                            RAISE NOTICE 'tenant %: profile_activations % sensitivity left as it is: not the % conversions of its targets', t.id, rid, steps;
+                            left_snapshots := left_snapshots || rid;
+                            RAISE NOTICE 'tenant %: profile_activations % sensitivity left as it is: it could be a correct ISF, or is not the % conversions of its targets', t.id, rid, steps;
                         END IF;
 
                         UPDATE profile_activations SET snapshot = snap, sys_updated_at = now()
@@ -266,10 +339,21 @@ namespace Nocturne.Infrastructure.Data.Migrations
                             t.id, n_targets, n_isf, n_snapshots, n_skipped;
                     END IF;
 
+                    IF cardinality(left_isf) > 0 THEN
+                        RAISE NOTICE 'tenant %: sensitivity_schedules left beside repaired targets, to review by hand: %',
+                            t.id, array_to_string(left_isf, ', ');
+                    END IF;
+
+                    IF cardinality(left_snapshots) > 0 THEN
+                        RAISE NOTICE 'tenant %: profile_activations whose sensitivity was left beside repaired targets, to review by hand: %',
+                            t.id, array_to_string(left_snapshots, ', ');
+                    END IF;
+
                     SELECT string_agg(tr.id::text, ', ') INTO left_over
                     FROM target_range_schedules tr
                     WHERE tr.tenant_id = t.id
                       AND tr.deleted_at IS NULL
+                      AND jsonb_typeof(tr.entries_json) = 'array'
                       AND EXISTS (
                           SELECT 1 FROM therapy_settings ts
                           WHERE ts.tenant_id = t.id
@@ -287,6 +371,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     FROM sensitivity_schedules si
                     WHERE si.tenant_id = t.id
                       AND si.deleted_at IS NULL
+                      AND jsonb_typeof(si.entries_json) = 'array'
                       AND EXISTS (
                           SELECT 1 FROM therapy_settings ts
                           WHERE ts.tenant_id = t.id

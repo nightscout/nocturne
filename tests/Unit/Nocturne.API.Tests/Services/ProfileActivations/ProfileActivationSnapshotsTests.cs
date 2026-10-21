@@ -30,46 +30,38 @@ public class ProfileActivationSnapshotsTests
     [Theory]
     [InlineData("mmol")]
     [InlineData("mmol/L")]
-    public void AMmolLabelledProfileCarryingMgdl_IsNotConvertedAgain(string units)
+    public void MmolLabelledMgdlTargets_AreNotConvertedAgain(string units)
     {
-        var (low, high, isf) = Read(Json(units, 63, 90, 99, sens2: 58));
+        var (low, high, _) = Read(Json(units, 3.5, 90, 99));
 
         (low, high).Should().Be((90.0, 99.0));
-        isf.Should().Equal(63, 58);
     }
 
     [Fact]
-    public void AProfileAlreadyConvertedOnceMore_IsUndoneToItsOriginalValues()
+    public void TargetsAlreadyConvertedOnceMore_AreUndoneToTheirOriginalValues()
     {
-        Read(Json("mmol", 1135, 1622, 1784)).Should().BeEquivalentTo((90.0, 99.0, new[] { 63.0 }));
+        var (low, high, _) = Read(Json("mmol", 3.5, 1622, 1784));
+
+        (low, high).Should().Be((90.0, 99.0));
     }
 
     [Fact]
     public void ReSendingTheSameSwitch_BuildsTheSameSnapshot()
     {
-        var json = Json("mmol", 63, 90, 99);
+        var json = Json("mmol", 3.5, 90, 99);
 
         Read(json).Should().BeEquivalentTo(Read(json));
     }
 
     [Theory]
     [InlineData(5.0, 90.0)]
-    [InlineData(6.0, 108.0)]
-    public void ACorrectMmolIsf_BesideMgdlTargets_IsNotDivided(double isfMmol, double isfMgdl)
+    [InlineData(23.0, 414.0)]
+    [InlineData(25.0, 450.0)]
+    [InlineData(63.0, 1135.0)]
+    public void TheIsf_IsConvertedAsUploaded_WhateverTheTargets(double isfMmol, double isfMgdl)
     {
-        var (low, _, isf) = Read(Json("mmol", isfMmol, 90, 99));
-
-        low.Should().Be(90);
-        isf.Should().Equal(isfMgdl);
-    }
-
-    [Fact]
-    public void AnIsfConvertedMoreTimesThanItsTargets_IsLeftAsBuilt()
-    {
-        var (low, _, isf) = Read(Json("mmol", 1135, 90, 99));
-
-        low.Should().Be(90);
-        isf.Should().Equal(20451);
+        Read(Json("mmol", isfMmol, 90, 99)).Isf.Should().Equal(isfMgdl);
+        Read(Json("mmol", isfMmol, 5.0, 5.5)).Isf.Should().Equal(isfMgdl);
     }
 
     [Fact]

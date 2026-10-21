@@ -440,4 +440,43 @@ public class ProfileDecomposerTests
 
         ProfileDecomposer.FromMgdl(stored, "mmol").Should().Be(mmol);
     }
+
+    private static List<TimeValue> At(params double[] values) =>
+        values.Select((v, i) => new TimeValue { Time = $"{i * 6:00}:00", Value = v }).ToList();
+
+    [Theory]
+    [InlineData("mmol", 90, 99, 108, 126)]
+    [InlineData("mmol/L", 1622, 1784, 1946, 2270)]
+    public void MmolTargetsThatConvertAboveAnyRealTarget_AreStoredWithTheExtraConversionUndone(
+        string units, double low1, double high1, double low2, double high2)
+    {
+        var targets = ProfileDecomposer.MergeTargets(At(low1, low2), At(high1, high2), units);
+
+        targets.Select(t => (t.Low, t.High)).Should().Equal((90.0, 99.0), (108.0, 126.0));
+    }
+
+    [Fact]
+    public void RealMmolTargets_AreConvertedOnce()
+    {
+        var target = ProfileDecomposer.MergeTargets(At(5.0), At(5.5), "mmol").Single();
+
+        (target.Low, target.High).Should().Be((90.0, 99.0));
+    }
+
+    [Fact]
+    public void MgdlTargets_AreStoredAsUploaded_HoweverLarge()
+    {
+        var target = ProfileDecomposer.MergeTargets(At(1622), At(1784), "mg/dl").Single();
+
+        (target.Low, target.High).Should().Be((1622.0, 1784.0));
+    }
+
+    [Theory]
+    [InlineData(23, 414)]
+    [InlineData(25, 450)]
+    [InlineData(63, 1135)]
+    public void AMmolIsf_IsConvertedAsUploaded(double mmol, double mgdl)
+    {
+        ProfileDecomposer.ConvertSensitivityValues(At(mmol), "mmol").Single().Value.Should().Be(mgdl);
+    }
 }
