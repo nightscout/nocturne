@@ -291,8 +291,9 @@ public static class DatabaseInitializationExtensions
     /// so a row left in a live state at startup can only be an orphan from a previous run.
     /// Each job table is paired with the live state names its owning enum defines.
     /// Without this sweep, an operator polling such a job sees "Running" forever.
-    /// Assumes a single API instance: a second replica (or an overlapping deploy) booting
-    /// while another instance has a job genuinely running would mark that job Interrupted.
+    /// Relies on the API running as one process that is stopped before its successor starts (the
+    /// Helm chart's <c>Recreate</c> strategy): an instance booting while another has a job running
+    /// would mark that job Interrupted.
     /// </summary>
     public static async Task MarkInterruptedJobsAsync(
         string migratorConnectionString,

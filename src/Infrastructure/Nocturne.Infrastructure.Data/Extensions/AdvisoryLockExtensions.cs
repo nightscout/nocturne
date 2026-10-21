@@ -4,9 +4,9 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 
 /// <summary>
 /// A PostgreSQL transaction-scoped advisory lock on a row id, in the two-key form: the first key
-/// names what is being serialised, the second is the id folded to an int. Replicas sharing the
-/// database serialise on the id, and the lock goes with the commit or rollback. Other providers
-/// have no other process to exclude and take nothing. Two ids whose keys collide only wait for
+/// names what is being serialised, the second is the id folded to an int. Transactions on any
+/// connection serialise on the id, and the lock goes with the commit or rollback. Other providers
+/// take nothing. Two ids whose keys collide only wait for
 /// each other, or turn each other's try away.
 /// </summary>
 public static class AdvisoryLockExtensions

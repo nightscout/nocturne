@@ -429,12 +429,6 @@ public class TenantResolutionMiddleware
     /// the columns <see cref="TenantContext"/> carries — an install that gains a second tenant
     /// otherwise keeps serving the first one from its apex.
     /// </para>
-    /// <para>
-    /// Both caches are per-process, so on a deployment running more than one API replica
-    /// (<c>api.autoscaling</c> in the Helm chart) this reaches only the replica that handled the
-    /// write; the others carry the previous answer until it expires. Staleness is bounded by
-    /// <see cref="CacheDuration"/> on every replica.
-    /// </para>
     /// </remarks>
     public static void EvictTenant(IMemoryCache cache, string slug)
     {
@@ -476,9 +470,9 @@ public class TenantResolutionMiddleware
     /// The fresh-install answer — no tenant exists at all — is deliberately not cached, and is the
     /// one answer worth a query per request. It is true only until an install's first tenant is
     /// created, and every way of holding it stale ends in an instance that answers
-    /// <c>setup_required</c> at its apex while its database has a tenant: a create on another
-    /// replica never reaches this process, and the setup page's own <c>/api/v4/status</c> poll can
-    /// read zero tenants, lose the race to the create, and then write the answer it read. Every
+    /// <c>setup_required</c> at its apex while its database has a tenant: the setup page's own
+    /// <c>/api/v4/status</c> poll can read zero tenants, lose the race to the create, and then write
+    /// the answer it read. Every
     /// other answer changes only when a tenant is created, removed or toggled, all of which call
     /// <see cref="EvictTenant"/>.
     /// </para>

@@ -135,7 +135,7 @@ builder.Services.AddDataProtection()
 // Add compatibility proxy services
 builder.Services.AddCompatibilityProxyServices(builder.Configuration);
 
-// In-process, so each replica caches independently and entries are lost on restart.
+// In-process, so entries are lost on restart.
 builder.Services.AddNocturneMemoryCache();
 
 // Add response caching for GET endpoints

@@ -11,23 +11,12 @@ namespace Nocturne.Infrastructure.Data.Migrations;
 /// <c>restart: unless-stopped</c> each crash-loop iteration starts again from nothing. That is the
 /// same trap the hour-long command timeout in
 /// <see cref="Extensions.DatabaseInitializationExtensions.RunMigrationsAsync"/> exists to avoid.
-/// A self-hosted deployment may also run more than one API replica, where a lock held for the
-/// length of a multi-GB build is not confined to one process's startup.
 /// <para>
 /// <c>CONCURRENTLY</c> cannot run inside a transaction, so the migration is not atomic and an
 /// interrupted build leaves an <c>indisvalid = false</c> index behind. <c>IF NOT EXISTS</c> does
 /// not repair that — it matches the relation name and skips, so the retry reports success over an
 /// index the planner will never use. Every build therefore drops its own invalid remains first,
 /// conditional on invalidity so a retry does not rebuild what already succeeded.
-/// </para>
-/// <para>
-/// One consequence of leaving the transaction, for the multi-replica case above: EF's migration
-/// lock is <c>LOCK TABLE … IN ACCESS EXCLUSIVE MODE</c> on the history table, not an advisory
-/// lock, so it is transaction-scoped and released at each <c>suppressTransaction</c> boundary
-/// rather than held for the migration. Two replicas starting together can therefore interleave,
-/// and one's invalid-index drop can land on the other's in-flight build. It self-heals — the
-/// interrupted build leaves remains the next iteration clears — but a deployment scaling the API
-/// should migrate once before scaling out rather than rely on that.
 /// </para>
 /// </summary>
 internal static class ConcurrentIndexBuilder

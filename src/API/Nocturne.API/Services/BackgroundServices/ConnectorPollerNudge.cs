@@ -9,10 +9,6 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// the end of the tenant's recheck interval. It is the cache-invalidation hook the configuration
 /// service already calls on every write, so the write paths need no second plumbing.
 /// </summary>
-/// <remarks>
-/// In-process only: on a multi-instance deployment the other instances' pollers notice within
-/// <c>ConnectorBackgroundService.UnconfiguredRecheckInterval</c> instead.
-/// </remarks>
 public sealed class ConnectorPollerNudge : IConnectorCacheInvalidator
 {
     private readonly ConcurrentDictionary<string, ConcurrentBag<Action<Guid>>> _subscribers =
