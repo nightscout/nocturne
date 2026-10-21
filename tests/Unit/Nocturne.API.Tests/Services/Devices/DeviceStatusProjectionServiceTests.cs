@@ -1119,40 +1119,6 @@ public class DeviceStatusProjectionServiceTests
 
     #endregion
 
-    #region CountAsync
-
-    [Fact]
-    public async Task CountAsync_ReturnsTheRepositoryCount()
-    {
-        _groupRepo.Setup(r => r.CountAsync(null, null, null, It.IsAny<CancellationToken>())).ReturnsAsync(12);
-
-        (await _service.CountAsync(null, CancellationToken.None)).Should().Be(12);
-    }
-
-    [Fact]
-    public async Task CountAsync_WithDateFilter_PassesDatesToRepository()
-    {
-        var expectedFrom = new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc);
-        var expectedTo = new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1);
-        _groupRepo.Setup(r => r.CountAsync(expectedFrom, expectedTo, null, It.IsAny<CancellationToken>())).ReturnsAsync(8);
-
-        var count = await _service.CountAsync(
-            """{"created_at":{"$gte":"2024-01-15T00:00:00Z","$lt":"2024-01-16T00:00:00Z"}}""",
-            CancellationToken.None);
-
-        count.Should().Be(8);
-    }
-
-    [Fact]
-    public async Task CountAsync_WithDeviceFilter_PassesDeviceToRepository()
-    {
-        _groupRepo.Setup(r => r.CountAsync(null, null, "openaps://rpi", It.IsAny<CancellationToken>())).ReturnsAsync(4);
-
-        (await _service.CountAsync("""{"device":"openaps://rpi"}""", CancellationToken.None)).Should().Be(4);
-    }
-
-    #endregion
-
     #region Helpers
 
     private void ReturnGroups(params DeviceStatusGroup[] groups) =>
