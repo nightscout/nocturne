@@ -36,11 +36,12 @@ public class LongPollingReaderIntegrationTests(ApiIntegrationTestFixture fixture
         (await AuthenticatedClient.PostAsJsonAsync("/api/v1/entries", entries)).EnsureSuccessStatusCode();
     }
 
-    private HubConnection LongPolling(string host, Action<IDictionary<string, string>> headers)
+    private HubConnection LongPolling(
+        string host, Action<IDictionary<string, string>> headers, string hub = ServiceNames.DataHub)
     {
         var connection = new HubConnectionBuilder()
             .WithUrl(
-                new Uri(ApiClient.BaseAddress!, $"hubs/{ServiceNames.DataHub}"),
+                new Uri(ApiClient.BaseAddress!, $"hubs/{hub}"),
                 HttpTransportType.LongPolling,
                 options =>
                 {
@@ -132,5 +133,38 @@ public class LongPollingReaderIntegrationTests(ApiIntegrationTestFixture fixture
 
         await load.Should().ThrowAsync<HubException>();
         retro.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_write_over_long_polling_is_audited_as_the_connections_subject()
+    {
+        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, Fixture.TenantId);
+        var (excursionId, _) = await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, Fixture.TenantId, ruleId);
+        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        var (subjectId, token) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, "Caregiver");
+        var connection = LongPolling(
+            Fixture.TenantHost, headers => headers["Authorization"] = $"Bearer {token}", hub: "alerts");
+        await connection.StartAsync();
+
+        await connection.InvokeAsync("Acknowledge", "caregiver");
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT set_config('app.current_tenant_id', @tenant, false);
+            SELECT subject_id FROM mutation_audit_log WHERE entity_id = @excursion;
+            """;
+        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
+        cmd.Parameters.AddWithValue("excursion", excursionId);
+        var subjects = new List<Guid?>();
+        await using (var reader = await cmd.ExecuteReaderAsync())
+        {
+            await reader.NextResultAsync();
+            while (await reader.ReadAsync())
+                subjects.Add(reader.IsDBNull(0) ? null : reader.GetGuid(0));
+        }
+
+        subjects.Should().NotBeEmpty().And.OnlyContain(s => s == subjectId,
+            "the long-polling copy of the request never ran AuditContextMiddleware");
     }
 }

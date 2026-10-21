@@ -13,7 +13,7 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// caller's <see cref="TenantReader"/>, and is not checked here. Every other scope is limited to the
 /// members listed here, each for the reason its group gives: a raw <c>CreateScope</c> or
 /// <c>CreateAsyncScope</c>, a <see cref="TenantJobScope.Open(IServiceProvider, TenantContext?, string)"/>,
-/// or a call to a helper that returns a scope it opened one of those ways, so a helper does not hide
+/// or a use of a method, property or field that returns a scope it opened one of those ways, so a helper does not hide
 /// its callers. An entry names the file and the member the call sits in, so a new method in a listed
 /// file is not covered by its neighbour.
 /// </summary>
@@ -154,6 +154,10 @@ public class ChildScopeGuardTests
     [InlineData("class O { class C { IServiceScope P => p.CreateScope(); } }", "O.C.P")]
     [InlineData("class C { IServiceScope Helper() => p.CreateScope(); void M() { using var s = Helper(); } }", "C.Helper,C.M")]
     [InlineData("class C { AsyncServiceScope Helper() => TenantJobScope.Open(p, t, \"a\"); void M() { using var s = this.Helper(); } }", "C.Helper,C.M")]
+    [InlineData("class C { IServiceScope Scope => p.CreateScope(); void M() { using var s = Scope; } }", "C.Scope,C.M")]
+    [InlineData("class C { static readonly Func<IServiceScope> Make = () => p.CreateScope(); void M() { using var s = Make(); } }", "C.Make,C.M")]
+    [InlineData("class C { IServiceScope Helper() => p.CreateScope(); } class D { void M() { var s = Helper(); } }", "C.Helper")]
+    [InlineData("class C { IServiceScope Helper() => p.CreateScope(); } class D { void M(C c) { using var s = c.Helper(); } }", "C.Helper,D.M")]
     [InlineData("class C { void M() { var s = TenantJobScope.OpenFor(p, r, \"a\"); } }", null)]
     [InlineData("class C { void M() { var s = File.Open(path); } }", null)]
     [InlineData("class C { void M() { var s = Open(path); } }", null)]
@@ -169,12 +173,13 @@ public class ChildScopeGuardTests
     }
 
     /// <summary>
-    /// Names of methods outside the seam that return a scope opened by an opener in their body, found
-    /// to a fixed point so a helper over a helper is one too.
+    /// Methods, properties and fields outside the seam that return a scope opened by an opener in their
+    /// body or initializer, by name, with the types declaring them; found to a fixed point so a helper
+    /// over a helper is one too.
     /// </summary>
-    private static HashSet<string> ScopeHelpers(IReadOnlyList<SyntaxTree> trees)
+    private static Dictionary<string, HashSet<string>> ScopeHelpers(IReadOnlyList<SyntaxTree> trees)
     {
-        var helpers = new HashSet<string>(StringComparer.Ordinal);
+        var helpers = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         bool grew;
         do
         {
@@ -182,13 +187,14 @@ public class ChildScopeGuardTests
             foreach (var tree in trees)
             {
                 var file = FileNames.Of(tree.GetRoot());
-                foreach (var method in tree.GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>())
+                foreach (var (name, type, body) in ScopeReturningMembers(tree.GetRoot()))
                 {
-                    if (method.ReturnType.ToString().Contains("ServiceScope", StringComparison.Ordinal)
-                        && OpeningNodes(method, file, helpers).Any())
-                    {
-                        grew |= helpers.Add(method.Identifier.ValueText);
-                    }
+                    if (!OpeningNodes(body, file, helpers).Any())
+                        continue;
+
+                    if (!helpers.TryGetValue(name, out var types))
+                        helpers[name] = types = new HashSet<string>(StringComparer.Ordinal);
+                    grew |= types.Add(type);
                 }
             }
         }
@@ -197,7 +203,34 @@ public class ChildScopeGuardTests
         return helpers;
     }
 
-    private static List<string> OpeningMembers(SyntaxTree tree, ISet<string> helpers) =>
+    private static IEnumerable<(string Name, string DeclaringType, SyntaxNode Body)> ScopeReturningMembers(SyntaxNode root)
+    {
+        foreach (var member in root.DescendantNodes().OfType<MemberDeclarationSyntax>())
+        {
+            var declaringType = member.Parent is BaseTypeDeclarationSyntax type ? type.Identifier.ValueText : null;
+            if (declaringType is null)
+                continue;
+
+            switch (member)
+            {
+                case MethodDeclarationSyntax method when ReturnsScope(method.ReturnType):
+                    yield return (method.Identifier.ValueText, declaringType, method);
+                    break;
+                case PropertyDeclarationSyntax property when ReturnsScope(property.Type):
+                    yield return (property.Identifier.ValueText, declaringType, property);
+                    break;
+                case FieldDeclarationSyntax field when ReturnsScope(field.Declaration.Type):
+                    foreach (var variable in field.Declaration.Variables)
+                        yield return (variable.Identifier.ValueText, declaringType, variable);
+                    break;
+            }
+        }
+    }
+
+    private static bool ReturnsScope(TypeSyntax type) =>
+        type.ToString().Contains("ServiceScope", StringComparison.Ordinal);
+
+    private static List<string> OpeningMembers(SyntaxTree tree, Dictionary<string, HashSet<string>> helpers) =>
         OpeningNodes(tree.GetRoot(), FileNames.Of(tree.GetRoot()), helpers)
             .Select(EnclosingMember.Of)
             .Distinct()
@@ -205,26 +238,30 @@ public class ChildScopeGuardTests
 
     /// <summary>
     /// Every mention by name of an opener in <paramref name="node"/>: a call, a conditional call or a
-    /// method group of a raw scope method or a helper, and every <c>TenantJobScope.Open</c> however it
-    /// is named.
+    /// method group of a raw scope method, every <c>TenantJobScope.Open</c> however it is named, and
+    /// every use of a helper: through a member access by its name (the receiver's type is not known to
+    /// syntax), or by its bare name inside a type declaring it.
     /// </summary>
-    private static IEnumerable<SyntaxNode> OpeningNodes(SyntaxNode node, FileNames file, ISet<string> helpers) =>
+    private static IEnumerable<SyntaxNode> OpeningNodes(
+        SyntaxNode node, FileNames file, Dictionary<string, HashSet<string>> helpers) =>
         node.DescendantNodes().Where(candidate => candidate switch
         {
             MemberAccessExpressionSyntax member =>
-                IsScopeMethod(member.Name.Identifier.ValueText, helpers)
+                IsRawOrHelper(member.Name.Identifier.ValueText, helpers)
                 || (member.Name.Identifier.ValueText == nameof(TenantJobScope.Open)
                     && file.NamesJobScope(member.Expression)),
-            MemberBindingExpressionSyntax binding => IsScopeMethod(binding.Name.Identifier.ValueText, helpers),
+            MemberBindingExpressionSyntax binding => IsRawOrHelper(binding.Name.Identifier.ValueText, helpers),
             IdentifierNameSyntax name when name.Parent is not (MemberAccessExpressionSyntax or MemberBindingExpressionSyntax
                 or QualifiedNameSyntax or AliasQualifiedNameSyntax or UsingDirectiveSyntax) =>
-                IsScopeMethod(name.Identifier.ValueText, helpers)
+                RawScopeMethods.Contains(name.Identifier.ValueText)
+                || (helpers.TryGetValue(name.Identifier.ValueText, out var types)
+                    && name.Ancestors().OfType<BaseTypeDeclarationSyntax>().Any(t => types.Contains(t.Identifier.ValueText)))
                 || (name.Identifier.ValueText == nameof(TenantJobScope.Open) && file.ImportsJobScope),
             _ => false,
         });
 
-    private static bool IsScopeMethod(string name, ISet<string> helpers) =>
-        RawScopeMethods.Contains(name) || helpers.Contains(name);
+    private static bool IsRawOrHelper(string name, Dictionary<string, HashSet<string>> helpers) =>
+        RawScopeMethods.Contains(name) || helpers.ContainsKey(name);
 
     /// <summary>How one file can name <c>TenantJobScope</c>: by its name, an alias, or a <c>using static</c>.</summary>
     private sealed record FileNames(IReadOnlySet<string> JobScopeNames, bool ImportsJobScope)

@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Http.Connections.Features;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Extensions;
 using Nocturne.API.Hubs;
@@ -245,5 +247,74 @@ public class TenantHubFilterTests
         var audit = scope.GetRequiredService<IAuditContext>();
         audit.SubjectId.Should().Be(subject);
         audit.Endpoint.Should().Be("GET /hubs/data");
+    }
+
+    [Fact]
+    public async Task A_long_polling_copy_of_the_upgrade_request_writes_as_its_actor_once_connected()
+    {
+        var caller = CreateConnection(longPolling: true);
+        var subject = Guid.NewGuid();
+        caller.GetHttpContext()!.Items[AuditContext.HttpItemKey] =
+            new AuditContext { SubjectId = subject, AuthType = "SessionCookie", IpAddress = "203.0.113.7" };
+        var copy = caller.GetHttpContext()!.RequestServices;
+
+        await new TenantHubFilter().OnConnectedAsync(
+            new HubLifetimeContext(caller, FreshScope(), new StubHub()), _ => Task.CompletedTask);
+
+        var audit = copy.GetRequiredService<IAuditContext>();
+        audit.SubjectId.Should().Be(subject, "hub methods write through the upgrade request's scope");
+        audit.AuthType.Should().Be("SessionCookie");
+        audit.IpAddress.Should().Be("203.0.113.7");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_in_band_credential_is_the_actor_of_later_writes(bool longPolling)
+    {
+        var caller = CreateConnection(longPolling: longPolling);
+        var upgrade = caller.GetHttpContext()!;
+        upgrade.Items[AuditContext.HttpItemKey] = new AuditContext { IpAddress = "203.0.113.7", Endpoint = "GET /hubs/alarms" };
+        var filter = new TenantHubFilter();
+        await filter.OnConnectedAsync(new HubLifetimeContext(caller, FreshScope(), new StubHub()), _ => Task.CompletedTask);
+        var subject = Guid.NewGuid();
+        var grant = Guid.NewGuid();
+
+        await filter.InvokeMethodAsync(Invocation(caller, FreshScope()), _ =>
+        {
+            HubAuthorizationState.Grant(caller, new HubAuthorization(
+                Tenant, Scope.Normalize([Scope.GlucoseRead]), HubCredentialKind.Subject, subject, HistoryClamped: false)
+            {
+                Source = new HubCredentialSource(
+                    Nocturne.Core.Models.Authorization.AuthType.LegacyJwt, subject, grant,
+                    Scope.Normalize([Scope.GlucoseRead]), LimitTo24Hours: false, ExpiresAt: null),
+            });
+            return ValueTask.FromResult<object?>(null);
+        });
+        var next = await InvokeAsync(caller);
+
+        foreach (var audit in new[]
+                 {
+                     next.GetRequiredService<IAuditContext>(),
+                     upgrade.RequestServices.GetRequiredService<IAuditContext>(),
+                 })
+        {
+            audit.SubjectId.Should().Be(subject, "the in-band credential, not the anonymous upgrade request, wrote");
+            audit.AuthType.Should().Be("LegacyJwt");
+            audit.TokenId.Should().Be(grant);
+            audit.IpAddress.Should().Be("203.0.113.7");
+        }
+    }
+
+    [Fact]
+    public void One_invocation_runs_per_connection_at_a_time()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddRealTimeAndNotifications(new ConfigurationBuilder().Build());
+        using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IOptions<HubOptions>>().Value.MaximumParallelInvocationsPerClient
+            .Should().Be(1, "an in-band grant's reader and actor must reach every later call before it runs");
     }
 }

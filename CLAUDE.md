@@ -298,12 +298,14 @@ system-attributed:
 
 - `OpenFor(provider, reader, actor)` for work done for a caller. `TenantReader.Of(scope)`
   captures the caller's tenant, share, CSV, full history and clamp as values, so it also
-  survives a fire-and-forget job; `ForTenant` and `ClampedToDay` only narrow it. Compression-low
-  detection, the dedup job and `TenantOverviewService` go through it. `CarryInto` sets a reader
-  only on a scope that still reads as no one. `ReaderRecordingMiddleware` records each request's
-  reader in `HttpContext.Items`, which survive the copy SignalR makes of a long-polling request;
-  `TenantHubFilter` sets that reader (`HubConnectionReader`, narrowed by an in-band clamp) on every
-  invocation scope and on the long-polling copy's scope.
+  survives a fire-and-forget job; `ClampedToDay` only narrows it, and `ForTenant` swaps only the
+  tenant, for a caller that has checked the reader may see it. Compression-low detection, the dedup
+  job and `TenantOverviewService` go through it. `CarryInto` sets a reader only on a scope that
+  still reads as no one. On `/hubs` requests `ReaderRecordingMiddleware` records the reader in
+  `HttpContext.Items`, which survive the copy SignalR makes of a long-polling request;
+  `TenantHubFilter` sets that reader (`HubConnectionReader`, narrowed by an in-band clamp) and the
+  connection's audit actor (`HubConnectionActor`, the in-band credential once one is granted) on
+  every invocation scope and on the long-polling copy's scope.
 - `Open(provider, tenant, actor)` reads as no one, for hosted loops, startup and
   request-started work that returns nothing it read. `ChildScopeGuardTests` pins every member
   that calls it, opens a raw `CreateScope`/`CreateAsyncScope`, or calls a helper returning such a

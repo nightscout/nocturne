@@ -11,9 +11,10 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// fails open. Being values, it outlives the request it was captured from.
 /// </summary>
 /// <remarks>
-/// It can be narrowed but not widened: <see cref="ForTenant"/> replaces only the tenant and
-/// <see cref="ClampedToDay"/> only adds the clamp, and nothing outside this module builds one from
-/// loose values.
+/// Outside this module one is built only from a scope (<see cref="Of(IServiceProvider)"/>).
+/// <see cref="ClampedToDay"/> only adds the clamp. <see cref="ForTenant"/> keeps the share, categories
+/// and clamp but replaces the tenant, so its caller must have decided the reader may see that tenant,
+/// as a membership check does.
 /// </remarks>
 public sealed class TenantReader
 {

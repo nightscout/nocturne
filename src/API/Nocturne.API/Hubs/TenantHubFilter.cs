@@ -1,14 +1,12 @@
 using Microsoft.AspNetCore.SignalR;
-using Nocturne.API.Services.Audit;
-using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Hubs;
 
 /// <summary>
 /// SignalR hub filter that sets the connection's reader (<see cref="HubConnectionReader"/>: tenant,
-/// share, categories, full history and history clamp) and the upgrade request's audit actor on every
-/// hub method invocation and lifetime event scope.
+/// share, categories, full history and history clamp) and audit actor (<see cref="HubConnectionActor"/>)
+/// on every hub method invocation and lifetime event scope.
 /// </summary>
 /// <remarks>
 /// SignalR builds a fresh DI scope per invocation, which reads as no one until this runs. The scope
@@ -24,9 +22,11 @@ namespace Nocturne.API.Hubs;
 /// Before each invocation it resolves the connection's credential
 /// (<see cref="HubAuthorizationState.Resolve"/>), so the clamp of a credential presented on the
 /// upgrade request applies from the first call, ahead of <see cref="HubAuthorizationFilter"/>. On
-/// connect it also sets the reader on the upgrade request's scope when that scope still reads as no
-/// one, which is the long-polling copy; the hub methods that read through that scope then read as the
-/// connection. <c>TenantHubFilterTests</c> pins what each scope carries.
+/// connect it also sets the reader and the actor on the upgrade request's scope when that scope still
+/// reads as no one, which is the long-polling copy; the hub methods that read and write through that
+/// scope then do so as the connection. SignalR runs one invocation per connection at a time
+/// (<c>MaximumParallelInvocationsPerClient</c>, pinned at 1 in <c>AddSignalR</c>), so an in-band grant
+/// cannot race another call's carry. <c>TenantHubFilterTests</c> pins what each scope carries.
 /// </remarks>
 public class TenantHubFilter : IHubFilter
 {
@@ -49,6 +49,7 @@ public class TenantHubFilter : IHubFilter
             && TenantReader.ReadsAsNoOne(upgradeScope))
         {
             reader.CarryInto(upgradeScope);
+            HubConnectionActor.CarryInto(context.Context, upgradeScope);
         }
 
         // Tenant validation is handled by TenantAwareHub.OnConnectedAsync. The reader is still set
@@ -71,11 +72,6 @@ public class TenantHubFilter : IHubFilter
     private static void CarryReader(HubCallerContext connection, IServiceProvider services)
     {
         HubConnectionReader.Of(connection)?.CarryInto(services);
-
-        if (services.GetService<IAuditContext>() is AuditContext audit
-            && connection.GetHttpContext()?.Items[AuditContext.HttpItemKey] is IAuditContext upgradeActor)
-        {
-            audit.CopyFrom(upgradeActor);
-        }
+        HubConnectionActor.CarryInto(connection, services);
     }
 }
