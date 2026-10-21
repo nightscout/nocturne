@@ -59,11 +59,13 @@ public static class ShareRlsPolicy
     /// visible. Exclusive with <paramref name="recencyColumn"/>.</param>
     /// <param name="recencyIsUnixMillis">True when <paramref name="recencyColumn"/> holds Unix
     /// milliseconds rather than a timestamp.</param>
-    /// <param name="parent">For a table with no time of its own, the parent row it is clamped
-    /// through: a row stays visible while its parent's <paramref name="parentRecencyColumn"/>, a
-    /// timestamp, is inside the last 24 hours. Exclusive with the other clamp columns.</param>
-    /// <param name="parentRecencyColumn">The parent's recency column; required with
-    /// <paramref name="parent"/>.</param>
+    /// <param name="parent">For a table whose rows are parts of a parent row, the parent it is
+    /// clamped through: a row stays visible while the clamp shows its parent, by
+    /// <paramref name="parentRecencyColumn"/> or by <paramref name="parentSpanEndColumn"/>, both
+    /// timestamps. Exclusive with the table's own clamp columns.</param>
+    /// <param name="parentRecencyColumn">The parent's recency column.</param>
+    /// <param name="parentSpanEndColumn">The parent's span end column; exactly one of the two goes
+    /// with <paramref name="parent"/>.</param>
     public static string BuildPolicySql(
         string table,
         string? governingScope,
@@ -71,7 +73,8 @@ public static class ShareRlsPolicy
         string? spanEndColumn = null,
         bool recencyIsUnixMillis = false,
         ParentRecency? parent = null,
-        string? parentRecencyColumn = null)
+        string? parentRecencyColumn = null,
+        string? parentSpanEndColumn = null)
     {
         SqlIdentifier.Require(table, nameof(table));
         if (governingScope is not null && !ScopePattern.IsMatch(governingScope))
@@ -88,15 +91,15 @@ public static class ShareRlsPolicy
         {
             if (recencyColumn is not null || spanEndColumn is not null)
                 throw new ArgumentException("A table clamped through its parent has no clamp column of its own.", nameof(parent));
-            if (parentRecencyColumn is null)
-                throw new ArgumentException("A parent clamp needs the parent's recency column.", nameof(parentRecencyColumn));
+            if ((parentRecencyColumn is null) == (parentSpanEndColumn is null))
+                throw new ArgumentException("A parent clamp needs the parent's recency column or its span end column.", nameof(parent));
             SqlIdentifier.Require(parent.Table, nameof(parent));
             SqlIdentifier.Require(parent.ForeignKeyColumn, nameof(parent));
-            SqlIdentifier.Require(parentRecencyColumn, nameof(parentRecencyColumn));
+            SqlIdentifier.Require((parentRecencyColumn ?? parentSpanEndColumn)!, nameof(parent));
         }
-        else if (parentRecencyColumn is not null)
+        else if (parentRecencyColumn is not null || parentSpanEndColumn is not null)
         {
-            throw new ArgumentException("A parent recency column needs a parent.", nameof(parentRecencyColumn));
+            throw new ArgumentException("A parent clamp column needs a parent.", nameof(parent));
         }
 
         var usingExpr = "current_setting('app.is_share', true) IS DISTINCT FROM 'true'";
@@ -110,28 +113,34 @@ public static class ShareRlsPolicy
             ? "(extract(epoch from now() - interval '24 hours') * 1000)::bigint"
             : "now() - interval '24 hours'";
 
-        // The subquery reads the parent under the parent's own policies. The child's column is
-        // table-qualified: unqualified, a parent column of the same name would shadow it.
         var recent = recencyColumn is not null
             ? $"\"{recencyColumn}\" >= {windowStart}"
             : spanEndColumn is not null
                 ? $"(\"{spanEndColumn}\" IS NULL OR \"{spanEndColumn}\" >= now() - interval '24 hours')"
-                : parent is not null
-                    ? $"EXISTS (SELECT 1 FROM {parent.Table} p WHERE p.id = {table}.\"{parent.ForeignKeyColumn}\"" +
-                      $" AND p.\"{parentRecencyColumn}\" >= now() - interval '24 hours')"
-                    : null;
+                : null;
+
+        // IS [NOT] DISTINCT FROM keeps the clamp test non-null when a GUC is unset, so an
+        // unset app.history_clamped leaves a non-share unclamped instead of hiding the row.
+        const string clamped =
+            "(current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'" +
+            " AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true')" +
+            " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true'";
 
         if (recent is not null)
         {
-            // IS [NOT] DISTINCT FROM keeps the clamp test non-null when a GUC is unset, so an
-            // unset app.history_clamped leaves a non-share unclamped instead of hiding the row.
-            const string clamped =
-                "(current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'" +
-                " AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true')" +
-                " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true'";
-
             // "timestamp" is quoted: it is a type keyword in PostgreSQL.
             usingExpr += $" AND ({recent} OR NOT ({clamped}))";
+        }
+        else if (parent is not null)
+        {
+            // The subquery reads the parent under the parent's own policies. The child's column is
+            // table-qualified: unqualified, a parent column of the same name would shadow it. The
+            // clamp test comes first so an unclamped reader is not sent into the subquery.
+            var parentShown = parentRecencyColumn is not null
+                ? $"p.\"{parentRecencyColumn}\" >= now() - interval '24 hours'"
+                : $"(p.\"{parentSpanEndColumn}\" IS NULL OR p.\"{parentSpanEndColumn}\" >= now() - interval '24 hours')";
+            usingExpr += $" AND (NOT ({clamped}) OR EXISTS (SELECT 1 FROM {parent.Table} p" +
+                $" WHERE p.id = {table}.\"{parent.ForeignKeyColumn}\" AND {parentShown}))";
         }
 
         return $"""

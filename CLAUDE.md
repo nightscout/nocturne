@@ -324,15 +324,22 @@ unless `ShareDataCategories.HiddenRecencyColumns` gives it a recency column
 (`notes`, `body_weights`, `lab_hba1c_results`, ...; a Unix-millisecond column is listed in
 `UnixMillisRecencyTables`): then it is hidden from shares and clamped for members. A hidden table of
 spans in `ShareDataCategories.HiddenSpanEndColumns` (`state_spans`, `sleep_sessions`,
-`alert_instances`, `tracker_instances`, ...) is clamped by
+`alert_instances`, `tracker_instances`, `in_app_notifications`, ...) is clamped by
 overlap instead, `("end_timestamp" IS NULL OR "end_timestamp" >= now() - interval
 '24 hours')`, so a profile switch or pump mode still running stays visible to a
 clamped member however long ago it started; clamping it by start would leave the
-therapy resolvers on the default profile. A hidden table with no time of its own in
-`ShareDataCategories.HiddenParentRecency` (`treatment_foods`) is clamped by an `EXISTS` on
-its parent row's recency column. `ShareDataCategoriesGuardTests` fails on a tenant-scoped
-table that is neither shareable, clamped, nor listed as deliberately unclamped.
+therapy resolvers on the default profile. A hidden table whose rows are parts of a parent row,
+in `ShareDataCategories.HiddenParentRecency` (`treatment_foods`, `sleep_stages`,
+`sleep_biometric_samples`), is shown exactly while the clamp shows its parent, by an `EXISTS`
+on the parent. `ShareDataCategoriesGuardTests` fails on a tenant-scoped table that is neither
+shareable, clamped, nor listed as deliberately unclamped.
 `IS [NOT] DISTINCT FROM` keeps the clamp test non-null when a GUC is unset.)
+
+The clamp limits reads, not writes, but PostgreSQL checks the rows an `INSERT … RETURNING` or
+an `UPDATE … WHERE` writes against SELECT policies, so a clamped member recording a row dated
+before the window would be refused (42501). `NocturneDbContext.SaveChangesAsync` lifts the
+clamp, local to the save's transaction, for a save that only inserts; any other lifted write goes
+through `HistoryClampLiftExtensions`, whose callers `HistoryClampLiftAllowlistTests` pins.
 
 Four extra GUCs carry the reader's state to the connection (written by
 `TenantConnectionInterceptor` on every open, unconditionally, from the tenant read context):

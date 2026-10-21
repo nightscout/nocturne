@@ -132,12 +132,33 @@ public class ShareRlsPolicyTests
 
         sql.Should().Contain(
             "USING (current_setting('app.is_share', true) IS DISTINCT FROM 'true'" +
-            " AND (EXISTS (SELECT 1 FROM carb_intakes p WHERE p.id = treatment_foods.\"carb_intake_id\"" +
-            " AND p.\"timestamp\" >= now() - interval '24 hours')" +
-            " OR NOT ((current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'" +
+            " AND (NOT ((current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'" +
             " AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true')" +
-            " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true')));");
+            " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true')" +
+            " OR EXISTS (SELECT 1 FROM carb_intakes p WHERE p.id = treatment_foods.\"carb_intake_id\"" +
+            " AND p.\"timestamp\" >= now() - interval '24 hours')));");
         sql.Should().NotContain("visible_categories");
+    }
+
+    [Fact]
+    public void BuildPolicySql_ParentSpan_ShowsThePartsOfASpanTheClampShows()
+    {
+        var sql = ShareRlsPolicy.BuildPolicySql(
+            "sleep_stages", null, parent: new ParentRecency("sleep_sessions", "sleep_session_id"),
+            parentSpanEndColumn: "end_time");
+
+        sql.Should().Contain(
+            " OR EXISTS (SELECT 1 FROM sleep_sessions p WHERE p.id = sleep_stages.\"sleep_session_id\"" +
+            " AND (p.\"end_time\" IS NULL OR p.\"end_time\" >= now() - interval '24 hours'))));");
+    }
+
+    [Fact]
+    public void BuildPolicySql_ParentWithBothClampColumns_Throws()
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql(
+            "sleep_stages", null, parent: new ParentRecency("sleep_sessions", "sleep_session_id"),
+            parentRecencyColumn: "start_time", parentSpanEndColumn: "end_time");
+        act.Should().Throw<ArgumentException>();
     }
 
     [Fact]
@@ -204,7 +225,14 @@ public class ShareRlsPolicyTests
             if (ShareDataCategories.ParentRecencyFor(table) is { } parent)
             {
                 Expect(parent.ForeignKeyColumn, "foreign key", typeof(Guid));
-                tables.Should().Contain(parent.Table);
+                var references = model.GetEntityTypes()
+                    .Where(t => t.GetTableName() == table)
+                    .SelectMany(t => t.GetForeignKeys())
+                    .Where(fk => fk.Properties.Count == 1
+                        && fk.Properties[0].GetColumnName(StoreObjectIdentifier.Table(table, null)) == parent.ForeignKeyColumn)
+                    .Select(fk => fk.PrincipalEntityType.GetTableName());
+                if (!references.Contains(parent.Table))
+                    problems.Add($"{table}.{parent.ForeignKeyColumn} is not a foreign key to {parent.Table}");
             }
         }
 

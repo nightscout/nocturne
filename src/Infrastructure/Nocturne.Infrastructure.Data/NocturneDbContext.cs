@@ -11,6 +11,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.ValueGenerators;
 
@@ -2682,7 +2683,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         try
         {
             UpdateTimestamps();
-            return await base.SaveChangesAsync(cancellationToken);
+            return HistoryClamped && InsertsOnly()
+                ? await this.WriteWithHistoryClampLiftedAsync(token => base.SaveChangesAsync(token), cancellationToken)
+                : await base.SaveChangesAsync(cancellationToken);
         }
         catch
         {
@@ -2693,6 +2696,26 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         {
             ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
         }
+    }
+
+    /// <summary>
+    /// Whether the save only inserts, which <see cref="SaveChangesAsync(CancellationToken)"/> runs with
+    /// the member history clamp lifted (<see cref="HistoryClampLiftExtensions"/>): an insert reaches no
+    /// existing row, so the lift only lets a clamped member record a row dated before the window. A
+    /// save that also updates or deletes keeps the clamp, since an entity attached by key rather than
+    /// read could name a row the clamp hides.
+    /// </summary>
+    private bool InsertsOnly()
+    {
+        var added = false;
+        foreach (var entry in ChangeTracker.Entries())
+        {
+            if (entry.State is EntityState.Modified or EntityState.Deleted)
+                return false;
+            added |= entry.State == EntityState.Added;
+        }
+
+        return added;
     }
 
     /// <summary>

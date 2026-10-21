@@ -49,10 +49,7 @@ public class ShareDataCategoriesGuardTests
         return ShareRlsPolicy.TenantScopedTableNames(context.Model).ToHashSet(StringComparer.Ordinal);
     });
 
-    private static bool IsClampedHidden(string table) =>
-        ShareDataCategories.HiddenRecencyColumns.ContainsKey(table)
-        || ShareDataCategories.HiddenSpanEndColumns.ContainsKey(table)
-        || ShareDataCategories.HiddenParentRecency.ContainsKey(table);
+    private static bool IsClampedHidden(string table) => ShareDataCategories.ClampedHiddenTables.Contains(table);
 
     [Fact]
     public void EveryTenantScopedTable_IsClassifiedShareableClampedOrUnclamped()
@@ -85,11 +82,16 @@ public class ShareDataCategoriesGuardTests
     {
         var real = TenantScopedTables.Value;
 
-        ShareDataCategories.HiddenRecencyColumns.Keys
-            .Concat(ShareDataCategories.HiddenSpanEndColumns.Keys)
-            .Concat(ShareDataCategories.HiddenParentRecency.Keys)
+        ShareDataCategories.ClampedHiddenTables
             .Where(t => !real.Contains(t))
             .Should().BeEmpty("a clamp must not name a stale, non-ITenantScoped table");
+    }
+
+    [Fact]
+    public void UnclampedHiddenTables_AreNotAlsoClamped()
+    {
+        UnclampedHiddenTables.Where(IsClampedHidden)
+            .Should().BeEmpty("a clamped table listed as unclamped would mislead whoever reads the list");
     }
 
     [Fact]

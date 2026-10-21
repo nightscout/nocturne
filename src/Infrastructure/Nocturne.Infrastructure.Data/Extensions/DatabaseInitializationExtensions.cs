@@ -200,7 +200,8 @@ public static class DatabaseInitializationExtensions
                         table, governingScope, recencyColumn, spanEndColumn,
                         ShareDataCategories.RecencyIsUnixMillis(table),
                         parent,
-                        parent is null ? null : ShareDataCategories.RecencyColumnFor(parent.Table));
+                        parent is null ? null : ShareDataCategories.RecencyColumnFor(parent.Table),
+                        parent is null ? null : ShareDataCategories.SpanEndColumnFor(parent.Table));
                     await command.ExecuteNonQueryAsync(cancellationToken);
                 }
                 await transaction.CommitAsync(cancellationToken);

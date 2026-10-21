@@ -95,19 +95,15 @@ public static class ShareDataCategories
     /// <summary>
     /// Recency column per table that no scope governs, so it stays hidden from every share, but whose
     /// rows a history-clamped member still reads only the last 24 hours of. <c>notes</c> holds the
-    /// Note and Announcement treatments the legacy treatment reads serve; <c>in_app_notifications</c>
-    /// embed glucose-derived text, so they are clamped by when they were raised, not by whether they
-    /// are still unread.
+    /// Note and Announcement treatments the legacy treatment reads serve.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> HiddenRecencyColumns =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["notes"] = "timestamp",
-            ["sleep_biometric_samples"] = "timestamp",
             ["body_weights"] = "mills",
             ["lab_hba1c_results"] = "measured_at",
             ["system_events"] = "mills",
-            ["in_app_notifications"] = "created_at",
             ["device_clock_observations"] = "observed_at",
         };
 
@@ -129,10 +125,12 @@ public static class ShareDataCategories
     /// </summary>
     /// <remarks>
     /// The same rule keeps an open alert (<c>alert_instances</c> unresolved, <c>alert_excursions</c>
-    /// not ended) and an active tracker (<c>tracker_instances</c> not completed) in front of a clamped
-    /// member, and keeps a sleep session or stage that ended inside the window whole however early it
-    /// began. A clamped request has no cache partition, so no cache serves it these rows; see
-    /// <c>IReaderCachePartition</c>.
+    /// not ended), an active tracker (<c>tracker_instances</c> not completed) and a notification still
+    /// in its recipient's inbox (<c>in_app_notifications</c> not archived) in front of a clamped
+    /// member, and keeps a sleep session that ended inside the window whole however early it began. A
+    /// row that never ends stays visible for good: a tracker nobody completes, or an excursion the
+    /// alert engine never closed. A clamped request has no cache partition, so no cache serves it these
+    /// rows; see <c>IReaderCachePartition</c>.
     /// </remarks>
     public static readonly IReadOnlyDictionary<string, string> HiddenSpanEndColumns =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -140,22 +138,25 @@ public static class ShareDataCategories
             ["state_spans"] = "end_timestamp",
             ["profile_activations"] = "end_timestamp",
             ["sleep_sessions"] = "end_time",
-            ["sleep_stages"] = "end_time",
             ["alert_excursions"] = "ended_at",
             ["alert_instances"] = "resolved_at",
             ["tracker_instances"] = "completed_at",
+            ["in_app_notifications"] = "archived_at",
         };
 
     /// <summary>
-    /// Hidden tables with no time of their own, which a history-clamped member reads only while the
-    /// parent row they belong to is inside the last 24 hours by the parent's recency column in
-    /// <see cref="RecencyColumns"/>. A <c>treatment_foods</c> line is part of its carb intake, so it is
-    /// clamped by the intake's time and follows an edit to that time with no copy to keep in step.
+    /// Hidden tables whose rows are parts of a parent row, which a history-clamped member reads exactly
+    /// while the clamp shows the parent: by the parent's column in <see cref="RecencyColumns"/> or
+    /// <see cref="HiddenSpanEndColumns"/>. A <c>treatment_foods</c> line is part of its carb intake and
+    /// follows an edit to the intake's time with no copy to keep in step; the stages and samples of a
+    /// sleep session stay with the session, so a night shown is shown whole.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, ParentRecency> HiddenParentRecency =
         new Dictionary<string, ParentRecency>(StringComparer.Ordinal)
         {
             ["treatment_foods"] = new("carb_intakes", "carb_intake_id"),
+            ["sleep_stages"] = new("sleep_sessions", "sleep_session_id"),
+            ["sleep_biometric_samples"] = new("sleep_sessions", "sleep_session_id"),
         };
 
     private static readonly IReadOnlyDictionary<string, string> TableToScope = BuildTableToScope();
@@ -192,6 +193,14 @@ public static class ShareDataCategories
     /// <see cref="HiddenParentRecency"/>.
     /// </summary>
     public static ParentRecency? ParentRecencyFor(string table) => HiddenParentRecency.GetValueOrDefault(table);
+
+    /// <summary>
+    /// Every table hidden from shares whose rows a history-clamped member reads only inside the window:
+    /// the keys of <see cref="HiddenRecencyColumns"/>, <see cref="HiddenSpanEndColumns"/> and
+    /// <see cref="HiddenParentRecency"/>.
+    /// </summary>
+    public static IEnumerable<string> ClampedHiddenTables =>
+        HiddenRecencyColumns.Keys.Concat(HiddenSpanEndColumns.Keys).Concat(HiddenParentRecency.Keys);
 
     /// <summary>
     /// Computes the value for the <c>app.visible_categories</c> GUC carried by a
@@ -240,10 +249,12 @@ public static class ShareDataCategories
                 throw new InvalidOperationException(
                     $"Table '{child}' is clamped through its parent, so it cannot also have a clamp column of its own.");
             }
-            if (RecencyColumns.GetValueOrDefault(parent.Table) is null)
+            var parentHasTimestamp = RecencyColumns.GetValueOrDefault(parent.Table) is not null
+                || HiddenSpanEndColumns.ContainsKey(parent.Table);
+            if (!parentHasTimestamp || UnixMillisRecencyTables.Contains(parent.Table))
             {
                 throw new InvalidOperationException(
-                    $"Parent '{parent.Table}' of '{child}' has no recency column in {nameof(RecencyColumns)}.");
+                    $"Parent '{parent.Table}' of '{child}' needs a timestamp column in {nameof(RecencyColumns)} or {nameof(HiddenSpanEndColumns)}.");
             }
         }
 

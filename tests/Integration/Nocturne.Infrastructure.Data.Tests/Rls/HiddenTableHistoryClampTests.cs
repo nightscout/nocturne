@@ -57,9 +57,9 @@ public class HiddenTableHistoryClampTests(RlsCompletenessFixture fx)
     {
         var (tenant, rows) = await SeedAsync();
 
-        await using var conn = await fx.OpenAppConnectionAsync();
         foreach (var historyClamped in new[] { "false", null })
         {
+            await using var conn = await fx.OpenAppConnectionAsync();
             await SetReaderAsync(conn, tenant, isShare: false, historyClamped: historyClamped);
             (await IdsAsync(conn, table, tenant)).Should().BeEquivalentTo(
                 rows[table].Select(r => r.Id), $"an owner reads all of {table} (history_clamped={historyClamped ?? "unset"})");
@@ -173,11 +173,17 @@ public class HiddenTableHistoryClampTests(RlsCompletenessFixture fx)
             },
             new SleepStageEntity
             {
+                Id = Track("sleep_stages", true), SleepSessionId = startedBeforeTheWindow.Id,
+                StartTime = now.AddHours(-30), EndTime = now.AddHours(-25), Stage = "Deep",
+            },
+            new SleepStageEntity
+            {
                 Id = Track("sleep_stages", false), SleepSessionId = threeNightsAgo.Id,
                 StartTime = now.AddDays(-3).AddHours(-1), EndTime = now.AddDays(-3), Stage = "Deep",
             });
         db.SleepBiometricSamples.AddRange(
             new SleepBiometricSampleEntity { Id = Track("sleep_biometric_samples", true), SleepSessionId = lastNight.Id, Timestamp = now.AddHours(-3), HeartRate = 58 },
+            new SleepBiometricSampleEntity { Id = Track("sleep_biometric_samples", true), SleepSessionId = startedBeforeTheWindow.Id, Timestamp = now.AddHours(-29), HeartRate = 55 },
             new SleepBiometricSampleEntity { Id = Track("sleep_biometric_samples", false), SleepSessionId = threeNightsAgo.Id, Timestamp = now.AddDays(-3), HeartRate = 61 });
 
         db.BodyWeights.AddRange(
@@ -225,7 +231,17 @@ public class HiddenTableHistoryClampTests(RlsCompletenessFixture fx)
 
         db.InAppNotifications.AddRange(
             new InAppNotificationEntity { Id = Track("in_app_notifications", true), UserId = "member", Type = "info", Title = "now", CreatedAt = now.AddHours(-1) },
-            new InAppNotificationEntity { Id = Track("in_app_notifications", false), UserId = "member", Type = "info", Title = "unread, raised three days ago", CreatedAt = now.AddDays(-3) });
+            new InAppNotificationEntity { Id = Track("in_app_notifications", true), UserId = "member", Type = "alert.firing", Title = "still in the inbox, raised three days ago", CreatedAt = now.AddDays(-3) },
+            new InAppNotificationEntity
+            {
+                Id = Track("in_app_notifications", false), UserId = "member", Type = "info", Title = "archived two days ago",
+                CreatedAt = now.AddDays(-4), IsArchived = true, ArchivedAt = now.AddDays(-2),
+            },
+            new InAppNotificationEntity
+            {
+                Id = Track("in_app_notifications", true), UserId = "member", Type = "info", Title = "archived an hour ago",
+                CreatedAt = now.AddDays(-4), IsArchived = true, ArchivedAt = now.AddHours(-1),
+            });
 
         var definition = new TrackerDefinitionEntity { Id = Guid.CreateVersion7(), UserId = "member", Name = "site" };
         db.TrackerDefinitions.Add(definition);
@@ -279,13 +295,14 @@ public class HiddenTableHistoryClampTests(RlsCompletenessFixture fx)
             "SELECT set_config('app.current_tenant_id', @tid, false), " +
             "set_config('app.is_share', @share, false), " +
             "set_config('app.visible_categories', @cats, false), " +
-            "set_config('app.share_full_history', @full, false), " +
-            "set_config('app.history_clamped', @clamped, false)";
+            "set_config('app.share_full_history', @full, false)" +
+            (historyClamped is null ? "" : ", set_config('app.history_clamped', @clamped, false)");
         cmd.Parameters.AddWithValue("tid", tenant.ToString());
         cmd.Parameters.AddWithValue("share", isShare ? "true" : "false");
         cmd.Parameters.AddWithValue("cats", visibleCategories);
         cmd.Parameters.AddWithValue("full", fullHistory ? "true" : "false");
-        cmd.Parameters.AddWithValue("clamped", historyClamped ?? string.Empty);
+        if (historyClamped is not null)
+            cmd.Parameters.AddWithValue("clamped", historyClamped);
         await cmd.ExecuteNonQueryAsync();
     }
 }
