@@ -464,6 +464,105 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     /// <summary>
+    /// The V3 answer to a create that stored a new document: 201 with the document's wire
+    /// identifier and the server's write time as <c>lastModified</c>, <c>Location</c> pointing at
+    /// <paramref name="getAction"/>, and <c>Last-Modified</c>.
+    /// </summary>
+    /// <param name="getAction">Name of the action that reads one document of the collection.</param>
+    /// <param name="storedId">Stored id of the created document.</param>
+    protected ActionResult V3Created(string getAction, string? storedId) =>
+        V3Inserted(getAction, MongoObjectId.Coerce(storedId));
+
+    /// <summary>
+    /// The V3 answer to a write that stored a new document under <paramref name="identifier"/>,
+    /// already in its wire form: 201 with the identifier and the server's write time as
+    /// <c>lastModified</c>, <c>Location</c> pointing at <paramref name="getAction"/>, and
+    /// <c>Last-Modified</c>.
+    /// </summary>
+    protected ActionResult V3Inserted(string getAction, string? identifier)
+    {
+        var lastModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
+        return CreatedAtAction(
+            getAction,
+            new { id = identifier },
+            new V3CreateResponse { Status = 201, Identifier = identifier, LastModified = lastModified }
+        );
+    }
+
+    /// <summary>
+    /// The V3 answer to a PUT that replaced a stored document: 200 with the server's write time as
+    /// <c>lastModified</c>, and <c>Last-Modified</c>.
+    /// </summary>
+    protected ActionResult V3Replaced()
+    {
+        var lastModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
+        return Ok(new { status = 200, lastModified });
+    }
+
+    /// <summary>
+    /// Validates common V3 fields as per Nightscout API behavior.
+    /// Nightscout validates these fields before checking if the document exists.
+    /// </summary>
+    /// <param name="jsonData">The JSON data to validate</param>
+    /// <returns>ActionResult with error if validation fails, null if validation passes</returns>
+    protected ActionResult? ValidateV3CommonFields(JsonElement jsonData)
+    {
+        const long MinTimestamp = 946684800000; // Year 2000 in milliseconds
+
+        // A document is an object; any other body has no fields to read, and upstream refuses it.
+        if (jsonData.ValueKind != JsonValueKind.Object)
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing request body");
+        }
+
+        // Check for 'date' field - Nightscout requires this for all V3 operations
+        if (!jsonData.TryGetProperty("date", out var dateProperty))
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing date field");
+        }
+
+        // Date must be a number greater than MIN_TIMESTAMP
+        if (dateProperty.ValueKind != JsonValueKind.Number)
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing date field");
+        }
+
+        if (!dateProperty.TryGetInt64(out var dateValue) || dateValue <= MinTimestamp)
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing date field");
+        }
+
+        return null; // Validation passed
+    }
+
+    /// <summary>
+    /// The V3 answer to a create that matched a document already stored: 200 with
+    /// <c>isDeduplication</c>, the stored document's identifier, which a v3 read by id resolves, and
+    /// its <c>lastModified</c>. The stored document is left as it was.
+    /// </summary>
+    /// <param name="storedId">Stored id of the existing document.</param>
+    /// <param name="srvModified">The existing document's <c>srvModified</c>, in Unix milliseconds.</param>
+    protected ActionResult V3Deduplicated(string? storedId, long? srvModified)
+    {
+        var lastModified = srvModified ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
+        return Ok(
+            new V3CreateResponse
+            {
+                Status = 200,
+                Identifier = MongoObjectId.Coerce(storedId),
+                IsDeduplication = true,
+                LastModified = lastModified,
+            }
+        );
+    }
+
+    private static string FormatHttpDate(long mills) =>
+        DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime.ToString("R");
+
+    /// <summary>
     /// Set <c>Last-Modified</c> and <c>ETag</c> on a V3 <c>history/{lastModified}</c> response.
     /// AAPS advances its incremental-sync cursor from these headers; without them the cursor
     /// stays put and the same page is requested repeatedly.
@@ -471,8 +570,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <param name="maxMills">Highest record timestamp in the response, in Unix milliseconds.</param>
     protected void SetHistoryCursorHeaders(long maxMills)
     {
-        var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(maxMills).UtcDateTime;
-        Response.Headers["Last-Modified"] = lastModified.ToString("R");
+        Response.Headers["Last-Modified"] = FormatHttpDate(maxMills);
         Response.Headers["ETag"] = FormatCursorETag(maxMills);
     }
 
@@ -602,26 +700,12 @@ public abstract class BaseV3Controller<T> : ControllerBase
     #region Protected Helper Methods
 
     /// <summary>
-    /// Convert V3 filter to V1 find query string
+    /// The V3 JSON filter as a find query. The find parser reads the JSON form directly, so the
+    /// operator and value structure passes through untouched.
     /// </summary>
     /// <param name="filter">V3 filter object</param>
-    /// <returns>V1 find query string</returns>
-    protected string? ConvertV3FilterToV1Find(JsonElement? filter)
-    {
-        if (filter == null || !filter.HasValue)
-            return null;
-
-        try
-        {
-            // Convert JSON filter to MongoDB query string
-            return filter.Value.GetRawText();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to convert V3 filter to V1 find query");
-            return null;
-        }
-    }
+    /// <returns>The filter's JSON text, or null when there is no filter</returns>
+    protected static string? ConvertV3FilterToV1Find(JsonElement? filter) => filter?.GetRawText();
 
     /// <summary>
     /// Extract sort direction from V3 sort parameter
@@ -650,22 +734,13 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <returns>Type value or null</returns>
     protected string? ExtractTypeFromFilter(JsonElement? filter)
     {
-        if (filter == null || !filter.HasValue)
-            return null;
-
-        try
+        if (
+            filter is { ValueKind: JsonValueKind.Object } value
+            && value.TryGetProperty("type", out var typeProperty)
+            && typeProperty.ValueKind == JsonValueKind.String
+        )
         {
-            if (
-                filter.Value.ValueKind == JsonValueKind.Object
-                && filter.Value.TryGetProperty("type", out var typeProperty)
-            )
-            {
-                return typeProperty.GetString();
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to extract type from V3 filter");
+            return typeProperty.GetString();
         }
 
         return null;
@@ -699,12 +774,14 @@ public abstract class BaseV3Controller<T> : ControllerBase
                     itemModified = DateTimeOffset.FromUnixTimeMilliseconds(mills);
                 }
 
-                // Check for SrvModified property
-                var srvModifiedProperty = itemType.GetProperty("SrvModified");
-                if (
-                    srvModifiedProperty != null
-                    && srvModifiedProperty.GetValue(item) is DateTimeOffset srvModified
-                )
+                // Check for SrvModified property (DateTimeOffset or Unix milliseconds)
+                var srvModified = itemType.GetProperty("SrvModified")?.GetValue(item) switch
+                {
+                    DateTimeOffset dto => dto,
+                    long srvMills => DateTimeOffset.FromUnixTimeMilliseconds(srvMills),
+                    _ => (DateTimeOffset?)null,
+                };
+                if (srvModified != null)
                 {
                     itemModified = srvModified;
                 }

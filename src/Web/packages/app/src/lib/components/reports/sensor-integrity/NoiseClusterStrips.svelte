@@ -5,6 +5,7 @@
    */
   import { type DayBucket } from "./buckets";
   import NoiseDayChart from "./NoiseDayChart.svelte";
+  import { tenantChartThresholds } from "$lib/stores/realtime-store.svelte";
 
   interface Props {
     buckets: DayBucket[];
@@ -15,10 +16,13 @@
 
   let {
     buckets,
-    thresholds = { low: 70, high: 180 },
+    thresholds: suppliedThresholds,
     selectedDateMs = null,
     onSelectDay,
   }: Props = $props();
+
+  const tenantThresholds = tenantChartThresholds();
+  const thresholds = $derived(suppliedThresholds ?? tenantThresholds.current);
 
   // Shared y-axis ceiling so every row is comparable; rounded up to a sensible bound.
   const yMax = $derived.by(() => {

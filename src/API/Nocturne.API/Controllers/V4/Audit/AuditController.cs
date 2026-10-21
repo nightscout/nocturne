@@ -10,7 +10,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Extensions;
 
@@ -26,13 +26,13 @@ namespace Nocturne.API.Controllers.V4.Audit;
 [Authorize]
 public class AuditController : ControllerBase
 {
-    private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantAuditConfigCache _configCache;
     private readonly IConfiguration _configuration;
 
     public AuditController(
-        IDbContextFactory<NocturneDbContext> contextFactory,
+        INocturneDbContextFactory contextFactory,
         ITenantAccessor tenantAccessor,
         ITenantAuditConfigCache configCache,
         IConfiguration configuration)
@@ -68,8 +68,7 @@ public class AuditController : ControllerBase
         limit = V4ReadLimits.ClampLimit(limit);
         offset = V4ReadLimits.ClampOffset(offset);
 
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = _tenantAccessor.TenantId;
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var query = db.MutationAuditLog.AsNoTracking()
             .Where(e => e.CreatedAt >= from && e.CreatedAt <= to);
@@ -142,8 +141,7 @@ public class AuditController : ControllerBase
         limit = V4ReadLimits.ClampLimit(limit);
         offset = V4ReadLimits.ClampOffset(offset);
 
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = _tenantAccessor.TenantId;
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var query = db.ReadAccessLog.AsNoTracking()
             .Where(e => e.CreatedAt >= from && e.CreatedAt <= to);
@@ -231,10 +229,7 @@ public class AuditController : ControllerBase
 
         var tenantId = _tenantAccessor.TenantId;
 
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
-        // Pin the tenant on the pooled context so the global query filter and the RLS
-        // session variable both scope to this tenant — pooling does not reset TenantId.
-        db.TenantId = tenantId;
+        await using var db = await _contextFactory.CreateForTenantAsync(tenantId, ct);
 
         // Mutation audit must outlive any soft-deleted entity it describes, so a user-delete's
         // attribution is still on record for as long as the entity itself is recoverable.

@@ -6,7 +6,6 @@ using Nocturne.API.Services.Chat;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Identity;
@@ -26,8 +25,7 @@ public class ChatIdentityDirectoryController : ControllerBase
 {
     private readonly ChatIdentityDirectoryService _directory;
     private readonly ChatIdentityPendingLinkService _pending;
-    private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
-    private readonly ITenantDbContextFactory _tenantContextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IAlertAcknowledgementService _acknowledgementService;
 
@@ -37,21 +35,18 @@ public class ChatIdentityDirectoryController : ControllerBase
     /// <param name="directory">Service for cross-tenant directory candidate lookups.</param>
     /// <param name="pending">Service for pending link token generation and resolution.</param>
     /// <param name="contextFactory">Factory for creating database context instances.</param>
-    /// <param name="tenantContextFactory">Factory for contexts scoped to the request's tenant.</param>
     /// <param name="tenantAccessor">Accessor for the request's resolved tenant.</param>
     /// <param name="acknowledgementService">The one alert acknowledgement decision.</param>
     public ChatIdentityDirectoryController(
         ChatIdentityDirectoryService directory,
         ChatIdentityPendingLinkService pending,
-        IDbContextFactory<NocturneDbContext> contextFactory,
-        ITenantDbContextFactory tenantContextFactory,
+        INocturneDbContextFactory contextFactory,
         ITenantAccessor tenantAccessor,
         IAlertAcknowledgementService acknowledgementService)
     {
         _directory = directory;
         _pending = pending;
         _contextFactory = contextFactory;
-        _tenantContextFactory = tenantContextFactory;
         _tenantAccessor = tenantAccessor;
         _acknowledgementService = acknowledgementService;
     }
@@ -77,7 +72,7 @@ public class ChatIdentityDirectoryController : ControllerBase
         var rows = await _directory.GetCandidatesAsync(platform, platformUserId, ct);
         if (rows.Count == 0) return NotFound();
 
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreatePlatformAsync(ct);
         var tenantIds = rows.Select(r => r.TenantId).ToList();
         var tenants = await db.Tenants.AsNoTracking()
             .Where(t => tenantIds.Contains(t.Id))
@@ -163,7 +158,7 @@ public class ChatIdentityDirectoryController : ControllerBase
         if (!_tenantAccessor.IsResolved || _tenantAccessor.TenantId != row.TenantId)
             return NotFound();
 
-        await using var db = await _tenantContextFactory.CreateAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
         List<Guid> excursionIds;
         if (body.ExcursionId is { } requested)
         {

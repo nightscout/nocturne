@@ -58,7 +58,7 @@ public class ApiKeyHandlerTests : IDisposable
             .ReturnsAsync(() => _db.CreateContext(_testTenantId));
 
         var logger = new Mock<ILogger<ApiKeyHandler>>();
-        _handler = new ApiKeyHandler(_dbContextFactory.Object, _clock, logger.Object);
+        _handler = new ApiKeyHandler(_dbContextFactory.Object.AsNocturneFactory(), _clock, logger.Object);
     }
 
     public void Dispose()

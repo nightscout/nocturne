@@ -80,9 +80,9 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
                 : ValueTask.FromResult(result);
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : ITenantDbContextFactory
+    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
     {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
     }
 
     private NocturneDbContext Context(Guid tenant, Failure failure) =>

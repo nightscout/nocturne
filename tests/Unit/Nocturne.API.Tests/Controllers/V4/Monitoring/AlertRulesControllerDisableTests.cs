@@ -80,7 +80,7 @@ public class AlertRulesControllerDisableTests
         var handler = new Mock<IExcursionResolutionHandler>();
 
         var controller = new AlertRulesController(
-            new TestTenantDbContextFactory(db),
+            new TestNocturneDbContextFactory(db),
             referenceService.Object,
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),

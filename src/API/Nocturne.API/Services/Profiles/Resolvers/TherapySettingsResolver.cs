@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
@@ -16,10 +15,11 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
     private readonly IPatientInsulinRepository _insulinRepo;
     private readonly IPatientRecordRepository _patientRecordRepo;
     private readonly IActiveProfileResolver _activeProfileResolver;
-    private readonly ITenantCache _cache;
+    private readonly ProfileVersionCache _versions;
     private readonly ILogger<TherapySettingsResolver> _logger;
 
-    private const int CacheTtlSeconds = 5;
+    private bool? _hasData;
+
     private const double DefaultDia = 3.0;
     private const double DefaultCarbsHr = 20.0;
 
@@ -28,14 +28,14 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
         IPatientInsulinRepository insulinRepo,
         IPatientRecordRepository patientRecordRepo,
         IActiveProfileResolver activeProfileResolver,
-        ITenantCache cache,
+        ProfileVersionCache versions,
         ILogger<TherapySettingsResolver> logger)
     {
         _repo = repo;
         _insulinRepo = insulinRepo;
         _patientRecordRepo = patientRecordRepo;
         _activeProfileResolver = activeProfileResolver;
-        _cache = cache;
+        _versions = versions;
         _logger = logger;
     }
 
@@ -104,16 +104,11 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
 
     public async Task<bool> HasDataAsync(CancellationToken ct = default)
     {
-        var count = await _repo.CountAsync(null, null, ct);
-        return count > 0;
+        // Scoped resolver: the memo lives for one request and never crosses tenants.
+        return _hasData ??= await _repo.CountAsync(null, null, ct) > 0;
     }
 
-    private async Task<Core.Models.V4.TherapySettings?> GetCachedSettingsAsync(
-        string profileName, DateTime timestamp, CancellationToken ct)
-    {
-        return await _cache.GetOrCreateLocalAsync(
-            ScheduleCacheKey.For("therapy-settings", profileName, timestamp),
-            () => _repo.GetActiveAtAsync(profileName, timestamp, ct),
-            TimeSpan.FromSeconds(CacheTtlSeconds));
-    }
+    private Task<Core.Models.V4.TherapySettings?> GetCachedSettingsAsync(
+        string profileName, DateTime timestamp, CancellationToken ct) =>
+        _versions.GetActiveAtAsync(_repo, profileName, timestamp, ct);
 }

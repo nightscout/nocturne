@@ -10,7 +10,6 @@ import { CharacterCount, Placeholder } from '@tiptap/extensions';
 import StarterKit from '@tiptap/starter-kit';
 import AutoJoiner from 'tiptap-extension-auto-joiner';
 import { ColorHighlighter } from './extensions/ColorHighlighter.ts';
-import SearchAndReplace from './extensions/FindAndReplace.ts';
 import { Table, TableCell, TableHeader, TableRow } from './extensions/table/index.ts';
 import { Markdown } from '@tiptap/markdown';
 import strings from './strings.ts';
@@ -82,7 +81,6 @@ export default (
 			TaskItem.configure({
 				nested: true
 			}),
-			SearchAndReplace,
 			AutoJoiner,
 			Table,
 			TableHeader,

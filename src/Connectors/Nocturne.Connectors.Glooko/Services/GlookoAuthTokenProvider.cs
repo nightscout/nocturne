@@ -9,6 +9,7 @@ using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Connectors.Glooko.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Services;
 
@@ -154,9 +155,9 @@ public class GlookoAuthTokenProvider(
                         "User data parsed successfully. Glooko code: {GlookoCode}",
                         userData.GlookoCode);
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
-                _logger.LogWarning("Could not parse user data: {Message}", ex.Message);
+                _logger.LogWarning(ex, "Could not parse user data");
             }
         }
 
@@ -187,7 +188,7 @@ public class GlookoAuthTokenProvider(
                     _logger.LogWarning("V3 sign-in succeeded but the user profile carried no Glooko code");
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex, cancellationToken))
             {
                 _logger.LogError(ex, "Failed to fetch V3 user profile after sign-in");
             }

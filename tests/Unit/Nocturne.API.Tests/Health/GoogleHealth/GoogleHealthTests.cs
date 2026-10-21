@@ -269,7 +269,7 @@ public class GoogleHealthTests
         db.TenantId = tenantId;
         db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = "sleep-test", DisplayName = "Sleep test", IsActive = true });
         await db.SaveChangesAsync();
-        var factory = new Mock<ITenantDbContextFactory>();
+        var factory = new Mock<INocturneDbContextFactory>();
         factory.Setup(value => value.CreateAsync(It.IsAny<CancellationToken>()))
             .Returns(() => ValueTask.FromResult(new NocturneDbContext(options) { TenantId = tenantId }));
         var repository = new SleepSessionRepository(factory.Object);

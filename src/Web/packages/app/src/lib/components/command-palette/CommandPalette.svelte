@@ -46,7 +46,10 @@
   const realtimeStore = getRealtimeStore();
 
   const visibleItems = $derived(
-    paletteItemsFor(tenantless).filter(
+    paletteItemsFor(tenantless, {
+      grantedScopes: page.data.effectivePermissions ?? [],
+      anonymous: !page.data.user,
+    }).filter(
       (item) =>
         (!item.scope ||
           satisfiesScope(page.data.effectivePermissions ?? [], item.scope)) &&

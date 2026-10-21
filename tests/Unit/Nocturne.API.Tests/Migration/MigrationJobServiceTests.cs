@@ -115,8 +115,8 @@ public class MigrationJobServiceTests
     {
         var (service, _) = CreateService();
 
-        // Refusing to start without a resolved tenant prevents the detached migration task from
-        // falling back to a stale pooled DbContext tenant and importing into the wrong tenant.
+        // The detached migration task writes under whatever tenant it is given, so it refuses to
+        // start without one.
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.StartMigrationAsync(ApiRequest(), tenantContext: null));
     }

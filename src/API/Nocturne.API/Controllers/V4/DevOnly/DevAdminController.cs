@@ -12,7 +12,6 @@ using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.DevOnly;
 using Nocturne.API.Services.Seeding;
 using Nocturne.Connectors.Core.Models;
-using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -36,8 +35,6 @@ public class DevAdminController : ControllerBase
 {
     private readonly NocturneDbContext _db;
     private readonly ISecretEncryptionService _encryption;
-    private readonly IConnectorSyncService _syncService;
-    private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantService _tenantService;
     private readonly IMemoryCache _cache;
     private readonly ILogger<DevAdminController> _logger;
@@ -52,16 +49,12 @@ public class DevAdminController : ControllerBase
     /// </summary>
     /// <param name="db">Database context for direct data access.</param>
     /// <param name="encryption">Service for secret encryption/decryption in snapshots.</param>
-    /// <param name="syncService">Service for triggering connector synchronisation.</param>
-    /// <param name="tenantAccessor">Accessor for the current request tenant context.</param>
     /// <param name="tenantService">Service for tenant lifecycle management.</param>
     /// <param name="cache">Tenant-resolution cache, which a restored snapshot invalidates.</param>
     /// <param name="logger">Logger instance.</param>
     public DevAdminController(
         NocturneDbContext db,
         ISecretEncryptionService encryption,
-        IConnectorSyncService syncService,
-        ITenantAccessor tenantAccessor,
         ITenantService tenantService,
         IMemoryCache cache,
         ILogger<DevAdminController> logger
@@ -69,8 +62,6 @@ public class DevAdminController : ControllerBase
     {
         _db = db;
         _encryption = encryption;
-        _syncService = syncService;
-        _tenantAccessor = tenantAccessor;
         _tenantService = tenantService;
         _cache = cache;
         _logger = logger;
@@ -594,16 +585,20 @@ public class DevAdminController : ControllerBase
                 .Where(c => c.TenantId == tenant.Id)
                 .ToListAsync(ct);
 
+            // Each tenant's syncs run in a scope of that tenant's, so the request's own tenant
+            // is left as it was.
+            await using var tenantScope = TenantJobScope.Open(
+                HttpContext.RequestServices,
+                new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo),
+                "service:dev-sync-all");
+            var syncService = tenantScope.ServiceProvider.GetRequiredService<IConnectorSyncService>();
+
             foreach (var config in configs)
             {
-                // Set tenant context so the sync service operates in the right tenant
-                _tenantAccessor.SetTenant(new TenantContext(
-                    tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo));
-
                 try
                 {
                     var request = new SyncRequest();
-                    var result = await _syncService.TriggerSyncAsync(
+                    var result = await syncService.TriggerSyncAsync(
                         config.ConnectorName, request, ct);
 
                     results.Add(new
@@ -1006,7 +1001,6 @@ public class DevAdminController : ControllerBase
         [FromBody] DevSeedTenantRequest request,
         [FromServices] ISessionService sessionService,
         [FromServices] ISubjectService subjectService,
-        [FromServices] SampleDataSeeder sampleDataService,
         [FromServices] IConfiguration configuration,
         [FromServices] IOptions<BaseDomainOptions> baseDomainOptions,
         CancellationToken ct)
@@ -1083,7 +1077,8 @@ public class DevAdminController : ControllerBase
         SampleDataSeedResult? seeded = null;
         if (request.SampleData)
         {
-            seeded = await sampleDataService.SeedAsync(
+            seeded = await SampleDataSeeder.SeedInTenantScopeAsync(
+                HttpContext.RequestServices,
                 new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenantEntity.IsDemo),
                 request.SampleDataDays,
                 subjectResult.Subject.Id,
@@ -1134,7 +1129,6 @@ public class DevAdminController : ControllerBase
     public async Task<ActionResult<SampleDataSeedResult>> SeedSampleData(
         Guid id,
         [FromBody] DevSeedSampleDataRequest? request,
-        [FromServices] SampleDataSeeder sampleDataService,
         CancellationToken ct)
     {
         var tenant = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
@@ -1153,7 +1147,8 @@ public class DevAdminController : ControllerBase
             ? DevTenantMemberSelection.PickOwnerOrFirst(candidates, tenant.Id)
             : null;
 
-        var seeded = await sampleDataService.SeedAsync(
+        var seeded = await SampleDataSeeder.SeedInTenantScopeAsync(
+            HttpContext.RequestServices,
             new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo),
             request?.Days ?? 7,
             owner?.SubjectId,

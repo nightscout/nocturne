@@ -389,12 +389,9 @@ class SignalRClient {
     if (!this.dataConnection) return;
 
     try {
-      const collections = ["entries", "treatments", "devicestatus", "profiles"];
-
-      logger.info("Subscribing to storage collections:", collections);
-      const subscribeResult = await this.dataConnection.invoke("Subscribe", {
-        collections: collections,
-      });
+      // No list asks the hub for every category it lets this connection read.
+      logger.info("Subscribing to storage collections");
+      const subscribeResult = await this.dataConnection.invoke("Subscribe", {});
 
       if (subscribeResult?.success) {
         logger.info(

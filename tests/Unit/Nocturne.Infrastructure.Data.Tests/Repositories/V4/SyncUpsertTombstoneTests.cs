@@ -86,7 +86,7 @@ public class SyncUpsertTombstoneTests : IDisposable
     }
 
     private BolusRepository NewBolusRepository(RecordingV4RecordBroadcaster<Bolus> broadcaster) =>
-        new(new TestTenantDbContextFactory(_context),
+        new(new TestNocturneDbContextFactory(_context),
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance,
@@ -94,14 +94,14 @@ public class SyncUpsertTombstoneTests : IDisposable
 
     private ApsSnapshotRepository NewApsSnapshotRepository(
         RecordingV4RecordBroadcaster<ApsSnapshot> broadcaster) =>
-        new(new TestTenantDbContextFactory(_context),
+        new(new TestNocturneDbContextFactory(_context),
             new Mock<IAuditContext>().Object,
             NullLogger<ApsSnapshotRepository>.Instance,
             broadcaster);
 
     private MeterGlucoseRepository NewMeterGlucoseRepository(
         RecordingV4RecordBroadcaster<MeterGlucose> broadcaster) =>
-        new(new TestTenantDbContextFactory(_context),
+        new(new TestNocturneDbContextFactory(_context),
             new Mock<IAuditContext>().Object,
             NullLogger<MeterGlucoseRepository>.Instance,
             broadcaster);
@@ -169,7 +169,7 @@ public class SyncUpsertTombstoneTests : IDisposable
         var tombstoneId = SeedTombstone(new SensorGlucoseEntity { Mgdl = 120 }, deletedByUser: false);
         var broadcaster = new RecordingV4RecordBroadcaster<SensorGlucose>();
         var repo = new SensorGlucoseRepository(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<SensorGlucoseRepository>.Instance,
@@ -317,7 +317,7 @@ public class SyncUpsertTombstoneTests : IDisposable
     {
         var broadcaster = new RecordingV4RecordBroadcaster<PumpSnapshot>();
         var repository = new PumpSnapshotRepository(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             new Mock<IAuditContext>().Object,
             NullLogger<PumpSnapshotRepository>.Instance,
             broadcaster);
@@ -342,7 +342,7 @@ public class SyncUpsertTombstoneTests : IDisposable
     {
         var broadcaster = new RecordingV4RecordBroadcaster<UploaderSnapshot>();
         var repository = new UploaderSnapshotRepository(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             new Mock<IAuditContext>().Object,
             NullLogger<UploaderSnapshotRepository>.Instance,
             broadcaster);
@@ -535,7 +535,7 @@ public class SyncUpsertTombstoneTests : IDisposable
     }
 
     private DeviceStatusExtrasRepository NewExtrasRepository() =>
-        new(new TestTenantDbContextFactory(_context), new Mock<IAuditContext>().Object,
+        new(new TestNocturneDbContextFactory(_context), new Mock<IAuditContext>().Object,
             NullLogger<DeviceStatusExtrasRepository>.Instance);
 
     private Guid SeedExtrasRow(Guid correlationId, DateTime? deletedAt, bool deletedByUser)

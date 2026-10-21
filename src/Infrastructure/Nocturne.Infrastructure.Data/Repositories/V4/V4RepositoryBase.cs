@@ -37,7 +37,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     where TEntity : class, IV4TimeSeriesEntity, IAuditable, ISystemTimestamped
 {
     /// <summary>Tenant-scoped context factory. Exposed so subclasses can implement type-specific queries.</summary>
-    protected ITenantDbContextFactory ContextFactory { get; }
+    protected INocturneDbContextFactory ContextFactory { get; }
 
     /// <summary>
     /// Actor/request metadata for the audited soft-delete path. Exposed so subclasses' type-specific
@@ -66,7 +66,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
 
     /// <summary>Initializes the base with the tenant-scoped context factory, audit context, logger, (optional) broadcaster, and (optional) legacy entry sink.</summary>
     protected V4RepositoryBase(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger logger,
         IV4RecordBroadcaster<TModel>? broadcaster = null,

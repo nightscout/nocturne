@@ -192,10 +192,13 @@ public class StatusServiceTests
                 return factoryCtx;
             });
 
-        var tenantFactory = new Mock<ITenantDbContextFactory>();
+        var tenantFactory = new Mock<INocturneDbContextFactory>();
         tenantFactory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(dbName));
+        tenantFactory
+            .Setup(f => f.CreatePlatformAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => mockFactory.Object.CreateDbContextAsync().GetAwaiter().GetResult());
         var appearanceReader = new Mock<IShareAppearanceReader>();
         appearanceReader
             .Setup(r => r.GetSharedAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
@@ -206,7 +209,6 @@ public class StatusServiceTests
             _mockCacheService.Object,
             _mockDemoModeService.Object,
             ctx,
-            mockFactory.Object,
             tenantFactory.Object,
             _httpContextAccessor,
             MockTenantAccessor.Create(tenantId: tenantId, slug: "t", isDemo: isDemo).Object,
@@ -1373,13 +1375,12 @@ public class StatusServiceTests
             factoryCtx.TenantId = ctx.TenantId;
             return factoryCtx;
         }
-        var mockDbContextFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
-        mockDbContextFactory
-            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(FactoryContext);
-        var mockTenantDbContextFactory = new Mock<ITenantDbContextFactory>();
+        var mockTenantDbContextFactory = new Mock<INocturneDbContextFactory>();
         mockTenantDbContextFactory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FactoryContext);
+        mockTenantDbContextFactory
+            .Setup(f => f.CreatePlatformAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(FactoryContext);
         var appearanceReader = new Mock<IShareAppearanceReader>();
         appearanceReader
@@ -1392,7 +1393,6 @@ public class StatusServiceTests
             _mockCacheService.Object,
             _mockDemoModeService.Object,
             ctx,
-            mockDbContextFactory.Object,
             mockTenantDbContextFactory.Object,
             httpContextAccessor ?? _httpContextAccessor,
             tenantAccessor ?? _mockTenantAccessor.Object,

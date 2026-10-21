@@ -1,3 +1,4 @@
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.GoogleHealth.Models;
@@ -40,9 +41,8 @@ public sealed class GoogleHealthWorker(
                 if (claim is null) return;
                 if (await coordinator.DisconnectRequestAsync(tenantId, ct) is { } disconnect)
                 {
-                    using var recovery = scopes.CreateScope();
-                    recovery.ServiceProvider.GetRequiredService<ITenantAccessor>()
-                        .SetTenant(new(tenantId, "", "", true, false));
+                    await using var recovery = TenantJobScope.Open(
+                        scopes, new TenantContext(tenantId, "", "", true, false), $"connector:{ConnectorId}");
                     await recovery.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.Health.IGoogleHealthService>()
                         .ResumeDisconnectAsync(disconnect.SubjectId, disconnect.RequestId);
                     return;
@@ -83,9 +83,8 @@ public sealed class GoogleHealthWorker(
 
     private async Task<bool> SyncTenantAsync(Guid id, string slug, string displayName, CancellationToken ct)
     {
-        using var scope = scopes.CreateScope();
-        scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
-            .SetTenant(new(id, slug, displayName, true, false));
+        await using var scope = TenantJobScope.Open(
+            scopes, new TenantContext(id, slug, displayName, true, false), $"connector:{ConnectorId}");
         var sync = scope.ServiceProvider.GetRequiredService<IConnectorSyncService>();
         SyncResult result;
         while (true)

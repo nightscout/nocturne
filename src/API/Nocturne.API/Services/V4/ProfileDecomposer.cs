@@ -240,6 +240,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             DelayMedium = profileData.DelayMedium,
             DelayLow = profileData.DelayLow,
             LoopSettings = profile.LoopSettings,
+            IsAPNSProduction = profile.IsAPNSProduction,
             IsDefault = isDefault,
             EnteredBy = profile.EnteredBy,
             IsExternallyManaged = profile.IsExternallyManaged,
@@ -418,6 +419,14 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         units is not null
         && (units.Equals("mmol", StringComparison.OrdinalIgnoreCase)
             || units.Equals("mmol/l", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Converts a stored mg/dL glucose value back to the profile's display units: the inverse of the
+    /// write-time normalisation in <see cref="ConvertSensitivityValues"/> and <see cref="MergeTargets"/>.
+    /// mmol values are rounded to one decimal place, the precision Nightscout profiles use.
+    /// </summary>
+    internal static double FromMgdl(double mgdl, string? units) =>
+        IsMmol(units) ? Math.Round(mgdl / GlucoseConstants.MgdlPerMmol, 1) : mgdl;
 
     #endregion
 

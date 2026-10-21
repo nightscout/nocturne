@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -43,7 +44,7 @@ public sealed class RuleScopeClassBackfillService : BackgroundService
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+            var factory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
             var classifier = scope.ServiceProvider.GetRequiredService<IRuleScopeClassifier>();
 
             // Without the native engine every Classify falls back to Undirected, and the
@@ -60,7 +61,7 @@ public sealed class RuleScopeClassBackfillService : BackgroundService
 
             // Tenants are not RLS-scoped, so this list read is safe without a tenant context.
             List<Guid> tenantIds;
-            await using (var lookup = await factory.CreateDbContextAsync(stoppingToken))
+            await using (var lookup = await factory.CreatePlatformAsync(stoppingToken))
             {
                 tenantIds = await lookup.Tenants
                     .AsNoTracking()
@@ -72,8 +73,7 @@ public sealed class RuleScopeClassBackfillService : BackgroundService
             var updatedTotal = 0;
             foreach (var tenantId in tenantIds)
             {
-                await using var db = await factory.CreateDbContextAsync(stoppingToken);
-                db.TenantId = tenantId;
+                await using var db = await factory.CreateForTenantAsync(tenantId, stoppingToken);
 
                 // The classifier needs only the condition columns; project instead of
                 // materialising tracked entity graphs for every rule of every tenant.

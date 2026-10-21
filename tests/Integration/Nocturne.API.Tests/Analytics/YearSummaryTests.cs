@@ -35,7 +35,7 @@ public class YearSummaryTests(ApiIntegrationTestFixture fixture, ITestOutputHelp
         using var scope = Fixture.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
             new TenantContext(Fixture.TenantId, "year-summary", "Year summary", true, false));
-        await using (var context = await scope.ServiceProvider.GetRequiredService<ITenantDbContextFactory>().CreateAsync())
+        await using (var context = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync())
         {
             for (var i = 0; i < 90; i++)
             {

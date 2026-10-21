@@ -315,6 +315,7 @@ public class LegacyPostBodyTests
             .Callback<DeviceStatus, string?, WriteOrigin, CancellationToken>((ds, _, _, _) => statuses.Add(ds))
             .ReturnsAsync(new DecompositionResult());
         var projection = new DeviceStatusProjectionService(
+            Mock.Of<IDeviceStatusGroupRepository>(),
             Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IPumpSnapshotRepository>(),
             Mock.Of<IUploaderSnapshotRepository>(),
@@ -331,6 +332,7 @@ public class LegacyPostBodyTests
                 decomposer.Object,
                 Mock.Of<IWriteSideEffects>(),
                 Mock.Of<IDataEventSink<DeviceStatus>>(),
+                TimeProvider.System,
                 NullLogger<LegacyV1.DeviceStatusController>.Instance));
             return new Handler(single, malformed, async body => Unwrap(await v1.CreateDeviceStatus(Json(body))), () => statuses.Count, () => statuses.All(s => s.Device == "openaps://phone"));
         }

@@ -24,7 +24,7 @@ public class SleepSessionRepositoryTests : IDisposable
         var dbName = $"sleep_session_tests_{Guid.NewGuid()}";
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
-        _repository = new SleepSessionRepository(new TestTenantDbContextFactory(_context));
+        _repository = new SleepSessionRepository(new TestNocturneDbContextFactory(_context));
     }
 
     public void Dispose()
@@ -422,7 +422,7 @@ public class SleepSessionRepositoryTests : IDisposable
     {
         using var database = TestDbContextFactory.CreateSqliteWithTenant(TenantA);
         await using var context = database.CreateContext();
-        var repository = new SleepSessionRepository(new TestTenantDbContextFactory(context));
+        var repository = new SleepSessionRepository(new TestNocturneDbContextFactory(context));
         var existing = CreateEntity(TenantA,
             new DateTime(2026, 1, 1, 22, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 1, 2, 6, 0, 0, DateTimeKind.Utc),
@@ -519,7 +519,7 @@ public class SleepSessionRepositoryTests : IDisposable
     {
         using var database = TestDbContextFactory.CreateSqliteWithTenant(TenantA);
         await using var context = database.CreateContext();
-        var repository = new SleepSessionRepository(new TestTenantDbContextFactory(context));
+        var repository = new SleepSessionRepository(new TestNocturneDbContextFactory(context));
         var original = Session("sleep-replacement");
         original.CreatedAt = new DateTime(2025, 12, 1, 0, 0, 0, DateTimeKind.Utc);
         original.Stages = [new SleepStageInterval

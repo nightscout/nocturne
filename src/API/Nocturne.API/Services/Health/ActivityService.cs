@@ -632,35 +632,31 @@ public class ActivityService : IActivityService
             // empty or a sleep type; the count applies the same gate
             var countSleep = string.IsNullOrEmpty(find) || ActivityStateSpanMapper.IsSleepType(find);
 
-            var pending = new Dictionary<string, Task<long>>(StringComparer.Ordinal);
+            // Sequential: the services share one DbContext.
+            var counts = new Dictionary<string, long>(StringComparer.Ordinal);
             if (categories.Contains(Scope.TreatmentsRead))
-                pending[Scope.TreatmentsRead] = CountOf(_stateSpanService.GetActivitiesAsync(
+                counts[Scope.TreatmentsRead] = (await _stateSpanService.GetActivitiesAsync(
                     type: find,
                     count: int.MaxValue,
                     skip: 0,
-                    cancellationToken: cancellationToken));
+                    cancellationToken: cancellationToken)).Count();
 
             if (categories.Contains(Scope.HeartRateRead))
-                pending[Scope.HeartRateRead] = CountOf(_heartRateService.GetHeartRatesAsync(
+                counts[Scope.HeartRateRead] = (await _heartRateService.GetHeartRatesAsync(
                     count: int.MaxValue,
                     skip: 0,
-                    cancellationToken: cancellationToken));
+                    cancellationToken: cancellationToken)).Count();
 
             if (categories.Contains(Scope.StepCountRead))
-                pending[Scope.StepCountRead] = CountOf(_stepCountService.GetStepCountsAsync(
+                counts[Scope.StepCountRead] = (await _stepCountService.GetStepCountsAsync(
                     count: int.MaxValue,
                     skip: 0,
-                    cancellationToken: cancellationToken));
+                    cancellationToken: cancellationToken)).Count();
 
             if (categories.Contains(Scope.SleepRead))
-                pending[Scope.SleepRead] = countSleep
-                    ? Widen(_sleepService.CountSessionsAsync(cancellationToken: cancellationToken))
-                    : Task.FromResult(0L);
-
-            await Task.WhenAll(pending.Values);
-
-            var counts = pending.ToDictionary(
-                source => source.Key, source => source.Value.Result, StringComparer.Ordinal);
+                counts[Scope.SleepRead] = countSleep
+                    ? await _sleepService.CountSessionsAsync(cancellationToken: cancellationToken)
+                    : 0;
 
             _logger.LogDebug("Counted {Total} activity records", counts.Values.Sum());
             return counts;
@@ -670,9 +666,5 @@ public class ActivityService : IActivityService
             _logger.LogError(ex, "Error counting activity records");
             throw;
         }
-
-        static async Task<long> CountOf<T>(Task<IEnumerable<T>> source) => (await source).Count();
-
-        static async Task<long> Widen(Task<int> source) => await source;
     }
 }

@@ -3,8 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -21,7 +21,7 @@ namespace Nocturne.API.Services.Identity;
 /// <seealso cref="ITenantRoleService"/>
 public partial class TenantRoleService(
     NocturneDbContext context,
-    IDbContextFactory<NocturneDbContext> contextFactory) : ITenantRoleService
+    INocturneDbContextFactory contextFactory) : ITenantRoleService
 {
     public async Task<List<TenantRoleDto>> GetRolesAsync(Guid tenantId, CancellationToken ct = default)
     {
@@ -183,7 +183,7 @@ public partial class TenantRoleService(
     /// <param name="ct">The cancellation token.</param>
     public async Task SeedRolesForTenantAsync(Guid tenantId, CancellationToken ct = default)
     {
-        await using var seedContext = await contextFactory.CreateTenantPinnedContextAsync(tenantId, ct);
+        await using var seedContext = await contextFactory.CreateForTenantAsync(tenantId, ct);
 
         var existingSlugs = await seedContext.TenantRoles
             .Where(r => r.TenantId == tenantId)

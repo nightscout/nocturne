@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models.V4;
 
@@ -49,7 +50,7 @@ public class GlookoDeviceMapper
         if (devices == null) return results;
 
         var skipped = 0;
-        foreach (var device in devices)
+        foreach (var device in ConnectorFaults.NonNullRecords(devices, _logger, _connectorSource, $"SSV2 {feed} device"))
         {
             if (device.SoftDeleted)
             {

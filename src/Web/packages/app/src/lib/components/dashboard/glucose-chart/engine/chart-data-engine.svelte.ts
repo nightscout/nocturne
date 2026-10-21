@@ -338,11 +338,11 @@ export function createChartDataEngine(
     };
   });
 
-  // The effect above never refetches SSR data and realtime streams only glucose,
-  // so IOB, COB, basal and treatment markers are refreshed here. Triggers: realtime
-  // devicestatus creates (the AID cadence), legacy `treatments` socket events and app
-  // writes via `treatmentRevision`, and the store's backfill; the timer covers IOB
-  // decaying with no new data.
+  // The effect above never refetches SSR data, so IOB, COB, basal and treatment
+  // markers are refreshed here. Triggers: realtime devicestatus creates (the AID
+  // cadence), the store's backfill through the record arrays, and v4 record
+  // broadcasts, legacy `treatments` socket events and app writes via
+  // `treatmentRevision`; the timer covers IOB decaying with no new data.
   const hasInitialData = $derived(!!options.initialChartData && !realtimeOnly);
   const dataFingerprint = $derived(
     hasInitialData

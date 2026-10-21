@@ -7,7 +7,7 @@ namespace Nocturne.API.Services.Audit;
 /// Populated by AuditContextMiddleware for HTTP requests
 /// or manually by background services.
 /// </summary>
-public class AuditContext : IAuditContext
+public class AuditContext : IAuditContext, ISystemAttributable
 {
     public Guid? SubjectId { get; set; }
     public string? SubjectName { get; set; }
@@ -17,4 +17,18 @@ public class AuditContext : IAuditContext
     public string? TraceId { get; set; }
     public string? Endpoint { get; set; }
     public bool IsSystem { get; set; }
+
+    /// <inheritdoc />
+    public void AttributeToSystem(string endpoint)
+    {
+        var system = SystemAuditContext.ForService(endpoint);
+        SubjectId = null;
+        SubjectName = null;
+        TokenId = null;
+        IpAddress = null;
+        AuthType = system.AuthType;
+        Endpoint = system.Endpoint;
+        TraceId = system.TraceId;
+        IsSystem = true;
+    }
 }

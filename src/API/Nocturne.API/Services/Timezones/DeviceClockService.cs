@@ -58,17 +58,9 @@ public class DeviceClockService : IDeviceClockService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    private Guid TenantId
-    {
-        get
-        {
-            var tenantId = _tenantAccessor.Context?.TenantId
-                ?? throw new InvalidOperationException("No tenant context for device clock access.");
-            // Pin the context so RLS (USING + WITH CHECK) scopes to this tenant in any scope.
-            _db.TenantId = tenantId;
-            return tenantId;
-        }
-    }
+    private Guid TenantId =>
+        _tenantAccessor.Context?.TenantId
+        ?? throw new InvalidOperationException("No tenant context for device clock access.");
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<DeviceClockSegment>> RecordObservationsAsync(

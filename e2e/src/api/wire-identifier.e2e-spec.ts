@@ -7,6 +7,13 @@ import { seedTenant, type Tenant } from "../helpers/tenant.ts";
 
 type Doc = Record<string, unknown>;
 
+/** Upstream's answer to a single-document v3 create. */
+interface V3CreateResponse {
+  status: number;
+  identifier: string;
+  lastModified: number;
+}
+
 interface StorageEvent {
   colName?: string;
   identifier?: string | null;
@@ -108,9 +115,9 @@ describe("one wire identifier for entries and devicestatus", () => {
   it("v3 entry uploaded without an identifier: the create, update and delete events carry the returned identifier", async () => {
     const date = Date.now() - 20 * 60_000;
     const body = { type: "sgv", sgv: 147, date, dateString: new Date(date).toISOString(), direction: "Flat", device: "e2e-wire-v3", app: "e2e" };
-    const created = await tenant.api.post<unknown>("/api/v3/entries", body);
+    const created = await tenant.api.post<V3CreateResponse>("/api/v3/entries", body);
     expect(created.status, created.text).toBe(201);
-    const id = unwrap<Doc>(created.body).identifier as string;
+    const id = created.body.identifier;
     expect(id, created.text).toMatch(OBJECT_ID);
 
     const [createEvent] = await hub.waitFor("create", isEvent("entries", (d) => d.date === date), { what: "the v3 entry's create event" });
@@ -161,10 +168,10 @@ describe("one wire identifier for entries and devicestatus", () => {
 
   it("v3 devicestatus uploaded without an identifier: the create, update and delete events carry it", async () => {
     const device = `e2e-wire-v3ds-${objectId().slice(0, 6)}`;
-    const created = await tenant.api.post<unknown>("/api/v3/devicestatus", { device, app: "e2e", created_at: minutesAgo(4), uploader: { battery: 61 }, pump: pump(minutesAgo(4)) });
-    expect(created.status).toBe(201);
-    const results = unwrap<Doc[]>(created.body);
-    const id = results[0]!.identifier as string;
+    const created = await tenant.api.post<V3CreateResponse>("/api/v3/devicestatus", { device, app: "e2e", created_at: minutesAgo(4), uploader: { battery: 61 }, pump: pump(minutesAgo(4)) });
+    expect(created.status, created.text).toBe(201);
+    expect(created.body.status).toBe(201);
+    const id = created.body.identifier;
     expect(id).toMatch(OBJECT_ID);
 
     const [createEvent] = await hub.waitFor("create", isEvent("devicestatus", (d) => d.device === device), { what: "the v3 devicestatus create event" });
@@ -305,7 +312,7 @@ describe("one wire identifier for entries and devicestatus", () => {
   it("keeps _id as identity when a v3 devicestatus also carries a different lowercase id", async () => {
     const _id = objectId();
     const device = `e2e-wire-both-ids-${_id.slice(0, 6)}`;
-    const created = await tenant.api.post<unknown>("/api/v3/devicestatus", {
+    const created = await tenant.api.post<V3CreateResponse>("/api/v3/devicestatus", {
       _id,
       id: objectId(),
       device,
@@ -314,8 +321,8 @@ describe("one wire identifier for entries and devicestatus", () => {
       uploader: { battery: 33 },
       pump: pump(minutesAgo(6)),
     });
-    expect(created.status).toBe(201);
-    expect(unwrap<Doc[]>(created.body)[0]!.identifier).toBe(_id);
+    expect(created.status, created.text).toBe(201);
+    expect(created.body.identifier).toBe(_id);
 
     const [event] = await hub.waitFor("create", isEvent("devicestatus", (d) => d.device === device), { what: "the devicestatus create event" });
     expect(storage([event]).doc?._id).toBe(_id);

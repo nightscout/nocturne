@@ -222,7 +222,6 @@ public static class ConnectorServiceCollectionExtensions
 
         /// <summary>
         ///     Discovers and registers all connector services via assembly scanning.
-        ///     Replaces explicit per-connector AddXxxConnector() calls in Program.cs.
         /// </summary>
         /// <param name="configuration">Application configuration</param>
         /// <param name="pollingService">
@@ -234,8 +233,8 @@ public static class ConnectorServiceCollectionExtensions
             IConfiguration configuration,
             Type? pollingService = null)
         {
-            // Connector assemblies may not be loaded yet since they're no longer
-            // directly referenced in Program.cs. Load them from the app's base directory.
+            // The host references no connector assembly, so the scan below would find none until they
+            // are loaded from the app's base directory.
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
             foreach (var dll in Directory.GetFiles(baseDir, "Nocturne.Connectors.*.dll"))
             {
@@ -248,9 +247,9 @@ public static class ConnectorServiceCollectionExtensions
                         Assembly.LoadFrom(dll);
                     }
                 }
-                catch
+                catch (Exception ex) when (ex is BadImageFormatException or FileLoadException or FileNotFoundException)
                 {
-                    // Skip assemblies that can't be loaded
+                    // Not a loadable managed assembly; nothing in it can register a connector.
                 }
             }
 

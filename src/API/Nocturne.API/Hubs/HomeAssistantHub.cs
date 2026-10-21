@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Hubs;
 
@@ -128,10 +128,9 @@ public class HomeAssistantHub : TenantAwareHub
     private async Task CatchUpFailedDeliveriesAsync(Guid tenantId, string instanceId, CancellationToken ct)
     {
         var services = Context.GetHttpContext()!.RequestServices;
-        var contextFactory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+        var contextFactory = services.GetRequiredService<INocturneDbContextFactory>();
 
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = tenantId;
+        await using var db = await contextFactory.CreateForTenantAsync(tenantId, ct);
         var now = DateTime.UtcNow;
 
         // Find failed HA deliveries for this instance that belong to open excursions and are

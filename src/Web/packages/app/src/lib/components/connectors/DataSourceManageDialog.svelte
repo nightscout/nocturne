@@ -17,7 +17,10 @@
   import { canManageConnectors } from "$lib/authorization/connector-management";
   import { page } from "$app/state";
   import { getCategoryIcon } from "$lib/utils/connector-display";
-  import { formatNumber, lastSeen } from "$lib/utils/formatting";
+  import {
+    formatNumber,
+    lastSeen,
+  } from "$lib/utils/formatting";
 
   interface Props {
     open: boolean;
@@ -152,7 +155,11 @@
           </div>
           <div>
             <span class="text-muted-foreground">
-              Records in the last 30 days
+              {#if selectedDataSource.totalEntriesWindowDays == null}
+                Records in total
+              {:else}
+                Records in the last {selectedDataSource.totalEntriesWindowDays} days
+              {/if}
             </span>
             <p class="mt-1 font-medium">
               {formatNumber(selectedDataSource.totalEntries)}
@@ -233,8 +240,11 @@
                 <li>All device status records</li>
               </ul>
               <p class="text-sm text-destructive mt-2">
-                This source sent {formatNumber(selectedDataSource.totalEntries)}
-                records in the last 30 days.
+                {#if selectedDataSource.totalEntriesWindowDays == null}
+                  This source sent {formatNumber(selectedDataSource.totalEntries)} records in total.
+                {:else}
+                  This source sent {formatNumber(selectedDataSource.totalEntries)} records in the last {selectedDataSource.totalEntriesWindowDays} days.
+                {/if}
               </p>
             </div>
 

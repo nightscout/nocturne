@@ -24,7 +24,7 @@ public class DeviceStatusExtrasRepositoryBulkCreateTests : IDisposable
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
         _repository = new DeviceStatusExtrasRepository(
-            new TestTenantDbContextFactory(_context), new SystemAuditContext(),
+            new TestNocturneDbContextFactory(_context), new SystemAuditContext(),
             NullLogger<DeviceStatusExtrasRepository>.Instance);
     }
 

@@ -99,7 +99,7 @@ public class GrantRevocationTests : IDisposable
             case App:
                 var grants = new OAuthGrantService(
                     db,
-                    _db.ContextFactory,
+                    _db.ContextFactory.AsNocturneFactory(),
                     new Mock<IOAuthClientService>().Object,
                     _sessionCache,
                     new GrantRevocationService(_sessionCache),

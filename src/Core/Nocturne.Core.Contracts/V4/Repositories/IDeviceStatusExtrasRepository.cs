@@ -17,6 +17,15 @@ public interface IDeviceStatusExtrasRepository : IBulkCreateRepository<DeviceSta
     /// <param name="ct">Cancellation token.</param>
     Task<DeviceStatusExtras> CreateAsync(DeviceStatusExtras model, WriteOrigin origin, CancellationToken ct = default);
 
+    /// <summary>The <see cref="DeviceStatusExtras"/> with the given id, or <c>null</c>.</summary>
+    Task<DeviceStatusExtras?> GetByIdAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// The first <see cref="DeviceStatusExtras"/> whose id falls within <c>[low, high]</c>, as
+    /// <see cref="IV4Repository{T}.GetByGuidRangeAsync"/> resolves a 24-hex ObjectId.
+    /// </summary>
+    Task<DeviceStatusExtras?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default);
+
     /// <summary>Retrieve <see cref="DeviceStatusExtras"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
     /// <param name="ct">Cancellation token.</param>

@@ -3,6 +3,7 @@ import type { RequestHandler } from "./$types";
 import { env } from "$env/dynamic/private";
 import {
   REALTIME_ADMISSION_PATH,
+  readRealtimeGrant,
   signHandshakeTicket,
 } from "@nocturne/bridge/ticket";
 import type { RealtimeAdmission } from "$lib/api";
@@ -23,8 +24,8 @@ import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
  * the connection's realtime admission and, only on a 2xx, signs a ticket the
  * bridge verifies locally. The admission is gated on the same glucose read as
  * the API's own feed, and says whether the credential may join the tenant-wide
- * room; the ticket carries that answer so the bridge needs no per-connection
- * API call.
+ * room and which category rooms; the ticket carries that answer so the bridge
+ * needs no per-connection API call.
  *
  * Always responds 200 with `{ token: string | null, retry?: boolean }`. A null
  * token means no ticket was minted; `retry: true` distinguishes a transient
@@ -83,8 +84,7 @@ export const GET: RequestHandler = async (event) => {
         token: signHandshakeTicket(
           secret,
           effectiveHost,
-          admission.tenantRelay === true,
-          admission.subjectId ?? undefined
+          readRealtimeGrant(admission)
         ),
       });
     }

@@ -1,11 +1,13 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Nocturne.API.Services.Audit;
+using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Models;
-using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -239,7 +241,7 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
         _cts.Cancel();
         // Leave terminal states untouched; otherwise mark cancelled so the snapshot reflects intent
         // even before the background loop observes the token.
-        if (_state is ConnectorResetJobState.Pending or ConnectorResetJobState.Running)
+        if (_state.IsLive())
             _state = ConnectorResetJobState.Cancelled;
     }
 
@@ -252,24 +254,18 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
 
         try
         {
-            // Fresh DI scope for the background work — the engine sets the target tenant's context on
-            // this scope (DbContext.TenantId, RLS GUC, ITenantAccessor) before fanning out.
-            using var scope = _serviceProvider.CreateScope();
+            var tenant = await LoadTenantAsync(ct);
+            TenantCursorResetResult? result = null;
 
-            // A reset is an operator-triggered re-ingest, not a person editing data, and the job
-            // outlives the request that started it. The audit interceptor falls back to the ambient
-            // HTTP request's scope while that request is still open, so without explicit attribution
-            // whether this job's writes land on the triggering admin depends on a race with the 202
-            // response. The property covers this scope's own context; the pushed scope covers the
-            // contexts ITenantDbContextFactory creates. Mirrors the migration job service.
-            scope.ServiceProvider.GetRequiredService<NocturneDbContext>().AuditContext =
-                SystemAuditContext.ForService(AuditEndpoint);
-            using var systemScope = SystemAuditScope.Push(
-                scope.ServiceProvider.GetRequiredService<IAuditContext>());
+            if (tenant is not null)
+            {
+                // System-attributed because a reset is an operator-triggered re-ingest that outlives
+                // the request that started it.
+                await using var scope = TenantJobScope.Open(_serviceProvider, tenant, AuditEndpoint);
 
-            var engine = scope.ServiceProvider.GetRequiredService<IConnectorCursorResetService>();
-
-            var result = await engine.ResetTenantCursorsAsync(_tenantId, _from, _dataTypes, this, ct);
+                var engine = scope.ServiceProvider.GetRequiredService<IConnectorCursorResetService>();
+                result = await engine.ResetTenantCursorsAsync(_tenantId, _from, _dataTypes, this, ct);
+            }
 
             if (result is null)
             {
@@ -301,6 +297,18 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
             _completedAt = DateTime.UtcNow;
             await PersistSnapshotAsync(CancellationToken.None);
         }
+    }
+
+    /// <summary>The target tenant, or null when it no longer exists.</summary>
+    private async Task<TenantContext?> LoadTenantAsync(CancellationToken ct)
+    {
+        await using var db = await _serviceProvider.GetRequiredService<INocturneDbContextFactory>()
+            .CreatePlatformAsync(ct);
+
+        return await db.Tenants.AsNoTracking()
+            .Where(t => t.Id == _tenantId)
+            .Select(t => new TenantContext(t.Id, t.Slug, t.DisplayName, t.IsActive, t.IsDemo))
+            .FirstOrDefaultAsync(ct);
     }
 
     /// <summary>
@@ -460,6 +468,20 @@ public enum ConnectorResetJobState
     Cancelled,
     /// <summary>The API restarted while the job was running; the work did not complete and must be re-run.</summary>
     Interrupted,
+}
+
+/// <summary>
+/// The one definition of which <see cref="ConnectorResetJobState"/> values mean a job is in flight.
+/// </summary>
+public static class ConnectorResetJobStates
+{
+    /// <summary>The live states, by name as persisted in the reset job record.</summary>
+    public static IReadOnlyList<string> LiveNames { get; } =
+        Enum.GetValues<ConnectorResetJobState>().Where(IsLive).Select(s => s.ToString()).ToArray();
+
+    /// <summary>Whether a job in this state is pending or running, so can still be cancelled or interrupted.</summary>
+    public static bool IsLive(this ConnectorResetJobState state) =>
+        state is ConnectorResetJobState.Pending or ConnectorResetJobState.Running;
 }
 
 /// <summary>State of a single connector within a reset job.</summary>

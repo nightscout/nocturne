@@ -1,12 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.API.Services.Caching;
-using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -119,7 +119,6 @@ internal sealed class IobCobComputeStage(
         // Generate cache key based on data hash and time range
         var cacheKey = GenerateIobCobCacheKey(boluses, carbIntakes, startTime, endTime, intervalMinutes, timeline, tempBasals, apsSnapshots);
 
-        // Try to get from cache
         if (
             cache.TryGetLocal(
                 cacheKey,
@@ -284,7 +283,6 @@ internal sealed class IobCobComputeStage(
                 maxCob = cob;
         }
 
-        // Cache the result
         var result = (iobSeries, cobSeries, maxIob, maxCob);
         cache.SetLocal(cacheKey, result, IobCobCacheExpiration);
 

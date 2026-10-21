@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 
@@ -43,7 +43,7 @@ namespace Nocturne.API.Services.Chat;
 /// <seealso cref="ChatIdentityService"/>
 /// <seealso cref="ChatIdentityPendingLinkService"/>
 public sealed class ChatIdentityDirectoryService(
-    IDbContextFactory<NocturneDbContext> contextFactory,
+    INocturneDbContextFactory contextFactory,
     ILogger<ChatIdentityDirectoryService> logger)
 {
     /// <summary>
@@ -57,7 +57,7 @@ public sealed class ChatIdentityDirectoryService(
     public async Task<IReadOnlyList<ChatIdentityDirectoryEntry>> GetCandidatesAsync(
         string platform, string platformUserId, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await contextFactory.CreatePlatformAsync(ct);
         return await db.ChatIdentityDirectory
             .Where(d => d.Platform == platform
                         && d.PlatformUserId == platformUserId
@@ -79,7 +79,7 @@ public sealed class ChatIdentityDirectoryService(
     public async Task<IReadOnlyList<ChatIdentityDirectoryEntry>> GetByTenantAsync(
         Guid tenantId, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await contextFactory.CreatePlatformAsync(ct);
         return await db.ChatIdentityDirectory
             .Where(d => d.TenantId == tenantId && d.IsActive)
             .OrderBy(d => d.CreatedAt)
@@ -95,7 +95,7 @@ public sealed class ChatIdentityDirectoryService(
     /// <param name="ct">Cancellation token.</param>
     public async Task<ChatIdentityDirectoryEntry?> GetByIdAsync(Guid id, ChatLinkScope scope, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await contextFactory.CreatePlatformAsync(ct);
         return await db.ChatIdentityDirectory
             .Where(ScopedToId(id, scope))
             .FirstOrDefaultAsync(ct);
@@ -112,7 +112,7 @@ public sealed class ChatIdentityDirectoryService(
     {
         for (var attempt = 1; ; attempt++)
         {
-            await using var db = await contextFactory.CreateDbContextAsync(ct);
+            await using var db = await contextFactory.CreatePlatformAsync(ct);
 
             var existing = await db.ChatIdentityDirectory
                 .FirstOrDefaultAsync(d => d.Platform == platform
@@ -178,7 +178,7 @@ public sealed class ChatIdentityDirectoryService(
     /// <param name="ct">Cancellation token.</param>
     public async Task SetDefaultAsync(Guid linkId, ChatLinkScope scope, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await contextFactory.CreatePlatformAsync(ct);
         var target = await db.ExecuteInTransactionAsync(async token =>
         {
             var link = await db.ChatIdentityDirectory.Where(ScopedToId(linkId, scope)).FirstOrDefaultAsync(token)
@@ -211,7 +211,7 @@ public sealed class ChatIdentityDirectoryService(
     /// <param name="ct">Cancellation token.</param>
     public async Task RenameLabelAsync(Guid linkId, ChatLinkScope scope, string newLabel, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await contextFactory.CreatePlatformAsync(ct);
         var target = await db.ChatIdentityDirectory.Where(ScopedToId(linkId, scope)).FirstOrDefaultAsync(ct)
             ?? throw new KeyNotFoundException($"Chat identity directory link {linkId} not found");
 
@@ -237,7 +237,7 @@ public sealed class ChatIdentityDirectoryService(
     /// <param name="ct">Cancellation token.</param>
     public async Task UpdateDisplayNameAsync(Guid linkId, ChatLinkScope scope, string newDisplayName, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await contextFactory.CreatePlatformAsync(ct);
         var target = await db.ChatIdentityDirectory.Where(ScopedToId(linkId, scope)).FirstOrDefaultAsync(ct)
             ?? throw new KeyNotFoundException($"Chat identity directory link {linkId} not found");
 
@@ -255,7 +255,7 @@ public sealed class ChatIdentityDirectoryService(
     /// <returns>The number of rows deleted: 0 when the entry does not exist in that scope.</returns>
     public async Task<int> RevokeAsync(Guid linkId, ChatLinkScope scope, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await contextFactory.CreatePlatformAsync(ct);
         var target = await db.ChatIdentityDirectory.AsNoTracking()
             .Where(ScopedToId(linkId, scope))
             .FirstOrDefaultAsync(ct);

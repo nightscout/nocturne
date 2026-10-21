@@ -110,11 +110,11 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         var fromDt = DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime;
         var toDt = DateTimeOffset.FromUnixTimeMilliseconds(toMills).UtcDateTime;
 
-        // Match ActiveProfileResolver's query shape: get all Profile spans up to the window end,
-        // then filter to those overlapping the window. Spans that started before the window are
-        // accepted; their StartMills fall before fromMills and contribute no internal boundary.
+        // from: is an overlap bound (open-ended or ending at/after it), so a switch that started
+        // long ago and is still running is kept; its StartMills precede fromMills and add no boundary.
         var spans = await _stateSpanService.GetStateSpansAsync(
             category: StateSpanCategory.Profile,
+            from: fromDt,
             to: toDt,
             count: 1000,
             cancellationToken: ct

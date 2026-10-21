@@ -30,7 +30,7 @@ public class SensitivityResolverTests : IDisposable
             _therapyRepo.Object,
             _patientRecordRepo.Object,
             _activeProfileResolver.Object,
-            TestTenantCache.Create(_cache),
+            new ProfileVersionCache(TestTenantCache.Create(_cache)),
             NullLogger<SensitivityResolver>.Instance);
     }
 
@@ -51,8 +51,8 @@ public class SensitivityResolverTests : IDisposable
     public async Task ReturnsCorrectValueFromSchedule()
     {
         var schedule = MakeSchedule((0, 40.0), (6 * 3600, 50.0), (22 * 3600, 60.0));
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(schedule);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { schedule });
 
         var result = await _sut.GetSensitivityAsync(NoonMills);
 
@@ -63,8 +63,8 @@ public class SensitivityResolverTests : IDisposable
     public async Task AppliesInverseCcpPercentageScaling()
     {
         var schedule = MakeSchedule((0, 50.0));
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(schedule);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { schedule });
         _activeProfileResolver.Setup(r => r.GetCircadianAdjustmentAsync(NoonMills, default))
             .ReturnsAsync(new CircadianAdjustment(200, 0));
 
@@ -76,8 +76,8 @@ public class SensitivityResolverTests : IDisposable
     [Fact]
     public async Task ReturnsDefaultWhenNoScheduleExists()
     {
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync((SensitivitySchedule?)null);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(Array.Empty<SensitivitySchedule>());
 
         var result = await _sut.GetSensitivityAsync(NoonMills);
 
@@ -90,8 +90,8 @@ public class SensitivityResolverTests : IDisposable
         _activeProfileResolver.Setup(r => r.GetActiveProfileNameAsync(NoonMills, default))
             .ReturnsAsync("Night");
         var schedule = MakeSchedule((0, 75.0));
-        _repo.Setup(r => r.GetActiveAtAsync("Night", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(schedule);
+        _repo.Setup(r => r.GetByProfileNameAsync("Night", default))
+            .ReturnsAsync(new[] { schedule });
 
         var result = await _sut.GetSensitivityAsync(NoonMills);
 
@@ -102,8 +102,8 @@ public class SensitivityResolverTests : IDisposable
     public async Task UsesSpecProfileWhenProvided()
     {
         var schedule = MakeSchedule((0, 100.0));
-        _repo.Setup(r => r.GetActiveAtAsync("Custom", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(schedule);
+        _repo.Setup(r => r.GetByProfileNameAsync("Custom", default))
+            .ReturnsAsync(new[] { schedule });
 
         var result = await _sut.GetSensitivityAsync(NoonMills, specProfile: "Custom");
 
@@ -119,8 +119,8 @@ public class SensitivityResolverTests : IDisposable
     public async Task UsesCanonicalPatientTimezone_OverLegacyTherapySettingsTimezone()
     {
         var schedule = MakeSchedule((0, 40.0), (12 * 3600, 60.0));
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(schedule);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { schedule });
         _therapyRepo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
             .ReturnsAsync(new TherapySettings { Timezone = "UTC" });
         _patientRecordRepo.Setup(r => r.GetAsync(default))
@@ -135,8 +135,8 @@ public class SensitivityResolverTests : IDisposable
     public async Task FallsBackToTherapySettingsTimezone_WhenPatientRecordHasNone()
     {
         var schedule = MakeSchedule((0, 40.0), (12 * 3600, 60.0));
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(schedule);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { schedule });
         _therapyRepo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
             .ReturnsAsync(new TherapySettings { Timezone = "America/New_York" });
         _patientRecordRepo.Setup(r => r.GetAsync(default))
@@ -145,5 +145,38 @@ public class SensitivityResolverTests : IDisposable
         var result = await _sut.GetSensitivityAsync(NoonMills);
 
         result.Should().Be(40.0);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LookupsAcrossAScheduleEditEachGetTheirOwnVersion(bool earlyLookupFirst)
+    {
+        var olderVersion = MakeSchedule((0, 40.0));
+        olderVersion.Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(NoonMills).UtcDateTime.AddDays(-1);
+        var editedVersion = MakeSchedule((0, 60.0));
+        editedVersion.Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(NoonMills).UtcDateTime.AddHours(-1);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { editedVersion, olderVersion });
+        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
+            .ReturnsAsync((string _, DateTime at, CancellationToken _) =>
+                at < editedVersion.Timestamp ? olderVersion : editedVersion);
+        var beforeEdit = NoonMills - 2 * 3_600_000;
+
+        double early;
+        double late;
+        if (earlyLookupFirst)
+        {
+            early = await _sut.GetSensitivityAsync(beforeEdit);
+            late = await _sut.GetSensitivityAsync(NoonMills);
+        }
+        else
+        {
+            late = await _sut.GetSensitivityAsync(NoonMills);
+            early = await _sut.GetSensitivityAsync(beforeEdit);
+        }
+
+        early.Should().Be(40.0);
+        late.Should().Be(60.0);
     }
 }

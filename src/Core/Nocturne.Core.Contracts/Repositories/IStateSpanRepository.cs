@@ -1,4 +1,7 @@
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Contracts.Repositories;
 
@@ -34,6 +37,18 @@ public interface IStateSpanRepository
         int count = 100,
         int skip = 0,
         bool descending = true,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns spans of <paramref name="category"/> starting at or after <paramref name="from"/>,
+    /// oldest first. Unlike <see cref="GetStateSpansAsync"/>, excludes open spans that started earlier.
+    /// </summary>
+    /// <param name="source">Matches every source when null.</param>
+    Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
+        StateSpanCategory category,
+        string? source,
+        DateTime from,
+        int count,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -109,6 +124,31 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Resolves each of <paramref name="ids"/>, as <see cref="StateSpan.Id"/> reads return it (the
+    /// original id or the row id), to the soft-deleted span it names, and returns each by row identifier
+    /// with the id sent and its category, which is what <see cref="RestoreAsync"/> takes. Of several deleted spans
+    /// sharing an original id, the latest deleted is the one named. An id naming no deleted span is
+    /// left out.
+    /// </summary>
+    /// <param name="ids">The identifiers to look up.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<IReadOnlyDictionary<Guid, DeletedStateSpan>> ResolveDeletedAsync(
+        IReadOnlyCollection<string> ids,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="IV4Repository{T}.RestoreAsync"/>
+    /// <remarks>
+    /// Refused only when a live span holds the same original id at restore time; nothing prevents one
+    /// being written afterwards, as no unique index backs it. A span another span superseded before
+    /// the delete is not re-pointed at; the link is not recoverable.
+    /// </remarks>
+    Task<StateSpan> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="IV4Repository{T}.BulkRestoreAsync"/>
+    Task<BulkRestoreResult<StateSpan>> BulkRestoreAsync(
+        IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Deletes all state spans originating from the specified data source.
     /// </summary>
     /// <param name="source">The data source identifier (e.g., "demo-service").</param>
@@ -144,17 +184,14 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Returns all state spans in the specified category within an optional time range.
+    /// Returns every state span in the category overlapping the range, newest start first. Not capped.
     /// </summary>
-    /// <param name="category">The <see cref="StateSpanCategory"/> to filter by.</param>
-    /// <param name="from">Optional start of the time range (inclusive).</param>
-    /// <param name="to">Optional end of the time range (inclusive).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A collection of matching <see cref="StateSpan"/> records.</returns>
+    /// <param name="from">Start of the range (inclusive).</param>
+    /// <param name="to">End of the range (inclusive).</param>
     Task<IEnumerable<StateSpan>> GetByCategory(
         StateSpanCategory category,
-        DateTime? from = null,
-        DateTime? to = null,
+        DateTime from,
+        DateTime to,
         CancellationToken cancellationToken = default);
 
     /// <summary>

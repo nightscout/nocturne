@@ -106,8 +106,6 @@ public class DevAdminSnapshotUpdateStampTests : IDisposable
         new(
             context,
             Mock.Of<ISecretEncryptionService>(),
-            Mock.Of<IConnectorSyncService>(),
-            Mock.Of<ITenantAccessor>(),
             Mock.Of<ITenantService>(),
             new MemoryCache(new MemoryCacheOptions()),
             NullLogger<DevAdminController>.Instance);

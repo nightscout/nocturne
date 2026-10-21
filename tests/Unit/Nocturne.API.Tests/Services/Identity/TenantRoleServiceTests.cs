@@ -50,7 +50,7 @@ public class TenantRoleServiceTests : IDisposable
             DisplayName = "Test Tenant",
         });
         _context.SaveChanges();
-        _service = new TenantRoleService(_context, factory);
+        _service = new TenantRoleService(_context, factory.AsNocturneFactory());
     }
 
     [Fact]
@@ -70,15 +70,14 @@ public class TenantRoleServiceTests : IDisposable
     [Fact]
     public async Task SeedRolesForTenantAsync_SeedsOnAContextPinnedToTheTenant()
     {
-        // The injected context is the request-scoped one, which on every tenant-creation entry
-        // point carries no pin. The seed must not write through it.
-        _context.TenantId.Should().Be(Guid.Empty);
-
+        // On every tenant-creation entry point the request's own scope reads another tenant, or
+        // none, so the seed writes through a context of its own pinned to the new one.
         await _service.SeedRolesForTenantAsync(_tenantId);
 
         _factory.Handed.Should().ContainSingle("the seed takes exactly one context of its own");
         _factory.Handed[0].TenantId.Should().Be(_tenantId);
-        _context.TenantId.Should().Be(Guid.Empty, "the request-scoped context must not be re-pinned");
+        _context.ChangeTracker.Entries<TenantRoleEntity>().Should().BeEmpty(
+            "the roles are written through that context, not the injected one");
     }
 
     [Fact]

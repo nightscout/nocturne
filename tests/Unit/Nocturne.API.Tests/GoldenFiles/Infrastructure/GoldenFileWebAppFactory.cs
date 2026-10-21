@@ -1,19 +1,17 @@
+using Nocturne.Infrastructure.Data.Services;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Tests.Infrastructure;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Cache.Abstractions;
-using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Tests.GoldenFiles.Infrastructure;
 
@@ -27,19 +25,11 @@ public class GoldenFileWebAppFactory : SqliteWebAppFactoryBase<Program>
 
     protected override void ConfigureTestServices(IServiceCollection services)
     {
-        // Mirrors the production ServiceCollectionExtensions registration, which pins the
-        // tenant from ITenantAccessor.
-        services.AddScoped(sp =>
-        {
-            var factory = sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-            var context = factory.CreateDbContext();
-            var tenantAccessor = sp.GetService<ITenantAccessor>();
-            if (tenantAccessor?.IsResolved == true)
-            {
-                context.TenantId = tenantAccessor.TenantId;
-            }
-            return context;
-        });
+        // The production factory over the SQLite pool, so every context reads the request's tenant
+        // live, as the pipeline resolves it.
+        services.AddTransient<NocturneDbContextFactory>();
+        services.AddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
+        services.AddScoped(sp => sp.GetRequiredService<NocturneDbContextFactory>().Create());
 
         // DefaultValue.Empty so GetAsync<T>() returns a completed Task<T?> with default(T)
         // for any T, not just object.

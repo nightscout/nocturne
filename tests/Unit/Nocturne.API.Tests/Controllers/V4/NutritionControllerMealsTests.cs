@@ -53,7 +53,7 @@ public class NutritionControllerMealsTests : IDisposable
 
         var dedupMock = new Mock<IDeduplicationService>();
         var auditMock = new Mock<IAuditContext>().Object;
-        var ctxFactory = new TestTenantDbContextFactory(_dbContext);
+        var ctxFactory = new TestNocturneDbContextFactory(_dbContext);
         _bolusRepo = new BolusRepository(
             ctxFactory,
             dedupMock.Object,
@@ -295,7 +295,7 @@ public class NutritionControllerMealsTests : IDisposable
 
     private BolusRepository CreateBolusRepo(IV4RecordBroadcaster<Bolus> broadcaster) =>
         new(
-            new TestTenantDbContextFactory(_dbContext),
+            new TestNocturneDbContextFactory(_dbContext),
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance,
@@ -303,7 +303,7 @@ public class NutritionControllerMealsTests : IDisposable
 
     private CarbIntakeRepository CreateCarbIntakeRepo(IV4RecordBroadcaster<CarbIntake> broadcaster) =>
         new(
-            new TestTenantDbContextFactory(_dbContext),
+            new TestNocturneDbContextFactory(_dbContext),
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<CarbIntakeRepository>.Instance,

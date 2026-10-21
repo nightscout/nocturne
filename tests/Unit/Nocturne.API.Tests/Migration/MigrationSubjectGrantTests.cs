@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using System.Net;
 using System.Text;
 using FluentAssertions;
@@ -123,10 +124,8 @@ public class MigrationSubjectGrantTests
         var database = $"migration-grants-{Guid.NewGuid():N}";
 
         return new ServiceCollection()
-            .AddDbContext<NocturneDbContext>(o => o.UseInMemoryDatabase(database))
-            // The grant lookup builds its own context, as it does in the request pipeline.
-            .AddDbContextFactory<NocturneDbContext>(
-                o => o.UseInMemoryDatabase(database), lifetime: ServiceLifetime.Scoped)
+            .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(database))
+            .AddDataServices()
             .AddScoped<ITenantAccessor, FixedTenantAccessor>()
             .AddScoped<IAuditContext, AuditContext>()
             .AddSingleton<IHttpClientFactory, StubHttpClientFactory>()
@@ -358,7 +357,7 @@ public class MigrationSubjectGrantTests
         // and the token the source issued still resolves through the rule that reads it. Asserting
         // the stored column alone would pass even if nothing could authenticate with it.
         var byIssuedToken = await DirectGrantTokenHandler.FindActiveGrantAsync(
-            factory, ReaderToken, tenantId, DateTime.UtcNow);
+            factory.AsNocturneFactory(), ReaderToken, tenantId, DateTime.UtcNow);
 
         byIssuedToken.Should().NotBeNull();
         byIssuedToken!.Label.Should().Be("Reader");
@@ -366,12 +365,12 @@ public class MigrationSubjectGrantTests
         // The name in front of the dash is cosmetic, and a longer prefix of the same digest is the
         // same credential; both are Nightscout's rule, not ours.
         (await DirectGrantTokenHandler.FindActiveGrantAsync(
-            factory, $"anything-{ReaderDigest}", tenantId, DateTime.UtcNow))
+            factory.AsNocturneFactory(), $"anything-{ReaderDigest}", tenantId, DateTime.UtcNow))
             .Should().NotBeNull();
 
         // A prefix taken from the middle of the digest is not a prefix of it.
         (await DirectGrantTokenHandler.FindActiveGrantAsync(
-            factory, $"reader-{ReaderDigest[8..24]}", tenantId, DateTime.UtcNow))
+            factory.AsNocturneFactory(), $"reader-{ReaderDigest[8..24]}", tenantId, DateTime.UtcNow))
             .Should().BeNull();
     }
 

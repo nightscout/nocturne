@@ -26,7 +26,7 @@ internal static class TestPublicAccessCache
 
         return new PublicAccessCacheService(
             new MemoryCache(new MemoryCacheOptions()),
-            factory.Object,
+            factory.Object.AsNocturneFactory(),
             NullLogger<PublicAccessCacheService>.Instance);
     }
 }

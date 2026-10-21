@@ -11,6 +11,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.ValueGenerators;
 
 namespace Nocturne.Infrastructure.Data;
@@ -73,12 +74,25 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         _options.FindExtension<Microsoft.EntityFrameworkCore.Infrastructure.CoreOptionsExtension>()
             ?.ApplicationServiceProvider;
 
+    private Guid? _tenantPin;
+
     /// <summary>
-    /// The current tenant ID. Set per-request by the DI factory.
-    /// Referenced by global query filters for automatic tenant isolation.
-    /// With context pooling, this property is set each time the context is checked out.
+    /// The scope this context reads its tenant, share, clamp and audit state from. Left unset, the
+    /// context reads <see cref="TenantReadContext.FailClosed"/>.
     /// </summary>
-    public Guid TenantId { get; set; }
+    internal TenantReadContext ReadContext { get; set; } = TenantReadContext.FailClosed;
+
+    /// <summary>
+    /// The tenant whose rows this context reaches: a pin when one is set, otherwise the scope's
+    /// resolved tenant, read live. The tenant query filter and the <c>app.current_tenant_id</c> GUC
+    /// both read it. Only <see cref="INocturneDbContextFactory"/> and
+    /// <see cref="Extensions.RlsPinningExtensions.PinTenantAsync"/> pin it.
+    /// </summary>
+    public Guid TenantId
+    {
+        get => _tenantPin ?? ReadContext.TenantId;
+        internal set => _tenantPin = value;
+    }
 
     /// <summary>
     /// <see cref="TenantId"/> as an optional, for the non-tenant-scoped columns that record which
@@ -87,56 +101,37 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public Guid? TenantIdOrNull => TenantId == Guid.Empty ? null : TenantId;
 
     /// <summary>
-    /// The subject whose own rows a subject-scoped cross-tenant read may reach. Set per-lease by
-    /// the few callers that legitimately read one subject's rows across tenants (the tenant
-    /// switcher, the caregiver overview, membership enumeration). The
-    /// <see cref="Interceptors.TenantConnectionInterceptor"/> carries it to the
-    /// <c>app.current_subject_id</c> GUC. <see cref="Guid.Empty"/> leaves the GUC unset, so a
-    /// policy arm reading it matches no row (fail-closed).
+    /// The subject whose own rows a subject-scoped cross-tenant read may reach (the tenant switcher,
+    /// the caregiver overview, membership enumeration), carried to the <c>app.current_subject_id</c>
+    /// GUC. <see cref="Guid.Empty"/> leaves the GUC unset, so a policy arm reading it matches no row.
     /// </summary>
-    public Guid SubjectId { get; set; }
+    public Guid SubjectId { get; internal set; }
 
     /// <summary>
-    /// Audit context for the current operation. Populated from HttpContext for HTTP
-    /// requests (via <see cref="Interceptors.MutationAuditInterceptor"/>), or set
-    /// directly by background services that have no HttpContext.
+    /// The audit actor <see cref="Interceptors.MutationAuditInterceptor"/> attributes this context's
+    /// writes to: the scope's <see cref="IAuditContext"/>, or none for a context with no scope.
     /// </summary>
-    public IAuditContext? AuditContext { get; set; }
+    public IAuditContext? AuditContext => ReadContext.AuditContext;
+
+    /// <summary>The scope's <see cref="TenantReadContext.IsShare"/>, carried to <c>app.is_share</c>.</summary>
+    public bool IsShareContext => ReadContext.IsShare;
 
     /// <summary>
-    /// True when this context serves an anonymous public share request. Set per-lease
-    /// wherever <see cref="TenantId"/> is set (known pre-auth at tenant resolution). The
-    /// <see cref="Interceptors.TenantConnectionInterceptor"/> carries it to the
-    /// <c>app.is_share</c> GUC, which gates the per-category public-share RLS policies.
+    /// The scope's <see cref="TenantReadContext.VisibleCategories"/>, carried to
+    /// <c>app.visible_categories</c>.
     /// </summary>
-    public bool IsShareContext { get; set; }
+    public string? VisibleCategories => ReadContext.VisibleCategories;
 
     /// <summary>
-    /// Comma-separated governing read scopes a public share may see, or <c>null</c> for
-    /// non-shares. Set only on the factory-created context (post-auth, once the share's
-    /// categories are resolved); carried to the <c>app.visible_categories</c> GUC. A share
-    /// context with no CSV denies all categorized data (fail-closed).
+    /// The scope's <see cref="TenantReadContext.ShareFullHistory"/>, carried to
+    /// <c>app.share_full_history</c>.
     /// </summary>
-    public string? VisibleCategories { get; set; }
+    public bool ShareFullHistory => ReadContext.ShareFullHistory;
 
     /// <summary>
-    /// True when a public share may see full history instead of the last 24 hours. Set only
-    /// on the factory-created context (post-auth, alongside <see cref="VisibleCategories"/>);
-    /// carried to the <c>app.share_full_history</c> GUC. A share context that never sets it
-    /// is clamped to 24 hours (fail-closed). Meaningless for non-shares — the clamp only
-    /// applies when <c>app.is_share</c> is 'true'.
+    /// The scope's <see cref="TenantReadContext.HistoryClamped"/>, carried to <c>app.history_clamped</c>.
     /// </summary>
-    public bool ShareFullHistory { get; set; }
-
-    /// <summary>
-    /// True when the request is clamped to the last 24 hours of time-series data, from
-    /// <c>ICategoryReadContext.IsHistoryClamped</c>. Known post-auth, so it is stamped on the
-    /// factory-created context and on the scoped context by <c>MemberScopeMiddleware</c>; carried
-    /// to the <c>app.history_clamped</c> GUC. A context that never sets it is not clamped: unlike
-    /// the share clamp this one is fail-open, so owners and background work are never narrowed by
-    /// a missed stamp.
-    /// </summary>
-    public bool HistoryClamped { get; set; }
+    public bool HistoryClamped => ReadContext.HistoryClamped;
 
     public DbSet<FoodEntity> Foods { get; set; }
 
@@ -530,8 +525,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>
     /// Tables a v3 history endpoint pages through <see cref="HistoryPage"/> on <c>sys_updated_at</c>:
     /// the V4 record tables of the treatment projection's <c>LegacyTreatmentTables.All</c> (its state
-    /// spans page on <c>ix_state_spans_tenant_category_updated_at</c>), the device-status
-    /// projection's APS snapshots, the three glucose types the entry projection reads and the five
+    /// spans page on <c>ix_state_spans_tenant_category_updated_at</c>), the four tables a device
+    /// status is decomposed into, the three glucose types the entry projection reads and the five
     /// profile-decomposition tables.
     /// </summary>
     internal static readonly Type[] V4HistoryPagedEntities =
@@ -544,6 +539,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(TempBasalEntity),
         typeof(BolusCalculationEntity),
         typeof(ApsSnapshotEntity),
+        typeof(PumpSnapshotEntity),
+        typeof(UploaderSnapshotEntity),
+        typeof(DeviceStatusExtrasEntity),
         typeof(SensorGlucoseEntity),
         typeof(MeterGlucoseEntity),
         typeof(CalibrationEntity),
@@ -594,6 +592,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(DeviceEventEntity),
         .. V4SnapshotEntities,
     ];
+
+    /// <summary>
+    /// Tables whose <see cref="IOriginalIdentified.OriginalId"/> is the re-import key. No unique index
+    /// backs it, so a restore checks for a live holder itself
+    /// (<see cref="Extensions.SoftDeleteRestoreExtensions"/>).
+    /// </summary>
+    internal static readonly Type[] OriginalIdKeyedEntities = [typeof(StateSpanEntity)];
 
     /// <summary>
     /// The marker-declared timestamp columns, by the marker that declares them. Every column here
@@ -712,6 +717,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .IsDescending(false, true)
                 .HasFilter("deleted_at IS NULL");
         }
+
+        // The device status list walks extras newest-first beside the snapshots; see
+        // DeviceStatusGroupRepository.GetAsync.
+        modelBuilder.Entity<DeviceStatusExtrasEntity>()
+            .HasIndex(e => new { e.TenantId, e.Timestamp })
+            .HasDatabaseName("ix_device_status_extras_tenant_timestamp")
+            .IsDescending(false, true)
+            .HasFilter("deleted_at IS NULL");
 
         // The legacy-id uniqueness must drop soft-deleted rows, or the next resync of a
         // system-swept legacy id is a 23505 — see SoftDeleteDedupExtensions.GetBlockingLegacyIdsAsync.
@@ -2888,8 +2901,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>
     /// Applies the global query filters carried by every ITenantScoped entity: tenant isolation,
     /// plus the soft-delete predicate on the ISoftDeletable ones.
-    /// Filters reference this.TenantId which is set per-request.
-    /// EF Core parameterizes the value, so pooled contexts work correctly.
+    /// Filters reference this.TenantId, which EF Core evaluates per query against the executing
+    /// context.
     /// </summary>
     private void ConfigureTenantFilters(ModelBuilder modelBuilder)
     {

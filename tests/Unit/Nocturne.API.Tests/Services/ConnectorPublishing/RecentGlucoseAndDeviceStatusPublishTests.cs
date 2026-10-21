@@ -157,7 +157,7 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
 
     private GlucosePublisher RealGlucosePublisher()
     {
-        var ctxFactory = new TestTenantDbContextFactory(_context);
+        var ctxFactory = new TestNocturneDbContextFactory(_context);
         var audit = Mock.Of<IAuditContext>();
         var sensorGlucose = new SensorGlucoseRepository(
             ctxFactory, Mock.Of<IDeduplicationService>(), audit, NullLogger<SensorGlucoseRepository>.Instance);

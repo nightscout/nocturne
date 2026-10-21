@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts.Events;
@@ -174,11 +173,11 @@ public class TrackerTriggerService : IDeviceEventReactor
                 run.Definition.Name);
 
             await _broadcast.BroadcastTrackerUpdateAsync(
-                "delete", TrackerInstanceDto.FromEntity(revert.Removed), run.Definition.UserId, run.Definition.Visibility);
+                TrackerRealtimeAction.Delete, TrackerInstanceDto.FromEntity(revert.Removed), run.Definition.UserId, run.Definition.Visibility);
             foreach (var reopened in revert.Reopened)
             {
                 await _broadcast.BroadcastTrackerUpdateAsync(
-                    "reopen", TrackerInstanceDto.FromEntity(reopened), run.Definition.UserId, run.Definition.Visibility);
+                    TrackerRealtimeAction.Reopen, TrackerInstanceDto.FromEntity(reopened), run.Definition.UserId, run.Definition.Visibility);
                 if (reopened.StartTreatmentId is { } startedBy && deletedIds.Contains(startedBy))
                     pending.Push(reopened);
             }
@@ -255,13 +254,6 @@ public class TrackerTriggerService : IDeviceEventReactor
             newInstance.Id,
             definition.Name,
             deviceEvent.EventType
-        );
-
-        await _broadcast.BroadcastTrackerUpdateAsync(
-            "create",
-            TrackerInstanceDto.FromEntity(newInstance),
-            definition.UserId,
-            definition.Visibility
         );
     }
 

@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -66,8 +67,14 @@ public class TrackerAlertRuleBackfillServiceTests : IDisposable
         var services = new ServiceCollection();
         services.AddSingleton<IDbContextFactory<NocturneDbContext>>(
             new StubDbContextFactory(options));
+        services.AddSingleton(sp =>
+            sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory());
         services.AddScoped(sp =>
-            sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext());
+        {
+            var context = sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext();
+            return context.ReadingFrom(
+                sp.GetRequiredService<ITenantAccessor>(), audit: sp.GetRequiredService<IAuditContext>());
+        });
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddScoped<ITrackerAlertRuleSyncService>(sp =>
@@ -95,8 +102,7 @@ public class TrackerAlertRuleBackfillServiceTests : IDisposable
         await synced.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await sut.StopAsync(CancellationToken.None);
 
-        ambientIsSystem.Should().BeTrue(
-            "the sync service stamps its factory-created contexts from the ambient audit context");
+        ambientIsSystem.Should().BeTrue();
         contextEndpoint.Should().Be(TrackerAlertRuleBackfillService.AuditEndpoint);
     }
 

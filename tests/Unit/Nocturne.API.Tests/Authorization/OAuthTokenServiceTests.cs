@@ -341,7 +341,7 @@ public class OAuthTokenServiceTests : IDisposable
             new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
         var grantService = new OAuthGrantService(
             db,
-            _db.ContextFactory,
+            _db.ContextFactory.AsNocturneFactory(),
             Mock.Of<IOAuthClientService>(),
             guestSessionCache,
             new GrantRevocationService(guestSessionCache),

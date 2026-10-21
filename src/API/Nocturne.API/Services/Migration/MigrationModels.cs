@@ -18,24 +18,36 @@ public enum MigrationMode
 
 /// <summary>
 /// Lifecycle state of a <see cref="MigrationJobInfo"/>.
-/// Transitions are: Pending → Validating → Running → Completed|Failed, or any state → Cancelled.
+/// Transitions are: Pending → Running → Completed|Failed, or a live state → Cancelled.
 /// </summary>
 public enum MigrationJobState
 {
     /// <summary>Job has been created and is waiting to start.</summary>
-    Pending,
-    /// <summary>Connection to the migration source is being tested before data transfer begins.</summary>
-    Validating,
+    Pending = 0,
     /// <summary>Data is actively being transferred.</summary>
-    Running,
+    Running = 2,
     /// <summary>All requested collections have been migrated successfully.</summary>
-    Completed,
+    Completed = 3,
     /// <summary>Migration terminated due to an unrecoverable error. See <see cref="MigrationJobInfo.ErrorMessage"/>.</summary>
-    Failed,
+    Failed = 4,
     /// <summary>Migration was explicitly stopped by the user before completion.</summary>
-    Cancelled,
+    Cancelled = 5,
     /// <summary>The API restarted while the migration was running; the work did not complete and must be re-run.</summary>
-    Interrupted
+    Interrupted = 6
+}
+
+/// <summary>
+/// The one definition of which <see cref="MigrationJobState"/> values mean a job is in flight.
+/// </summary>
+public static class MigrationJobStates
+{
+    /// <summary>The live states, by name as persisted in the migration run record.</summary>
+    public static IReadOnlyList<string> LiveNames { get; } =
+        Enum.GetValues<MigrationJobState>().Where(IsLive).Select(s => s.ToString()).ToArray();
+
+    /// <summary>Whether a job in this state is pending or running, so can still be cancelled or interrupted.</summary>
+    public static bool IsLive(this MigrationJobState state) =>
+        state is MigrationJobState.Pending or MigrationJobState.Running;
 }
 
 /// <summary>

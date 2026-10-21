@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Auth;
@@ -67,8 +68,8 @@ public class OidcProviderService : IOidcProviderService
         if (options.Providers.Count == 0)
             return;
 
-        var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var db = await factory.CreateDbContextAsync();
+        var factory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
+        await using var db = await factory.CreatePlatformAsync();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<OidcProviderService>>();
 
         var configuredIds = options.Providers.Select(p => CreateDeterministicGuid(p.IssuerUrl)).ToArray();

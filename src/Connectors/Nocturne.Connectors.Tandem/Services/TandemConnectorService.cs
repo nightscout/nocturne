@@ -115,9 +115,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[{Source}] Error during Tandem sync", ConnectorSource);
-            result.Success = false;
-            result.Errors.Add($"Sync error: {ex.Message}");
+            RecordSyncError(result, ex);
         }
 
         return result;
@@ -166,8 +164,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         {
             return (await _cursorStore.GetAsync(TandemConstants.ConnectorName, resource, cancellationToken))?.LastGuid;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "[{Source}] Could not read the published profile; publishing", ConnectorSource);
             return null;
@@ -185,8 +182,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             await _cursorStore.SetAsync(
                 TandemConstants.ConnectorName, resource, new ConnectorSyncCursor(null, fingerprint), cancellationToken);
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "[{Source}] Could not record the published profile", ConnectorSource);
         }
@@ -380,12 +376,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             () => _apiClient.GetPumpLogsAsync(
                 region, token!, pumperId, deviceAssignmentId, windowStart, windowEnd, eventIdsFilter, cancellationToken),
             _retryDelayStrategy,
-            async () =>
-            {
-                _tokenProvider.InvalidateToken();
-                token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
-                return !string.IsNullOrEmpty(token);
-            },
+            ReauthenticateWith(_tokenProvider, config, t => token = t, cancellationToken),
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchPumpEvents",
             cancellationToken: cancellationToken);

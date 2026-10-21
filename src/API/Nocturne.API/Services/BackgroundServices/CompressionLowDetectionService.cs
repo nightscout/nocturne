@@ -2,17 +2,18 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Glucose;
+using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Identity;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.API.Services.Glucose;
 
 namespace Nocturne.API.Services.BackgroundServices;
 
@@ -30,6 +31,8 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// <seealso cref="ICompressionLowDetectionService"/>
 public class CompressionLowDetectionService : BackgroundService, ICompressionLowDetectionService
 {
+    private const string AuditEndpoint = "service:compression-low-detection";
+
     private readonly IServiceProvider _serviceProvider;
     private readonly ActiveTenantSnapshot _activeTenants;
     private readonly ILogger<CompressionLowDetectionService> _logger;
@@ -114,9 +117,10 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         {
             try
             {
-                using var scope = _serviceProvider.CreateScope();
-                var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
+                await using var scope = TenantJobScope.Open(
+                    _serviceProvider,
+                    new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false),
+                    AuditEndpoint);
 
                 var uiSettingsService = scope.ServiceProvider.GetRequiredService<IUISettingsService>();
                 var therapySettingsResolver = scope.ServiceProvider.GetRequiredService<ITherapySettingsResolver>();
@@ -181,9 +185,10 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         {
             try
             {
-                using var scope = _serviceProvider.CreateScope();
-                var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
+                await using var scope = TenantJobScope.Open(
+                    _serviceProvider,
+                    new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false),
+                    AuditEndpoint);
 
                 // Determine "last night" in the user's local timezone
                 var therapySettingsResolver = scope.ServiceProvider.GetRequiredService<ITherapySettingsResolver>();
@@ -217,8 +222,8 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Propagates the current HTTP request's tenant context to the new service scope so that
-    /// tenant-scoped services resolve correctly when called from an API endpoint.
+    /// Called from an API endpoint, the work runs in a scope of its own carrying the request's
+    /// tenant and history clamp, so a clamped member reads no more through it than the request may.
     /// </remarks>
     /// <param name="nightOf">The local calendar date whose overnight window should be analysed.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -227,17 +232,14 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         DateOnly nightOf,
         CancellationToken cancellationToken = default)
     {
-        using var scope = _serviceProvider.CreateScope();
+        var requestServices = _serviceProvider.GetService<IHttpContextAccessor>()?.HttpContext?.RequestServices;
+        var requestTenant = requestServices?.GetService<ITenantAccessor>() is { IsResolved: true } accessor
+            ? accessor.Context
+            : null;
+        var requestClamped = requestServices?.GetService<ICategoryReadContext>()?.IsHistoryClamped == true;
 
-        // When called from an HTTP endpoint, the tenant context lives in the request scope.
-        // Propagate it to the new scope so tenant-scoped services (EntryService, etc.) work.
-        var httpContextAccessor = scope.ServiceProvider.GetService<IHttpContextAccessor>();
-        var requestTenantAccessor = httpContextAccessor?.HttpContext?.RequestServices.GetService<ITenantAccessor>();
-        if (requestTenantAccessor is { IsResolved: true, Context: not null })
-        {
-            var scopedTenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-            scopedTenantAccessor.SetTenant(requestTenantAccessor.Context);
-        }
+        await using var scope = TenantJobScope.Open(
+            _serviceProvider, requestTenant, AuditEndpoint, historyClamped: requestClamped);
 
         return await DetectForNightInternalAsync(nightOf, scope.ServiceProvider, cancellationToken);
     }

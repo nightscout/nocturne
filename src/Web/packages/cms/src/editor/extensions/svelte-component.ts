@@ -2,7 +2,7 @@ import { Node, mergeAttributes, type Editor } from '@tiptap/core';
 import { parseComponentProps } from './svelte-component-svx.ts';
 import { registerComponentActions, ComponentIcon } from '../../lib/components/edra/extensions/slash-command/groups.ts';
 
-export { parseComponentProps, serializeComponentToSvx } from './svelte-component-svx.ts';
+export { parseComponentProps } from './svelte-component-svx.ts';
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {

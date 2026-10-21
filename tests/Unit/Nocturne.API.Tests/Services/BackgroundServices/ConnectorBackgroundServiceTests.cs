@@ -1,3 +1,4 @@
+using Nocturne.API.Multitenancy;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -149,13 +150,9 @@ public class ConnectorBackgroundServiceTests
         db.AddToServices(services);
         services.AddActiveTenantSnapshot();
 
-        // Register scoped services
-        services.AddScoped<ITenantAccessor>(_ =>
-        {
-            var mock = MockTenantAccessor.Create(Guid.NewGuid());
-            mock.Setup(t => t.SetTenant(It.IsAny<TenantContext>()));
-            return mock.Object;
-        });
+        services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
+        services.AddScoped(sp => new NocturneDbContext(db.Options).ReadingFrom(
+            sp.GetRequiredService<ITenantAccessor>(), audit: sp.GetRequiredService<IAuditContext>()));
 
         services.AddScoped<IConnectorConfigurationService>(_ => configServiceMock.Object);
 
@@ -706,14 +703,10 @@ public class ConnectorBackgroundServiceTests
     }
 
     [Fact]
-    public async Task SyncForTenant_PinsScopedDbContextToSyncedTenant_ForRlsIsolation()
+    public async Task SyncForTenant_ScopedDbContextReadsTheSyncedTenant_ForRlsIsolation()
     {
-        // Regression test for the connector-wide outage: a NocturneDbContext's TenantId defaults
-        // to Guid.Empty. The background sync must set dbContext.TenantId to the tenant being
-        // synced — otherwise the
-        // TenantConnectionInterceptor applies a stale/empty RLS tenant, tenant-scoped reads
-        // (connector config + secrets) silently return nothing, and every connector authenticates
-        // with empty credentials. Before the fix the scoped context stayed at Guid.Empty here.
+        // Under an empty tenant the connector config and secrets read nothing, and every connector
+        // authenticates with empty credentials.
         var tenantId = Guid.NewGuid();
         using var db = TestDbContextFactory.CreateSqlite().SeedTenant(tenantId, "test-tenant");
 
@@ -751,20 +744,15 @@ public class ConnectorBackgroundServiceTests
         // Act
         await sut.ExecuteOnceAsync(CancellationToken.None);
 
-        // Assert — the scoped DbContext the connector services share must be pinned to the synced
-        // tenant so RLS scopes correctly.
         Assert.Equal(tenantId, capturedTenantId);
     }
 
     [Fact]
     public async Task SyncForTenant_SystemAttributesTheScopeToTheConnector()
     {
-        // Regression test for the mutation_audit_log firehose: V4 repositories stamp their
-        // factory-created DbContexts from the scoped IAuditContext (V4RepositoryBase), not from
-        // the scoped NocturneDbContext the sync annotates. A background scope's AuditContext is
-        // a blank user context (IsSystem = false), so every connector upsert was audited with
-        // null attribution — ~1.5M rows/day in production — instead of being skipped as a
-        // system mutation.
+        // A background scope's AuditContext is a blank user context, so without system
+        // attribution every connector upsert is audited with null attribution instead of being
+        // skipped as a system mutation.
         using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
 
         var syncResult = new SyncResult { Success = true, Message = "OK" };
@@ -792,6 +780,7 @@ public class ConnectorBackgroundServiceTests
         var serviceProvider = BuildServiceProvider(db, configServiceMock, config);
 
         bool? capturedIsSystem = null;
+        bool? capturedContextIsSystem = null;
         string? capturedEndpoint = null;
         var sut = new TestConnectorBackgroundService(
             serviceProvider,
@@ -800,14 +789,15 @@ public class ConnectorBackgroundServiceTests
             onSyncScope: sp =>
             {
                 capturedIsSystem = sp.GetRequiredService<IAuditContext>().IsSystem;
-                capturedEndpoint = sp.GetRequiredService<NocturneDbContext>().AuditContext?.Endpoint;
+                capturedEndpoint = sp.GetRequiredService<IAuditContext>().Endpoint;
+                capturedContextIsSystem = sp.GetRequiredService<NocturneDbContext>().AuditContext?.IsSystem;
             });
 
         // Act
         await sut.ExecuteOnceAsync(CancellationToken.None);
 
-        // Assert — everything written during the sync must carry system attribution.
         Assert.True(capturedIsSystem);
+        Assert.True(capturedContextIsSystem);
         Assert.Equal("connector:testconnector", capturedEndpoint);
     }
 

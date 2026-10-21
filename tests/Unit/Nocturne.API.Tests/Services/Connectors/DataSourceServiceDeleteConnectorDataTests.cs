@@ -4,16 +4,23 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.V4;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -57,25 +64,50 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         _deviceId = ConnectorMetadataService.GetByConnectorId(ConnectorId)?.DataSourceId
             ?? throw new InvalidOperationException("Nightscout connector metadata failed to load");
 
-        _db = TestDbContextFactory.CreateSqlite();
-
-        using var db = NewContext();
-        db.Tenants.Add(new TenantEntity { Id = TenantId, Slug = "test" });
-        db.SaveChanges();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
     }
 
     public void Dispose() => _db.Dispose();
 
     private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
-    private DataSourceService CreateService(NocturneDbContext context) => new(
+    private DataSourceService CreateService(NocturneDbContext context, ITreatmentDecomposer? decomposer = null) => new(
         context,
         _sensorGlucose.Object,
         _meterGlucose.Object,
         _calibrations.Object,
         _auditContext,
         _connectorConfig.Object,
+        decomposer ?? CreateDecomposer(context, Mock.Of<IProfileDecomposer>()),
         NullLogger<DataSourceService>.Instance);
+
+    private TreatmentDecomposer CreateDecomposer(NocturneDbContext context, IProfileDecomposer profiles) => new(
+        context,
+        Mock.Of<IBolusRepository>(), Mock.Of<ITempBasalRepository>(), Mock.Of<ICarbIntakeRepository>(),
+        Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
+        Mock.Of<IBolusCalculationRepository>(), Mock.Of<IStateSpanService>(), Mock.Of<ITreatmentFoodService>(),
+        Mock.Of<IDeviceService>(), Mock.Of<IPatientDeviceStamper>(), profiles, Mock.Of<IActiveProfileResolver>(),
+        Mock.Of<IPatientInsulinRepository>(), _auditContext, NullLogger<TreatmentDecomposer>.Instance);
+
+    private static Profile ProfileDocument(string id, string storeName) => new()
+    {
+        Id = id,
+        Mills = 1672567200000,
+        DefaultProfile = storeName,
+        Store =
+        {
+            [storeName] = new ProfileData
+            {
+                Dia = 3.0,
+                Timezone = "UTC",
+                Basal = [new TimeValue { Time = "00:00", Value = 1.0 }],
+                CarbRatio = [new TimeValue { Time = "00:00", Value = 10.0 }],
+                Sens = [new TimeValue { Time = "00:00", Value = 50.0 }],
+                TargetLow = [new TimeValue { Time = "00:00", Value = 80.0 }],
+                TargetHigh = [new TimeValue { Time = "00:00", Value = 120.0 }],
+            },
+        },
+    };
 
     private void SeedOneOfEachType()
     {
@@ -182,6 +214,58 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         (await assertCtx.MutationAuditLog.Where(a => a.Action == "bulk_delete")
             .Select(a => a.EntityType).ToListAsync())
             .Should().Contain(["BGCheck", "Note", "ApsSnapshot", "StateSpan"]);
+    }
+
+    [Fact]
+    public async Task DeleteConnectorData_DeletesTheProfileRowsOfTheSourcesProfileSwitchesOnly()
+    {
+        const string storeName = "Weekend@@@@@1672567200000";
+        const string metadata = """{"profileName":"Weekend","profileJson":"{}","utcOffset":0}""";
+        await using (var seed = NewContext())
+        {
+            seed.StateSpans.AddRange(
+                new StateSpanEntity
+                {
+                    Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = "ps-1", Source = _deviceId,
+                    Category = "Profile", State = "Active", StartTimestamp = DateTime.UtcNow, MetadataJson = metadata,
+                },
+                new StateSpanEntity
+                {
+                    Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = "ps-2", Source = "loop",
+                    Category = "Profile", State = "Active", StartTimestamp = DateTime.UtcNow, MetadataJson = metadata,
+                });
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var factory = new TestNocturneDbContextFactory(ctx);
+            var profiles = new ProfileDecomposer(
+                new TherapySettingsRepository(factory, _auditContext, NullLogger<TherapySettingsRepository>.Instance),
+                new BasalScheduleRepository(factory, _auditContext, NullLogger<BasalScheduleRepository>.Instance),
+                new CarbRatioScheduleRepository(factory, _auditContext, NullLogger<CarbRatioScheduleRepository>.Instance),
+                new SensitivityScheduleRepository(factory, _auditContext, NullLogger<SensitivityScheduleRepository>.Instance),
+                new TargetRangeScheduleRepository(factory, _auditContext, NullLogger<TargetRangeScheduleRepository>.Instance),
+                NullLogger<ProfileDecomposer>.Instance);
+            await profiles.DecomposeProfileSwitchAsync(ProfileDocument("ps-1", storeName), WriteOrigin.Live);
+            await profiles.DecomposeProfileSwitchAsync(ProfileDocument("ps-2", storeName), WriteOrigin.Live);
+
+            (await CreateService(ctx, CreateDecomposer(ctx, profiles)).DeleteConnectorDataAsync(ConnectorId))
+                .Success.Should().BeTrue();
+        }
+
+        await using var db = NewContext();
+        var snapshots = (await db.TherapySettings.IgnoreQueryFilters().ToListAsync()).Select(r => (r.LegacyId, r.DeletedAt))
+            .Concat((await db.BasalSchedules.IgnoreQueryFilters().ToListAsync()).Select(r => (r.LegacyId, r.DeletedAt)))
+            .Concat((await db.CarbRatioSchedules.IgnoreQueryFilters().ToListAsync()).Select(r => (r.LegacyId, r.DeletedAt)))
+            .Concat((await db.SensitivitySchedules.IgnoreQueryFilters().ToListAsync()).Select(r => (r.LegacyId, r.DeletedAt)))
+            .Concat((await db.TargetRangeSchedules.IgnoreQueryFilters().ToListAsync()).Select(r => (r.LegacyId, r.DeletedAt)))
+            .ToList();
+        snapshots.Where(r => r.LegacyId == $"ps-1:{storeName}").Should().HaveCount(5)
+            .And.AllSatisfy(r => r.DeletedAt.Should().NotBeNull());
+        snapshots.Where(r => r.LegacyId == $"ps-2:{storeName}").Should().HaveCount(5)
+            .And.AllSatisfy(r => r.DeletedAt.Should().BeNull());
+        (await db.StateSpans.IgnoreQueryFilters().SingleAsync(s => s.OriginalId == "ps-1")).DeletedAt.Should().NotBeNull();
     }
 
     [Fact]

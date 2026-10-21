@@ -34,7 +34,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Route("api/v4/alerts")]
 public class AlertsController : ControllerBase
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly IAlertAcknowledgementService _acknowledgementService;
     private readonly IAlertDeliveryService _deliveryService;
     private readonly IAlertSnoozeService _snoozeService;
@@ -51,7 +51,7 @@ public class AlertsController : ControllerBase
     /// <param name="tenantAccessor">Accessor for the current request tenant context.</param>
     /// <param name="logger">Logger instance.</param>
     public AlertsController(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAlertAcknowledgementService acknowledgementService,
         IAlertDeliveryService deliveryService,
         IAlertSnoozeService snoozeService,

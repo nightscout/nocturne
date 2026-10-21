@@ -12,7 +12,7 @@ namespace Nocturne.API.Tests.Services.Alerts;
 
 /// <summary>
 /// <see cref="AlertRuleRearm"/> clears the hold through the scoped context, whose tenant Row Level
-/// Security reads. That context takes the tenant only if one is resolved when the scope first builds it.
+/// Security reads. That context reads the scope's tenant live, whenever it is resolved.
 /// </summary>
 [Trait("Category", "Unit")]
 public class AlertRuleRearmWiringTests
@@ -86,7 +86,7 @@ public class AlertRuleRearmWiringTests
     }
 
     [Fact]
-    public async Task A_scope_whose_context_was_built_before_the_tenant_clears_nothing()
+    public async Task A_scope_whose_context_was_built_before_the_tenant_still_clears_the_hold()
     {
         var accessor = new SettableTenantAccessor();
         await using var provider = Provider(Guid.NewGuid().ToString(), accessor);
@@ -98,7 +98,6 @@ public class AlertRuleRearmWiringTests
 
         await rearm.ClearAsync([Rule], CancellationToken.None);
 
-        (await AwaitingRearmAsync(provider)).Should().BeTrue(
-            "every caller must set the tenant before its scope first resolves the rearm service");
+        (await AwaitingRearmAsync(provider)).Should().BeFalse();
     }
 }

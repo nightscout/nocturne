@@ -91,9 +91,9 @@ public class PasskeyControllerTests : IDisposable
             _tenantService.Object,
             // The real service, not a mock: the enrolment probe's cross-tenant reach is the
             // property under test, and a mock would assert the mock.
-            new TenantMemberService(new SharedSqliteFactory(_db.Options)),
+            new TenantMemberService((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
             _dbContext,
-            new SharedSqliteFactory(_db.Options),
+            (new SharedSqliteFactory(_db.Options)).AsNocturneFactory(),
             oidcOptions,
             logger.Object);
 
@@ -1334,6 +1334,36 @@ public class PasskeyControllerTests : IDisposable
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
         var response = Assert.IsType<PasskeyCredentialListResponse>(okResult.Value);
         response.HasSingleSignInMethod.Should().Be(single);
+    }
+
+    [Fact]
+    public async Task RemoveCredential_WhenLastPrimaryFactor_Returns409WithTheLastFactorCode()
+    {
+        Authenticate();
+        var credentialId = Guid.NewGuid();
+        _subjectService.Setup(s => s.TryRemovePasskeyCredentialAsync(_subjectId, credentialId))
+            .ReturnsAsync(FactorRemovalResult.LastPrimaryFactor);
+
+        var result = await _controller.RemoveCredential(credentialId);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        var problem = objectResult.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Detail.Should().NotBeNullOrWhiteSpace();
+        problem.Extensions.Should().ContainKey("error").WhoseValue.Should().Be("last_factor");
+    }
+
+    [Fact]
+    public async Task RemoveCredential_WhenNotFound_Returns404()
+    {
+        Authenticate();
+        var credentialId = Guid.NewGuid();
+        _subjectService.Setup(s => s.TryRemovePasskeyCredentialAsync(_subjectId, credentialId))
+            .ReturnsAsync(FactorRemovalResult.NotFound);
+
+        var result = await _controller.RemoveCredential(credentialId);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
 
     #endregion

@@ -74,7 +74,7 @@
 
 
   // Smoothly animate the trend arrow rotation
-  const arrowAngle = Tween.of(() => trendAngle(bgDelta), {
+  const arrowAngle = Tween.of(() => trendAngle(bgDelta ?? 0), {
     // Reactive, so toggling the OS setting takes effect without a reload.
     duration: prefersReducedMotion.current ? 0 : 600,
     easing: cubicOut,
@@ -96,13 +96,15 @@
       />
       {#if hasData && !isStale}
         <div class="flex flex-col items-center gap-0.5">
-          <div class="flex items-center gap-0.5 {deltaColorClass(direction)}">
-            <ArrowRight
-              class="size-4 rotate-(--arrow-angle)"
-              style="--arrow-angle: {arrowAngle.current}deg"
-            />
-            <span class="text-sm font-medium">{displayDelta}</span>
-          </div>
+          {#if bgDelta !== null}
+            <div class="flex items-center gap-0.5 {deltaColorClass(direction)}">
+              <ArrowRight
+                class="size-4 rotate-(--arrow-angle)"
+                style="--arrow-angle: {arrowAngle.current}deg"
+              />
+              <span class="text-sm font-medium">{displayDelta}</span>
+            </div>
+          {/if}
           <span class="text-2xs text-muted-foreground leading-tight">
             {timeSinceReading}
           </span>
@@ -144,7 +146,7 @@
     size="xs"
     class="text-lg"
   />
-  {#if hasData && !isStale}
+  {#if hasData && !isStale && bgDelta !== null}
     <div class="flex items-center gap-0.5 {deltaColorClass(direction)}">
       <ArrowRight
         class="size-3 rotate-(--arrow-angle)"

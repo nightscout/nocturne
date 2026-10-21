@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -21,7 +21,8 @@ namespace Nocturne.API.Services.Connectors;
 public interface IConnectorCursorResetService
 {
     /// <summary>
-    /// Resets the cursor for every configured connector belonging to <paramref name="tenantId"/>.
+    /// Resets the cursor for every configured connector belonging to <paramref name="tenantId"/>,
+    /// in a scope already opened on that tenant (<c>TenantJobScope.Open</c>).
     /// </summary>
     /// <param name="tenantId">The target tenant whose connectors should be re-pulled.</param>
     /// <param name="from">Optional lower bound. When null, all available history is re-ingested.</param>
@@ -107,6 +108,7 @@ public record TenantCursorResetResult(
 public class ConnectorCursorResetService : IConnectorCursorResetService
 {
     private readonly NocturneDbContext _db;
+    private readonly INocturneDbContextFactory _dbFactory;
     private readonly IConnectorSyncService _syncService;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<ConnectorCursorResetService> _logger;
@@ -114,11 +116,13 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
     /// <summary>Initializes a new instance of <see cref="ConnectorCursorResetService"/>.</summary>
     public ConnectorCursorResetService(
         NocturneDbContext db,
+        INocturneDbContextFactory dbFactory,
         IConnectorSyncService syncService,
         ITenantAccessor tenantAccessor,
         ILogger<ConnectorCursorResetService> logger)
     {
         _db = db;
+        _dbFactory = dbFactory;
         _syncService = syncService;
         _tenantAccessor = tenantAccessor;
         _logger = logger;
@@ -141,19 +145,14 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
             return null;
         }
 
-        // Switch the ambient tenant context to the target tenant so that RLS-scoped queries and the
-        // sync executors operate under the right tenant.
-        //
-        // The TenantConnectionInterceptor sets the RLS GUC from NocturneDbContext.TenantId on each
-        // connection open (and RESETs it on close), so the *DbContext's* TenantId is what actually
-        // scopes our own queries below — updating ITenantAccessor alone does not retro-fit the
-        // already-created _db. Pin it explicitly, otherwise the ConnectorConfigurations query runs
-        // under the admin's (or empty) tenant and silently finds no connectors. PinTenantAsync also
-        // sets the GUC on the current connection; SetTenant propagates to the executor scope
-        // that IConnectorSyncService.TriggerSyncAsync creates.
-        await _db.PinTenantAsync(tenantId, ct);
-        _tenantAccessor.SetTenant(new TenantContext(
-            tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo));
+        // _db and the executor scope IConnectorSyncService.TriggerSyncAsync opens both read the
+        // tenant from the accessor, so the caller opens this scope on the target tenant
+        // (TenantJobScope.Open); moving the accessor here would move every context of the scope.
+        if (_tenantAccessor.Context?.TenantId != tenantId)
+        {
+            throw new InvalidOperationException(
+                $"A cursor reset for tenant {tenantId} must run in a scope opened on that tenant.");
+        }
 
         var configs = await _db.ConnectorConfigurations.AsNoTracking()
             .Where(c => c.TenantId == tenantId)
@@ -224,11 +223,9 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
         if (tenant is null)
             return null;
 
-        // See ResetTenantCursorsAsync: the interceptor scopes connections by DbContext.TenantId,
-        // so pin _db before the RLS-scoped query below.
-        await _db.PinTenantAsync(tenantId, ct);
-
-        var connectors = await _db.ConnectorConfigurations.AsNoTracking()
+        // The job service asks before it has opened the target tenant's scope.
+        await using var tenantDb = await _dbFactory.CreateForTenantAsync(tenantId, ct);
+        var connectors = await tenantDb.ConnectorConfigurations.AsNoTracking()
             .Where(c => c.TenantId == tenantId)
             .OrderBy(c => c.ConnectorName)
             .Select(c => new TenantConnectorSummary(

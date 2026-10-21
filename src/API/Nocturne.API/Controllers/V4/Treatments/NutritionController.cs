@@ -488,7 +488,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
     /// Refuses the whole meal when either half's sync key is held by a record the user deleted.
     /// </summary>
     /// <remarks>
-    /// Each repository writes on its own pooled context, so the bolus write commits before the carb
+    /// Each repository writes on its own context, so the bolus write commits before the carb
     /// write is attempted and nothing can roll it back. Asking both
     /// repositories first is what keeps a key blocked on one half only from leaving a committed
     /// bolus behind the refusal.

@@ -1,4 +1,3 @@
-using System.Data.Common;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
@@ -52,7 +51,7 @@ public class DataOverviewServiceNonPrimarySqlTests : IDisposable
             .ReturnsAsync((string?)null);
 
         _service = new DataOverviewService(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             therapySettings.Object,
             new Mock<IStatisticsService>().Object,
             Mock.Of<ITenantCache>(),
@@ -216,29 +215,5 @@ public class DataOverviewServiceNonPrimarySqlTests : IDisposable
             SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger) =>
             method == IsNaN ? sql.IsNull(arguments[0]) : null;
-    }
-
-    private sealed class StatementRecorder : DbCommandInterceptor
-    {
-        private readonly List<string> _statements = [];
-
-        public IReadOnlyList<string> All => _statements;
-
-        public void Clear() => _statements.Clear();
-
-        public override InterceptionResult<DbDataReader> ReaderExecuting(
-            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
-        {
-            _statements.Add(command.CommandText);
-            return result;
-        }
-
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
-            CancellationToken cancellationToken = default)
-        {
-            _statements.Add(command.CommandText);
-            return ValueTask.FromResult(result);
-        }
     }
 }

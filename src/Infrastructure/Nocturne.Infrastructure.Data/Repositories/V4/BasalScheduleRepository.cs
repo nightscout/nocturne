@@ -24,7 +24,7 @@ public class BasalScheduleRepository : V4RepositoryBase<BasalSchedule, BasalSche
     /// Initializes a new instance of the <see cref="BasalScheduleRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public BasalScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<BasalScheduleRepository> logger, IV4RecordBroadcaster<BasalSchedule>? broadcaster = null)
+    public BasalScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<BasalScheduleRepository> logger, IV4RecordBroadcaster<BasalSchedule>? broadcaster = null)
         : base(contextFactory, auditContext, logger, broadcaster)
     {
     }

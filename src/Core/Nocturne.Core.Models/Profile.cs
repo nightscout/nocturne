@@ -114,6 +114,15 @@ public class Profile
     public LoopProfileSettings? LoopSettings { get; set; }
 
     /// <summary>
+    /// The APNs environment the uploading Loop build registered its device token with: <c>true</c>
+    /// for production (TestFlight, App Store), <c>false</c> for sandbox (Xcode). Unset when the
+    /// uploader did not say, so Loop pushes fall back to the configured environment.
+    /// </summary>
+    [JsonPropertyName("isAPNSProduction")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsAPNSProduction { get; set; }
+
+    /// <summary>
     /// Gets or sets whether this profile is managed by an external service (e.g. Glooko)
     /// </summary>
     [NocturneOnly]

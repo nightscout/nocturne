@@ -4,6 +4,7 @@ using Nocturne.API.Services.Caching;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 
@@ -48,14 +49,14 @@ public sealed class DemoTenantService
     /// </summary>
     public const string DemoRoleSlug = "demo-visitor";
 
-    private readonly IDbContextFactory<NocturneDbContext> _factory;
+    private readonly INocturneDbContextFactory _factory;
     private readonly ITenantService _tenantService;
     private readonly PublicAccessCacheService _publicAccessCache;
     private readonly ITenantCache _cache;
     private readonly ILogger<DemoTenantService> _logger;
 
     public DemoTenantService(
-        IDbContextFactory<NocturneDbContext> factory,
+        INocturneDbContextFactory factory,
         ITenantService tenantService,
         PublicAccessCacheService publicAccessCache,
         ITenantCache cache,
@@ -73,7 +74,7 @@ public sealed class DemoTenantService
     /// </summary>
     public async Task<TenantEntity?> FindDemoTenantAsync(CancellationToken ct = default)
     {
-        await using var db = await _factory.CreateDbContextAsync(ct);
+        await using var db = await _factory.CreatePlatformAsync(ct);
         return await db.Set<TenantEntity>()
             .AsNoTracking()
             .Include(t => t.DemoConfig)
@@ -95,8 +96,7 @@ public sealed class DemoTenantService
     /// </remarks>
     public async Task<Guid?> FindDemoMemberSubjectIdAsync(Guid tenantId, CancellationToken ct = default)
     {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-        db.TenantId = tenantId;
+        await using var db = await _factory.CreateForTenantAsync(tenantId, ct);
 
         return await db.TenantMembers
             .AsNoTracking()
@@ -117,8 +117,7 @@ public sealed class DemoTenantService
     /// </summary>
     public async Task ConfigureAccessAsync(Guid tenantId, CancellationToken ct = default)
     {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-        db.TenantId = tenantId;
+        await using var db = await _factory.CreateForTenantAsync(tenantId, ct);
 
         var tenant = await db.Set<TenantEntity>().FirstOrDefaultAsync(t => t.Id == tenantId, ct);
         if (tenant is null)
@@ -171,7 +170,7 @@ public sealed class DemoTenantService
         // membership, so afterwards there is nothing left to resolve its subject from.
         var outgoingMemberSubjectId = await FindDemoMemberSubjectIdAsync(tenantId.Value, ct);
 
-        await using (var db = await _factory.CreateDbContextAsync(ct))
+        await using (var db = await _factory.CreatePlatformAsync(ct))
         {
             await db.ExecuteInTransactionAsync(async token =>
             {
@@ -213,7 +212,7 @@ public sealed class DemoTenantService
 
     private async Task<Guid?> FindDemoTenantIdAsync(CancellationToken ct)
     {
-        await using var db = await _factory.CreateDbContextAsync(ct);
+        await using var db = await _factory.CreatePlatformAsync(ct);
         return await db.Set<TenantEntity>()
             .AsNoTracking()
             .Where(t => t.IsDemo)
@@ -312,7 +311,7 @@ public sealed class DemoTenantService
         if (subjectId is null)
             return;
 
-        await using var db = await _factory.CreateDbContextAsync(ct);
+        await using var db = await _factory.CreatePlatformAsync(ct);
 
         var isDemoSubject = await db.Subjects
             .AsNoTracking()

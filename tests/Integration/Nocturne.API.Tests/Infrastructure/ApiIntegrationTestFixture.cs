@@ -5,11 +5,13 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Controllers.V4.DevOnly;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Platform;
 using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -38,6 +40,13 @@ namespace Nocturne.API.Tests.Integration.Infrastructure;
 /// </remarks>
 public class ApiIntegrationTestFixture : IAsyncLifetime
 {
+    public sealed class ControllableDemoModeService : IDemoModeService
+    {
+        public bool IsEnabled { get; set; }
+        public bool IsConfigured => IsEnabled;
+        public string? ServiceUrl => null;
+    }
+
     /// <summary>The instance key the API runs with.</summary>
     public const string InstanceKey = "test-secret-for-integration-tests";
 
@@ -52,6 +61,8 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
 
     private WebApplicationFactory<Nocturne.API.Program>? _factory;
     private TestDatabase? _database;
+
+    public ControllableDemoModeService DemoModeService { get; } = new();
 
     public string ApiBaseUrl { get; private set; } = string.Empty;
 
@@ -180,6 +191,8 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             builder.UseSetting("INSTANCE_KEY", InstanceKey);
             builder.UseSetting("BASE_DOMAIN", $"localhost:{port}");
             builder.UseSetting("DemoService:Enabled", "false");
+            builder.ConfigureTestServices(services =>
+                services.AddSingleton<IDemoModeService>(DemoModeService));
         });
         _factory.UseKestrel(options => options.ListenLocalhost(port));
         _factory.StartServer();

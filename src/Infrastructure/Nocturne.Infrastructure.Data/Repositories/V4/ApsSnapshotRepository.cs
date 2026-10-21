@@ -27,7 +27,7 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
     /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
     // logger is unused but retained for DI + direct test construction.
     public ApsSnapshotRepository(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<ApsSnapshotRepository> logger,
         IV4RecordBroadcaster<ApsSnapshot>? broadcaster = null)
@@ -55,13 +55,6 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
             .OrderBy(e => e.Timestamp)
             .Select(e => new ApsIobCobPoint(e.Timestamp, e.Iob, e.Cob))
             .ToListAsync(ct);
-    }
-
-    /// <inheritdoc />
-    public async Task<int> CountAsync(DateTime? from, DateTime? to, string? device, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await InWindow(ctx.ApsSnapshots.AsNoTracking(), from, to, device).CountAsync(ct);
     }
 
     /// <summary>

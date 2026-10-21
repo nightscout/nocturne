@@ -6,10 +6,8 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -17,20 +15,20 @@ namespace Nocturne.API.Services.Identity;
 /// Cross-tenant caregiver overview. Enumerates the subject's active memberships from a
 /// subject-pinned factory context (same pattern as <see cref="TenantService.GetTenantsForSubjectAsync"/>),
 /// then fans out per tenant: a fresh DI scope pinned via <see cref="ITenantAccessor"/> for the
-/// canonical glucose read, and a factory context pinned via <see cref="NocturneDbContext.TenantId"/>
+/// canonical glucose read, and a context from <see cref="INocturneDbContextFactory.CreateForTenantAsync"/>
 /// for alert rules and active excursions. Never touches the request-scoped DbContext, so the
 /// endpoint works from the apex (tenantless) in multi-tenant deployments.
 /// </summary>
 /// <seealso cref="ITenantOverviewService"/>
 public class TenantOverviewService : ITenantOverviewService
 {
-    private readonly IDbContextFactory<NocturneDbContext> _factory;
+    private readonly INocturneDbContextFactory _factory;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IGlucoseStatusClassifier _classifier;
     private readonly ILogger<TenantOverviewService> _logger;
 
     public TenantOverviewService(
-        IDbContextFactory<NocturneDbContext> factory,
+        INocturneDbContextFactory factory,
         IServiceScopeFactory scopeFactory,
         IGlucoseStatusClassifier classifier,
         ILogger<TenantOverviewService> logger)
@@ -78,7 +76,7 @@ public class TenantOverviewService : ITenantOverviewService
     {
         // The read spans tenants for one person, so the context is pinned to the subject rather
         // than to a tenant.
-        await using var context = await _factory.CreateSubjectPinnedContextAsync(subjectId, ct);
+        await using var context = await _factory.CreateForSubjectAsync(subjectId, ct);
         var memberships = await context.TenantMembers.AsNoTracking()
             .Include(tm => tm.Tenant)
             .Include(tm => tm.MemberRoles).ThenInclude(mr => mr.TenantRole)
@@ -121,7 +119,7 @@ public class TenantOverviewService : ITenantOverviewService
             .GetLatestAsync(ct);
 
         await using var db = await scope.ServiceProvider
-            .GetRequiredService<ITenantDbContextFactory>()
+            .GetRequiredService<INocturneDbContextFactory>()
             .CreateAsync(ct);
 
         int? activeAlertCount = null;

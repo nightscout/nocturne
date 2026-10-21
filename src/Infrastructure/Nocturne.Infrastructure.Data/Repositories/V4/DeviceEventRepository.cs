@@ -37,7 +37,7 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     /// <param name="reactor">Optional domain reaction to live creates and deletes — the tracker trigger.
     /// Null when the repository is constructed without DI, in which case writes simply run no reaction.</param>
     public DeviceEventRepository(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<DeviceEventRepository> logger,

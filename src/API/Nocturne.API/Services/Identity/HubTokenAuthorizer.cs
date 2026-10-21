@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
 using Nocturne.API.Hubs;
 using Nocturne.API.Middleware.Handlers;
@@ -8,7 +7,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Services.Auth;
 
 namespace Nocturne.API.Services.Identity;
@@ -58,7 +57,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
 {
     private readonly IJwtCredentialValidator _credentialValidator;
     private readonly ITenantMemberService _memberService;
-    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly TimeProvider _timeProvider;
     private readonly IConfiguration _configuration;
     private readonly ILogger<HubTokenAuthorizer> _logger;
@@ -66,7 +65,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
     public HubTokenAuthorizer(
         IJwtCredentialValidator credentialValidator,
         ITenantMemberService memberService,
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        INocturneDbContextFactory dbContextFactory,
         TimeProvider timeProvider,
         IConfiguration configuration,
         ILogger<HubTokenAuthorizer> logger)
@@ -209,10 +208,6 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
     /// and <see cref="Middleware.MemberScopeMiddleware"/> intersects the grant's scopes with the
     /// membership — <see cref="AuthType.DirectGrant"/> is a scoped credential, so membership cannot
     /// widen it and a demotion narrows it.
-    ///
-    /// It does not go through the token-exchange endpoint's direct-grant path: that reads
-    /// <c>oauth_grants</c> off the scoped context, which on a hub invocation was built before any
-    /// tenant was known and so matches no row.
     /// </remarks>
     private async Task<HubAuthorization?> AuthorizeDirectGrantAsync(
         string token, Guid connectionTenantId, string requiredScope)

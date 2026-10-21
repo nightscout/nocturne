@@ -95,4 +95,22 @@ public interface IDeduplicationService
     /// batch. Stops when caught up or after maxBatches. Returns groups merged and whether caught up.
     /// </summary>
     Task<ReconcileResult> ReconcileNewLinksAsync(int batchSize, int maxBatches, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes, for the current tenant, links that are the only link of their group once reconcile
+    /// has passed them and they are a day old, at most maxBatches batches of batchSize. Matching
+    /// reads a record with no link that old as the singleton group it was, so a group that never
+    /// gained a second record costs no row. Returns the number of links deleted.
+    /// </summary>
+    Task<int> PruneSingletonLinksAsync(int batchSize, int maxBatches, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Moves, for the current tenant, the primary of every recent state span group whose closed
+    /// primary a live group mate superseded or is still open beside onto the member the survivor
+    /// rule picks. Groups linked before that rule existed can hold one, which reads would show as
+    /// ended while a copy runs on. Finds them with one query over groups with a member open or
+    /// recently started, so a tenant with none costs only that. Returns the number of groups whose
+    /// primary moved.
+    /// </summary>
+    Task<int> RepairStateSpanPrimariesAsync(CancellationToken cancellationToken = default);
 }

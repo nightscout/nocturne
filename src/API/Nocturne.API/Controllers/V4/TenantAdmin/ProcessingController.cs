@@ -11,7 +11,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 [ApiController]
 [Tags("TenantAdmin")]
 [Route("api/v4/processing")]
-[RequireAdmin]
+[RequireSuperuser]
 public class ProcessingController : ControllerBase
 {
     private readonly IProcessingStatusService _processingStatusService;

@@ -65,7 +65,7 @@ public class OAuthGrantServiceTests : IDisposable
     {
         return new OAuthGrantService(
             dbContext,
-            _db.ContextFactory,
+            _db.ContextFactory.AsNocturneFactory(),
             _mockClientService.Object,
             _guestSessionCache,
             new GrantRevocationService(_guestSessionCache),

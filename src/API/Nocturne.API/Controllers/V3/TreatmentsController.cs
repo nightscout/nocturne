@@ -165,7 +165,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// </summary>
     /// <param name="treatment">The <see cref="Treatment"/> to create.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The created <see cref="Treatment"/>.</returns>
+    /// <returns>The <see cref="V3CreateResponse"/> for the created or already stored treatment.</returns>
     /// <remarks>
     /// Supports AAPS deduplication: if a treatment with the same ID already exists,
     /// returns 200 with <c>isDeduplication: true</c>.
@@ -180,11 +180,12 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [Authorize]
     [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments")]
-    [ProducesResponseType(typeof(Treatment), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<Treatment>> CreateTreatment(
+    public async Task<ActionResult> CreateTreatment(
         [FromBody] Treatment treatment,
         CancellationToken cancellationToken = default
     )
@@ -212,16 +213,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 );
                 if (existingTreatment != null)
                 {
-                    var existingIdentifier = MongoObjectId.Coerce(existingTreatment.Id);
-                    return Ok(
-                        new
-                        {
-                            status = 200,
-                            identifier = existingIdentifier,
-                            isDeduplication = true,
-                            deduplicatedIdentifier = existingIdentifier,
-                        }
-                    );
+                    return V3Deduplicated(existingTreatment.Id, existingTreatment.SrvModified);
                 }
             }
 
@@ -246,12 +238,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
             _logger.LogDebug("Successfully created V3 treatment {Id}", createdTreatment.Id);
 
-            // Location resolves to the 24-hex ObjectId that matches the response body identifier.
-            return CreatedAtAction(
-                nameof(GetTreatment),
-                new { id = MongoObjectId.Coerce(createdTreatment.Id) },
-                createdTreatment
-            );
+            return V3Created(nameof(GetTreatment), createdTreatment.Id);
         }
         catch (ArgumentException ex)
         {
@@ -539,44 +526,6 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     }
 
     #region Helper Methods
-
-    private new string? ConvertV3FilterToV1Find(JsonElement? filter)
-    {
-        if (!filter.HasValue)
-            return null;
-
-        try
-        {
-            // Convert V3 JSON filter to V1 query string format
-            var filterObj = filter.Value;
-            var queryParts = new List<string>();
-
-            foreach (var property in filterObj.EnumerateObject())
-            {
-                var value = property.Value;
-                if (value.ValueKind == JsonValueKind.Object)
-                {
-                    // Handle operators like $gte, $lte, etc.
-                    foreach (var op in value.EnumerateObject())
-                    {
-                        queryParts.Add($"find[{property.Name}][{op.Name}]={op.Value}");
-                    }
-                }
-                else
-                {
-                    // Simple equality
-                    queryParts.Add($"find[{property.Name}]={value}");
-                }
-            }
-
-            return queryParts.Count > 0 ? string.Join("&", queryParts) : null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to convert V3 filter to V1 find query");
-            return null;
-        }
-    }
 
     private async Task<long> GetTotalCountAsync(
         string? findQuery,

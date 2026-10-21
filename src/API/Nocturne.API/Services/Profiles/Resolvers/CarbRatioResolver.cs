@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
@@ -15,10 +15,9 @@ internal sealed class CarbRatioResolver : ICarbRatioResolver
     private readonly ITherapySettingsRepository _therapyRepo;
     private readonly IPatientRecordRepository _patientRecordRepo;
     private readonly IActiveProfileResolver _activeProfileResolver;
-    private readonly ITenantCache _cache;
+    private readonly ProfileVersionCache _versions;
     private readonly ILogger<CarbRatioResolver> _logger;
 
-    private const int CacheTtlSeconds = 5;
     private const double DefaultCarbRatio = 12.0;
 
     public CarbRatioResolver(
@@ -26,14 +25,14 @@ internal sealed class CarbRatioResolver : ICarbRatioResolver
         ITherapySettingsRepository therapyRepo,
         IPatientRecordRepository patientRecordRepo,
         IActiveProfileResolver activeProfileResolver,
-        ITenantCache cache,
+        ProfileVersionCache versions,
         ILogger<CarbRatioResolver> logger)
     {
         _repo = repo;
         _therapyRepo = therapyRepo;
         _patientRecordRepo = patientRecordRepo;
         _activeProfileResolver = activeProfileResolver;
-        _cache = cache;
+        _versions = versions;
         _logger = logger;
     }
 
@@ -64,12 +63,7 @@ internal sealed class CarbRatioResolver : ICarbRatioResolver
         return value;
     }
 
-    private async Task<Core.Models.V4.CarbRatioSchedule?> GetCachedScheduleAsync(
-        string profileName, DateTime timestamp, CancellationToken ct)
-    {
-        return await _cache.GetOrCreateLocalAsync(
-            ScheduleCacheKey.For("carb-ratio-schedule", profileName, timestamp),
-            () => _repo.GetActiveAtAsync(profileName, timestamp, ct),
-            TimeSpan.FromSeconds(CacheTtlSeconds));
-    }
+    private Task<Core.Models.V4.CarbRatioSchedule?> GetCachedScheduleAsync(
+        string profileName, DateTime timestamp, CancellationToken ct) =>
+        _versions.GetActiveAtAsync(_repo, profileName, timestamp, ct);
 }

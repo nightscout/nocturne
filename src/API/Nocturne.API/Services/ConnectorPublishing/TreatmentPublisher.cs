@@ -23,7 +23,7 @@ namespace Nocturne.API.Services.ConnectorPublishing;
 /// <seealso cref="ITreatmentPublisher"/>
 internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPublisher
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly ITreatmentService _treatmentService;
     private readonly ITreatmentDecomposer _treatmentDecomposer;
     private readonly ITreatmentCache _treatmentCache;
@@ -41,7 +41,7 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
     private readonly IPatientDeviceStamper _patientDeviceStamper;
 
     public TreatmentPublisher(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         ITreatmentService treatmentService,
         ITreatmentDecomposer treatmentDecomposer,
         ITreatmentCache treatmentCache,
@@ -187,6 +187,10 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
                 "Reclassified {Count}/{Total} TempBasal records from Scheduled to Algorithm "
                 + "(rate differs from programmed basal schedule) for {Source}",
                 reclassifiedCount, recordList.Count, source);
+
+        foreach (var record in recordList)
+            record.AdditionalProperties = TempBasalAutomaticFlag.Keep(
+                record.AdditionalProperties, TempBasalAutomaticFlag.Of(record.Origin));
     }
 
     /// <summary>

@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Middleware;
@@ -64,7 +64,7 @@ public class TenantSetupMiddleware
     public async Task InvokeAsync(
         HttpContext context,
         ITenantAccessor tenantAccessor,
-        IDbContextFactory<NocturneDbContext> dbFactory,
+        INocturneDbContextFactory dbFactory,
         IInstanceKeyValidator instanceKeyValidator)
     {
         // Only check when a tenant has been resolved
@@ -161,21 +161,16 @@ public class TenantSetupMiddleware
     /// Runs the setup and recovery checks and logs the diagnostics for a refusal.
     /// </summary>
     /// <remarks>
-    /// On its own context rather than the request-scoped one. A public-share request marks the
-    /// scoped context as a share, and membership is not share-visible data: once tenant_members is
-    /// behind Row Level Security, the restrictive share_category_read policy denies a share every
-    /// row of it. Read there, this gate would see no members and answer 503 setup_required to every
-    /// share request. Whether the instance is configured is a property of the instance, not of what
-    /// a share may see, so the checks run on a plain tenant-pinned context that is never flagged as
-    /// a share. Scoped to this method so the context is released before the pipeline continues.
+    /// System-pinned (<see cref="INocturneDbContextFactory.CreateSystemPinnedAsync"/>): the gate runs on public-share requests
+    /// too. Scoped to this method so the context is released before the pipeline continues.
     /// </remarks>
     private async Task<SetupGate> EvaluateGateAsync(
-        IDbContextFactory<NocturneDbContext> dbFactory,
+        INocturneDbContextFactory dbFactory,
         Guid tenantId,
         string path,
         CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateTenantPinnedContextAsync(tenantId, ct);
+        await using var db = await dbFactory.CreateSystemPinnedAsync(tenantId, ct);
 
         // Check 1: Does this tenant have any members with auth credentials (passkey or OIDC)?
         // These entities are subject-scoped (not tenant-scoped), so we join through TenantMembers.

@@ -18,18 +18,24 @@ public abstract class V4RecordBase : IV4Record
     public Guid Id { get; set; }
 
     /// <inheritdoc />
-    public DateTime Timestamp { get; set; }
+    /// <remarks>
+    /// Always UTC once set: a body timestamp with an offset binds as <see cref="DateTimeKind.Local"/>,
+    /// which <see cref="Mills"/> and the database both reject on a host off UTC.
+    /// </remarks>
+    public DateTime Timestamp
+    {
+        get => _timestamp;
+        set => _timestamp = value.AsUtc();
+    }
+
+    private DateTime _timestamp;
 
     /// <inheritdoc />
     /// <remarks>
-    /// Read millions of times per analytics report, so a UTC or unspecified timestamp is converted
-    /// by arithmetic, which is exactly what <see cref="DateTimeOffset.ToUnixTimeMilliseconds"/>
-    /// computes for a zero offset. A local timestamp keeps the <see cref="DateTimeOffset"/> path and
-    /// its exception for an offset that is not zero.
+    /// Read millions of times per analytics report, so it is converted by arithmetic, which is
+    /// exactly what <see cref="DateTimeOffset.ToUnixTimeMilliseconds"/> computes for a zero offset.
     /// </remarks>
-    public long Mills => Timestamp.Kind == DateTimeKind.Local
-        ? new DateTimeOffset(Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds()
-        : Timestamp.Ticks / TimeSpan.TicksPerMillisecond - UnixEpochMilliseconds;
+    public long Mills => _timestamp.Ticks / TimeSpan.TicksPerMillisecond - UnixEpochMilliseconds;
 
     private const long UnixEpochMilliseconds = 62_135_596_800_000;
 

@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -450,7 +451,7 @@ public class TenantOverviewServiceTests
         var clampSeen = new Dictionary<Guid, bool>();
         var contextClampSeen = new Dictionary<Guid, bool>();
         var services = new ServiceCollection();
-        services.AddScoped<ITenantDbContextFactory>(sp => new ScopeContextFactory(
+        services.AddScoped<INocturneDbContextFactory>(sp => new ScopeContextFactory(
             options,
             () => sp.GetRequiredService<ITenantAccessor>().TenantId,
             sp.GetRequiredService<ICategoryReadContext>(),
@@ -473,7 +474,7 @@ public class TenantOverviewServiceTests
         var provider = services.BuildServiceProvider();
 
         var service = new TenantOverviewService(
-            new InMemoryContextFactory(options),
+            (new InMemoryContextFactory(options)).AsNocturneFactory(),
             provider.GetRequiredService<IServiceScopeFactory>(),
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
@@ -596,33 +597,32 @@ public class TenantOverviewServiceTests
         var services = new ServiceCollection();
         services.AddScoped(_ => canonical.Object);
         services.AddScoped(_ => accessor.Object);
-        services.AddScoped<ITenantDbContextFactory>(_ => new ScopeContextFactory(options, () => current!.TenantId));
+        services.AddScoped<INocturneDbContextFactory>(_ => new ScopeContextFactory(options, () => current!.TenantId));
         var provider = services.BuildServiceProvider();
 
         return new TenantOverviewService(
-            new InMemoryContextFactory(options),
+            (new InMemoryContextFactory(options)).AsNocturneFactory(),
             provider.GetRequiredService<IServiceScopeFactory>(),
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
             NullLogger<TenantOverviewService>.Instance);
     }
 
-    /// <summary>The per-tenant scope's context factory, pinned and clamped as that scope says.</summary>
+    /// <summary>
+    /// The per-tenant scope's context factory, pinned to that scope's tenant and recording the
+    /// scope's clamp when a context is taken.
+    /// </summary>
     private sealed class ScopeContextFactory(
         DbContextOptions<NocturneDbContext> options,
         Func<Guid> tenantId,
         ICategoryReadContext? category = null,
-        Dictionary<Guid, bool>? clampSeen = null) : ITenantDbContextFactory
+        Dictionary<Guid, bool>? clampSeen = null) : SingleReaderDbContextFactory
     {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
         {
-            var context = new NocturneDbContext(options)
-            {
-                TenantId = tenantId(),
-                HistoryClamped = category?.IsHistoryClamped == true,
-            };
+            var context = new NocturneDbContext(options) { TenantId = tenantId() };
             if (clampSeen is not null)
-                clampSeen[context.TenantId] = context.HistoryClamped;
+                clampSeen[context.TenantId] = category?.IsHistoryClamped == true;
             return ValueTask.FromResult(context);
         }
     }

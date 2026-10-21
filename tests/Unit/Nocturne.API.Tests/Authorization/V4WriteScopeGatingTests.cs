@@ -59,9 +59,9 @@ public class V4WriteScopeGatingTests
         public const string PlatformAdminRole = "platform-admin role, not a data scope";
 
         /// <summary>
-        /// Tenant operator surface; [RequireAdmin] on the class or on every write action.
+        /// Superuser-only surface; [RequireSuperuser] on the class or on every write action.
         /// </summary>
-        public const string TenantAdminAttribute = "tenant-admin attribute, not a data scope";
+        public const string SuperuserAttribute = "superuser attribute, not a data scope";
 
         /// <summary>Service-to-service surface; the class carries [RequireInstanceKeyAuth].</summary>
         public const string InstanceKey = "instance-key service credential, not a data scope";
@@ -181,12 +181,12 @@ public class V4WriteScopeGatingTests
             ["TenantController"] = NotDataCategory.PlatformAdminRole,
             ["TenantDirectGrantController"] = NotDataCategory.PlatformAdminRole,
 
-            ["DeduplicationController"] = NotDataCategory.TenantAdminAttribute,
-            ["MigrationController"] = NotDataCategory.TenantAdminAttribute,
+            ["DeduplicationController"] = NotDataCategory.SuperuserAttribute,
+            ["MigrationController"] = NotDataCategory.SuperuserAttribute,
 
-            // CompatibilityController repeats [RequireAdmin] per action rather than carrying it on
+            // CompatibilityController repeats [RequireSuperuser] per action rather than carrying it on
             // the class.
-            ["CompatibilityController"] = NotDataCategory.TenantAdminAttribute,
+            ["CompatibilityController"] = NotDataCategory.SuperuserAttribute,
             ["ServicesController"] = NotDataCategory.TenantSettingsScope,
 
             ["ChatIdentityDirectoryController"] = NotDataCategory.InstanceKey,
@@ -257,8 +257,10 @@ public class V4WriteScopeGatingTests
             ["StateSpansController.CreateStateSpan"] = NotDataCategory.PerRecordGuard,
             ["StateSpansController.UpdateStateSpan"] = NotDataCategory.PerRecordGuard,
             ["StateSpansController.DeleteStateSpan"] = NotDataCategory.PerRecordGuard,
+            ["StateSpansController.RestoreStateSpan"] = NotDataCategory.PerRecordGuard,
+            ["StateSpansController.BulkRestoreStateSpans"] = NotDataCategory.PerRecordGuard,
 
-            // The rest of DiscrepancyController is [RequireAdmin]; the ingest route is deliberately
+            // The rest of DiscrepancyController is [RequireSuperuser]; the ingest route is deliberately
             // [AllowAnonymous], so there is no credential whose scopes could be checked.
             ["DiscrepancyController.IngestDiscrepancy"] = NotDataCategory.AnonymousByDeclaration,
 
@@ -641,10 +643,12 @@ public class V4WriteScopeGatingTests
     {
         var covered = new[]
         {
-            // StateSpanWriteScopeTests drives all three through the real handler.
+            // StateSpanWriteScopeTests drives all five through the real handler.
             "StateSpansController.CreateStateSpan",
             "StateSpansController.UpdateStateSpan",
             "StateSpansController.DeleteStateSpan",
+            "StateSpansController.RestoreStateSpan",
+            "StateSpansController.BulkRestoreStateSpans",
             // ActivityControllerV4Tests drives all three through the real handler.
             "ActivityController.CreateActivities",
             "ActivityController.UpdateActivity",
@@ -771,7 +775,7 @@ public class V4WriteScopeGatingTests
                 NotDataCategory.PlatformAdminRole => attributes
                     .OfType<AuthorizeAttribute>()
                     .Any(a => a.Roles?.Contains("platform_admin", StringComparison.Ordinal) == true),
-                NotDataCategory.TenantAdminAttribute => CarriesAttribute(controller, "RequireAdminAttribute"),
+                NotDataCategory.SuperuserAttribute => CarriesAttribute(controller, "RequireSuperuserAttribute"),
                 NotDataCategory.TenantSettingsScope => GovernsEveryWrite(controller,
                     a => a is RequireScopeAttribute scope
                          && scope.Scopes.Contains(Scope.TenantSettings, StringComparer.Ordinal)),

@@ -124,7 +124,7 @@ public class AlertSweepServiceSnoozeTests
                     if (_resumeThrowsFor(id)) throw new InvalidOperationException("resume failed");
                     _resumed.Add((id,
                         sp.GetRequiredService<ITenantAccessor>().TenantId,
-                        sp.GetRequiredService<NocturneDbContext>().AuditContext?.Endpoint));
+                        sp.GetRequiredService<IAuditContext>().Endpoint));
                     return true;
                 });
             return snooze.Object;

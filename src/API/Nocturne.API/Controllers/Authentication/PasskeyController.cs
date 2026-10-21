@@ -15,6 +15,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 
@@ -94,7 +95,7 @@ public class PasskeyController : ControllerBase
     private readonly ITenantService _tenantService;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly NocturneDbContext _dbContext;
-    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly OidcOptions _oidcOptions;
     private readonly ILogger<PasskeyController> _logger;
 
@@ -113,7 +114,7 @@ public class PasskeyController : ControllerBase
         ITenantService tenantService,
         ITenantMemberService tenantMemberService,
         NocturneDbContext dbContext,
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        INocturneDbContextFactory dbContextFactory,
         IOptions<OidcOptions> oidcOptions,
         ILogger<PasskeyController> logger)
     {
@@ -734,7 +735,7 @@ public class PasskeyController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RemoveCredential(Guid id)
     {
         var auth = HttpContext.GetAuthContext();
@@ -746,17 +747,7 @@ public class PasskeyController : ControllerBase
         // Symmetric factor-count rule is enforced atomically inside the service inside a
         // serializable transaction to prevent TOCTOU races between concurrent removals.
         var result = await _subjectService.TryRemovePasskeyCredentialAsync(auth.SubjectId.Value, id);
-        return result switch
-        {
-            FactorRemovalResult.Removed => NoContent(),
-            FactorRemovalResult.NotFound => Problem(detail: "Credential not found", statusCode: 404, title: "Not Found"),
-            FactorRemovalResult.LastPrimaryFactor => Conflict(new
-            {
-                error = "last_factor",
-                message = "Cannot remove your only remaining sign-in method",
-            }),
-            _ => throw new InvalidOperationException($"Unexpected FactorRemovalResult: {result}"),
-        };
+        return result == FactorRemovalResult.Removed ? NoContent() : this.FactorRemovalRefusal(result, "Credential");
     }
 
     /// <summary>
@@ -844,15 +835,12 @@ public class PasskeyController : ControllerBase
     /// tenant is past first-run setup.
     /// </summary>
     /// <remarks>
-    /// On a tenant-pinned context of its own, not the request-scoped one, for the same reason as
-    /// <c>TenantSetupMiddleware</c>: <see cref="GetAuthStatus"/> is anonymous and reachable on a
-    /// share host, where the scoped context is marked as a share. Membership is not share-visible
-    /// data, so once tenant_members is behind Row Level Security a share is denied every row of it
-    /// — and this would report a configured tenant as needing first-run setup.
+    /// System-pinned: <see cref="GetAuthStatus"/> is anonymous and reachable on a share host
+    /// (<see cref="INocturneDbContextFactory.CreateSystemPinnedAsync"/>).
     /// </remarks>
     private async Task<bool> TenantHasCredentialsAsync(Guid tenantId)
     {
-        await using var db = await _dbContextFactory.CreateTenantPinnedContextAsync(tenantId, HttpContext.RequestAborted);
+        await using var db = await _dbContextFactory.CreateSystemPinnedAsync(tenantId, HttpContext.RequestAborted);
 
         return await db.TenantMembers
             .Where(m => m.TenantId == tenantId)
@@ -865,12 +853,10 @@ public class PasskeyController : ControllerBase
     /// Whether the tenant has an active, non-system member with no passkey and no linked
     /// provider — an account that cannot sign in at all.
     /// </summary>
-    /// <remarks>
-    /// Pinned for the same reason as <see cref="TenantHasCredentialsAsync"/>.
-    /// </remarks>
+    /// <remarks>System-pinned as <see cref="TenantHasCredentialsAsync"/> is.</remarks>
     private async Task<bool> HasOrphanedSubjectAsync(Guid tenantId)
     {
-        await using var db = await _dbContextFactory.CreateTenantPinnedContextAsync(tenantId, HttpContext.RequestAborted);
+        await using var db = await _dbContextFactory.CreateSystemPinnedAsync(tenantId, HttpContext.RequestAborted);
 
         return await db.OrphanedSubjectsOf(tenantId).AnyAsync();
     }
@@ -1031,11 +1017,8 @@ public class PasskeyController : ControllerBase
                 .Select(s => s.AccessRequestMessage)
                 .FirstOrDefaultAsync();
 
-            // Pinned, not the request-scoped context: "Request access" is rendered on the login
-            // page of a share host too, where the scoped context is marked as a share and
-            // membership is denied. Resolved there, this would find no owners and the request would
-            // be filed with nobody notified.
-            await using var ownerCtx = await _dbContextFactory.CreateTenantPinnedContextAsync(
+            // System-pinned: "Request access" is rendered on a share host's login page too.
+            await using var ownerCtx = await _dbContextFactory.CreateSystemPinnedAsync(
                 tenant.Id, HttpContext.RequestAborted);
             var ownerIds = await ownerCtx.TenantMembers
                 .OwnersOf(tenant.Id)

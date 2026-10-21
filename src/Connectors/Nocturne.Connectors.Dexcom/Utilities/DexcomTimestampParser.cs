@@ -11,7 +11,6 @@ public static partial class DexcomTimestampParser
     ///     Parses Dexcom Share timestamp format: /Date(milliseconds-offset)/
     ///     Example: "/Date(1426292016000-0700)/"
     /// </summary>
-    /// <param name="value">The timestamp string from Dexcom API</param>
     /// <returns>Parsed DateTime in UTC</returns>
     /// <exception cref="FormatException">Thrown if the timestamp cannot be parsed</exception>
     public static DateTime Parse(string value)
@@ -26,9 +25,6 @@ public static partial class DexcomTimestampParser
     /// <summary>
     ///     Tries to parse Dexcom Share timestamp format.
     /// </summary>
-    /// <param name="value">The timestamp string from Dexcom API</param>
-    /// <param name="result">The parsed DateTime if successful</param>
-    /// <returns>True if parsing succeeded, false otherwise</returns>
     public static bool TryParse(string value, out DateTime result)
     {
         result = default;

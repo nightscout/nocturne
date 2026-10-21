@@ -39,7 +39,7 @@ public class SensorGlucoseRepositoryLastReadingTests : IDisposable
         _context = _db.CreateContext();
 
         _repo = new SensorGlucoseRepository(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<SensorGlucoseRepository>.Instance);

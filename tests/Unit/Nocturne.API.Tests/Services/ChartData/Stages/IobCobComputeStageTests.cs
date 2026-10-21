@@ -2,15 +2,19 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
-using Nocturne.API.Services.Treatments;
+using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 using Nocturne.API.Tests.Infrastructure;
@@ -66,15 +70,17 @@ public class IobCobComputeStageTests
             .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
                 new TherapyTimeline(new[] { new TherapySegment(from, to, defaultSnapshot) }));
 
-        _stage = new IobCobComputeStage(
-            _mockIobCalculator.Object,
-            _mockCobCalculator.Object,
-            _mockBasalSeriesBuilder.Object,
-            _mockTherapyTimelineResolver.Object,
-            TestTenantCache.Create(_cache),
-            NullLogger<IobCobComputeStage>.Instance
-        );
+        _stage = CreateStage(TestTenantCache.Create(_cache));
     }
+
+    private IobCobComputeStage CreateStage(ITenantCache cache) => new(
+        _mockIobCalculator.Object,
+        _mockCobCalculator.Object,
+        _mockBasalSeriesBuilder.Object,
+        _mockTherapyTimelineResolver.Object,
+        cache,
+        NullLogger<IobCobComputeStage>.Instance
+    );
 
     [Fact]
     public async Task ExecuteAsync_ComputesIobCobAndBasalSeries()
@@ -461,6 +467,46 @@ public class IobCobComputeStageTests
         }, CancellationToken.None);
 
         second.IobSeries.Should().ContainSingle().Which.Value.Should().Be(1.5);
+    }
+
+    /// <summary>
+    /// A share computes with the profile tables hidden from it, so its series must never meet the
+    /// owner's.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(NarrowedReaders.All), MemberType = typeof(NarrowedReaders))]
+    public async Task ExecuteAsync_NarrowedReader_NeverSharesTheOwnersCachedSeries(string reader)
+    {
+        var context = new ChartDataContext
+        {
+            StartTime = TestMills,
+            EndTime = TestMills,
+            IntervalMinutes = 5,
+            DefaultBasalRate = 1.0,
+            BolusList = [new Bolus
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(TestMills - 5 * 60 * 1000).UtcDateTime,
+                Insulin = 3.0,
+            }],
+            CarbIntakeList = [],
+            TempBasalList = [],
+        };
+        void IobIs(double iob) => _mockIobCalculator
+            .Setup(s => s.FromBoluses(It.IsAny<List<Bolus>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
+            .Returns(new IobResult { Iob = iob });
+        var narrowed = CreateStage(NarrowedReaders.Cache(reader, _cache));
+
+        IobIs(2.0);
+        await _stage.ExecuteAsync(context, CancellationToken.None);
+
+        IobIs(7.0);
+        var narrowedResult = await narrowed.ExecuteAsync(context, CancellationToken.None);
+
+        IobIs(9.0);
+        var owner = await _stage.ExecuteAsync(context, CancellationToken.None);
+
+        narrowedResult.IobSeries.Should().ContainSingle().Which.Value.Should().Be(7.0, "the owner's cached series is not served");
+        owner.IobSeries.Should().ContainSingle().Which.Value.Should().Be(2.0, "the narrowed series is not written over it");
     }
 
     [Fact]

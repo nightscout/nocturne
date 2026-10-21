@@ -6,7 +6,7 @@ import type { TenantAlertSettingsResponse } from "$api-clients";
 
 // The page seeds its form from the generated remote query; the mock resolves
 // synchronously so `current` is populated on first render.
-const settings: TenantAlertSettingsResponse = {
+let settings: TenantAlertSettingsResponse = {
   dndManualActive: false,
   dndScheduleEnabled: false,
 } as TenantAlertSettingsResponse;
@@ -26,6 +26,7 @@ const accessDenied = () => page.getByText("Access Denied");
 describe("alerts/dnd page", () => {
   beforeEach(() => {
     pageState.data = {};
+    settings = { dndManualActive: false, dndScheduleEnabled: false } as TenantAlertSettingsResponse;
     updateImpl = () => Promise.resolve(settings);
   });
 
@@ -48,6 +49,34 @@ describe("alerts/dnd page", () => {
       .element(page.getByText("Do Not Disturb is currently"))
       .toBeVisible();
     await expect.element(accessDenied()).not.toBeInTheDocument();
+  });
+
+  it("says the schedule is on now while its window is in effect", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    settings = { dndManualActive: false, dndScheduleEnabled: true, dndScheduleActiveNow: true };
+
+    render(DndPage, {});
+
+    await expect.element(page.getByText("Scheduled, on now")).toBeVisible();
+  });
+
+  it("says only Scheduled while the window is configured but not in effect", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    settings = { dndManualActive: false, dndScheduleEnabled: true, dndScheduleActiveNow: false };
+
+    render(DndPage, {});
+
+    await expect.element(page.getByText("Scheduled", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Scheduled, on now")).not.toBeInTheDocument();
+  });
+
+  it("shows no schedule status when none is configured", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+
+    render(DndPage, {});
+
+    await expect.element(saveButton()).toBeVisible();
+    await expect.element(page.getByText("Scheduled", { exact: true })).not.toBeInTheDocument();
   });
 
   it("shows the server's reason when the save is refused", async () => {

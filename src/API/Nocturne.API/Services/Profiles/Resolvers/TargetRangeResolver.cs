@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
@@ -16,10 +16,9 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
     private readonly ITherapySettingsRepository _therapyRepo;
     private readonly IPatientRecordRepository _patientRecordRepo;
     private readonly IActiveProfileResolver _activeProfileResolver;
-    private readonly ITenantCache _cache;
+    private readonly ProfileVersionCache _versions;
     private readonly ILogger<TargetRangeResolver> _logger;
 
-    private const int CacheTtlSeconds = 5;
     private const double DefaultLow = GlucoseConstants.TargetBottomMgdl;
     private const double DefaultHigh = GlucoseConstants.TargetTopMgdl;
 
@@ -28,14 +27,14 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
         ITherapySettingsRepository therapyRepo,
         IPatientRecordRepository patientRecordRepo,
         IActiveProfileResolver activeProfileResolver,
-        ITenantCache cache,
+        ProfileVersionCache versions,
         ILogger<TargetRangeResolver> logger)
     {
         _repo = repo;
         _therapyRepo = therapyRepo;
         _patientRecordRepo = patientRecordRepo;
         _activeProfileResolver = activeProfileResolver;
-        _cache = cache;
+        _versions = versions;
         _logger = logger;
     }
 
@@ -50,6 +49,9 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
         var (_, high) = await ResolveRangeAsync(timeMills, specProfile, ct);
         return high;
     }
+
+    public Task<(double Low, double High)> GetBGTargetRangeAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
+        => ResolveRangeAsync(timeMills, specProfile, ct);
 
     private async Task<(double Low, double High)> ResolveRangeAsync(
         long timeMills, string? specProfile, CancellationToken ct)
@@ -74,12 +76,7 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
         return range ?? (DefaultLow, DefaultHigh);
     }
 
-    private async Task<Core.Models.V4.TargetRangeSchedule?> GetCachedScheduleAsync(
-        string profileName, DateTime timestamp, CancellationToken ct)
-    {
-        return await _cache.GetOrCreateLocalAsync(
-            ScheduleCacheKey.For("target-range-schedule", profileName, timestamp),
-            () => _repo.GetActiveAtAsync(profileName, timestamp, ct),
-            TimeSpan.FromSeconds(CacheTtlSeconds));
-    }
+    private Task<Core.Models.V4.TargetRangeSchedule?> GetCachedScheduleAsync(
+        string profileName, DateTime timestamp, CancellationToken ct) =>
+        _versions.GetActiveAtAsync(_repo, profileName, timestamp, ct);
 }

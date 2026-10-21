@@ -233,7 +233,11 @@ public class OidcControllerLinkTests
 
         var result = await _controller.UnlinkIdentity(identityId);
 
-        result.Should().BeOfType<ConflictObjectResult>();
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        var problem = objectResult.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Detail.Should().NotBeNullOrWhiteSpace();
+        problem.Extensions.Should().ContainKey("error").WhoseValue.Should().Be("last_factor");
     }
 
     [Fact]
@@ -248,7 +252,9 @@ public class OidcControllerLinkTests
 
         var result = await _controller.UnlinkIdentity(identityId);
 
-        result.Should().BeOfType<NotFoundResult>();
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        objectResult.Value.Should().BeOfType<ProblemDetails>().Subject.Detail.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]

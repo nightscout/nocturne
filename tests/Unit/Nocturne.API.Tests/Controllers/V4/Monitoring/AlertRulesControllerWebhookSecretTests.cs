@@ -187,7 +187,7 @@ public class AlertRulesControllerWebhookSecretTests
         var encryption = WebhookTestHarness.Encryption();
 
         var controller = new AlertRulesController(
-            new TestTenantDbContextFactory(ctx),
+            new TestNocturneDbContextFactory(ctx),
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),

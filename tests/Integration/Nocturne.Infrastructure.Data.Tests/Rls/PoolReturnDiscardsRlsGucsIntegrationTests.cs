@@ -1,5 +1,7 @@
 using System.Data.Common;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
@@ -47,16 +49,18 @@ public class PoolReturnDiscardsRlsGucsIntegrationTests
         var shareSubject = Guid.NewGuid();
         int backendPid;
 
+        var shareReader = new CategoryReadContext();
+        shareReader.MarkShare();
+        shareReader.SetVisibleCategories("glucose.read,treatments.read");
+        shareReader.SetFullHistory(true);
+        shareReader.ClampMemberHistory();
+
         // Lease 1 - a share-flagged, category-restricted context. Every GUC is on the session.
         await using (var share = new NocturneDbContext(options)
         {
             TenantId = shareTenant,
             SubjectId = shareSubject,
-            IsShareContext = true,
-            VisibleCategories = "glucose.read,treatments.read",
-            ShareFullHistory = true,
-            HistoryClamped = true,
-        })
+        }.ReadingFrom(reader: shareReader))
         {
             var connection = await OpenAsync(share);
             backendPid = Convert.ToInt32(await ScalarAsync(connection, "SELECT pg_backend_pid()"));

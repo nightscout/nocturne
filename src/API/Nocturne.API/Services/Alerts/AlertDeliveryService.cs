@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Services.Realtime;
 
@@ -24,7 +25,7 @@ namespace Nocturne.API.Services.Alerts;
 /// <see cref="ISignalRBroadcastService"/> notifications are sent alongside channel deliveries.
 /// </remarks>
 internal sealed class AlertDeliveryService(
-    IDbContextFactory<NocturneDbContext> contextFactory,
+    INocturneDbContextFactory contextFactory,
     ITenantAccessor tenantAccessor,
     ISignalRBroadcastService broadcastService,
     IServiceProvider serviceProvider,
@@ -45,8 +46,7 @@ internal sealed class AlertDeliveryService(
     {
         var tenantId = tenantAccessor.TenantId;
 
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = tenantId;
+        await using var db = await contextFactory.CreateAsync(ct);
 
         var snoozedUntil = await db.AlertInstances
             .AsNoTracking()
@@ -196,8 +196,7 @@ internal sealed class AlertDeliveryService(
         CancellationToken ct)
     {
         var tenantId = tenantAccessor.TenantId;
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = tenantId;
+        await using var db = await contextFactory.CreateAsync(ct);
 
         // Synthesise a parent excursion so the delivery rows have somewhere to hang. The
         // excursion is opened and immediately resolved — it never participates in tracker
@@ -347,8 +346,7 @@ internal sealed class AlertDeliveryService(
 
     public async Task MarkDeliveredAsync(Guid deliveryId, string? platformMessageId, string? platformThreadId, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = tenantAccessor.TenantId;
+        await using var db = await contextFactory.CreateAsync(ct);
         var delivery = await db.AlertDeliveries.FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
         if (delivery is null) return;
 
@@ -361,8 +359,7 @@ internal sealed class AlertDeliveryService(
 
     public async Task MarkFailedAsync(Guid deliveryId, string error, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = tenantAccessor.TenantId;
+        await using var db = await contextFactory.CreateAsync(ct);
         var delivery = await db.AlertDeliveries.FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
         if (delivery is null) return;
 

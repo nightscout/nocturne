@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -67,7 +68,7 @@ public class TreatmentReadService : ITreatmentStore
     /// <inheritdoc />
     public async Task<IReadOnlyList<Treatment>> QueryAsync(TreatmentQuery query, CancellationToken ct = default)
     {
-        var find = FindQuery.Parse(query.Find);
+        var find = FindQuery.Parse(query.Find, FindQuery.TreatmentBareRegexFields);
 
         var results = find.HasFieldFilters
             ? await QueryFilteredAsync(find, query.Count, query.Skip, ct)
@@ -101,32 +102,21 @@ public class TreatmentReadService : ITreatmentStore
     private async Task<IReadOnlyList<Treatment>> QueryFilteredAsync(
         FindQuery find, int count, int skip, CancellationToken ct)
     {
-        var needed = (long)count + skip;
-        var fetchLimit = (int)Math.Min(Math.Max(needed * 4, 100), MaxFilterFetch);
+        var (matching, truncated) = await FindFilteredFetch.MatchWindowAsync<Treatment>(
+            async limit => (await _projection.GetProjectedTreatmentsAsync(
+                find.FromMills, find.ToMills, limit, nativeOnly: false, ct: ct)).ToList(),
+            find.Matches, (long)count + skip, MaxFilterFetch);
 
-        while (true)
-        {
-            var projected = (await _projection.GetProjectedTreatmentsAsync(
-                find.FromMills, find.ToMills, fetchLimit, nativeOnly: false, ct: ct)).ToList();
+        if (truncated)
+            _logger.LogWarning(
+                "Find-filtered treatment query hit the {MaxFetch}-row window; older matches are not returned",
+                MaxFilterFetch);
 
-            var matching = projected.Where(find.Matches).ToList();
-            var exhausted = projected.Count < fetchLimit || fetchLimit >= MaxFilterFetch;
-            if (matching.Count >= needed || exhausted)
-            {
-                if (matching.Count < needed && projected.Count >= fetchLimit)
-                    _logger.LogWarning(
-                        "Find-filtered treatment query hit the {MaxFetch}-row window; older matches are not returned",
-                        MaxFilterFetch);
-
-                return matching
-                    .OrderByDescending(t => t.Mills)
-                    .Skip(skip)
-                    .Take(count)
-                    .ToList();
-            }
-
-            fetchLimit = (int)Math.Min((long)fetchLimit * 4, MaxFilterFetch);
-        }
+        return matching
+            .OrderByDescending(t => t.Mills)
+            .Skip(skip)
+            .Take(count)
+            .ToList();
     }
 
     /// <inheritdoc />
@@ -272,18 +262,17 @@ public class TreatmentReadService : ITreatmentStore
     private async Task<TreatmentDeletion?> DeleteStateSpanAsync(string id, CancellationToken ct)
     {
         if (await _projection.GetProjectedStateSpanTreatmentAsync(id, ct) is not { Id: { } spanId } served
-            || await _projection.GetStateSpanTreatmentIdAsync(id, ct) is not { } treatmentId
-            || !await _stateSpans.DeleteStateSpanAsync(spanId, ct))
+            || await _projection.GetStateSpanTreatmentIdAsync(id, ct) is not { } treatmentId)
             return null;
 
         await _pipeline.DeleteByLegacyIdAsync<Treatment>(treatmentId, WriteOrigin.Live, ct);
-        return new TreatmentDeletion(served);
+        return await _stateSpans.DeleteStateSpanAsync(spanId, ct) ? new TreatmentDeletion(served) : null;
     }
 
     /// <inheritdoc />
     public async Task<long> CountAsync(string? find = null, CancellationToken ct = default)
     {
-        var findQuery = FindQuery.Parse(find);
+        var findQuery = FindQuery.Parse(find, FindQuery.TreatmentBareRegexFields);
 
         if (findQuery.HasFieldFilters)
         {

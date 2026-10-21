@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Extensions;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Connections.Features;
@@ -10,9 +11,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
-using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Hubs;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -456,7 +457,7 @@ public class TenantIsolationTests
         var (service, dataClients, _, _, _, _, _) = CreateBroadcastService(TenantA);
 
         await service.BroadcastTrackerUpdateAsync(
-            "created",
+            TrackerRealtimeAction.Create,
             new TrackerInstanceDto { Id = Guid.NewGuid() },
             "owner-123",
             TrackerVisibility.Public
@@ -841,6 +842,7 @@ public class TenantIsolationTests
             // Register an in-memory DbContext factory so the middleware can query for tenants
             services.AddDbContextFactory<Nocturne.Infrastructure.Data.NocturneDbContext>(options =>
                 options.UseInMemoryDatabase($"TenantTest_{Guid.NewGuid()}"));
+            services.AddDataServices();
         }
 
         context.RequestServices = services.BuildServiceProvider();

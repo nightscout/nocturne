@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Events;
@@ -20,10 +21,10 @@ namespace Nocturne.API.Services.Glucose;
 /// <seealso cref="IEntryCache"/>
 public class EntryService : IEntryService
 {
-    private static readonly HashSet<string> ValidEntryTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "sgv", "mbg", "cal"
-    };
+    private static readonly HashSet<string> ValidEntryTypes = new(
+        LegacyEntryTypes.All,
+        StringComparer.OrdinalIgnoreCase
+    );
 
     private readonly IEntryStore _store;
     private readonly IEntryDecomposer _decomposer;

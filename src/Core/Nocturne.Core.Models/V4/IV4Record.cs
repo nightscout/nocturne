@@ -47,7 +47,7 @@ public interface IV4Record
     /// Unix milliseconds, computed from <see cref="Timestamp"/>.
     /// </summary>
     /// <remarks>
-    /// This is a computed property: <c>new DateTimeOffset(Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds()</c>.
+    /// This is a computed property: the Unix milliseconds of <see cref="Timestamp"/>.
     /// It exists for v1/v3 API compatibility where <c>mills</c> / <c>date</c> fields are expected.
     /// </remarks>
     long Mills { get; }

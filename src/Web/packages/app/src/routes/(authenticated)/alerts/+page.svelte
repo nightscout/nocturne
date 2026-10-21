@@ -47,7 +47,8 @@
 
   import AlertRuleRow from "$lib/components/alerts/AlertRuleRow.svelte";
   import DndNoticeStrip from "$lib/components/alerts/DndNoticeStrip.svelte";
-  import { isDndActiveNow } from "$lib/components/alerts/dnd";
+  import { isDndInEffect, isDndManualActive } from "$lib/components/alerts/dnd";
+  import { refreshOnReturn } from "$lib/utils/refresh-on-return.svelte";
   import { severity, severityLabel } from "$lib/components/alerts/severity";
 
   // Every write on this page — rule toggle/delete/test-fire, acknowledge, and
@@ -66,6 +67,7 @@
   const activeAlertsQuery = getActiveAlerts();
   const historyQuery = getAlertHistory({ page: 1, pageSize: 50 });
   const dndQuery = getTenantAlertSettings();
+  refreshOnReturn(() => void dndQuery.refresh());
 
   // ---- Mutation state ----
   let togglingRuleId = $state<string | null>(null);
@@ -227,10 +229,9 @@
       firedThisWeek === fetchedHistory.length &&
       (history?.totalCount ?? 0) > fetchedHistory.length}
 
-    <!-- Do Not Disturb notice, shown only while a manual mute is in effect. -->
-    {#if dnd && isDndActiveNow(dnd)}
+    {#if dnd && isDndInEffect(dnd)}
       <DndNoticeStrip
-        onDisableDnd={canManageAlerts ? () => handleDisableDnd(dnd) : undefined}
+        onDisableDnd={canManageAlerts && isDndManualActive(dnd) ? () => handleDisableDnd(dnd) : undefined}
         {disablingDnd}
       />
     {/if}

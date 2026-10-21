@@ -49,32 +49,92 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         count.Should().Be(13);
     }
 
-    [Fact]
+    [Theory]
     [Trait("Category", "Unit")]
-    public async Task BulkDeleteAsync_WithNullFind_DeletesAll()
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("{}")]
+    [InlineData(" { } ")]
+    [InlineData("token=x")]
+    [InlineData("count=5&token=x")]
+    [InlineData("not a find")]
+    [InlineData("{\"mills\":")]
+    public async Task BulkDeleteAsync_WithAFindThatHasNoConditions_DeletesNothing(string? find)
     {
-        _sgRepo.Setup(r => r.DeleteByTimeRangeAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(50);
-        _mgRepo.Setup(r => r.DeleteByTimeRangeAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(5);
-        _calRepo.Setup(r => r.DeleteByTimeRangeAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(0);
-
         var decomposer = CreateDecomposer();
-        var count = await decomposer.BulkDeleteAsync(null, WriteOrigin.Live);
+        var count = await decomposer.BulkDeleteAsync(find, WriteOrigin.Live);
 
-        count.Should().Be(55);
+        count.Should().Be(0);
+        _sgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _calRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task BulkDeleteAsync_WithEmptyFind_DeletesAll()
+    public async Task BulkDeleteAsync_WithATypeEquality_DeletesOnlyThatType()
     {
-        _sgRepo.Setup(r => r.DeleteByTimeRangeAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(100);
-        _mgRepo.Setup(r => r.DeleteByTimeRangeAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(0);
-        _calRepo.Setup(r => r.DeleteByTimeRangeAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        _sgRepo.Setup(r => r.DeleteByTimeRangeAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(7);
 
         var decomposer = CreateDecomposer();
-        var count = await decomposer.BulkDeleteAsync("{}", WriteOrigin.Live);
+        var count = await decomposer.BulkDeleteAsync("find[type]=sgv", WriteOrigin.Live);
 
-        count.Should().Be(100);
+        count.Should().Be(7);
+        _mgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _calRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("find[]=")]
+    [InlineData("{\"$and\":[]}")]
+    [InlineData("{\"date\":{}}")]
+    [InlineData("{}")]
+    public async Task BulkDeleteAsync_WhenTheFindHasNoConditions_RefusesAtTheEmptyGuard(string find)
+    {
+        var count = await CreateDecomposer().BulkDeleteAsync(find, WriteOrigin.Live);
+
+        count.Should().Be(0);
+        _logger.Invocations
+            .Where(i => i.Method.Name == nameof(ILogger.Log))
+            .Select(i => i.Arguments[2].ToString())
+            .Should().Contain(m => m!.Contains("has no conditions"));
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("find[type]=other")]
+    [InlineData("find[type]=sgv%0D%0Aforged-line")]
+    [InlineData("find[type]=SGV&find[date][$gte]=1704067200000")]
+    public async Task BulkDeleteAsync_WithAnUnknownType_DeletesNothingAndLogsNoClientText(string find)
+    {
+        var count = await CreateDecomposer().BulkDeleteAsync(find, WriteOrigin.Live);
+
+        count.Should().Be(0);
+        _sgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _calRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _logger.Invocations
+            .Where(i => i.Method.Name == nameof(ILogger.Log))
+            .Select(i => i.Arguments[2].ToString())
+            .Should().NotContain(m => m!.Contains("forged-line") || m.Contains('\r') || m.Contains('\n') || m.Contains("other"));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task BulkDeleteAsync_NeverLogsTheRawFind()
+    {
+        var find = "find[type]=sgv&token=secret-value&find[date][$gte]=1704067200000";
+
+        await CreateDecomposer().BulkDeleteAsync(find, WriteOrigin.Live);
+        await CreateDecomposer().BulkDeleteAsync("token=secret-value", WriteOrigin.Live);
+        await CreateDecomposer().BulkDeleteAsync("find[sgv][$gte]=180&token=secret-value", WriteOrigin.Live);
+
+        _logger.Invocations
+            .Where(i => i.Method.Name == nameof(ILogger.Log))
+            .Select(i => i.Arguments[2].ToString())
+            .Should().NotContain(m => m!.Contains("secret-value"));
     }
 
     [Fact]

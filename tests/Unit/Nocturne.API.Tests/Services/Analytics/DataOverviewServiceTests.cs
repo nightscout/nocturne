@@ -29,7 +29,7 @@ public class DataOverviewServiceTests : IDisposable
     private readonly DataOverviewService _service;
     private readonly Mock<ITenantCache> _cacheService = new();
     private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
-    private readonly Mock<ITenantDbContextFactory> _factory = new();
+    private readonly Mock<INocturneDbContextFactory> _factory = new();
     private readonly ListLogger<DataOverviewService> _logger = new();
     private IInterceptor[] _interceptors = [];
     private readonly string _dbName = $"data_overview_{Guid.NewGuid()}";
@@ -53,7 +53,7 @@ public class DataOverviewServiceTests : IDisposable
     {
         // Seed via a long-lived context; the service leases its own contexts from the factory.
         // Both share the same named InMemory store and tenant, so the service sees seeded data —
-        // mirroring production, where the service queries through ITenantDbContextFactory.
+        // mirroring production, where the service queries through INocturneDbContextFactory.
         _dbContext = TestDbContextFactory.CreateInMemoryContext(_dbName);
         _dbContext.TenantId = TenantId;
 

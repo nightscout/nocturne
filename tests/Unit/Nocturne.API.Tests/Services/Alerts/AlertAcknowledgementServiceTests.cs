@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -7,7 +8,6 @@ using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
@@ -51,7 +51,6 @@ public class AlertAcknowledgementServiceTests
 
         _service = new AlertAcknowledgementService(
             _factory,
-            _tenantAccessor,
             _broadcast.Object,
             _members.Object,
             NullLogger<AlertAcknowledgementService>.Instance);
@@ -280,7 +279,6 @@ public class AlertAcknowledgementServiceTests
             .Options;
         var service = new AlertAcknowledgementService(
             new TestDbContextFactory(racingOptions) { TenantOverride = _tenantId },
-            _tenantAccessor,
             _broadcast.Object,
             _members.Object,
             NullLogger<AlertAcknowledgementService>.Instance);
@@ -456,28 +454,6 @@ public class AlertAcknowledgementServiceTests
             Times.Never);
     }
 
-    [Fact]
-    public async Task AcknowledgeAllAsync_CarriesTheScopeAuditContextOntoEachContext()
-    {
-        // Acknowledgement mutates an auditable entity, and the pooled context is leased with
-        // AuditContext cleared. Left unset, an auto-acknowledgement made inside a connector
-        // sync's scope is attributed to whichever HTTP request the interceptor falls back to.
-        await SeedActiveExcursionAsync();
-        var audit = SystemAuditContext.ForService("connector:test");
-        var service = new AlertAcknowledgementService(
-            _factory,
-            _tenantAccessor,
-            _broadcast.Object,
-            _members.Object,
-            NullLogger<AlertAcknowledgementService>.Instance,
-            audit);
-
-        await service.AcknowledgeAllAsync(_tenantId, "system", CancellationToken.None);
-
-        _factory.Created.Should().NotBeEmpty();
-        _factory.Created.Should().OnlyContain(c => c.AuditContext == audit);
-    }
-
     /// <summary>
     /// Commits the same mute from another context just before the service's own insert, then
     /// rejects that insert the way PostgreSQL's unique index would. The in-memory provider does
@@ -514,7 +490,7 @@ public class AlertAcknowledgementServiceTests
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
+        : SingleReaderDbContextFactory
     {
         // Optional override so AcknowledgeExcursionAsync (which doesn't take a tenant) can still
         // resolve the excursion across tenants under the global query filter.
@@ -533,7 +509,7 @@ public class AlertAcknowledgementServiceTests
             return ctx;
         }
 
-        public Task<NocturneDbContext> CreateDbContextAsync(CancellationToken ct = default)
-            => Task.FromResult(CreateDbContext());
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
+            => ValueTask.FromResult(CreateDbContext());
     }
 }

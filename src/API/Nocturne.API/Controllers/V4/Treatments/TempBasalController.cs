@@ -173,5 +173,8 @@ public class TempBasalController(
         Origin = request.Origin ?? TempBasalOrigin.Manual,
         PumpRecordId = request.PumpRecordId,
         ApsSnapshotId = request.ApsSnapshotId,
+        AdditionalProperties = request.Origin is { } origin
+            ? TempBasalAutomaticFlag.Keep(null, TempBasalAutomaticFlag.Of(origin))
+            : null,
     };
 }

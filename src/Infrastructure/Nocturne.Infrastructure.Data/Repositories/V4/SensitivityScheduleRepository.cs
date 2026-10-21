@@ -24,7 +24,7 @@ public class SensitivityScheduleRepository : V4RepositoryBase<SensitivitySchedul
     /// Initializes a new instance of the <see cref="SensitivityScheduleRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public SensitivityScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<SensitivityScheduleRepository> logger, IV4RecordBroadcaster<SensitivitySchedule>? broadcaster = null)
+    public SensitivityScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<SensitivityScheduleRepository> logger, IV4RecordBroadcaster<SensitivitySchedule>? broadcaster = null)
         : base(contextFactory, auditContext, logger, broadcaster)
     {
     }

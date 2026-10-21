@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Auth;
@@ -14,7 +15,7 @@ namespace Nocturne.API.Services.Auth;
 public class OAuthGrantService : IOAuthGrantService
 {
     private readonly NocturneDbContext _dbContext;
-    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly IOAuthClientService _clientService;
     private readonly GuestSessionCacheService _guestSessionCache;
     private readonly GrantRevocationService _grantRevocation;
@@ -24,15 +25,16 @@ public class OAuthGrantService : IOAuthGrantService
     /// Initialises a new <see cref="OAuthGrantService"/>.
     /// </summary>
     /// <param name="dbContext">Database context for grant persistence.</param>
-    /// <param name="dbContextFactory">Factory used by <see cref="IsGrantRevokedAsync"/>, which runs
-    /// during authentication and so cannot rely on the scoped context being tenant-pinned yet.</param>
+    /// <param name="dbContextFactory">Factory used by <see cref="IsGrantRevokedAsync"/>, which pins
+    /// the token's tenant rather than reading its scope's: it runs inside the authentication handlers,
+    /// which may hold a scope with no tenant resolved.</param>
     /// <param name="clientService">Used to resolve client metadata (currently unused in this implementation).</param>
     /// <param name="guestSessionCache">Cache evicted when a grant's scopes are narrowed.</param>
     /// <param name="grantRevocation">Applies the consequences of a revoke.</param>
     /// <param name="logger">Logger instance.</param>
     public OAuthGrantService(
         NocturneDbContext dbContext,
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        INocturneDbContextFactory dbContextFactory,
         IOAuthClientService clientService,
         GuestSessionCacheService guestSessionCache,
         GrantRevocationService grantRevocation,
@@ -204,8 +206,7 @@ public class OAuthGrantService : IOAuthGrantService
         // A dedicated context pinned to the token's tenant: this runs inside the authentication
         // handlers, which may hold a child scope whose context carries no tenant (and therefore no
         // RLS tenant GUC), and an unpinned read would return nothing for every grant.
-        await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
-        db.TenantId = tenantId;
+        await using var db = await _dbContextFactory.CreateForTenantAsync(tenantId, ct);
 
         var state = await db.OAuthGrants
             .AsNoTracking()

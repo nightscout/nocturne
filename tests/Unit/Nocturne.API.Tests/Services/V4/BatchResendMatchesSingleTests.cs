@@ -34,7 +34,7 @@ public class BatchResendMatchesSingleTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
-    private readonly TestTenantDbContextFactory _factory;
+    private readonly TestNocturneDbContextFactory _factory;
     private readonly IAuditContext _audit = Mock.Of<IAuditContext>();
     private readonly IDeduplicationService _dedup = Mock.Of<IDeduplicationService>();
 
@@ -42,7 +42,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
         _context = _db.CreateContext();
-        _factory = new TestTenantDbContextFactory(_context);
+        _factory = new TestNocturneDbContextFactory(_context);
     }
 
     public void Dispose()

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Audit;
 using System.Linq;
 using Nocturne.Core.Contracts.Devices;
@@ -52,12 +53,20 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         _auditContext = auditContext;
     }
 
+    /// <summary>The tables an entry decomposes into, all keyed by its legacy id.</summary>
+    private StoredCorrelationLookup[] EntryTables =>
+    [
+        _sensorGlucoseRepository.GetCorrelationIdsByLegacyIdAsync,
+        _meterGlucoseRepository.GetCorrelationIdsByLegacyIdAsync,
+        _calibrationRepository.GetCorrelationIdsByLegacyIdAsync,
+    ];
+
     /// <inheritdoc />
     public async Task<DecompositionResult> DecomposeAsync(Entry entry, WriteOrigin origin, CancellationToken ct = default)
     {
         var result = new DecompositionResult
         {
-            CorrelationId = Guid.CreateVersion7()
+            CorrelationId = CorrelationIdFor(entry.Id, await GetStoredCorrelationIdsAsync([entry.Id], EntryTables, ct))
         };
 
         var entryType = entry.Type?.ToLowerInvariant();
@@ -158,10 +167,11 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         var mbgList = new List<MeterGlucose>();
         var calList = new List<Calibration>();
         var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
+        var correlationIds = await GetStoredCorrelationIdsAsync(entries.Select(e => e.Id), EntryTables, ct);
 
         foreach (var entry in entries)
         {
-            var correlationId = Guid.CreateVersion7();
+            var correlationId = CorrelationIdFor(entry.Id, correlationIds);
             switch (entry.Type?.ToLowerInvariant())
             {
                 case "sgv":
@@ -273,28 +283,34 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         var findQuery = Core.Models.Queries.FindQuery.Parse(find);
         var (fromMills, toMills) = (findQuery.FromMills, findQuery.ToMills);
 
-        // find is client-controlled; strip line breaks so it can't forge log entries
-        var findForLog = find?.ReplaceLineEndings(" ");
+        if (findQuery.IsEmpty)
+        {
+            Logger.LogWarning("BulkDelete refused: the find has no conditions");
+            return 0;
+        }
 
-        // A find[type]=x equality narrows the sweep to that record type; any other field filter
-        // cannot be honored by a by-time sweep, so refuse rather than wipe non-matching records.
+        // A find[type]=x equality narrows the sweep to that record type.
         var typeFilter = findQuery.GetEqualityValue("type");
+        if (typeFilter is not null && !LegacyEntryTypes.All.Contains(typeFilter))
+        {
+            Logger.LogWarning("BulkDelete refused: the find names a record type the sweep does not cover");
+            return 0;
+        }
+
+        // Any other field filter cannot be honored by a by-time sweep, so refuse rather than wipe
+        // non-matching records.
         if (findQuery.HasFieldFiltersExcept("type"))
         {
-            Logger.LogWarning("BulkDelete refused: find query carries field filters the by-time sweep cannot honor. find={Find}", findForLog);
+            Logger.LogWarning("BulkDelete refused: the find carries field filters the by-time sweep cannot honor");
             return 0;
         }
 
         // NIGHTSCOUT-COMPAT: Legacy Nightscout allowed arbitrary MongoDB find queries for
-        // bulk delete. If the caller passed a non-empty find query but we couldn't extract
-        // any time bounds or a type filter, refuse to delete — otherwise we'd wipe all records.
-        // Null/empty find intentionally deletes everything (matches "delete all" semantics).
-        var hasFind = !string.IsNullOrEmpty(find) && find != "{}";
-        var hasTimeBounds = fromMills.HasValue || toMills.HasValue;
-
-        if (hasFind && !hasTimeBounds && typeFilter is null)
+        // bulk delete. If the caller passed a find but we couldn't extract any time bounds or
+        // a type filter, refuse to delete, otherwise we'd wipe all records.
+        if (!fromMills.HasValue && !toMills.HasValue && typeFilter is null)
         {
-            Logger.LogWarning("BulkDelete refused: find query has no parseable time range, would delete all records. find={Find}", findForLog);
+            Logger.LogWarning("BulkDelete refused: the find has no parseable time range or type");
             return 0;
         }
 
@@ -313,8 +329,8 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             ? await _calibrationRepository.DeleteByTimeRangeAsync(from, to, ct) : 0;
 
         var total = (long)sgDeleted + mgDeleted + calDeleted;
-        Logger.LogInformation("BulkDelete: removed {Total} v4 records (sg={Sg}, mg={Mg}, cal={Cal}) for find={Find}",
-            total, sgDeleted, mgDeleted, calDeleted, findForLog);
+        Logger.LogInformation("BulkDelete: removed {Total} v4 records (sg={Sg}, mg={Mg}, cal={Cal}) from={From} to={To} type={Type}",
+            total, sgDeleted, mgDeleted, calDeleted, from, to, typeFilter);
 
         return total;
     }

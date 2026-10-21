@@ -22,7 +22,6 @@ public interface IConnectorCredentialVerifier
     /// </summary>
     /// <param name="configuration">The non-secret configuration values, in the same shape the configuration PUT accepts.</param>
     /// <param name="secrets">The secret values keyed by camelCase property name, in the same shape the secrets PUT accepts.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<ConnectorCredentialVerificationResult> VerifyAsync(
         JsonDocument? configuration,
         Dictionary<string, string> secrets,

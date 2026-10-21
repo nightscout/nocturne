@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Tests.Infrastructure;
@@ -193,8 +192,7 @@ public class ServiceCacheTests
         };
         var httpContextAccessor = new HttpContextAccessor { HttpContext = httpContext };
 
-        var mockDbContextFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
-        var tenantDbContextFactory = new Mock<ITenantDbContextFactory>();
+        var tenantDbContextFactory = new Mock<INocturneDbContextFactory>();
         tenantDbContextFactory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext());
@@ -207,7 +205,6 @@ public class ServiceCacheTests
             _mockCacheService.Object,
             _mockDemoModeService.Object,
             dbContext,
-            mockDbContextFactory.Object,
             tenantDbContextFactory.Object,
             httpContextAccessor,
             _mockTenantAccessor.Object,
@@ -286,8 +283,7 @@ public class ServiceCacheTests
         };
         var httpContextAccessor = new HttpContextAccessor { HttpContext = httpContext };
 
-        var mockDbContextFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
-        var tenantDbContextFactory = new Mock<ITenantDbContextFactory>();
+        var tenantDbContextFactory = new Mock<INocturneDbContextFactory>();
         tenantDbContextFactory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext());
@@ -300,7 +296,6 @@ public class ServiceCacheTests
             _mockCacheService.Object,
             _mockDemoModeService.Object,
             dbContext,
-            mockDbContextFactory.Object,
             tenantDbContextFactory.Object,
             httpContextAccessor,
             _mockTenantAccessor.Object,

@@ -55,7 +55,7 @@ public class DirectGrantTokenHandlerTests : IDisposable
             .ReturnsAsync(() => _db.CreateContext(_testTenantId));
 
         var logger = new Mock<ILogger<DirectGrantTokenHandler>>();
-        _handler = new DirectGrantTokenHandler(_dbContextFactory.Object, _clock, logger.Object);
+        _handler = new DirectGrantTokenHandler(_dbContextFactory.Object.AsNocturneFactory(), _clock, logger.Object);
     }
 
     public void Dispose()

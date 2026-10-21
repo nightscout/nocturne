@@ -197,7 +197,7 @@ public class TenantControllerLoginCodeTests : IDisposable
 
     private async Task<IActionResult> InvokeAsync(Guid tenantId, Guid subjectId) =>
         await _controller.IssueLoginCode(
-            tenantId, subjectId, _db.ContextFactory, _loginCodeService, CancellationToken.None);
+            tenantId, subjectId, _db.ContextFactory.AsNocturneFactory(), _loginCodeService, CancellationToken.None);
 
     private async Task<LoginCode> IssueAsync(Guid subjectId)
     {

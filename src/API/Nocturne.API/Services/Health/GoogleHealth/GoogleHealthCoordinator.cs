@@ -1,3 +1,4 @@
+using Nocturne.API.Multitenancy;
 using System.Collections.Concurrent;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
@@ -16,6 +17,8 @@ namespace Nocturne.API.Services.Health.GoogleHealth;
 
 public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
 {
+    private const string AuditEndpoint = "service:google-health";
+
     private readonly IServiceScopeFactory? scopes;
     public GoogleHealthCoordinator(IServiceScopeFactory scopes) => this.scopes = scopes;
     internal GoogleHealthCoordinator() { }
@@ -193,14 +196,8 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
         }
     }
 
-    private IServiceScope TenantScope(Guid tenantId)
-    {
-        var scope = scopes!.CreateScope();
-        scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
-            .SetTenant(new(tenantId, "", "", true, false));
-        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = tenantId;
-        return scope;
-    }
+    private IServiceScope TenantScope(Guid tenantId) =>
+        TenantJobScope.Open(scopes!, new TenantContext(tenantId, "", "", true, false), AuditEndpoint);
 
     internal async Task<SyncProgress?> ProgressAsync(Guid tenantId, CancellationToken ct)
     {

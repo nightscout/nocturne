@@ -3,7 +3,6 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Realtime;
@@ -369,7 +368,7 @@ public class TrackerTriggerServiceTests
 
         _broadcast.Verify(
             b => b.BroadcastTrackerUpdateAsync(
-                "complete",
+                TrackerRealtimeAction.Complete,
                 It.IsAny<TrackerInstanceDto>(),
                 It.IsAny<string>(),
                 It.IsAny<TrackerVisibility>()
@@ -378,7 +377,7 @@ public class TrackerTriggerServiceTests
         );
         _broadcast.Verify(
             b => b.BroadcastTrackerUpdateAsync(
-                "create",
+                TrackerRealtimeAction.Create,
                 It.IsAny<TrackerInstanceDto>(),
                 It.IsAny<string>(),
                 It.IsAny<TrackerVisibility>()
@@ -440,7 +439,7 @@ public class TrackerTriggerServiceTests
             CompletedAt = completedAt,
         };
 
-    private void VerifyBroadcast(string action, TrackerInstanceEntity instance, Times times) =>
+    private void VerifyBroadcast(TrackerRealtimeAction action, TrackerInstanceEntity instance, Times times) =>
         _broadcast.Verify(b => b.BroadcastTrackerUpdateAsync(
             action, It.Is<TrackerInstanceDto>(d => d.Id == instance.Id), instance.UserId, It.IsAny<TrackerVisibility>()), times);
 
@@ -458,8 +457,8 @@ public class TrackerTriggerServiceTests
         await _sut.OnDeletedAsync([deviceEvent]);
 
         _reverts.Should().Equal((definition.Id, deviceEvent.Id.ToString()));
-        VerifyBroadcast("delete", started, Times.Once());
-        VerifyBroadcast("reopen", previous, Times.Once());
+        VerifyBroadcast(TrackerRealtimeAction.Delete, started, Times.Once());
+        VerifyBroadcast(TrackerRealtimeAction.Reopen, previous, Times.Once());
     }
 
     [Fact]
@@ -507,7 +506,7 @@ public class TrackerTriggerServiceTests
         await _sut.OnDeletedAsync([older, newer]);
 
         _reverts.Select(r => r.StartTreatmentId).Should().Equal(newer.Id.ToString(), older.Id.ToString());
-        VerifyBroadcast("reopen", first, Times.Once());
+        VerifyBroadcast(TrackerRealtimeAction.Reopen, first, Times.Once());
     }
 
     [Fact]

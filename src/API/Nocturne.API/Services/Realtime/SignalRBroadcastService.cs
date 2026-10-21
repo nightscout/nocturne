@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
-using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Hubs;
+using Nocturne.API.Services.Monitoring;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -81,7 +81,7 @@ public interface ISignalRBroadcastService
     /// only a Public definition is visible tenant-wide, otherwise just to its owner.
     /// </remarks>
     Task BroadcastTrackerUpdateAsync(
-        string action,
+        TrackerRealtimeAction action,
         TrackerInstanceDto trackerInstance,
         string ownerSubjectId,
         TrackerVisibility visibility
@@ -468,7 +468,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
 
     /// <inheritdoc />
     public async Task BroadcastTrackerUpdateAsync(
-        string action,
+        TrackerRealtimeAction action,
         TrackerInstanceDto trackerInstance,
         string ownerSubjectId,
         TrackerVisibility visibility

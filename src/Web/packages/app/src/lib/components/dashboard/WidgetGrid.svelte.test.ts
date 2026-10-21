@@ -23,10 +23,18 @@ const { store } = vi.hoisted(() => {
   };
 });
 
-vi.mock("$lib/stores/realtime-store.svelte", () => ({
-  getRealtimeStore: () => store,
-  tryGetRealtimeStore: () => store,
-}));
+vi.mock("$lib/stores/realtime-store.svelte", async () => {
+  const { resolveChartThresholds } = await import("$lib/constants/glucose-thresholds");
+  return {
+    getRealtimeStore: () => store,
+    tryGetRealtimeStore: () => store,
+    tenantChartThresholds: () => ({
+      get current() {
+        return resolveChartThresholds();
+      },
+    }),
+  };
+});
 vi.mock("$api/generated/batteries.generated.remote", () => ({
   getCurrentBatteryStatus: () => new Promise(() => {}),
 }));

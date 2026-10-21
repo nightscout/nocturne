@@ -3,8 +3,8 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Multitenancy;
@@ -293,10 +293,7 @@ public class TenantResolutionMiddleware
             tenantAccessor.SetTenant(shareTenant);
             context.SetTenantContext(shareTenant);
             context.SetShareAccess();
-            // Mark the share before pinning the scoped context so the carrier is in place
-            // for both the scoped-direct and the factory DbContext paths.
             context.RequestServices.GetRequiredService<ICategoryReadContext>().MarkShare();
-            PinTenantOnScopedDbContext(context, shareTenant.TenantId);
             await _next(context);
             return;
         }
@@ -312,7 +309,6 @@ public class TenantResolutionMiddleware
             {
                 tenantAccessor.SetTenant(soleApexTenant);
                 context.SetTenantContext(soleApexTenant);
-                PinTenantOnScopedDbContext(context, soleApexTenant.TenantId);
                 await _next(context);
                 return;
             }
@@ -356,7 +352,6 @@ public class TenantResolutionMiddleware
             // Single tenant: auto-resolve from the apex domain.
             tenantAccessor.SetTenant(soleTenant);
             context.SetTenantContext(soleTenant);
-            PinTenantOnScopedDbContext(context, soleTenant.TenantId);
             await _next(context);
             return;
         }
@@ -394,35 +389,9 @@ public class TenantResolutionMiddleware
 
         tenantAccessor.SetTenant(tenantContext);
         context.SetTenantContext(tenantContext);
-        PinTenantOnScopedDbContext(context, tenantContext.TenantId);
 
         await _next(context);
     }
-
-    /// <summary>
-    /// Pins the resolved tenant onto the request-scoped <see cref="NocturneDbContext"/>.
-    /// The scoped context's <c>TenantId</c> defaults to <c>Guid.Empty</c>, so without this a
-    /// directly-injected context has no tenant set. The <c>TenantConnectionInterceptor</c>
-    /// reads <c>TenantId</c> to scope Row-Level Security on connection open, so any
-    /// directly-injected context (e.g. connector-configuration reads) would otherwise run under
-    /// an empty tenant — most visibly on unauthenticated flows (setup/onboarding) that have no
-    /// auth handler to set it.
-    /// </summary>
-    private static void PinTenantOnScopedDbContext(HttpContext context, Guid tenantId)
-    {
-        var db = context.RequestServices.GetService<NocturneDbContext>();
-        if (db is null)
-            return;
-        db.TenantId = tenantId;
-        // Set the share carrier unconditionally so a directly-injected context never carries
-        // unintended share state. The scoped-direct context carries only the marker (known
-        // pre-auth) and leaves the CSV null, so a share reading PHI on this path is denied.
-        db.IsShareContext = context.RequestServices.GetService<ICategoryReadContext>()?.IsShare == true;
-        db.VisibleCategories = null;
-        db.ShareFullHistory = false;
-        db.HistoryClamped = false;
-    }
-
 
     /// <summary>Cache key holding the resolved <see cref="TenantContext"/> for a slug.</summary>
     public static string TenantCacheKey(string slug) => $"tenant:{slug}";
@@ -483,8 +452,8 @@ public class TenantResolutionMiddleware
         if (_cache.TryGetValue(cacheKey, out TenantContext? cached))
             return cached;
 
-        var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var context = await factory.CreateDbContextAsync();
+        var factory = services.GetRequiredService<INocturneDbContextFactory>();
+        await using var context = await factory.CreatePlatformAsync();
 
         var tenant = await context.Tenants.AsNoTracking()
             .FirstOrDefaultAsync(t => t.Slug == slug);
@@ -519,8 +488,8 @@ public class TenantResolutionMiddleware
         if (_cache.TryGetValue(SoleTenantCacheKey, out ApexTenants? cached) && cached is not null)
             return cached;
 
-        var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var context = await factory.CreateDbContextAsync();
+        var factory = services.GetRequiredService<INocturneDbContextFactory>();
+        await using var context = await factory.CreatePlatformAsync();
 
         var tenant = await context.Tenants.SoleTenantAsync();
 

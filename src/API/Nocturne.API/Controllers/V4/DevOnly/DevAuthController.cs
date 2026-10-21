@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +31,7 @@ namespace Nocturne.API.Controllers.V4.DevOnly;
 public class DevAuthController : ControllerBase
 {
     private readonly NocturneDbContext _db;
+    private readonly INocturneDbContextFactory _dbFactory;
     private readonly ISessionService _sessionService;
     private readonly IOptions<OidcOptions> _oidcOptions;
     private readonly IOptions<BaseDomainOptions> _baseDomainOptions;
@@ -37,12 +39,14 @@ public class DevAuthController : ControllerBase
 
     public DevAuthController(
         NocturneDbContext db,
+        INocturneDbContextFactory dbFactory,
         ISessionService sessionService,
         IOptions<OidcOptions> oidcOptions,
         IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<DevAuthController> logger)
     {
         _db = db;
+        _dbFactory = dbFactory;
         _sessionService = sessionService;
         _oidcOptions = oidcOptions;
         _baseDomainOptions = baseDomainOptions;
@@ -168,12 +172,9 @@ public class DevAuthController : ControllerBase
                 }), null);
         }
 
-        // tenant_members/tenant_roles carry no RLS policies today, but set the
-        // context's TenantId so the connection interceptor pins the GUC on every
-        // open (a raw set_config would be reset when EF closes the connection).
-        _db.TenantId = tenant.Id;
-
-        var members = await _db.TenantMembers
+        // ?tenant= may name a tenant other than the host's.
+        await using var tenantDb = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
+        var members = await tenantDb.TenantMembers
             .AsNoTracking()
             .Include(m => m.Subject)
             .Include(m => m.MemberRoles).ThenInclude(mr => mr.TenantRole)

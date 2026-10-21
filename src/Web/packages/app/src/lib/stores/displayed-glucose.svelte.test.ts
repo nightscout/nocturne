@@ -33,7 +33,7 @@ holder.state = summaryState;
 const source = $state({
   currentEntry: null as { mills: number } | null,
   currentBG: 0,
-  bgDelta: 0,
+  bgDelta: 0 as number | null,
   direction: "",
 });
 
@@ -91,6 +91,18 @@ describe("displayedGlucose", () => {
 
     summaryLands(1_000_000, GlucoseStatus.InRange);
     expect(pair.status).toBe(GlucoseStatus.InRange);
+  });
+
+  it("reports no delta for a held reading that had none, not the new reading's", () => {
+    const pair = mount();
+    reading(1_000_000, 100);
+    source.bgDelta = null;
+    flushSync();
+    summaryLands(1_000_000, GlucoseStatus.InRange);
+
+    reading(1_300_000, 250);
+    expect(pair.currentBG).toBe(100);
+    expect(pair.bgDelta).toBeNull();
   });
 
   it("holds the previous value and status until the summary matches the new reading", () => {

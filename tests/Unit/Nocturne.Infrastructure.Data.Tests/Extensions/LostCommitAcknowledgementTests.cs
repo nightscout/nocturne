@@ -60,7 +60,7 @@ public sealed class LostCommitAcknowledgementTests : IDisposable
     public async Task Device_status_extras_bulk_create_reports_the_rows_the_first_attempt_inserted()
     {
         var repository = new DeviceStatusExtrasRepository(
-            new TestTenantDbContextFactory(_retrying), new SystemAuditContext(),
+            new TestNocturneDbContextFactory(_retrying), new SystemAuditContext(),
             NullLogger<DeviceStatusExtrasRepository>.Instance);
 
         var written = await repository.BulkCreateAsync(
@@ -82,7 +82,7 @@ public sealed class LostCommitAcknowledgementTests : IDisposable
         var seededId = SeedBoluses(1, syncIdentifier: "sync", insulin: 5.0).Single();
         var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
         var repository = new BolusRepository(
-            new TestTenantDbContextFactory(_retrying),
+            new TestNocturneDbContextFactory(_retrying),
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance,
@@ -122,7 +122,7 @@ public sealed class LostCommitAcknowledgementTests : IDisposable
         }
         var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
         var repository = new BolusRepository(
-            new TestTenantDbContextFactory(_retrying),
+            new TestNocturneDbContextFactory(_retrying),
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance,

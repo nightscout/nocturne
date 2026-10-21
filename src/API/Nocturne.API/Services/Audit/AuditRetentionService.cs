@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 
@@ -13,7 +13,7 @@ namespace Nocturne.API.Services.Audit;
 /// avoid WAL bloat.
 /// </summary>
 public class AuditRetentionService(
-    IDbContextFactory<NocturneDbContext> contextFactory,
+    INocturneDbContextFactory contextFactory,
     IConfiguration configuration,
     ILogger<AuditRetentionService> logger) : BackgroundService
 {
@@ -56,7 +56,7 @@ public class AuditRetentionService(
         var defaultReadDays = DefaultReadRetentionDays;
         var defaultMutationDays = DefaultMutationRetentionDays;
 
-        await using var configContext = await contextFactory.CreateDbContextAsync(ct);
+        await using var configContext = await contextFactory.CreatePlatformAsync(ct);
 
         var configs = await configContext.TenantAuditConfig
             .Where(c => c.ReadAuditRetentionDays != null || c.MutationAuditRetentionDays != null)

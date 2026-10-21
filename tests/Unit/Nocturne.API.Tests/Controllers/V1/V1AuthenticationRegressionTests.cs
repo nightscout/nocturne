@@ -62,6 +62,7 @@ public class V1AuthenticationRegressionTests : IClassFixture<AuthenticationTestF
     [InlineData("/api/v1/activity")]
     [InlineData("/api/v1/count/activity/where")]
     [InlineData("/api/v1/adminnotifies")]
+    [InlineData("/api/v1/notifications/ack?level=1")]
     [InlineData("/api/v1/times/2026-07")]
     [InlineData("/api/v1/times/2026-07/T13")]
     [InlineData("/api/v1/slice/entries/dateString")]
@@ -86,6 +87,7 @@ public class V1AuthenticationRegressionTests : IClassFixture<AuthenticationTestF
     [InlineData("/api/v1/activity")]
     [InlineData("/api/v1/count/activity/where")]
     [InlineData("/api/v1/adminnotifies")]
+    [InlineData("/api/v1/notifications/ack?level=1")]
     [InlineData("/api/v1/times/2026-07")]
     [InlineData("/api/v1/times/2026-07/T13")]
     [InlineData("/api/v1/slice/entries/dateString")]
@@ -110,7 +112,6 @@ public class V1AuthenticationRegressionTests : IClassFixture<AuthenticationTestF
     [InlineData("/api/v1/food")]
     [InlineData("/api/v1/profile")]
     [InlineData("/api/v1/activity")]
-    [InlineData("/api/v1/notifications/ack")]
     [InlineData("/api/v1/adminnotifies")]
     [InlineData("/api/v1/notifications/pushover")]
     public async Task V1_PostEndpoints_ShouldRejectUnauthenticatedRequests(string endpoint)
@@ -123,6 +124,27 @@ public class V1AuthenticationRegressionTests : IClassFixture<AuthenticationTestF
 
         // Assert - unauthenticated write should be blocked
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/notifications/ack?level=2&group=default&time=1800000")]
+    [InlineData("/api/v2/notifications/ack?level=2&group=default&time=1800000")]
+    public async Task NotificationsAck_IsAGetAnsweringPlainOk(string endpoint)
+    {
+        var response = await _authenticatedClient.GetAsync(endpoint);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("OK", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task NotificationsAck_RejectsPost()
+    {
+        var content = new StringContent("{\"level\":1}", Encoding.UTF8, "application/json");
+
+        var response = await _authenticatedClient.PostAsync("/api/v1/notifications/ack", content);
+
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
     }
 
     [Theory]

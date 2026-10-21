@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import type { AlertRuleResponse } from "$api-clients";
+import type { AlertRuleResponse, TenantAlertSettingsResponse } from "$api-clients";
 import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
@@ -43,8 +43,10 @@ vi.mock("$api/generated/alerts.generated.remote", () => ({
   acknowledge: remoteCommand(() => undefined),
 }));
 
+let dndSettings: TenantAlertSettingsResponse | null = null;
+
 vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
-  get: () => remoteQuery(() => null),
+  get: () => remoteQuery(() => dndSettings),
   update: remoteCommand(() => undefined),
 }));
 
@@ -60,8 +62,49 @@ const rowActions = () => page.getByRole("button", { name: "Row actions" });
 describe("alerts page", () => {
   beforeEach(() => {
     toggleImpl = () => Promise.resolve();
+    dndSettings = null;
     toastError.mockClear();
     pageState.data = {};
+  });
+
+  it("shows the Do Not Disturb notice for a schedule in effect, without a way to turn it off", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    dndSettings = {
+      dndManualActive: false,
+      dndScheduleEnabled: true,
+      dndScheduleActiveNow: true,
+    };
+
+    render(AlertsPage, {});
+
+    await expect.element(page.getByText(/Do Not Disturb is on/)).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Turn off" }))
+      .not.toBeInTheDocument();
+  });
+
+  it("offers to turn off a manual mute from the Do Not Disturb notice", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    dndSettings = { dndManualActive: true, dndScheduleEnabled: false };
+
+    render(AlertsPage, {});
+
+    await expect.element(page.getByText(/Do Not Disturb is on/)).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Turn off" }))
+      .toBeVisible();
+  });
+
+  it("shows no Do Not Disturb notice for a schedule that is not in effect", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    dndSettings = { dndManualActive: false, dndScheduleEnabled: true, dndScheduleActiveNow: false };
+
+    render(AlertsPage, {});
+
+    await expect.element(ruleName()).toBeVisible();
+    await expect
+      .element(page.getByText(/Do Not Disturb is on/))
+      .not.toBeInTheDocument();
   });
 
   it("hides the write controls from a member without alerts.readwrite", async () => {

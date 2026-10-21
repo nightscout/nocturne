@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Cookies } from "@sveltejs/kit";
 import type { UserDisplayPreferences } from "$lib/api";
+import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
 import { load } from "./+layout.server";
 
 /**
@@ -66,16 +67,18 @@ function runLoad(situation: Situation) {
 
   const cookies = { get: () => undefined } as unknown as Cookies;
 
+  const depends = vi.fn();
   const event = {
     locals,
     cookies,
+    depends,
     request: new Request(`https://${situation.host}/`, {
       headers: { host: situation.host },
     }),
   };
 
   const data = load(event as unknown as LoadEvent) as unknown as Promise<LoadedData>;
-  return { data, getMyPermissions, getShareAppearance };
+  return { data, getMyPermissions, getShareAppearance, depends };
 }
 
 async function permissions(situation: Situation): Promise<string[]> {
@@ -91,6 +94,12 @@ describe("root layout load", () => {
   });
   afterEach(() => {
     delete process.env.BASE_DOMAIN;
+  });
+
+  it("registers the shell key, so a revalidation re-reads the grant and the viewer", async () => {
+    const { data, depends } = runLoad({ host: TENANT_HOST, resolved: ["*"], memberPreferences: {} });
+    await data;
+    expect(depends).toHaveBeenCalledExactlyOnceWith(SHELL_DATA_KEY);
   });
 
   it("resolves a public share's own grant, which no auth handler resolved for it", async () => {

@@ -41,8 +41,7 @@ public class StatusService : IStatusService
     private readonly ICacheService _cacheService;
     private readonly IDemoModeService _demoModeService;
     private readonly NocturneDbContext _dbContext;
-    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
-    private readonly ITenantDbContextFactory _tenantDbContextFactory;
+    private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly PublicAccessCacheService _publicAccessCacheService;
@@ -73,8 +72,7 @@ public class StatusService : IStatusService
         ICacheService cacheService,
         IDemoModeService demoModeService,
         NocturneDbContext dbContext,
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
-        ITenantDbContextFactory tenantDbContextFactory,
+        INocturneDbContextFactory dbContextFactory,
         IHttpContextAccessor httpContextAccessor,
         ITenantAccessor tenantAccessor,
         PublicAccessCacheService publicAccessCacheService,
@@ -89,7 +87,6 @@ public class StatusService : IStatusService
         _demoModeService = demoModeService;
         _dbContext = dbContext;
         _dbContextFactory = dbContextFactory;
-        _tenantDbContextFactory = tenantDbContextFactory;
         _httpContextAccessor = httpContextAccessor;
         _tenantAccessor = tenantAccessor;
         _publicAccessCacheService = publicAccessCacheService;
@@ -199,7 +196,7 @@ public class StatusService : IStatusService
         {
             isDemo = true;
 
-            await using var ctx = await _dbContextFactory.CreateDbContextAsync();
+            await using var ctx = await _dbContextFactory.CreatePlatformAsync();
             nextResetAt = await ctx.Tenants
                 .AsNoTracking()
                 .Where(t => t.Id == tenantContext.TenantId)
@@ -524,7 +521,7 @@ public class StatusService : IStatusService
         var ct = _httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None;
         try
         {
-            await using var db = await _tenantDbContextFactory.CreateAsync(ct);
+            await using var db = await _dbContextFactory.CreateAsync(ct);
             return await _thresholdClassifier.ResolveThresholdsAsync(db, ct);
         }
         catch (DbException ex)
@@ -656,7 +653,7 @@ public class StatusService : IStatusService
     /// the stamp, and a client only reads the history once the collection's stamp has moved.
     /// <para>
     /// A collection the caller holds no read scope for (<see cref="LegacyStorageReadScopes"/>) is
-    /// left null. The stamps are read through <see cref="ITenantDbContextFactory"/>, so share RLS and
+    /// left null. The stamps are read through <see cref="INocturneDbContextFactory"/>, so share RLS and
     /// the history clamp narrow each table as they narrow every other read: a share or a clamped
     /// member learns nothing of a row it cannot read, not even when it changed.
     /// </para>
@@ -830,7 +827,7 @@ public class StatusService : IStatusService
 
         try
         {
-            await using var ctx = await _dbContextFactory.CreateDbContextAsync();
+            await using var ctx = await _dbContextFactory.CreatePlatformAsync();
             var conn = ctx.Database.GetDbConnection();
             if (conn.State != System.Data.ConnectionState.Open)
                 await conn.OpenAsync();
@@ -924,7 +921,7 @@ public class StatusService : IStatusService
 
     private async Task<DateTime?> LastModifiedAsync(Func<NocturneDbContext, Task<DateTime?>> query)
     {
-        await using var ctx = await _tenantDbContextFactory.CreateAsync();
+        await using var ctx = await _dbContextFactory.CreateAsync();
         return await query(ctx);
     }
 

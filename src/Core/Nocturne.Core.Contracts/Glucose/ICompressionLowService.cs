@@ -37,7 +37,8 @@ public interface ICompressionLowService
         Guid id,
         long startMills,
         long endMills,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool demoSeed = false);
 
     /// <summary>
     /// Dismiss a suggestion

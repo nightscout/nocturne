@@ -63,7 +63,7 @@ public class V3LastModifiedRlsIntegrationTests(ApiIntegrationTestFixture fixture
     {
         await WithTenantScopeAsync(async services =>
         {
-            await using var context = await services.GetRequiredService<ITenantDbContextFactory>().CreateAsync();
+            await using var context = await services.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
             context.AddRange(first, second);
             await context.SaveChangesAsync();
             context.Entry(first).Property("SysUpdatedAt").CurrentValue = firstStamp;

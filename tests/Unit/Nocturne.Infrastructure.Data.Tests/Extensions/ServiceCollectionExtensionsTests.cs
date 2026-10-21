@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
@@ -9,22 +8,20 @@ namespace Nocturne.Infrastructure.Data.Tests.Extensions;
 public class ServiceCollectionExtensionsTests
 {
     [Fact]
-    public void AddPostgreSqlInfrastructure_RegistersCarrierResettingFactory_AsTheDbContextFactory()
+    public void AddPostgreSqlInfrastructure_ResolvesTheContextFactory_FromTheRootAndFromAScope()
     {
-        // The chokepoint is only effective if it is the registered IDbContextFactory: a raw-factory
-        // caller resolves this interface, so if a refactor silently dropped the decoration, every
-        // raw lease would again inherit a pooled context's stale tenant/share carrier. Guards that.
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton(Mock.Of<IHttpContextAccessor>());
         services.AddPostgreSqlInfrastructure(
             "Host=localhost;Database=nocturne_test;Username=nocturne_app;Password=x",
             configuration: null);
 
-        using var provider = services.BuildServiceProvider();
-        var factory = provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var scope = provider.CreateScope();
 
-        factory.Should().BeOfType<CarrierResettingDbContextFactory>(
-            "every IDbContextFactory<NocturneDbContext> resolution must funnel through the carrier-reset chokepoint");
+        provider.GetRequiredService<INocturneDbContextFactory>().Should().NotBeNull(
+            "singletons and hosted services take it from the root");
+        scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().Should().NotBeNull();
+        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().Should().NotBeNull();
     }
 }

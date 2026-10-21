@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Nocturne.Core.Models;
 
@@ -109,6 +110,30 @@ public class V3CollectionResponse<T>
     /// Response metadata
     /// </summary>
     public V3ResponseMetadata Meta { get; set; } = new();
+}
+
+/// <summary>
+/// What a V3 create answers: 201 for a stored document, 200 with <see cref="IsDeduplication"/> when
+/// the document matched one already stored.
+/// </summary>
+public class V3CreateResponse
+{
+    /// <summary>HTTP status of the answer, repeated in the body.</summary>
+    [JsonPropertyName("status")]
+    public int Status { get; set; }
+
+    /// <summary>Wire identifier of the stored document, which a v3 read by id resolves.</summary>
+    [JsonPropertyName("identifier")]
+    public string? Identifier { get; set; }
+
+    /// <summary>Set on a create that matched a stored document, which it left unchanged.</summary>
+    [JsonPropertyName("isDeduplication")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsDeduplication { get; set; }
+
+    /// <summary>Modification time of the stored document, in Unix milliseconds.</summary>
+    [JsonPropertyName("lastModified")]
+    public long LastModified { get; set; }
 }
 
 /// <summary>

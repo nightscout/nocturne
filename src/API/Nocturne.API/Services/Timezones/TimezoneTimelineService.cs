@@ -9,10 +9,9 @@ using Nocturne.Infrastructure.Data.Mappers;
 namespace Nocturne.API.Services.Timezones;
 
 /// <summary>
-/// Persists and reads the current tenant's timezone timeline. Works in both HTTP request scopes and
-/// background connector-sync scopes: it pins <see cref="NocturneDbContext.TenantId"/> from the ambient
-/// <see cref="ITenantAccessor"/> on each call, so RLS (and the WITH CHECK on writes) scope correctly
-/// without an HTTP context.
+/// Persists and reads the current tenant's timezone timeline, in HTTP request scopes and background
+/// connector-sync scopes alike: the scoped context reads its tenant from the scope's
+/// <see cref="ITenantAccessor"/>, which must be resolved.
 /// </summary>
 /// <seealso cref="ITimezoneTimelineService"/>
 public class TimezoneTimelineService : ITimezoneTimelineService
@@ -31,17 +30,9 @@ public class TimezoneTimelineService : ITimezoneTimelineService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    private Guid TenantId
-    {
-        get
-        {
-            var tenantId = _tenantAccessor.Context?.TenantId
-                ?? throw new InvalidOperationException("No tenant context for timezone timeline access.");
-            // Pin the context so RLS (USING + WITH CHECK) scopes to this tenant in any scope.
-            _db.TenantId = tenantId;
-            return tenantId;
-        }
-    }
+    private Guid TenantId =>
+        _tenantAccessor.Context?.TenantId
+        ?? throw new InvalidOperationException("No tenant context for timezone timeline access.");
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<TimezoneTimelineEntry>> GetTimelineAsync(CancellationToken cancellationToken = default)

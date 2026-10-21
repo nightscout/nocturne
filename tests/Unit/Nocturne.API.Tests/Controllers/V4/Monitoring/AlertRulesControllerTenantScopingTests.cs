@@ -19,14 +19,11 @@ namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
 /// <summary>
 /// Regression tests for tenant scoping on <see cref="AlertRulesController"/>.
 ///
-/// The controller leases its <see cref="NocturneDbContext"/> from a pooled factory.
-/// Pooling does not reset the custom <c>TenantId</c> property, so a context leased
-/// without re-pinning the tenant carries whatever the previous lessee left on it. Both
-/// the EF global query filter and PostgreSQL RLS derive from that <c>TenantId</c>, so a
-/// stale value made <c>/alerts</c> intermittently surface another tenant's rules — most
-/// visibly the demo tenant's seeded "High"/"Low" rules. Going through
-/// <see cref="Infrastructure.Data.Services.ITenantDbContextFactory"/> stamps the resolved
-/// tenant onto every leased context, which these tests lock in.
+/// Both the EF global query filter and PostgreSQL RLS derive from the context's <c>TenantId</c>;
+/// a context reaching the wrong tenant made <c>/alerts</c> surface another tenant's rules, most
+/// visibly the demo tenant's seeded "High"/"Low" rules. Every context
+/// <see cref="Infrastructure.Data.Services.INocturneDbContextFactory"/> creates reads the
+/// resolved tenant, which these tests lock in.
 /// </summary>
 [Trait("Category", "Unit")]
 public class AlertRulesControllerTenantScopingTests
@@ -98,10 +95,10 @@ public class AlertRulesControllerTenantScopingTests
     private static AlertRulesController CreateControllerScopedTo(
         Guid tenantId, DbContextOptions<NocturneDbContext> options)
     {
-        // TestTenantDbContextFactory mirrors the production ITenantDbContextFactory: every
-        // leased context is stamped with this tenant, regardless of pool state.
+        // Every context the factory creates reaches this tenant, as a production context reads
+        // its scope's resolved tenant.
         var seedContext = new NocturneDbContext(options) { TenantId = tenantId };
-        var factory = new TestTenantDbContextFactory(seedContext);
+        var factory = new TestNocturneDbContextFactory(seedContext);
 
         return new AlertRulesController(
             factory,

@@ -5,6 +5,9 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
+using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
@@ -46,11 +49,11 @@ public class StateSpanRepositoryTests : IDisposable
         httpContextAccessor.Setup(x => x.HttpContext).Returns((HttpContext)null!);
 
         _db = TestDbContextFactory.CreateSqliteWithTenant(
-                TestTenantId, "test", new MutationAuditInterceptor(httpContextAccessor.Object), _saves)
+                TestTenantId, "test", new MutationAuditInterceptor(), _saves)
             .SeedTenant(OtherTenantId, "other");
 
         _context = _db.CreateContext();
-        _context.AuditContext = _auditContext;
+        _context.AttributedTo(_auditContext);
         _mockDedup = new Mock<IDeduplicationService>();
         _logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _repository = new StateSpanRepository(
@@ -489,6 +492,62 @@ public class StateSpanRepositoryTests : IDisposable
         spans.Should().ContainSingle().Which.Source.Should().Be("primary");
     }
 
+    [Fact]
+    public async Task GetActiveAtAsync_ExcludesNonPrimaryDeduplicatedSpans()
+    {
+        var primaryEntity = SpanEntity(_context.TenantId, StateSpanCategory.Override, "Custom",
+            new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc), null);
+        primaryEntity.Source = "primary";
+        var duplicateEntity = SpanEntity(_context.TenantId, StateSpanCategory.Override, "Custom",
+            new DateTime(2026, 1, 1, 9, 0, 20, DateTimeKind.Utc), null);
+        duplicateEntity.Source = "duplicate";
+
+        _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
+        var canonicalId = Guid.NewGuid();
+        _context.LinkedRecords.AddRange(
+            Link(canonicalId, primaryEntity.Id, isPrimary: true),
+            Link(canonicalId, duplicateEntity.Id, isPrimary: false));
+        await _context.SaveChangesAsync();
+
+        var active = await _repository.GetActiveAtAsync(
+            StateSpanCategory.Override, null, new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc));
+
+        active.Should().NotBeNull();
+        active!.Source.Should().Be("primary");
+    }
+
+    [Fact]
+    public async Task GetByCategories_ExcludesNonPrimaryDeduplicatedSpans()
+    {
+        var from = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        var carriedPrimary = SpanEntity(TestTenantId, StateSpanCategory.Override, "Custom", from.AddHours(-2), null);
+        carriedPrimary.Source = "primary";
+        var carriedDuplicate = SpanEntity(TestTenantId, StateSpanCategory.Override, "Custom", from.AddHours(-1), null);
+        carriedDuplicate.Source = "duplicate";
+        var windowPrimary = SpanEntity(
+            TestTenantId, StateSpanCategory.PumpMode, "Automatic", from.AddHours(1), null);
+        windowPrimary.Source = "primary";
+        var windowDuplicate = SpanEntity(
+            TestTenantId, StateSpanCategory.PumpMode, "Automatic", from.AddHours(1).AddSeconds(10), null);
+        windowDuplicate.Source = "duplicate";
+
+        _context.StateSpans.AddRange(carriedPrimary, carriedDuplicate, windowPrimary, windowDuplicate);
+        var carriedGroup = Guid.NewGuid();
+        var windowGroup = Guid.NewGuid();
+        _context.LinkedRecords.AddRange(
+            Link(carriedGroup, carriedPrimary.Id, isPrimary: true),
+            Link(carriedGroup, carriedDuplicate.Id, isPrimary: false),
+            Link(windowGroup, windowPrimary.Id, isPrimary: true),
+            Link(windowGroup, windowDuplicate.Id, isPrimary: false));
+        await _context.SaveChangesAsync();
+
+        var result = await _repository.GetByCategories(
+            [StateSpanCategory.Override, StateSpanCategory.PumpMode], from, from.AddDays(1));
+
+        result[StateSpanCategory.Override].Should().ContainSingle().Which.Source.Should().Be("primary");
+        result[StateSpanCategory.PumpMode].Should().ContainSingle().Which.Source.Should().Be("primary");
+    }
+
     private static LinkedRecordEntity Link(Guid canonicalId, Guid recordId, bool isPrimary) => new()
     {
         Id = Guid.NewGuid(),
@@ -767,6 +826,25 @@ public class StateSpanRepositoryTests : IDisposable
                 It.IsAny<Exception?>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task GetByCategory_RangeOverlappingMoreThanAHundredSpans_ReturnsAllNewestFirst()
+    {
+        var from = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        for (var i = 0; i < 150; i++)
+            _context.StateSpans.Add(SpanEntity(
+                TestTenantId, StateSpanCategory.Override, "Pre-Meal",
+                from.AddMinutes(i), from.AddMinutes(i).AddSeconds(30)));
+        _context.StateSpans.Add(SpanEntity(
+            TestTenantId, StateSpanCategory.Exercise, "Running", from, from.AddMinutes(1)));
+        await _context.SaveChangesAsync();
+
+        var overrides = (await _repository.GetByCategory(
+            StateSpanCategory.Override, from, from.AddHours(3))).ToList();
+
+        overrides.Should().HaveCount(150);
+        overrides.Select(s => s.StartTimestamp).Should().BeInDescendingOrder();
     }
 
     // --- Soft-delete re-creation guard ---
@@ -1079,6 +1157,35 @@ public class StateSpanRepositoryTests : IDisposable
         rows["ov-b"].SupersededById.Should().Be(rows["ov-c"].Id);
         rows["ov-c"].EndTimestamp.Should().BeNull();
         rows["ov-c"].SupersededById.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CreateActivitiesAsStateSpansAsync_XDripMotionClass_EachRecordEndsTheOneBeforeIt()
+    {
+        static StateSpan Motion(string motionClass, long at)
+        {
+            var activity = System.Text.Json.JsonSerializer.Deserialize<Activity>($$"""
+                {"type":"motion-class","timeStamp":{{at}},"created_at":"2026-05-28T20:26:40Z","class":"{{motionClass}}"}
+                """)!;
+            activity.Mills = at;
+            return Nocturne.Infrastructure.Data.Mappers.ActivityStateSpanMapper.ToStateSpan(activity);
+        }
+
+        var still = new DateTimeOffset(BatchDay.AddHours(8)).ToUnixTimeMilliseconds();
+        var walking = still + 600_000;
+        var inVehicle = walking + 600_000;
+
+        await _repository.CreateActivitiesAsStateSpansAsync([Motion("still", still)]);
+        await _repository.CreateActivitiesAsStateSpansAsync(
+            [Motion("walking", walking), Motion("in vehicle", inVehicle)]);
+
+        var rows = await _context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.State);
+        rows.Values.Should().OnlyContain(s => s.Category == nameof(StateSpanCategory.Motion));
+        rows["still"].EndTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(walking).UtcDateTime);
+        rows["still"].SupersededById.Should().Be(rows["walking"].Id);
+        rows["walking"].EndTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(inVehicle).UtcDateTime);
+        rows["walking"].SupersededById.Should().Be(rows["in vehicle"].Id);
+        rows["in vehicle"].EndTimestamp.Should().BeNull();
     }
 
     [Fact]
@@ -1441,5 +1548,178 @@ public class StateSpanRepositoryTests : IDisposable
         created.Select(s => s.OriginalId).Should().Equal("act-stored", "act-a", "act-b");
         created[0].EndTimestamp.Should().Be(BatchDay.AddHours(9));
         (await RowsForAsync("act-stored")).Should().ContainSingle();
+    }
+
+    // --- Restore and supersession ---
+
+    private async Task<Guid> RowIdAsync(string originalId) => (await RowsForAsync(originalId)).Single().Id;
+
+    private Task<bool> DeletedByUserAsync(Guid id) =>
+        _context.StateSpans.IgnoreQueryFilters().AsNoTracking()
+            .Where(s => s.Id == id)
+            .Select(s => EF.Property<bool>(s, "DeletedByUser"))
+            .SingleAsync();
+
+    [Fact]
+    public async Task RestoreAsync_BringsBackAUserDeletedSpan_AndALaterSyncUpsertsIt()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        var id = await RowIdAsync("glooko-exercise-1");
+        await _repository.DeleteStateSpanAsync("glooko-exercise-1");
+        (await DeletedByUserAsync(id)).Should().BeTrue();
+
+        var restored = await _repository.RestoreAsync(id, WriteOrigin.Live);
+
+        restored.OriginalId.Should().Be("glooko-exercise-1");
+        (await _repository.GetStateSpanByIdAsync("glooko-exercise-1")).Should().NotBeNull();
+        (await DeletedByUserAsync(id)).Should().BeFalse();
+
+        var resync = ConnectorSpan();
+        resync.State = "Cycling";
+        await _repository.UpsertStateSpanAsync(resync);
+
+        var rows = await RowsForAsync("glooko-exercise-1");
+        rows.Should().ContainSingle().Which.State.Should().Be("Cycling");
+        rows[0].DeletedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RestoreAsync_OfASpanThatIsNotDeleted_Throws()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+
+        var id = await RowIdAsync("glooko-exercise-1");
+        var act = () => _repository.RestoreAsync(id, WriteOrigin.Live);
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task RestoreAsync_RefusesASpanWhoseOriginalIdALiveSpanNowHolds()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        var swept = await RowIdAsync("glooko-exercise-1");
+        _auditContext.IsSystem = true;
+        await _repository.DeleteStateSpanAsync("glooko-exercise-1");
+        _auditContext.IsSystem = false;
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+
+        var act = () => _repository.RestoreAsync(swept, WriteOrigin.Live);
+
+        await act.Should().ThrowAsync<RecreationBlockedException>().WithMessage("*glooko-exercise-1*");
+        (await RowsForAsync("glooko-exercise-1")).Should().ContainSingle(r => r.Id == swept && r.DeletedAt != null);
+    }
+
+    [Fact]
+    public async Task BulkRestoreAsync_ReportsALiveHeldOriginalIdAsAConflict_AndRestoresTheRest()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Illness, "Flu", 10, "act-b"));
+        var clashing = await RowIdAsync("glooko-exercise-1");
+        var clear = await RowIdAsync("act-b");
+        _auditContext.IsSystem = true;
+        await _repository.DeleteStateSpanAsync("glooko-exercise-1");
+        _auditContext.IsSystem = false;
+        await _repository.DeleteStateSpanAsync("act-b");
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+
+        var result = await _repository.BulkRestoreAsync([clashing, clear], WriteOrigin.Live);
+
+        result.Conflicts.Should().Equal(clashing);
+        result.Restored.Select(s => s.OriginalId).Should().Equal("act-b");
+        (await RowsForAsync("act-b")).Should().ContainSingle().Which.DeletedAt.Should().BeNull();
+        (await RowsForAsync("glooko-exercise-1")).Should().ContainSingle(r => r.Id == clashing && r.DeletedAt != null);
+    }
+
+    [Fact]
+    public async Task ResolveDeletedAsync_NamesADeletedSpanByTheIdReadsReturnForIt()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Illness, "Flu", 10, "act-live"));
+        var deleted = await RowIdAsync("glooko-exercise-1");
+        await _repository.DeleteStateSpanAsync("glooko-exercise-1");
+
+        var byOriginalId = await _repository.ResolveDeletedAsync(["glooko-exercise-1", "act-live", "nope"]);
+        var byRowId = await _repository.ResolveDeletedAsync([deleted.ToString()]);
+
+        byOriginalId.Should().ContainSingle().Which.Should().Be(
+            new KeyValuePair<Guid, DeletedStateSpan>(deleted, new("glooko-exercise-1", StateSpanCategory.Exercise)));
+        byRowId.Keys.Should().Equal(byOriginalId.Keys);
+        byRowId[deleted].SentId.Should().Be(deleted.ToString());
+    }
+
+    [Fact]
+    public async Task ResolveDeletedAsync_NamesTheLatestDeletedOfSpansSharingAnOriginalId()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        var swept = await RowIdAsync("glooko-exercise-1");
+        _auditContext.IsSystem = true;
+        await _repository.DeleteStateSpanAsync("glooko-exercise-1");
+        _auditContext.IsSystem = false;
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        var second = (await RowsForAsync("glooko-exercise-1")).Single(r => r.Id != swept).Id;
+        await _repository.DeleteStateSpanAsync("glooko-exercise-1");
+
+        var named = await _repository.ResolveDeletedAsync(["glooko-exercise-1"]);
+
+        named.Keys.Should().Equal(second);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_ByTheResolvedIdOfASpanWithAnOriginalId_BringsItBack()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        await _repository.DeleteStateSpanAsync("glooko-exercise-1");
+
+        var rowId = (await _repository.ResolveDeletedAsync(["glooko-exercise-1"])).Keys.Single();
+        await _repository.RestoreAsync(rowId, WriteOrigin.Live);
+
+        (await _repository.GetStateSpanByIdAsync("glooko-exercise-1")).Should().NotBeNull();
+    }
+
+    private async Task<(Guid Superseded, Guid Supersessor)> SupersededPairAsync(string supersessorSource)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "first"));
+        var second = Span(StateSpanCategory.Override, "Custom", 9, "second");
+        second.Source = supersessorSource;
+        await _repository.UpsertStateSpanAsync(second);
+
+        var first = (await LiveRowsAsync())["first"];
+        var supersessor = await RowIdAsync("second");
+        first.SupersededById.Should().Be(supersessor);
+        return (first.Id, supersessor);
+    }
+
+    [Fact]
+    public async Task DeleteStateSpanAsync_ClearsTheSupersededByOfALiveSpanPointingAtIt()
+    {
+        await SupersededPairAsync("connector");
+
+        await _repository.DeleteStateSpanAsync("second");
+
+        var first = (await LiveRowsAsync())["first"];
+        first.SupersededById.Should().BeNull();
+        first.EndTimestamp.Should().Be(BatchDay.AddHours(9));
+    }
+
+    [Fact]
+    public async Task DeleteBySourceAsync_ClearsTheSupersededByOfALiveSpanPointingAtADeletedOne()
+    {
+        await SupersededPairAsync("other-connector");
+
+        await _repository.DeleteBySourceAsync("other-connector");
+
+        (await LiveRowsAsync()).Should().ContainSingle().Which.Value.SupersededById.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DeleteStateSpanAsync_LeavesAnUnrelatedSpansSupersededByAlone()
+    {
+        var (_, supersessor) = await SupersededPairAsync("connector");
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Exercise, "Running", 7, "bystander"));
+
+        await _repository.DeleteStateSpanAsync("bystander");
+
+        (await LiveRowsAsync())["first"].SupersededById.Should().Be(supersessor);
     }
 }

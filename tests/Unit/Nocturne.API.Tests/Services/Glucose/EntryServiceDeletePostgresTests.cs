@@ -24,7 +24,6 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories.V4;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -56,9 +55,9 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : ITenantDbContextFactory
+    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
     {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
     }
 
     private sealed record Setup(
@@ -74,12 +73,12 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         Func<NocturneDbContext> Db);
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
+        new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
                 maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
             .AddInterceptors(
-                new TenantConnectionInterceptor(), new MutationAuditInterceptor(Mock.Of<IHttpContextAccessor>()))
-            .Options) { TenantId = tenant, AuditContext = _audit };
+                new TenantConnectionInterceptor(), new MutationAuditInterceptor())
+            .Options) { TenantId = tenant }.AttributedTo(_audit);
 
     private readonly IAuditContext _audit = Mock.Of<IAuditContext>();
 

@@ -50,7 +50,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Route("api/v4/alert-rules")]
 public class AlertRulesController : ControllerBase
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly IAlertReferenceService _referenceService;
     private readonly IAlertDeliveryService _deliveryService;
     private readonly IRuleScopeClassifier _scopeClassifier;
@@ -64,7 +64,7 @@ public class AlertRulesController : ControllerBase
     /// Initializes a new instance of <see cref="AlertRulesController"/>.
     /// </summary>
     public AlertRulesController(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAlertReferenceService referenceService,
         IAlertDeliveryService deliveryService,
         IRuleScopeClassifier scopeClassifier,

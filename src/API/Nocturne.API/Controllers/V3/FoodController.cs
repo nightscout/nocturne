@@ -310,12 +310,12 @@ public class FoodController : BaseV3Controller<Food>
     /// </summary>
     /// <param name="foodData">Food data to create (single object or array)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Created food records</returns>
+    /// <returns>The <see cref="V3CreateResponse"/> for one document; the created records for an array.</returns>
     [HttpPost]
     [Authorize]
     [RequireScope(Scope.FoodReadWrite)]
     [NightscoutEndpoint("/api/v3/food")]
-    [ProducesResponseType(typeof(Food[]), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -383,7 +383,18 @@ public class FoodController : BaseV3Controller<Food>
 
             _logger.LogDebug("Successfully created {Count} food records", createdRecords.Count());
 
-            return StatusCode(201, createdRecords.ToArray());
+            if (foodData.ValueKind == JsonValueKind.Array)
+            {
+                return StatusCode(201, createdRecords.ToArray());
+            }
+
+            var created = createdRecords.FirstOrDefault();
+            if (created == null)
+            {
+                return CreateV3ErrorResponse(500, "Failed to create food", "Food creation failed");
+            }
+
+            return V3Created(nameof(GetFoodById), created.Id);
         }
         catch (ArgumentException ex)
         {
@@ -498,36 +509,6 @@ public class FoodController : BaseV3Controller<Food>
         }
 
         return false;
-    }
-
-    /// <summary>
-    /// Validates common V3 fields as per Nightscout API behavior.
-    /// Nightscout validates these fields before checking if the document exists.
-    /// </summary>
-    /// <param name="jsonData">The JSON data to validate</param>
-    /// <returns>ActionResult with error if validation fails, null if validation passes</returns>
-    private ActionResult? ValidateV3CommonFields(JsonElement jsonData)
-    {
-        const long MinTimestamp = 946684800000; // Year 2000 in milliseconds
-
-        // Check for 'date' field - Nightscout requires this for all V3 operations
-        if (!jsonData.TryGetProperty("date", out var dateProperty))
-        {
-            return CreateV3ErrorResponse(400, "Bad or missing date field");
-        }
-
-        // Date must be a number greater than MIN_TIMESTAMP
-        if (dateProperty.ValueKind != JsonValueKind.Number)
-        {
-            return CreateV3ErrorResponse(400, "Bad or missing date field");
-        }
-
-        if (!dateProperty.TryGetInt64(out var dateValue) || dateValue <= MinTimestamp)
-        {
-            return CreateV3ErrorResponse(400, "Bad or missing date field");
-        }
-
-        return null; // Validation passed
     }
 
     /// <summary>

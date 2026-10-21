@@ -60,11 +60,13 @@ internal sealed class ApiErrorEnvelopeHandler : IExceptionHandler
             return false;
         }
 
+        // The raw path is not logged: some routes carry a credential as a segment, e.g. the v2
+        // token exchange at request/{accessToken}.
         _logger.LogError(
             exception,
-            "Unhandled exception serving {Method} {Path}",
+            "Unhandled exception serving {Method} {Route}",
             httpContext.Request.Method,
-            httpContext.Request.Path
+            (endpoint as RouteEndpoint)?.RoutePattern.RawText ?? endpoint.DisplayName
         );
 
         var (body, options) = ApiErrorEnvelope.Create(

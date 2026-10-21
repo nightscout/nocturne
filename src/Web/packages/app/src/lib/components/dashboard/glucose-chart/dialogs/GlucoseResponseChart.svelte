@@ -12,6 +12,7 @@
   import { curveMonotoneX } from "d3";
   import type { PredictionData } from "$api/predictions.remote";
   import { bg, time } from "$lib/utils/formatting";
+  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
 
   interface GlucoseDataPoint {
     time: Date;
@@ -20,6 +21,7 @@
   }
 
   interface Props {
+    glucoseUnits?: GlucoseUnits;
     glucoseData: GlucoseDataPoint[];
     centerTime: Date;
     predictionData?: PredictionData | null;
@@ -35,6 +37,7 @@
     highThreshold,
     lowThreshold,
     label,
+    glucoseUnits,
   }: Props = $props();
 
   // Compute x domain from glucose data
@@ -178,7 +181,7 @@
             text-anchor="middle"
             class="text-2xs fill-foreground font-medium"
           >
-            {bg(peakPoint.sgv)}
+            {bg(peakPoint.sgv, glucoseUnits)}
           </text>
         {/if}
 
@@ -191,7 +194,7 @@
             text-anchor="middle"
             class="text-2xs fill-foreground font-medium"
           >
-            {bg(nadirPoint.sgv)}
+            {bg(nadirPoint.sgv, glucoseUnits)}
           </text>
         {/if}
 
@@ -199,7 +202,7 @@
         <Axis
           placement="left"
           ticks={4}
-          format={(v) => String(bg(Number(v)))}
+          format={(v) => String(bg(Number(v), glucoseUnits))}
           tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
         />
 

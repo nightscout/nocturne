@@ -28,7 +28,7 @@ public class NoteRepository : SyncUpsertRepositoryBase<Note, NoteEntity>, INoteR
     /// Initializes a new instance of the <see cref="NoteRepository"/> class.
     /// </summary>
     public NoteRepository(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<NoteRepository> logger,

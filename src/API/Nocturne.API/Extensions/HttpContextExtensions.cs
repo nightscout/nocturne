@@ -3,7 +3,6 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Middleware;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
 using Scope = Nocturne.Core.Models.Authorization.Scope;
 
 namespace Nocturne.API.Extensions;
@@ -130,26 +129,13 @@ public static class HttpContextExtensions
     }
 
     /// <summary>
-    /// Check if the current request has admin permissions
+    /// Check if the current request holds superuser permissions
     /// </summary>
     /// <param name="context">HTTP context</param>
     /// <returns>True if the request holds superuser permissions</returns>
-    public static bool IsAdmin(this HttpContext context)
+    public static bool IsSuperuser(this HttpContext context)
     {
         return context.HasPermission("*");
-    }
-
-    /// <summary>
-    /// Check if the current request has read permissions
-    /// </summary>
-    /// <param name="context">HTTP context</param>
-    /// <returns>True if has read permissions</returns>
-    public static bool CanRead(this HttpContext context)
-    {
-        return context.HasPermission("*")
-            || context.HasPermission("api:*")
-            || context.HasPermission("api:*:read")
-            || context.HasPermission("readable");
     }
 
     /// <summary>
@@ -207,17 +193,12 @@ public static class HttpContextExtensions
         context.RequestServices?.GetService<ICategoryReadContext>()?.IsHistoryClamped == true;
 
     /// <summary>
-    /// Clamps every read on the request's services to the last 24 hours: onto
-    /// <see cref="ICategoryReadContext"/>, which the DbContext factory and the PHI caches read, and
-    /// onto the request-scoped context, which was pinned before authentication ran. There is no way
-    /// to lift it.
+    /// Clamps every read on the request's services to the last 24 hours, through
+    /// <see cref="ICategoryReadContext"/>, which every context of the request and the PHI caches
+    /// read. There is no way to lift it.
     /// </summary>
-    public static void ClampMemberHistory(this HttpContext context)
-    {
+    public static void ClampMemberHistory(this HttpContext context) =>
         context.RequestServices.GetService<ICategoryReadContext>()?.ClampMemberHistory();
-        if (context.RequestServices.GetService<NocturneDbContext>() is { } db)
-            db.HistoryClamped = true;
-    }
 
     /// <summary>
     /// The history limit something this caller mints carries: the requested limit, or the

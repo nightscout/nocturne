@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Caching.Memory;
 using Moq;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Profiles.Resolvers;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -20,11 +22,13 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
 
     public void Dispose() => _cache.Dispose();
 
-    private BasalSegmentService Service() => new(
+    private BasalSegmentService Service(ITenantCache cache) => new(
         _stateSpans.Object,
         Mock.Of<IBasalScheduleRepository>(),
         Mock.Of<ITherapySettingsRepository>(),
-        TestTenantCache.Create(_cache));
+        cache);
+
+    private BasalSegmentService Service() => Service(TestTenantCache.Create(_cache));
 
     private static async Task DrainAsync(BasalSegmentService service)
     {
@@ -55,5 +59,19 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
         await DrainAsync(service);
 
         VerifySpanReads(1);
+    }
+
+    [Theory]
+    [MemberData(nameof(NarrowedReaders.All), MemberType = typeof(NarrowedReaders))]
+    public async Task A_narrowed_reader_never_reads_the_owners_cached_window(string reader)
+    {
+        var owner = Service();
+        var narrowed = Service(NarrowedReaders.Cache(reader, _cache));
+
+        await DrainAsync(owner);
+        await DrainAsync(narrowed);
+        await DrainAsync(owner);
+
+        VerifySpanReads(2);
     }
 }
