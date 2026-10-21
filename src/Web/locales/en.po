@@ -27184,3 +27184,36 @@ msgstr "Fill in the configuration form. Set a strong password for each PostgreSQ
 #: src/routes/(authenticated)/oauth/consent/+page.svelte
 msgid "Approving sends access to <0/>"
 msgstr "Approving sends access to <0/>"
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Unavailable member"
+msgstr "Unavailable member"
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "No recipient"
+msgstr "No recipient"
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Me"
+msgstr "Me"
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Member"
+msgstr "Member"
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "This channel has no recipient. Saving the rule sends it to you."
+msgstr "This channel has no recipient. Saving the rule sends it to you."
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "This person can no longer receive alerts on this site. Saving the rule sends this channel to you."
+msgstr "This person can no longer receive alerts on this site. Saving the rule sends this channel to you."
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Shown in this person's Nocturne notification centre."
+msgstr "Shown in this person's Nocturne notification centre."
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Recipient"
+msgstr "Recipient"

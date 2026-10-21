@@ -441,6 +441,71 @@ public class ProfileDecomposerTests
         ProfileDecomposer.FromMgdl(stored, "mmol").Should().Be(mmol);
     }
 
+    private static List<TimeValue> At(params double[] values) =>
+        values.Select((v, i) => new TimeValue { Time = $"{i * 6:00}:00", Value = v }).ToList();
+
+    [Theory]
+    [InlineData("mmol", 90, 99, 108, 126)]
+    [InlineData("mmol/L", 1622, 1784, 1946, 2270)]
+    public void MmolTargetsThatConvertAboveAnyRealTarget_AreStoredWithTheExtraConversionUndone(
+        string units, double low1, double high1, double low2, double high2)
+    {
+        var targets = ProfileDecomposer.MergeTargets(At(low1, low2), At(high1, high2), units);
+
+        targets.Select(t => (t.Low, t.High)).Should().Equal((90.0, 99.0), (108.0, 126.0));
+    }
+
+    [Fact]
+    public void RealMmolTargets_AreConvertedOnce()
+    {
+        var target = ProfileDecomposer.MergeTargets(At(5.0), At(5.5), "mmol").Single();
+
+        (target.Low, target.High).Should().Be((90.0, 99.0));
+    }
+
+    [Fact]
+    public void MgdlTargets_AreStoredAsUploaded_HoweverLarge()
+    {
+        var target = ProfileDecomposer.MergeTargets(At(1622), At(1784), "mg/dl").Single();
+
+        (target.Low, target.High).Should().Be((1622.0, 1784.0));
+    }
+
+    [Theory]
+    [InlineData(90, 99, 1)]
+    [InlineData(5.0, 5.5, 0)]
+    public void UndoingAStoresTargets_IsLoggedAsAWarningNamingTheStore(double low, double high, int warnings)
+    {
+        var logger = new Mock<Microsoft.Extensions.Logging.ILogger>();
+        var profile = new Nocturne.Core.Models.Profile { Id = "doc", Mills = 0, Units = "mmol" };
+        var data = new Nocturne.Core.Models.ProfileData { Units = "mmol", TargetLow = At(low), TargetHigh = At(high) };
+
+        ProfileDecomposer.MapToTargetRangeSchedule(profile, data, "AAPS", "doc:AAPS", null, logger.Object);
+
+        logger.Verify(
+            l => l.Log(
+                Microsoft.Extensions.Logging.LogLevel.Warning,
+                It.IsAny<Microsoft.Extensions.Logging.EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("AAPS") && state.ToString()!.Contains("doc:AAPS")),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Exactly(warnings));
+    }
+
+    [Theory]
+    [InlineData(23, 414)]
+    [InlineData(25, 450)]
+    [InlineData(63, 1135)]
+    public void AMmolIsf_IsConvertedAsUploaded(double mmol, double mgdl)
+    {
+        ProfileDecomposer.ConvertSensitivityValues(At(mmol), "mmol").Single().Value.Should().Be(mgdl);
+    }
+
+    /// <remarks>
+    /// Targets stop at 22.2 mmol/L, the highest one conversion keeps at or under 400 mg/dL; above it
+    /// <see cref="ProfileDecomposer.MergeTargets(List{TimeValue}, List{TimeValue}, string?)"/> reads
+    /// the values as mg/dL.
+    /// </remarks>
     [Fact]
     public void EveryOneDecimalMmolValue_SurvivesRepeatedReadAndReupload()
     {
@@ -453,12 +518,15 @@ public class ProfileDecomposerTests
             {
                 var sens = ProfileDecomposer.ConvertSensitivityValues(
                     [new TimeValue { Time = "00:00", Value = value }], "mmol")[0].Value;
-                var target = ProfileDecomposer.MergeTargets(
-                    [new TimeValue { Time = "00:00", Value = value }],
-                    [new TimeValue { Time = "00:00", Value = value }],
-                    "mmol/L")[0];
+                if (uploaded <= 22.2)
+                {
+                    var target = ProfileDecomposer.MergeTargets(
+                        [new TimeValue { Time = "00:00", Value = value }],
+                        [new TimeValue { Time = "00:00", Value = value }],
+                        "mmol/L")[0];
+                    sens.Should().Be(target.Low).And.Be(target.High);
+                }
 
-                sens.Should().Be(target.Low).And.Be(target.High);
                 value = ProfileDecomposer.FromMgdl(sens, "mmol");
             }
 
