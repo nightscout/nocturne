@@ -114,6 +114,14 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     public string? ManagedBy { get; set; }
 
     /// <summary>
+    /// Why the rule needs its owner to look at it, one of <see cref="AlertRuleReviewReasons"/>:
+    /// a data repair changed or disabled it. Null otherwise; an edit clears it.
+    /// </summary>
+    [Column("review_reason")]
+    [MaxLength(64)]
+    public string? ReviewReason { get; set; }
+
+    /// <summary>
     /// Order in which the rule should be processed or displayed
     /// </summary>
     [Column("sort_order")]

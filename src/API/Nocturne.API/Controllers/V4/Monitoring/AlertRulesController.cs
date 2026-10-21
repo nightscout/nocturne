@@ -270,6 +270,7 @@ public class AlertRulesController : ControllerBase
         if (!sameAutoResolve)
             rule.AutoResolveParams = trees.AutoResolveParams;
         rule.ClientConfiguration = trees.ClientConfiguration ?? "{}";
+        rule.ReviewReason = null;
         rule.UpdatedAt = DateTime.UtcNow;
 
         if (request.Channels is not null)
@@ -821,7 +822,10 @@ public class AlertRulesController : ControllerBase
     private async Task<List<AlertRuleResponse>> ToResponsesAsync(
         NocturneDbContext db, IEnumerable<AlertRuleEntity> rules, CancellationToken ct)
     {
-        var responses = rules.Select(MapToResponse).ToList();
+        var responses = rules.Select(rule => MapToResponse(rule, _conditionValidator.Validate(
+                rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled,
+                rule.AutoResolveParams, rule.ClientConfiguration)))
+            .ToList();
         var inApp = responses
             .SelectMany(r => r.Channels)
             .Where(c => c.ChannelType == ChannelType.InApp)
@@ -866,7 +870,8 @@ public class AlertRulesController : ControllerBase
             .ToList());
     }
 
-    private static AlertRuleResponse MapToResponse(AlertRuleEntity entity) => new()
+    private static AlertRuleResponse MapToResponse(
+        AlertRuleEntity entity, IReadOnlyList<RustValidationIssue> conditionIssues) => new()
     {
         Id = entity.Id,
         Name = entity.Name,
@@ -879,6 +884,8 @@ public class AlertRulesController : ControllerBase
         AllowThroughDnd = entity.AllowThroughDnd,
         ScopeClass = entity.ScopeClass,
         ManagedBy = entity.ManagedBy,
+        ReviewReason = entity.ReviewReason,
+        ConditionIssues = [.. conditionIssues],
         AutoResolveEnabled = entity.AutoResolveEnabled,
         AutoResolveParams = entity.AutoResolveParams is null
             ? null
@@ -1105,6 +1112,13 @@ public class AlertRuleResponse
     /// cannot be deleted here — the owning configuration re-syncs their condition, name and
     /// severity; channels and client configuration remain user-editable.</summary>
     public string? ManagedBy { get; set; }
+    /// <summary>Why a data repair changed or disabled this rule (<see cref="AlertRuleReviewReasons"/>);
+    /// null when none did. Cleared by the next edit.</summary>
+    public string? ReviewReason { get; set; }
+    /// <summary>What a save of the rule's stored conditions would reject. A stored rule keeps
+    /// evaluating with them, so a non-empty list can mean a condition that never fires as
+    /// written.</summary>
+    public List<RustValidationIssue> ConditionIssues { get; set; } = [];
     public bool AutoResolveEnabled { get; set; }
     public object? AutoResolveParams { get; set; }
     public object ClientConfiguration { get; set; } = new { };

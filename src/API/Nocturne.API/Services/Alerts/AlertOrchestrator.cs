@@ -38,6 +38,7 @@ internal sealed class AlertOrchestrator(
     IAlertAcknowledgementService acknowledgementService,
     IExcursionResolutionHandler resolutionHandler,
     ConditionVersionLog conditionLog,
+    IAlertRuleConditionValidator conditionValidator,
     TimeProvider timeProvider,
     ILogger<AlertOrchestrator> logger)
     : IAlertOrchestrator
@@ -70,6 +71,7 @@ internal sealed class AlertOrchestrator(
 
         foreach (var rule in evaluable)
         {
+            ReportConditionIssues(rule, tenantId);
             try
             {
                 await EvaluateRuleAsync(rule, enriched, tenantId, ct);
@@ -90,6 +92,33 @@ internal sealed class AlertOrchestrator(
                     rule.Id, tenantId);
             }
         }
+    }
+
+    /// <summary>
+    /// Logs, once per version of a rule's condition, what a save of it would reject. A stored
+    /// rule keeps evaluating such a tree, where an unknown kind reads false and a missing operand
+    /// reads as its default, so the rule can go on never firing with nothing else to say so. A
+    /// tree that fails evaluation is left to the per-rule catch, which reports it.
+    /// </summary>
+    private void ReportConditionIssues(AlertRuleSnapshot rule, Guid tenantId)
+    {
+        if (!conditionLog.FirstIssueCheckFor(rule.Id, rule.ConditionType, rule.ConditionParams)
+            || ConditionTreeFaults.InRule(rule.ConditionType, rule.ConditionParams) is not null)
+        {
+            return;
+        }
+
+        var issues = conditionValidator.Validate(
+            rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled,
+            rule.AutoResolveParams, rule.ClientConfiguration);
+        if (issues.Count == 0)
+            return;
+
+        logger.LogWarning(
+            "Alert rule {AlertRuleId} for tenant {TenantId} evaluates conditions a save would reject, so it may not fire as written: {Issues}",
+            rule.Id,
+            tenantId,
+            string.Join("; ", issues.Select(i => $"{i.Scope} {i.Path}: {i.Reason}{(i.Field is null ? "" : $" ({i.Field})")}")));
     }
 
     private async Task EvaluateRuleAsync(
