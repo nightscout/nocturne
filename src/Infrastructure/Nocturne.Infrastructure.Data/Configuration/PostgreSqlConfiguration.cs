@@ -64,6 +64,13 @@ public class PostgreSqlConfiguration
     public int MaxPoolSize { get; set; } = 100;
 
     /// <summary>
+    /// How long, in seconds, a runtime-pool transaction may sit idle between statements before
+    /// PostgreSQL ends its session (<c>idle_in_transaction_session_timeout</c>). A non-positive
+    /// value leaves the server default (no limit).
+    /// </summary>
+    public int IdleInTransactionTimeoutSeconds { get; set; } = 600;
+
+    /// <summary>
     /// How far v3 history stays behind its newest deliverable stamp, in milliseconds; see
     /// <see cref="HistoryCommitMargin"/>.
     /// </summary>

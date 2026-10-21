@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,28 +11,36 @@ namespace Nocturne.Infrastructure.Data;
 /// a row stamped under it, so a client's cursor never passes a row it has not been sent.
 /// </summary>
 /// <remarks>
-/// A row is stamped before its transaction commits, and a long one (a bulk delete) can commit
-/// seconds after rows other transactions stamped later. A read in between returns those later rows
-/// and moves the client past the stamps still to commit. The horizon is the earlier of the database
-/// clock and the start of the oldest other transaction in the database that holds a transaction id,
-/// less the <see cref="HistoryCommitMargin"/>, truncated to the millisecond a cursor carries.
+/// A row is stamped before its transaction commits, and a long one (a bulk delete, an import) can
+/// commit seconds after rows other transactions stamped later. A read in between returns those later
+/// rows and moves the client past the stamps still to commit. The horizon is the earlier of the
+/// database clock and the start of the oldest other transaction in the database that holds a
+/// transaction id, less the <see cref="HistoryCommitMargin"/>, truncated to the millisecond a cursor
+/// carries.
 /// <para>
-/// A writer that takes its stamp with <see cref="StampAsync"/> is covered exactly: it holds an id
-/// before its stamp exists, and the stamp is on the database clock. It also tags its session with its
-/// tenant, so it holds back only that tenant's history, and it is waited for however long it runs.
-/// Every other writer holds back every tenant's history while it runs. A tracked save stamps on the
-/// application clock before its connection is even taken, so it is covered only while the pool wait,
-/// the round trips before its first write and the skew between the two clocks (application behind
-/// the database, or between replicas) together stay under the margin. An untagged writer open longer
-/// than <see cref="MaxWriterAge"/> is not waited for, so a transaction left open cannot stall every
-/// tenant's history; a read that passes one logs it.
+/// Every tenant-pinned connection carries its tenant in <c>application_name</c>
+/// (<see cref="SessionTag"/>, written by <c>TenantConnectionInterceptor</c> and
+/// <c>PinTenantAsync</c>), and a read waits only for its own tenant's writers and for untagged ones
+/// (platform contexts, other roles' sessions are not seen at all). A writer that stamps with
+/// <see cref="StampAsync"/> is covered exactly: it holds an id before its stamp exists, on the
+/// database clock. A tracked save opens its connection before it stamps
+/// (<c>NocturneDbContext.SaveChangesAsync</c>), so it is covered while its round trips to its first
+/// write and the skew between the application and database clocks stay under the margin.
+/// </para>
+/// <para>
+/// A writer of the reader's tenant is waited for however long it runs, since passing it over could
+/// lose what it commits; one open longer than <see cref="MaxWriterAge"/> is logged, once per
+/// transaction. An untagged writer that old is passed over, so a transaction left open cannot stall
+/// every tenant's history, and is logged too. Setting <c>idle_in_transaction_session_timeout</c> on
+/// the runtime role bounds both (see <c>docs/postgres</c>).
 /// </para>
 /// <para>
 /// The horizon reads <c>pg_stat_activity</c>. Its <c>xact_start</c> is visible only for sessions of
-/// the reader's own role, so a writer on another role (the migrator) is not waited for. It is read
-/// once per transaction and then held, so a horizon read inside an open transaction would see the
-/// activity of the moment that transaction first looked; history reads run outside one. The scan
-/// costs time in proportion to <c>max_connections</c>, once per history read.
+/// the reader's own role, so a writer on another role (the migrator) is not waited for. It is empty
+/// when <c>track_activities</c> is off, which leaves every horizon at the clock; a read logs that
+/// once. It is read once per transaction and then held, so a horizon read inside an open transaction
+/// would see the activity of the moment that transaction first looked; history reads run outside
+/// one. The scan costs time in proportion to <c>max_connections</c>, once per history read.
 /// </para>
 /// <para>
 /// Reads merged into one page must all be cut at the same horizon, or one cut lower than another
@@ -42,34 +51,44 @@ public static class HistoryHorizon
 {
     internal static readonly TimeSpan MaxWriterAge = TimeSpan.FromMinutes(10);
 
-    private const string Tag = "nocturne-hist:";
+    private const string TagPrefix = "nocturne-hist:";
 
     // The clock is read before the activity scan, so a writer that claims its id after the scan
     // stamps after the clock this returns.
     private static readonly string HorizonSql = $"""
-        SELECT least(c.now, w.oldest) - make_interval(secs => @margin) AS "Value", w.ignored AS "Ignored"
+        SELECT
+            least(c.now, w.oldest) - make_interval(secs => @margin) AS "Value",
+            coalesce(w.old_pids, ARRAY[]::int[]) AS "OldPids",
+            coalesce(w.old_names, ARRAY[]::text[]) AS "OldNames",
+            coalesce(w.old_starts, ARRAY[]::timestamptz[]) AS "OldStarts",
+            coalesce(w.old_waited, ARRAY[]::boolean[]) AS "OldWaited",
+            current_setting('track_activities')::boolean AS "Tracking",
+            c.now AS "Now"
         FROM (SELECT clock_timestamp() AS now OFFSET 0) c
         CROSS JOIN LATERAL (
             SELECT
-                min(a.xact_start) FILTER (WHERE a.tagged OR a.xact_start > c.now - make_interval(secs => {(int)MaxWriterAge.TotalSeconds})) AS oldest,
-                count(*) FILTER (WHERE NOT a.tagged AND a.xact_start <= c.now - make_interval(secs => {(int)MaxWriterAge.TotalSeconds})) AS ignored
+                min(a.xact_start) FILTER (WHERE a.own OR NOT a.old) AS oldest,
+                array_agg(a.pid) FILTER (WHERE a.old) AS old_pids,
+                array_agg(a.application_name) FILTER (WHERE a.old) AS old_names,
+                array_agg(a.xact_start) FILTER (WHERE a.old) AS old_starts,
+                array_agg(a.own) FILTER (WHERE a.old) AS old_waited
             FROM (
-                SELECT s.xact_start, s.application_name = '{Tag}' || current_setting('app.current_tenant_id', true) AS tagged
+                SELECT
+                    s.pid,
+                    s.application_name,
+                    s.xact_start,
+                    coalesce(s.application_name = '{TagPrefix}' || current_setting('app.current_tenant_id', true), false) AS own,
+                    s.xact_start <= c.now - make_interval(secs => {(int)MaxWriterAge.TotalSeconds}) AS old
                 FROM pg_stat_activity s
                 WHERE s.datname = current_database()
                   AND s.pid <> pg_backend_pid()
                   AND s.backend_type = 'client backend'
                   AND s.backend_xid IS NOT NULL
                   AND s.xact_start IS NOT NULL
-                  AND (s.application_name NOT LIKE '{Tag}%'
-                       OR s.application_name = '{Tag}' || current_setting('app.current_tenant_id', true))
+                  AND (s.application_name NOT LIKE '{TagPrefix}%'
+                       OR s.application_name = '{TagPrefix}' || current_setting('app.current_tenant_id', true))
             ) a
         ) w
-        """;
-
-    private static readonly string TagSql = $"""
-        SELECT set_config('application_name', '{Tag}' || current_setting('app.current_tenant_id', true), true)
-        WHERE coalesce(current_setting('app.current_tenant_id', true), '') <> ''
         """;
 
     private const string StampSql = """
@@ -79,6 +98,13 @@ public static class HistoryHorizon
         """;
 
     private static readonly AsyncLocal<Scope?> Current = new();
+
+    private static readonly ConcurrentDictionary<(int Pid, DateTime Started), byte> ReportedWriters = new();
+
+    private static int _reportedUntracked;
+
+    /// <summary>The <c>application_name</c> a connection pinned to <paramref name="tenantId"/> carries.</summary>
+    public static string SessionTag(Guid tenantId) => TagPrefix + tenantId;
 
     /// <summary>
     /// Opens a scope in which every history read is cut at the horizon the first of them reads.
@@ -105,8 +131,7 @@ public static class HistoryHorizon
 
     /// <summary>
     /// A stamp for the rows <paramref name="context"/>'s open transaction writes: the database clock,
-    /// read once the transaction holds an id and its session carries its tenant's tag, so no horizon
-    /// read before then for that tenant is above it.
+    /// read once the transaction holds an id, so no horizon read before then is above it.
     /// </summary>
     public static async Task<DateTime> StampAsync(DbContext context, CancellationToken ct)
     {
@@ -115,7 +140,6 @@ public static class HistoryHorizon
         if (context.Database.CurrentTransaction is null)
             throw new InvalidOperationException("A history stamp is taken inside a transaction");
 
-        await context.Database.ExecuteSqlRawAsync(TagSql, ct);
         return await context.Database.SqlQueryRaw<DateTime>(StampSql).SingleAsync(ct);
     }
 
@@ -129,12 +153,33 @@ public static class HistoryHorizon
             .SqlQueryRaw<HorizonRead>(HorizonSql, new Npgsql.NpgsqlParameter("margin", margin.TotalSeconds))
             .SingleAsync(ct);
 
-        if (read.Ignored > 0)
-            logger.LogWarning(
-                "History is not waiting for {Count} transaction(s) open longer than {MaxWriterAge}; rows they commit may be missed by v3 history clients",
-                read.Ignored, MaxWriterAge);
-
+        Report(read, logger);
         return DateTimeOffset.FromUnixTimeMilliseconds(HistoryPage.ToMilliseconds(read.Value)).UtcDateTime;
+    }
+
+    private static void Report(HorizonRead read, ILogger logger)
+    {
+        if (!read.Tracking && Interlocked.Exchange(ref _reportedUntracked, 1) == 0)
+            logger.LogWarning(
+                "track_activities is off, so v3 history cannot see transactions still in flight and may miss rows they commit");
+
+        if (ReportedWriters.Count > 1000)
+            ReportedWriters.Clear();
+
+        for (var i = 0; i < read.OldPids.Length; i++)
+        {
+            if (!ReportedWriters.TryAdd((read.OldPids[i], read.OldStarts[i]), 0))
+                continue;
+
+            logger.LogWarning(
+                "Transaction on backend {Pid} ({ApplicationName}) has been open {Age}; v3 history {Handling}",
+                read.OldPids[i],
+                read.OldNames[i],
+                read.Now - read.OldStarts[i],
+                read.OldWaited[i]
+                    ? "for its tenant waits for it to finish"
+                    : "no longer waits for it and may miss what it commits");
+        }
     }
 
     private static TimeSpan MarginOf(DbContext context) =>
@@ -146,7 +191,17 @@ public static class HistoryHorizon
     {
         public DateTime Value { get; init; }
 
-        public long Ignored { get; init; }
+        public int[] OldPids { get; init; } = [];
+
+        public string[] OldNames { get; init; } = [];
+
+        public DateTime[] OldStarts { get; init; } = [];
+
+        public bool[] OldWaited { get; init; } = [];
+
+        public bool Tracking { get; init; }
+
+        public DateTime Now { get; init; }
     }
 
     /// <summary>The horizon shared by the history reads of one page.</summary>

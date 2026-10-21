@@ -2660,14 +2660,23 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public override int SaveChanges()
     {
         var autoDetectChanges = DetectChangesOnceForSave();
+        var opened = false;
         try
         {
+            if (MustOpenBeforeStamping())
+            {
+                Database.OpenConnection();
+                opened = true;
+            }
+
             UpdateTimestamps();
             return base.SaveChanges();
         }
         finally
         {
             ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+            if (opened)
+                Database.CloseConnection();
         }
     }
 
@@ -2679,8 +2688,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var autoDetectChanges = DetectChangesOnceForSave();
+        var opened = false;
         try
         {
+            if (MustOpenBeforeStamping())
+            {
+                await Database.OpenConnectionAsync(cancellationToken);
+                opened = true;
+            }
+
             UpdateTimestamps();
             return await base.SaveChangesAsync(cancellationToken);
         }
@@ -2692,8 +2708,22 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         finally
         {
             ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+            if (opened)
+                await Database.CloseConnectionAsync();
         }
     }
+
+    /// <summary>
+    /// Whether a save must take its connection before it stamps: a stamp taken while it waits for a
+    /// pooled connection would fall behind rows other saves commit in the meantime, which a v3 history
+    /// client could be moved past (<see cref="HistoryHorizon"/>). A connection the caller already
+    /// opened, or a save with nothing to write, needs none; a connection opened here is closed here,
+    /// since EF leaves one it did not open to whoever opened it.
+    /// </summary>
+    private bool MustOpenBeforeStamping() =>
+        Database.IsNpgsql()
+        && ChangeTracker.HasChanges()
+        && Database.GetDbConnection().State != System.Data.ConnectionState.Open;
 
     /// <summary>
     /// Drops the audit rows of a save that did not complete, so a retry on the same context does
