@@ -315,6 +315,7 @@ export const signInWithAuthenticator = form(
     const api = getApiClient();
 
     let verified = false;
+    let notAMember = false;
     try {
       const result = await api.totp.login({
         stepUpToken: data.stepUpToken,
@@ -322,9 +323,19 @@ export const signInWithAuthenticator = form(
       });
       verified = result?.success === true;
     } catch (err) {
+      // 403: both factors passed, but this address does not admit the account.
+      notAMember = errorStatus(err) === 403;
       console.error(
         "Authenticator sign-in failed with status:",
         errorStatus(err) ?? "none"
+      );
+    }
+
+    if (notAMember) {
+      invalid(
+        issue.code(
+          "Your account isn't a member here. Go back to sign in, or request membership."
+        )
       );
     }
 
