@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20261021161225_AddTempBasalPercent")]
-    partial class AddTempBasalPercent
+    [Migration("20261021162338_AddTempBasalRelativeIndex")]
+    partial class AddTempBasalRelativeIndex
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -7494,6 +7494,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId", "SysUpdatedAt", "Id")
                         .HasDatabaseName("ix_notes_tenant_history");
+
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_notes_tenant_legacy_id_any")
+                        .HasDatabaseName("ix_notes_tenant_legacy_id_any");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_notes_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_notes_tenant_legacy_id_user_deleted")
