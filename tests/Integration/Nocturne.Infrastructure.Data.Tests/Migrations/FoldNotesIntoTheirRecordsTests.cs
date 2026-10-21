@@ -14,10 +14,10 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 /// </summary>
 public class FoldNotesIntoTheirRecordsFixture : IAsyncLifetime
 {
-    private const string MigrationUnderTest = "20261021135625_FoldNotesIntoTheirRecords";
+    private const string MigrationUnderTest = "20261021142648_FoldNotesIntoTheirRecords";
 
     /// <summary>The migration immediately before the one under test.</summary>
-    private const string PriorMigration = "20261021070559_UnverifyKnownClientsWithForeignRedirectUris";
+    private const string PriorMigration = "20261021130540_AddGoogleHealthGrantHolders";
 
     private string _migratorConnectionString = string.Empty;
     private string _superuserConnectionString = string.Empty;
@@ -42,6 +42,8 @@ public class FoldNotesIntoTheirRecordsFixture : IAsyncLifetime
 
     internal List<(Guid Note, Guid Row, string Pinned)> UpdatesAsSuperuser { get; } = [];
 
+    internal bool? IndexValid { get; private set; }
+
     internal sealed record Row(Guid Tenant, DateTime UpdatedAt);
 
     public async Task InitializeAsync()
@@ -55,6 +57,7 @@ public class FoldNotesIntoTheirRecordsFixture : IAsyncLifetime
         await ReadAsync(Seeded);
         await MigrateToAsync(targetMigration: null);
         await ReadAsync(AfterUp);
+        await ReadIndexAsync();
         await RunAsSuperuserAsync();
     }
 
@@ -81,7 +84,7 @@ public class FoldNotesIntoTheirRecordsFixture : IAsyncLifetime
         var assembly = context.GetService<IMigrationsAssembly>();
         var migration = assembly.CreateMigration(
             assembly.Migrations[MigrationUnderTest], context.Database.ProviderName!);
-        return migration.UpOperations.OfType<SqlOperation>().Single().Sql;
+        return migration.UpOperations.OfType<SqlOperation>().Single(op => op.Sql.Contains("UPDATE notes")).Sql;
     }
 
     /// <summary>
@@ -125,6 +128,18 @@ public class FoldNotesIntoTheirRecordsFixture : IAsyncLifetime
         }
 
         await transaction.RollbackAsync();
+    }
+
+    private async Task ReadIndexAsync()
+    {
+        await using var conn = new NpgsqlConnection(_migratorConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+            WHERE c.relname = 'ix_notes_tenant_legacy_id_any';
+            """;
+        IndexValid = (bool?)await cmd.ExecuteScalarAsync();
     }
 
     private async Task ReadAsync(Dictionary<Guid, Row> rows)
@@ -239,6 +254,12 @@ public class FoldNotesIntoTheirRecordsTests(FoldNotesIntoTheirRecordsFixture fix
 
         milliseconds.Should().HaveCountGreaterThan(2)
             .And.OnlyContain(count => count <= FoldNotesIntoTheirRecordsFixture.SystemTimestampGroupSize);
+    }
+
+    [Fact]
+    public void The_notes_legacy_id_index_is_built_and_valid()
+    {
+        fixture.IndexValid.Should().BeTrue();
     }
 
     [Fact]

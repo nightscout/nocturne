@@ -10,11 +10,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateIndex(
-                name: "ix_notes_tenant_legacy_id_any",
-                table: "notes",
-                columns: new[] { "tenant_id", "legacy_id" });
-
             // A Note written beside a bolus, carb intake, BG check, device event, temp basal or
             // calculation is served as that record's notes, and v3 history tombstones the Note's own
             // id whenever its row moves (V4ToLegacyProjectionService.AssembleAsync). A client that
@@ -46,18 +41,20 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         UPDATE notes n
                         SET sys_updated_at = now() + (ranked.k / 1000) * interval '1 millisecond'
                         FROM ranked
-                        WHERE ranked.id = n.id;
+                        WHERE ranked.id = n.id
+                          AND n.tenant_id = t.id;
                     END LOOP;
                 END $$;
                 """);
+
+            ConcurrentIndexBuilder.Build(
+                migrationBuilder, "ix_notes_tenant_legacy_id_any", "ON notes (tenant_id, legacy_id)");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "ix_notes_tenant_legacy_id_any",
-                table: "notes");
+            ConcurrentIndexBuilder.Drop(migrationBuilder, "ix_notes_tenant_legacy_id_any");
         }
     }
 }

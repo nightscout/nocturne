@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20261021135625_FoldNotesIntoTheirRecords")]
+    [Migration("20261021142648_FoldNotesIntoTheirRecords")]
     partial class FoldNotesIntoTheirRecords
     {
         /// <inheritdoc />
@@ -2065,6 +2065,25 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_foods_tenant_sys_updated_at");
 
                     b.ToTable("foods");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.GoogleHealthGrantHolderEntity", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("AccountKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("account_key");
+
+                    b.HasKey("TenantId");
+
+                    b.HasIndex("AccountKey")
+                        .HasDatabaseName("ix_google_health_grant_holders_account_key");
+
+                    b.ToTable("google_health_grant_holders");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.HeartRateEntity", b =>
@@ -8323,6 +8342,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("patient_device_id");
 
+                    b.Property<int?>("Rssi")
+                        .HasColumnType("integer")
+                        .HasColumnName("rssi");
+
                     b.Property<double?>("SmoothedMgdl")
                         .HasColumnType("double precision")
                         .HasColumnName("smoothed_mgdl");
@@ -9353,6 +9376,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.FoodEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.GoogleHealthGrantHolderEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()

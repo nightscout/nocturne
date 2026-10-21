@@ -100,17 +100,11 @@ public class TreatmentReadService : ITreatmentStore
                     page, page.Count == 0 ? null : page.Max(t => t.SrvModified ?? t.Mills), page.Count == 0);
             },
             treatment => treatment.IsValid == false,
+            treatment => treatment.Id,
             after,
             ModifiedSearch.ArrivesInOrder(query.SortField, descending) ? (long)query.Count + query.Skip : null,
             ModifiedSearch.MaxRead,
             ct);
-
-        // A page re-sends a record it did not cut on, such as the record holding a Note on it, so
-        // one treatment can arrive on two pages.
-        live = live
-            .GroupBy(t => t.Id)
-            .Select(g => g.MaxBy(t => t.SrvModified ?? t.Mills)!)
-            .ToList();
 
         Func<Treatment, long> key = query.SortField == ReadSortField.SrvModified
             ? treatment => treatment.SrvModified ?? treatment.Mills
