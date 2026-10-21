@@ -336,11 +336,6 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         // goes with them: otherwise a test reads what the previous one cached.
         ((MemoryCache)Services.GetRequiredService<IMemoryCache>()).Clear();
 
-        // The tenant caches hold values read from the rows just emptied, such as the therapy
-        // timezone a profile set, which would otherwise outlive them into the next test.
-        if (cache is MemoryCache memory)
-            memory.Clear();
-
         await AuthTestHelpers.SeedApiSecretGrantAsync(conn, TenantId, OwnerSubjectId, ApiSecret);
 
         // The shared client starts every test as a client the rate limits have not seen.
