@@ -7,6 +7,7 @@
     previewAlarmSound,
     stopPreview,
     CustomSoundRejectedError,
+    CUSTOM_SOUND_ACCEPT,
     MAX_CUSTOM_SOUND_SIZE_MB,
     type CustomAlarmSound,
     type CustomSoundRejection,
@@ -80,10 +81,13 @@
     }
   }
 
+  // @wc-ignore
+  const FORMATS = "MP3, WAV, OGG, FLAC, WebM, M4A, AAC";
+
   function describeRejection(reason: CustomSoundRejection): string {
     switch (reason) {
       case "unsupported-type":
-        return "Choose an MP3, WAV, OGG, FLAC, WebM, M4A or AAC file";
+        return `Choose one of these formats: ${FORMATS}`;
       case "too-large":
         return `The file is larger than ${MAX_CUSTOM_SOUND_SIZE_MB} MB`;
       case "undecodable":
@@ -171,7 +175,7 @@
     <div>
       <Label size="lg">Custom Sounds</Label>
       <p class="text-sm text-muted-foreground">
-        Upload your own alarm sounds (MP3, WAV, OGG, FLAC, WebM, M4A or AAC, up to {MAX_CUSTOM_SOUND_SIZE_MB} MB)
+        Upload your own alarm sounds ({FORMATS}, up to {MAX_CUSTOM_SOUND_SIZE_MB} MB)
       </p>
     </div>
 
@@ -208,7 +212,7 @@
               <Input
                 id="audio-file"
                 type="file"
-                accept="audio/mpeg,audio/wav,audio/ogg,audio/flac,audio/webm,audio/mp4,audio/aac,.mp3,.wav,.ogg,.flac,.webm,.m4a,.aac"
+                accept={CUSTOM_SOUND_ACCEPT}
                 onchange={handleFileSelect}
                 bind:ref={fileInput}
                 class="flex-1"

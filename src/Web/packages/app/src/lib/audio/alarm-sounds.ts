@@ -661,7 +661,15 @@ export function getVibrationPattern(soundId: string): number[] {
 
 const CUSTOM_SOUNDS_STORAGE_KEY = 'nocturne-custom-alarm-sounds';
 export const MAX_CUSTOM_SOUND_SIZE_MB = 5;
-const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/webm', 'audio/mp4', 'audio/aac'];
+const CUSTOM_SOUND_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/webm', 'audio/mp4', 'audio/aac'];
+/**
+ * Browsers disagree on these files' MIME types (`video/webm`, `audio/x-m4a`, an empty type, ...),
+ * so a known extension is enough; the decode check in {@link uploadCustomSound} still refuses non-audio.
+ */
+const CUSTOM_SOUND_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.flac', '.webm', '.m4a', '.aac'];
+
+/** The file input's `accept` value for custom sounds. */
+export const CUSTOM_SOUND_ACCEPT = [...CUSTOM_SOUND_TYPES, ...CUSTOM_SOUND_EXTENSIONS].join(',');
 
 export type CustomSoundRejection = 'unsupported-type' | 'too-large' | 'undecodable' | 'timed-out';
 
@@ -675,7 +683,8 @@ export class CustomSoundRejectedError extends Error {
 
 /** @throws {CustomSoundRejectedError} when the file's type or size is not accepted. */
 export function assertAcceptableCustomSound(file: File): void {
-  if (!ALLOWED_AUDIO_TYPES.includes(file.type)) {
+  const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  if (!CUSTOM_SOUND_TYPES.includes(file.type) && !CUSTOM_SOUND_EXTENSIONS.includes(extension)) {
     throw new CustomSoundRejectedError('unsupported-type');
   }
   if (file.size > MAX_CUSTOM_SOUND_SIZE_MB * 1024 * 1024) {

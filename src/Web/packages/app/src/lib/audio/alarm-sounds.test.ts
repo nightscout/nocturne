@@ -6,7 +6,8 @@ import {
   type CustomSoundRejection,
 } from "./alarm-sounds";
 
-const fileOf = (type: string, size = 1024) => new File([new Uint8Array(size)], "sound", { type });
+const fileOf = (type: string, size = 1024, name = "sound") =>
+  new File([new Uint8Array(size)], name, { type });
 
 const rejectionOf = (file: File): CustomSoundRejection | undefined => {
   try {
@@ -26,8 +27,17 @@ describe("assertAcceptableCustomSound", () => {
     }
   );
 
-  it("rejects a type the picker does not offer", () => {
-    expect(rejectionOf(fileOf("video/mp4"))).toBe("unsupported-type");
+  it.each([
+    ["audio/x-m4a", "alarm.m4a"],
+    ["video/webm", "alarm.webm"],
+    ["", "alarm.FLAC"],
+  ])("accepts a browser-specific type %j when the extension is known (%s)", (type, name) => {
+    expect(rejectionOf(fileOf(type, 1024, name))).toBeUndefined();
+  });
+
+  it("rejects an unknown type with an unknown extension", () => {
+    expect(rejectionOf(fileOf("video/mp4", 1024, "clip.mp4"))).toBe("unsupported-type");
+    expect(rejectionOf(fileOf("", 1024, "notes"))).toBe("unsupported-type");
   });
 
   it("accepts a file exactly at the size limit and rejects one byte over", () => {
