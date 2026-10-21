@@ -161,8 +161,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     IF n_stores > 0 THEN
                         INSERT INTO pending_tenant_jobs (tenant_id, job, requested_at)
-                        VALUES (t.id, 'profile-versions-moved', now())
-                        ON CONFLICT DO NOTHING;
+                        VALUES (t.id, 'profile-versions-moved', now());
 
                         SELECT d.document INTO newest_document
                         FROM (SELECT CASE
