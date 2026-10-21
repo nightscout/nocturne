@@ -70,6 +70,7 @@ public static class ServiceCollectionExtensions
         }
 
         // Register interceptors as singletons so caches are shared across all DbContext instances.
+        services.TryAddSingleton(new HistoryCommitMargin(TimeSpan.FromMilliseconds(config.HistoryCommitMarginMilliseconds)));
         services.TryAddSingleton<TenantConnectionInterceptor>();
         services.TryAddSingleton<MutationAuditInterceptor>();
 
@@ -134,7 +135,7 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddDataServices(this IServiceCollection services)
     {
-        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         services.AddScoped(sp => new TenantReadContext(
             sp.GetService<ITenantAccessor>(),
             sp.GetService<ICategoryReadContext>(),

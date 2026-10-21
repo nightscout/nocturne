@@ -103,6 +103,12 @@ public class AuthContext
     public Guid? TokenId { get; set; }
 
     /// <summary>
+    /// The refresh-token family a session login belongs to; null for every other credential and
+    /// for a session token minted without one.
+    /// </summary>
+    public string? SessionId { get; set; }
+
+    /// <summary>
     /// The OAuth client an access token was issued to; null for every other credential.
     /// </summary>
     public string? ClientId { get; set; }

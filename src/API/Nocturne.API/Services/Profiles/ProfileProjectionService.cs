@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Profiles;
 
@@ -100,6 +101,7 @@ public class ProfileProjectionService : IProfileProjectionService
         long cursorMills, int limit, CancellationToken ct = default)
     {
         var cursor = cursorMills;
+        using var committed = HistoryHorizon.Share();
 
         while (true)
         {
@@ -146,7 +148,11 @@ public class ProfileProjectionService : IProfileProjectionService
                     profile.IsValid = false;
                 }
 
-                if (profile.SrvModified > cursor && (horizon is null || profile.SrvModified <= horizon))
+                // A document is assembled from its live rows, which the history reads did not cut.
+                if (profile.SrvModified is { } modified
+                    && modified > cursor
+                    && (horizon is null || modified <= horizon)
+                    && committed.Admits(modified))
                     stamped[document.Key] = profile;
             }
 
@@ -236,9 +242,12 @@ public class ProfileProjectionService : IProfileProjectionService
     /// One legacy profile document, with a store per row of <paramref name="rows"/>.
     /// </summary>
     /// <remarks>
-    /// A document's own <c>defaultProfile</c> is not stored, only the tenant's one
-    /// <see cref="TherapySettings.IsDefault"/> row, so the document names that row's store when it
-    /// holds it and its newest store otherwise, and reads its document-level fields off that store's row.
+    /// The document names the tenant's <see cref="TherapySettings.IsDefault"/> row's store when it holds
+    /// that row, as <see cref="Resolvers.ProfileStoreTimeline"/> reads it; else its recorded
+    /// <see cref="TherapySettings.DocumentDefaultProfile"/>; else, for a row decomposed before that was
+    /// recorded, its newest store. It reads its document-level fields off its first store's row. Its
+    /// <c>startDate</c> is the stored one only where its versions start there (a row decomposed before
+    /// <c>startDate</c> led may record another), so a client that saves it back does not move them.
     /// </remarks>
     private async Task<Profile> AssembleDocumentAsync(IReadOnlyList<TherapySettings> rows, CancellationToken ct)
     {
@@ -261,8 +270,12 @@ public class ProfileProjectionService : IProfileProjectionService
         return new Profile
         {
             Id = TherapySettings.DocumentIdOf(head),
-            DefaultProfile = head.ProfileName,
-            StartDate = head.StartDate ?? head.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            DefaultProfile = head.IsDefault
+                ? head.ProfileName
+                : rows.Select(r => r.DocumentDefaultProfile).FirstOrDefault(d => d is not null) ?? head.ProfileName,
+            StartDate = UploaderTimestamp.ParseUtcDateTime(head.StartDate) == head.Timestamp
+                ? head.StartDate
+                : head.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             Mills = head.Mills,
             CreatedAt = head.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             SrvModified = srvModified,

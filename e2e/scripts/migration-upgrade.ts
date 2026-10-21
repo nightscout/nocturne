@@ -31,6 +31,11 @@ interface Seeded {
 
 interface Snapshot {
   entries: number[];
+  /**
+   * Each distinct `eventType@created_at` served. Distinct, because a release before #2308 served a
+   * treatment's notes as a second document of the same event type and time, which a later one
+   * serves on the treatment itself: the same treatments read back, one document each.
+   */
   treatments: string[];
   alertRules: string[];
   share: { enabled: boolean; fullHistory: boolean; scopes: string[] } | null;
@@ -88,7 +93,7 @@ async function snapshot(slug: string, auth: { token?: string; secret?: string })
   const labs = await optional(() => call<unknown[]>("GET", "/api/v4/lab-results/hba1c", h));
   return {
     entries: entries.map((e) => e.date).sort((a, b) => a - b),
-    treatments: treatments.map((t) => `${t.eventType}@${Date.parse(t.created_at)}`).sort(),
+    treatments: [...new Set(treatments.map((t) => `${t.eventType}@${Date.parse(t.created_at)}`))].sort(),
     alertRules: rules.map((r) => r.name).sort(),
     share: share && { enabled: share.enabled, fullHistory: share.fullHistory, scopes: [...share.scopes].sort() },
     connectorUrl: connector.configuration.url,
@@ -131,10 +136,19 @@ function assertSame(actual: Snapshot, expected: Snapshot, what: string) {
   assertEqual(known, before, what);
 }
 
-function assertEqual(actual: unknown, expected: unknown, what: string) {
-  const a = JSON.stringify(actual);
-  const e = JSON.stringify(expected);
-  if (a !== e) throw new Error(`${what} changed across the upgrade:\n  before ${e.slice(0, 600)}\n  after  ${a.slice(0, 600)}`);
+function assertEqual(actual: Record<string, unknown>, expected: Record<string, unknown>, what: string) {
+  if (JSON.stringify(actual) === JSON.stringify(expected)) return;
+  const changed = Object.keys(expected)
+    .filter((key) => JSON.stringify(actual[key]) !== JSON.stringify(expected[key]))
+    .map((key) => {
+      const [before, after] = [expected[key], actual[key]];
+      if (!Array.isArray(before) || !Array.isArray(after)) return `  ${key}: ${JSON.stringify(before)} -> ${JSON.stringify(after)}`;
+      const [b, f] = [before.map((v) => JSON.stringify(v)), after.map((v) => JSON.stringify(v))];
+      const lost = b.filter((v) => !f.includes(v)).slice(0, 20).join(", ") || "none";
+      const gained = f.filter((v) => !b.includes(v)).slice(0, 20).join(", ") || "none";
+      return `  ${key} (${b.length} -> ${f.length}): lost ${lost}; gained ${gained}`;
+    });
+  throw new Error(`${what} changed across the upgrade:\n${changed.join("\n")}`);
 }
 
 async function main() {

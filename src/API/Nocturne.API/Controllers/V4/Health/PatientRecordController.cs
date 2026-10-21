@@ -4,6 +4,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Caching;
+using Nocturne.API.Services.V4;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -51,6 +52,7 @@ public class PatientRecordController : ControllerBase
     private readonly IDeviceTrackerProvisioner _trackerProvisioner;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantCache _tenantCache;
+    private readonly ITempBasalRateReresolver _tempBasalRates;
     private readonly ILogger<PatientRecordController> _logger;
 
     public PatientRecordController(
@@ -64,6 +66,7 @@ public class PatientRecordController : ControllerBase
         IDeviceTrackerProvisioner trackerProvisioner,
         ITenantAccessor tenantAccessor,
         ITenantCache tenantCache,
+        ITempBasalRateReresolver tempBasalRates,
         ILogger<PatientRecordController> logger)
     {
         _recordRepo = recordRepo;
@@ -76,6 +79,7 @@ public class PatientRecordController : ControllerBase
         _trackerProvisioner = trackerProvisioner;
         _tenantAccessor = tenantAccessor;
         _tenantCache = tenantCache;
+        _tempBasalRates = tempBasalRates;
         _logger = logger;
     }
 
@@ -110,7 +114,10 @@ public class PatientRecordController : ControllerBase
         var storedTimezone = (await _recordRepo.GetAsync(cancellationToken))?.Timezone;
         var updated = await _recordRepo.UpdateAsync(model, WriteOrigin.Live, cancellationToken);
         if (!string.Equals(storedTimezone, updated.Timezone, StringComparison.Ordinal))
+        {
             await _tenantCache.RemoveFamilyAsync(TenantCacheFamily.EHbA1c, cancellationToken);
+            await _tempBasalRates.AfterProfilesChangedAsync([], cancellationToken);
+        }
         return Ok(updated);
     }
 

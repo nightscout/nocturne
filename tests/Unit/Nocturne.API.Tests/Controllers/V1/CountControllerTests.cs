@@ -208,6 +208,67 @@ public class CountControllerTests
         Rows(result).Should().ContainSingle().Which.Count.Should().Be(1L);
     }
 
+    [Theory]
+    [InlineData("food")]
+    [InlineData("activity")]
+    public async Task CountGeneric_BracketedFind_ReachesTheStorage(string storage)
+    {
+        const string queryString = "find[category]=synthetic";
+        _controller.ControllerContext.HttpContext.Request.QueryString = new QueryString("?" + queryString);
+        _mockFoodRepository
+            .Setup(s => s.CountFoodAsync(queryString, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(2L);
+        _mockActivityService
+            .Setup(s => s.CountActivitiesAsync(queryString, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(2L);
+
+        var result = await _controller.CountGeneric(storage, find: null);
+
+        Rows(result).Should().ContainSingle().Which.Count.Should().Be(2L);
+    }
+
+    [Fact]
+    public async Task CountActivity_BracketedFind_ReachesTheService()
+    {
+        const string queryString = "find[type]=exercise";
+        _controller.ControllerContext.HttpContext.Request.QueryString = new QueryString("?" + queryString);
+        _mockActivityService
+            .Setup(s => s.CountActivitiesAsync(queryString, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(3L);
+
+        Rows(await _controller.CountActivity(find: null)).Should().ContainSingle().Which.Count.Should().Be(3L);
+    }
+
+    [Fact]
+    public async Task CountGeneric_Food_FindOnAFieldTheCollectionLacks_AnswersBadRequest()
+    {
+        _controller.ControllerContext.HttpContext.Request.QueryString = new QueryString("?find[bogus]=1");
+
+        var result = await _controller.CountGeneric("food", find: null);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        _mockFoodRepository.Verify(
+            s => s.CountFoodAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CountActivity_FindWhoseKeysTheParserCannotRead_AnswersBadRequest(bool viaGenericRoute)
+    {
+        _controller.ControllerContext.HttpContext.Request.QueryString = new QueryString("?find[]=1");
+
+        var result = viaGenericRoute
+            ? await _controller.CountGeneric("activity", find: null)
+            : await _controller.CountActivity(find: null);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        _mockActivityService.Verify(
+            s => s.CountActivitiesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     [Fact]
     public void LegacyCountResult_SerializesAsTheAggregateRow()
     {

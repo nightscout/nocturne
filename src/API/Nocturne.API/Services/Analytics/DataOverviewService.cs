@@ -376,7 +376,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Rate > 0)
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .ExcludeNonPrimary(context, RecordType.TempBasal)
-                .Select(e => new { StartTimestamp = e.Timestamp, e.Rate, e.EndTimestamp }),
+                .Select(e => new { StartTimestamp = e.Timestamp, Rate = e.Rate ?? 0, e.EndTimestamp }),
             r => r.StartTimestamp,
             r => r.Rate * (r.EndTimestamp.HasValue
                 ? (r.EndTimestamp.Value - r.StartTimestamp).TotalHours
@@ -557,8 +557,9 @@ public class DataOverviewService : IDataOverviewService
             return response;
 
         var isCurrentYear = year == localNow.Year;
-        // Only V4 sensor and meter glucose writes clear a completed year (EHbA1cCacheFamilies);
-        // any other glucose writer's backfill shows once the 14 days run out.
+        // A sensor or meter glucose write through the V4 repositories clears the years its readings
+        // reach (EHbA1cCacheFamilies). Delete-by-source, and the year an update moves a reading out
+        // of, do not clear, so the expiry bounds those.
         var expiry = isCurrentYear ? DateTime.UtcNow.AddHours(1) : DateTime.UtcNow.AddDays(14);
         await _cache.SetAsync(cacheKey, response, expiry, cancellationToken);
 
@@ -1121,7 +1122,7 @@ public class DataOverviewService : IDataOverviewService
                 .Select(e => new
                 {
                     StartTimestamp = e.Timestamp,
-                    e.Rate,
+                    Rate = e.Rate ?? 0,
                     e.EndTimestamp,
                 })
                 .ReadMetricRowsAsync(reads, YearMetricSource.TempBasal, cancellationToken);

@@ -487,18 +487,27 @@ public class TrackerRepository : ITrackerRepository
         await using var lease = await OpenAsync(cancellationToken);
         var db = lease.Context;
         var at = completedAt ?? DateTime.UtcNow;
-        var updated = await db
-            .TrackerInstances.Where(i => i.Id == instanceId && i.CompletedAt == null)
-            .ExecuteUpdateAsync(
-                s => s
-                    .SetProperty(i => i.CompletedAt, at)
-                    .SetProperty(i => i.CompletionReason, reason)
-                    .SetProperty(i => i.CompletionNotes, completionNotes)
-                    .SetProperty(i => i.CompleteTreatmentId, completeTreatmentId),
-                cancellationToken
-            );
 
-        return updated == 0 ? null : await InstanceByIdAsync(db, instanceId, cancellationToken);
+        // Lifted so a clamped member can complete a run at a time before the window. It targets only
+        // running instances, which the clamp shows (see ShareDataCategories.HiddenSpanEndColumns), and
+        // reads back only the one it completed.
+        return await db.WriteWithHistoryClampLiftedAsync(
+            async token =>
+            {
+                var updated = await db
+                    .TrackerInstances.Where(i => i.Id == instanceId && i.CompletedAt == null)
+                    .ExecuteUpdateAsync(
+                        s => s
+                            .SetProperty(i => i.CompletedAt, at)
+                            .SetProperty(i => i.CompletionReason, reason)
+                            .SetProperty(i => i.CompletionNotes, completionNotes)
+                            .SetProperty(i => i.CompleteTreatmentId, completeTreatmentId),
+                        token
+                    );
+
+                return updated == 0 ? null : await InstanceByIdAsync(db, instanceId, token);
+            },
+            cancellationToken);
     }
 
     /// <inheritdoc />

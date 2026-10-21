@@ -171,7 +171,6 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             UserCode = entity.UserCode,
             ClientId = entity.ClientId,
             ClientDisplayName = client?.DisplayName,
-            IsKnownClient = client?.IsKnown ?? false,
             Scopes = entity.Scopes,
             IsExpired = entity.IsExpired,
             IsApproved = entity.IsApproved,
@@ -253,6 +252,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             subjectId,
             scopes,
             limitTo24Hours: limitTo24Hours,
+            approvedByDeviceCode: true,
             ct: ct
         );
 

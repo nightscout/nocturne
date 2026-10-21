@@ -81,6 +81,7 @@ function createTenantClient(
   socketIOServer: SocketIOServer,
   config: ReturnType<typeof buildConfig>,
   tenantSlug: string,
+  tenantId: string,
   baseDomain: string,
   confirmReconnect: () => Promise<boolean>,
 ): SignalRClient {
@@ -95,7 +96,8 @@ function createTenantClient(
     reconnectDelay: config.signalr.reconnectDelay,
     maxReconnectDelay: config.signalr.maxReconnectDelay,
     instanceKey: config.instanceKey,
-    connectionHeaders: { 'X-Forwarded-Host': tenantHost },
+    // See TenantAwareHub.ExpectedTenantHeader in the API.
+    connectionHeaders: { 'X-Forwarded-Host': tenantHost, 'X-Expected-Tenant-Id': tenantId },
     confirmReconnect,
   });
 }
@@ -159,18 +161,19 @@ export async function setupBridge(
     .toLowerCase();
 
   const registry: TenantRegistry<SignalRClient> = new TenantRegistry({
-    discover: async (): Promise<TenantDirectory> => ({
-      tenants: await discoverTenants(apiBaseUrl, instanceKeyHash),
-      apexSlug: await discoverApexTenant(apiBaseUrl, baseDomain),
-    }),
-    createConnection: (slug) => {
+    discover: async (): Promise<TenantDirectory> => {
+      const [tenants, apexSlug] = await Promise.all([
+        discoverTenants(apiBaseUrl, instanceKeyHash),
+        discoverApexTenant(apiBaseUrl, baseDomain),
+      ]);
+      return { tenants, apexSlug };
+    },
+    createConnection: (slug, id) => {
       const client: SignalRClient = createTenantClient(
-        socketIOServer, config, slug, baseDomain, () => registry.confirm(slug, client));
+        socketIOServer, config, slug, id, baseDomain, () => registry.confirm(slug, client));
       return client;
     },
     refreshIntervalMs: userConfig.tenantRefreshIntervalMs ?? DEFAULT_TENANT_REFRESH_INTERVAL_MS,
-    // A slug's room may hold sockets of a tenant that is gone, or of the tenant a reused slug named
-    // before; they reconnect and are admitted afresh.
     onTenantRemoved: (slug) => socketIOServer.disconnectTenant(slug),
     onApexChanged: (slug) => socketIOServer.setApexTenantSlug(slug),
   });

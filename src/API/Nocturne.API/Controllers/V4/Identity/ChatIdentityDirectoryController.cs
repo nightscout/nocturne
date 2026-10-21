@@ -101,7 +101,7 @@ public class ChatIdentityDirectoryController : ControllerBase
         [FromBody] CreatePendingLinkRequest request, CancellationToken ct)
     {
         var token = await _pending.CreateAsync(
-            request.Platform, request.PlatformUserId, request.TenantSlug, request.Source, ct);
+            request.Platform, request.PlatformUserId, request.PlatformUserName, request.TenantSlug, request.Source, ct);
         return Ok(new PendingLinkResponse { Token = token });
     }
 
@@ -242,6 +242,7 @@ public class CreatePendingLinkRequest
 {
     public string Platform { get; set; } = string.Empty;
     public string PlatformUserId { get; set; } = string.Empty;
+    public string? PlatformUserName { get; set; }
     public string? TenantSlug { get; set; }
     public string Source { get; set; } = "connect-slash";
 }

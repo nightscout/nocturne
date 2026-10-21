@@ -1,6 +1,8 @@
+import type { RustValidationIssue } from "$api-clients";
 import { errorIssues } from "$lib/forms/submit-error";
 
 const MALFORMED = "Part of this rule's conditions is malformed, so it can't be saved.";
+const STORED_MALFORMED = "Part of this rule's conditions is malformed, so the rule may not alert as set. Edit its conditions and save it.";
 
 /**
  * Sentences for the reason codes a rule save is rejected with
@@ -57,17 +59,37 @@ export function conditionIssuesMessage(err: unknown): string | null {
 
 	const sentences: string[] = [];
 	for (const issue of issues) {
-		const reason = issue.reason;
-		const key = reason && issue.field ? `${reason}:${issue.field}` : undefined;
-		const sentence =
-			(key !== undefined && Object.hasOwn(ISSUE_MESSAGES, key)
-				? ISSUE_MESSAGES[key]
-				: undefined) ??
-			(reason !== undefined && Object.hasOwn(ISSUE_MESSAGES, reason)
-				? ISSUE_MESSAGES[reason]
-				: undefined);
+		const sentence = sentenceFor(issue);
 		if (sentence === undefined) return null;
-		if (!sentences.includes(sentence)) sentences.push(sentence);
+		sentences.push(sentence);
 	}
-	return sentences.join(" ");
+	return distinct(sentences).join(" ");
+}
+
+/**
+ * What to tell the person about a stored rule whose conditions a save would
+ * reject, or `null` when there is nothing wrong with them.
+ */
+export function storedConditionIssuesMessage(
+	issues: RustValidationIssue[] | undefined
+): string | null {
+	if (issues === undefined || issues.length === 0) return null;
+	return distinct(issues.map((issue) => sentenceFor(issue) ?? STORED_MALFORMED)).join(" ");
+}
+
+function distinct(sentences: string[]): string[] {
+	return sentences.filter((sentence, i) => sentences.indexOf(sentence) === i);
+}
+
+function sentenceFor(issue: RustValidationIssue): string | undefined {
+	const reason = issue.reason;
+	const key = reason && issue.field ? `${reason}:${issue.field}` : undefined;
+	return (
+		(key !== undefined && Object.hasOwn(ISSUE_MESSAGES, key)
+			? ISSUE_MESSAGES[key]
+			: undefined) ??
+		(reason !== undefined && Object.hasOwn(ISSUE_MESSAGES, reason)
+			? ISSUE_MESSAGES[reason]
+			: undefined)
+	);
 }

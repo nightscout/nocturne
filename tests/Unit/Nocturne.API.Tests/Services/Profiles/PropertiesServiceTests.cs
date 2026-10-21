@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Configuration;
@@ -746,6 +747,39 @@ public class PropertiesServiceTests
         Assert.NotNull(current["combobolustreatment"]); // Should have combo bolus treatment
     }
 
+    [Theory]
+    [InlineData(-50, 0.5)]
+    [InlineData(50, 1.5)]
+    [InlineData(150, 2.5)]
+    public async Task GetAllPropertiesAsync_PercentTempBasal_ChangesScheduledBasalByPercent(
+        double percent, double factor)
+    {
+        var testDData = CreateTestDDataWithActiveTempBasal(new Treatment { Percent = percent });
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(testDData);
+
+        var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
+
+        var current = (Dictionary<string, object>)((Dictionary<string, object>)result["basal"])["current"];
+        Convert.ToDouble(current["totalbasal"])
+            .Should().BeApproximately(Convert.ToDouble(current["basal"]) * factor, 1e-9);
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_AbsoluteBesidePercent_TakesAbsolute()
+    {
+        var testDData = CreateTestDDataWithActiveTempBasal(new Treatment { Percent = -50, Absolute = 2.0 });
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(testDData);
+
+        var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
+
+        var current = (Dictionary<string, object>)((Dictionary<string, object>)result["basal"])["current"];
+        Convert.ToDouble(current["totalbasal"]).Should().Be(2.0);
+    }
+
     [Fact]
     public async Task GetAllPropertiesAsync_WithExpiredTempBasal_ReturnsBasalPropertiesWithoutTempMarker()
     {
@@ -933,6 +967,19 @@ public class PropertiesServiceTests
                     .ToString("O"),
             },
         };
+
+        return basalData;
+    }
+
+    private DData CreateTestDDataWithActiveTempBasal(Treatment tempBasal)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var basalData = CreateTestDDataWithBasalProfile();
+
+        tempBasal.EventType = "Temp Basal";
+        tempBasal.Duration = 60;
+        tempBasal.Mills = now - 10 * 60 * 1000;
+        basalData.Treatments = new List<Treatment> { tempBasal };
 
         return basalData;
     }

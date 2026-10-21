@@ -116,14 +116,16 @@ public class PredictionService : IPredictionService
             cancellationToken);
 
         // Convert to oref treatments
+        // A percent temp basal of unknown rate gives oref no delivery to work from, so it is left out
         var orefTreatments = treatments
+            .Where(t => t.EventType != "Temp Basal" || (t.DeliveredRate ?? t.Rate) is not null)
             .Select(t => new OrefModels.OrefTreatment
             {
                 EventType = t.EventType ?? "",
                 Mills = t.Mills,
                 Insulin = t.Insulin,
                 Carbs = t.Carbs,
-                Rate = t.Rate,
+                Rate = t.DeliveredRate ?? t.Rate,
                 Duration = (int?)(t.Duration ?? 0),
             })
             .ToList();

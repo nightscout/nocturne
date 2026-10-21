@@ -79,8 +79,9 @@ public class OAuthDeviceCodeServiceTests : IDisposable
                 It.IsAny<string>(),
                 It.IsAny<string?>(),
                 It.IsAny<bool>(),
+                It.IsAny<bool>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, bool limitTo24Hours, CancellationToken _) =>
+            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, bool limitTo24Hours, bool _, CancellationToken _) =>
                 new OAuthGrantInfo
                 {
                     LimitTo24Hours = limitTo24Hours,
@@ -259,7 +260,6 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         Assert.Equal("TESTCD01", info.UserCode);
         Assert.Equal(TestClientId, info.ClientId);
         Assert.Equal("Test App", info.ClientDisplayName);
-        Assert.False(info.IsKnownClient);
         Assert.Contains("glucose.read", info.Scopes);
         Assert.Contains("treatments.readwrite", info.Scopes);
         Assert.False(info.IsExpired);
@@ -336,6 +336,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             It.IsAny<string>(),
             It.IsAny<string?>(),
             It.IsAny<bool>(),
+            true,
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -362,6 +363,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             It.IsAny<string>(),
             It.IsAny<string?>(),
             It.IsAny<bool>(),
+            It.IsAny<bool>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -382,6 +384,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         _mockGrantService.Verify(g => g.CreateOrUpdateGrantAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(),
             It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<bool>(),
+            It.IsAny<bool>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
 

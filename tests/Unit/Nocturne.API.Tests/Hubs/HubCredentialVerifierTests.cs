@@ -62,7 +62,7 @@ public class HubCredentialVerifierTests
         bool platformAdmin = false,
         DateTime? grantRevokedAt = null,
         DateTime? grantExpiresAt = null,
-        bool session = false)
+        params string?[] sessions)
     {
         await using var db = await _contexts.CreateDbContextAsync();
         db.Tenants.Add(new TenantEntity { Id = Tenant, Slug = "default", DisplayName = "Default", IsActive = true });
@@ -80,15 +80,19 @@ public class HubCredentialVerifierTests
             RevokedAt = grantRevokedAt,
             ExpiresAt = grantExpiresAt,
         });
-        if (session)
+        foreach (var session in sessions)
         {
             db.RefreshTokens.Add(new RefreshTokenEntity
             {
-                Id = Guid.NewGuid(), SubjectId = _subject, TokenHash = "hash", ExpiresAt = DateTime.UtcNow.AddDays(1),
+                Id = Guid.NewGuid(), SubjectId = _subject, OidcSessionId = session, TokenHash = $"hash-{session}",
+                ExpiresAt = DateTime.UtcNow.AddDays(1),
             });
         }
         await db.SaveChangesAsync();
     }
+
+    private Task SignOutAsync(string session) =>
+        UpdateAsync(db => db.RefreshTokens.Single(t => t.OidcSessionId == session).RevokedAt = DateTime.UtcNow);
 
     private async Task UpdateAsync(Action<NocturneDbContext> change)
     {
@@ -111,7 +115,8 @@ public class HubCredentialVerifierTests
     }
 
     private HubAuthorization Credential(
-        AuthType authType, Guid? grantId, HubCredentialKind kind = HubCredentialKind.Subject, TimeSpan? expiresIn = null) =>
+        AuthType authType, Guid? grantId, HubCredentialKind kind = HubCredentialKind.Subject, TimeSpan? expiresIn = null,
+        string? sessionId = null) =>
         new(Tenant, new HashSet<string>(), kind, authType is AuthType.Guest ? null : _subject, HistoryClamped: false)
         {
             Source = new HubCredentialSource(
@@ -120,7 +125,8 @@ public class HubCredentialVerifierTests
                 grantId,
                 Scope.Normalize([Scope.GlucoseRead, Scope.AlertsRead]),
                 LimitTo24Hours: false,
-                ExpiresAt: DateTimeOffset.UtcNow + (expiresIn ?? TimeSpan.FromMinutes(-30))),
+                ExpiresAt: DateTimeOffset.UtcNow + (expiresIn ?? TimeSpan.FromMinutes(-30)),
+                sessionId),
         };
 
     /// <summary>The credential as the connection was admitted with it, proven from the seeded state.</summary>
@@ -271,12 +277,38 @@ public class HubCredentialVerifierTests
     [Fact]
     public async Task A_session_login_lasts_while_the_subject_has_a_session()
     {
-        await SeedAsync(session: true);
-        var admitted = await AdmittedAsync(Credential(AuthType.SessionCookie, null));
+        await SeedAsync(sessions: "laptop");
+        var admitted = await AdmittedAsync(Credential(AuthType.SessionCookie, null, sessionId: "laptop"));
         (await StillCoveredAsync(admitted)).Should().BeTrue();
 
-        await UpdateAsync(db => db.RefreshTokens.Single().RevokedAt = DateTime.UtcNow);
+        await SignOutAsync("laptop");
 
+        (await StillCoveredAsync(admitted)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Signing_out_one_session_ends_only_that_sessions_login()
+    {
+        await SeedAsync(sessions: ["laptop", "phone"]);
+        var laptop = await AdmittedAsync(Credential(AuthType.SessionCookie, null, sessionId: "laptop"));
+        var phone = await AdmittedAsync(Credential(AuthType.SessionCookie, null, sessionId: "phone"));
+
+        await SignOutAsync("laptop");
+
+        (await StillCoveredAsync(laptop)).Should().BeFalse();
+        (await StillCoveredAsync(phone)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_session_login_without_its_session_id_lasts_while_the_subject_has_any_session()
+    {
+        await SeedAsync(sessions: ["laptop", "phone"]);
+        var admitted = await AdmittedAsync(Credential(AuthType.SessionCookie, null));
+
+        await SignOutAsync("laptop");
+        (await StillCoveredAsync(admitted)).Should().BeTrue();
+
+        await SignOutAsync("phone");
         (await StillCoveredAsync(admitted)).Should().BeFalse();
     }
 
@@ -370,10 +402,12 @@ public class HubCredentialVerifierTests
     private OverviewGrant Overview(params Guid[] tenants) =>
         new(_subject, AuthType.OAuthAccessToken, new HashSet<string> { Scope.GlucoseRead }, tenants);
 
-    private void Reaches(params Guid[] tenants) =>
+    private void Reaches(params Guid[] tenants) => Reaches(AuthType.OAuthAccessToken, tenants);
+
+    private void Reaches(AuthType authType, params Guid[] tenants) =>
         _overview
             .Setup(o => o.GetGlucoseReadTenantsAsync(
-                _subject, It.IsAny<IReadOnlySet<string>>(), AuthType.OAuthAccessToken, It.IsAny<CancellationToken>()))
+                _subject, It.IsAny<IReadOnlySet<string>>(), authType, It.IsAny<CancellationToken>()))
             .ReturnsAsync(tenants
                 .Select(id => new GlucoseReadTenant(new TenantEntity { Id = id }, new HashSet<string>(), false, new HashSet<string>()))
                 .ToList());
@@ -397,5 +431,19 @@ public class HubCredentialVerifierTests
         Reaches(Tenant);
 
         (await Verifier().StillHoldsAsync(Overview(Tenant))).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Signing_out_one_session_ends_only_that_sessions_overview_connection()
+    {
+        await SeedAsync(sessions: ["laptop", "phone"]);
+        Reaches(AuthType.SessionCookie, Tenant);
+        var laptop = Overview(Tenant) with { AuthType = AuthType.SessionCookie, SessionId = "laptop" };
+        var phone = laptop with { SessionId = "phone" };
+
+        await SignOutAsync("laptop");
+
+        (await Verifier().StillHoldsAsync(laptop)).Should().BeFalse();
+        (await Verifier().StillHoldsAsync(phone)).Should().BeTrue();
     }
 }

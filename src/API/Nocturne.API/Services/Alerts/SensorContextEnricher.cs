@@ -367,9 +367,10 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         decimal glucoseMgdl, DateTime at, string? tenantTimeZoneId, CancellationToken ct)
     {
         var atMills = new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
-        var profileName = await _deps.ActiveProfileResolver.GetActiveProfileNameAsync(atMills, ct)
-            ?? await _deps.ActiveProfileResolver.GetDefaultProfileNameAsync(ct);
-        var schedule = await _deps.TargetRangeSchedules.GetActiveAtAsync(profileName, at, ct);
+        var profileName = await _deps.ActiveProfileResolver.GetProfileNameAsync(atMills, ct);
+        // Before the store's first version, its newest, as ProfileVersionCache.ActiveAt reads it.
+        var schedule = await _deps.TargetRangeSchedules.GetActiveAtAsync(profileName, at, ct)
+            ?? (await _deps.TargetRangeSchedules.GetByProfileNameAsync(profileName, ct)).MaxBy(s => s.Timestamp);
 
         // No schedule at all — fall back to the consensus in-range band and clinical bucket defaults.
         if (schedule is null || schedule.Entries.Count == 0)
@@ -489,9 +490,9 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         if (needs.NeedsTempBasal)
         {
             var temp = await _deps.TempBasals.GetActiveAtAsync(now, ct);
-            if (temp is not null)
+            if (temp is { Rate: { } rate })
             {
-                enriched = enriched with { ActiveTempBasal = ProjectTempBasal(temp) };
+                enriched = enriched with { ActiveTempBasal = ProjectTempBasal(temp, rate) };
             }
         }
 
@@ -527,9 +528,9 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         return enriched;
     }
 
-    private static TempBasalSnapshot ProjectTempBasal(TempBasal t) =>
+    private static TempBasalSnapshot ProjectTempBasal(TempBasal t, double rate) =>
         new(
-            Rate: (decimal)t.Rate,
+            Rate: (decimal)rate,
             ScheduledRate: t.ScheduledRate.HasValue ? (decimal?)t.ScheduledRate.Value : null,
             StartedAt: t.StartTimestamp);
 

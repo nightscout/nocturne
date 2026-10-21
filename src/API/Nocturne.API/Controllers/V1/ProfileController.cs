@@ -213,6 +213,9 @@ public class ProfileController : ControllerBase
                 return Ok(Array.Empty<Profile>());
             }
 
+            foreach (var created in profiles)
+                StampCreatedAt(created);
+
             var createdProfiles = await _writeService.CreateProfilesAsync(
                 profiles,
                 cancellationToken
@@ -263,6 +266,8 @@ public class ProfileController : ControllerBase
             return BadRequest("Profile store must name at least one profile");
         }
 
+        StampCreatedAt(profile);
+
         try
         {
             var saved = await _writeService.UpdateProfileAsync(
@@ -279,6 +284,16 @@ public class ProfileController : ControllerBase
             _logger.LogError(ex, "Error occurred while saving profile {ProfileId}", profile.Id);
             return StatusCode(500, "Internal server error while saving profile");
         }
+    }
+
+    /// <summary>
+    /// Gives a document posted without <c>created_at</c> the time it arrived, as Nightscout's create and
+    /// save do, so one with no <c>startDate</c> or <c>mills</c> either starts then rather than at the epoch.
+    /// </summary>
+    private static void StampCreatedAt(Profile profile)
+    {
+        if (string.IsNullOrEmpty(profile.CreatedAt))
+            profile.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
     }
 
     /// <summary>

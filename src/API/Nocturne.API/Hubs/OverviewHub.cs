@@ -74,6 +74,7 @@ public class OverviewHub : Hub
             Guid subjectId;
             IReadOnlySet<string> tokenScopes;
             AuthType authType;
+            string? sessionId = null;
 
             var httpContext = Context.GetHttpContext();
             var authContext = httpContext?.Items[AuthContextKeys.AuthContext] as AuthContext;
@@ -97,6 +98,7 @@ public class OverviewHub : Hub
 
                 subjectId = authContext.SubjectId.Value;
                 authType = authContext.AuthType;
+                sessionId = authContext.SessionId;
                 tokenScopes = httpContext!.GetGrantedScopes();
             }
             else if (!string.IsNullOrEmpty(request.Token))
@@ -155,7 +157,7 @@ public class OverviewHub : Hub
             }
 
             HubAuthorizationState.GrantOverview(
-                Context, new OverviewGrant(subjectId, authType, tokenScopes, tenantIds));
+                Context, new OverviewGrant(subjectId, authType, tokenScopes, tenantIds, sessionId));
 
             _logger.LogInformation(
                 "Client {ConnectionId} authorized for overview of {TenantCount} tenants",

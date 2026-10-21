@@ -23,6 +23,10 @@ public class ChatIdentityPendingLinkEntity
     [Column("platform_user_id"), MaxLength(256)]
     public string PlatformUserId { get; set; } = string.Empty;
 
+    /// <summary>The chat account's username as the platform reported it, shown when confirming the link.</summary>
+    [Column("platform_user_name"), MaxLength(256)]
+    public string? PlatformUserName { get; set; }
+
     /// <summary>Optional tenant slug if the user provided one in /connect; null means "any tenant".</summary>
     [Column("tenant_slug"), MaxLength(64)]
     public string? TenantSlug { get; set; }

@@ -68,9 +68,17 @@ public class ProfileVersionCacheTests : IDisposable
     }
 
     [Fact]
-    public async Task ReturnsNullBeforeTheFirstVersion()
+    public async Task ReadsTheNewestVersionBeforeTheFirst_AsNightscoutReadsItsNewestDocument()
     {
         var result = await _sut.GetActiveAtAsync(_repo.Object, "Default", Day1.AddSeconds(-1), default);
+
+        result.Should().BeSameAs(_second);
+    }
+
+    [Fact]
+    public async Task ReturnsNullForAProfileWithNoVersion()
+    {
+        var result = await _sut.GetActiveAtAsync(_repo.Object, "Missing", Day9, default);
 
         result.Should().BeNull();
     }

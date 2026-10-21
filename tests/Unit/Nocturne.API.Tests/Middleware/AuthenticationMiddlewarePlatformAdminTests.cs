@@ -61,7 +61,7 @@ public class AuthenticationMiddlewarePlatformAdminTests
 
         var dbName = $"auth_platform_admin_{Guid.NewGuid()}";
         var services = new ServiceCollection();
-        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         services.AddSingleton(memberService.Object);
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
         var provider = services.BuildServiceProvider();

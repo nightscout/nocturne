@@ -264,7 +264,14 @@ const lowOvernight = (context: ArrangeContext) =>
 				],
 			},
 		},
-		channels: [inApp, { channelType: 'web_push', destinationLabel: 'Bedroom laptop' }],
+		channels: [
+			inApp,
+			{
+				channelType: 'webhook',
+				destination: 'https://home.example.com/nocturne',
+				destinationLabel: 'Home automation',
+			},
+		],
 	});
 
 const fallingTowardLow = (context: ArrangeContext) =>
@@ -701,7 +708,7 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'patient',
 		arrange: lowOvernight,
 		clip: '[data-testid="alert-channels-card"]',
-		alt: 'The Channels card of an alert rule, listing where the alert is sent. An In-App entry notes it is routed to your account automatically, a Browser Push entry carries the label Bedroom laptop, and an Add channel button sits underneath.',
+		alt: 'The Channels card of an alert rule, listing where the alert is sent. An In-App entry shows the member it is sent to, a Webhook entry shows its web address, and an Add channel button sits underneath.',
 	},
 	{
 		id: 'alert-rule-auto-resolve',

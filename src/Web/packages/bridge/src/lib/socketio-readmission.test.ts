@@ -2,7 +2,10 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createServer } from 'http';
 import type { AddressInfo } from 'node:net';
 import { io as connectClient, type Socket as ClientSocket } from 'socket.io-client';
-import SocketIOServer, { ADMISSION_RECHECK_INTERVAL_MS } from './socketio-server.js';
+import SocketIOServer, {
+  ADMISSION_RECHECK_INTERVAL_MS,
+  UNANSWERED_COLLECTION_RETRY_MS,
+} from './socketio-server.js';
 import { signHandshakeTicket, type RealtimeGrant } from './handshake-ticket.js';
 
 const SECRET = 'test-instance-key-0123456789';
@@ -125,6 +128,65 @@ describe('SocketIOServer re-admission of a socket admitted on its own credential
     await server.readmit(socket as never);
 
     expect(socket.leave.mock.calls.map(([room]) => room)).toEqual(['storage:rhys:treatments', 'storage:rhys:entries']);
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('joins a /storage collection whose probe went unanswered once the API answers', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockImplementation((url: URL) =>
+      String(url).includes('/treatments')
+        ? Promise.reject(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
+        : Promise.resolve({ ok: true, status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const server = makeServer();
+    const socket = admittedSocket();
+    const ack = vi.fn();
+    await server.handleStorageSubscribe(socket as never, { accessToken: 'aaps', collections: ['entries', 'treatments'] }, ack);
+
+    expect(ack).toHaveBeenCalledWith({ success: true, collections: ['entries'] });
+    expect(socket.join.mock.calls.map(([room]) => room)).toEqual(['storage:rhys:entries']);
+
+    fetchMock.mockResolvedValue({ ok: true, status: 200 });
+    await vi.advanceTimersByTimeAsync(UNANSWERED_COLLECTION_RETRY_MS);
+
+    expect(socket.join.mock.calls.map(([room]) => room)).toEqual(['storage:rhys:entries', 'storage:rhys:treatments']);
+    expect(socket.leave).not.toHaveBeenCalled();
+    expect(socket.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('keeps a /storage socket the API could not answer for at all, and joins it once the API answers', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(failing);
+    vi.stubGlobal('fetch', fetchMock);
+    const server = makeServer();
+    const socket = admittedSocket();
+    const ack = vi.fn();
+    await server.handleStorageSubscribe(socket as never, { accessToken: 'aaps', collections: ['entries', 'treatments'] }, ack);
+
+    expect(ack).toHaveBeenCalledWith({ success: true, collections: [] });
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).not.toHaveBeenCalled();
+
+    fetchMock.mockRejectedValue(new Error('ECONNREFUSED'));
+    await server.readmit(socket as never);
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValue({ ok: true, status: 200 });
+    await server.readmit(socket as never);
+    expect(socket.join.mock.calls.map(([room]) => room)).toEqual(['storage:rhys:entries', 'storage:rhys:treatments']);
+  });
+
+  it('disconnects a /storage socket once the API refuses every collection it could not answer for', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(failing);
+    vi.stubGlobal('fetch', fetchMock);
+    const server = makeServer();
+    const socket = admittedSocket();
+    await server.handleStorageSubscribe(socket as never, { accessToken: 'aaps', collections: ['entries'] });
+
+    fetchMock.mockResolvedValue(refused);
+    await server.readmit(socket as never);
+
+    expect(socket.join).not.toHaveBeenCalled();
     expect(socket.disconnect).toHaveBeenCalledWith(true);
   });
 

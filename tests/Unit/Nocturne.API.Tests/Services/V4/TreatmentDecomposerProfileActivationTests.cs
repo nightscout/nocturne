@@ -77,6 +77,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
             _profileDecomposer.Object,
             new Mock<IActiveProfileResolver>().Object,
             new Mock<IPatientInsulinRepository>().Object,
+            TempBasalTestDeps.Unscheduled(),
             Mock.Of<IAuditContext>(),
             NullLogger<TreatmentDecomposer>.Instance);
     }

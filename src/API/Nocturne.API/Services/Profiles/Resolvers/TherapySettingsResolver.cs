@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
@@ -47,12 +49,10 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
     {
         if (specProfile is null
             && await _activeProfileResolver.GetActiveSchedulesAsync(timeMills, ct) is { } snapshot
-            && (snapshot.Insulin?.Dia ?? snapshot.Dia) is > 0 and var snapshotDia)
+            && SnapshotDia(snapshot) is { } snapshotDia)
             return snapshotDia;
 
-        var profileName = specProfile
-            ?? await _activeProfileResolver.GetActiveProfileNameAsync(timeMills, ct)
-            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
+        var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(timeMills, ct);
 
         var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
         var settings = await GetCachedSettingsAsync(profileName, timestamp, ct);
@@ -73,15 +73,22 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
         return settings.Dia > 0 ? settings.Dia : DefaultDia;
     }
 
+    /// <summary>
+    /// The DIA an activation was uploaded with: its insulin's, else its own, or null when neither is
+    /// set. A zero or negative value is not set.
+    /// </summary>
+    internal static double? SnapshotDia(ProfileActivationSnapshot snapshot) =>
+        snapshot.Insulin?.Dia is > 0 and var insulinDia ? insulinDia
+        : snapshot.Dia is > 0 and var dia ? dia
+        : null;
+
     public async Task<double> GetCarbAbsorptionRateAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
     {
         if (specProfile is null
             && await _activeProfileResolver.GetActiveSchedulesAsync(timeMills, ct) is { CarbsHr: > 0 } snapshot)
             return snapshot.CarbsHr!.Value;
 
-        var profileName = specProfile
-            ?? await _activeProfileResolver.GetActiveProfileNameAsync(timeMills, ct)
-            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
+        var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(timeMills, ct);
 
         var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
         var settings = await GetCachedSettingsAsync(profileName, timestamp, ct);
@@ -89,32 +96,27 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
         return settings?.CarbsHr > 0 ? settings.CarbsHr : DefaultCarbsHr;
     }
 
-    public async Task<string?> GetTimezoneAsync(string? specProfile = null, CancellationToken ct = default)
+    public Task<string?> GetTimezoneAsync(string? specProfile = null, CancellationToken ct = default) =>
+        GetTimezoneAtAsync(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), specProfile, ct);
+
+    /// <remarks>The order is <see cref="ScheduleTimeHelper.TimezoneOf"/>'s.</remarks>
+    public async Task<string?> GetTimezoneAtAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
     {
-        // PatientRecord is the canonical source — a patient lives in one timezone regardless of
-        // how many therapy profiles they have. The per-profile TherapySettings.Timezone field
-        // remains a legacy fallback because connector-imported profiles (Nightscout, Glooko)
-        // wrote into it before this move; backfill brings those rows forward on next migration,
-        // but until then we read the legacy value rather than silently UTCing.
         var patient = await _patientRecordRepo.GetAsync(ct);
         if (!string.IsNullOrEmpty(patient?.Timezone))
             return patient.Timezone;
 
-        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        if (specProfile is null
-            && await _activeProfileResolver.GetActiveSchedulesAsync(nowMills, ct) is { Timezone: { Length: > 0 } snapshotTimezone })
-            return snapshotTimezone;
-
-        var profileName = specProfile
-            ?? await _activeProfileResolver.GetActiveProfileNameAsync(nowMills, ct)
-            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
-        var settings = await GetCachedSettingsAsync(profileName, DateTime.UtcNow, ct);
-        return settings?.Timezone;
+        var snapshot = specProfile is null ? await _activeProfileResolver.GetActiveSchedulesAsync(timeMills, ct) : null;
+        var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(timeMills, ct);
+        var settings = await GetCachedSettingsAsync(
+            profileName, DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime, ct);
+        return ScheduleTimeHelper.TimezoneOf(null, snapshot?.Timezone, settings?.Timezone);
     }
 
     public async Task<string?> GetUnitsAsync(string? specProfile = null, CancellationToken ct = default)
     {
-        var profileName = specProfile ?? await _activeProfileResolver.GetDefaultProfileNameAsync(ct);
+        var profileName = specProfile
+            ?? await _activeProfileResolver.GetDefaultProfileNameAsync(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct);
         var settings = await GetCachedSettingsAsync(profileName, DateTime.UtcNow, ct);
         return settings?.Units;
     }

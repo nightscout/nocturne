@@ -6,13 +6,17 @@ using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.ValueGenerators;
+using Nocturne.Infrastructure.Data.Logging;
 
 namespace Nocturne.Infrastructure.Data;
 
@@ -219,6 +223,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<ConnectorResetJobEntity> ConnectorResetJobs { get; set; }
 
+    public DbSet<PendingTenantJobEntity> PendingTenantJobs { get; set; }
+
     public DbSet<LinkedRecordEntity> LinkedRecords { get; set; }
 
     public DbSet<DedupReconcileStateEntity> DedupReconcileState { get; set; }
@@ -276,6 +282,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <see cref="TimezoneTimeline"/> so derived knowledge never clobbers a user assertion.
     /// </summary>
     public DbSet<DeviceClockObservationEntity> DeviceClockObservations { get; set; }
+
+    /// <summary>Submitted records answered but not stored; see <see cref="RejectedUploadEntity"/>.</summary>
+    public DbSet<RejectedUploadEntity> RejectedUploads { get; set; }
 
     public DbSet<CalibrationEntity> Calibrations { get; set; }
 
@@ -401,6 +410,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<TenantDataRetentionConfigEntity> TenantDataRetentionConfig { get; set; }
 
     public DbSet<TenantDemoConfigEntity> TenantDemoConfigs => Set<TenantDemoConfigEntity>();
+
+    public DbSet<GoogleHealthGrantHolderEntity> GoogleHealthGrantHolders => Set<GoogleHealthGrantHolderEntity>();
 
     /// <summary>
     /// Configure the database model and relationships
@@ -754,6 +765,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .HasDatabaseName(name)
                 .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
         }
+
+        // The legacy treatment read stamps a record with the Note beside it, deleted or not, on every
+        // page it serves, and both legacy-id indexes above skip a system-deleted Note.
+        modelBuilder.Entity<NoteEntity>()
+            .HasIndex([nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId)], "ix_notes_tenant_legacy_id_any")
+            .HasDatabaseName("ix_notes_tenant_legacy_id_any");
 
         // Matches HistoryPage's (sys_updated_at, id) order under the tenant filter, so a poll reads
         // its page off the index instead of sorting the tenant's whole table. Not partial on
@@ -1465,6 +1482,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(j => j.State)
             .HasDatabaseName("ix_connector_reset_jobs_state");
 
+        modelBuilder
+            .Entity<PendingTenantJobEntity>()
+            .HasKey(j => new { j.TenantId, j.Job });
+
+        modelBuilder
+            .Entity<PendingTenantJobEntity>()
+            .HasOne<TenantEntity>()
+            .WithMany()
+            .HasForeignKey(j => j.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // A canonical id is minted per group, so it alone narrows a lookup to that group's few links;
         // leading with record_type, or adding is_primary, only made the index bigger.
         modelBuilder
@@ -1743,6 +1771,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         // DeviceClockObservations: an observation is keyed by what was observed and when — the same
         // evidence re-gathered on a later sync must upsert into the same row, not accumulate.
+        modelBuilder.Entity<RejectedUploadEntity>()
+            .HasIndex(e => new { e.TenantId, e.RecordType, e.Identity })
+            .HasDatabaseName("ux_rejected_uploads_tenant_record_identity")
+            .IsUnique();
+        modelBuilder.Entity<RejectedUploadEntity>()
+            .HasIndex(e => new { e.TenantId, e.LastSeenAt })
+            .HasDatabaseName("ix_rejected_uploads_tenant_last_seen_at");
+
         modelBuilder.Entity<DeviceClockObservationEntity>()
             .HasIndex(e => new { e.TenantId, e.Connector, e.Source, e.ObservedAt })
             .HasDatabaseName("ix_device_clock_observations_tenant_connector_source_observed")
@@ -1903,6 +1939,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             b.HasOne<SubjectEntity>()
                 .WithMany()
                 .HasForeignKey(e => e.NocturneUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GoogleHealthGrantHolderEntity>(b =>
+        {
+            b.HasIndex(e => e.AccountKey).HasDatabaseName("ix_google_health_grant_holders_account_key");
+            b.HasOne<TenantEntity>()
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -2651,14 +2696,23 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public override int SaveChanges()
     {
         var autoDetectChanges = DetectChangesOnceForSave();
+        var opened = false;
         try
         {
+            if (MustOpenBeforeStamping())
+            {
+                Database.OpenConnection();
+                opened = true;
+            }
+
             UpdateTimestamps();
             return base.SaveChanges();
         }
         finally
         {
             ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+            if (opened)
+                Database.CloseConnection();
         }
     }
 
@@ -2670,10 +2724,19 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var autoDetectChanges = DetectChangesOnceForSave();
+        var opened = false;
         try
         {
+            if (MustOpenBeforeStamping())
+            {
+                await Database.OpenConnectionAsync(cancellationToken);
+                opened = true;
+            }
+
             UpdateTimestamps();
-            return await base.SaveChangesAsync(cancellationToken);
+            return HistoryClamped && InsertsOnly()
+                ? await this.WriteWithHistoryClampLiftedAsync(token => base.SaveChangesAsync(token), cancellationToken)
+                : await base.SaveChangesAsync(cancellationToken);
         }
         catch
         {
@@ -2683,8 +2746,42 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         finally
         {
             ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+            if (opened)
+                await Database.CloseConnectionAsync();
         }
     }
+
+    /// <summary>
+    /// Whether the save only inserts, which <see cref="SaveChangesAsync(CancellationToken)"/> runs with
+    /// the member history clamp lifted (<see cref="HistoryClampLiftExtensions"/>): an insert reaches no
+    /// existing row, so the lift only lets a clamped member record a row dated before the window. A
+    /// save that also updates or deletes keeps the clamp, since an entity attached by key rather than
+    /// read could name a row the clamp hides.
+    /// </summary>
+    private bool InsertsOnly()
+    {
+        var added = false;
+        foreach (var entry in ChangeTracker.Entries())
+        {
+            if (entry.State is EntityState.Modified or EntityState.Deleted)
+                return false;
+            added |= entry.State == EntityState.Added;
+        }
+
+        return added;
+    }
+
+    /// <summary>
+    /// Whether a save must take its connection before it stamps: a stamp taken while it waits for a
+    /// pooled connection would fall behind rows other saves commit in the meantime, which a v3 history
+    /// client could be moved past (<see cref="HistoryHorizon"/>). A connection the caller already
+    /// opened, or a save with nothing to write, needs none; a connection opened here is closed here,
+    /// since EF leaves one it did not open to whoever opened it.
+    /// </summary>
+    private bool MustOpenBeforeStamping() =>
+        Database.IsNpgsql()
+        && ChangeTracker.HasChanges()
+        && Database.GetDbConnection().State != System.Data.ConnectionState.Open;
 
     /// <summary>
     /// Drops the audit rows of a save that did not complete, so a retry on the same context does
@@ -2745,7 +2842,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             var isAdded = entry.State == EntityState.Added;
 
             EnforceTenantOwnership(entry, isAdded);
-            StripNulCharacters(entry, isAdded, isRelational);
+            StripNulCharacters(entry, isAdded, isRelational, ReportTruncation);
             ApplyUpstreamFingerprint(entry);
 
             // Update timestamps are stamped on insert and on real modifications only. An
@@ -2857,11 +2954,18 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         }
     }
 
+    private void ReportTruncation(EntityEntry entry, string property, int length) =>
+        (_truncationLogger ??= this.GetService<ILoggerFactory>().CreateLogger<NocturneDbContext>())
+            .LogTruncated(entry.Metadata.GetTableName() ?? entry.Metadata.ClrType.Name, property, length);
+
+    private ILogger? _truncationLogger;
+
     /// <summary>
     /// The string-mapped properties of an entity type, each flagged with whether its column is
-    /// jsonb, so the model metadata is read once per type rather than once per row.
+    /// jsonb and, for a <see cref="FitToColumnAttribute"/> one, the length it is cut to, so the
+    /// model metadata is read once per type rather than once per row.
     /// </summary>
-    private static readonly ConcurrentDictionary<IEntityType, (string Name, bool IsJsonb)[]> StringColumns = new();
+    private static readonly ConcurrentDictionary<IEntityType, (string Name, bool IsJsonb, int? Fit)[]> StringColumns = new();
 
     /// <summary>
     /// The six-character JSON escape for U+0000, matched only where the backslash opening it is
@@ -2876,9 +2980,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// uploaders — which Mongo and JSON both accept; Postgres rejects the raw byte in a text column
     /// (22021) and the escape sequence in a jsonb one (22P05), failing the whole insert batch the
     /// row happens to land in. Runs in the SaveChanges walk, before any interceptor sees the entry,
-    /// so audit snapshots record what is actually persisted.
+    /// so audit snapshots record what is actually persisted. Unpaired surrogates become U+FFFD in
+    /// the same pass (<see cref="StorableText"/>), and a <see cref="FitToColumnAttribute"/> column is
+    /// cut to its length.
     /// </summary>
-    private static void StripNulCharacters(EntityEntry entry, bool isAdded, bool isRelational)
+    private static void StripNulCharacters(
+        EntityEntry entry, bool isAdded, bool isRelational, Action<EntityEntry, string, int> onTruncated)
     {
         if (!isAdded && entry.State != EntityState.Modified)
         {
@@ -2890,10 +2997,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             static (entityType, relational) =>
                 [.. entityType.GetProperties()
                     .Where(p => p.ClrType == typeof(string))
-                    .Select(p => (p.Name, IsJsonb: relational && p.GetColumnType() == "jsonb"))],
+                    .Select(p => (
+                        p.Name,
+                        IsJsonb: relational && p.GetColumnType() == "jsonb",
+                        Fit: p.PropertyInfo?.IsDefined(typeof(FitToColumnAttribute), inherit: true) == true
+                            ? p.GetMaxLength()
+                            : null))],
             isRelational);
 
-        foreach (var (name, isJsonb) in columns)
+        foreach (var (name, isJsonb, fit) in columns)
         {
             var property = entry.Property(name);
             if (property.CurrentValue is not string value)
@@ -2901,10 +3013,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 continue;
             }
 
-            var stripped = value.Contains('\0') ? value.Replace("\0", string.Empty) : value;
+            var stripped = StorableText.ReplaceUnpairedSurrogates(
+                value.Contains('\0') ? value.Replace("\0", string.Empty) : value);
             if (isJsonb && stripped.Contains(@"\u0000", StringComparison.Ordinal))
             {
                 stripped = JsonNulEscape.Replace(stripped, "$1");
+            }
+
+            if (fit is { } length && stripped.Length > length)
+            {
+                stripped = stripped[..(char.IsHighSurrogate(stripped[length - 1]) ? length - 1 : length)];
+                onTruncated(entry, name, length);
             }
 
             if (!string.Equals(stripped, value, StringComparison.Ordinal))

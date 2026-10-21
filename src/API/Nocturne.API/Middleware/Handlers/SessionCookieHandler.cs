@@ -198,7 +198,8 @@ public class SessionCookieHandler : IAuthHandler
     /// grant here would let a holder move it into the session cookie and shed both its tenant pin
     /// and its scope ceiling. <see cref="LegacyJwtHandler"/> applies the same test to a bearer JWT,
     /// which resolves to the same unscoped type. Session tokens are minted only via the overload
-    /// that cannot emit any of these claims, so their absence is the session shape.
+    /// that cannot emit any of these claims, so their absence is the session shape; the <c>sid</c>
+    /// that overload does emit names a session, not a grant, and is no part of the test.
     /// The refresh-token cookie needs no equivalent check: it holds an opaque random string that
     /// is looked up server-side, and the access token it yields is re-minted here.
     /// </remarks>
@@ -227,6 +228,7 @@ public class SessionCookieHandler : IAuthHandler
             RawToken = token,
             ExpiresAt = claims.ExpiresAt,
             LimitTo24Hours = claims.LimitTo24Hours,
+            SessionId = claims.SessionId,
         };
     }
 

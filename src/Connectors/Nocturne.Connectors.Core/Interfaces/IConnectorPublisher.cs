@@ -13,4 +13,11 @@ public interface IConnectorPublisher
     /// Cumulative, so a run reads the difference across itself.
     /// </summary>
     int SkippedDeleted { get; }
+
+    /// <summary>
+    /// Records this publisher's scope has refused so far because a value in them could never be
+    /// stored; each is kept in the tenant's rejected uploads. Cumulative, like
+    /// <see cref="SkippedDeleted"/>.
+    /// </summary>
+    int Refused { get; }
 }

@@ -293,7 +293,9 @@ public class IobCalculator(
         var effectiveEnd = Math.Min(currentTime, treatmentEnd);
         var durationActual = (effectiveEnd - treatmentStart) / 1000.0 / 60.0;
 
-        var rate = tempBasal.Origin == TempBasalOrigin.Suspended ? 0 : tempBasal.Rate;
+        if ((tempBasal.Origin == TempBasalOrigin.Suspended ? 0 : tempBasal.Rate) is not { } rate)
+            return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
+
         var excessInsulin = Math.Max(0, (rate - scheduledBasalRate) * (durationActual / 60.0));
 
         if (excessInsulin <= 0)

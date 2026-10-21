@@ -59,11 +59,11 @@ public class SummaryService : ISummaryService
             var currentTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var ddata = await _ddataService.GetDDataAsync(currentTime, cancellationToken);
             var sgvs = ProcessSgvs(ddata.Sgvs, hours);
-            var switchedProfile = await _activeProfileResolver.GetActiveProfileNameAsync(
+            var profileName = await _activeProfileResolver.GetProfileNameAsync(
                 currentTime,
                 cancellationToken
             );
-            var profile = await ResolveActiveProfileAsync(switchedProfile, cancellationToken);
+            var profile = await ResolveActiveProfileAsync(profileName, cancellationToken);
             var treatments = ProcessTreatments(ddata.Treatments, profile, hours);
             var state = await ConstructStateAsync(cancellationToken);
 
@@ -183,7 +183,11 @@ public class SummaryService : ISummaryService
         }
 
         var profileBasals = profileData.Basal;
+        // NIGHTSCOUT-COMPAT: Nightscout reads only absolute here and reports a percent temp as 0 U/h, a
+        // suspension. A percent temp reports the rate it delivers, and one whose rate is unknown is
+        // left out so the profile basal shows through.
         var temps = tempBasals
+            .Where(temp => temp.Percent is null || (temp.Absolute ?? temp.DeliveredRate) is not null)
             .Select(temp => new SummaryTempBasal
             {
                 Start =
@@ -191,7 +195,7 @@ public class SummaryService : ISummaryService
                         ? createdAt.ToUnixTimeMilliseconds()
                         : temp.Mills,
                 Duration = temp.Duration.HasValue ? (int)(temp.Duration.Value * 60 * 1000) : 0,
-                Absolute = temp.Absolute ?? 0,
+                Absolute = temp.Absolute ?? temp.DeliveredRate ?? 0,
             })
             .ToList();
 
@@ -465,26 +469,21 @@ public class SummaryService : ISummaryService
     }
 
     /// <summary>
-    /// The store entry active now: the one an active Profile Switch names, else the default. A switch
-    /// naming no stored entry falls back to the default, as the legacy profile functions do. The default
-    /// is the <see cref="Nocturne.Core.Models.V4.TherapySettings.IsDefault"/> row, since a projected
-    /// document carries only its own store name as <see cref="Profile.DefaultProfile"/>. Entries are
-    /// assembled from their rows, not read out of the newest projected documents, which Profile Switch
-    /// snapshots can crowd out.
+    /// The store entry read now (<see cref="IActiveProfileResolver.GetProfileNameAsync"/>), or the
+    /// <see cref="Nocturne.Core.Models.V4.TherapySettings.IsDefault"/> row's when that store has no entry.
+    /// Entries are assembled from their rows, not read out of the newest projected documents, which
+    /// Profile Switch snapshots can crowd out.
     /// </summary>
     private async Task<ProfileData?> ResolveActiveProfileAsync(
-        string? switchedProfile,
+        string profileName,
         CancellationToken cancellationToken
     )
     {
-        if (switchedProfile is not null)
-        {
-            var switched = (
-                await _therapySettingsRepository.GetByProfileNameAsync(switchedProfile, cancellationToken)
-            ).FirstOrDefault();
-            if (await EntryOfAsync(switched, cancellationToken) is { } entry)
-                return entry;
-        }
+        var row = (
+            await _therapySettingsRepository.GetByProfileNameAsync(profileName, cancellationToken)
+        ).FirstOrDefault();
+        if (await EntryOfAsync(row, cancellationToken) is { } entry)
+            return entry;
 
         var defaults = await _therapySettingsRepository.GetDefaultsAsync(cancellationToken);
         return await EntryOfAsync(defaults.FirstOrDefault(), cancellationToken);

@@ -253,14 +253,27 @@ public class Treatment : ProcessableDocumentBase
 
     /// <summary>
     /// Absolute temporary basal rate.
-    /// Returns Rate if this is null.
+    /// Returns Rate if this is null, unless <see cref="Percent"/> is set.
     /// </summary>
+    /// <remarks>
+    /// Nightscout takes a temp basal as absolute only when <c>absolute</c> is present, and otherwise
+    /// applies <see cref="Percent"/> to the scheduled rate. AAPS sends a percent temp as
+    /// <c>percent</c> plus its own conversion in <c>rate</c>, with no <c>absolute</c>.
+    /// </remarks>
     [JsonPropertyName("absolute")]
     public double? Absolute
     {
-        get => _absolute ?? Rate;
+        get => _absolute ?? (Percent is null ? Rate : null);
         set => _absolute = value;
     }
+
+    /// <summary>
+    /// The U/h a temp basal delivers as Nocturne stores it, including a rate it resolved from
+    /// <see cref="Percent"/>; null when unknown. Not served: a temp basal reads back with only the
+    /// rate fields its upload carried.
+    /// </summary>
+    [JsonIgnore]
+    public double? DeliveredRate { get; set; }
 
     [JsonPropertyName("notes")]
     [Sanitizable]

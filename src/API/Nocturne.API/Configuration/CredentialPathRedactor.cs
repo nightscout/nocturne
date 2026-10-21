@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Text;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Routing.Patterns;
 using Nocturne.API.Attributes;
@@ -8,7 +9,9 @@ namespace Nocturne.API.Configuration;
 
 /// <summary>
 /// Replaces each <see cref="CredentialRouteValueAttribute"/> segment of a request path with its
-/// route parameter name, e.g. <c>/api/v2/authorization/request/{accessToken}</c>.
+/// route parameter name, e.g. <c>/api/v2/authorization/request/{accessToken}</c>, and the value of
+/// a <c>token</c>, <c>secret</c> or <c>access_token</c> query parameter with the parameter name, as
+/// clients authenticate with <c>?token=</c>, <c>?secret=</c> and, on SignalR, <c>?access_token=</c>.
 /// </summary>
 /// <remarks>
 /// Paths are matched against the routes themselves rather than the matched endpoint, because the
@@ -19,6 +22,8 @@ namespace Nocturne.API.Configuration;
 /// </remarks>
 public sealed class CredentialPathRedactor : IRequestPathRedactor
 {
+    private static readonly string[] CredentialQueryParameters = ["token", "secret", "access_token"];
+
     private volatile CredentialRoute[] _routes = [];
 
     public void Load(IEnumerable<Endpoint> endpoints)
@@ -33,31 +38,107 @@ public sealed class CredentialPathRedactor : IRequestPathRedactor
     public bool TryRedact(string path, [NotNullWhen(true)] out string? redacted)
     {
         redacted = null;
-        var routes = _routes;
-        if (routes.Length == 0 || !path.StartsWith('/'))
+        if (!path.StartsWith('/') && !path.StartsWith('?'))
         {
             return false;
         }
 
         var queryStart = path.IndexOf('?');
-        var pathOnly = queryStart < 0 ? path.AsSpan() : path.AsSpan(0, queryStart);
+        var pathPart = queryStart < 0 ? path : path[..queryStart];
+        var query = queryStart < 0 ? "" : path[queryStart..];
+
+        var redactedPath = RedactRoute(pathPart);
+        var redactedQuery = RedactQuery(query);
+        if (redactedPath is null && redactedQuery is null)
+        {
+            return false;
+        }
+
+        redacted = (redactedPath ?? pathPart) + (redactedQuery ?? query);
+        return true;
+    }
+
+    private string? RedactRoute(string path)
+    {
+        var routes = _routes;
+        if (routes.Length == 0 || path.Length == 0)
+        {
+            return null;
+        }
+
+        var pathOnly = path.AsSpan();
         var trimmed = pathOnly.Trim('/');
 
         foreach (var route in routes)
         {
             if (route.Matches(trimmed))
             {
-                redacted = string.Concat(
+                return string.Concat(
                     "/",
                     route.Redact(trimmed.ToString().Split('/')),
-                    pathOnly.Length > 1 && pathOnly.EndsWith('/') ? "/" : "",
-                    queryStart < 0 ? "" : path[queryStart..]
+                    pathOnly.Length > 1 && pathOnly.EndsWith('/') ? "/" : ""
                 );
-                return true;
             }
         }
 
-        return false;
+        return null;
+    }
+
+    /// <summary>
+    /// Names match after URL decoding, and the whole query is scanned because a server-side query
+    /// has no fragment.
+    /// </summary>
+    private static string? RedactQuery(string query)
+    {
+        if (query.Length == 0)
+        {
+            return null;
+        }
+
+        StringBuilder? builder = null;
+        var copied = 0;
+        var position = 1;
+        while (position <= query.Length)
+        {
+            var next = query.IndexOf('&', position);
+            var pairEnd = next < 0 ? query.Length : next;
+            var pair = query.AsSpan(position, pairEnd - position);
+            var equals = pair.IndexOf('=');
+            if (equals >= 0
+                && pair.Length > equals + 1
+                && CredentialQueryName(pair[..equals]) is { } name)
+            {
+                var valueStart = position + equals + 1;
+                builder ??= new StringBuilder(query.Length);
+                builder.Append(query, copied, valueStart - copied).Append('{').Append(name).Append('}');
+                copied = pairEnd;
+            }
+
+            if (next < 0)
+            {
+                break;
+            }
+
+            position = next + 1;
+        }
+
+        return builder?.Append(query, copied, query.Length - copied).ToString();
+    }
+
+    private static string? CredentialQueryName(ReadOnlySpan<char> encodedName)
+    {
+        var name = encodedName.IndexOfAny('%', '+') < 0
+            ? encodedName.ToString()
+            : Uri.UnescapeDataString(encodedName.ToString().Replace('+', ' '));
+        foreach (var credential in CredentialQueryParameters)
+        {
+            if (name.Equals(credential, StringComparison.OrdinalIgnoreCase))
+            {
+                return credential;
+            }
+        }
+
+        return null;
     }
 
     /// <param name="Segments">A literal, or null for a parameter.</param>

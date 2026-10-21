@@ -2573,6 +2573,7 @@ msgstr "Select a date range to re-sync specific data."
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 msgid "From"
@@ -6840,8 +6841,10 @@ msgstr "<0/> Stale"
 msgid "<0/> Inactive"
 msgstr "<0/> Inactive"
 
+#. 0: rejectedCount
 #. 0: formatNumber(allRows.length)
 #. 0: formatCount(col.migrated)
+#: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "{0} records"
@@ -7897,6 +7900,7 @@ msgstr "Search records..."
 #: src/lib/components/treatments/DataTableToolbar.svelte
 #: src/lib/components/treatments/DataTableToolbar.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 msgid "Clear"
 msgstr "Clear"
 
@@ -10968,6 +10972,7 @@ msgid "Selected Target"
 msgstr "Selected Target"
 
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 msgid "Reason"
 msgstr "Reason"
 
@@ -11726,6 +11731,7 @@ msgid "90th %ile"
 msgstr "90th %ile"
 
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/sensor-integrity/+page.svelte
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "<0/> Data Quality"
@@ -27184,3 +27190,145 @@ msgstr "Fill in the configuration form. Set a strong password for each PostgreSQ
 #: src/routes/(authenticated)/oauth/consent/+page.svelte
 msgid "Approving sends access to <0/>"
 msgstr "Approving sends access to <0/>"
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Unavailable member"
+msgstr "Unavailable member"
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "No recipient"
+msgstr "No recipient"
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Me"
+msgstr "Me"
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Member"
+msgstr "Member"
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "This channel has no recipient. Saving the rule sends it to you."
+msgstr "This channel has no recipient. Saving the rule sends it to you."
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "This person can no longer receive alerts on this site. Saving the rule sends this channel to you."
+msgstr "This person can no longer receive alerts on this site. Saving the rule sends this channel to you."
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Shown in this person's Nocturne notification centre."
+msgstr "Shown in this person's Nocturne notification centre."
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Recipient"
+msgstr "Recipient"
+
+#: src/lib/components/alerts/AlertRuleRow.svelte
+msgid "Needs review"
+msgstr "Needs review"
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "Part of this rule's conditions is malformed, so the rule may not alert as set. Edit its conditions and save it."
+msgstr "Part of this rule's conditions is malformed, so the rule may not alert as set. Edit its conditions and save it."
+
+#. 0: needsReview
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "{0} alert rules need review."
+msgstr "{0} alert rules need review."
+
+#. 0: needsReview === 1 ? "1 alert rule needs review." \\: `${needsReview} alert rules need review.`
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "{0} An update changed or turned off rules set up in an older format, or their conditions may not alert as set. They are marked below."
+msgstr "{0} An update changed or turned off rules set up in an older format, or their conditions may not alert as set. They are marked below."
+
+#: src/lib/components/shared/SkippedRecordsNote.svelte
+msgid "1 record could not be stored. It is listed under"
+msgstr "1 record could not be stored. It is listed under"
+
+#. 0: formatNumber(refused)
+#: src/lib/components/shared/SkippedRecordsNote.svelte
+msgid "{0} records could not be stored. They are listed under"
+msgstr "{0} records could not be stored. They are listed under"
+
+#: src/lib/components/shared/SkippedRecordsNote.svelte
+#: src/routes/(authenticated)/reports/data-quality/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Rejected Uploads"
+msgstr "Rejected Uploads"
+
+#: src/routes/(authenticated)/reports/data-quality/+page.svelte
+msgid "Records an uploader sent that Nocturne could not store"
+msgstr "Records an uploader sent that Nocturne could not store"
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Error Loading Rejected Uploads"
+msgstr "Error Loading Rejected Uploads"
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Rejected Uploads - Nocturne"
+msgstr "Rejected Uploads - Nocturne"
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Records an uploader sent that Nocturne answered but could not store, because a value in them could not be stored as sent. Most uploaders treat them as saved, so they are not in your data. Each is listed once, with how many times it was sent. Long text in a record is shortened here."
+msgstr "Records an uploader sent that Nocturne answered but could not store, because a value in them could not be stored as sent. Most uploaders treat them as saved, so they are not in your data. Each is listed once, with how many times it was sent. Long text in a record is shortened here."
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "<0/> Export this page"
+msgstr "<0/> Export this page"
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "<0/> Clear this page"
+msgstr "<0/> Clear this page"
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "No rejected uploads."
+msgstr "No rejected uploads."
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Last sent"
+msgstr "Last sent"
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Times sent"
+msgstr "Times sent"
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Record"
+msgstr "Record"
+
+#. 0: formatDateTime(row.firstSeenAt)
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "First {0}"
+msgstr "First {0}"
+
+#. 0: formatNumber(row.payloadBytes ?? 0)
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Shortened from {0} bytes."
+msgstr "Shortened from {0} bytes."
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "<0/> Newer"
+msgstr "<0/> Newer"
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Older <0/>"
+msgstr "Older <0/>"
+
+#. 0: formatNumber(offset + 1); 1: formatNumber(offset + rows.length); 2: formatNumber(total)
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "{0}–{1} of {2}"
+msgstr "{0}–{1} of {2}"
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Clear rejected uploads"
+msgstr "Clear rejected uploads"
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Clearing..."
+msgstr "Clearing..."
+
+#. 0: formatNumber(rows.length)
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Remove the {0} rejected uploads on this page? Export them first to keep a copy. They are not in your data and cannot be recovered once cleared. Uploads not on this page are kept."
+msgstr "Remove the {0} rejected uploads on this page? Export them first to keep a copy. They are not in your data and cannot be recovered once cleared. Uploads not on this page are kept."

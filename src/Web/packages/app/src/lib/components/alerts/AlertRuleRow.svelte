@@ -10,6 +10,9 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Zap from "@lucide/svelte/icons/zap";
   import MoreHorizontal from "@lucide/svelte/icons/ellipsis";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import { storedConditionIssuesMessage } from "./conditionIssues.svelte";
+  import { reviewReasonMessage } from "./reviewReason";
   import {
     summarizeCondition,
     type SummarizeContext,
@@ -59,6 +62,12 @@
   );
 
   let severityClass = $derived(severity(rule.severity, "dot"));
+
+  let attention = $derived(
+    [reviewReasonMessage(rule.reviewReason), storedConditionIssuesMessage(rule.conditionIssues)]
+      .filter((m): m is string => m !== null)
+      .join(" ")
+  );
 </script>
 
 <div
@@ -89,10 +98,19 @@
       {#if rule.managedBy}
         <Badge variant="secondary" size="sm">Managed by tracker</Badge>
       {/if}
+      {#if attention}
+        <Badge variant="warning" size="sm">Needs review</Badge>
+      {/if}
     </div>
     <div class="truncate text-xs text-muted-foreground" title={chip}>
       {chip || "No condition configured"}
     </div>
+    {#if attention}
+      <p class="mt-1 flex items-start gap-1.5 text-xs text-warning">
+        <AlertTriangle class="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+        <span>{attention}</span>
+      </p>
+    {/if}
   </div>
 
   <!-- Channel icons -->

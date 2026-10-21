@@ -122,8 +122,8 @@ public class SensitivityResolverTests : IDisposable
         var schedule = MakeSchedule((0, 40.0), (12 * 3600, 60.0));
         _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
             .ReturnsAsync(new[] { schedule });
-        _therapyRepo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(new TherapySettings { Timezone = "UTC" });
+        _therapyRepo.Setup(r => r.GetByProfileNameAsync("Default", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TherapySettings { Timezone = "UTC" }]);
         _patientRecordRepo.Setup(r => r.GetAsync(default))
             .ReturnsAsync(new PatientRecord { Timezone = "America/New_York" });
 
@@ -138,8 +138,8 @@ public class SensitivityResolverTests : IDisposable
         var schedule = MakeSchedule((0, 40.0), (12 * 3600, 60.0));
         _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
             .ReturnsAsync(new[] { schedule });
-        _therapyRepo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(new TherapySettings { Timezone = "America/New_York" });
+        _therapyRepo.Setup(r => r.GetByProfileNameAsync("Default", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TherapySettings { Timezone = "America/New_York" }]);
         _patientRecordRepo.Setup(r => r.GetAsync(default))
             .ReturnsAsync(new PatientRecord { Timezone = null });
 

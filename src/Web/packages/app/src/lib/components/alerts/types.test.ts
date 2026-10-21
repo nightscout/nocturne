@@ -283,7 +283,7 @@ describe("parseRule", () => {
 				},
 				{
 					id: "22222222-2222-2222-2222-222222222222",
-					channelType: ChannelType.WebPush,
+					channelType: ChannelType.InApp,
 					destination: "",
 					destinationLabel: undefined,
 					sortOrder: 0,
@@ -293,8 +293,8 @@ describe("parseRule", () => {
 
 		expect(state.allowThroughDnd).toBe(true);
 		expect(state.channels).toHaveLength(2);
-		// Sorted by sortOrder, so WebPush (0) comes before Discord (1).
-		expect(state.channels[0].channelType).toBe("web_push");
+		// Sorted by sortOrder, so InApp (0) comes before Discord (1).
+		expect(state.channels[0].channelType).toBe("in_app");
 		expect(state.channels[1].channelType).toBe("discord_dm");
 		expect(state.channels[1].destinationLabel).toBe("Family channel");
 	});
@@ -307,7 +307,7 @@ describe("parseRule", () => {
 		});
 
 		expect(state.channels).toHaveLength(1);
-		expect(state.channels[0].channelType).toBe("web_push");
+		expect(state.channels[0].channelType).toBe("in_app");
 		expect(state.allowThroughDnd).toBe(false);
 	});
 
@@ -460,7 +460,7 @@ describe("buildBody", () => {
 			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			channels: [
-				{ channelType: ChannelType.WebPush, destination: "", sortOrder: 0 },
+				{ channelType: ChannelType.InApp, destination: "", sortOrder: 0 },
 			],
 		});
 		const body = buildBody(state);
@@ -540,7 +540,7 @@ describe("buildBody", () => {
 			name: "Test",
 			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
-			channels: [{ channelType: ChannelType.WebPush, destination: "", sortOrder: 0 }],
+			channels: [{ channelType: ChannelType.InApp, destination: "", sortOrder: 0 }],
 		});
 		const body = buildBody(state);
 		expect(body.channels[0].metadata).toBeUndefined();
@@ -601,7 +601,7 @@ describe("parseChannelMetadata", () => {
 describe("validateChannels", () => {
 	function channel(over: Partial<ChannelDef> = {}): ChannelDef {
 		return {
-			channelType: ChannelType.WebPush,
+			channelType: ChannelType.InApp,
 			destination: "",
 			destinationLabel: "",
 			...over,
@@ -630,8 +630,8 @@ describe("validateChannels", () => {
 	it("does not require a destination for non-device channels", () => {
 		expect(
 			validateChannels([
-				channel({ channelType: ChannelType.WebPush, destination: "" }),
 				channel({ channelType: ChannelType.InApp, destination: "" }),
+				channel({ channelType: ChannelType.DiscordDm, destination: "" }),
 			]),
 		).toBeNull();
 	});

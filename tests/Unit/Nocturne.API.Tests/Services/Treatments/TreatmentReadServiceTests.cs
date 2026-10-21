@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Npgsql;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Glucose;
@@ -297,43 +298,151 @@ public class TreatmentReadServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_WhenDecompositionCanceled_PropagatesWithoutTouchingRemaining()
+    public async Task CreateAsync_WhenDecompositionCanceled_StopsTheBatchCarryingWhatWasStored()
     {
-        var canceled = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
-        var next = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+        var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var canceled = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+        var next = new Treatment { Id = "t3", Mills = 3000, EventType = "Note" };
+        DecomposeAll();
+        FailOn(canceled, new OperationCanceledException());
 
-        _decomposer
-            .Setup(d => d.DecomposeAsync(canceled, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new OperationCanceledException());
+        var act = () => _service.CreateAsync([first, canceled, next]);
 
-        var act = () => _service.CreateAsync([canceled, next]);
+        var failed = (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which;
+        failed.InnerException.Should().BeOfType<OperationCanceledException>();
+        failed.Written.Select(t => t.Id).Should().Equal("t1");
+        NeverDecomposed(next);
+    }
 
-        // Cancellation must abort the batch, not be swallowed as a per-record failure.
-        await act.Should().ThrowAsync<OperationCanceledException>();
-        _decomposer.Verify(
-            d => d.DecomposeAsync(next, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+    [Theory]
+    [MemberData(nameof(TransientFailures))]
+    public async Task CreateAsync_WhenATreatmentFailsTransiently_StopsTheBatchAndCarriesWhatWasStored(Exception failure)
+    {
+        var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var bad = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+        var last = new Treatment { Id = "t3", Mills = 3000, EventType = "Note" };
+        DecomposeAll(skippedDeleted: 1);
+        FailOn(bad, failure);
+
+        var act = () => _service.CreateAsync([first, bad, last]);
+
+        var failed = (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which;
+        failed.FailedIndex.Should().Be(1);
+        failed.InnerException.Should().BeSameAs(failure);
+        failed.Written.Select(t => t.Id).Should().Equal("t1");
+        failed.Written.SkippedDeleted.Should().Be(1);
+        failed.Message.Should().Contain("stored 1 treatment(s) before it");
+        NeverDecomposed(last);
+    }
+
+    public static TheoryData<Exception> TransientFailures() => new()
+    {
+        new InvalidOperationException("connection broken"),
+        new TimeoutException(),
+        new DbUpdateException("unique", new PostgresException("duplicate key", "ERROR", "ERROR", "23505")),
+        new DbUpdateException("network", new InvalidOperationException("connection reset")),
+        new DbUpdateException("our bug", new PostgresException("null value", "ERROR", "ERROR", "23502")),
+        new DbUpdateException("our bug", new PostgresException("invalid input syntax", "ERROR", "ERROR", "22P02")),
+    };
+
+    [Theory]
+    [MemberData(nameof(DeterministicFailures))]
+    public async Task CreateAsync_WhenATreatmentCanNeverBeStored_RefusesItAndStoresTheRest(Exception failure, string reason)
+    {
+        var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var bad = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+        var last = new Treatment { Id = "t3", Mills = 3000, EventType = "Note" };
+        DecomposeAll();
+        FailOn(bad, failure);
+
+        var written = await _service.CreateAsync([first, bad, last]);
+
+        written.Select(t => t.Id).Should().Equal("t1", "t3");
+        written.Rejected.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new BulkWriteRejection<Treatment>(1, bad, reason));
+    }
+
+    public static TheoryData<Exception, string> DeterministicFailures() => new()
+    {
+        {
+            new DbUpdateException("too long", new PostgresException("value too long for type character varying(255)", "ERROR", "ERROR", "22001")),
+            "A text value is longer than Nocturne can store; parts of the treatment may be stored"
+        },
+        {
+            new DbUpdateException("out of range", new PostgresException("date/time field value out of range", "ERROR", "ERROR", "22008")),
+            "A date or time is invalid or outside the range Nocturne can store; parts of the treatment may be stored"
+        },
+        {
+            new TreatmentMappingException(new FormatException("bad date")),
+            "A field of the treatment has a value Nocturne cannot read; parts of the treatment may be stored"
+        },
+    };
+
+    [Fact]
+    public async Task CreateAsync_WhenAnArgumentErrorComesFromOutsideTheMappingStep_DoesNotRefuseTheTreatment()
+    {
+        var bad = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        DecomposeAll();
+        FailOn(bad, new ArgumentException("resolver bug"));
+
+        var act = () => _service.CreateAsync([bad]);
+
+        await act.Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]
-    public async Task CreateAsync_WhenDecompositionFailsForOneRecord_SkipsItAndContinues()
+    public async Task CreateAsync_ReportsEachStoredTreatmentAsItLands()
     {
-        var bad = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
-        var good = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+        var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var bad = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+        DecomposeAll();
+        FailOn(bad, new NotSupportedException());
+        var stored = new List<Treatment>();
 
-        _decomposer
-            .Setup(d => d.DecomposeAsync(bad, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("boom"));
-        _decomposer
-            .Setup(d => d.DecomposeAsync(good, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult { CorrelationId = Guid.NewGuid() });
+        var act = () => _service.CreateAsync([first, bad], CancellationToken.None, stored);
 
-        var result = await _service.CreateAsync([bad, good]);
-
-        // A genuine per-record failure is still isolated: the bad record is dropped,
-        // the good one is kept.
-        result.Should().ContainSingle().Which.Id.Should().Be("t2");
+        await act.Should().ThrowAsync<NotSupportedException>();
+        stored.Select(t => t.Id).Should().Equal("t1");
     }
+
+    [Fact]
+    public async Task CreateAsync_WhenAStoredTreatmentCannotBeReadBack_CarriesItAsStored()
+    {
+        var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var span = new Treatment { Id = "t2", Mills = 2000, EventType = "Temporary Target" };
+        var last = new Treatment { Id = "t3", Mills = 3000, EventType = "Note" };
+        DecomposeAll();
+        var spanResult = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        spanResult.CreatedRecords.Add(new StateSpan { OriginalId = "t2", Category = StateSpanCategory.TemporaryTarget });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(span, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(spanResult);
+        _projection
+            .Setup(p => p.GetProjectedStateSpanTreatmentAsync("t2", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException());
+
+        var act = () => _service.CreateAsync([first, span, last]);
+
+        var failed = (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which;
+        failed.Written.Select(t => t.Id).Should().Equal("t1", "t2");
+        failed.Message.Should().Contain("was stored but could not be read back");
+        NeverDecomposed(last);
+    }
+
+    private void DecomposeAll(int skippedDeleted = 0) =>
+        _decomposer
+            .Setup(d => d.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new DecompositionResult { CorrelationId = Guid.NewGuid(), SkippedDeleted = skippedDeleted });
+
+    private void FailOn(Treatment treatment, Exception failure) =>
+        _decomposer
+            .Setup(d => d.DecomposeAsync(treatment, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+    private void NeverDecomposed(Treatment treatment) =>
+        _decomposer.Verify(
+            d => d.DecomposeAsync(treatment, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 
     [Fact]
     public async Task DeleteAsync_ByStoredLegacyId_DeletesEverySiblingThroughThePipeline()

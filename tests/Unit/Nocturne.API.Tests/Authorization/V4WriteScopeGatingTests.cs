@@ -188,6 +188,7 @@ public class V4WriteScopeGatingTests
             // the class.
             ["CompatibilityController"] = NotDataCategory.SuperuserAttribute,
             ["ServicesController"] = NotDataCategory.TenantSettingsScope,
+            ["RejectedUploadsController"] = NotDataCategory.TenantSettingsScope,
 
             ["ChatIdentityDirectoryController"] = NotDataCategory.InstanceKey,
 

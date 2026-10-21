@@ -139,8 +139,17 @@
 			</a>
 		{:else}
 			<p class="text-muted-foreground max-w-md text-center">
-				Allow the Nocturne bot to access glucose data on your behalf and send alerts to your
-				<strong>{pending?.platform}</strong> account?
+				{#if pending?.platformUserName}
+					Link the <strong>{pending.platform}</strong> account
+					<strong>@{pending.platformUserName}</strong> to your Nocturne account? It will be able to
+					read your glucose and acknowledge your alerts.
+				{:else}
+					Allow the Nocturne bot to access glucose data on your behalf and send alerts to your
+					<strong>{pending?.platform}</strong> account?
+				{/if}
+			</p>
+			<p class="text-muted-foreground max-w-md text-center text-sm">
+				Only continue if you started this link yourself.
 			</p>
 			{#if claimError}
 				<p class="text-destructive">{claimError}</p>

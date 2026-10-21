@@ -60,7 +60,6 @@ public class V3SortTests
 
     private static TreatmentsController TreatmentsControllerFor(Mock<ITreatmentService> treatments, string queryString) =>
         new(
-            Mock.Of<ITreatmentStore>(),
             Mock.Of<IDocumentProcessingService>(),
             treatments.Object,
             NullLogger<TreatmentsController>.Instance)

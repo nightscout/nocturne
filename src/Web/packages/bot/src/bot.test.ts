@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import type { TelegramAdapter } from "@chat-adapter/telegram";
 import { DiscordAdapter } from "@chat-adapter/discord";
 import { SlackAdapter } from "@chat-adapter/slack";
 import { createBot } from "./bot.js";
@@ -55,5 +56,76 @@ describe("createBot", () => {
     expect(telegram).not.toBeInstanceOf(AccentedDiscordAdapter);
     expect(telegram).not.toBeInstanceOf(AccentedSlackAdapter);
     expect(telegram?.name).toBe("telegram");
+  });
+});
+
+describe("the Telegram webhook", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const telegramWith = (telegram: boolean | { enabled: true; botToken: string; webhookSecretToken?: string }) =>
+    createBot({
+      postgresUrl: "postgres://nobody@localhost:5432/not-connected",
+      platforms: { telegram },
+    }).getAdapter("telegram") as unknown as TelegramAdapter;
+
+  const update = (secretToken?: string) =>
+    new Request("https://nocturne.test/api/v4/webhooks/telegram", {
+      method: "POST",
+      headers: secretToken ? { "X-Telegram-Bot-Api-Secret-Token": secretToken } : {},
+      body: JSON.stringify({ update_id: 1 }),
+    });
+
+  it("accepts an update carrying the configured secret token", async () => {
+    const telegram = telegramWith({ enabled: true, botToken: "not-a-token", webhookSecretToken: "the-secret" });
+
+    expect((await telegram.handleWebhook(update("the-secret"))).status).toBe(200);
+  });
+
+  it("refuses an update without the configured secret token", async () => {
+    const telegram = telegramWith({ enabled: true, botToken: "not-a-token", webhookSecretToken: "the-secret" });
+
+    expect((await telegram.handleWebhook(update())).status).toBe(401);
+    expect((await telegram.handleWebhook(update("a-guess"))).status).toBe(401);
+  });
+
+  it("refuses every update when neither the stored settings nor the environment carry a secret token", async () => {
+    vi.stubEnv("TELEGRAM_WEBHOOK_SECRET_TOKEN", "");
+    const telegram = telegramWith({ enabled: true, botToken: "not-a-token" });
+
+    expect((await telegram.handleWebhook(update())).status).toBe(401);
+  });
+
+  it("falls back to the environment's secret token when the stored settings carry none", async () => {
+    vi.stubEnv("TELEGRAM_WEBHOOK_SECRET_TOKEN", "env-secret");
+    const telegram = telegramWith({ enabled: true, botToken: "not-a-token" });
+
+    expect((await telegram.handleWebhook(update())).status).toBe(401);
+    expect((await telegram.handleWebhook(update("env-secret"))).status).toBe(200);
+  });
+
+  it("prefers the stored secret token over the environment's", async () => {
+    vi.stubEnv("TELEGRAM_WEBHOOK_SECRET_TOKEN", "env-secret");
+    const telegram = telegramWith({ enabled: true, botToken: "not-a-token", webhookSecretToken: "the-secret" });
+
+    expect((await telegram.handleWebhook(update("env-secret"))).status).toBe(401);
+    expect((await telegram.handleWebhook(update("the-secret"))).status).toBe(200);
+  });
+
+  it("refuses every update when the environment carries no secret token", async () => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "not-a-token");
+    vi.stubEnv("TELEGRAM_WEBHOOK_SECRET_TOKEN", "");
+
+    expect((await telegramWith(true).handleWebhook(update())).status).toBe(401);
+  });
+
+  it("checks the environment's secret token when configured from the environment", async () => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "not-a-token");
+    vi.stubEnv("TELEGRAM_WEBHOOK_SECRET_TOKEN", "env-secret");
+    const telegram = telegramWith(true);
+
+    expect((await telegram.handleWebhook(update())).status).toBe(401);
+    expect((await telegram.handleWebhook(update("env-secret"))).status).toBe(200);
   });
 });

@@ -22,19 +22,21 @@ namespace Nocturne.API.Services.Identity;
 /// <seealso cref="ITenantOverviewService"/>
 public class TenantOverviewService : ITenantOverviewService
 {
+    private const string AuditEndpoint = "service:tenant-overview";
+
     private readonly INocturneDbContextFactory _factory;
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IServiceProvider _scope;
     private readonly IGlucoseStatusClassifier _classifier;
     private readonly ILogger<TenantOverviewService> _logger;
 
     public TenantOverviewService(
         INocturneDbContextFactory factory,
-        IServiceScopeFactory scopeFactory,
+        IServiceProvider scope,
         IGlucoseStatusClassifier classifier,
         ILogger<TenantOverviewService> logger)
     {
         _factory = factory;
-        _scopeFactory = scopeFactory;
+        _scope = scope;
         _classifier = classifier;
         _logger = logger;
     }
@@ -106,14 +108,13 @@ public class TenantOverviewService : ITenantOverviewService
         bool historyClamped,
         CancellationToken ct)
     {
-        // Fresh scope per tenant: CanonicalGlucoseService caches per scope. The scope never passes
-        // through MemberScopeMiddleware, so the caller's clamp on this tenant is carried in here,
-        // and every read below goes through it so the clamp and the tenant pin travel together.
-        using var scope = _scopeFactory.CreateScope();
-        scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
-            .SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, tenant.IsDemo));
-        if (historyClamped)
-            scope.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
+        // A scope per tenant, since CanonicalGlucoseService caches per scope. The caller's request
+        // never passed through MemberScopeMiddleware for this tenant, so its clamp here is the one
+        // this membership decides, and every read below goes through the scope.
+        var reader = TenantReader.Of(_scope)
+            .ForTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, tenant.IsDemo))
+            .ClampedToDay(historyClamped);
+        await using var scope = TenantJobScope.OpenFor(_scope, reader, AuditEndpoint);
         var latest = await scope.ServiceProvider
             .GetRequiredService<ICanonicalGlucoseService>()
             .GetLatestAsync(ct);

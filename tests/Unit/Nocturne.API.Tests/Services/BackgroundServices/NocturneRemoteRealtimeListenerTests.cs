@@ -235,12 +235,7 @@ public class NocturneRemoteRealtimeListenerTests
         db.AddToServices(services);
         services.AddActiveTenantSnapshot();
 
-        services.AddScoped<ITenantAccessor>(_ =>
-        {
-            var mock = MockTenantAccessor.Create(Guid.NewGuid());
-            mock.Setup(t => t.SetTenant(It.IsAny<TenantContext>()));
-            return mock.Object;
-        });
+        services.AddScoped<ITenantAccessor, Nocturne.API.Multitenancy.HttpContextTenantAccessor>();
 
         if (config != null)
         {

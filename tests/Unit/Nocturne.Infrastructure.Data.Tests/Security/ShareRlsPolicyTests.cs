@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Security;
@@ -99,6 +100,175 @@ public class ShareRlsPolicyTests
             " AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true')" +
             " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true')));");
         sql.Should().NotContain("visible_categories");
+    }
+
+    [Fact]
+    public void BuildPolicySql_UnixMillisRecencyColumn_ComparesWithTheWindowStartInMilliseconds()
+    {
+        var sql = ShareRlsPolicy.BuildPolicySql(
+            "compression_low_suggestions", null, "end_mills", recencyIsUnixMillis: true);
+
+        sql.Should().Contain(
+            "USING (current_setting('app.is_share', true) IS DISTINCT FROM 'true'" +
+            " AND (\"end_mills\" >= (extract(epoch from now() - interval '24 hours') * 1000)::bigint" +
+            " OR NOT ((current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'" +
+            " AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true')" +
+            " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true')));");
+    }
+
+    [Fact]
+    public void BuildPolicySql_UnixMillisWithoutARecencyColumn_Throws()
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql(
+            "state_spans", null, spanEndColumn: "end_timestamp", recencyIsUnixMillis: true);
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void BuildPolicySql_Parent_ClampsByTheParentRowsTime()
+    {
+        var sql = ShareRlsPolicy.BuildPolicySql(
+            "treatment_foods", null, parent: new ParentRecency("carb_intakes", "carb_intake_id"),
+            parentRecencyColumn: "timestamp");
+
+        sql.Should().Contain(
+            "USING (current_setting('app.is_share', true) IS DISTINCT FROM 'true'" +
+            " AND (NOT ((current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'" +
+            " AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true')" +
+            " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true')" +
+            " OR EXISTS (SELECT 1 FROM carb_intakes p WHERE p.id = treatment_foods.\"carb_intake_id\"" +
+            " AND p.\"timestamp\" >= now() - interval '24 hours')));");
+        sql.Should().NotContain("visible_categories");
+    }
+
+    [Fact]
+    public void BuildPolicySql_ParentSpan_ShowsThePartsOfASpanTheClampShows()
+    {
+        var sql = ShareRlsPolicy.BuildPolicySql(
+            "sleep_stages", null, parent: new ParentRecency("sleep_sessions", "sleep_session_id"),
+            parentSpanEndColumn: "end_time");
+
+        sql.Should().Contain(
+            " OR EXISTS (SELECT 1 FROM sleep_sessions p WHERE p.id = sleep_stages.\"sleep_session_id\"" +
+            " AND (p.\"end_time\" IS NULL OR p.\"end_time\" >= now() - interval '24 hours'))));");
+    }
+
+    [Fact]
+    public void BuildPolicySql_OpenSpanBound_ShowsAnOpenSpanOnlyWithinTheBound()
+    {
+        var sql = ShareRlsPolicy.BuildPolicySql(
+            "in_app_notifications", null, spanEndColumn: "archived_at",
+            openSpanBound: new OpenSpanBound("created_at", 7));
+
+        sql.Should().Contain(
+            " AND (((\"archived_at\" IS NULL AND \"created_at\" >= now() - interval '7 days')" +
+            " OR \"archived_at\" >= now() - interval '24 hours') OR NOT (");
+    }
+
+    [Fact]
+    public void BuildPolicySql_OpenSpanBoundWithoutASpan_Throws()
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql(
+            "notes", null, "timestamp", openSpanBound: new OpenSpanBound("created_at", 7));
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData("created_at\"; DROP TABLE x", 7)]
+    [InlineData("created_at", 0)]
+    public void BuildPolicySql_InvalidOpenSpanBound_Throws(string startColumn, int days)
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql(
+            "in_app_notifications", null, spanEndColumn: "archived_at", openSpanBound: new OpenSpanBound(startColumn, days));
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void BuildPolicySql_ParentWithBothClampColumns_Throws()
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql(
+            "sleep_stages", null, parent: new ParentRecency("sleep_sessions", "sleep_session_id"),
+            parentRecencyColumn: "start_time", parentSpanEndColumn: "end_time");
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void BuildPolicySql_ParentWithAClampColumnOfItsOwn_Throws()
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql(
+            "treatment_foods", null, "sys_created_at", parent: new ParentRecency("carb_intakes", "carb_intake_id"),
+            parentRecencyColumn: "timestamp");
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData("carb_intakes; DROP TABLE x", "carb_intake_id", "timestamp")]
+    [InlineData("carb_intakes", "carb_intake_id\"; DROP TABLE x", "timestamp")]
+    [InlineData("carb_intakes", "carb_intake_id", "timestamp\"; DROP TABLE x")]
+    public void BuildPolicySql_UnsafeParentIdentifier_Throws(string parentTable, string foreignKey, string parentColumn)
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql(
+            "treatment_foods", null, parent: new ParentRecency(parentTable, foreignKey), parentRecencyColumn: parentColumn);
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void BuildPolicySql_ParentWithoutItsRecencyColumn_Throws()
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql(
+            "treatment_foods", null, parent: new ParentRecency("carb_intakes", "carb_intake_id"));
+        act.Should().Throw<ArgumentException>();
+    }
+
+    /// <summary>
+    /// The clamp classification names columns as strings, and a policy over a column that does not
+    /// exist fails the reconciler at startup; this catches the typo before that, and checks a column
+    /// marked as Unix milliseconds holds a number and every other clamp column a timestamp.
+    /// </summary>
+    [Fact]
+    public void EveryClampColumn_ExistsOnItsTableWithTheMatchingType()
+    {
+        var model = Model();
+        var tables = ShareRlsPolicy.TenantScopedTableNames(model);
+        var problems = new List<string>();
+
+        foreach (var table in tables)
+        {
+            var columns = model.GetEntityTypes()
+                .Where(t => t.GetTableName() == table)
+                .SelectMany(t => t.GetProperties())
+                .GroupBy(p => p.GetColumnName(StoreObjectIdentifier.Table(table, null)) ?? p.GetColumnName())
+                .ToDictionary(g => g.Key, g => Nullable.GetUnderlyingType(g.First().ClrType) ?? g.First().ClrType);
+
+            void Expect(string? column, string role, params Type[] types)
+            {
+                if (column is null) return;
+                if (!columns.TryGetValue(column, out var actual))
+                    problems.Add($"{table}.{column} ({role}) is not a column");
+                else if (!types.Contains(actual))
+                    problems.Add($"{table}.{column} ({role}) is {actual.Name}");
+            }
+
+            Type[] timestamp = [typeof(DateTime), typeof(DateTimeOffset)];
+            Expect(ShareDataCategories.RecencyColumnFor(table), "recency",
+                ShareDataCategories.RecencyIsUnixMillis(table) ? [typeof(long)] : timestamp);
+            Expect(ShareDataCategories.SpanEndColumnFor(table), "span end", timestamp);
+            Expect(ShareDataCategories.OpenSpanBoundFor(table)?.StartColumn, "open-span start", timestamp);
+            if (ShareDataCategories.ParentRecencyFor(table) is { } parent)
+            {
+                Expect(parent.ForeignKeyColumn, "foreign key", typeof(Guid));
+                var references = model.GetEntityTypes()
+                    .Where(t => t.GetTableName() == table)
+                    .SelectMany(t => t.GetForeignKeys())
+                    .Where(fk => fk.Properties.Count == 1
+                        && fk.Properties[0].GetColumnName(StoreObjectIdentifier.Table(table, null)) == parent.ForeignKeyColumn)
+                    .Select(fk => fk.PrincipalEntityType.GetTableName());
+                if (!references.Contains(parent.Table))
+                    problems.Add($"{table}.{parent.ForeignKeyColumn} is not a foreign key to {parent.Table}");
+            }
+        }
+
+        problems.Should().BeEmpty();
     }
 
     [Fact]

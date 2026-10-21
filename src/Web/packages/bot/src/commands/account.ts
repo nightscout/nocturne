@@ -2,6 +2,7 @@ import type { Chat } from "chat";
 import { getUnscopedApi } from "../lib/request-context.js";
 import { requireLink } from "../lib/require-link.js";
 import { createLogger } from "../lib/logger.js";
+import { slashCommandHandle } from "../lib/platform-handle.js";
 
 const logger = createLogger();
 
@@ -26,6 +27,7 @@ export function registerAccountCommands(bot: Chat, baseDomain: string) {
       const { token } = await api.pendingLinks.create(
         platform,
         event.user.userId,
+        slashCommandHandle(event),
         slugArg,
         "connect-slash",
       );

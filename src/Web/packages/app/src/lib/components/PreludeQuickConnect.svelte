@@ -5,6 +5,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Separator } from "$lib/components/ui/separator";
+  import DeviceAppClaimNotice from "$lib/components/auth/DeviceAppClaimNotice.svelte";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -39,7 +40,6 @@
     userCode: string;
     clientId: string;
     displayName: string | null;
-    isKnown: boolean;
     scopes: string[];
   } | null>(null);
   let deviceApproveLoading = $state(false);
@@ -82,7 +82,6 @@
         userCode: info.userCode ?? code,
         clientId: info.clientId ?? "",
         displayName: info.clientDisplayName ?? null,
-        isKnown: info.isKnownClient ?? false,
         scopes: (info.scopes ?? []).filter(Boolean),
       };
     } catch (err) {
@@ -208,23 +207,11 @@
         <div class="flex items-center gap-2">
           <Shield class="h-4 w-4 text-primary" />
           <p class="text-sm font-medium">
-            <span class="text-foreground font-semibold">{deviceAppName}</span> wants access
+            A device wants access
           </p>
         </div>
 
-        {#if !deviceInfo.isKnown}
-          <div
-            class="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 p-3"
-          >
-            <AlertTriangle
-              class="mt-0.5 h-4 w-4 shrink-0 text-warning"
-            />
-            <p class="text-sm text-warning">
-              This application is not in the Nocturne known app directory. Only
-              approve if you trust this application.
-            </p>
-          </div>
-        {/if}
+        <DeviceAppClaimNotice claimedName={deviceAppName} />
 
         <div>
           <p class="text-muted-foreground mb-2 text-xs font-medium">Requested permissions:</p>

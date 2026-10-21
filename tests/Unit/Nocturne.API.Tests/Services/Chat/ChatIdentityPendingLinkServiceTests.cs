@@ -36,9 +36,37 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
     // ---- CreateAsync ----
 
     [Fact]
+    public async Task CreateAsync_stores_the_chat_account_name_without_control_or_bidi_characters()
+    {
+        var token = await _service.CreateAsync(
+            Platform, UserA, "ali‮ce​\u0007", null, "connect-slash", default);
+
+        await using var db = await _factory.CreateDbContextAsync();
+        var row = await db.ChatIdentityPendingLinks.SingleAsync(p => p.Token == token);
+        row.PlatformUserName.Should().Be("alice");
+    }
+
+    [Theory]
+    [InlineData("‮​")]
+    [InlineData("   ")]
+    public void A_name_with_nothing_printable_left_is_stored_as_none(string name)
+    {
+        ChatIdentityPendingLinkService.SanitizePlatformUserName(name).Should().BeNull();
+    }
+
+    [Fact]
+    public void A_long_name_is_cut_on_a_whole_character()
+    {
+        ChatIdentityPendingLinkService.SanitizePlatformUserName(new string('a', 255) + "\U0001F600")
+            .Should().Be(new string('a', 255));
+        ChatIdentityPendingLinkService.SanitizePlatformUserName(new string('a', 254) + "\U0001F600")
+            .Should().EndWith("\U0001F600").And.HaveLength(256);
+    }
+
+    [Fact]
     public async Task CreateAsync_returns_64_char_hex_token()
     {
-        var token = await _service.CreateAsync(Platform, UserA, null, "connect-slash", default);
+        var token = await _service.CreateAsync(Platform, UserA, null, null, "connect-slash", default);
         token.Should().HaveLength(64);
         Regex.IsMatch(token, "^[0-9A-F]{64}$").Should().BeTrue();
     }
@@ -47,7 +75,7 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
     public async Task CreateAsync_persists_row_with_correct_fields()
     {
         var before = DateTime.UtcNow;
-        var token = await _service.CreateAsync(Platform, UserA, "lily-tenant", "connect-slash", default);
+        var token = await _service.CreateAsync(Platform, UserA, null, "lily-tenant", "connect-slash", default);
         var after = DateTime.UtcNow;
 
         using var db = _factory.CreateDbContext();
@@ -64,7 +92,7 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
     [Fact]
     public async Task CreateAsync_allows_null_tenant_slug()
     {
-        var token = await _service.CreateAsync(Platform, UserA, null, "oauth2-finalize", default);
+        var token = await _service.CreateAsync(Platform, UserA, null, null, "oauth2-finalize", default);
         using var db = _factory.CreateDbContext();
         var row = await db.ChatIdentityPendingLinks.FirstAsync(p => p.Token == token);
         row.TenantSlug.Should().BeNull();
@@ -73,8 +101,8 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
     [Fact]
     public async Task CreateAsync_generates_distinct_tokens()
     {
-        var a = await _service.CreateAsync(Platform, UserA, null, "connect-slash", default);
-        var b = await _service.CreateAsync(Platform, UserA, null, "connect-slash", default);
+        var a = await _service.CreateAsync(Platform, UserA, null, null, "connect-slash", default);
+        var b = await _service.CreateAsync(Platform, UserA, null, null, "connect-slash", default);
         a.Should().NotBe(b);
     }
 
@@ -90,7 +118,7 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
     [Fact]
     public async Task TryConsumeAsync_returns_row_and_deletes_it()
     {
-        var token = await _service.CreateAsync(Platform, UserA, "lily", "connect-slash", default);
+        var token = await _service.CreateAsync(Platform, UserA, null, "lily", "connect-slash", default);
         var result = await _service.TryConsumeAsync(token, default);
 
         result.Should().NotBeNull();
@@ -106,7 +134,7 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
     [Fact]
     public async Task TryConsumeAsync_returns_null_when_called_twice()
     {
-        var token = await _service.CreateAsync(Platform, UserA, null, "connect-slash", default);
+        var token = await _service.CreateAsync(Platform, UserA, null, null, "connect-slash", default);
         (await _service.TryConsumeAsync(token, default)).Should().NotBeNull();
         (await _service.TryConsumeAsync(token, default)).Should().BeNull();
     }
@@ -142,7 +170,7 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
     [Fact]
     public async Task CleanupExpiredAsync_removes_only_expired_rows()
     {
-        var freshToken = await _service.CreateAsync(Platform, UserA, null, "connect-slash", default);
+        var freshToken = await _service.CreateAsync(Platform, UserA, null, null, "connect-slash", default);
 
         using (var db = _factory.CreateDbContext())
         {
@@ -179,7 +207,7 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
     [Fact]
     public async Task CleanupExpiredAsync_returns_zero_when_nothing_expired()
     {
-        await _service.CreateAsync(Platform, UserA, null, "connect-slash", default);
+        await _service.CreateAsync(Platform, UserA, null, null, "connect-slash", default);
         var deleted = await _service.CleanupExpiredAsync(default);
         deleted.Should().Be(0);
     }
@@ -187,7 +215,7 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
     [Fact]
     public async Task TryConsumeAsync_returns_the_row_when_the_delete_landed_but_its_commit_reported_failure()
     {
-        var token = await _service.CreateAsync(Platform, UserA, null, "connect-slash", default);
+        var token = await _service.CreateAsync(Platform, UserA, null, null, "connect-slash", default);
         var fault = new FirstTransactionFault(TransactionFault.AfterCommit);
         var retrying = new ChatIdentityPendingLinkService(
             (new RetryingFactory(TransactionFaultOptions.RetryingSqlite(_db.Connection, fault))).AsNocturneFactory(),

@@ -16,5 +16,5 @@ public static class ProfileActivationTestDeps
             NullLogger<ProfileActivationRepository>.Instance);
 
     public static ProfileActivationWriter Writer(NocturneDbContext context) =>
-        new(Repository(context), TestTenantCache.Create());
+        new(Repository(context), TestTenantCache.Create(), TempBasalTestDeps.NoReresolution());
 }

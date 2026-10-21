@@ -197,6 +197,25 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
     public bool IsMigrated { get; private set; }
 
     /// <summary>
+    /// That a device-code approval has added to this grant. The device flow carries no redirect
+    /// URI, so nothing ties the software that started it to the client it names, and once one has
+    /// been approved the grant's tokens may belong to anyone holding that public <c>client_id</c>.
+    /// Never cleared, for the same reason.
+    /// </summary>
+    [Column("approved_by_device_code")]
+    public bool ApprovedByDeviceCode { get; set; }
+
+    /// <summary>
+    /// How far the grant's tokens are known to belong to the app its client names.
+    /// </summary>
+    /// <seealso cref="ApprovedByDeviceCode"/>
+    [NotMapped]
+    public OAuthClientIdentity ClientIdentity =>
+        Client?.IsKnown != true ? OAuthClientIdentity.SelfRegistered
+        : ApprovedByDeviceCode ? OAuthClientIdentity.Unverified
+        : OAuthClientIdentity.Verified;
+
+    /// <summary>
     /// Whether this grant has been revoked
     /// </summary>
     [NotMapped]

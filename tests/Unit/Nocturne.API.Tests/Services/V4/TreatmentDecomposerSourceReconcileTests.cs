@@ -58,6 +58,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
             _profiles.Object,
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
+            TempBasalTestDeps.Unscheduled(),
             new AuditContext { IsSystem = true },
             NullLogger<TreatmentDecomposer>.Instance);
     }

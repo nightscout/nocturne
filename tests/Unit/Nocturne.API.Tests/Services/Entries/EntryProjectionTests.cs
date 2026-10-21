@@ -129,6 +129,7 @@ public class EntryProjectionTests
         sg.Filtered = 100_000;
         sg.Unfiltered = 110_000;
         sg.Delta = 3.5;
+        sg.Rssi = 100;
 
         var entry = EntryProjection.FromSensorGlucose(sg);
 
@@ -137,6 +138,7 @@ public class EntryProjectionTests
         entry.Filtered.Should().Be(100_000);
         entry.Unfiltered.Should().Be(110_000);
         entry.Delta.Should().Be(3.5);
+        entry.Rssi.Should().Be(100);
     }
 
     [Fact]

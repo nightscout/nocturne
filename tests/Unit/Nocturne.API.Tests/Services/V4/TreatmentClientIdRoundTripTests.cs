@@ -111,6 +111,7 @@ public class TreatmentClientIdRoundTripTests : IDisposable
             Mock.Of<IProfileDecomposer>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
+            TempBasalTestDeps.Unscheduled(),
             apiSecretCaller,
             NullLogger<TreatmentDecomposer>.Instance);
 

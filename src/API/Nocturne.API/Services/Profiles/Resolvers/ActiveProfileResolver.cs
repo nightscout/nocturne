@@ -9,36 +9,28 @@ namespace Nocturne.API.Services.Profiles.Resolvers;
 /// </summary>
 internal sealed class ActiveProfileResolver : IActiveProfileResolver
 {
-    /// <summary>The store read when no row is the tenant's default.</summary>
-    private const string ImplicitDefaultProfileName = "Default";
-
     private readonly IProfileActivationResolver _activations;
     private readonly IProfileActivationRepository _repository;
-    private readonly ITherapySettingsRepository _therapySettings;
-
-    private string? _defaultProfileName;
+    private readonly ProfileStoreTimelineSource _stores;
 
     public ActiveProfileResolver(
         IProfileActivationResolver activations,
         IProfileActivationRepository repository,
-        ITherapySettingsRepository therapySettings)
+        ProfileStoreTimelineSource stores)
     {
         _activations = activations;
         _repository = repository;
-        _therapySettings = therapySettings;
+        _stores = stores;
     }
 
     public async Task<string?> GetActiveProfileNameAsync(long timeMills, CancellationToken ct = default) =>
         (await _activations.GetAtAsync(timeMills, ct))?.ProfileName;
 
-    /// <remarks>
-    /// The <see cref="TherapySettings.IsDefault"/> row is the store the newest profile document names
-    /// as its <c>defaultProfile</c>, which Nightscout reads as <c>store[defaultProfile]</c>. Read once
-    /// per scope: no cache family is cleared when a profile write moves the default.
-    /// </remarks>
-    public async Task<string> GetDefaultProfileNameAsync(CancellationToken ct = default) =>
-        _defaultProfileName ??= (await _therapySettings.GetDefaultsAsync(ct)).FirstOrDefault()?.ProfileName
-            ?? ImplicitDefaultProfileName;
+    public async Task<string> GetProfileNameAsync(long timeMills, CancellationToken ct = default) =>
+        (await _stores.GetAsync(ct)).StoreFor(await GetActiveProfileNameAsync(timeMills, ct), timeMills);
+
+    public async Task<string> GetDefaultProfileNameAsync(long timeMills, CancellationToken ct = default) =>
+        (await _stores.GetAsync(ct)).DefaultAt(timeMills);
 
     public async Task<CircadianAdjustment?> GetCircadianAdjustmentAsync(long timeMills, CancellationToken ct = default) =>
         (await _activations.GetAtAsync(timeMills, ct))?.Scaling;
@@ -46,11 +38,52 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
     public async Task<ProfileActivationSnapshot?> GetActiveSchedulesAsync(long timeMills, CancellationToken ct = default) =>
         (await _activations.GetAtAsync(timeMills, ct))?.Schedules;
 
-    public async Task<IReadOnlyList<ProfileSpan>> GetActiveProfileSpansForRangeAsync(
-        long fromMs, long toMs, CancellationToken ct = default) =>
-        (await _activations.GetRangeAsync(fromMs, toMs, ct))
-            .Select(s => new ProfileSpan(s.Active.ProfileName, s.StartMills, s.EndMills, s.Active.Scaling, s.Active.Schedules))
-            .ToList();
+    public async Task<IReadOnlyList<ProfileSpan>> GetProfileSpansForRangeAsync(
+        long fromMs, long toMs, CancellationToken ct = default)
+    {
+        if (toMs <= fromMs)
+            toMs = fromMs + 1;
+
+        var stores = await _stores.GetAsync(ct);
+        var spans = new List<ProfileSpan>();
+        var cursor = fromMs;
+        foreach (var segment in await _activations.GetRangeAsync(fromMs, toMs, ct))
+        {
+            if (segment.StartMills > cursor)
+                AddCut(spans, stores, cursor, segment.StartMills, null);
+            var end = Math.Min(segment.EndMills, toMs);
+            AddCut(spans, stores, Math.Max(segment.StartMills, cursor), end, segment.Active);
+            cursor = Math.Max(cursor, end);
+        }
+
+        if (cursor < toMs)
+            AddCut(spans, stores, cursor, toMs, null);
+        return spans;
+    }
+
+    /// <summary>
+    /// Adds [<paramref name="fromMs"/>, <paramref name="toMs"/>) under <paramref name="active"/>, cut
+    /// wherever the store it reads changes with the profile document in force.
+    /// </summary>
+    private static void AddCut(
+        List<ProfileSpan> spans, ProfileStoreTimeline stores, long fromMs, long toMs, ResolvedProfileActivation? active)
+    {
+        if (toMs <= fromMs)
+            return;
+
+        var start = fromMs;
+        var store = stores.StoreFor(active?.ProfileName, fromMs);
+        foreach (var change in stores.ChangesWithin(fromMs, toMs))
+        {
+            var next = stores.StoreFor(active?.ProfileName, change);
+            if (string.Equals(next, store, StringComparison.Ordinal))
+                continue;
+            spans.Add(new ProfileSpan(store, start, change, active?.Scaling, active?.Schedules));
+            (start, store) = (change, next);
+        }
+
+        spans.Add(new ProfileSpan(store, start, toMs, active?.Scaling, active?.Schedules));
+    }
 
     /// <remarks>
     /// An effective activation uploaded without the insulin falls back to the requested activation

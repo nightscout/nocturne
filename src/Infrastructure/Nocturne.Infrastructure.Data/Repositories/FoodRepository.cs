@@ -117,51 +117,11 @@ public class FoodRepository : IFoodRepository
     }
 
     /// <summary>
-    /// Get food entries with advanced filtering
-    /// </summary>
-    /// <param name="count">The maximum number of entries to return.</param>
-    /// <param name="skip">The number of entries to skip.</param>
-    /// <param name="findQuery">Optional search query string.</param>
-    /// <param name="reverseResults">Whether to reverse the order of results.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A collection of matching food entries.</returns>
-    public async Task<IEnumerable<Food>> GetFoodWithAdvancedFilterAsync(
-        int count = 10,
-        int skip = 0,
-        string? findQuery = null,
-        bool reverseResults = false,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await using var db = await _contexts.CreateAsync(cancellationToken);
-        var query = db.Foods.AsNoTracking().AsQueryable();
-
-        // Apply find query filter if specified
-        if (!string.IsNullOrEmpty(findQuery))
-        {
-            // Simple text search across name, category, and subcategory
-            query = query.Where(f =>
-                f.Name.Contains(findQuery)
-                || f.Category.Contains(findQuery)
-                || f.Subcategory.Contains(findQuery)
-            );
-        }
-
-        // Apply ordering
-        query = reverseResults ? query.OrderByDescending(f => f.Name) : query.OrderBy(f => f.Name);
-
-        // Apply pagination
-        var entities = await query.Skip(skip).Take(count).ToListAsync(cancellationToken);
-
-        return entities.Select(FoodMapper.ToDomainModel);
-    }
-
-    /// <summary>
     /// Get food entries with advanced filtering including type filter
     /// </summary>
     /// <param name="count">The maximum number of entries to return.</param>
     /// <param name="skip">The number of entries to skip.</param>
-    /// <param name="findQuery">Optional search query string.</param>
+    /// <param name="findQuery">Optional legacy find, read through <see cref="FindQuery"/>.</param>
     /// <param name="type">Optional food type filter.</param>
     /// <param name="reverseResults">Whether to reverse the order of results.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -178,30 +138,26 @@ public class FoodRepository : IFoodRepository
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var query = db.Foods.AsNoTracking().AsQueryable();
 
-        // Apply type filter if specified
         if (!string.IsNullOrEmpty(type))
         {
             query = query.Where(f => f.Type == type);
         }
 
-        // Apply find query filter if specified
-        if (!string.IsNullOrEmpty(findQuery))
-        {
-            // Simple text search across name, category, and subcategory
-            query = query.Where(f =>
-                f.Name.Contains(findQuery)
-                || f.Category.Contains(findQuery)
-                || f.Subcategory.Contains(findQuery)
-            );
-        }
+        var find = ParseFind(findQuery);
 
-        // Apply ordering
         query = reverseResults ? query.OrderByDescending(f => f.Name) : query.OrderBy(f => f.Name);
 
-        // Apply pagination
-        var entities = await query.Skip(skip).Take(count).ToListAsync(cancellationToken);
+        if (find.IsEmpty)
+        {
+            var page = await query.Skip(skip).Take(count).ToListAsync(cancellationToken);
+            return page.Select(FoodMapper.ToDomainModel);
+        }
 
-        return entities.Select(FoodMapper.ToDomainModel);
+        var matching = (await query.ToListAsync(cancellationToken))
+            .Select(FoodMapper.ToDomainModel)
+            .Where(f => find.Matches(f));
+
+        return matching.Skip(skip).Take(count).ToList();
     }
 
     /// <inheritdoc />
@@ -218,6 +174,7 @@ public class FoodRepository : IFoodRepository
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var entities = await HistoryPage.GetAsync(
+            db,
             db.Foods.IncludingDeleted().AsNoTracking(),
             f => f.SysUpdatedAt,
             f => f.Id,
@@ -346,12 +303,9 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = FindQuery.Parse(find);
+        var query = ParseFind(find);
         if (query.IsEmpty)
             throw new ArgumentException("A bulk delete requires a find with a condition.", nameof(find));
-
-        if (Food.FindRefusal(query) is { } refusal)
-            throw new ArgumentException(refusal, nameof(find));
 
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var entities = (await db.Foods.ToListAsync(cancellationToken))
@@ -364,6 +318,15 @@ public class FoodRepository : IFoodRepository
         }
 
         return entities.Count;
+    }
+
+    private static FindQuery ParseFind(string? find)
+    {
+        var query = FindQuery.Parse(find);
+        if (Food.FindRefusal(query) is { } refusal)
+            throw new ArgumentException(refusal, nameof(find));
+
+        return query;
     }
 
     /// <summary>
@@ -397,37 +360,9 @@ public class FoodRepository : IFoodRepository
     }
 
     /// <summary>
-    /// Count food entries
-    /// </summary>
-    /// <param name="findQuery">Optional search query string.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The total number of matching food entries.</returns>
-    public async Task<long> CountFoodAsync(
-        string? findQuery = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await using var db = await _contexts.CreateAsync(cancellationToken);
-        var query = db.Foods.AsNoTracking().AsQueryable();
-
-        // Apply find query filter if specified
-        if (!string.IsNullOrEmpty(findQuery))
-        {
-            // Simple text search across name, category, and subcategory
-            query = query.Where(f =>
-                f.Name.Contains(findQuery)
-                || f.Category.Contains(findQuery)
-                || f.Subcategory.Contains(findQuery)
-            );
-        }
-
-        return await query.CountAsync(cancellationToken);
-    }
-
-    /// <summary>
     /// Count food entries with type filter
     /// </summary>
-    /// <param name="findQuery">Optional search query string.</param>
+    /// <param name="findQuery">Optional legacy find, read through <see cref="FindQuery"/>.</param>
     /// <param name="type">Optional food type filter.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The total number of matching food entries.</returns>
@@ -440,23 +375,46 @@ public class FoodRepository : IFoodRepository
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var query = db.Foods.AsNoTracking().AsQueryable();
 
-        // Apply type filter if specified
         if (!string.IsNullOrEmpty(type))
         {
             query = query.Where(f => f.Type == type);
         }
 
-        // Apply find query filter if specified
-        if (!string.IsNullOrEmpty(findQuery))
+        var find = ParseFind(findQuery);
+        if (find.IsEmpty)
+            return await query.CountAsync(cancellationToken);
+
+        return (await query.ToListAsync(cancellationToken))
+            .Select(FoodMapper.ToDomainModel)
+            .LongCount(f => find.Matches(f));
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<Food>> SearchFoodAsync(
+        string? text,
+        int count = 10,
+        int skip = 0,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var query = db.Foods.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrEmpty(text))
         {
-            // Simple text search across name, category, and subcategory
             query = query.Where(f =>
-                f.Name.Contains(findQuery)
-                || f.Category.Contains(findQuery)
-                || f.Subcategory.Contains(findQuery)
+                f.Name.Contains(text)
+                || f.Category.Contains(text)
+                || f.Subcategory.Contains(text)
             );
         }
 
-        return await query.CountAsync(cancellationToken);
+        var entities = await query
+            .OrderBy(f => f.Name)
+            .Skip(skip)
+            .Take(count)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(FoodMapper.ToDomainModel);
     }
 }
