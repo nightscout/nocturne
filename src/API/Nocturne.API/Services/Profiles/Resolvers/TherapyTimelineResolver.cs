@@ -168,14 +168,14 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         // Sequential: see INocturneDbContextFactory.
         // An activation's own DIA, carb rate and timezone win over the stored profile's, as
         // TherapySettingsResolver reads them at a point.
-        var dia = schedules is not null && (schedules.Insulin?.Dia ?? schedules.Dia) is > 0 and var snapshotDia
+        var dia = schedules is not null && TherapySettingsResolver.SnapshotDia(schedules) is { } snapshotDia
             ? snapshotDia
             : await _therapySettings.GetDIAAsync(anchorMills, profileName, ct);
         var carbsHr = schedules is { CarbsHr: > 0 }
             ? schedules.CarbsHr.Value
             : await _therapySettings.GetCarbAbsorptionRateAsync(anchorMills, profileName, ct);
         var timezoneId = schedules is not null
-            ? await _therapySettings.GetTimezoneAtAsync(anchorMills, ct: ct) ?? schedules.Timezone
+            ? await _therapySettings.GetTimezoneAtAsync(anchorMills, ct: ct)
             : await _therapySettings.GetTimezoneAtAsync(anchorMills, profileName, ct);
         if (schedules is not null)
         {

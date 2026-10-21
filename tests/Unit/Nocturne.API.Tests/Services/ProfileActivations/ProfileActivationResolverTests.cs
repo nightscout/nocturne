@@ -229,6 +229,19 @@ public sealed class ProfileActivationResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task ASwitchFromBeforeTheFirstDocumentIsReadFromItsOwnSnapshot()
+    {
+        _therapy.Setup(r => r.GetStoreIndexAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ProfileStoreRow("document", true, "Rhys", At(2 * Hour), true)]);
+        Store(0, "Rhys", percentage: 200, snapshot: Snapshot(0.7));
+
+        var active = (await Resolver().GetAtAsync(T0 + Hour))!;
+        active.Source.Should().Be(ProfileScheduleSource.BaseSnapshot,
+            "no document holds Rhys yet, and the store's values are from after the switch");
+        (await BasalRates(Resolver()).GetBasalRateAsync(T0 + Hour)).Should().BeApproximately(1.4, 1e-9);
+    }
+
+    [Fact]
     public async Task ACustomizedSnapshotIsReadAsUploadedAndNotScaledAgain()
     {
         Store(0, "Rhys", ProfileActivationPhase.Effective, percentage: 150, snapshot: Snapshot(1.5), customized: true,

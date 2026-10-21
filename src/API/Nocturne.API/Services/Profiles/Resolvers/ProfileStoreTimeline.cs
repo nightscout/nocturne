@@ -101,8 +101,13 @@ internal sealed class ProfileStoreTimeline
     /// <summary>The store read at <paramref name="timeMills"/> when no profile switch names one.</summary>
     public string DefaultAt(long timeMills) => EpochAt(timeMills)?.Default ?? ImplicitDefault;
 
-    /// <summary>Whether the document in force at <paramref name="timeMills"/> holds <paramref name="store"/>.</summary>
-    public bool Holds(string store, long timeMills) => EpochAt(timeMills)?.Stores.Contains(store) == true;
+    /// <summary>
+    /// Whether a document uploaded by <paramref name="timeMills"/> holds <paramref name="store"/>: before
+    /// the first, none does, so a profile switch from then reads the schedules it was uploaded with,
+    /// the only ones from its own time.
+    /// </summary>
+    public bool Holds(string store, long timeMills) =>
+        EpochAt(timeMills, newestBeforeFirst: false)?.Stores.Contains(store) == true;
 
     /// <summary>
     /// The store read at <paramref name="timeMills"/> for a profile switch naming
@@ -122,7 +127,7 @@ internal sealed class ProfileStoreTimeline
     public IEnumerable<long> ChangesWithin(long fromMills, long toMills) =>
         _epochs.Select(e => e.StartMills).Where(s => s > fromMills && s < toMills).Distinct();
 
-    private Epoch? EpochAt(long timeMills)
+    private Epoch? EpochAt(long timeMills, bool newestBeforeFirst = true)
     {
         int low = 0, high = _epochs.Length - 1, found = -1;
         while (low <= high)
@@ -141,7 +146,7 @@ internal sealed class ProfileStoreTimeline
 
         if (found >= 0)
             return _epochs[found];
-        return _epochs.Length > 0 ? _epochs[^1] : null;
+        return newestBeforeFirst && _epochs.Length > 0 ? _epochs[^1] : null;
     }
 
     private static long ToMills(DateTime utc) =>

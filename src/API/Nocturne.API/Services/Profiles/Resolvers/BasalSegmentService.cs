@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -31,6 +32,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly IBasalScheduleRepository _scheduleRepo;
     private readonly ITherapySettingsRepository _therapyRepo;
+    private readonly IPatientRecordRepository _patientRecordRepo;
     private readonly ITenantCache _cache;
 
     private const int CacheTtlSeconds = 5;
@@ -39,11 +41,13 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         IActiveProfileResolver activeProfileResolver,
         IBasalScheduleRepository scheduleRepo,
         ITherapySettingsRepository therapyRepo,
+        IPatientRecordRepository patientRecordRepo,
         ITenantCache cache)
     {
         _activeProfileResolver = activeProfileResolver;
         _scheduleRepo = scheduleRepo;
         _therapyRepo = therapyRepo;
+        _patientRecordRepo = patientRecordRepo;
         _cache = cache;
     }
 
@@ -79,21 +83,21 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         BasalWindow window,
         CancellationToken ct)
     {
-        var toUtc = DateTimeOffset.FromUnixTimeMilliseconds(window.EndMills).UtcDateTime;
-
         var spans = await _activeProfileResolver.GetProfileSpansForRangeAsync(
             window.StartMills, window.EndMills, ct);
 
-        // For each profile name, load schedule-version history and timezone.
+        // For each profile name, load schedule and settings version history.
+        var patientTimezone = (await _patientRecordRepo.GetAsync(ct))?.Timezone;
         var byProfile = new Dictionary<string, ProfileResources>(StringComparer.Ordinal);
         foreach (var name in spans.Select(s => s.ProfileName).Distinct(StringComparer.Ordinal))
         {
             var schedules = (await _scheduleRepo.GetByProfileNameAsync(name, ct))
                 .OrderBy(s => s.Timestamp)
                 .ToList();
-            var therapy = await _therapyRepo.GetActiveAtAsync(name, toUtc, ct)
-                ?? (await _therapyRepo.GetByProfileNameAsync(name, ct)).MaxBy(t => t.Timestamp);
-            byProfile[name] = new ProfileResources(schedules, therapy?.Timezone);
+            var settings = (await _therapyRepo.GetByProfileNameAsync(name, ct))
+                .OrderByDescending(t => t.Timestamp)
+                .ToArray();
+            byProfile[name] = new ProfileResources(schedules, settings, patientTimezone);
         }
 
         var result = new List<ScheduleAssignment>();
@@ -107,7 +111,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
             {
                 result.Add(new ScheduleAssignment(
                     span.StartMills, spanEnd, span.ProfileName, snapshot.Basal ?? [], percentage, timeshiftMs,
-                    snapshot.Timezone ?? byProfile.GetValueOrDefault(span.ProfileName)?.TimeZoneId));
+                    byProfile[span.ProfileName].TimeZoneAt(span.StartMills, snapshot.Timezone)));
             }
             else
             {
@@ -141,7 +145,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         var schedules = resources.Schedules;
         if (schedules.Count == 0)
         {
-            yield return new ScheduleAssignment(fromMills, toMills, profileName, [], percentage, timeshiftMs, resources.TimeZoneId);
+            yield return new ScheduleAssignment(fromMills, toMills, profileName, [], percentage, timeshiftMs, resources.TimeZoneAt(fromMills));
             yield break;
         }
 
@@ -164,7 +168,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
             if (leadingEnd > sliceStart)
             {
                 yield return new ScheduleAssignment(
-                    sliceStart, leadingEnd, profileName, schedules[^1].Entries, percentage, timeshiftMs, resources.TimeZoneId);
+                    sliceStart, leadingEnd, profileName, schedules[^1].Entries, percentage, timeshiftMs, resources.TimeZoneAt(sliceStart));
                 sliceStart = leadingEnd;
             }
             if (sliceStart >= toMills) yield break;
@@ -180,7 +184,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
 
             yield return new ScheduleAssignment(
                 sliceStart, versionStartMs, profileName,
-                activeSchedule.Entries, percentage, timeshiftMs, resources.TimeZoneId);
+                activeSchedule.Entries, percentage, timeshiftMs, resources.TimeZoneAt(sliceStart));
 
             sliceStart = versionStartMs;
             activeSchedule = schedules[i];
@@ -189,7 +193,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         if (sliceStart < toMills)
             yield return new ScheduleAssignment(
                 sliceStart, toMills, profileName,
-                activeSchedule.Entries, percentage, timeshiftMs, resources.TimeZoneId);
+                activeSchedule.Entries, percentage, timeshiftMs, resources.TimeZoneAt(sliceStart));
     }
 
     private static int LastIndexAtOrBefore(List<BasalSchedule> sortedAsc, DateTime cutoff)
@@ -204,5 +208,13 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         return idx;
     }
 
-    private sealed record ProfileResources(List<BasalSchedule> Schedules, string? TimeZoneId);
+    /// <param name="Settings">The profile's settings versions, newest first.</param>
+    private sealed record ProfileResources(List<BasalSchedule> Schedules, TherapySettings[] Settings, string? PatientTimezone)
+    {
+        public string? TimeZoneAt(long mills, string? switchTimezone = null) =>
+            ScheduleTimeHelper.TimezoneOf(
+                PatientTimezone,
+                switchTimezone,
+                ProfileVersionCache.ActiveAt(Settings, DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime)?.Timezone);
+    }
 }

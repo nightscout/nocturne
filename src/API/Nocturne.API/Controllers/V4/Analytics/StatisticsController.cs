@@ -616,7 +616,9 @@ public class StatisticsController : ControllerBase
     {
         var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var profileName = await _activeProfileResolver.GetProfileNameAsync(nowMills, ct);
-        return await _targetRangeScheduleRepository.GetActiveAtAsync(profileName, DateTime.UtcNow, ct);
+        // Before the store's first version, its newest, as ProfileVersionCache.ActiveAt reads it.
+        return await _targetRangeScheduleRepository.GetActiveAtAsync(profileName, DateTime.UtcNow, ct)
+            ?? (await _targetRangeScheduleRepository.GetByProfileNameAsync(profileName, ct)).MaxBy(s => s.Timestamp);
     }
 
     /// <summary>

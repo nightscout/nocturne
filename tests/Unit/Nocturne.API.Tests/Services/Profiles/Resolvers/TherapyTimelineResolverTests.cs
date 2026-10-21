@@ -124,4 +124,21 @@ public sealed class TherapyTimelineResolverTests : IDisposable
 
         timeline.SnapshotAt(From).Dia.Should().Be(7);
     }
+
+    [Fact]
+    public async Task BuildAsync_ReadsAnActivationsOwnDia_WhenItsInsulinCarriesNone()
+    {
+        _therapySettings.Setup(t => t.GetDIAAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(4);
+        SetupSpans(new ProfileSpan("Rhys", From, To, null, new ProfileActivationSnapshot
+        {
+            Basal = [new ScheduleEntry { Time = "00:00", TimeAsSeconds = 0, Value = 1.1 }],
+            Dia = 6,
+            Insulin = new TreatmentInsulinContext { InsulinName = "Fiasp", Dia = 0, Peak = 55 },
+        }));
+
+        var timeline = await _sut.BuildAsync(From, To);
+
+        timeline.SnapshotAt(From).Dia.Should().Be(6);
+    }
 }

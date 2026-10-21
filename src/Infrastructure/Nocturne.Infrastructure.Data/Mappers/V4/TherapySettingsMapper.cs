@@ -106,6 +106,6 @@ public static class TherapySettingsMapper
         entity.EnteredBy = model.EnteredBy;
         entity.IsExternallyManaged = model.IsExternallyManaged;
         entity.StartDate = model.StartDate;
-        entity.DocumentDefaultProfile = model.DocumentDefaultProfile ?? entity.DocumentDefaultProfile;
+        entity.DocumentDefaultProfile = model.DocumentDefaultProfile;
     }
 }

@@ -1,6 +1,7 @@
 using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
@@ -44,11 +45,12 @@ internal static class ActiveSchedule
         var adjustment = await active.GetCircadianAdjustmentAsync(timeMills, ct);
         var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
 
-        var timezone = snapshot is not null
-            ? snapshot.Timezone
-            : (await versions.GetActiveAtAsync(therapyRepo, profileName, timestamp, ct))?.Timezone;
-        var secondsFromMidnight = await ScheduleTimeHelper.GetSecondsFromMidnightAsync(
-            shiftedMills, timezone, patientRecordRepo, ct);
+        var timezone = ScheduleTimeHelper.TimezoneOf(
+            (await patientRecordRepo.GetAsync(ct))?.Timezone,
+            snapshot?.Timezone,
+            (await versions.GetActiveAtAsync(therapyRepo, profileName, timestamp, ct))?.Timezone);
+        var secondsFromMidnight = ScheduleTimeHelper.GetSecondsFromMidnight(
+            shiftedMills, TimeZoneHelper.GetTimeZoneInfoFromId(timezone));
 
         return new At<TEntry>(entries, secondsFromMidnight, adjustment);
     }

@@ -368,7 +368,9 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     {
         var atMills = new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
         var profileName = await _deps.ActiveProfileResolver.GetProfileNameAsync(atMills, ct);
-        var schedule = await _deps.TargetRangeSchedules.GetActiveAtAsync(profileName, at, ct);
+        // Before the store's first version, its newest, as ProfileVersionCache.ActiveAt reads it.
+        var schedule = await _deps.TargetRangeSchedules.GetActiveAtAsync(profileName, at, ct)
+            ?? (await _deps.TargetRangeSchedules.GetByProfileNameAsync(profileName, ct)).MaxBy(s => s.Timestamp);
 
         // No schedule at all — fall back to the consensus in-range band and clinical bucket defaults.
         if (schedule is null || schedule.Entries.Count == 0)

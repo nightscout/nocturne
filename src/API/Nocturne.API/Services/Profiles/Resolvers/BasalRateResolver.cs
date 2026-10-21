@@ -63,21 +63,27 @@ internal sealed class BasalRateResolver : IBasalRateResolver
     {
         var spans = await _activeProfileResolver.GetProfileSpansForRangeAsync(fromMs, toMs, ct);
 
+        var patientTimezone = (await _patientRecordRepo.GetAsync(ct))?.Timezone;
         var stores = new Dictionary<string, StoreVersions>(StringComparer.Ordinal);
-        var timezones = new Dictionary<string, TimeZoneInfo?>(StringComparer.Ordinal);
         foreach (var name in spans.Select(s => s.ProfileName).Distinct(StringComparer.Ordinal))
         {
-            var settings = await _versions.GetVersionsAsync(_therapyRepo, name, ct);
-            stores[name] = new StoreVersions(await _versions.GetVersionsAsync(_repo, name, ct), settings);
-            foreach (var id in settings.Select(v => v.Timezone).OfType<string>().Where(id => id.Length > 0))
-            {
-                if (timezones.ContainsKey(id))
-                    continue;
-                // TimeZoneHelper resolves IANA/Windows IDs and mis-cased IANA IDs (e.g. "ETC/GMT-2").
-                timezones[id] = TimeZoneHelper.TryGetTimeZoneInfoFromId(id, out var tz) ? tz : null;
-                if (timezones[id] is null)
-                    _logger.LogWarning("Timezone '{Timezone}' for profile '{Profile}' could not be resolved", id, name);
-            }
+            stores[name] = new StoreVersions(
+                await _versions.GetVersionsAsync(_repo, name, ct),
+                await _versions.GetVersionsAsync(_therapyRepo, name, ct));
+        }
+
+        var timezones = new Dictionary<string, TimeZoneInfo?>(StringComparer.Ordinal);
+        foreach (var id in stores.Values.SelectMany(s => s.Settings).Select(v => v.Timezone)
+                     .Concat(spans.Select(s => s.Schedules?.Timezone))
+                     .Append(patientTimezone)
+                     .OfType<string>()
+                     .Where(id => id.Length > 0)
+                     .Distinct(StringComparer.Ordinal))
+        {
+            // TimeZoneHelper resolves IANA/Windows IDs and mis-cased IANA IDs (e.g. "ETC/GMT-2").
+            timezones[id] = TimeZoneHelper.TryGetTimeZoneInfoFromId(id, out var tz) ? tz : null;
+            if (timezones[id] is null)
+                _logger.LogWarning("Timezone '{Timezone}' could not be resolved", id);
         }
 
         // Closure over pre-fetched data — no DB access inside.
@@ -92,20 +98,12 @@ internal sealed class BasalRateResolver : IBasalRateResolver
             var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
 
             // null when unset/unresolvable so the stamp is read as UTC.
-            var tz = ProfileVersionCache.ActiveAt(store.Settings, at)?.Timezone is { Length: > 0 } id
-                ? timezones.GetValueOrDefault(id)
-                : null;
-            List<Core.Models.V4.ScheduleEntry>? entries;
-            if (span.Schedules is { } snapshot)
-            {
-                entries = snapshot.Basal;
-                if (TimeZoneHelper.TryGetTimeZoneInfoFromId(snapshot.Timezone, out var snapshotTz))
-                    tz = snapshotTz;
-            }
-            else
-            {
-                entries = ProfileVersionCache.ActiveAt(store.Basal, at)?.Entries;
-            }
+            var tzId = ScheduleTimeHelper.TimezoneOf(
+                patientTimezone, span.Schedules?.Timezone, ProfileVersionCache.ActiveAt(store.Settings, at)?.Timezone);
+            var tz = tzId is null ? null : timezones.GetValueOrDefault(tzId);
+            var entries = span.Schedules is { } snapshot
+                ? snapshot.Basal
+                : ProfileVersionCache.ActiveAt(store.Basal, at)?.Entries;
 
             if (entries is null)
                 return DefaultBasalRate;

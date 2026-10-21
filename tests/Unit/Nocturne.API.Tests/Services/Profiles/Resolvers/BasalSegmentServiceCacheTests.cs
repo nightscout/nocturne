@@ -30,6 +30,7 @@ public sealed class BasalSegmentServiceCacheTests : IDisposable
         _activeProfile.Object,
         Mock.Of<IBasalScheduleRepository>(),
         Mock.Of<ITherapySettingsRepository>(),
+        Mock.Of<IPatientRecordRepository>(),
         cache);
 
     private BasalSegmentService Service() => Service(TestTenantCache.Create(_cache));

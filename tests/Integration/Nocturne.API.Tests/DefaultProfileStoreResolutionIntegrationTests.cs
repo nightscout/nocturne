@@ -427,4 +427,137 @@ public class DefaultProfileStoreResolutionIntegrationTests : ApiIntegrationTestB
         timeline.Dia.Should().Be(7);
         timeline.BasalRateAt(at).Should().Be(0.9);
     }
+
+    [Fact]
+    public async Task ScheduledBasalsPublishedTogether_ReadTheSwitchStartingAtTheLastOne()
+    {
+        var client = await SeedAsync(Document(
+            "5f8d0c1e8a7b4c3d9e5f1889", "Loop Profile", Now.AddDays(-2), new() { ["Loop Profile"] = Day }));
+        var first = Now.AddHours(-3);
+        var last = Now.AddHours(-1);
+        (await client.PostAsJsonAsync("/api/v1/treatments", new[]
+        {
+            new
+            {
+                eventType = "Profile Switch",
+                profile = "Loop Profile",
+                percentage = 150,
+                duration = 0,
+                created_at = last.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                mills = last.ToUnixTimeMilliseconds(),
+                enteredBy = "careportal",
+            },
+        })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var stored = await WithTenantScopeAsync(async services =>
+        {
+            (await services.GetRequiredService<ITreatmentPublisher>().PublishTempBasalsAsync(
+                [Scheduled("scheduled-first", first, Day.Basal), Scheduled("scheduled-last", last, Day.Basal * 1.5)],
+                "test-connector",
+                WriteOrigin.Live)).Should().BeTrue();
+            var repository = services.GetRequiredService<ITempBasalRepository>();
+            return (First: await repository.GetByLegacyIdAsync("scheduled-first"),
+                Last: await repository.GetByLegacyIdAsync("scheduled-last"));
+        });
+
+        stored.First!.Origin.Should().Be(TempBasalOrigin.Scheduled);
+        stored.First.ScheduledRate.Should().BeApproximately(Day.Basal, 1e-9);
+        stored.Last!.Origin.Should().Be(TempBasalOrigin.Scheduled);
+        stored.Last.ScheduledRate.Should().BeApproximately(Day.Basal * 1.5, 1e-9);
+    }
+
+    private static TempBasal Scheduled(string legacyId, DateTimeOffset start, double rate) => new()
+    {
+        LegacyId = legacyId,
+        StartTimestamp = start.UtcDateTime,
+        EndTimestamp = start.UtcDateTime.AddMinutes(30),
+        Rate = rate,
+        Origin = TempBasalOrigin.Scheduled,
+        DataSource = "test-connector",
+    };
+
+    [Fact]
+    public async Task ThePatientsTimezone_IsReadByThePointBatchAndTimelineResolversAlike()
+    {
+        var store = new
+        {
+            dia = 5.5,
+            carbs_hr = 25,
+            timezone = "UTC",
+            units = "mg/dl",
+            basal = new[] { new { time = "00:00", value = 0.5 }, new { time = "12:00", value = 1.5 } },
+            carbratio = new[] { new { time = "00:00", value = 8.0 } },
+            sens = new[] { new { time = "00:00", value = 40.0 }, new { time = "12:00", value = 60.0 } },
+            target_low = new[] { new { time = "00:00", value = 100.0 } },
+            target_high = new[] { new { time = "00:00", value = 110.0 } },
+        };
+        await SeedAsync(RawDocument(
+            "5f8d0c1e8a7b4c3d9e5f188a", "Loop Profile", Now.AddDays(-3), new Dictionary<string, object> { ["Loop Profile"] = store }));
+
+        // 14:00 UTC is before noon in New York, so the morning entries apply there and the afternoon ones in UTC.
+        var day = Now.UtcDateTime.Date;
+        var at = new DateTimeOffset(day.AddHours(14) <= Now.UtcDateTime.AddHours(-1) ? day.AddHours(14) : day.AddDays(-1).AddHours(14));
+        var atMills = at.ToUnixTimeMilliseconds();
+
+        await SetPatientTimezoneAsync("America/New_York");
+        try
+        {
+            var answers = await WithTenantScopeAsync(async services =>
+            {
+                var batch = await services.GetRequiredService<IBasalRateResolver>()
+                    .BuildResolverAsync(atMills - 3_600_000, atMills + 1);
+                var timeline = (await services.GetRequiredService<ITherapyTimelineResolver>()
+                    .BuildAsync(atMills - 3_600_000, atMills + 1)).SnapshotAt(atMills);
+                var segments = new List<BasalSegment>();
+                await foreach (var segment in services.GetRequiredService<IBasalSegmentService>()
+                                   .GetSegmentsAsync(atMills, atMills + 1_800_000))
+                    segments.Add(segment);
+                return (
+                    Point: await services.GetRequiredService<IBasalRateResolver>().GetBasalRateAsync(atMills),
+                    PointSens: await services.GetRequiredService<ISensitivityResolver>().GetSensitivityAsync(atMills),
+                    Batch: batch(atMills),
+                    TimelineBasal: timeline.BasalRateAt(atMills),
+                    TimelineSens: timeline.SensitivityAt(atMills),
+                    Segments: segments);
+            });
+
+            answers.Point.Should().Be(0.5);
+            answers.PointSens.Should().Be(40);
+            answers.Batch.Should().Be(0.5);
+            answers.TimelineBasal.Should().Be(0.5);
+            answers.TimelineSens.Should().Be(40);
+            answers.Segments.Should().NotBeEmpty().And.OnlyContain(s => s.UnitsPerHour == 0.5);
+        }
+        finally
+        {
+            await SetPatientTimezoneAsync(null);
+        }
+    }
+
+    private Task SetPatientTimezoneAsync(string? timezone) =>
+        WithTenantScopeAsync(async services =>
+        {
+            var patients = services.GetRequiredService<IPatientRecordRepository>();
+            var patient = await patients.GetOrCreateAsync();
+            patient.Timezone = timezone;
+            return await patients.UpdateAsync(patient, WriteOrigin.Live);
+        });
+
+    [Fact]
+    public async Task AReuploadChangingAnOlderDocumentsDefault_IsReadAndServed()
+    {
+        var stores = new Dictionary<string, Store> { ["Day"] = Day, ["Night"] = Night };
+        var older = Document("5f8d0c1e8a7b4c3d9e5f188b", "Night", Now.AddDays(-3), stores);
+        var client = await SeedAsync(older, Document("5f8d0c1e8a7b4c3d9e5f188c", "Day", Now.AddDays(-2), stores));
+        ShouldBe(await ResolveAtAsync(Now.AddHours(-60).ToUnixTimeMilliseconds()), Night, "Night");
+
+        (await client.PutAsJsonAsync("/api/v1/profile", Document("5f8d0c1e8a7b4c3d9e5f188b", "Day", Now.AddDays(-3), stores)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Another window than before: the basal assignments are cached for 5 s per window.
+        ShouldBe(await ResolveAtAsync(Now.AddHours(-59).ToUnixTimeMilliseconds()), Day, "Day");
+        var documents = JsonNode.Parse(await client.GetStringAsync("/api/v1/profile?count=10"))!.AsArray();
+        documents.Single(d => d!["_id"]!.GetValue<string>() == "5f8d0c1e8a7b4c3d9e5f188b")!["defaultProfile"]!
+            .GetValue<string>().Should().Be("Day");
+    }
 }
