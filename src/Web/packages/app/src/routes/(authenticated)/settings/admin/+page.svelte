@@ -80,8 +80,15 @@
 
   async function saveProvider(providerData: CreateOidcProviderRequest) {
     try {
-      if (editingProvider?.id) {
-        await oidcRemote.update({ id: editingProvider.id, request: providerData });
+      const id = editingProvider?.id;
+      if (id) {
+        // The generated update takes no force flag, so an override switches the provider off
+        // through disable first; the update that follows then no longer turns it off.
+        const saved = await withLockoutOverride(editingProvider?.name, async (force) => {
+          if (force) await oidcRemote.disable({ id, force });
+          await oidcRemote.update({ id, request: providerData });
+        });
+        if (!saved) return;
       } else {
         await oidcRemote.create(providerData);
       }
@@ -101,15 +108,17 @@
   async function withLockoutOverride(
     providerName: string | undefined,
     run: (force: boolean) => Promise<unknown>
-  ) {
+  ): Promise<boolean> {
     try {
       await run(false);
+      return true;
     } catch (err: unknown) {
       if (errorStatus(err) !== 409) throw err;
       const proceed = confirm(
         `Some members sign in only through "${providerName}". They will be locked out until an administrator gives them a recovery code. Continue anyway?`
       );
       if (proceed) await run(true);
+      return proceed;
     }
   }
 
