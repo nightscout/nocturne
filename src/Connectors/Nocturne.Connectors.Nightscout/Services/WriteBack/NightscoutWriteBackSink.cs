@@ -70,7 +70,8 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         for (var i = 0; i < filtered.Count; i += batchSize)
         {
             var batch = filtered.Skip(i).Take(batchSize).ToList();
-            await SendAsync(config, HttpMethod.Post, Endpoint, batch, ct);
+            if (await SendAsync(config, HttpMethod.Post, Endpoint, batch, ct))
+                await AfterWrittenAsync(config, batch, ct);
         }
     }
 
@@ -80,7 +81,8 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         if (config is null || ShouldSkip(item))
             return;
 
-        await SendAsync(config, HttpMethod.Post, Endpoint, new[] { item }, ct);
+        if (await SendAsync(config, HttpMethod.Post, Endpoint, new[] { item }, ct))
+            await AfterWrittenAsync(config, [item], ct);
     }
 
     public async Task OnUpdatedAsync(T item, CancellationToken ct = default)
@@ -89,7 +91,51 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         if (config is null || ShouldSkip(item))
             return;
 
-        await SendAsync(config, HttpMethod.Put, Endpoint, item, ct);
+        if (await SendAsync(config, HttpMethod.Put, Endpoint, item, ct))
+            await AfterWrittenAsync(config, [item], ct);
+    }
+
+    /// <summary>
+    /// Runs once upstream has accepted <paramref name="items"/>, to tidy what an earlier write left there.
+    /// </summary>
+    protected virtual Task AfterWrittenAsync(
+        NightscoutConnectorConfiguration config, IReadOnlyList<T> items, CancellationToken ct)
+        => Task.CompletedTask;
+
+    /// <returns>The response body, or null when the request failed (counted against the breaker).</returns>
+    protected async Task<string?> ExchangeAsync(
+        NightscoutConnectorConfiguration config, HttpMethod method, string pathAndQuery, CancellationToken ct)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(method, ResolveAbsoluteUrl(config.Url, pathAndQuery));
+            request.Headers.Add(
+                "api-secret",
+                NightscoutConnectorService.ComputeApiSecretHash(config.ApiSecret));
+
+            using var response = await _httpClient.SendAsync(request, ct);
+            response.EnsureSuccessStatusCode();
+            var body = await response.Content.ReadAsStringAsync(ct);
+
+            _circuitBreaker.RecordSuccess();
+            return body;
+        }
+        catch (HttpRequestException ex)
+        {
+            RecordFailure(ex, method);
+        }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            RecordFailure(ex, method);
+        }
+
+        return null;
+    }
+
+    private void RecordFailure(Exception ex, HttpMethod method)
+    {
+        _circuitBreaker.RecordFailure();
+        _logger.LogWarning(ex, "Nightscout write-back failed for {Method} {Endpoint}", method, Endpoint);
     }
 
     public Task OnDeletedAsync(T? item, CancellationToken ct = default)
@@ -134,7 +180,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         return filtered;
     }
 
-    private async Task SendAsync<TPayload>(
+    private async Task<bool> SendAsync<TPayload>(
         NightscoutConnectorConfiguration config,
         HttpMethod method,
         string endpoint,
@@ -154,6 +200,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
             response.EnsureSuccessStatusCode();
 
             _circuitBreaker.RecordSuccess();
+            return true;
         }
         catch (Exception ex)
         {
@@ -163,6 +210,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
                 "Nightscout write-back failed for {Method} {Endpoint}",
                 method,
                 endpoint);
+            return false;
         }
     }
 }

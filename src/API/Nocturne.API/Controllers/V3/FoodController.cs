@@ -81,9 +81,6 @@ public class FoodController : BaseV3Controller<Food>
             foodList = ApplyV3FilterCriteria(foodList, parameters.FilterCriteria);
             foodList = OrderFood(foodList, parameters.Sort);
 
-            // Get total count before pagination
-            var totalCount = foodList.Count;
-
             // Apply pagination
             foodList = foodList.Skip(parameters.Offset).Take(parameters.Limit).ToList();
 
@@ -104,7 +101,6 @@ public class FoodController : BaseV3Controller<Food>
             return (ActionResult)CreateV3CollectionResponse(
                 foodList.Select(f => ToV3Document(f, f.Id)).ToList(),
                 parameters,
-                totalCount,
                 lastModified
             );
         }
@@ -674,28 +670,4 @@ public class FoodController : BaseV3Controller<Food>
         }
     }
 
-    /// <summary>
-    /// Get total count for pagination support
-    /// </summary>
-    private async Task<long> GetTotalCountAsync(
-        string? type,
-        string? findQuery,
-        CancellationToken cancellationToken,
-        string collection = "food"
-    )
-    {
-        try
-        {
-            return await _foods.CountFoodAsync(findQuery, type, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Could not get total count for {Collection}, using approximation",
-                collection
-            );
-            return 0; // Return 0 for count errors to maintain API functionality
-        }
-    }
 }
