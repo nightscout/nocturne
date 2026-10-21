@@ -53,6 +53,95 @@ public class ProfileDecomposerTests
     }
 
     /// <summary>
+    /// Every version of a document starts at its <c>mills</c>, else its <c>startDate</c>, else its
+    /// <c>created_at</c>, in the shapes clients upload: Nightscout's profile editor and AAPS send no
+    /// <c>mills</c>, Loop sends it as a string, Trio truncated to the second.
+    /// </summary>
+    [Theory]
+    [InlineData("""
+        "startDate": "2025-10-01T06:00:00.000Z", "created_at": "2025-10-09T08:53:20.000Z"
+        """, "2025-10-01T06:00:00.000Z")]
+    [InlineData("""
+        "date": 1760000000000, "created_at": "2025-10-09T08:53:20.000Z", "startDate": "2025-10-09T08:53:20.000Z"
+        """, "2025-10-09T08:53:20.000Z")]
+    [InlineData("""
+        "mills": "1759996800000", "startDate": "2025-10-09T08:53:20.000Z"
+        """, "2025-10-09T08:00:00.000Z")]
+    [InlineData("""
+        "mills": 1760000000000, "startDate": "2025-10-09T08:53:20.123Z"
+        """, "2025-10-09T08:53:20.000Z")]
+    [InlineData("""
+        "startDate": "2025-10-01T06:00:00", "created_at": "2025-10-09T08:53:20.000Z"
+        """, "2025-10-01T06:00:00.000Z")]
+    [InlineData("""
+        "startDate": "", "created_at": "2025-10-02T00:00:00.000Z"
+        """, "2025-10-02T00:00:00.000Z")]
+    public async Task DecomposeAsync_StartsEveryVersionAtTheDocumentsTime(string header, string expected)
+    {
+        var repos = new Repositories();
+
+        await repos.Decomposer.DecomposeAsync(Upload("doc", header), WriteOrigin.Live);
+
+        var start = DateTimeOffset.Parse(expected).UtcDateTime;
+        repos.Written.Should().HaveCount(5).And.AllSatisfy(r => r.Timestamp.Should().Be(start));
+    }
+
+    /// <summary>
+    /// Nightscout's newest document is the newest by <c>startDate</c>, so a batch of documents without
+    /// <c>mills</c> claims the default with the one that starts last, whatever their ids.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_WithoutMills_ClaimsTheDefaultWithTheDocumentThatStartsLast()
+    {
+        var repos = new Repositories();
+
+        await repos.Decomposer.DecomposeBatchAsync(
+        [
+            Upload("a-later", """ "startDate": "2025-10-05T00:00:00.000Z" """),
+            Upload("b-earlier", """ "startDate": "2025-10-01T00:00:00.000Z" """),
+        ], WriteOrigin.Live);
+
+        WrittenDefaults(repos).Should().ContainSingle().Which.LegacyId.Should().Be("a-later:Default");
+    }
+
+    /// <summary>
+    /// A document without <c>mills</c> that starts after every stored one is the newest, and claims.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeAsync_WithoutMills_ClaimsTheDefault_WhenItStartsAfterEveryStoredDocument()
+    {
+        var repos = new Repositories(storedSettings:
+        [
+            new TherapySettings
+            {
+                LegacyId = "stored:Default", ProfileName = "Default", IsDefault = true,
+                Timestamp = new DateTime(2025, 10, 1, 0, 0, 0, DateTimeKind.Utc),
+            },
+        ]);
+
+        await repos.Decomposer.DecomposeAsync(
+            Upload("new", """ "startDate": "2025-10-05T00:00:00.000Z" """), WriteOrigin.Live);
+
+        WrittenDefaults(repos).Should().ContainSingle().Which.LegacyId.Should().Be("new:Default");
+    }
+
+    /// <summary>A one-store document as a client posts it, with <paramref name="header"/>'s time fields.</summary>
+    private static Profile Upload(string id, string header) =>
+        System.Text.Json.JsonSerializer.Deserialize<Profile>($$"""
+            {
+              "_id": "{{id}}", "defaultProfile": "Default", "units": "mg/dl", {{header}},
+              "store": { "Default": {
+                "dia": 4, "timezone": "UTC",
+                "basal": [{ "time": "00:00", "value": 1.0 }],
+                "carbratio": [{ "time": "00:00", "value": 10 }],
+                "sens": [{ "time": "00:00", "value": 50 }],
+                "target_low": [{ "time": "00:00", "value": 80 }],
+                "target_high": [{ "time": "00:00", "value": 120 }]
+              } }
+            }
+            """)!;
+
+    /// <summary>
     /// Only the therapy settings row may keep its stored correlation id; the four schedules are
     /// stamped from what it reads back, so preserving on them would let a fork survive.
     /// </summary>

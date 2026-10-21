@@ -189,13 +189,13 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         var newest = entries
             .Select(e => e.Profile)
             .Distinct()
-            .OrderByDescending(p => p.Mills)
+            .OrderByDescending(VersionStart)
             .ThenByDescending(p => p.Id, StringComparer.Ordinal)
             .First();
 
         var storedNewest = await _therapySettingsRepo.GetNewestDocumentRowAsync(ct);
         var claims = storedNewest is null
-            || storedNewest.Mills <= newest.Mills
+            || storedNewest.Timestamp <= VersionStart(newest)
             || storedNewest.LegacyId?.StartsWith($"{newest.Id}:", StringComparison.Ordinal) == true;
         if (!claims)
             return new DefaultClaim(false, null);
@@ -235,6 +235,26 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
 
     #region Mapping Methods
 
+    /// <summary>
+    /// The instant every version decomposed from <paramref name="profile"/> starts: its <c>mills</c>,
+    /// else its <c>startDate</c>, else its <c>created_at</c>, else the epoch.
+    /// </summary>
+    /// <remarks>
+    /// Nightscout dates a document by <c>startDate</c> alone (profilefunctions.js sets <c>mills</c>
+    /// from it on load). Clients that send both send one instant, give or take Trio's truncation to
+    /// the second; <c>mills</c> leads because the Glooko connector sets it to the pump's settings time
+    /// and <c>startDate</c> to the sync. A zone-less string is read as UTC (<see cref="UploaderTimestamp"/>).
+    /// </remarks>
+    internal static DateTime VersionStart(Profile profile)
+    {
+        if (profile.Mills != 0)
+            return DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime;
+
+        return UploaderTimestamp.ParseUtcDateTime(profile.StartDate)
+            ?? UploaderTimestamp.ParseUtcDateTime(profile.CreatedAt)
+            ?? DateTime.UnixEpoch;
+    }
+
     internal static V4Models.TherapySettings MapToTherapySettings(
         Profile profile,
         ProfileData profileData,
@@ -246,7 +266,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         return new V4Models.TherapySettings
         {
             LegacyId = legacyId,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime,
+            Timestamp = VersionStart(profile),
             ProfileName = storeName,
             Timezone = profileData.Timezone,
             Units = profileData.Units ?? profile.Units,
@@ -282,7 +302,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         return new V4Models.BasalSchedule
         {
             LegacyId = legacyId,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime,
+            Timestamp = VersionStart(profile),
             ProfileName = storeName,
             Entries = ConvertTimeValues(profileData.Basal),
             Device = profile.EnteredBy,
@@ -300,7 +320,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         return new V4Models.CarbRatioSchedule
         {
             LegacyId = legacyId,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime,
+            Timestamp = VersionStart(profile),
             ProfileName = storeName,
             Entries = ConvertTimeValues(profileData.CarbRatio),
             Device = profile.EnteredBy,
@@ -318,7 +338,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         return new V4Models.SensitivitySchedule
         {
             LegacyId = legacyId,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime,
+            Timestamp = VersionStart(profile),
             ProfileName = storeName,
             Entries = ConvertSensitivityValues(profileData.Sens, profileData.Units ?? profile.Units),
             Device = profile.EnteredBy,
@@ -347,7 +367,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         return new V4Models.TargetRangeSchedule
         {
             LegacyId = legacyId,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime,
+            Timestamp = VersionStart(profile),
             ProfileName = storeName,
             Entries = entries,
             Device = profile.EnteredBy,
