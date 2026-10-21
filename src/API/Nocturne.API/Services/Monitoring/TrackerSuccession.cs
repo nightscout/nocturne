@@ -105,7 +105,7 @@ public static class TrackerSuccession
             await broadcast.BroadcastTrackerUpdateAsync(
                 TrackerRealtimeAction.Create,
                 TrackerInstanceDto.FromEntity(started),
-                started.UserId,
+                definition.UserId,
                 definition.Visibility
             );
 

@@ -88,6 +88,7 @@ using Nocturne.Infrastructure.Shared.Services;
 using JwtOptions = Nocturne.Core.Models.Configuration.JwtOptions;
 using OidcOptions = Nocturne.Core.Models.Configuration.OidcOptions;
 using OpenTelemetry.Metrics;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Extensions;
 
@@ -597,6 +598,8 @@ public static class ServiceRegistrationExtensions
         // Demo mode
         services.AddSingleton<IDemoModeService, DemoModeService>();
 
+        services.AddScoped<ITenantCache, TenantCache>();
+
         services.AddScoped<IV4ToLegacyProjectionService, V4ToLegacyProjectionService>();
 
         // Collection effect descriptors (resolved by WriteSideEffectsService)
@@ -727,6 +730,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IDeviceService, DeviceService>();
         services.AddScoped<IPatientDeviceStamper, PatientDeviceStamper>();
         services.AddScoped<IDeviceReattributionService, DeviceReattributionService>();
+        services.AddScoped<IDeviceTrackerProvisioner, DeviceTrackerProvisioner>();
 
         // Canonical glucose stream (single-stream view for v1/v3, alarms, unfiltered analytics)
         services.AddScoped<ICanonicalGlucoseService, CanonicalGlucoseService>();
@@ -829,6 +833,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IEntryDecomposer, EntryDecomposer>();
         services.AddScoped<ITreatmentDecomposer, TreatmentDecomposer>();
         services.AddScoped<IDeviceStatusDecomposer, DeviceStatusDecomposer>();
+        services.AddHostedService<ApsSnapshotCurvesBackfillService>();
         services.AddScoped<IActivityDecomposer, ActivityDecomposer>();
         services.AddScoped<IProfileDecomposer, ProfileDecomposer>();
 

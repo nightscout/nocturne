@@ -4,6 +4,10 @@
 {{- if not .Values.baseDomain }}
 {{- fail "baseDomain is required: set it to the bare host people browse to (e.g. nocturne.example.com, no scheme). Left empty, the chart omits BASE_DOMAIN, the API binds passkeys to localhost, and every browser refuses the passkey prompt." }}
 {{- end }}
+{{- $apiReplicas := toString .Values.api.replicaCount }}
+{{- if or (and (ne $apiReplicas "<nil>") (ne $apiReplicas "") (ne (int .Values.api.replicaCount) 1)) (include "nocturne.removedToggleOn" .Values.api.autoscaling) (include "nocturne.removedToggleOn" .Values.api.pdb) }}
+{{- fail "api.replicaCount, api.autoscaling and api.pdb have been removed: the API runs as exactly one pod (see the chart README, \"Single API process\")." }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -12,9 +16,11 @@ metadata:
     {{- include "nocturne.labels" . | nindent 4 }}
     app.kubernetes.io/component: api
 spec:
-  {{- if not .Values.api.autoscaling.enabled }}
-  replicas: {{ .Values.api.replicaCount }}
-  {{- end }}
+  # One pod, replaced by stopping the old one first: see the chart README, "Single API process".
+  replicas: 1
+  strategy:
+    type: Recreate
+    rollingUpdate: null
   selector:
     matchLabels: {{- include "nocturne.api.selectorLabels" . | nindent 6 }}
   template:
@@ -129,11 +135,20 @@ spec:
             - name: ConnectionStrings__nocturne-postgres-migrator
               value: "Host=$(__DB_HOST);Port=$(__DB_PORT);Database=$(__DB_NAME);Username=nocturne_migrator;Password=$(__DB_MIGRATOR_PASSWORD);SslMode=$(__DB_SSLMODE)"
             {{- include "nocturne.observability.api.env" . | nindent 12 }}
+          # Migrations run before the API listens, and one index build can take most of an hour;
+          # liveness would otherwise kill the pod and restart the interrupted build from scratch.
+          # A run longer than this hour needs failureThreshold raised.
+          startupProbe:
+            httpGet:
+              path: /alive
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 360
           livenessProbe:
             httpGet:
               path: /alive
               port: http
-            initialDelaySeconds: 15
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 3
@@ -141,7 +156,6 @@ spec:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6

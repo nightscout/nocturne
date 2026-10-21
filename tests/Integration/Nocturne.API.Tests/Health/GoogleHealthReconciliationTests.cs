@@ -310,8 +310,8 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         await SeedConnectorAsync();
         await using var firstProvider = ReplicaServices();
         await using var secondProvider = ReplicaServices();
-        var first = new GoogleHealthCoordinator(firstProvider.GetRequiredService<IServiceScopeFactory>());
-        var second = new GoogleHealthCoordinator(secondProvider.GetRequiredService<IServiceScopeFactory>());
+        var first = new GoogleHealthCoordinator(new PostgresGoogleHealthCoordinatorStore(firstProvider.GetRequiredService<IServiceScopeFactory>()));
+        var second = new GoogleHealthCoordinator(new PostgresGoogleHealthCoordinatorStore(secondProvider.GetRequiredService<IServiceScopeFactory>()));
         var lease = await first.AcquireAsync(tenantId, default);
         try
         {
@@ -348,8 +348,8 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         await SeedConnectorAsync();
         await using var provider = ReplicaServices();
         var scopes = provider.GetRequiredService<IServiceScopeFactory>();
-        var first = new GoogleHealthCoordinator(scopes);
-        var second = new GoogleHealthCoordinator(scopes);
+        var first = new GoogleHealthCoordinator(new PostgresGoogleHealthCoordinatorStore(scopes));
+        var second = new GoogleHealthCoordinator(new PostgresGoogleHealthCoordinatorStore(scopes));
         Assert.True(await first.QueueAsync(tenantId, 4, default));
         Assert.False(await second.QueueAsync(tenantId, 4, default));
         var claim = await first.ClaimWorkerAsync(tenantId, default);
@@ -364,7 +364,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         }
         finally { await claim!.DisposeAsync(); }
 
-        var restarted = new GoogleHealthCoordinator(scopes);
+        var restarted = new GoogleHealthCoordinator(new PostgresGoogleHealthCoordinatorStore(scopes));
         await using var requests = restarted.ReadRequestsAsync(default).GetAsyncEnumerator();
         Assert.True(await requests.MoveNextAsync());
         Assert.Equal(tenantId, requests.Current);
@@ -382,13 +382,13 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         await SeedConnectorAsync();
         await using var provider = ReplicaServices();
         var scopes = provider.GetRequiredService<IServiceScopeFactory>();
-        var first = new GoogleHealthCoordinator(scopes);
-        var second = new GoogleHealthCoordinator(scopes);
+        var first = new GoogleHealthCoordinator(new PostgresGoogleHealthCoordinatorStore(scopes));
+        var second = new GoogleHealthCoordinator(new PostgresGoogleHealthCoordinatorStore(scopes));
         var subject = Guid.NewGuid();
         await using var reader = await first.WatchReadsAsync(tenantId, default);
         var request = await second.RequestDisconnectAsync(tenantId, subject, default);
         await Task.Delay(Timeout.Infinite, reader.Token).ContinueWith(task => Assert.True(task.IsCanceled)).WaitAsync(TimeSpan.FromSeconds(5));
-        var restarted = new GoogleHealthCoordinator(scopes);
+        var restarted = new GoogleHealthCoordinator(new PostgresGoogleHealthCoordinatorStore(scopes));
         Assert.Equal(subject, (await restarted.DisconnectRequestAsync(tenantId, default))!.SubjectId);
         await using var requests = restarted.ReadRequestsAsync(default).GetAsyncEnumerator();
         Assert.True(await requests.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
@@ -407,8 +407,8 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         var tenants = Mock.Get(provider.GetRequiredService<ITenantService>());
         tenants.Setup(service => service.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var scopes = provider.GetRequiredService<IServiceScopeFactory>();
-        var listener = new GoogleHealthCoordinator(scopes);
-        var sender = new GoogleHealthCoordinator(scopes);
+        var listener = new GoogleHealthCoordinator(new PostgresGoogleHealthCoordinatorStore(scopes));
+        var sender = new GoogleHealthCoordinator(new PostgresGoogleHealthCoordinatorStore(scopes));
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await using var requests = listener.ReadRequestsAsync(cancellation.Token).GetAsyncEnumerator();
         var next = requests.MoveNextAsync().AsTask();
@@ -443,8 +443,8 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         var secondTenant = new Guid("00000001-0001-0000-0000-000000000000");
         await using var provider = ReplicaServices();
         var scopes = provider.GetRequiredService<IServiceScopeFactory>();
-        var first = new GoogleHealthCoordinator(scopes);
-        var second = new GoogleHealthCoordinator(scopes);
+        var first = new GoogleHealthCoordinator(new PostgresGoogleHealthCoordinatorStore(scopes));
+        var second = new GoogleHealthCoordinator(new PostgresGoogleHealthCoordinatorStore(scopes));
         await using var operation = await first.AcquireAsync(firstTenant, default);
         await using var unrelated = await second.AcquireAsync(secondTenant, default, TimeSpan.Zero);
         Assert.NotNull(unrelated);
@@ -470,7 +470,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
     {
         await SeedConnectorAsync(legacyJson);
         await using var provider = ReplicaServices();
-        var coordinator = new GoogleHealthCoordinator(provider.GetRequiredService<IServiceScopeFactory>());
+        var coordinator = new GoogleHealthCoordinator(new PostgresGoogleHealthCoordinatorStore(provider.GetRequiredService<IServiceScopeFactory>()));
         Assert.Null(await coordinator.ProgressAsync(tenantId, default));
 
         using var scope = provider.CreateScope();

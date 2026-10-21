@@ -81,6 +81,13 @@ public class DashboardChartData
     /// <summary>Basal delivery spans with rate and origin information.</summary>
     public List<BasalDeliverySpanDto> BasalDeliverySpans { get; set; } = new();
 
+    /// <summary>
+    /// When the pump was last known to be in contact, as of the end of the window: the later of the
+    /// pump clock of the newest pump status and the end of the newest basal delivery span. Null when
+    /// there is neither.
+    /// </summary>
+    public long? LastPumpSyncMills { get; set; }
+
     // === Basal injection markers ===
 
     /// <summary>Discrete long-acting basal injection markers from <see cref="V4.BasalInjection"/> records.</summary>

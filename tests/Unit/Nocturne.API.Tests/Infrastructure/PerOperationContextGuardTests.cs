@@ -29,8 +29,10 @@ public class PerOperationContextGuardTests
 
     /// <summary>
     /// Where the caller's history ceiling is decided, reported, minted into a credential, carried
-    /// into a background scope, or set on the connection. An entry names the file and the member the
-    /// read sits in, so a new read in a listed file is not covered by its neighbour.
+    /// into a background scope, set on the connection, or turned into the reader's cache partition
+    /// (<c>ReaderCachePartition</c>, which every <c>ITenantCache</c> keys by). An entry names the
+    /// file and the member the read sits in, so a new read in a listed file is not covered by its
+    /// neighbour.
     /// </summary>
     private static readonly string[] ClampReaders =
     [
@@ -39,16 +41,8 @@ public class PerOperationContextGuardTests
         "src/API/Nocturne.API/Services/Identity/AuthorizationService.cs: AuthorizationService.CreateSubjectAsync",
         "src/API/Nocturne.API/Services/BackgroundServices/CompressionLowDetectionService.cs: CompressionLowDetectionService.DetectForNightAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/DeduplicationService.cs: DeduplicationService.StartDeduplicationJobAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Services/ReaderCachePartition.cs: ReaderCachePartition.Current",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/TenantReadContext.cs: TenantReadContext.HistoryClamped",
-    ];
-
-    /// <summary>
-    /// Caches that still bypass on the clamp. #2161 moves them onto <c>ITenantCache</c>, which
-    /// takes the decision away from them; this list then empties and goes.
-    /// </summary>
-    private static readonly string[] ClampReadingCachesAwaitingTenantCache =
-    [
-        "src/API/Nocturne.API/Services/Profiles/Resolvers/ProfileVersionCache.cs: ProfileVersionCache.GetActiveAtAsync",
     ];
 
     private static readonly IReadOnlyList<(string Path, SyntaxTree Tree)> Sources = Load();
@@ -88,9 +82,9 @@ public class PerOperationContextGuardTests
             .SelectMany(s => ClampReadingMembers(s.Tree).Select(member => $"{s.Path}: {member}"))
             .ToList();
 
-        readers.Except(ClampReaders).Except(ClampReadingCachesAwaitingTenantCache).Should().BeEmpty(
+        readers.Except(ClampReaders).Should().BeEmpty(
             $"{Clamp} is read where a caller's ceiling is decided or carried; a cache partitions through ITenantCache");
-        ClampReaders.Concat(ClampReadingCachesAwaitingTenantCache).Except(readers).Should().BeEmpty(
+        ClampReaders.Except(readers).Should().BeEmpty(
             "a stale entry would silently cover a future read in that member");
     }
 

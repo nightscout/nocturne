@@ -179,7 +179,7 @@
   <ChartClipPath>
     <!-- Bolus markers -->
     {#if showBolus}
-      {#each bolusMarkers as marker (marker.treatmentId)}
+      {#each bolusMarkers as marker, i (markerKey(marker.treatmentId, marker.time, i))}
         {@const xPos = chartCtx.xScale(marker.time)}
         {@const yPos = markerBaselineY}
         <BolusMarker

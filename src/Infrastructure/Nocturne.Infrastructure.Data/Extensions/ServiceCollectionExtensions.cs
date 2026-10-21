@@ -142,6 +142,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton(sp => new RootServiceProvider(sp));
         services.TryAddTransient<NocturneDbContextFactory>();
         services.TryAddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
+        services.AddScoped<IReaderCachePartition, ReaderCachePartition>();
 
         // Register deduplication service (required by repositories)
         services.AddScoped<IDeduplicationService, DeduplicationService>();

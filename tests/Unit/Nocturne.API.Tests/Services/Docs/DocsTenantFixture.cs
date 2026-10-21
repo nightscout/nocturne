@@ -11,10 +11,10 @@ using Nocturne.API.Services.Docs;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Tests.Services.Docs;
 
@@ -125,7 +125,7 @@ internal sealed class DocsTenantFixture : IDisposable
             dbFactory.Object.AsNocturneFactory(),
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),
-            new Mock<ICacheService>().Object,
+            Mock.Of<ITenantCache>(),
             new Mock<ILogger<DemoTenantService>>().Object);
 
         return new ScalarAuthProvider(

@@ -572,7 +572,7 @@ export type PredictionDisplayMode = (typeof PREDICTION_DISPLAY_MODES)[number];
 const LINE_COLOR_MODES = ["single", "threshold", "continuous"] as const;
 export type LineColorMode = (typeof LINE_COLOR_MODES)[number];
 
-const AREA_MODES = ["off", "baseline", "deviation"] as const;
+const AREA_MODES = ["off", "full", "baseline", "deviation"] as const;
 export type AreaMode = (typeof AREA_MODES)[number];
 
 /**
@@ -615,7 +615,7 @@ export const GLUCOSE_CHART_FETCH_HOURS = 48;
 
 export const chartLineColorMode = new SyncedPref<LineColorMode>(
   "nocturne-chart-line-color-mode",
-  "threshold",
+  "continuous",
   (p) => p.chart?.lineColorMode,
   oneOfPref(LINE_COLOR_MODES)
 );
@@ -629,7 +629,7 @@ export const chartLineColor = new SyncedPref<string>(
 
 export const chartPointColorMode = new SyncedPref<LineColorMode>(
   "nocturne-chart-point-color-mode",
-  "threshold",
+  "continuous",
   (p) => p.chart?.pointColorMode,
   oneOfPref(LINE_COLOR_MODES)
 );

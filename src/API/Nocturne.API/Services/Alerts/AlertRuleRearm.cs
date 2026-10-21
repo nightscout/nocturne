@@ -10,10 +10,8 @@ namespace Nocturne.API.Services.Alerts;
 /// enablement. Every writer of alert rules goes through here.
 /// </summary>
 /// <remarks>
-/// Under the lease, no evaluation in this process can read the hold and then find it cleared
-/// when it writes, and a hold one sets just before is read and cleared here. Another replica
-/// reads outside the transition lock. An evaluation there that read the hold just before
-/// this clears it drops its decision, as for any state changed under it.
+/// Under the lease, no evaluation can read the hold and then find it cleared when it writes, and
+/// a hold one sets just before is read and cleared here.
 /// <para>
 /// An evaluation that read the rule before the save, and takes the lease after this clear,
 /// decided on the old conditions. The writer re-reads the rule under the transition lock and

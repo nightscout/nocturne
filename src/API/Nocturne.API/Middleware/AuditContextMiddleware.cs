@@ -5,8 +5,8 @@ using Nocturne.Core.Contracts.Audit;
 namespace Nocturne.API.Middleware;
 
 /// <summary>
-/// Populates the scoped IAuditContext from the current HTTP request.
-/// Must run after AuthenticationMiddleware.
+/// Populates the scoped <see cref="IAuditContext"/> from the current HTTP request.
+/// Must run after <see cref="AuthenticationMiddleware"/>, which sets the <c>AuthContext</c> it reads.
 /// </summary>
 public class AuditContextMiddleware
 {

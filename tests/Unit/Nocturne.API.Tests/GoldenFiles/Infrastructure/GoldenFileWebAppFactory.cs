@@ -36,8 +36,6 @@ public class GoldenFileWebAppFactory : SqliteWebAppFactoryBase<Program>
         mockCache.Setup(x => x.SetAsync(It.IsAny<string>(), It.IsAny<object>(),
             It.IsAny<TimeSpan?>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        mockCache.Setup(x => x.RemoveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
         services.AddSingleton(mockCache.Object);
 
         // Added IN ADDITION to the existing handlers; Priority 0 puts it first.

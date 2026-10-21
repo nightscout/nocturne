@@ -11,7 +11,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 
 /// <summary>
 /// A public share link with full history reads <c>/api/v1/treatments</c> through the same
-/// recent-treatments cache as the tenant's members, under a key that carries only the tenant.
+/// recent-treatments cache as the tenant's members, in the partition of its own categories.
 /// Row level security hides <c>notes</c> and <c>state_spans</c> from every share, so the share and
 /// the owner must never be served each other's cached list.
 /// </summary>

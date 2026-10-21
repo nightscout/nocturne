@@ -278,23 +278,13 @@ public class TimeQueryController : ControllerBase
 
         try
         {
-            // Extract query parameters
-            var queryParameters = new Dictionary<string, object>();
-            foreach (var param in Request.Query)
-            {
-                if (param.Key != "storage" && param.Key != "field")
-                {
-                    queryParameters[param.Key] = param.Value.ToString() ?? "";
-                }
-            }
-
             // Generate debug information
             var echo = _timeQueryService.GenerateTimeQueryEcho(
                 prefix: prefix,
                 regex: regex,
                 storage: storage,
                 fieldName: field,
-                queryParameters: queryParameters
+                queryString: Request.QueryString.Value
             );
 
             _logger.LogDebug(

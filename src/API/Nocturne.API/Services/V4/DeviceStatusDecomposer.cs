@@ -73,11 +73,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     {
         NormalizeMills(ds);
 
-        var legacyId = ds.Id;
-        var storedCorrelationIds = await GetStoredCorrelationIdsAsync([ds], ct);
-        var correlationId = legacyId is not null && storedCorrelationIds.TryGetValue(legacyId, out var stored)
-            ? stored
-            : Guid.CreateVersion7();
+        var correlationId = CorrelationIdFor(ds.Id, await GetStoredCorrelationIdsAsync([ds.Id], SnapshotTables, ct));
         return await DecomposeCoreAsync(ds, source, correlationId, group: null, origin, ct);
     }
 
@@ -907,7 +903,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         var uploaderList = new List<V4Models.UploaderSnapshot>();
         var extrasList = new List<V4Models.DeviceStatusExtras>();
         var overrideStatuses = new List<(DeviceStatus Status, Guid CorrelationId)>();
-        var correlationIds = await GetStoredCorrelationIdsAsync(statuses, ct);
+        var correlationIds = await GetStoredCorrelationIdsAsync(statuses.Select(s => s.Id), SnapshotTables, ct);
 
         await DeferLastSeenAsync(_deviceService, async () =>
         {
@@ -916,11 +912,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
                 NormalizeMills(ds);
 
                 var legacyId = ds.Id;
-                Guid correlationId;
-                if (legacyId is null)
-                    correlationId = Guid.CreateVersion7();
-                else if (!correlationIds.TryGetValue(legacyId, out correlationId))
-                    correlationIds[legacyId] = correlationId = Guid.CreateVersion7();
+                var correlationId = CorrelationIdFor(legacyId, correlationIds);
                 result.CorrelationId ??= correlationId;
                 var statusMills = ResolveStatusMills(ds);
 
@@ -1020,31 +1012,17 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     }
 
     /// <summary>
-    /// The correlation id each re-sent status's stored group already carries, preferring the APS,
-    /// then pump, then uploader snapshot as <see cref="DeleteByLegacyIdAsync"/> does.
+    /// The snapshot tables a status's stored correlation id is read from, in the APS, pump, uploader
+    /// order <see cref="DeleteByLegacyIdAsync"/> prefers. The group's extras row carries no legacy id
+    /// of its own and is found through that id, so a re-send that moved the snapshots onto a new one
+    /// would orphan it beyond <see cref="DeleteByLegacyIdAsync"/>'s reach.
     /// </summary>
-    /// <remarks>
-    /// A re-send keeps that id rather than minting a fresh one, because the group's extras row is
-    /// found through it and carries no legacy id of its own: moving the snapshots onto a new id
-    /// would orphan the stored extras row beyond <see cref="DeleteByLegacyIdAsync"/>'s reach.
-    /// Stamping every sibling with the one id also converges a group that has forked.
-    /// </remarks>
-    private async Task<Dictionary<string, Guid>> GetStoredCorrelationIdsAsync(
-        IReadOnlyList<DeviceStatus> statuses, CancellationToken ct)
-    {
-        var correlationIds = new Dictionary<string, Guid>(StringComparer.Ordinal);
-        var legacyIds = statuses.Select(s => s.Id).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
-        if (legacyIds.Count == 0)
-            return correlationIds;
-
-        foreach (var stored in await _apsRepo.GetCorrelationIdsByLegacyIdAsync(legacyIds, ct))
-            correlationIds.TryAdd(stored.LegacyId, stored.CorrelationId);
-        foreach (var stored in await _pumpRepo.GetCorrelationIdsByLegacyIdAsync(legacyIds, ct))
-            correlationIds.TryAdd(stored.LegacyId, stored.CorrelationId);
-        foreach (var stored in await _uploaderRepo.GetCorrelationIdsByLegacyIdAsync(legacyIds, ct))
-            correlationIds.TryAdd(stored.LegacyId, stored.CorrelationId);
-        return correlationIds;
-    }
+    private StoredCorrelationLookup[] SnapshotTables =>
+    [
+        _apsRepo.GetCorrelationIdsByLegacyIdAsync,
+        _pumpRepo.GetCorrelationIdsByLegacyIdAsync,
+        _uploaderRepo.GetCorrelationIdsByLegacyIdAsync,
+    ];
 
     #endregion
 

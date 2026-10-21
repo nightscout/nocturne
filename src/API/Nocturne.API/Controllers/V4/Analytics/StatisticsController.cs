@@ -6,6 +6,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Clinical.Statistics;
+using Nocturne.API.Services.Caching;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
@@ -17,7 +18,6 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Cache.Abstractions;
 using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
@@ -28,7 +28,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// time-in-range, glycemic variability, GMI, GRI, basal/bolus ratios, and AID system metrics.
 /// </summary>
 /// <remarks>
-/// <c>GET /periods</c> caches for five minutes through <see cref="ICacheService"/>;
+/// <c>GET /periods</c> caches for five minutes through <see cref="ITenantCache"/>;
 /// <c>GET /range-analytics</c>, <c>GET /weekday-averages</c> and <c>GET /hourly-patterns</c>
 /// carry a 60-second client-only <see cref="ResponseCacheAttribute"/>. No other action caches.
 ///
@@ -57,7 +57,7 @@ public class StatisticsController : ControllerBase
     public const int ComputeBodyLimitBytes = 100 * 1024 * 1024;
 
     private readonly IStatisticsService _statisticsService;
-    private readonly ICacheService _cacheService;
+    private readonly ITenantCache _cache;
     private readonly IProfileProjectionService _profileProjectionService;
     private readonly IBasalRateResolver _basalRateResolver;
     private readonly IBasalSegmentService _basalSegments;
@@ -66,7 +66,6 @@ public class StatisticsController : ControllerBase
     private readonly IBolusRepository _bolusRepository;
     private readonly ICarbIntakeRepository _carbIntakeRepository;
     private readonly ITempBasalRepository _tempBasalRepository;
-    private readonly ITenantAccessor _tenantAccessor;
     private readonly IAidMetricsService _aidMetricsService;
     private readonly IPatientDeviceRepository _patientDeviceRepository;
     private readonly IApsSnapshotRepository _apsSnapshotRepository;
@@ -79,13 +78,9 @@ public class StatisticsController : ControllerBase
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<StatisticsController> _logger;
 
-    private string TenantCacheId =>
-        _tenantAccessor.Context?.TenantId.ToString()
-        ?? throw new InvalidOperationException("Tenant context is not resolved");
-
     public StatisticsController(
         IStatisticsService statisticsService,
-        ICacheService cacheService,
+        ITenantCache cache,
         IProfileProjectionService profileProjectionService,
         IBasalRateResolver basalRateResolver,
         IBasalSegmentService basalSegments,
@@ -94,7 +89,6 @@ public class StatisticsController : ControllerBase
         IBolusRepository bolusRepository,
         ICarbIntakeRepository carbIntakeRepository,
         ITempBasalRepository tempBasalRepository,
-        ITenantAccessor tenantAccessor,
         IAidMetricsService aidMetricsService,
         IPatientDeviceRepository patientDeviceRepository,
         IApsSnapshotRepository apsSnapshotRepository,
@@ -109,7 +103,7 @@ public class StatisticsController : ControllerBase
     )
     {
         _statisticsService = statisticsService;
-        _cacheService = cacheService;
+        _cache = cache;
         _profileProjectionService = profileProjectionService;
         _basalRateResolver = basalRateResolver;
         _basalSegments = basalSegments;
@@ -118,7 +112,6 @@ public class StatisticsController : ControllerBase
         _bolusRepository = bolusRepository;
         _carbIntakeRepository = carbIntakeRepository;
         _tempBasalRepository = tempBasalRepository;
-        _tenantAccessor = tenantAccessor;
         _aidMetricsService = aidMetricsService;
         _patientDeviceRepository = patientDeviceRepository;
         _apsSnapshotRepository = apsSnapshotRepository;
@@ -817,6 +810,8 @@ public class StatisticsController : ControllerBase
     /// <see cref="AddScheduledBasalFallbackAsync"/> for the rest of the gate.
     /// GMI reliability is assessed per-period using context-appropriate recommended-day minimums
     /// (e.g., 1-day periods cannot require 14 days of data).
+    /// The cached value breaks the rule on <see cref="ITenantCache"/> for what a value may contain
+    /// (#2138).
     /// </remarks>
     [HttpGet("periods")]
     [RequireScope(Scope.GlucoseRead)]
@@ -825,12 +820,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        var cacheKey = $"statistics:multi-period:{TenantCacheId}";
+        const string cacheKey = $"{TenantCacheFamily.Statistics}:multi-period";
 
-        var useCache = !_categoryReadContext.BypassesTenantCaches;
-        var cachedResult = useCache
-            ? await _cacheService.GetAsync<MultiPeriodStatistics>(cacheKey, cancellationToken)
-            : null;
+        var cachedResult = await _cache.GetAsync<MultiPeriodStatistics>(cacheKey, cancellationToken);
         if (cachedResult != null)
         {
             return Ok(cachedResult);
@@ -964,8 +956,7 @@ public class StatisticsController : ControllerBase
         // Cache for 5 minutes — long enough to absorb rapid dashboard refreshes,
         // short enough that newly-imported connector data (basal StateSpans, etc.) appears promptly.
         var expiry = DateTime.UtcNow.AddMinutes(5);
-        if (useCache)
-            await _cacheService.SetAsync(cacheKey, result, expiry, cancellationToken);
+        await _cache.SetAsync(cacheKey, result, expiry, cancellationToken);
 
         return Ok(result);
     }

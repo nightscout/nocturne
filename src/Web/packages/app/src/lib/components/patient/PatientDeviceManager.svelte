@@ -27,6 +27,7 @@
   import {
     type PatientDevice,
     type DiscoveredSource,
+    type DeviceCatalogEntry,
     DeviceCategory,
     AidAlgorithm,
   } from "$api";
@@ -35,6 +36,8 @@
     aidAlgorithmLabels,
   } from "./labels";
   import { DeviceListState } from "./state.svelte";
+  import DeviceNameCombobox from "./DeviceNameCombobox.svelte";
+  import { trackerNote } from "./device-catalog";
 
   interface Props {
     /** "inline" = wizard-style card forms, "dialog" = settings-style dialog CRUD */
@@ -70,7 +73,22 @@
   let inlineCategory = $state("");
   let inlineManufacturer = $state("");
   let inlineModel = $state("");
+  let inlineCatalogId = $state("");
   let inlineAidAlgorithm = $state("");
+
+  const inlineEntry = $derived(deviceList.catalog.find((e) => e.id === inlineCatalogId));
+
+  function pickInline(entry: DeviceCatalogEntry) {
+    inlineCatalogId = entry.id ?? "";
+    inlineCategory = entry.category ?? inlineCategory;
+    inlineManufacturer = entry.manufacturer ?? "";
+    inlineModel = entry.name ?? "";
+  }
+
+  function nameInline(name: string) {
+    inlineCatalogId = "";
+    inlineModel = name;
+  }
 
   let showInlineAid = $derived(inlineCategory === DeviceCategory.InsulinPump);
   let canAddInline = $derived(
@@ -81,6 +99,7 @@
     inlineCategory = "";
     inlineManufacturer = "";
     inlineModel = "";
+    inlineCatalogId = "";
     inlineAidAlgorithm = "";
     showInlineForm = false;
   }
@@ -94,6 +113,7 @@
   let deviceCategory = $state<string>(DeviceCategory.InsulinPump);
   let deviceManufacturer = $state("");
   let deviceModel = $state("");
+  let deviceCatalogId = $state("");
   let deviceAidAlgorithm = $state<string>("");
   let deviceSerialNumber = $state("");
   let deviceStartDate = $state("");
@@ -102,6 +122,20 @@
   let deviceNotes = $state("");
 
   let showAidAlgorithm = $derived(deviceCategory === DeviceCategory.InsulinPump);
+
+  const dialogEntry = $derived(deviceList.catalog.find((e) => e.id === deviceCatalogId));
+
+  function pickDialog(entry: DeviceCatalogEntry) {
+    deviceCatalogId = entry.id ?? "";
+    deviceCategory = entry.category ?? deviceCategory;
+    deviceManufacturer = entry.manufacturer ?? "";
+    deviceModel = entry.name ?? "";
+  }
+
+  function nameDialog(name: string) {
+    deviceCatalogId = "";
+    deviceModel = name;
+  }
 
   const activeForm = $derived(editing?.id ? deviceList.updateForm : deviceList.createForm);
   const dialogSaving = $derived(!!deviceList.createForm.pending || !!deviceList.updateForm.pending);
@@ -115,6 +149,7 @@
       deviceCategory = device.deviceCategory ?? DeviceCategory.InsulinPump;
       deviceManufacturer = device.manufacturer ?? "";
       deviceModel = device.model ?? "";
+      deviceCatalogId = device.catalogId ?? "";
       deviceAidAlgorithm = device.aidAlgorithm ?? "";
       deviceSerialNumber = device.serialNumber ?? "";
       deviceStartDate = device.startDate
@@ -130,6 +165,7 @@
       deviceCategory = DeviceCategory.InsulinPump;
       deviceManufacturer = "";
       deviceModel = "";
+      deviceCatalogId = "";
       deviceAidAlgorithm = "";
       deviceSerialNumber = "";
       deviceStartDate = "";
@@ -233,9 +269,35 @@
       >
         <Card.Content class="@container space-y-4">
           <div class="grid gap-4 @sm:grid-cols-2">
+            <div class="space-y-2 @sm:col-span-2">
+              <Label for="device-name-inline">Device</Label>
+              <DeviceNameCombobox
+                id="device-name-inline"
+                catalog={deviceList.catalog}
+                value={inlineModel}
+                catalogId={inlineCatalogId}
+                onPick={pickInline}
+                onCustom={nameInline}
+              />
+              <input type="hidden" name="model" value={inlineModel} />
+              {#if inlineCatalogId}
+                <input type="hidden" name="catalogId" value={inlineCatalogId} />
+              {/if}
+              {#if trackerNote(inlineEntry)}
+                <p class="text-xs text-muted-foreground">{trackerNote(inlineEntry)}</p>
+              {/if}
+            </div>
+
             <div class="space-y-2">
               <Label for="device-category">Device Category</Label>
-              <Select.Root type="single" name="deviceCategory" bind:value={inlineCategory}>
+              <Select.Root
+                type="single"
+                name="deviceCategory"
+                bind:value={inlineCategory}
+                onValueChange={(v: string) => {
+                  if (inlineEntry && inlineEntry.category !== v) inlineCatalogId = "";
+                }}
+              >
                 <Select.Trigger id="device-category">
                   {inlineCategory
                     ? (labelFor(deviceCategoryLabels, inlineCategory) ?? inlineCategory)
@@ -255,17 +317,7 @@
                 name="manufacturer"
                 id="manufacturer"
                 bind:value={inlineManufacturer}
-                placeholder="e.g. Dexcom, Omnipod"
-              />
-            </div>
-
-            <div class="space-y-2">
-              <Label for="model">Model</Label>
-              <Input
-                name="model"
-                id="model"
-                bind:value={inlineModel}
-                placeholder="e.g. G7, DASH"
+                placeholder="e.g. Dexcom, Insulet"
               />
             </div>
 
@@ -472,8 +524,34 @@
         {/if}
         <div class="@container space-y-4 py-4">
           <div class="space-y-2">
+            <Label for="device-name">Device</Label>
+            <DeviceNameCombobox
+              id="device-name"
+              catalog={deviceList.catalog}
+              value={deviceModel}
+              catalogId={deviceCatalogId}
+              onPick={pickDialog}
+              onCustom={nameDialog}
+            />
+            <input type="hidden" name="{namePrefix}model" value={deviceModel} />
+            {#if deviceCatalogId}
+              <input type="hidden" name="{namePrefix}catalogId" value={deviceCatalogId} />
+            {/if}
+            {#if trackerNote(dialogEntry)}
+              <p class="text-xs text-muted-foreground">{trackerNote(dialogEntry)}</p>
+            {/if}
+          </div>
+
+          <div class="space-y-2">
             <Label for="device-category">Category</Label>
-            <Select.Root type="single" name="{namePrefix}deviceCategory" bind:value={deviceCategory}>
+            <Select.Root
+              type="single"
+              name="{namePrefix}deviceCategory"
+              bind:value={deviceCategory}
+              onValueChange={(v: string) => {
+                if (dialogEntry && dialogEntry.category !== v) deviceCatalogId = "";
+              }}
+            >
               <Select.Trigger id="device-category">
                 {labelFor(deviceCategoryLabels, deviceCategory) ?? deviceCategory}
               </Select.Trigger>
@@ -485,25 +563,14 @@
             </Select.Root>
           </div>
 
-          <div class="grid gap-4 @sm:grid-cols-2">
-            <div class="space-y-2">
-              <Label for="device-manufacturer">Manufacturer</Label>
-              <Input
-                name="{namePrefix}manufacturer"
-                id="device-manufacturer"
-                bind:value={deviceManufacturer}
-                placeholder="e.g. Medtronic, Dexcom"
-              />
-            </div>
-            <div class="space-y-2">
-              <Label for="device-model">Model</Label>
-              <Input
-                name="{namePrefix}model"
-                id="device-model"
-                bind:value={deviceModel}
-                placeholder="e.g. 780G, G7"
-              />
-            </div>
+          <div class="space-y-2">
+            <Label for="device-manufacturer">Manufacturer</Label>
+            <Input
+              name="{namePrefix}manufacturer"
+              id="device-manufacturer"
+              bind:value={deviceManufacturer}
+              placeholder="e.g. Medtronic, Dexcom"
+            />
           </div>
 
           {#if showAidAlgorithm}

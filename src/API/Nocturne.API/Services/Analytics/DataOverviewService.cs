@@ -2,13 +2,13 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Clinical.Statistics;
+using Nocturne.API.Services.Caching;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
-using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
@@ -29,14 +29,8 @@ public class DataOverviewService : IDataOverviewService
     private readonly INocturneDbContextFactory _factory;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly IStatisticsService _statisticsService;
-    private readonly ICacheService _cacheService;
-    private readonly ITenantAccessor _tenantAccessor;
-    private readonly ICategoryReadContext _categoryReadContext;
+    private readonly ITenantCache _cache;
     private readonly ILogger<DataOverviewService> _logger;
-
-    private string TenantCacheId =>
-        _tenantAccessor.Context?.TenantId.ToString()
-        ?? throw new InvalidOperationException("Tenant context is not resolved");
 
     /// <summary>
     /// Initializes a new instance of <see cref="DataOverviewService"/>.
@@ -46,27 +40,20 @@ public class DataOverviewService : IDataOverviewService
     /// the categories they were granted.</param>
     /// <param name="therapySettingsResolver">Resolver for the user's active timezone and therapy settings.</param>
     /// <param name="statisticsService">Statistics service for per-day metric aggregation.</param>
-    /// <param name="cacheService">Cross-request cache for the eHbA1c timeline, keyed per tenant and year.</param>
-    /// <param name="tenantAccessor">Resolves the current tenant for cache-key scoping.</param>
-    /// <param name="categoryReadContext">Says whether this request bypasses the timeline cache, per
-    /// <see cref="ICategoryReadContext.BypassesTenantCaches"/>.</param>
+    /// <param name="cache">Cross-request cache for the eHbA1c timeline, keyed per year and source.</param>
     /// <param name="logger">The logger instance.</param>
     public DataOverviewService(
         INocturneDbContextFactory factory,
         ITherapySettingsResolver therapySettingsResolver,
         IStatisticsService statisticsService,
-        ICacheService cacheService,
-        ITenantAccessor tenantAccessor,
-        ICategoryReadContext categoryReadContext,
+        ITenantCache cache,
         ILogger<DataOverviewService> logger
     )
     {
         _factory = factory;
         _therapySettingsResolver = therapySettingsResolver;
         _statisticsService = statisticsService;
-        _cacheService = cacheService;
-        _tenantAccessor = tenantAccessor;
-        _categoryReadContext = categoryReadContext;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -434,6 +421,38 @@ public class DataOverviewService : IDataOverviewService
     private const int EHbA1cMinimumReadings = 30;
 
     /// <summary>
+    /// The <see cref="ITenantCache"/> families holding every cached timeline a reading at any of
+    /// <paramref name="touchedUtc"/> feeds: the whole <see cref="TenantCacheFamily.EHbA1c"/> family
+    /// when none is given, otherwise one per year.
+    /// </summary>
+    /// <remarks>
+    /// Year <c>Y</c> reads local readings from <see cref="EHbA1cWindowDays"/> before 1 January of
+    /// <c>Y</c> up to the end of <c>Y</c>, so a reading feeds its own local year and the year
+    /// <see cref="EHbA1cWindowDays"/> later. A day either side absorbs the tenant's UTC offset and
+    /// a duplicate copy stamped moments apart, whose primary may change with the write. A timestamp
+    /// too near <see cref="DateTime.MinValue"/> or <see cref="DateTime.MaxValue"/> for that
+    /// arithmetic clears the whole family.
+    /// </remarks>
+    public static IReadOnlyList<string> EHbA1cCacheFamilies(IReadOnlyCollection<DateTime> touchedUtc)
+    {
+        if (touchedUtc.Count == 0 || touchedUtc.Any(t =>
+                t < DateTime.MinValue.AddDays(1) || t > DateTime.MaxValue.AddDays(-(EHbA1cWindowDays + 1))))
+            return [TenantCacheFamily.EHbA1c];
+
+        var years = new SortedSet<int>();
+        foreach (var timestamp in touchedUtc)
+        {
+            var last = timestamp.AddDays(EHbA1cWindowDays + 1).Year;
+            for (var year = timestamp.AddDays(-1).Year; year <= last; year++)
+                years.Add(year);
+        }
+
+        return [.. years.Select(EHbA1cCacheFamily)];
+    }
+
+    private static string EHbA1cCacheFamily(int year) => $"{TenantCacheFamily.EHbA1c}:{year}";
+
+    /// <summary>
     /// Per-day decay ratio for the recency weighting: the largest <c>r &lt; 1</c> such that the most
     /// recent 30 days already carry half of the full 90-day weight — a smooth, per-day generalisation
     /// of the textbook "50% last month / 25% / 25%" HbA1c teaching, without computing it in three
@@ -465,14 +484,9 @@ public class DataOverviewService : IDataOverviewService
         var sourceKey = dataSources is { Length: > 0 }
             ? string.Join(",", dataSources.OrderBy(s => s, StringComparer.OrdinalIgnoreCase))
             : "all";
-        var cacheKey = $"ehba1c:{TenantCacheId}:{year}:{sourceKey}";
+        var cacheKey = $"{EHbA1cCacheFamily(year)}:{sourceKey}";
 
-        // Computed once per tenant/year/source combination and reused until it expires below —
-        // only a cache miss (new day, first view, or expiry) triggers recomputation.
-        var useCache = !_categoryReadContext.BypassesTenantCaches;
-        var cached = useCache
-            ? await _cacheService.GetAsync<EHbA1cTimelineResponse>(cacheKey, cancellationToken)
-            : null;
+        var cached = await _cache.GetAsync<EHbA1cTimelineResponse>(cacheKey, cancellationToken);
         if (cached != null)
             return cached;
 
@@ -543,11 +557,10 @@ public class DataOverviewService : IDataOverviewService
             return response;
 
         var isCurrentYear = year == localNow.Year;
-        // Completed years don't change (barring rare backfills), so cache them for a long time; the
-        // current year is still accumulating days, so refresh it more often.
+        // Only V4 sensor and meter glucose writes clear a completed year (EHbA1cCacheFamilies);
+        // any other glucose writer's backfill shows once the 14 days run out.
         var expiry = isCurrentYear ? DateTime.UtcNow.AddHours(1) : DateTime.UtcNow.AddDays(14);
-        if (useCache)
-            await _cacheService.SetAsync(cacheKey, response, expiry, cancellationToken);
+        await _cache.SetAsync(cacheKey, response, expiry, cancellationToken);
 
         return response;
     }

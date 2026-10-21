@@ -18,6 +18,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Tests.Services.Analytics;
 
@@ -48,17 +49,12 @@ public class DataOverviewServiceNonPrimarySqlTests : IDisposable
         therapySettings
             .Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string?)null);
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(a => a.Context)
-            .Returns(new TenantContext(TenantId, "test", "Test", true, false));
 
         _service = new DataOverviewService(
             new TestNocturneDbContextFactory(_context),
             therapySettings.Object,
             new Mock<IStatisticsService>().Object,
-            new Mock<ICacheService>().Object,
-            tenantAccessor.Object,
-            new CategoryReadContext(),
+            Mock.Of<ITenantCache>(),
             NullLogger<DataOverviewService>.Instance);
     }
 

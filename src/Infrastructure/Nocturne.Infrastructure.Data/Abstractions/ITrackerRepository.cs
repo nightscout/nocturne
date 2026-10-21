@@ -181,7 +181,7 @@ public interface ITrackerRepository
 
     /// <summary>
     /// Runs <paramref name="work"/> in one transaction holding the definition's lock, so that
-    /// writers succeeding one tracker's run take turns across replicas.
+    /// writers succeeding one tracker's run take turns.
     /// </summary>
     /// <remarks>
     /// <paramref name="work"/> can run more than once when the store retries a transient failure.

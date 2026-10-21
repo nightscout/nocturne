@@ -469,28 +469,18 @@ export function createChartDataView(
   });
 
   // ---- Stale basal detection ----
-  const lastBasalSourceTime = $derived.by(() => {
-    if (displayBasalDeliverySpans.length === 0) return 0;
-    let latestEndTime = 0;
-    for (const span of displayBasalDeliverySpans) {
-      const endTime = span.endTime?.getTime() ?? span.startTime.getTime();
-      if (endTime > latestEndTime) {
-        latestEndTime = endTime;
-      }
-    }
-    return latestEndTime;
-  });
+  const lastPumpSyncTime = $derived(serverChartData?.lastPumpSyncMills ?? 0);
 
   const staleBasalData = $derived.by(() => {
-    if (lastBasalSourceTime === 0) return null;
+    if (lastPumpSyncTime === 0) return null;
     const rangeEndTime = displayDateRange.to.getTime();
-    const timeSinceLastUpdate = rangeEndTime - lastBasalSourceTime;
+    const timeSinceLastUpdate = rangeEndTime - lastPumpSyncTime;
     const rangeStartTime = displayDateRange.from.getTime();
     if (
       timeSinceLastUpdate > STALE_THRESHOLD_MS &&
-      lastBasalSourceTime >= rangeStartTime
+      lastPumpSyncTime >= rangeStartTime
     ) {
-      return dateSpan(lastBasalSourceTime, rangeEndTime);
+      return dateSpan(lastPumpSyncTime, rangeEndTime);
     }
     return null;
   });

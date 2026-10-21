@@ -10,7 +10,6 @@
   import BatteryLow from "@lucide/svelte/icons/battery-low";
   import BatteryMedium from "@lucide/svelte/icons/battery-medium";
   import BatteryWarning from "@lucide/svelte/icons/battery-warning";
-  import Zap from "@lucide/svelte/icons/zap";
   import Wifi from "@lucide/svelte/icons/wifi";
   import WifiOff from "@lucide/svelte/icons/wifi-off";
   import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
@@ -87,7 +86,7 @@
   </div>
 
   <!-- Last updated info with battery -->
-  {#if !batteryStatusPromise}
+  {#await batteryStatusPromise}
     <div
       class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
     >
@@ -98,66 +97,52 @@
         {time(displayLastUpdated)}
       </span>
     </div>
-  {:else}
-    {#await batteryStatusPromise}
-      <div
-        class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
-      >
-        <span class="text-xs text-muted-foreground">
-          {age}
+  {:then currentStatus}
+    {@const hasDevices =
+      currentStatus && Object.keys(currentStatus.devices ?? {}).length > 0}
+    <div
+      class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
+    >
+      <span class="text-xs text-muted-foreground">
+        {age}
+      </span>
+      {#if hasDevices && currentStatus?.min}
+        <span
+          class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium {currentStatus.status ===
+          'urgent'
+            ? 'bg-destructive/20 text-destructive'
+            : currentStatus.status === 'warn'
+              ? 'bg-warning/20 text-warning'
+              : 'bg-success/20 text-success'}"
+        >
+          {#if currentStatus.min.isCharging}
+            <BatteryCharging class="h-3 w-3" />
+          {:else}
+            {@const IconComponent = getBatteryIconComponent(
+              currentStatus.level
+            )}
+            <IconComponent class="h-3 w-3" />
+          {/if}
+          {currentStatus.min.battery != null
+            ? `${currentStatus.min.battery}%`
+            : currentStatus.display}
         </span>
-        <span class="text-xs text-muted-foreground">
-          {time(displayLastUpdated)}
-        </span>
-      </div>
-    {:then currentStatus}
-      {@const hasDevices =
-        currentStatus && Object.keys(currentStatus.devices ?? {}).length > 0}
-      <div
-        class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
-      >
-        <span class="text-xs text-muted-foreground">
-          {age}
-        </span>
-        {#if hasDevices && currentStatus?.min}
-          <span
-            class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium {currentStatus.status ===
-            'urgent'
-              ? 'bg-destructive/20 text-destructive'
-              : currentStatus.status === 'warn'
-                ? 'bg-warning/20 text-warning'
-                : 'bg-success/20 text-success'}"
-          >
-            {#if currentStatus.min.isCharging}
-              <BatteryCharging class="h-3 w-3" />
-            {:else}
-              {@const IconComponent = getBatteryIconComponent(
-                currentStatus.level
-              )}
-              <IconComponent class="h-3 w-3" />
-            {/if}
-            {currentStatus.display}
-            {#if currentStatus.min.isCharging}
-              <Zap class="h-3 w-3" />
-            {/if}
-          </span>
-        {:else}
-          <span class="text-xs text-muted-foreground">
-            {time(displayLastUpdated)}
-          </span>
-        {/if}
-      </div>
-    {:catch}
-      <div
-        class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
-      >
-        <span class="text-xs text-muted-foreground">
-          {age}
-        </span>
+      {:else}
         <span class="text-xs text-muted-foreground">
           {time(displayLastUpdated)}
         </span>
-      </div>
-    {/await}
-  {/if}
+      {/if}
+    </div>
+  {:catch}
+    <div
+      class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
+    >
+      <span class="text-xs text-muted-foreground">
+        {age}
+      </span>
+      <span class="text-xs text-muted-foreground">
+        {time(displayLastUpdated)}
+      </span>
+    </div>
+  {/await}
 </WidgetCard>

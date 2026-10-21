@@ -55,6 +55,7 @@ internal sealed class DataFetchStage(
     IDeviceEventRepository deviceEventRepository,
     ITempBasalRepository tempBasalRepository,
     IApsSnapshotRepository apsSnapshotRepository,
+    IPumpSnapshotRepository pumpSnapshotRepository,
     IStateSpanRepository stateSpanRepository,
     ISystemEventRepository systemEventRepository,
     ITrackerRepository trackerRepository,
@@ -187,6 +188,11 @@ internal sealed class DataFetchStage(
             ct: cancellationToken
         );
 
+        var latestPumpSnapshotTask = pumpSnapshotRepository.GetLatestAsync(
+            asOf: MillsToDateTime(endTime),
+            ct: cancellationToken
+        );
+
         var sleepSessionTask = sleepService.GetSessionsAsync(
             from: MillsToDateTime(startTime),
             to: MillsToDateTime(endTime),
@@ -267,7 +273,7 @@ internal sealed class DataFetchStage(
 
         await Task.WhenAll(
             sensorGlucoseTask, bolusTask, carbIntakeTask, bgCheckTask, deviceEventTask,
-            basalInjectionTask, tempBasalTask, apsSnapshotTask, sleepSessionTask, scopedTask);
+            basalInjectionTask, tempBasalTask, apsSnapshotTask, latestPumpSnapshotTask, sleepSessionTask, scopedTask);
 
         var sensorGlucoseList = await sensorGlucoseTask;
         var bolusList = (await bolusTask).ToList();
@@ -317,6 +323,7 @@ internal sealed class DataFetchStage(
             TempBasalList = tempBasalList,
             DisplayTempBasals = displayTempBasals,
             ApsSnapshotList = apsSnapshotList,
+            LatestPumpSnapshot = await latestPumpSnapshotTask,
             BasalInjectionList = basalInjectionList,
             SleepSessions = sleepSessionList,
         };

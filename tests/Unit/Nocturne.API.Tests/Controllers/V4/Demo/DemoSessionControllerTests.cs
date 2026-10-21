@@ -11,13 +11,13 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 using Nocturne.API.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Tests.Controllers.V4.Demo;
 
@@ -219,7 +219,7 @@ public class DemoSessionControllerTests : IDisposable
             BuildDbFactory().AsNocturneFactory(),
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),
-            new Mock<ICacheService>().Object,
+            Mock.Of<ITenantCache>(),
             new Mock<ILogger<DemoTenantService>>().Object);
 
         var controller = new DemoSessionController(

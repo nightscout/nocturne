@@ -58,6 +58,7 @@ public class AnalyticsReadScopeGuardTests
         BasalInjectionMarkers = [new BasalInjectionMarkerDto { Id = "i", Time = 1 }],
         TempBasalSpans = [new ChartStateSpanDto { Id = "tb" }],
         BasalDeliverySpans = [new BasalDeliverySpanDto { Id = "bd" }],
+        LastPumpSyncMills = 1,
         DefaultBasalRate = 0.9,
         MaxBasalRate = 1.2,
         MaxIob = 4,
@@ -141,6 +142,17 @@ public class AnalyticsReadScopeGuardTests
         var sleep = ChartDataReadScopeGuard.Redact(
             OneRecordPerCategory(), Granted(Scope.SleepRead));
         sleep.ActivitySpans.Should().ContainSingle().Which.Id.Should().Be("sl");
+    }
+
+    [Fact]
+    public void ChartData_LastPumpSync_NeedsBothTheBasalAndThePumpStatusScopes()
+    {
+        ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.TreatmentsRead))
+            .LastPumpSyncMills.Should().BeNull();
+        ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.DevicesRead))
+            .LastPumpSyncMills.Should().BeNull();
+        ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.TreatmentsRead, Scope.DevicesRead))
+            .LastPumpSyncMills.Should().Be(1);
     }
 
     [Fact]

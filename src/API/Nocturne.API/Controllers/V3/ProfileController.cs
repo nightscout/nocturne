@@ -90,7 +90,12 @@ public class ProfileController : BaseV3Controller<Profile>
 
             // CreateV3CollectionResponse returns the {status, result} envelope IActionResult;
             // wrapping it in Ok(...) again would serialize the ActionResult object itself.
-            return (ActionResult)CreateV3CollectionResponse(profilesList, parameters, totalCount);
+            return (ActionResult)CreateV3CollectionResponse(
+                profilesList.Select(p => ToV3Document(p, p.Id)).ToList(),
+                parameters,
+                totalCount,
+                lastModified
+            );
         }
         catch (ArgumentException ex)
         {
@@ -143,7 +148,7 @@ public class ProfileController : BaseV3Controller<Profile>
         // a parseable cursor ETag.
         SetHistoryCursorHeaders(page.CursorMills ?? lastModified);
 
-        return CreateV3SuccessResponse(page.Records);
+        return CreateV3SuccessResponse(page.Records.Select(p => ToV3Document(p, p.Id)).ToList());
     }
 
     /// <summary>
@@ -182,7 +187,8 @@ public class ProfileController : BaseV3Controller<Profile>
         }
 
         var parameters = ParseV3QueryParameters(); // Apply field selection if specified
-        var result = ApplyFieldSelection(new[] { profile }, parameters.Fields).FirstOrDefault();
+        var result = ApplyFieldSelection(new[] { ToV3Document(profile, profile.Id) }, parameters.Fields)
+            .FirstOrDefault();
 
         _logger.LogDebug("Successfully returned profile with ID {Id}", id);
 

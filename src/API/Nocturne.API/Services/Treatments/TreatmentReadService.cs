@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -101,32 +102,21 @@ public class TreatmentReadService : ITreatmentStore
     private async Task<IReadOnlyList<Treatment>> QueryFilteredAsync(
         FindQuery find, int count, int skip, CancellationToken ct)
     {
-        var needed = (long)count + skip;
-        var fetchLimit = (int)Math.Min(Math.Max(needed * 4, 100), MaxFilterFetch);
+        var (matching, truncated) = await FindFilteredFetch.MatchWindowAsync<Treatment>(
+            async limit => (await _projection.GetProjectedTreatmentsAsync(
+                find.FromMills, find.ToMills, limit, nativeOnly: false, ct: ct)).ToList(),
+            find.Matches, (long)count + skip, MaxFilterFetch);
 
-        while (true)
-        {
-            var projected = (await _projection.GetProjectedTreatmentsAsync(
-                find.FromMills, find.ToMills, fetchLimit, nativeOnly: false, ct: ct)).ToList();
+        if (truncated)
+            _logger.LogWarning(
+                "Find-filtered treatment query hit the {MaxFetch}-row window; older matches are not returned",
+                MaxFilterFetch);
 
-            var matching = projected.Where(find.Matches).ToList();
-            var exhausted = projected.Count < fetchLimit || fetchLimit >= MaxFilterFetch;
-            if (matching.Count >= needed || exhausted)
-            {
-                if (matching.Count < needed && projected.Count >= fetchLimit)
-                    _logger.LogWarning(
-                        "Find-filtered treatment query hit the {MaxFetch}-row window; older matches are not returned",
-                        MaxFilterFetch);
-
-                return matching
-                    .OrderByDescending(t => t.Mills)
-                    .Skip(skip)
-                    .Take(count)
-                    .ToList();
-            }
-
-            fetchLimit = (int)Math.Min((long)fetchLimit * 4, MaxFilterFetch);
-        }
+        return matching
+            .OrderByDescending(t => t.Mills)
+            .Skip(skip)
+            .Take(count)
+            .ToList();
     }
 
     /// <inheritdoc />

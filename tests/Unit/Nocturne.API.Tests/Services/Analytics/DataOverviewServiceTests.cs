@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Tests.Services.Analytics;
 
@@ -26,10 +27,9 @@ public class DataOverviewServiceTests : IDisposable
 {
     private readonly NocturneDbContext _dbContext;
     private readonly DataOverviewService _service;
-    private readonly Mock<ICacheService> _cacheService = new();
+    private readonly Mock<ITenantCache> _cacheService = new();
     private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
     private readonly Mock<INocturneDbContextFactory> _factory = new();
-    private readonly CategoryReadContext _categoryReadContext = new();
     private readonly ListLogger<DataOverviewService> _logger = new();
     private IInterceptor[] _interceptors = [];
     private readonly string _dbName = $"data_overview_{Guid.NewGuid()}";
@@ -67,15 +67,11 @@ public class DataOverviewServiceTests : IDisposable
 
         _therapySettings.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         var mockStatisticsService = new Mock<IStatisticsService>();
-        var mockTenantAccessor = new Mock<ITenantAccessor>();
-        mockTenantAccessor.SetupGet(a => a.Context).Returns(new TenantContext(TenantId, "test-tenant", "Test Tenant", true, false));
         _service = new DataOverviewService(
             _factory.Object,
             _therapySettings.Object,
             mockStatisticsService.Object,
             _cacheService.Object,
-            mockTenantAccessor.Object,
-            _categoryReadContext,
             _logger
         );
     }
@@ -1645,7 +1641,7 @@ public class DataOverviewServiceTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetEHbA1cTimelineAsync_Unclamped_ServesTheTenantCache()
+    public async Task GetEHbA1cTimelineAsync_ServesTheTenantCache()
     {
         var cached = new EHbA1cTimelineResponse { Year = 2024 };
         _cacheService
@@ -1655,21 +1651,6 @@ public class DataOverviewServiceTests : IDisposable
         var result = await _service.GetEHbA1cTimelineAsync(2024);
 
         result.Should().BeSameAs(cached);
-    }
-
-    [Theory]
-    [Trait("Category", "Unit")]
-    [MemberData(nameof(CacheBypassingCallers.All), MemberType = typeof(CacheBypassingCallers))]
-    public async Task GetEHbA1cTimelineAsync_BypassingCaller_NeitherReadsNorWritesTheCache(string caller)
-    {
-        _cacheService
-            .Setup(c => c.GetAsync<EHbA1cTimelineResponse>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new EHbA1cTimelineResponse { Year = 2024 });
-        CacheBypassingCallers.Become(_categoryReadContext, caller);
-
-        await _service.GetEHbA1cTimelineAsync(2024);
-
-        _cacheService.Invocations.Should().BeEmpty();
     }
 
     [Fact]
