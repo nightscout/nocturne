@@ -897,7 +897,7 @@ export function defaultChannels(): ChannelDef[] {
 	return [
 		{
 			_uid: newUid(),
-			channelType: ChannelType.WebPush,
+			channelType: ChannelType.InApp,
 			destination: "",
 			destinationLabel: "",
 		},
@@ -1023,7 +1023,7 @@ export function parseRule(r: AlertRuleResponse | null): RuleEditorState {
 			.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
 			.map((c) => ({
 				_uid: newUid(),
-				channelType: c.channelType ?? ChannelType.WebPush,
+				channelType: c.channelType ?? ChannelType.InApp,
 				destination: c.destination ?? "",
 				destinationLabel: c.destinationLabel ?? "",
 				metadata: parseChannelMetadata(c.metadata),

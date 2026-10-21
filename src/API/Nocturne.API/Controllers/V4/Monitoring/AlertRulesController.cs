@@ -494,7 +494,9 @@ public class AlertRulesController : ControllerBase
 
     /// <summary>
     /// Fills in a DM channel's destination from the caller's linked identity on that channel's
-    /// platform and rejects a channel list whose destinations cannot deliver: a
+    /// platform, routes an in-app channel to the caller unless it names another member, and
+    /// rejects a channel list whose destinations cannot deliver: an in-app channel naming no
+    /// member, a
     /// <c>device_action</c> channel naming an unknown kind or capability, a channel type with no
     /// delivery path, a channel type that needs a destination and was given none, or a destination
     /// the platform adapter cannot address. Nothing downstream inspects a destination, so an
@@ -534,6 +536,26 @@ public class AlertRulesController : ControllerBase
                     message = $"A {WireName(ch.ChannelType)} channel has no delivery path. Use "
                         + $"{string.Join(" or ", replacements.Select(WireName))} instead.",
                 });
+            }
+
+            if (ChannelDestinations.RoutesToMember(ch.ChannelType))
+            {
+                var blank = string.IsNullOrWhiteSpace(ch.Destination);
+                var member = await ResolveMemberDestinationAsync(db, ch.Destination, ct);
+                if (member is null)
+                {
+                    return BadRequest(new
+                    {
+                        message = blank
+                            ? $"A {WireName(ch.ChannelType)} channel is delivered to the member who "
+                                + "saves it, and this caller is not a member of this site."
+                            : $"A {WireName(ch.ChannelType)} channel's destination must be the subject "
+                                + $"id of a member of this site; got '{ch.Destination}'.",
+                    });
+                }
+
+                ch.Destination = member;
+                continue;
             }
 
             if (ChannelDestinations.ResolvesFromLinkedIdentity(ch.ChannelType)
@@ -659,6 +681,22 @@ public class AlertRulesController : ControllerBase
             .OrderBy(d => d.CreatedAt)
             .Select(d => d.PlatformUserId)
             .FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>
+    /// The subject id an in-app channel delivers to: the named subject, or the caller when none is
+    /// named, provided <see cref="InAppRecipients.ResolveAsync"/> accepts it.
+    /// </summary>
+    private async Task<string?> ResolveMemberDestinationAsync(
+        NocturneDbContext db, string? destination, CancellationToken ct)
+    {
+        var named = string.IsNullOrWhiteSpace(destination)
+            ? HttpContext?.GetSubjectId()?.ToString()
+            : destination;
+
+        return await InAppRecipients.ResolveAsync(db, db.TenantId, named, ct) is { } subjectId
+            ? subjectId.ToString()
+            : null;
     }
 
     /// <summary>Serialised name of a channel type, so error text matches the request wire format.</summary>

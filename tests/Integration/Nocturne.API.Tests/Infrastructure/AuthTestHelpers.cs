@@ -600,8 +600,8 @@ public static class AuthTestHelpers
             Id = Guid.CreateVersion7(),
             TenantId = tenantId,
             AlertRuleId = rule.Id,
-            ChannelType = ChannelType.WebPush,
-            Destination = "default",
+            ChannelType = ChannelType.InApp,
+            Destination = Guid.CreateVersion7().ToString(),
         });
         await db.SaveChangesAsync();
         return rule.Id;

@@ -185,27 +185,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
                     UpdatedAt = DateTime.UtcNow,
                 };
 
-                created.Channels.Add(new AlertRuleChannelEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenantId,
-                    AlertRuleId = created.Id,
-                    ChannelType = ChannelType.InApp,
-                    SortOrder = 0,
-                    CreatedAt = DateTime.UtcNow,
-                });
-                if (threshold.PushEnabled)
-                {
-                    created.Channels.Add(new AlertRuleChannelEntity
-                    {
-                        Id = Guid.CreateVersion7(),
-                        TenantId = tenantId,
-                        AlertRuleId = created.Id,
-                        ChannelType = ChannelType.WebPush,
-                        SortOrder = 1,
-                        CreatedAt = DateTime.UtcNow,
-                    });
-                }
+                created.Channels.Add(OwnerInAppChannel(tenantId, created.Id, definition));
 
                 db.AlertRules.Add(created);
                 threshold.AlertRuleId = created.Id;
@@ -357,18 +337,26 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
-        created.Channels.Add(new AlertRuleChannelEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenantId,
-            AlertRuleId = created.Id,
-            ChannelType = ChannelType.InApp,
-            SortOrder = 0,
-            CreatedAt = DateTime.UtcNow,
-        });
+        created.Channels.Add(OwnerInAppChannel(tenantId, created.Id, definition));
         db.AlertRules.Add(created);
         keptRuleIds.Add(created.Id);
     }
+
+    /// <summary>
+    /// The in-app channel a synced rule is created with, delivered to the member who owns the
+    /// tracker definition. A sync runs outside the rule editor, so nothing else fills it in.
+    /// </summary>
+    private static AlertRuleChannelEntity OwnerInAppChannel(
+        Guid tenantId, Guid ruleId, TrackerDefinitionEntity definition) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        TenantId = tenantId,
+        AlertRuleId = ruleId,
+        ChannelType = ChannelType.InApp,
+        Destination = definition.UserId,
+        SortOrder = 0,
+        CreatedAt = DateTime.UtcNow,
+    };
 
     /// <summary>
     /// The baked minutes of a managed rule's stored condition, or null when the stored

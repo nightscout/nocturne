@@ -41,17 +41,11 @@ export interface ChannelMetaEntry {
 /** All known channel kinds. Kept in display order for the picker. */
 export const CHANNEL_META: ChannelMetaEntry[] = [
   {
-    type: ChannelType.WebPush,
-    label: "Browser Push",
-    description: "Receive alerts directly in your browser",
-    icon: Bell,
-  },
-  {
     type: ChannelType.InApp,
     label: "In-App",
     description: "Show alerts in the Nocturne notification centre",
     icon: BellRing,
-    destinationHelper: "Routed to your account automatically.",
+    destinationHelper: "Sent to the notification centre of the member who added it.",
   },
   {
     type: ChannelType.Webhook,

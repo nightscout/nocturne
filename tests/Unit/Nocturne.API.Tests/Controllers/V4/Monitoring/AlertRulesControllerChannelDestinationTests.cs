@@ -9,6 +9,7 @@ using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -34,7 +35,8 @@ public class AlertRulesControllerChannelDestinationTests
     private const string SlackMemberId = "U00FAKEUSER1";
     private const string TelegramUserId = "864203571";
 
-    private static (AlertRulesController Controller, NocturneDbContext Db) CreateController()
+    private static (AlertRulesController Controller, NocturneDbContext Db) CreateController(
+        IAlertDeliveryService? deliveryService = null)
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -44,7 +46,7 @@ public class AlertRulesControllerChannelDestinationTests
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(ctx),
             Mock.Of<IAlertReferenceService>(),
-            Mock.Of<IAlertDeliveryService>(),
+            deliveryService ?? Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
             new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
@@ -277,6 +279,7 @@ public class AlertRulesControllerChannelDestinationTests
     [Theory]
     [InlineData(ChannelType.Telegram, "telegram_dm")]
     [InlineData(ChannelType.WhatsApp, "whatsapp_dm")]
+    [InlineData(ChannelType.WebPush, "in_app")]
     public async Task CreateRule_rejects_a_channel_type_with_no_delivery_path(
         ChannelType channelType, string replacement)
     {
@@ -347,19 +350,138 @@ public class AlertRulesControllerChannelDestinationTests
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    private static async Task AddMemberAsync(NocturneDbContext db, Guid subjectId, bool isSystemSubject = false)
+    {
+        db.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId,
+            Name = subjectId.ToString(),
+            IsSystemSubject = isSystemSubject,
+        });
+        db.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = Tenant,
+            SubjectId = subjectId,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static AlertRuleChannelResponse SingleChannel(ActionResult<AlertRuleResponse> result) =>
+        result.Result.Should().BeOfType<CreatedAtActionResult>()
+            .Subject.Value.Should().BeOfType<AlertRuleResponse>()
+            .Subject.Channels.Should().ContainSingle().Subject;
+
     [Fact]
-    public async Task CreateRule_keeps_saving_channels_that_need_no_destination()
+    public async Task CreateRule_routes_an_in_app_channel_to_the_caller()
+    {
+        var (controller, db) = CreateController();
+        await AddMemberAsync(db, Subject);
+
+        var result = await controller.CreateRule(RuleWith(ChannelType.InApp, null), CancellationToken.None);
+
+        var channel = SingleChannel(result);
+        channel.ChannelType.Should().Be(ChannelType.InApp);
+        channel.Destination.Should().Be(Subject.ToString());
+    }
+
+    [Fact]
+    public async Task CreateRule_keeps_an_in_app_channel_routed_to_another_member()
+    {
+        var (controller, db) = CreateController();
+        var caregiver = Guid.CreateVersion7();
+        await AddMemberAsync(db, Subject);
+        await AddMemberAsync(db, caregiver);
+
+        var result = await controller.CreateRule(
+            RuleWith(ChannelType.InApp, caregiver.ToString()), CancellationToken.None);
+
+        SingleChannel(result).Destination.Should().Be(caregiver.ToString());
+    }
+
+    [Fact]
+    public async Task CreateRule_rejects_an_in_app_channel_routed_to_someone_outside_the_tenant()
+    {
+        var (controller, db) = CreateController();
+        await AddMemberAsync(db, Subject);
+        var outsider = Guid.CreateVersion7();
+        db.Subjects.Add(new SubjectEntity { Id = outsider, Name = "Outsider" });
+        db.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = Guid.CreateVersion7(),
+            SubjectId = outsider,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await controller.CreateRule(
+            RuleWith(ChannelType.InApp, outsider.ToString()), CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Theory]
+    [InlineData("user-1")]
+    [InlineData("default")]
+    public async Task CreateRule_rejects_an_in_app_destination_that_is_not_a_subject_id(string destination)
+    {
+        var (controller, db) = CreateController();
+        await AddMemberAsync(db, Subject);
+
+        var result = await controller.CreateRule(RuleWith(ChannelType.InApp, destination), CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task CreateRule_rejects_an_in_app_channel_routed_to_a_system_subject()
+    {
+        var (controller, db) = CreateController();
+        var devices = Guid.CreateVersion7();
+        await AddMemberAsync(db, Subject);
+        await AddMemberAsync(db, devices, isSystemSubject: true);
+
+        var result = await controller.CreateRule(
+            RuleWith(ChannelType.InApp, devices.ToString()), CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task CreateRule_rejects_an_in_app_channel_when_the_caller_is_not_a_member()
     {
         var (controller, _) = CreateController();
 
-        var result = await controller.CreateRule(
-            RuleWith(ChannelType.InApp, null),
+        var result = await controller.CreateRule(RuleWith(ChannelType.InApp, null), CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task TestFireDryRun_fires_an_in_app_channel_at_the_caller()
+    {
+        var delivery = new Mock<IAlertDeliveryService>();
+        IReadOnlyList<AlertRuleChannelSnapshot>? fired = null;
+        delivery
+            .Setup(d => d.TestFireDryRunAsync(
+                It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
+                It.IsAny<AlertPayload>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<AlertRuleChannelSnapshot>, AlertPayload, CancellationToken>(
+                (channels, _, _) => fired = channels)
+            .Returns(Task.CompletedTask);
+        var (controller, db) = CreateController(delivery.Object);
+        await AddMemberAsync(db, Subject);
+
+        var result = await controller.TestFireDryRun(
+            new TestFireDryRunRequest("Low", AlertRuleSeverity.Warning,
+            [
+                new CreateAlertRuleChannelRequest { ChannelType = ChannelType.InApp },
+            ]),
             CancellationToken.None);
 
-        var created = result.Result.Should().BeOfType<CreatedAtActionResult>()
-            .Subject.Value.Should().BeOfType<AlertRuleResponse>().Subject;
-        created.Channels.Should().ContainSingle()
-            .Which.ChannelType.Should().Be(ChannelType.InApp);
+        result.Should().BeOfType<AcceptedResult>();
+        fired.Should().ContainSingle().Which.Destination.Should().Be(Subject.ToString());
     }
 
     [Fact]

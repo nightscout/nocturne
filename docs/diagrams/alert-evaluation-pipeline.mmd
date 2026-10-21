@@ -75,7 +75,7 @@ flowchart TD
     subgraph delivery ["Step 0 dispatch (and escalation advance)"]
         direction TB
         Dispatch["<b>AlertDeliveryService</b><br/>DispatchAsync(instanceId, stepOrder, payload)<br/>Quiet hours, severity-bypass,<br/>per-channel delivery records"]
-        Channels["WebPushProvider<br/>InAppProvider<br/>WebhookProvider<br/>ChatBotProvider"]
+        Channels["InAppProvider<br/>WebhookProvider<br/>ChatBotProvider"]
         BroadcastDispatch["broadcastService<br/>BroadcastAlertEventAsync('alert_dispatch')"]
 
         Dispatch --> Channels

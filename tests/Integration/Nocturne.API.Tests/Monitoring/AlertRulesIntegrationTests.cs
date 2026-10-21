@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.EntityFrameworkCore;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
@@ -17,6 +18,7 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 public class AlertRulesIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
+    private Guid _subjectId;
     private string _accessToken = null!;
 
     public AlertRulesIntegrationTests(
@@ -39,7 +41,7 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
         await conn.OpenAsync();
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
-        (_, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "AlertRules Test User");
+        (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "AlertRules Test User");
 
         Log($"Seeded tenant {_tenantId}");
     }
@@ -54,7 +56,7 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
         sortOrder = 0,
         channels = new[]
         {
-            new { channelType = "web_push", destination = "default" }
+            new { channelType = "in_app", destination = "" }
         }
     };
 
@@ -165,8 +167,8 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
         body.GetProperty("channels").GetArrayLength().Should().BeGreaterThan(0);
 
         var channel = body.GetProperty("channels")[0];
-        channel.GetProperty("channelType").GetString().Should().Be("web_push");
-        channel.GetProperty("destination").GetString().Should().Be("default");
+        channel.GetProperty("channelType").GetString().Should().Be("in_app");
+        channel.GetProperty("destination").GetString().Should().Be(_subjectId.ToString(), "an in-app channel saved blank goes to the member who saved it");
     }
 
     [Fact]
@@ -303,7 +305,7 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
             sortOrder = 0,
             channels = new[]
             {
-                new { channelType = "web_push", destination = "default" },
+                new { channelType = "in_app", destination = "" },
                 new { channelType = "webhook", destination = "https://example.com/webhook" }
             }
         };
@@ -328,10 +330,60 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
             .ToList();
         channels.Should().HaveCount(2);
 
-        channels[0].GetProperty("channelType").GetString().Should().Be("web_push");
-        channels[0].GetProperty("destination").GetString().Should().Be("default");
+        channels[0].GetProperty("channelType").GetString().Should().Be("in_app");
+        channels[0].GetProperty("destination").GetString().Should().Be(_subjectId.ToString(), "an in-app channel saved blank goes to the member who saved it");
 
         channels[1].GetProperty("channelType").GetString().Should().Be("webhook");
         channels[1].GetProperty("destination").GetString().Should().Be("https://example.com/webhook");
+    }
+
+    [Fact]
+    public async Task TestFire_InAppChannelSavedBlank_ReachesTheSaversNotificationCentre()
+    {
+        // Arrange
+        using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
+        var createResponse = await client.PostAsJsonAsync(
+            "/api/v4/alert-rules", CreateValidAlertRulePayload("Reaches the saver"));
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await createResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var ruleId = created.GetProperty("id").GetGuid();
+
+        // Act
+        var fire = await client.PostAsync($"/api/v4/alert-rules/{ruleId}/test-fire", null);
+
+        // Assert
+        fire.StatusCode.Should().Be(HttpStatusCode.Accepted);
+
+        var notifications = await client.GetFromJsonAsync<JsonElement>("/api/v4/notifications");
+        notifications.EnumerateArray()
+            .Select(n => n.GetProperty("title").GetString())
+            .Should().Contain("[Test] Reaches the saver");
+
+        await using var db = Fixture.CreateDbContext(_tenantId);
+        var deliveries = await db.AlertDeliveries
+            .Where(d => db.AlertRuleChannels.Any(c => c.Id == d.AlertRuleChannelId && c.AlertRuleId == ruleId))
+            .Select(d => new { d.Status, d.Destination })
+            .ToListAsync();
+        deliveries.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new { Status = "delivered", Destination = _subjectId.ToString() });
+    }
+
+    [Fact]
+    public async Task CreateAlertRule_WebPushChannel_IsRejectedWithItsReplacement()
+    {
+        using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
+        var payload = new
+        {
+            name = "Browser push",
+            conditionType = "threshold",
+            conditionParams = new { direction = "above", value = 180 },
+            severity = "warning",
+            channels = new[] { new { channelType = "web_push", destination = "" } },
+        };
+
+        var response = await client.PostAsJsonAsync("/api/v4/alert-rules", payload);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("in_app");
     }
 }

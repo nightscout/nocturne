@@ -141,7 +141,7 @@ public class TrackerAlertRuleSyncServiceTests
     }
 
     [Fact]
-    public async Task Sync_maps_urgency_to_severity_and_push_to_channels()
+    public async Task Sync_routes_every_threshold_to_the_definition_owner_in_app_and_never_to_web_push()
     {
         var definition = await SeedDefinitionAsync(
             thresholds:
@@ -158,13 +158,16 @@ public class TrackerAlertRuleSyncServiceTests
         var info = rules.Single(r => Params(r).GetProperty("minutes").GetInt32() == 60);
         info.Severity.Should().Be(AlertRuleSeverity.Info);
         info.AllowThroughDnd.Should().BeFalse();
-        info.Channels.Select(c => c.ChannelType).Should().Equal(ChannelType.InApp);
-
         var urgent = rules.Single(r => Params(r).GetProperty("minutes").GetInt32() == 120);
         urgent.Severity.Should().Be(AlertRuleSeverity.Critical);
         urgent.AllowThroughDnd.Should().BeTrue();
-        urgent.Channels.Select(c => c.ChannelType)
-            .Should().BeEquivalentTo([ChannelType.InApp, ChannelType.WebPush]);
+
+        foreach (var rule in new[] { info, urgent })
+        {
+            rule.Channels.Should().ContainSingle()
+                .Which.Should().Match<AlertRuleChannelEntity>(c =>
+                    c.ChannelType == ChannelType.InApp && c.Destination == definition.UserId);
+        }
     }
 
     [Fact]
@@ -571,7 +574,9 @@ public class TrackerAlertRuleSyncServiceTests
         p.GetProperty("operator").GetString().Should().Be("<");
         p.GetProperty("value").GetDouble().Should().Be(20);
         level.Severity.Should().Be(AlertRuleSeverity.Critical);
-        level.Channels.Select(c => c.ChannelType).Should().Equal(ChannelType.InApp);
+        level.Channels.Should().ContainSingle()
+            .Which.Should().Match<AlertRuleChannelEntity>(c =>
+                c.ChannelType == ChannelType.InApp && c.Destination == definition.UserId);
 
         rules.Should().ContainSingle(r => r.ConditionType == AlertConditionType.TrackerAge);
     }
