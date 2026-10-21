@@ -118,7 +118,7 @@ public sealed class GoogleHealthSessionStore(
         }
     }
 
-    /// <summary>Stores the refresh token, its grant and the account it belongs to.</summary>
+    /// <summary>Once this returns, the grant is stored and must not be revoked by a later failure.</summary>
     public async Task StoreAsync(GoogleHealthTokenSession session, string accountKey, Guid subject, CancellationToken ct)
     {
         var secrets = await configurations.GetSecretsAsync(ConnectorName, ct);
