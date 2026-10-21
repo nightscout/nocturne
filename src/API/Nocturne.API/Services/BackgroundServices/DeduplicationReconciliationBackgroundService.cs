@@ -13,7 +13,7 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// merging duplicate canonical groups created since the tenant's persisted cursor, then
 /// <see cref="IDeduplicationService.RepairStateSpanPrimariesAsync(CancellationToken)"/> and
 /// <see cref="IDeduplicationService.PruneSingletonLinksAsync(int, int, CancellationToken)"/>. A tenant
-/// another instance is reconciling is left to it until the next tick.
+/// whose merge lock is held has its merges left to the next tick.
 /// </summary>
 internal sealed class DeduplicationReconciliationBackgroundService : BackgroundService
 {

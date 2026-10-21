@@ -12,7 +12,8 @@ namespace Nocturne.API.Middleware;
 /// and an instance with several answers 404. Neither is a useful first page for an operator who is
 /// standing the instance up, so the request jumps straight to the endpoint instead — which also
 /// skips everything downstream, leaving what a tenant's host exposes to
-/// <see cref="ScalarAuthProvider"/> alone.
+/// <see cref="ScalarAuthProvider"/> alone. It must follow <c>UseRouting</c>, which supplies the
+/// endpoint it jumps to, and <c>UseRateLimiter</c>, which would otherwise never see a docs request.
 /// </remarks>
 public sealed class PublicDocsMiddleware
 {

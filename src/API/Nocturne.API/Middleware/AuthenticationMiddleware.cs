@@ -20,19 +20,14 @@ namespace Nocturne.API.Middleware;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Pipeline order (position 5 of 6 custom middleware):
-/// <see cref="JsonExtensionMiddleware"/>,
-/// <see cref="OidcCallbackRedirectMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
-/// <see cref="TenantSetupMiddleware"/>, <b>AuthenticationMiddleware</b>,
-/// <see cref="MemberScopeMiddleware"/>.
-/// </para>
-/// <para>
 /// Populates <c>HttpContext.Items[AuthContextKeys.AuthContext]</c> with an <see cref="AuthContext"/>,
 /// <c>HttpContext.Items[AuthContextKeys.PermissionTrie]</c> with a <see cref="PermissionTrie"/>,
 /// and <c>HttpContext.Items[AuthContextKeys.GrantedScopes]</c> with normalized OAuth scopes.
-/// Depends on <see cref="Multitenancy.TenantResolutionMiddleware"/> having resolved a
-/// <see cref="TenantContext"/> first. For unauthenticated requests with a resolved tenant,
-/// delegates to <see cref="PublicAccessCacheService"/> for public/read-only access.
+/// Must run after <see cref="Multitenancy.TenantResolutionMiddleware"/>, which resolves the
+/// <see cref="TenantContext"/> it authenticates against, and after <c>UseRouting</c>, which supplies the
+/// endpoint carrying <see cref="InviteTokenAuthorizedAttribute"/> and the route value holding the invite token. For
+/// unauthenticated requests with a resolved tenant, delegates to
+/// <see cref="PublicAccessCacheService"/> for public/read-only access.
 /// </para>
 /// </remarks>
 /// <seealso cref="IAuthHandler"/>

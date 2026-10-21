@@ -135,7 +135,7 @@ builder.Services.AddDataProtection()
 // Add compatibility proxy services
 builder.Services.AddCompatibilityProxyServices(builder.Configuration);
 
-// In-process, so each replica caches independently and entries are lost on restart.
+// In-process, so entries are lost on restart.
 builder.Services.AddNocturneMemoryCache();
 
 // Add response caching for GET endpoints
@@ -145,10 +145,12 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContext, AuditContext>();
 builder.Services.AddHostedService<AuditRetentionService>();
 builder.Services.AddHostedService<SoftDeleteCleanupService>();
+builder.Services.AddSingleton<IGoogleHealthCoordinatorStore, PostgresGoogleHealthCoordinatorStore>();
 builder.Services.AddSingleton<GoogleHealthCoordinator>();
 builder.Services.AddSingleton<IGoogleHealthSyncCoordinator>(provider =>
     provider.GetRequiredService<GoogleHealthCoordinator>());
 builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
+builder.Services.AddGoogleHealthPlatform();
 builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
 builder.Services.AddHostedService<GoogleHealthWorker>();
 builder.Services.AddDevOnlyGoogleHealthMock(builder.Environment, builder.Configuration);
@@ -353,47 +355,26 @@ app.UseNocturneForwardedHeaders(builder.Configuration);
 // this keeps tenant-scoped responses isolated per tenant and per credential in the shared cache.
 app.UseResponseCaching();
 
-// Strip .json suffixes before routing so /api/v1/treatments.json matches
-// the TreatmentsController route /api/v1/treatments. Must run before
-// UseRouting so the rewritten path is what the router sees.
 app.UseMiddleware<JsonExtensionMiddleware>();
-
-// Serve v1 under /api/v2 wherever v2 has no route of its own, as Nightscout does. After the
-// .json strip so /api/v2/entries.json is judged as /api/v2/entries, and before UseRouting so
-// the rewritten path is what the router sees.
 app.UseMiddleware<V2FallbackMiddleware>();
 
-// Routing must run here, not where minimal hosting would insert it, so that
-// TenantSetupMiddleware below can read endpoint metadata such as [AllowDuringSetup].
+// Here rather than where minimal hosting would insert it, so the middleware below see the
+// matched endpoint.
 app.UseRouting();
 
-// Ahead of the documentation branch below, which jumps straight to its endpoint and would
-// otherwise skip the limiter entirely; the policies are attached to endpoints, so this needs
-// UseRouting to have run. Everything without a policy passes through untouched, and no policy
-// partitions on anything this position withholds: all but one partition on pre-auth request data
-// (the remote address or the Host), and translation-drafts partitions on the raw credential
-// because HttpContext.Items["AuthContext"] is not populated until AuthenticationMiddleware,
-// further down.
+// The policies are attached to endpoints, so this needs UseRouting to have run. Everything
+// without a policy passes through untouched, and no policy partitions on anything this position
+// withholds: all but one partition on pre-auth request data (the remote address or the Host),
+// and translation-drafts partitions on the raw credential because HttpContext.Items["AuthContext"]
+// is not populated until AuthenticationMiddleware, further down.
 app.UseRateLimiter();
 
 app.UseMiddleware<PublicDocsMiddleware>();
-
-// Redirect OIDC callbacks from apex to the originating tenant subdomain
-app.UseMiddleware<OidcCallbackRedirectMiddleware>();
-
-// Resolve tenant from subdomain (must run before authentication)
+app.UseMiddleware<ApexCallbackRelayMiddleware>();
 app.UseMiddleware<TenantResolutionMiddleware>();
-
-// Block API traffic for freshly provisioned tenants with no passkey credentials
 app.UseMiddleware<TenantSetupMiddleware>();
-
-// Add Nightscout authentication middleware
 app.UseMiddleware<AuthenticationMiddleware>();
-
-// Add member scope middleware (resolves membership role and restricts scopes)
 app.UseMiddleware<MemberScopeMiddleware>();
-
-// Add audit context middleware (captures actor metadata for mutation audit log)
 app.UseMiddleware<AuditContextMiddleware>();
 
 // There is no app.UseAuthentication() call here, and adding one would be a security regression.
@@ -415,7 +396,6 @@ app.UseMiddleware<AuditContextMiddleware>();
 // directly.
 app.UseAuthorization();
 
-// Add compatibility proxy middleware (background comparison against Nightscout for v1/v2/v3 GET requests)
 app.UseMiddleware<CompatibilityProxyMiddleware>();
 
 // Map native API controllers
