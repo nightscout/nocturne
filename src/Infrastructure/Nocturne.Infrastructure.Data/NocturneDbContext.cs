@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -13,6 +15,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.ValueGenerators;
+using Nocturne.Infrastructure.Data.Logging;
 
 namespace Nocturne.Infrastructure.Data;
 
@@ -276,6 +279,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <see cref="TimezoneTimeline"/> so derived knowledge never clobbers a user assertion.
     /// </summary>
     public DbSet<DeviceClockObservationEntity> DeviceClockObservations { get; set; }
+
+    /// <summary>Submitted records answered but not stored; see <see cref="RejectedUploadEntity"/>.</summary>
+    public DbSet<RejectedUploadEntity> RejectedUploads { get; set; }
 
     public DbSet<CalibrationEntity> Calibrations { get; set; }
 
@@ -1745,6 +1751,10 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         // DeviceClockObservations: an observation is keyed by what was observed and when — the same
         // evidence re-gathered on a later sync must upsert into the same row, not accumulate.
+        modelBuilder.Entity<RejectedUploadEntity>()
+            .HasIndex(e => new { e.TenantId, e.ReceivedAt })
+            .HasDatabaseName("ix_rejected_uploads_tenant_received_at");
+
         modelBuilder.Entity<DeviceClockObservationEntity>()
             .HasIndex(e => new { e.TenantId, e.Connector, e.Source, e.ObservedAt })
             .HasDatabaseName("ix_device_clock_observations_tenant_connector_source_observed")
@@ -2754,7 +2764,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             var isAdded = entry.State == EntityState.Added;
 
             EnforceTenantOwnership(entry, isAdded);
-            StripNulCharacters(entry, isAdded, isRelational);
+            StripNulCharacters(entry, isAdded, isRelational, ReportTruncation);
             ApplyUpstreamFingerprint(entry);
 
             // Update timestamps are stamped on insert and on real modifications only. An
@@ -2866,6 +2876,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         }
     }
 
+    private void ReportTruncation(EntityEntry entry, string property, int length) =>
+        (_truncationLogger ??= this.GetService<ILoggerFactory>().CreateLogger<NocturneDbContext>())
+            .LogTruncated(entry.Metadata.GetTableName() ?? entry.Metadata.ClrType.Name, property, length);
+
+    private ILogger? _truncationLogger;
+
     /// <summary>
     /// The string-mapped properties of an entity type, each flagged with whether its column is
     /// jsonb and, for a <see cref="FitToColumnAttribute"/> one, the length it is cut to, so the
@@ -2889,7 +2905,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// so audit snapshots record what is actually persisted. A <see cref="FitToColumnAttribute"/>
     /// column is cut to its length in the same pass.
     /// </summary>
-    private static void StripNulCharacters(EntityEntry entry, bool isAdded, bool isRelational)
+    private static void StripNulCharacters(
+        EntityEntry entry, bool isAdded, bool isRelational, Action<EntityEntry, string, int> onTruncated)
     {
         if (!isAdded && entry.State != EntityState.Modified)
         {
@@ -2926,6 +2943,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             if (fit is { } length && stripped.Length > length)
             {
                 stripped = stripped[..(char.IsHighSurrogate(stripped[length - 1]) ? length - 1 : length)];
+                onTruncated(entry, name, length);
             }
 
             if (!string.Equals(stripped, value, StringComparison.Ordinal))

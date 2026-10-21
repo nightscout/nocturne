@@ -107,15 +107,13 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
             using var scope = UpstreamFingerprintScope.Open(fingerprints);
             var written = await _treatmentService.CreateTreatmentsAsync(list, cancellationToken);
             RecordSkippedDeleted(written.SkippedDeleted);
-            if (written.Rejected.Count > 0)
-                Logger.LogWarning(
-                    "{Count} treatments from {Source} cannot be stored and were refused; the rest were published",
-                    written.Rejected.Count, source);
+            RecordRefused(written.Rejected.Count);
             return true;
         }
         catch (TreatmentBatchFailedException failed) when (!cancellationToken.IsCancellationRequested)
         {
             RecordSkippedDeleted(failed.Written.SkippedDeleted);
+            RecordRefused(failed.Written.Rejected.Count);
             Logger.LogError(failed, "Failed to publish treatments for {Source}", source);
             return false;
         }

@@ -10,9 +10,21 @@ namespace Nocturne.API.Helpers;
 public static class TreatmentEcho
 {
     /// <summary>
-    /// The written treatments with each refused one put back at its position, as submitted and
-    /// carrying an <c>error</c> member that says why it was not stored.
+    /// The member a refused treatment's echo carries, saying why it was not stored. Namespaced so it
+    /// cannot be mistaken for a field a client sent.
     /// </summary>
+    public const string RefusalMember = "nocturneError";
+
+    /// <summary>
+    /// The written treatments with each refused one put back at its position, as submitted and
+    /// carrying <see cref="RefusalMember"/>.
+    /// </summary>
+    /// <remarks>
+    /// NIGHTSCOUT-COMPAT: Nightscout stores any document, so v1 uploaders treat every element of a
+    /// 2xx reply as stored; NightscoutKit also pairs each echoed <c>_id</c> with its request. A
+    /// refused treatment is therefore still echoed, keeping its <c>_id</c>, and is kept in the
+    /// tenant's rejected uploads, where the owner sees what the uploader believes it saved.
+    /// </remarks>
     public static Treatment[] InSubmittedOrder(BulkWrite<Treatment> written)
     {
         if (written.Rejected.Count == 0)
@@ -22,7 +34,7 @@ public static class TreatmentEcho
         foreach (var refused in written.Rejected.OrderBy(r => r.Index))
         {
             refused.Record.AdditionalProperties ??= [];
-            refused.Record.AdditionalProperties["error"] = refused.Reason;
+            refused.Record.AdditionalProperties[RefusalMember] = refused.Reason;
             echo.Insert(refused.Index, refused.Record);
         }
 

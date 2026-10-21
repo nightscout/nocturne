@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Npgsql;
 using Nocturne.API.Controllers.V1;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Events;
@@ -138,9 +139,9 @@ public class TreatmentsCreatePartialFailureTests
 
         var echoed = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeAssignableTo<Treatment[]>().Subject;
         echoed.Select(t => t.Notes).Should().Equal("first", "second", "third");
-        echoed[1].AdditionalProperties.Should().ContainKey("error")
-            .WhoseValue.Should().Be("value too long for type character varying(255)");
-        echoed[0].AdditionalProperties?.ContainsKey("error").Should().NotBe(true);
+        echoed[1].AdditionalProperties.Should().ContainKey(TreatmentEcho.RefusalMember)
+            .WhoseValue.Should().Be("A text value is longer than Nocturne can store; parts of the treatment may be stored");
+        echoed[0].AdditionalProperties?.ContainsKey(TreatmentEcho.RefusalMember).Should().NotBe(true);
         _events.Verify(
             e => e.OnCreatedAsync(
                 It.Is<IReadOnlyList<Treatment>>(written => written.Select(t => t.Notes).SequenceEqual(new[] { "first", "third" })),
@@ -149,14 +150,16 @@ public class TreatmentsCreatePartialFailureTests
     }
 
     [Fact]
-    public async Task Put_WhenTheTreatmentCanNeverBeStored_Answers400()
+    public async Task Put_WhenTheTreatmentCanNeverBeStored_Answers200WithTheRefusalOnItsEcho()
     {
         RefuseSecond();
 
         var result = await _controller.SaveTreatments(JsonSerializer.SerializeToElement(
             new { eventType = "Note", notes = "second", created_at = "2026-09-30T01:05:00.000Z" }));
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        var echoed = result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<Treatment>().Subject;
+        echoed.Notes.Should().Be("second");
+        echoed.AdditionalProperties.Should().ContainKey(TreatmentEcho.RefusalMember);
     }
 
     private void RefuseSecond() =>

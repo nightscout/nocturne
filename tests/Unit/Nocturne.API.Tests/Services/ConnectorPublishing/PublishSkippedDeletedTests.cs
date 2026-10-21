@@ -119,6 +119,7 @@ public class PublishSkippedDeletedTests : IDisposable
             "nightscout", WriteOrigin.Backfill);
 
         published.Should().BeTrue();
+        _tally.Refused.Should().Be(1);
         decomposer.Verify(
             d => d.DecomposeAsync(It.Is<Treatment>(t => t.Id == "t-2"), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);

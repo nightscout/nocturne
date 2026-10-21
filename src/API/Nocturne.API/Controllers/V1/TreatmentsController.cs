@@ -200,9 +200,19 @@ public class TreatmentsController : ControllerBase
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
+        List<Treatment>? treatmentsToCreate;
         try
         {
-            var treatmentsToCreate = NightscoutJsonBody.ReadObjects<Treatment>(treatments);
+            treatmentsToCreate = NightscoutJsonBody.ReadObjects<Treatment>(treatments);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Invalid JSON in create treatments request");
+            return BadRequest("Invalid JSON format");
+        }
+
+        try
+        {
             if (treatmentsToCreate is null)
             {
                 _logger.LogWarning("Invalid JSON format for treatments");
@@ -224,11 +234,6 @@ public class TreatmentsController : ControllerBase
 
             // Return 200 OK to match Nightscout behavior (not 201 Created)
             return Ok(resultArray);
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogWarning(ex, "Invalid JSON in create treatments request");
-            return BadRequest("Invalid JSON format");
         }
         catch (TreatmentBatchFailedException ex)
         {
@@ -481,10 +486,11 @@ public class TreatmentsController : ControllerBase
         if (created.SkippedDeleted > 0)
             return NothingSaved(prepared.Id);
 
-        if (created.Rejected is [{ Reason: var reason }])
-            return BadRequest(new { status = 400, message = "Treatment cannot be stored", description = reason });
-
-        return Ok(created[0]);
+        // NIGHTSCOUT-COMPAT: Nightscout stores any document, so v1 clients take any 2xx as stored
+        // and a 4xx or 5xx as a reason to resend forever. A treatment Nocturne cannot store is
+        // answered 200 with the treatment echoed under TreatmentEcho's marker and kept in the
+        // rejected uploads for the owner to see.
+        return Ok(TreatmentEcho.InSubmittedOrder(created)[0]);
     }
 
     /// <summary>

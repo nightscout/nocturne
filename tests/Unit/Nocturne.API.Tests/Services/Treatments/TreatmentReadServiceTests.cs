@@ -341,6 +341,8 @@ public class TreatmentReadServiceTests
         new TimeoutException(),
         new DbUpdateException("unique", new PostgresException("duplicate key", "ERROR", "ERROR", "23505")),
         new DbUpdateException("network", new InvalidOperationException("connection reset")),
+        new DbUpdateException("our bug", new PostgresException("null value", "ERROR", "ERROR", "23502")),
+        new DbUpdateException("our bug", new PostgresException("invalid input syntax", "ERROR", "ERROR", "22P02")),
     };
 
     [Theory]
@@ -364,16 +366,44 @@ public class TreatmentReadServiceTests
     {
         {
             new DbUpdateException("too long", new PostgresException("value too long for type character varying(255)", "ERROR", "ERROR", "22001")),
-            "value too long for type character varying(255)"
+            "A text value is longer than Nocturne can store; parts of the treatment may be stored"
         },
         {
-            new DbUpdateException("null", new PostgresException("null value in column \"text\"", "ERROR", "ERROR", "23502")),
-            "null value in column \"text\""
+            new DbUpdateException("out of range", new PostgresException("date/time field value out of range", "ERROR", "ERROR", "22008")),
+            "A date or time is invalid or outside the range Nocturne can store; parts of the treatment may be stored"
         },
-        { new ArgumentException("unsupported units"), "unsupported units" },
-        { new FormatException("bad date"), "bad date" },
-        { new OverflowException("too big"), "too big" },
+        {
+            new TreatmentMappingException(new FormatException("bad date")),
+            "A field of the treatment has a value Nocturne cannot read; parts of the treatment may be stored"
+        },
     };
+
+    [Fact]
+    public async Task CreateAsync_WhenAnArgumentErrorComesFromOutsideTheMappingStep_DoesNotRefuseTheTreatment()
+    {
+        var bad = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        DecomposeAll();
+        FailOn(bad, new ArgumentException("resolver bug"));
+
+        var act = () => _service.CreateAsync([bad]);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task CreateAsync_ReportsEachStoredTreatmentAsItLands()
+    {
+        var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var bad = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+        DecomposeAll();
+        FailOn(bad, new NotSupportedException());
+        var stored = new List<Treatment>();
+
+        var act = () => _service.CreateAsync([first, bad], CancellationToken.None, stored);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+        stored.Select(t => t.Id).Should().Equal("t1");
+    }
 
     [Fact]
     public async Task CreateAsync_WhenAStoredTreatmentCannotBeReadBack_CarriesItAsStored()

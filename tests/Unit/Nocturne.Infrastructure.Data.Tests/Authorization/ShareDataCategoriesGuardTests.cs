@@ -31,7 +31,7 @@ public class ShareDataCategoriesGuardTests
         "mutation_audit_log", "notes", "oauth_authorization_codes", "oauth_clients", "oauth_device_codes",
         "oauth_grants", "oauth_refresh_tokens", "patient_devices", "patient_insulins", "patient_records",
         "profile_activations",
-        "read_access_log", "sensitivity_schedules", "settings",
+        "read_access_log", "rejected_uploads", "sensitivity_schedules", "settings",
         "sleep_biometric_samples", "sleep_sessions", "sleep_stages",
         "state_spans", "system_events",
         "target_range_schedules", "tenant_alert_settings",

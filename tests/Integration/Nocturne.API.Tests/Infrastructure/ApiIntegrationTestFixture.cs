@@ -381,6 +381,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "temp_basals",
         "basal_injections",
         "notes",
+        "rejected_uploads",
         "device_events",
         "state_spans",
         "profile_activations",

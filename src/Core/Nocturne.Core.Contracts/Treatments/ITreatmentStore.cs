@@ -67,7 +67,14 @@ public interface ITreatmentStore
     /// how many of their records were not written because the user had deleted them.
     /// </returns>
     /// <exception cref="TreatmentBatchFailedException">A treatment could not be stored.</exception>
-    Task<BulkWrite<Treatment>> CreateAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
+    /// <param name="treatments">The treatments to write, in order.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <param name="stored">
+    /// Receives each treatment as it is stored, so a caller still knows what landed when the batch
+    /// ends in an exception it does not expect.
+    /// </param>
+    Task<BulkWrite<Treatment>> CreateAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken ct = default, ICollection<Treatment>? stored = null);
 
     /// <summary>
     /// Updates an existing treatment by ID, propagating changes to V4 tables.

@@ -209,7 +209,7 @@ public class TreatmentReadService : ITreatmentStore
 
     /// <inheritdoc />
     public async Task<BulkWrite<Treatment>> CreateAsync(
-        IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
+        IReadOnlyList<Treatment> treatments, CancellationToken ct = default, ICollection<Treatment>? stored = null)
     {
         var results = new List<Treatment>();
         var rejected = new List<BulkWriteRejection<Treatment>>();
@@ -223,21 +223,15 @@ public class TreatmentReadService : ITreatmentStore
             {
                 result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
                 skippedDeleted += result.SkippedDeleted;
-                results.Add(await ToCreatedAsync(treatment, result, ct));
+                var created = await ToCreatedAsync(treatment, result, ct);
+                results.Add(created);
+                stored?.Add(created);
             }
             catch (DbUpdateException ex) when (result is null && StoreRefusal.ReasonFor(ex) is { } reason)
             {
                 rejected.Add(Reject(i, treatment, ex, reason));
             }
-            catch (ArgumentException ex) when (result is null)
-            {
-                rejected.Add(Reject(i, treatment, ex, ex.Message));
-            }
-            catch (FormatException ex) when (result is null)
-            {
-                rejected.Add(Reject(i, treatment, ex, ex.Message));
-            }
-            catch (OverflowException ex) when (result is null)
+            catch (TreatmentMappingException ex)
             {
                 rejected.Add(Reject(i, treatment, ex, ex.Message));
             }
@@ -251,9 +245,11 @@ public class TreatmentReadService : ITreatmentStore
             {
                 _logger.LogError(ex, "Failed to store treatment {Id}; ending the batch", treatment.Id);
                 _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
-                var stored = result is null ? results : [.. results, treatment];
+                var written = result is null ? results : [.. results, treatment];
+                if (result is not null)
+                    stored?.Add(treatment);
                 return new TreatmentBatchFailedException(
-                    new BulkWrite<Treatment>(stored, skippedDeleted) { Rejected = rejected },
+                    new BulkWrite<Treatment>(written, skippedDeleted) { Rejected = rejected },
                     i, treatments.Count, failedOneStored: result is not null, ex);
             }
         }
@@ -265,12 +261,13 @@ public class TreatmentReadService : ITreatmentStore
     /// <summary>
     /// A treatment whose write fails the same way on every attempt is answered as refused and the
     /// batch goes on, so neither a client resending the batch nor a connector re-reading the page
-    /// is held on it forever.
+    /// is held on it forever. The records written for it before the refusal stay written.
     /// </summary>
     private BulkWriteRejection<Treatment> Reject(int index, Treatment treatment, Exception ex, string reason)
     {
-        _logger.LogError(ex, "Treatment {Id} cannot be stored and was refused", treatment.Id);
-        return new BulkWriteRejection<Treatment>(index, treatment, reason);
+        _logger.LogRefused(nameof(Treatment), reason, treatment.DataSource ?? "api", ex);
+        return new BulkWriteRejection<Treatment>(
+            index, treatment, $"{reason}; parts of the treatment may be stored");
     }
 
     /// <inheritdoc />

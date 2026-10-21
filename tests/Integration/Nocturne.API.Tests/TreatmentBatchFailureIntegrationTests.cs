@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using Nocturne.API.Helpers;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Tests.Integration.Infrastructure;
@@ -45,13 +46,25 @@ public class TreatmentBatchFailureIntegrationTests(ApiIntegrationTestFixture fix
         var echoed = (await response.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray().ToList();
         echoed.Should().HaveCount(3);
         echoed[1].GetProperty("notes").GetString().Should().Be("second");
-        echoed[1].TryGetProperty("error", out _).Should().BeTrue();
-        echoed[0].TryGetProperty("error", out _).Should().BeFalse();
-        echoed[2].TryGetProperty("error", out _).Should().BeFalse();
+        echoed[1].TryGetProperty(TreatmentEcho.RefusalMember, out _).Should().BeTrue();
+        echoed[0].TryGetProperty(TreatmentEcho.RefusalMember, out _).Should().BeFalse();
+        echoed[2].TryGetProperty(TreatmentEcho.RefusalMember, out _).Should().BeFalse();
 
         await using var db = Fixture.CreateDbContext(Fixture.TenantId);
         var stored = await db.Set<NoteEntity>().Select(n => n.Text).ToListAsync();
         stored.Should().BeEquivalentTo(["first", longNote]);
+
+        var rejected = await AuthenticatedClient.GetFromJsonAsync<JsonElement>("/api/v4/rejected-uploads");
+        var rows = rejected.GetProperty("data").EnumerateArray().ToList();
+        rows.Should().ContainSingle();
+        rows[0].GetProperty("recordType").GetString().Should().Be("treatment");
+        rows[0].GetProperty("reason").GetString().Should().StartWith("A text value is longer than Nocturne can store");
+        JsonDocument.Parse(rows[0].GetProperty("payload").GetString()!).RootElement
+            .GetProperty("notes").GetString().Should().Be("second");
+
+        (await AuthenticatedClient.DeleteAsync("/api/v4/rejected-uploads")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await AuthenticatedClient.GetFromJsonAsync<JsonElement>("/api/v4/rejected-uploads"))
+            .GetProperty("data").EnumerateArray().Should().BeEmpty();
     }
 
     [Fact]
