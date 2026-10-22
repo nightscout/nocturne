@@ -131,6 +131,106 @@ public class AidMetricsServiceTests
         metrics.EnactedCount.Should().Be(6);
     }
 
+    private static AidSegmentMetrics ApsMetrics(DateTime start, DateTime end, IEnumerable<ApsSnapshot> snapshots) =>
+        new ApsSnapshotStrategy().CalculateMetrics(new AidDetectionContext
+        {
+            Algorithm = AidAlgorithm.Trio,
+            StartDate = start,
+            EndDate = end,
+            ApsSnapshots = snapshots.ToList()
+        });
+
+    private static IEnumerable<ApsSnapshot> Cycles(DateTime start, TimeSpan cadence, int count, bool enacted = true) =>
+        Enumerable.Range(0, count).Select(i => new ApsSnapshot
+        {
+            Timestamp = start + cadence * i,
+            Enacted = enacted,
+            AidAlgorithm = AidAlgorithm.Trio
+        });
+
+    [Fact]
+    public void ApsSnapshotStrategy_EveryCycleUploadedTwiceThirtySecondsApart_CoversHalfADayOnce()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var halfDay = Cycles(start, TimeSpan.FromMinutes(5), 144);
+        var repeats = Cycles(start.AddSeconds(30), TimeSpan.FromMinutes(5), 144);
+
+        var metrics = ApsMetrics(start, start.AddDays(1), halfDay.Concat(repeats));
+
+        // The last repeat carries the covered time thirty seconds past twelve hours.
+        var covered = 720.5 / 1440 * 100;
+        metrics.AidActivePercent.Should().BeApproximately(covered, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately(covered, 0.001);
+        metrics.LoopCycleCount.Should().Be(288);
+    }
+
+    [Fact]
+    public void ApsSnapshotStrategy_OneMinuteCadence_CreditsEachCycleOneMinute()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var metrics = ApsMetrics(start, start.AddDays(1), Cycles(start, TimeSpan.FromMinutes(1), 720));
+
+        metrics.AidActivePercent.Should().BeApproximately((719 + 5) / 1440.0 * 100, 0.001);
+    }
+
+    [Fact]
+    public void ApsSnapshotStrategy_ThirtyNineHourGap_IsNotCredited()
+    {
+        // Two days with dense one-minute looping for nine hours, then nothing for thirty-nine:
+        // enough cycles to fill the window at five minutes each, but under a fifth of it covered.
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var metrics = ApsMetrics(start, start.AddDays(2), Cycles(start, TimeSpan.FromMinutes(1), 540));
+
+        metrics.AidActivePercent.Should().BeApproximately((539 + 5) / 2880.0 * 100, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately((539 + 5) / 2880.0 * 100, 0.001);
+    }
+
+    [Fact]
+    public void ApsSnapshotStrategy_UnenactedCycleCutsShortTheEnactedOneBeforeIt()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var snapshots = new[]
+        {
+            new ApsSnapshot { Timestamp = start, Enacted = true },
+            new ApsSnapshot { Timestamp = start.AddMinutes(1), Enacted = false },
+        };
+
+        var metrics = ApsMetrics(start, start.AddMinutes(10), snapshots);
+
+        metrics.AidActivePercent.Should().BeApproximately(10.0, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately(60.0, 0.001);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ApsSnapshotStrategy_EnactedAndUnenactedCopiesOfOneCycle_CreditTheEnactedOneInEitherOrder(bool enactedFirst)
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var enacted = new ApsSnapshot { Timestamp = start, Enacted = true };
+        var unenacted = new ApsSnapshot { Timestamp = start, Enacted = false };
+
+        var metrics = ApsMetrics(
+            start,
+            start.AddMinutes(10),
+            enactedFirst ? [enacted, unenacted] : [unenacted, enacted]);
+
+        metrics.AidActivePercent.Should().BeApproximately(50.0, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately(50.0, 0.001);
+    }
+
+    [Fact]
+    public void ApsSnapshotStrategy_LastCycleRunsNoFurtherThanTheWindow()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var metrics = ApsMetrics(start, start.AddMinutes(2), Cycles(start, TimeSpan.FromMinutes(5), 1));
+
+        metrics.AidActivePercent.Should().BeApproximately(100.0, 0.001);
+    }
+
     [Fact]
     public void ApsSnapshotStrategy_NoSnapshots_ReturnsNulls()
     {
@@ -179,6 +279,32 @@ public class AidMetricsServiceTests
         metrics.PumpUsePercent.Should().Be(100.0);
         metrics.LoopCycleCount.Should().BeNull();
         metrics.EnactedCount.Should().BeNull();
+    }
+
+    [Fact]
+    public void TbrBasedStrategy_OverlappingTempBasals_CoverTheirSharedTimeOnce()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var end = start.AddHours(1);
+
+        var tempBasals = new List<TempBasal>
+        {
+            new() { StartTimestamp = start, EndTimestamp = start.AddMinutes(30), Origin = TempBasalOrigin.Algorithm, Rate = 0.5 },
+            new() { StartTimestamp = start.AddMinutes(10), EndTimestamp = start.AddMinutes(40), Origin = TempBasalOrigin.Algorithm, Rate = 0.6 },
+            new() { StartTimestamp = start.AddMinutes(15), EndTimestamp = start.AddMinutes(20), Origin = TempBasalOrigin.Algorithm, Rate = 0.7 },
+            new() { StartTimestamp = start.AddMinutes(35), EndTimestamp = start.AddMinutes(50), Origin = TempBasalOrigin.Manual, Rate = 1.0 },
+        };
+
+        var metrics = new TbrBasedStrategy().CalculateMetrics(new AidDetectionContext
+        {
+            Algorithm = AidAlgorithm.ControlIQ,
+            StartDate = start,
+            EndDate = end,
+            TempBasals = tempBasals
+        });
+
+        metrics.AidActivePercent.Should().BeApproximately(40 / 60.0 * 100, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately(50 / 60.0 * 100, 0.001);
     }
 
     [Fact]

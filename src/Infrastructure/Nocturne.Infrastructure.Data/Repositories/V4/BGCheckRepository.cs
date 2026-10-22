@@ -29,7 +29,7 @@ public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity
     /// Initializes a new instance of the <see cref="BGCheckRepository"/> class.
     /// </summary>
     public BGCheckRepository(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<BGCheckRepository> logger,

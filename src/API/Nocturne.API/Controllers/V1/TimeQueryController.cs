@@ -1,9 +1,11 @@
+using System.Text.RegularExpressions;
 using Nocturne.API.Extensions;
 using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Platform;
+using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -32,6 +34,11 @@ public class TimeQueryController : ControllerBase
     /// asserts.
     /// </summary>
     internal static readonly string[] SliceableStorage = ["entries", "treatments", "devicestatus"];
+
+    private static readonly Regex SafeFieldName = new(
+        @"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*\z",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant
+    );
 
     private readonly ITimeQueryService _timeQueryService;
     private readonly ILogger<TimeQueryController> _logger;
@@ -139,23 +146,13 @@ public class TimeQueryController : ControllerBase
                 return BadRequest($"Count must be non-negative, got {count}");
             }
 
-            // Extract query parameters for additional filtering
-            var queryParameters = new Dictionary<string, object>();
-            foreach (var param in Request.Query)
-            {
-                if (param.Key != "count" && param.Key != "format")
-                {
-                    queryParameters[param.Key] = param.Value.ToString() ?? "";
-                }
-            }
-
             // Execute time-based query
             var entries = await _timeQueryService.ExecuteTimeQueryAsync(
                 prefix: prefix,
                 regex: regex,
                 storage: "entries",
                 fieldName: "dateString",
-                queryParameters: queryParameters,
+                find: FindParameters(),
                 cancellationToken: cancellationToken
             );
 
@@ -166,27 +163,11 @@ public class TimeQueryController : ControllerBase
                 entriesArray.Length
             );
 
-            // Handle different output formats
-            if (format != null && !format.Equals("json", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    var formattedData = DataFormatService.FormatEntries(entriesArray, format);
-                    var contentType = DataFormatService.GetContentType(format);
-                    return Content(formattedData, contentType);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to format data as {Format}, falling back to JSON",
-                        format
-                    );
-                    return Ok(entriesArray);
-                }
-            }
-
-            return Ok(entriesArray);
+            return EntriesResult(entriesArray, format);
+        }
+        catch (TimePatternRejectedException ex)
+        {
+            return BadRequest(ex.Message);
         }
         catch (Exception ex)
         {
@@ -302,23 +283,13 @@ public class TimeQueryController : ControllerBase
 
         try
         {
-            // Extract query parameters
-            var queryParameters = new Dictionary<string, object>();
-            foreach (var param in Request.Query)
-            {
-                if (param.Key != "storage" && param.Key != "field")
-                {
-                    queryParameters[param.Key] = param.Value.ToString() ?? "";
-                }
-            }
-
             // Generate debug information
             var echo = _timeQueryService.GenerateTimeQueryEcho(
                 prefix: prefix,
                 regex: regex,
                 storage: storage,
                 fieldName: field,
-                queryParameters: queryParameters
+                queryString: Request.QueryString.Value
             );
 
             _logger.LogDebug(
@@ -327,6 +298,10 @@ public class TimeQueryController : ControllerBase
             );
 
             return Ok(echo);
+        }
+        catch (TimePatternRejectedException ex)
+        {
+            return BadRequest(ex.Message);
         }
         catch (Exception ex)
         {
@@ -552,14 +527,10 @@ public class TimeQueryController : ControllerBase
                 return BadRequest("Storage and field parameters are required");
             }
 
-            // Extract query parameters for additional filtering
-            var queryParameters = new Dictionary<string, object>();
-            foreach (var param in Request.Query)
+            if (!SafeFieldName.IsMatch(field))
             {
-                if (param.Key != "count" && param.Key != "format")
-                {
-                    queryParameters[param.Key] = param.Value.ToString() ?? "";
-                }
+                _logger.LogWarning("Invalid field parameter: {Field}", field);
+                return BadRequest("Field must be a field name made of letters, digits, '_' and '.'");
             }
 
             // Execute slice query
@@ -569,7 +540,7 @@ public class TimeQueryController : ControllerBase
                 type: type,
                 prefix: prefix,
                 regex: regex,
-                queryParameters: queryParameters,
+                find: FindParameters(),
                 cancellationToken: cancellationToken
             );
 
@@ -580,27 +551,11 @@ public class TimeQueryController : ControllerBase
                 entriesArray.Length
             );
 
-            // Handle different output formats
-            if (format != null && !format.Equals("json", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    var formattedData = DataFormatService.FormatEntries(entriesArray, format);
-                    var contentType = DataFormatService.GetContentType(format);
-                    return Content(formattedData, contentType);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to format data as {Format}, falling back to JSON",
-                        format
-                    );
-                    return Ok(entriesArray);
-                }
-            }
-
-            return Ok(entriesArray);
+            return EntriesResult(entriesArray, format);
+        }
+        catch (TimePatternRejectedException ex)
+        {
+            return BadRequest(ex.Message);
         }
         catch (Exception ex)
         {
@@ -625,6 +580,18 @@ public class TimeQueryController : ControllerBase
             );
         }
     }
+
+    private ActionResult EntriesResult(Entry[] entries, string? format) =>
+        this.EntriesText(entries, format) ?? Ok(entries);
+
+    /// <summary>
+    /// The request's <c>find[...]</c> pairs alone, so no other key (<c>token</c>, <c>secret</c>, a
+    /// cache buster) reaches the read services or anything they key on.
+    /// </summary>
+    private string FindParameters() =>
+        QueryString.Create(
+            Request.Query.Where(q => q.Key.StartsWith("find[", StringComparison.OrdinalIgnoreCase))
+        ).Value?.TrimStart('?') ?? "";
 
     /// <summary>
     /// Refuses a collection these routes do not dispatch on. Checked ahead of the scope gate so the

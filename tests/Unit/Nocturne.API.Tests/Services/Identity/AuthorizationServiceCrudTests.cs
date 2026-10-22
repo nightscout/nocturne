@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Identity;
@@ -78,7 +77,7 @@ public class AuthorizationServiceCrudTests : IDisposable
             _mockRoleService.Object,
             _mockDirectGrantService.Object,
             _mockJwtService.Object,
-            _dbContext,
+            _dbContext.AsFactory(),
             _categoryReadContext
         );
     }
@@ -385,7 +384,7 @@ public class AuthorizationServiceCrudTests : IDisposable
         result.Should().NotBeNull();
         result!.Name.Should().Be("New name");
 
-        var reloaded = await _dbContext.OAuthGrants.SingleAsync(g => g.Id == grant.Id);
+        var reloaded = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grant.Id);
         reloaded.Scopes.Should().Equal(Scope.TreatmentsRead);
     }
 
@@ -408,7 +407,7 @@ public class AuthorizationServiceCrudTests : IDisposable
             Roles = read.Roles,
         });
 
-        var reloaded = await _dbContext.OAuthGrants.SingleAsync(g => g.Id == grant.Id);
+        var reloaded = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grant.Id);
         reloaded.Scopes.Should().Equal(Scope.FullAccess);
     }
 
@@ -428,7 +427,7 @@ public class AuthorizationServiceCrudTests : IDisposable
 
         // Omitting roles is not the same as asking for none; a client that only renames must not
         // silently strip the token of everything it could do.
-        var reloaded = await _dbContext.OAuthGrants.SingleAsync(g => g.Id == grant.Id);
+        var reloaded = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grant.Id);
         reloaded.Scopes.Should().Equal(Scope.GlucoseRead);
     }
 
@@ -450,7 +449,7 @@ public class AuthorizationServiceCrudTests : IDisposable
 
         // Answering 200 here leaves a token that authenticates and then refuses every request it is
         // used for, with nothing said about why.
-        var reloaded = await _dbContext.OAuthGrants.SingleAsync(g => g.Id == grant.Id);
+        var reloaded = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grant.Id);
         reloaded.Scopes.Should().Equal(Scope.GlucoseRead);
     }
 

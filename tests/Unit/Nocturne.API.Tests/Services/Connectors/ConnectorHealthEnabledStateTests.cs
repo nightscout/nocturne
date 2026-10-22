@@ -54,6 +54,17 @@ public class ConnectorHealthEnabledStateTests
         (await Service().GetConnectorStatusesAsync()).Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData("false")]
+    [InlineData("true")]
+    public async Task ConnectorCounts_AreLifetimeAndSayNoWindow(string enabled)
+    {
+        var statuses = await Service(("Connectors:Settings:Enabled", enabled)).GetConnectorStatusesAsync();
+
+        statuses.Should().NotBeEmpty();
+        statuses.Should().OnlyContain(status => status.TotalEntriesWindowDays == null);
+    }
+
     private static ConnectorHealthService Service(params (string Key, string Value)[] settings)
     {
         var configuration = new ConfigurationBuilder()

@@ -7,19 +7,15 @@ namespace Nocturne.Core.Models;
 /// <seealso cref="DiscrepancyAnalysisDto"/>
 public class CompatibilityMetrics
 {
-    /// <summary>Total number of requests analyzed.</summary>
     public int TotalRequests { get; set; }
 
     /// <summary>Number of requests with identical responses.</summary>
     public int PerfectMatches { get; set; }
 
-    /// <summary>Number of requests with minor differences.</summary>
     public int MinorDifferences { get; set; }
 
-    /// <summary>Number of requests with major differences.</summary>
     public int MajorDifferences { get; set; }
 
-    /// <summary>Number of requests with critical differences.</summary>
     public int CriticalDifferences { get; set; }
 
     /// <summary>Overall compatibility score (0-100).</summary>
@@ -41,19 +37,15 @@ public class EndpointMetrics
     /// <summary>API endpoint path (e.g., "/api/v1/entries").</summary>
     public string Endpoint { get; set; } = string.Empty;
 
-    /// <summary>Total number of requests to this endpoint.</summary>
     public int TotalRequests { get; set; }
 
     /// <summary>Number of requests with identical responses.</summary>
     public int PerfectMatches { get; set; }
 
-    /// <summary>Number of requests with minor differences.</summary>
     public int MinorDifferences { get; set; }
 
-    /// <summary>Number of requests with major differences.</summary>
     public int MajorDifferences { get; set; }
 
-    /// <summary>Number of requests with critical differences.</summary>
     public int CriticalDifferences { get; set; }
 
     /// <summary>Compatibility score for this endpoint (0-100).</summary>

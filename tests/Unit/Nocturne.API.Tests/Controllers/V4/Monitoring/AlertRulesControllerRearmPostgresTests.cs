@@ -80,9 +80,9 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
                 : ValueTask.FromResult(result);
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : ITenantDbContextFactory
+    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
     {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
     }
 
     private NocturneDbContext Context(Guid tenant, Failure failure) =>
@@ -145,6 +145,10 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
                 It.IsAny<string?>(), It.IsAny<StoredConditionTrees>()))
             .Returns((AlertConditionType _, string body, bool _, string? autoResolve, string? client, StoredConditionTrees _) =>
                 new ConditionUpdateCheck([], body, autoResolve, client, []));
+        validator
+            .Setup(v => v.Validate(
+                It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([]);
         var controller = new AlertRulesController(
             new Factory(() => Context(tenant, failure)),
             Mock.Of<IAlertReferenceService>(),

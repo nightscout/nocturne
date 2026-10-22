@@ -43,8 +43,9 @@ export type TopWidgetPlaceholder =
   | "clock"
   | "connection"
   | "empty-state"
-  | "caption"
-  | "spinner";
+  | "tir"
+  | "tdd"
+  | "summary";
 
 const TOP_WIDGET_PLACEHOLDERS: Record<TopWidgetId, TopWidgetPlaceholder> = {
   [WidgetId.BgDelta]: "delta",
@@ -52,10 +53,10 @@ const TOP_WIDGET_PLACEHOLDERS: Record<TopWidgetId, TopWidgetPlaceholder> = {
   [WidgetId.ConnectionStatus]: "connection",
   [WidgetId.Meals]: "empty-state",
   [WidgetId.Trackers]: "empty-state",
-  [WidgetId.TirChart]: "spinner",
-  [WidgetId.DailySummary]: "caption",
+  [WidgetId.TirChart]: "tir",
+  [WidgetId.DailySummary]: "summary",
   [WidgetId.Clock]: "clock",
-  [WidgetId.Tdd]: "spinner",
+  [WidgetId.Tdd]: "tdd",
 };
 
 export function topWidgetPlaceholder(id: TopWidgetId): TopWidgetPlaceholder {

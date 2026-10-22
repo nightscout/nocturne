@@ -9,14 +9,8 @@ namespace Nocturne.Core.Models.Authorization;
 /// <seealso cref="ApprovalStatus"/>
 public class Subject
 {
-    /// <summary>
-    /// Unique identifier
-    /// </summary>
     public Guid Id { get; set; }
 
-    /// <summary>
-    /// Display name
-    /// </summary>
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
@@ -29,9 +23,6 @@ public class Subject
     /// </summary>
     public string? Email { get; set; }
 
-    /// <summary>
-    /// Whether the subject is active
-    /// </summary>
     public bool IsActive { get; set; } = true;
 
     /// <summary>
@@ -44,24 +35,12 @@ public class Subject
     /// </summary>
     public bool IsPlatformAdmin { get; set; }
 
-    /// <summary>
-    /// Avatar URL
-    /// </summary>
     public string? AvatarUrl { get; set; }
 
-    /// <summary>
-    /// When the subject was created
-    /// </summary>
     public DateTime CreatedAt { get; set; }
 
-    /// <summary>
-    /// When the subject last logged in
-    /// </summary>
     public DateTime? LastLoginAt { get; set; }
 
-    /// <summary>
-    /// Assigned roles
-    /// </summary>
     public List<Role> Roles { get; set; } = new();
 
     /// <summary>
@@ -69,9 +48,6 @@ public class Subject
     /// </summary>
     public List<string> Permissions { get; set; } = new();
 
-    /// <summary>
-    /// Notes or description
-    /// </summary>
     public string? Notes { get; set; }
 
     /// <summary>
@@ -86,9 +62,6 @@ public class Subject
     public string? Preferences { get; set; }
 }
 
-/// <summary>
-/// Type of subject
-/// </summary>
 public enum SubjectType
 {
     /// <summary>
@@ -106,8 +79,5 @@ public enum SubjectType
     /// </summary>
     Service,
 
-    /// <summary>
-    /// Admin user
-    /// </summary>
     Admin
 }

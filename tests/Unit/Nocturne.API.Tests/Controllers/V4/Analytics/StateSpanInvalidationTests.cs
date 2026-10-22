@@ -20,7 +20,6 @@ public class StateSpanInvalidationTests
         nameof(StateSpansController.GetConnectivity),
         nameof(StateSpansController.GetOverrides),
         nameof(StateSpansController.GetTemporaryTargets),
-        nameof(StateSpansController.GetProfiles),
         nameof(StateSpansController.GetExercise),
         nameof(StateSpansController.GetIllness),
         nameof(StateSpansController.GetTravel),
@@ -55,7 +54,6 @@ public class StateSpanInvalidationTests
     [InlineData(nameof(StateSpansController.GetConnectivity))]
     [InlineData(nameof(StateSpansController.GetOverrides))]
     [InlineData(nameof(StateSpansController.GetTemporaryTargets))]
-    [InlineData(nameof(StateSpansController.GetProfiles))]
     [InlineData(nameof(StateSpansController.GetExercise))]
     [InlineData(nameof(StateSpansController.GetIllness))]
     [InlineData(nameof(StateSpansController.GetTravel))]

@@ -1,3 +1,4 @@
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -10,7 +11,8 @@ namespace Nocturne.API.Services.AidDetection;
 /// <remarks>
 /// Durations are clamped to the evaluation window defined by
 /// <see cref="AidDetectionContext.StartDate"/> and <see cref="AidDetectionContext.EndDate"/>.
-/// TBRs without an explicit end time are assumed to last <c>5</c> minutes.
+/// TBRs without an explicit end time are assumed to last <c>5</c> minutes. Overlapping TBRs
+/// cover their shared time once, as their <see cref="IntervalUnion"/>.
 /// <see cref="AidSegmentMetrics.LoopCycleCount"/> and <see cref="AidSegmentMetrics.EnactedCount"/>
 /// are not applicable for this strategy and are returned as <see langword="null"/>.
 /// </remarks>
@@ -42,52 +44,27 @@ public class TbrBasedStrategy : IAidDetectionStrategy
             return new AidSegmentMetrics();
         }
 
-        var totalMinutes = (context.EndDate - context.StartDate).TotalMinutes;
-
-        var algorithmMinutes = 0.0;
-        var allMinutes = 0.0;
-
-        foreach (var tbr in tempBasals)
-        {
-            var duration = GetClampedDuration(tbr, context.StartDate, context.EndDate);
-
-            allMinutes += duration;
-
-            if (tbr.Origin == TempBasalOrigin.Algorithm)
-            {
-                algorithmMinutes += duration;
-            }
-        }
+        var total = context.EndDate - context.StartDate;
+        var all = tempBasals
+            .Select(tbr => (Tbr: tbr, Interval: ClampedInterval(tbr, context.StartDate, context.EndDate)))
+            .ToList();
 
         return new AidSegmentMetrics
         {
-            AidActivePercent = Math.Min(algorithmMinutes / totalMinutes * 100.0, 100.0),
-            PumpUsePercent = Math.Min(allMinutes / totalMinutes * 100.0, 100.0),
+            AidActivePercent = IntervalUnion.Length(all
+                .Where(t => t.Tbr.Origin == TempBasalOrigin.Algorithm)
+                .Select(t => t.Interval)) / total * 100.0,
+            PumpUsePercent = IntervalUnion.Length(all.Select(t => t.Interval)) / total * 100.0,
             LoopCycleCount = null,
             EnactedCount = null
         };
     }
 
-    /// <summary>
-    /// Returns the duration (in minutes) of <paramref name="tbr"/> clipped to the
-    /// <paramref name="windowStart"/>–<paramref name="windowEnd"/> evaluation window.
-    /// </summary>
-    /// <param name="tbr">The temporary basal record to measure.</param>
-    /// <param name="windowStart">Inclusive start of the evaluation window.</param>
-    /// <param name="windowEnd">Inclusive end of the evaluation window.</param>
-    /// <returns>
-    /// Duration in minutes within the window, or <c>0.0</c> if the record falls entirely outside it.
-    /// </returns>
-    private static double GetClampedDuration(TempBasal tbr, DateTime windowStart, DateTime windowEnd)
+    private static (DateTime Start, DateTime End) ClampedInterval(TempBasal tbr, DateTime windowStart, DateTime windowEnd)
     {
-        var start = tbr.StartTimestamp < windowStart ? windowStart : tbr.StartTimestamp;
-        var end = tbr.EndTimestamp.HasValue
-            ? (tbr.EndTimestamp.Value > windowEnd ? windowEnd : tbr.EndTimestamp.Value)
-            : tbr.StartTimestamp.AddMinutes(DefaultDurationMinutes);
-
-        if (end > windowEnd) end = windowEnd;
-        if (start >= end) return 0.0;
-
-        return (end - start).TotalMinutes;
+        var end = tbr.EndTimestamp ?? tbr.StartTimestamp.AddMinutes(DefaultDurationMinutes);
+        return (
+            tbr.StartTimestamp < windowStart ? windowStart : tbr.StartTimestamp,
+            end > windowEnd ? windowEnd : end);
     }
 }

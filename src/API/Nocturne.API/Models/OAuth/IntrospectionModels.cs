@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Nocturne.API.Models.OAuth;
 
 /// <summary>
@@ -18,6 +20,7 @@ public class TokenIntrospectionResponse
     /// <summary>
     /// OAuth client identifier that the token was issued to.
     /// </summary>
+    [JsonPropertyName("client_id")]
     public string? ClientId { get; set; }
 
     /// <summary>
@@ -43,5 +46,6 @@ public class TokenIntrospectionResponse
     /// <summary>
     /// Type of the token (e.g. "Bearer").
     /// </summary>
+    [JsonPropertyName("token_type")]
     public string? TokenType { get; set; }
 }

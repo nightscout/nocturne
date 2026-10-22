@@ -1,7 +1,7 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -16,6 +16,7 @@ public sealed class GoogleHealthAuthTokenProvider(
     IConnectorTokenCache tokenCache,
     IConnectorServerResolver<GoogleHealthConnectorConfiguration> serverResolver,
     ITenantAccessor tenantAccessor,
+    IOptions<GoogleHealthPlatformOptions> platformOptions,
     ILogger<GoogleHealthAuthTokenProvider> logger)
     : AuthTokenProviderBase<GoogleHealthConnectorConfiguration>(
         httpClient,
@@ -28,7 +29,7 @@ public sealed class GoogleHealthAuthTokenProvider(
     private const string ScopesKey = "Scopes";
     private const string ExpiresAtKey = "AccessTokenExpiresAt";
     private readonly GoogleHealthOAuthClient oauth = new(httpClient);
-    private readonly ConcurrentDictionary<Guid, GoogleHealthTokenSession> storedSessions = new();
+    private readonly GoogleHealthPlatformOptions platform = platformOptions.Value;
 
     protected override string ConnectorName => "GoogleHealth";
     protected override int TokenLifetimeBufferMinutes => 1;
@@ -38,32 +39,31 @@ public sealed class GoogleHealthAuthTokenProvider(
         ? _tenantAccessor.TenantId
         : throw new InvalidOperationException("Google Health token storage requires a resolved tenant context");
 
-    public async Task SeedSessionAsync(GoogleHealthTokenSession session)
+    /// <summary>
+    /// Drops a cached access token minted for a refresh token or grant the tenant no longer
+    /// stores, such as one another replica has since rotated.
+    /// </summary>
+    public async Task DiscardStaleCacheAsync(GoogleHealthConnectorConfiguration configuration)
     {
-        var tenantId = TenantId;
-        var cached = await _tokenCache.GetAsync(ConnectorName, tenantId);
-        if (cached is not null)
-        {
-            try
-            {
-                var cachedSession = FromCache(cached);
-                if (cachedSession.RefreshToken == session.RefreshToken &&
-                    cachedSession.Scopes.Order(StringComparer.Ordinal).SequenceEqual(session.Scopes.Order(StringComparer.Ordinal)))
-                {
-                    storedSessions[tenantId] = cachedSession;
-                    return;
-                }
-                InvalidateToken();
-            }
-            catch (GoogleHealthException)
-            {
-                InvalidateToken();
-            }
-        }
+        var cached = await _tokenCache.GetAsync(ConnectorName, TenantId);
+        if (cached is not null && !IsForStoredGrant(cached, configuration))
+            InvalidateToken();
+    }
 
-        storedSessions[tenantId] = session;
-        if (!string.IsNullOrWhiteSpace(session.AccessToken) && session.AccessTokenExpiresAt is not null)
-            await StoreSessionAsync(session);
+    private static bool IsForStoredGrant(ConnectorSession cached, GoogleHealthConnectorConfiguration configuration)
+    {
+        GoogleHealthTokenSession session;
+        try
+        {
+            session = FromCache(cached);
+        }
+        catch (GoogleHealthException)
+        {
+            return false;
+        }
+        return session.RefreshToken == configuration.RefreshToken &&
+               session.Scopes.Order(StringComparer.Ordinal)
+                   .SequenceEqual(configuration.ParsedGrantedScopes().Order(StringComparer.Ordinal));
     }
 
     public async Task StoreSessionAsync(GoogleHealthTokenSession session)
@@ -71,11 +71,9 @@ public sealed class GoogleHealthAuthTokenProvider(
         if (string.IsNullOrWhiteSpace(session.AccessToken) || session.AccessTokenExpiresAt is null)
             throw new ArgumentException("A Google Health access token and expiration are required.", nameof(session));
 
-        var tenantId = TenantId;
-        storedSessions[tenantId] = session;
         await _tokenCache.SetAsync(
             ConnectorName,
-            tenantId,
+            TenantId,
             new ConnectorSession(
                 session.AccessToken,
                 session.AccessTokenExpiresAt.Value.UtcDateTime.AddMinutes(-TokenLifetimeBufferMinutes),
@@ -89,7 +87,6 @@ public sealed class GoogleHealthAuthTokenProvider(
     }
 
     public async Task<GoogleHealthTokenSession> ExchangeAuthorizationCodeAsync(
-        GoogleHealthConnectorConfiguration configuration,
         string code,
         string verifier,
         IReadOnlyCollection<string> requestedScopes,
@@ -100,9 +97,9 @@ public sealed class GoogleHealthAuthTokenProvider(
             ["grant_type"] = "authorization_code",
             ["code"] = code,
             ["code_verifier"] = verifier,
-            ["client_id"] = configuration.ClientId,
-            ["client_secret"] = configuration.ClientSecret!,
-            ["redirect_uri"] = configuration.CallbackUrl
+            ["client_id"] = platform.ClientId,
+            ["client_secret"] = platform.ClientSecret,
+            ["redirect_uri"] = platform.RedirectUri
         }, cancellationToken);
 
         return Parse(response, "authorization_code", null, requestedScopes, requireRefreshToken: true);
@@ -121,9 +118,7 @@ public sealed class GoogleHealthAuthTokenProvider(
         GoogleHealthConnectorConfiguration configuration,
         CancellationToken cancellationToken)
     {
-        var tenantId = TenantId;
-        storedSessions.TryGetValue(tenantId, out var stored);
-        var refreshToken = stored?.RefreshToken ?? configuration.RefreshToken;
+        var refreshToken = configuration.RefreshToken;
         if (string.IsNullOrWhiteSpace(refreshToken))
             return (null, DateTime.MinValue, null);
 
@@ -131,11 +126,10 @@ public sealed class GoogleHealthAuthTokenProvider(
         {
             ["grant_type"] = "refresh_token",
             ["refresh_token"] = refreshToken,
-            ["client_id"] = configuration.ClientId,
-            ["client_secret"] = configuration.ClientSecret!
+            ["client_id"] = platform.ClientId,
+            ["client_secret"] = platform.ClientSecret
         }, cancellationToken);
-        var session = Parse(response, "token_refresh", refreshToken, stored?.Scopes ?? []);
-        storedSessions[tenantId] = session;
+        var session = Parse(response, "token_refresh", refreshToken, configuration.ParsedGrantedScopes());
 
         return (
             session.AccessToken,

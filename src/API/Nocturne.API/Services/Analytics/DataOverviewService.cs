@@ -1,13 +1,14 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.Statistics;
+using Nocturne.API.Services.Caching;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
-using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
@@ -25,17 +26,11 @@ namespace Nocturne.API.Services.Analytics;
 /// <seealso cref="ITherapySettingsResolver"/>
 public class DataOverviewService : IDataOverviewService
 {
-    private readonly ITenantDbContextFactory _factory;
+    private readonly INocturneDbContextFactory _factory;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly IStatisticsService _statisticsService;
-    private readonly ICacheService _cacheService;
-    private readonly ITenantAccessor _tenantAccessor;
-    private readonly ICategoryReadContext _categoryReadContext;
+    private readonly ITenantCache _cache;
     private readonly ILogger<DataOverviewService> _logger;
-
-    private string TenantCacheId =>
-        _tenantAccessor.Context?.TenantId.ToString()
-        ?? throw new InvalidOperationException("Tenant context is not resolved");
 
     /// <summary>
     /// Initializes a new instance of <see cref="DataOverviewService"/>.
@@ -45,28 +40,20 @@ public class DataOverviewService : IDataOverviewService
     /// the categories they were granted.</param>
     /// <param name="therapySettingsResolver">Resolver for the user's active timezone and therapy settings.</param>
     /// <param name="statisticsService">Statistics service for per-day metric aggregation.</param>
-    /// <param name="cacheService">Cross-request cache for the eHbA1c timeline, keyed per tenant and year.</param>
-    /// <param name="tenantAccessor">Resolves the current tenant for cache-key scoping.</param>
-    /// <param name="categoryReadContext">Says whether this request is history-clamped, in which
-    /// case the timeline cache is bypassed for the reason given on
-    /// <see cref="Nocturne.API.Services.Entries.EntryCacheAdapter"/>.</param>
+    /// <param name="cache">Cross-request cache for the eHbA1c timeline, keyed per year and source.</param>
     /// <param name="logger">The logger instance.</param>
     public DataOverviewService(
-        ITenantDbContextFactory factory,
+        INocturneDbContextFactory factory,
         ITherapySettingsResolver therapySettingsResolver,
         IStatisticsService statisticsService,
-        ICacheService cacheService,
-        ITenantAccessor tenantAccessor,
-        ICategoryReadContext categoryReadContext,
+        ITenantCache cache,
         ILogger<DataOverviewService> logger
     )
     {
         _factory = factory;
         _therapySettingsResolver = therapySettingsResolver;
         _statisticsService = statisticsService;
-        _cacheService = cacheService;
-        _tenantAccessor = tenantAccessor;
-        _categoryReadContext = categoryReadContext;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -252,7 +239,7 @@ public class DataOverviewService : IDataOverviewService
             cancellationToken
         );
 
-        // Insulin totals (Bolus from Boluses table + Basal from algorithm boluses & TempBasals)
+        // Insulin totals (Bolus from manual and algorithm boluses + Basal from TempBasals)
         await CollectInsulinTotals(
             context,
             startUtc,
@@ -285,7 +272,7 @@ public class DataOverviewService : IDataOverviewService
 
             if (day.TotalBolusUnits.HasValue || day.TotalBasalUnits.HasValue)
             {
-                day.TotalDailyDose = (day.TotalBolusUnits ?? 0) + (day.TotalBasalUnits ?? 0);
+                day.TotalDailyDose = Math.Round((day.TotalBolusUnits ?? 0) + (day.TotalBasalUnits ?? 0), 2);
             }
         }
 
@@ -370,7 +357,7 @@ public class DataOverviewService : IDataOverviewService
             r => r.Timestamp, r => r.Insulin, manualBolusByMonth, tz,
             "Failed to collect manual bolus totals for GRI year {Year}", year, cancellationToken, reads, YearMetricSource.ManualBolus);
 
-        // Algorithm boluses (APS SMBs -> basal)
+        // Algorithm boluses (APS SMBs)
         var algorithmBolusByMonth = new Dictionary<int, double>();
         await AccumulateMonthlyTotalsAsync(
             context.Boluses
@@ -389,7 +376,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Rate > 0)
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .ExcludeNonPrimary(context, RecordType.TempBasal)
-                .Select(e => new { StartTimestamp = e.Timestamp, e.Rate, e.EndTimestamp }),
+                .Select(e => new { StartTimestamp = e.Timestamp, Rate = e.Rate ?? 0, e.EndTimestamp }),
             r => r.StartTimestamp,
             r => r.Rate * (r.EndTimestamp.HasValue
                 ? (r.EndTimestamp.Value - r.StartTimestamp).TotalHours
@@ -434,6 +421,38 @@ public class DataOverviewService : IDataOverviewService
     private const int EHbA1cMinimumReadings = 30;
 
     /// <summary>
+    /// The <see cref="ITenantCache"/> families holding every cached timeline a reading at any of
+    /// <paramref name="touchedUtc"/> feeds: the whole <see cref="TenantCacheFamily.EHbA1c"/> family
+    /// when none is given, otherwise one per year.
+    /// </summary>
+    /// <remarks>
+    /// Year <c>Y</c> reads local readings from <see cref="EHbA1cWindowDays"/> before 1 January of
+    /// <c>Y</c> up to the end of <c>Y</c>, so a reading feeds its own local year and the year
+    /// <see cref="EHbA1cWindowDays"/> later. A day either side absorbs the tenant's UTC offset and
+    /// a duplicate copy stamped moments apart, whose primary may change with the write. A timestamp
+    /// too near <see cref="DateTime.MinValue"/> or <see cref="DateTime.MaxValue"/> for that
+    /// arithmetic clears the whole family.
+    /// </remarks>
+    public static IReadOnlyList<string> EHbA1cCacheFamilies(IReadOnlyCollection<DateTime> touchedUtc)
+    {
+        if (touchedUtc.Count == 0 || touchedUtc.Any(t =>
+                t < DateTime.MinValue.AddDays(1) || t > DateTime.MaxValue.AddDays(-(EHbA1cWindowDays + 1))))
+            return [TenantCacheFamily.EHbA1c];
+
+        var years = new SortedSet<int>();
+        foreach (var timestamp in touchedUtc)
+        {
+            var last = timestamp.AddDays(EHbA1cWindowDays + 1).Year;
+            for (var year = timestamp.AddDays(-1).Year; year <= last; year++)
+                years.Add(year);
+        }
+
+        return [.. years.Select(EHbA1cCacheFamily)];
+    }
+
+    private static string EHbA1cCacheFamily(int year) => $"{TenantCacheFamily.EHbA1c}:{year}";
+
+    /// <summary>
     /// Per-day decay ratio for the recency weighting: the largest <c>r &lt; 1</c> such that the most
     /// recent 30 days already carry half of the full 90-day weight — a smooth, per-day generalisation
     /// of the textbook "50% last month / 25% / 25%" HbA1c teaching, without computing it in three
@@ -465,14 +484,9 @@ public class DataOverviewService : IDataOverviewService
         var sourceKey = dataSources is { Length: > 0 }
             ? string.Join(",", dataSources.OrderBy(s => s, StringComparer.OrdinalIgnoreCase))
             : "all";
-        var cacheKey = $"ehba1c:{TenantCacheId}:{year}:{sourceKey}";
+        var cacheKey = $"{EHbA1cCacheFamily(year)}:{sourceKey}";
 
-        // Computed once per tenant/year/source combination and reused until it expires below —
-        // only a cache miss (new day, first view, or expiry) triggers recomputation.
-        var useCache = !_categoryReadContext.IsHistoryClamped;
-        var cached = useCache
-            ? await _cacheService.GetAsync<EHbA1cTimelineResponse>(cacheKey, cancellationToken)
-            : null;
+        var cached = await _cache.GetAsync<EHbA1cTimelineResponse>(cacheKey, cancellationToken);
         if (cached != null)
             return cached;
 
@@ -543,11 +557,11 @@ public class DataOverviewService : IDataOverviewService
             return response;
 
         var isCurrentYear = year == localNow.Year;
-        // Completed years don't change (barring rare backfills), so cache them for a long time; the
-        // current year is still accumulating days, so refresh it more often.
+        // A sensor or meter glucose write through the V4 repositories clears the years its readings
+        // reach (EHbA1cCacheFamilies). Delete-by-source, and the year an update moves a reading out
+        // of, do not clear, so the expiry bounds those.
         var expiry = isCurrentYear ? DateTime.UtcNow.AddHours(1) : DateTime.UtcNow.AddDays(14);
-        if (useCache)
-            await _cacheService.SetAsync(cacheKey, response, expiry, cancellationToken);
+        await _cache.SetAsync(cacheKey, response, expiry, cancellationToken);
 
         return response;
     }
@@ -825,10 +839,10 @@ public class DataOverviewService : IDataOverviewService
         var daysInMonth = (localMonthEnd - localMonthStart).TotalDays;
 
         double? totalDailyDose = null;
-        manualBolusByMonth.TryGetValue(month, out var totalBolusUnits);
-        algorithmBolusByMonth.TryGetValue(month, out var algorithmBasalUnits);
-        tempBasalByMonth.TryGetValue(month, out var tempBasalUnits);
-        var totalBasalUnits = algorithmBasalUnits + tempBasalUnits;
+        manualBolusByMonth.TryGetValue(month, out var manualBolusUnits);
+        algorithmBolusByMonth.TryGetValue(month, out var algorithmBolusUnits);
+        tempBasalByMonth.TryGetValue(month, out var totalBasalUnits);
+        var totalBolusUnits = manualBolusUnits + algorithmBolusUnits;
 
         if (totalBolusUnits > 0 || totalBasalUnits > 0)
         {
@@ -1005,8 +1019,8 @@ public class DataOverviewService : IDataOverviewService
     }
 
     /// <summary>
-    /// Collects insulin totals from the Boluses table (bolus insulin) and from
-    /// algorithm boluses + TempBasals tables (basal insulin delivery).
+    /// Collects insulin totals from the Boluses table (manual and algorithm boluses) and from
+    /// the TempBasals table (basal insulin delivery).
     /// </summary>
     private async Task CollectInsulinTotals(
         NocturneDbContext context,
@@ -1020,7 +1034,7 @@ public class DataOverviewService : IDataOverviewService
         CancellationToken cancellationToken
     )
     {
-        // Manual bolus records — only user-initiated boluses count as bolus insulin
+        // Manual bolus records
         try
         {
             var bolusRecords = await context
@@ -1057,7 +1071,7 @@ public class DataOverviewService : IDataOverviewService
             _logger.LogWarning(ex, "Failed to collect bolus insulin totals");
         }
 
-        // Algorithm bolus records (APS-delivered SMBs that contribute to basal insulin)
+        // Algorithm bolus records (APS-delivered SMBs)
         try
         {
             var algorithmBolusRecords = await context
@@ -1074,7 +1088,7 @@ public class DataOverviewService : IDataOverviewService
             {
                 var grouped = algorithmBolusRecords
                     .GroupBy(r => TimestampToDate(r.Timestamp, tz))
-                    .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd"), TotalBasal = g.Sum(r => r.Insulin) });
+                    .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd"), BolusUnits = g.Sum(r => r.Insulin) });
 
                 foreach (var group in grouped)
                 {
@@ -1084,8 +1098,8 @@ public class DataOverviewService : IDataOverviewService
                         dayMap[group.Date] = day;
                     }
 
-                    day.TotalBasalUnits = Math.Round(
-                        (day.TotalBasalUnits ?? 0) + group.TotalBasal,
+                    day.TotalBolusUnits = Math.Round(
+                        (day.TotalBolusUnits ?? 0) + group.BolusUnits,
                         2
                     );
                 }
@@ -1093,7 +1107,7 @@ public class DataOverviewService : IDataOverviewService
         }
         catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
-            _logger.LogWarning(ex, "Failed to collect basal insulin from algorithm boluses");
+            _logger.LogWarning(ex, "Failed to collect bolus insulin from algorithm boluses");
         }
 
         // TempBasal records (pump basal delivery with rate x duration)
@@ -1108,7 +1122,7 @@ public class DataOverviewService : IDataOverviewService
                 .Select(e => new
                 {
                     StartTimestamp = e.Timestamp,
-                    e.Rate,
+                    Rate = e.Rate ?? 0,
                     e.EndTimestamp,
                 })
                 .ReadMetricRowsAsync(reads, YearMetricSource.TempBasal, cancellationToken);

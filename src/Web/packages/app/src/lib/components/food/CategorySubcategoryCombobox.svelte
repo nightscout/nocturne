@@ -26,6 +26,8 @@
     onSubcategoryCreate?: (category: string, subcategory: string) => void;
     /** Whether the combobox is disabled */
     disabled?: boolean;
+    /** Id of the trigger, for a label to point at */
+    id?: string;
     /** CSS class for the trigger button */
     class?: string;
   }
@@ -39,6 +41,7 @@
     onCategoryCreate,
     onSubcategoryCreate,
     disabled = false,
+    id,
     class: className,
   }: Props = $props();
 
@@ -148,7 +151,7 @@
 
 <div class={className}>
   <Popover.Root bind:open={comboboxOpen}>
-    <Popover.Trigger bind:ref={comboboxTriggerRef}>
+    <Popover.Trigger bind:ref={comboboxTriggerRef} {id}>
       {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button
           variant="combobox"

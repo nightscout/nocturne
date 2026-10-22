@@ -36,7 +36,7 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
         _context.TenantId = Tenant;
         _logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _repository = new TherapySettingsRepository(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             new SystemAuditContext(),
             _logger.Object,
             _broadcaster);

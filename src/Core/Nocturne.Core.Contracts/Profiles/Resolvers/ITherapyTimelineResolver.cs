@@ -24,7 +24,6 @@ public interface ITherapyTimelineResolver
     /// <param name="toMills">Window end (exclusive) in Unix milliseconds.</param>
     /// <param name="specProfile">Optional explicit profile name. When supplied, no profile
     /// switches are honored — the timeline is single-segment with that profile's data.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<TherapyTimeline> BuildAsync(
         long fromMills,
         long toMills,

@@ -2,8 +2,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
+using Nocturne.API.Services.Caching;
+using Nocturne.API.Services.V4;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Projections;
@@ -44,6 +48,12 @@ public class PatientRecordController : ControllerBase
     private readonly IDeviceService _deviceService;
     private readonly ISensorGlucoseRepository _sensorGlucoseRepo;
     private readonly IDeviceReattributionService _reattribution;
+    private readonly ISensorSessionInferenceRunner _sessionInference;
+    private readonly IDeviceTrackerProvisioner _trackerProvisioner;
+    private readonly ITenantAccessor _tenantAccessor;
+    private readonly ITenantCache _tenantCache;
+    private readonly ITempBasalRateReresolver _tempBasalRates;
+    private readonly ILogger<PatientRecordController> _logger;
 
     public PatientRecordController(
         IPatientRecordRepository recordRepo,
@@ -51,7 +61,13 @@ public class PatientRecordController : ControllerBase
         IPatientInsulinRepository insulinRepo,
         IDeviceService deviceService,
         ISensorGlucoseRepository sensorGlucoseRepo,
-        IDeviceReattributionService reattribution)
+        IDeviceReattributionService reattribution,
+        ISensorSessionInferenceRunner sessionInference,
+        IDeviceTrackerProvisioner trackerProvisioner,
+        ITenantAccessor tenantAccessor,
+        ITenantCache tenantCache,
+        ITempBasalRateReresolver tempBasalRates,
+        ILogger<PatientRecordController> logger)
     {
         _recordRepo = recordRepo;
         _deviceRepo = deviceRepo;
@@ -59,6 +75,12 @@ public class PatientRecordController : ControllerBase
         _deviceService = deviceService;
         _sensorGlucoseRepo = sensorGlucoseRepo;
         _reattribution = reattribution;
+        _sessionInference = sessionInference;
+        _trackerProvisioner = trackerProvisioner;
+        _tenantAccessor = tenantAccessor;
+        _tenantCache = tenantCache;
+        _tempBasalRates = tempBasalRates;
+        _logger = logger;
     }
 
     /// <summary>Window scanned for "discovered sources" — distinct unattributed streams seen recently.</summary>
@@ -89,7 +111,13 @@ public class PatientRecordController : ControllerBase
         [FromBody] PatientRecord model,
         CancellationToken cancellationToken = default)
     {
+        var storedTimezone = (await _recordRepo.GetAsync(cancellationToken))?.Timezone;
         var updated = await _recordRepo.UpdateAsync(model, WriteOrigin.Live, cancellationToken);
+        if (!string.Equals(storedTimezone, updated.Timezone, StringComparison.Ordinal))
+        {
+            await _tenantCache.RemoveFamilyAsync(TenantCacheFamily.EHbA1c, cancellationToken);
+            await _tempBasalRates.AfterProfilesChangedAsync([], cancellationToken);
+        }
         return Ok(updated);
     }
 
@@ -138,6 +166,10 @@ public class PatientRecordController : ControllerBase
         var created = await _deviceRepo.CreateAsync(model, WriteOrigin.Live, cancellationToken);
         // Back-stamp existing unattributed records this device now explains.
         await _reattribution.ReattributeForDeviceAsync(created, cancellationToken);
+        if (created.DeviceCategory == DeviceCategory.CGM)
+            await InferSensorSessionHistoryAsync(created, cancellationToken);
+        if (HttpContext.GetSubjectIdString() is { } userId)
+            await _trackerProvisioner.ProvisionAsync(created, userId, cancellationToken);
         return CreatedAtAction(nameof(GetDevices), created);
     }
 
@@ -154,7 +186,14 @@ public class PatientRecordController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         await ResolveDeviceIdAsync(model, cancellationToken);
+        var previous = await _deviceRepo.GetByIdAsync(id, cancellationToken);
         var updated = await _deviceRepo.UpdateAsync(id, model, WriteOrigin.Live, cancellationToken);
+        if (previous is not null && ChangesWhatItExplains(previous, updated))
+        {
+            await _reattribution.ReattributeForDeviceAsync(updated, cancellationToken);
+            if (previous?.DeviceCategory == DeviceCategory.CGM || updated.DeviceCategory == DeviceCategory.CGM)
+                await InferSensorSessionHistoryAsync(updated, cancellationToken);
+        }
         return Ok(updated);
     }
 
@@ -167,6 +206,8 @@ public class PatientRecordController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> DeleteDevice(Guid id, CancellationToken cancellationToken = default)
     {
+        if (await _deviceRepo.GetByIdAsync(id, cancellationToken) is { DeviceCategory: DeviceCategory.CGM } cgm)
+            await RunSensorSessionInferenceAsync(cgm, (inference, token) => inference.ForgetDeviceAsync(cgm, token), cancellationToken);
         await _deviceRepo.DeleteAsync(id, WriteOrigin.Live, cancellationToken);
         return NoContent();
     }
@@ -187,6 +228,42 @@ public class PatientRecordController : ControllerBase
         var changed = await _deviceRepo.ReorderAsync(
             ranks.Select(r => (r.Id, r.Rank)).ToList(), WriteOrigin.Live, cancellationToken);
         return Ok(changed);
+    }
+
+    /// <summary>
+    /// Whether an edit changes which records the device explains, so its attribution and sensor
+    /// session history are worth redoing. A rename, a note or a reorder is not.
+    /// </summary>
+    private static bool ChangesWhatItExplains(PatientDevice previous, PatientDevice updated) =>
+        previous.DeviceCategory != updated.DeviceCategory
+        || previous.CatalogId != updated.CatalogId
+        || previous.StartDate != updated.StartDate
+        || previous.EndDate != updated.EndDate
+        || previous.Manufacturer != updated.Manufacturer
+        || previous.SerialNumber != updated.SerialNumber;
+
+    /// <summary>
+    /// Gives a registered or edited CGM its sensor session history
+    /// (<see cref="ISensorSessionInferenceService.InferHistoryAsync"/>). The device is already saved,
+    /// so a failure here is logged rather than failing the request.
+    /// </summary>
+    private Task InferSensorSessionHistoryAsync(PatientDevice device, CancellationToken ct)
+        => RunSensorSessionInferenceAsync(device, (inference, token) => inference.InferHistoryAsync(device, token), ct);
+
+    private async Task RunSensorSessionInferenceAsync(
+        PatientDevice device, Func<ISensorSessionInferenceService, CancellationToken, Task> work, CancellationToken ct)
+    {
+        if (_tenantAccessor.Context is not { } tenant)
+            return;
+
+        try
+        {
+            await _sessionInference.RunAsync(tenant, work, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Sensor session inference failed for device {DeviceId}", device.Id);
+        }
     }
 
     private async Task ResolveDeviceIdAsync(PatientDevice model, CancellationToken ct)

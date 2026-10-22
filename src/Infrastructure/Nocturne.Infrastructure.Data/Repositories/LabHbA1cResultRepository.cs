@@ -13,11 +13,11 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class LabHbA1cResultRepository : ILabHbA1cResultRepository
 {
-    private readonly ITenantDbContextFactory _factory;
+    private readonly INocturneDbContextFactory _factory;
 
     /// <summary>Initializes a new instance of <see cref="LabHbA1cResultRepository"/>.</summary>
     /// <param name="factory">Tenant-scoped DbContext factory.</param>
-    public LabHbA1cResultRepository(ITenantDbContextFactory factory)
+    public LabHbA1cResultRepository(INocturneDbContextFactory factory)
     {
         _factory = factory;
     }

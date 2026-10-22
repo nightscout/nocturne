@@ -205,7 +205,7 @@ public class OidcController : ControllerBase
         // Clear state cookie (single use)
         ClearStateCookie();
 
-        // The callback runs on the tenant subdomain (OidcCallbackRedirectMiddleware has already
+        // The callback runs on the tenant subdomain (ApexCallbackRelayMiddleware has already
         // bounced apex callbacks to {slug}.{baseDomain}), so the resolved tenant is the one being
         // logged into. Pass it through so a session is only issued to a member of that tenant.
         var currentTenantId = (HttpContext.GetTenantContext())?.TenantId;
@@ -219,6 +219,21 @@ public class OidcController : ControllerBase
             Request.Headers.UserAgent,
             currentTenantId
         );
+
+        if (result.StepUpToken is { } stepUpToken)
+        {
+            Response.SetTotpStepUpCookie(stepUpToken, _options);
+            SetLastSignInCookie(result.ProviderId);
+
+            // Not a completed login, so not a successful one; the success row is written when the
+            // second factor lands.
+            await _auditService.LogAsync(AuthAuditEventType.Login, result.SubjectId, success: false,
+                ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+                detailsJson: JsonSerializer.Serialize(new { method = "oidc", secondFactorPending = true }));
+
+            return Redirect(
+                $"/auth/login?returnUrl={Uri.EscapeDataString(result.ReturnUrl ?? "/")}");
+        }
 
         if (!result.Success)
         {
@@ -255,10 +270,7 @@ public class OidcController : ControllerBase
 
         // Set session cookies
         SetSessionCookies(result.Tokens!);
-        Response.SetLastSignInCookie(
-            SessionCookieExtensions.SignInMethods.Oidc,
-            result.ProviderId?.ToString(),
-            _options);
+        SetLastSignInCookie(result.ProviderId);
 
         await _auditService.LogAsync(AuthAuditEventType.Login, result.Tokens?.SubjectId, success: true,
             ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
@@ -281,6 +293,7 @@ public class OidcController : ControllerBase
     /// endpoint so they can attach the external identity to their current account.
     /// </summary>
     [HttpGet("link")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -322,6 +335,7 @@ public class OidcController : ControllerBase
     /// Does NOT issue new session cookies.
     /// </summary>
     [HttpGet("link/callback")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -442,12 +456,13 @@ public class OidcController : ControllerBase
     /// <response code="404">Identity not found.</response>
     /// <response code="409">Cannot remove the last primary sign-in method.</response>
     [HttpDelete("link/identities/{identityId:guid}")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetLinkedIdentities", "Passkey_ListCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UnlinkIdentity(Guid identityId)
     {
         var auth = HttpContext.GetAuthContext();
@@ -457,29 +472,18 @@ public class OidcController : ControllerBase
         // Symmetric factor-count rule is enforced atomically inside the service inside a
         // serializable transaction to prevent TOCTOU races between concurrent removals.
         var result = await _subjectService.TryRemoveOidcIdentityAsync(auth.SubjectId.Value, identityId);
-        switch (result)
-        {
-            case FactorRemovalResult.NotFound:
-                return NotFound();
-            case FactorRemovalResult.LastPrimaryFactor:
-                return Conflict(new
-                {
-                    error = "last_factor",
-                    message = "Cannot remove your only remaining sign-in method",
-                });
-            case FactorRemovalResult.Removed:
-                await _auditService.LogAsync(AuthAuditEventType.OidcIdentityUnlinked, auth.SubjectId, success: true,
-                    ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
-                    detailsJson: JsonSerializer.Serialize(new { identityId }));
+        if (result != FactorRemovalResult.Removed)
+            return this.FactorRemovalRefusal(result, "OIDC identity");
 
-                _logger.LogInformation(
-                    "OIDC identity {IdentityId} unlinked from subject {SubjectId}",
-                    identityId, auth.SubjectId);
+        await _auditService.LogAsync(AuthAuditEventType.OidcIdentityUnlinked, auth.SubjectId, success: true,
+            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+            detailsJson: JsonSerializer.Serialize(new { identityId }));
 
-                return NoContent();
-            default:
-                throw new InvalidOperationException($"Unexpected FactorRemovalResult: {result}");
-        }
+        _logger.LogInformation(
+            "OIDC identity {IdentityId} unlinked from subject {SubjectId}",
+            identityId, auth.SubjectId);
+
+        return NoContent();
     }
 
     /// <summary>
@@ -689,6 +693,10 @@ public class OidcController : ControllerBase
             tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
 
     private void ClearSessionCookies() => Response.ClearSessionCookies(_options);
+
+    private void SetLastSignInCookie(Guid? providerId) =>
+        Response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Oidc, providerId?.ToString(), _options);
 
     /// <summary>
     /// Get the refresh token from cookie or request body

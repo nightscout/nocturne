@@ -18,7 +18,7 @@ public class ClockFaceServiceTests
     public ClockFaceServiceTests()
     {
         _db.TenantId = Guid.NewGuid();
-        _service = new ClockFaceService(_db, NullLogger<ClockFaceService>.Instance);
+        _service = new ClockFaceService(_db.AsFactory(), NullLogger<ClockFaceService>.Instance);
     }
 
     private Guid AddSubject(string? preferences)

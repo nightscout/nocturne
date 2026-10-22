@@ -29,10 +29,10 @@ public class FoodHistoryTests : IDisposable
     public FoodHistoryTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(
-            TenantId, "test", new MutationAuditInterceptor(Mock.Of<IHttpContextAccessor>()));
+            TenantId, "test", new MutationAuditInterceptor());
         _context = _db.CreateContext();
-        _context.AuditContext = new UserAuditContext();
-        _foods = new FoodRepository(_context, NullLogger<FoodRepository>.Instance);
+        _context.AttributedTo(new UserAuditContext());
+        _foods = new FoodRepository(_context.AsFactory(), NullLogger<FoodRepository>.Instance);
     }
 
     public void Dispose()
@@ -126,7 +126,7 @@ public class FoodHistoryTests : IDisposable
         await _context.SaveChangesAsync();
         _context.ChangeTracker.Clear();
 
-        await _foods.BulkDeleteFoodAsync("apple");
+        await _foods.BulkDeleteFoodAsync("find[name]=apple");
 
         (await _context.TreatmentFoods.SingleAsync()).FoodId.Should().BeNull();
         (await _context.ConnectorFoodEntries.SingleAsync()).FoodId.Should().BeNull();
@@ -150,6 +150,53 @@ public class FoodHistoryTests : IDisposable
             .Should().BeFalse("a restored food is live again, and its next delete is judged afresh");
     }
 
+    [Fact]
+    public async Task BulkDelete_RemovesTheFoodsNamedAndNoOthers()
+    {
+        var wanted = await SeedAsync("apple", Written);
+        var sameName = await SeedAsync("apple", Written);
+        await SeedAsync("pie", Written, category: "apple");
+        await SeedAsync("apple pie", Written);
+
+        var deleted = await _foods.BulkDeleteFoodAsync("find[name]=apple");
+
+        deleted.Should().Be(2);
+        (await _foods.GetFoodAsync()).Select(f => f.Name).Should().BeEquivalentTo("pie", "apple pie");
+        (await _foods.GetFoodByIdAsync(wanted.ToString())).Should().BeNull();
+        (await _foods.GetFoodByIdAsync(sameName.ToString())).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("{}")]
+    [InlineData("count=10")]
+    public async Task BulkDelete_WithNoConditions_RefusesAndDeletesNothing(string? find)
+    {
+        await SeedAsync("apple", Written);
+
+        var act = () => _foods.BulkDeleteFoodAsync(find);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        (await _foods.GetFoodAsync()).Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData("find[colour]=red")]
+    [InlineData("find[name]=apple&find[colour]=red")]
+    [InlineData("find[name][$bogus]=apple")]
+    [InlineData("find[colour][$ne]=red")]
+    [InlineData("find[name]=apple&find[colour][$exists]=false")]
+    public async Task BulkDelete_WithAFieldOrOperatorItCannotApply_RefusesAndDeletesNothing(string find)
+    {
+        await SeedAsync("apple", Written);
+
+        var act = () => _foods.BulkDeleteFoodAsync(find);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        (await _foods.GetFoodAsync()).Should().ContainSingle();
+    }
+
     private sealed class UserAuditContext : IAuditContext
     {
         public Guid? SubjectId => Guid.Empty;
@@ -165,10 +212,10 @@ public class FoodHistoryTests : IDisposable
     /// <summary>
     /// Inserts a food, then sets its write stamp alone — a touch the save path keeps as assigned.
     /// </summary>
-    private async Task<Guid> SeedAsync(string name, DateTime written)
+    private async Task<Guid> SeedAsync(string name, DateTime written, string category = "")
     {
         var id = Guid.CreateVersion7();
-        _context.Foods.Add(new FoodEntity { Id = id, TenantId = TenantId, Name = name, Carbs = 10 });
+        _context.Foods.Add(new FoodEntity { Id = id, TenantId = TenantId, Name = name, Category = category, Carbs = 10 });
         await _context.SaveChangesAsync();
 
         var entity = await _context.Foods.SingleAsync(f => f.Id == id);

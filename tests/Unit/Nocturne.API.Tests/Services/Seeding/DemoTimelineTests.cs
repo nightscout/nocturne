@@ -255,16 +255,13 @@ public class DemoTimelineTests
     }
 
     [Fact]
-    public void LifestyleSeeds_ProfileAndTargetSpansCarryDecomposerShapedMetadata()
+    public void LifestyleSeeds_TargetSpansCarryDecomposerShapedMetadata_AndNoProfileSpan()
     {
-        // Resolvers read the profile name and target values from metadata, not
-        // from State — a name-in-State span silently resolves as "Default".
+        // Resolvers read target values from metadata, not from State. The profile is a profile
+        // activation, which the seeder writes beside the spans.
         var spans = DemoLifestyleSeeds.BuildSpans(DateTime.Now.Date, 60);
 
-        var profile = spans.Single(s => s.Category == StateSpanCategory.Profile);
-        profile.State.Should().Be(nameof(ProfileState.Active));
-        profile.Metadata.Should().ContainKey("profileName")
-            .WhoseValue.Should().Be(DemoTherapyProfile.ProfileName);
+        spans.Should().NotContain(s => s.Category == StateSpanCategory.Profile);
 
         var targets = spans.Where(s => s.Category == StateSpanCategory.TemporaryTarget).ToList();
         targets.Should().NotBeEmpty("60 days contain exercise days with temp targets");

@@ -5,12 +5,14 @@ using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Services.Legacy;
 
 /// <summary>
-/// Abstract base for simple entity CRUD services that use <see cref="NocturneDbContext"/> directly
+/// Abstract base for simple entity CRUD services that use <see cref="NocturneDbContext"/> directly,
+/// one context per operation,
 /// with document processing and SignalR broadcasting via <see cref="ISignalRBroadcastService"/>.
 /// Eliminates boilerplate for services like <see cref="BodyWeightService"/> that follow the same
 /// get/create/update/delete + broadcast pattern. Services whose entity carries an observation
@@ -25,7 +27,7 @@ public abstract class SimpleEntityService<TDomain, TEntity>
     where TDomain : class, IProcessableDocument
     where TEntity : class, IOriginalIdentified
 {
-    protected readonly NocturneDbContext DbContext;
+    protected readonly INocturneDbContextFactory Contexts;
     protected readonly IDocumentProcessingService DocumentProcessingService;
     protected readonly ISignalRBroadcastService SignalRBroadcastService;
     protected readonly ILogger Logger;
@@ -33,19 +35,18 @@ public abstract class SimpleEntityService<TDomain, TEntity>
     /// <summary>
     /// Initializes a new instance of <see cref="SimpleEntityService{TDomain,TEntity}"/>.
     /// </summary>
-    /// <param name="dbContext">The EF Core database context for entity access.</param>
     /// <param name="documentProcessingService">Service for HTML sanitization and document preprocessing.</param>
     /// <param name="signalRBroadcastService">Service for broadcasting storage events to connected clients.</param>
     /// <param name="logger">The logger instance.</param>
     /// <exception cref="ArgumentNullException">Thrown when any required parameter is <see langword="null"/>.</exception>
     protected SimpleEntityService(
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         IDocumentProcessingService documentProcessingService,
         ISignalRBroadcastService signalRBroadcastService,
         ILogger logger
     )
     {
-        DbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+        Contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         DocumentProcessingService =
             documentProcessingService
             ?? throw new ArgumentNullException(nameof(documentProcessingService));
@@ -55,8 +56,8 @@ public abstract class SimpleEntityService<TDomain, TEntity>
         Logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    /// <summary>The <see cref="Microsoft.EntityFrameworkCore.DbSet{TEntity}"/> for this entity type.</summary>
-    protected abstract DbSet<TEntity> EntitySet { get; }
+    /// <summary>The <see cref="Microsoft.EntityFrameworkCore.DbSet{TEntity}"/> for this entity type on <paramref name="db"/>.</summary>
+    protected abstract DbSet<TEntity> EntitySet(NocturneDbContext db);
 
     /// <summary>The collection name used for <see cref="ISignalRBroadcastService"/> broadcasts (e.g., <c>"heartrate"</c>).</summary>
     protected abstract string CollectionName { get; }
@@ -89,13 +90,14 @@ public abstract class SimpleEntityService<TDomain, TEntity>
     /// taken for the MongoDB ObjectId the row carried into the migration, so links minted against
     /// the legacy database keep resolving.
     /// </summary>
+    /// <param name="db">The context to look it up on.</param>
     /// <param name="id">The route id to look up.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The matching entity, or <see langword="null"/>.</returns>
-    private Task<TEntity?> FindByIdAsync(string id, CancellationToken cancellationToken) =>
+    private Task<TEntity?> FindByIdAsync(NocturneDbContext db, string id, CancellationToken cancellationToken) =>
         Guid.TryParse(id, out var guid)
-            ? EntitySet.FirstOrDefaultAsync(e => e.Id == guid, cancellationToken)
-            : EntitySet.FirstOrDefaultAsync(e => e.OriginalId == id, cancellationToken);
+            ? EntitySet(db).FirstOrDefaultAsync(e => e.Id == guid, cancellationToken)
+            : EntitySet(db).FirstOrDefaultAsync(e => e.OriginalId == id, cancellationToken);
 
     /// <summary>
     /// Retrieves a page of entities ordered by timestamp descending.
@@ -112,6 +114,7 @@ public abstract class SimpleEntityService<TDomain, TEntity>
     {
         try
         {
+            await using var db = await Contexts.CreateAsync(cancellationToken);
             Logger.LogDebug(
                 "Getting {EntityType} records with count: {Count}, skip: {Skip}",
                 EntityTypeName,
@@ -119,7 +122,7 @@ public abstract class SimpleEntityService<TDomain, TEntity>
                 skip
             );
 
-            var entities = await OrderByTimestamp(EntitySet.AsNoTracking())
+            var entities = await OrderByTimestamp(EntitySet(db).AsNoTracking())
                 .Skip(skip)
                 .Take(count)
                 .ToListAsync(cancellationToken);
@@ -146,9 +149,10 @@ public abstract class SimpleEntityService<TDomain, TEntity>
     {
         try
         {
+            await using var db = await Contexts.CreateAsync(cancellationToken);
             Logger.LogDebug("Getting {EntityType} record by ID: {Id}", EntityTypeName, id);
 
-            var entity = await FindByIdAsync(id, cancellationToken);
+            var entity = await FindByIdAsync(db, id, cancellationToken);
             return entity is null ? null : ToDomainModel(entity);
         }
         catch (Exception ex)
@@ -181,6 +185,7 @@ public abstract class SimpleEntityService<TDomain, TEntity>
     {
         try
         {
+            await using var db = await Contexts.CreateAsync(cancellationToken);
             var itemList = items.ToList();
             Logger.LogDebug(
                 "Creating {Count} {EntityType} records",
@@ -229,7 +234,7 @@ public abstract class SimpleEntityService<TDomain, TEntity>
             var existingByKey = new Dictionary<string, TEntity>(StringComparer.Ordinal);
             if (syncIdentifiers.Count > 0)
             {
-                var candidates = await EntitySet
+                var candidates = await EntitySet(db)
                     .Where(e => dataSources.Contains(
                             EF.Property<string>(e, nameof(ISyncDedupable.DataSource)))
                         && syncIdentifiers.Contains(
@@ -266,8 +271,8 @@ public abstract class SimpleEntityService<TDomain, TEntity>
             }
 
             if (toInsert.Count > 0)
-                await EntitySet.AddRangeAsync(toInsert, cancellationToken);
-            await DbContext.SaveChangesAsync(cancellationToken);
+                await EntitySet(db).AddRangeAsync(toInsert, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
 
             var result = resultEntities.Select(ToDomainModel).ToList();
 
@@ -305,9 +310,10 @@ public abstract class SimpleEntityService<TDomain, TEntity>
     {
         try
         {
+            await using var db = await Contexts.CreateAsync(cancellationToken);
             Logger.LogDebug("Updating {EntityType} record with ID: {Id}", EntityTypeName, id);
 
-            var entity = await FindByIdAsync(id, cancellationToken);
+            var entity = await FindByIdAsync(db, id, cancellationToken);
             if (entity is null)
             {
                 Logger.LogDebug(
@@ -319,7 +325,7 @@ public abstract class SimpleEntityService<TDomain, TEntity>
             }
 
             UpdateEntity(entity, item);
-            await DbContext.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
 
             var result = ToDomainModel(entity);
 
@@ -360,9 +366,10 @@ public abstract class SimpleEntityService<TDomain, TEntity>
     {
         try
         {
+            await using var db = await Contexts.CreateAsync(cancellationToken);
             Logger.LogDebug("Deleting {EntityType} record with ID: {Id}", EntityTypeName, id);
 
-            var entity = await FindByIdAsync(id, cancellationToken);
+            var entity = await FindByIdAsync(db, id, cancellationToken);
             if (entity is null)
             {
                 Logger.LogDebug(
@@ -376,8 +383,8 @@ public abstract class SimpleEntityService<TDomain, TEntity>
             if (entity is ISoftDeletable softDeletable)
                 softDeletable.DeletedAt = DateTime.UtcNow;
             else
-                EntitySet.Remove(entity);
-            await DbContext.SaveChangesAsync(cancellationToken);
+                EntitySet(db).Remove(entity);
+            await db.SaveChangesAsync(cancellationToken);
 
             await SignalRBroadcastService.BroadcastStorageDeleteAsync(
                 CollectionName,

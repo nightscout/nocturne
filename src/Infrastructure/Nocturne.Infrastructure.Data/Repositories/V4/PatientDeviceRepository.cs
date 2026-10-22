@@ -15,7 +15,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// </summary>
 public class PatientDeviceRepository : IPatientDeviceRepository
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly ILogger<PatientDeviceRepository> _logger;
 
     /// <summary>
@@ -24,7 +24,7 @@ public class PatientDeviceRepository : IPatientDeviceRepository
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="logger">The logger instance.</param>
     public PatientDeviceRepository(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         ILogger<PatientDeviceRepository> logger)
     {
         _contextFactory = contextFactory;

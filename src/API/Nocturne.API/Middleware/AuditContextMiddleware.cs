@@ -5,8 +5,8 @@ using Nocturne.Core.Contracts.Audit;
 namespace Nocturne.API.Middleware;
 
 /// <summary>
-/// Populates the scoped IAuditContext from the current HTTP request.
-/// Must run after AuthenticationMiddleware.
+/// Populates the scoped <see cref="IAuditContext"/> from the current HTTP request.
+/// Must run after <see cref="AuthenticationMiddleware"/>, which sets the <c>AuthContext</c> it reads.
 /// </summary>
 public class AuditContextMiddleware
 {
@@ -17,7 +17,10 @@ public class AuditContextMiddleware
         _next = next;
     }
 
-    public async Task InvokeAsync(HttpContext httpContext, IAuditContext auditContext)
+    public async Task InvokeAsync(
+        HttpContext httpContext,
+        IAuditContext auditContext,
+        IRequestPathRedactor pathRedactor)
     {
         if (auditContext is AuditContext mutableContext)
         {
@@ -29,7 +32,9 @@ public class AuditContextMiddleware
             mutableContext.TokenId = authContext?.TokenId;
             mutableContext.IpAddress = httpContext.Connection.RemoteIpAddress?.ToString();
             mutableContext.TraceId = httpContext.TraceIdentifier;
-            mutableContext.Endpoint = $"{httpContext.Request.Method} {httpContext.Request.Path}";
+            mutableContext.Endpoint =
+                $"{httpContext.Request.Method} {pathRedactor.Redact(httpContext.Request.Path.ToString())}";
+            httpContext.Items[AuditContext.HttpItemKey] = mutableContext;
         }
 
         await _next(httpContext);

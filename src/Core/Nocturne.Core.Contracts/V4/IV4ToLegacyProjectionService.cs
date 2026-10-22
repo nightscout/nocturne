@@ -4,44 +4,26 @@ using Nocturne.Core.Contracts.Glucose;
 namespace Nocturne.Core.Contracts.V4;
 
 /// <summary>
-/// Projects V4 granular records (SensorGlucose, Bolus, CarbIntake, BGCheck, Note, DeviceEvent)
-/// back into the legacy Entry and Treatment shapes required by the v1/v2/v3 API endpoints.
+/// Projects V4 granular records (Bolus, CarbIntake, BGCheck, Note, DeviceEvent)
+/// back into the legacy Treatment shape required by the v1/v2/v3 API endpoints.
 /// </summary>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="ITreatmentService"/>
 public interface IV4ToLegacyProjectionService
 {
     /// <summary>
-    /// Returns a set of legacy <see cref="Entry"/> objects synthesised from V4 SensorGlucose records.
-    /// These supplement the entries already stored in the legacy entries table for connectors
-    /// that write V4 directly.
-    /// </summary>
-    Task<IEnumerable<Entry>> GetProjectedEntriesAsync(
-        long? fromMills,
-        long? toMills,
-        int limit,
-        int offset,
-        bool descending,
-        CancellationToken ct = default
-    );
-
-    /// <summary>
-    /// Returns the single most-recent legacy <see cref="Entry"/> synthesised from V4 SensorGlucose records,
-    /// or <c>null</c> if no V4 glucose records exist.
-    /// </summary>
-    Task<Entry?> GetLatestProjectedEntryAsync(CancellationToken ct = default);
-
-    /// <summary>
     /// Returns a set of legacy <see cref="Treatment"/> objects synthesised from V4 treatment records
     /// (Bolus, CarbIntake, BGCheck, Note, DeviceEvent).
     /// These supplement the treatments already stored in the legacy treatments table for connectors
-    /// that write V4 directly.
+    /// that write V4 directly. The newest <paramref name="limit"/> treatments in the window newest
+    /// first, or, when <paramref name="descending"/> is <c>false</c>, the oldest oldest first.
     /// </summary>
     Task<IEnumerable<Treatment>> GetProjectedTreatmentsAsync(
         long? fromMills,
         long? toMills,
         int limit,
         bool nativeOnly = true,
+        bool descending = true,
         CancellationToken ct = default
     );
 
@@ -77,11 +59,20 @@ public interface IV4ToLegacyProjectionService
     Task<bool> IsStateSpanDeletedByUserAsync(string id, CancellationToken ct = default);
 
     /// <summary>
-    /// The treatments the state spans decomposed from treatments add to a count of the record tables
-    /// over the window, bounds inclusive: the spans that start inside it, less the Notes their
-    /// treatments wrote beside them, which a record count holds but are served as part of the span.
+    /// The treatments the state spans and profile activations decomposed from treatments are served
+    /// as over the window, bounds inclusive: those that start inside it.
     /// </summary>
     Task<long> CountProjectedStateSpanTreatmentsAsync(
+        long? fromMills,
+        long? toMills,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// The Notes served as treatments of their own over the window, bounds inclusive: every Note but
+    /// those a treatment wrote beside another record, which serves it as its <c>notes</c>.
+    /// </summary>
+    Task<long> CountNotesServedApartAsync(
         long? fromMills,
         long? toMills,
         CancellationToken ct = default

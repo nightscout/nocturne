@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Chat;
@@ -28,7 +28,7 @@ namespace Nocturne.API.Services.Chat;
 public sealed class ChatIdentityService(
     ChatIdentityDirectoryService directory,
     ChatIdentityPendingLinkService pendingLinks,
-    IDbContextFactory<NocturneDbContext> contextFactory,
+    INocturneDbContextFactory contextFactory,
     ILogger<ChatIdentityService> logger)
 {
     /// <summary>Returns all active chat identity links for the specified tenant.</summary>
@@ -42,13 +42,15 @@ public sealed class ChatIdentityService(
         => directory.GetDefaultAsync(platform, platformUserId, ct);
 
     /// <summary>Consumes a pending link token and creates a directory entry linking the chat platform user to the tenant.</summary>
+    /// <exception cref="ChatLinkTokenRejectedException">The token cannot be claimed for this tenant.</exception>
+    /// <exception cref="ChatAccountLinkedToAnotherMemberException"><see cref="ChatIdentityDirectoryService.CreateLinkAsync"/></exception>
     public async Task<ChatIdentityDirectoryEntry> ClaimPendingLinkAsync(
         Guid tenantId, Guid userId, string token, CancellationToken ct)
     {
         var pending = await pendingLinks.TryConsumeAsync(token, ct)
-            ?? throw new InvalidOperationException("Token expired or already used");
+            ?? throw new ChatLinkTokenRejectedException("Token expired or already used");
 
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await contextFactory.CreatePlatformAsync(ct);
         var tenant = await db.Tenants.AsNoTracking()
             .Where(t => t.Id == tenantId)
             .Select(t => new { t.Slug, t.DisplayName })
@@ -57,7 +59,7 @@ public sealed class ChatIdentityService(
         if (pending.TenantSlug is not null &&
             !string.Equals(pending.TenantSlug, tenant.Slug, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Token does not belong to this tenant");
+            throw new ChatLinkTokenRejectedException("Token does not belong to this tenant");
         }
 
         var entry = await directory.CreateLinkAsync(
@@ -102,7 +104,7 @@ public sealed class ChatIdentityService(
     /// </summary>
     public async Task<ChatIdentityPendingLinkView?> GetPendingAsync(string token, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await contextFactory.CreatePlatformAsync(ct);
         var row = await db.ChatIdentityPendingLinks.AsNoTracking()
             .FirstOrDefaultAsync(p => p.Token == token, ct);
         if (row is null || row.ExpiresAt < DateTime.UtcNow) return null;
@@ -110,6 +112,7 @@ public sealed class ChatIdentityService(
         {
             Platform = row.Platform,
             PlatformUserId = row.PlatformUserId,
+            PlatformUserName = row.PlatformUserName,
             TenantSlug = row.TenantSlug,
             Source = row.Source,
         };
@@ -125,6 +128,7 @@ public class ChatIdentityPendingLinkView
 {
     public string Platform { get; set; } = string.Empty;
     public string PlatformUserId { get; set; } = string.Empty;
+    public string? PlatformUserName { get; set; }
     public string? TenantSlug { get; set; }
     public string Source { get; set; } = string.Empty;
 }

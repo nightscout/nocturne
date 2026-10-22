@@ -5,6 +5,8 @@ using Nocturne.API.Services.Entries;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
@@ -60,6 +62,27 @@ public class EntryReadServiceHistoryTests
     }
 
     [Fact]
+    public async Task SearchBySrvModified_PagesByWriteStamp_AndLeavesOutDeletedReadings()
+    {
+        var first = Sg(Cursor.AddDays(-2), written: Cursor.AddMinutes(1), source: "cgm");
+        var second = Sg(Cursor.AddDays(-9), written: Cursor.AddMinutes(2), source: "cgm");
+        var third = Sg(Cursor.AddDays(-1), written: Cursor.AddMinutes(3), source: "cgm");
+        var deleted = Sg(Cursor.AddDays(-3), written: Cursor.AddMinutes(4), source: "cgm");
+        ServeHistory(_sgRepo, new[] { first, second, third, deleted }, deleted: [deleted.Id]);
+
+        var result = await CreateSut(TestDoubles.CanonicalGlucosePassThrough.Create()).QueryAsync(new EntryQuery
+        {
+            Find = $"find[srvModified][$gt]={CursorMills}",
+            Count = 2,
+            Skip = 1,
+            ReverseResults = true,
+            SortField = ReadSortField.SrvModified,
+        });
+
+        result.Select(e => e.Id).Should().Equal(second.Id.ToString(), third.Id.ToString());
+    }
+
+    [Fact]
     public async Task NothingWrittenAfterTheCursor_ReturnsAnEmptyPageWithoutACursor()
     {
         var page = await CreateSut(TestDoubles.CanonicalGlucosePassThrough.Create())
@@ -81,7 +104,7 @@ public class EntryReadServiceHistoryTests
 
         _sgRepo.Setup(r => r.GetModifiedSinceAsync(CursorMills, 1000, It.IsAny<CancellationToken>()))
             .ReturnsAsync([Live(loser)]);
-        _sgRepo.Setup(r => r.GetAsync(
+        _sgRepo.Setup(r => r.GetForEntriesAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
@@ -109,7 +132,7 @@ public class EntryReadServiceHistoryTests
         var winner = Sg(at, written: deletedAt, source: "a-cgm");
         var successor = Sg(at.AddMinutes(1), written: Cursor.AddHours(-3), source: "b-cgm");
         ServeHistory(_sgRepo, new[] { winner }, deleted: [winner.Id]);
-        _sgRepo.Setup(r => r.GetAsync(
+        _sgRepo.Setup(r => r.GetForEntriesAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))

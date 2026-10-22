@@ -39,6 +39,7 @@ internal sealed record SensorContextEnricherDependencies(
     IAlertRepository Alerts,
     ITargetRangeScheduleRepository TargetRangeSchedules,
     IActiveProfileResolver ActiveProfileResolver,
+    IProfileActivationResolver ProfileActivations,
     ITherapySettingsResolver TherapySettings,
     ISleepService Sleep,
     ITrackerRepository Trackers,

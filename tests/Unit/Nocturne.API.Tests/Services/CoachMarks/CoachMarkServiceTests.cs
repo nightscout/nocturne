@@ -34,7 +34,7 @@ public class CoachMarkServiceTests
         var httpContextAccessor = new HttpContextAccessor { HttpContext = httpContext };
         var logger = new Mock<ILogger<CoachMarkService>>();
 
-        _service = new CoachMarkService(_dbContext, httpContextAccessor, logger.Object);
+        _service = new CoachMarkService(_dbContext.AsFactory(), httpContextAccessor, logger.Object);
     }
 
     [Fact]

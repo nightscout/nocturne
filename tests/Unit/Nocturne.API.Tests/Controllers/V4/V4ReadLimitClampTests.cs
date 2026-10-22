@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -161,7 +162,7 @@ public class V4ReadLimitClampTests
             count, 0, true, It.IsAny<CancellationToken>()), Times.Exactly(ActivityCategoryCount));
 
     /// <summary>The <c>/state-spans</c> sub-routes that pre-filter by a single category.</summary>
-    private const int CategorySubRouteCount = 8;
+    private const int CategorySubRouteCount = 7;
 
     private static async Task InvokeCategorySubRoutes(StateSpansController controller, int limit, int offset)
     {
@@ -169,7 +170,6 @@ public class V4ReadLimitClampTests
         await controller.GetConnectivity(limit: limit, offset: offset);
         await controller.GetOverrides(limit: limit, offset: offset);
         await controller.GetTemporaryTargets(limit: limit, offset: offset);
-        await controller.GetProfiles(limit: limit, offset: offset);
         await controller.GetExercise(limit: limit, offset: offset);
         await controller.GetIllness(limit: limit, offset: offset);
         await controller.GetTravel(limit: limit, offset: offset);
@@ -209,7 +209,8 @@ public class V4ReadLimitClampTests
             Mock.Of<ICarbRatioScheduleRepository>(),
             Mock.Of<ISensitivityScheduleRepository>(),
             Mock.Of<ITargetRangeScheduleRepository>(),
-            Mock.Of<IProfileProjectionService>());
+            Mock.Of<IProfileProjectionService>(),
+            TempBasalTestDeps.NoReresolution());
 
     private static void VerifyTherapySettingsFetched(Mock<ITherapySettingsRepository> repo, int limit, int offset) =>
         repo.Verify(r => r.GetAsync(null, null, null, null, limit, offset, true, It.IsAny<CancellationToken>()), Times.Once);
@@ -306,7 +307,7 @@ public class V4ReadLimitClampTests
         var result = await controller.GetHeartRates(count: Ceiling, skip: 0);
 
         result.Result.Should().BeOfType<OkObjectResult>();
-        service.Verify(s => s.GetHeartRatesAsync(Ceiling, 0, It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(s => s.GetHeartRatesAsync(Ceiling, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -318,7 +319,7 @@ public class V4ReadLimitClampTests
         var result = await controller.GetHeartRates(count: AboveCeiling, skip: -1);
 
         result.Result.Should().BeOfType<OkObjectResult>();
-        service.Verify(s => s.GetHeartRatesAsync(Ceiling, 0, It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(s => s.GetHeartRatesAsync(Ceiling, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -372,7 +373,7 @@ public class V4ReadLimitClampTests
         var result = await controller.GetStepCounts(count: Ceiling, skip: 0);
 
         result.Result.Should().BeOfType<OkObjectResult>();
-        service.Verify(s => s.GetStepCountsAsync(Ceiling, 0, It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(s => s.GetStepCountsAsync(Ceiling, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -384,7 +385,7 @@ public class V4ReadLimitClampTests
         var result = await controller.GetStepCounts(count: AboveCeiling, skip: -1);
 
         result.Result.Should().BeOfType<OkObjectResult>();
-        service.Verify(s => s.GetStepCountsAsync(Ceiling, 0, It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(s => s.GetStepCountsAsync(Ceiling, 0, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -540,7 +541,7 @@ public class V4ReadLimitClampTests
             repo.Object,
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<ITrackerAlertRuleSyncService>(),
-            Mock.Of<ITenantDbContextFactory>(),
+            Mock.Of<INocturneDbContextFactory>(),
             Mock.Of<IAlertAcknowledgementService>(),
             Mock.Of<ILogger<TrackersController>>())
         {

@@ -60,7 +60,7 @@ public class ConnectorSchemaSyncToggleTests : IDisposable
 
     private ConnectorConfigurationService CreateService() =>
         new(
-            _dbContext,
+            _dbContext.AsFactory(),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IAuditContext>(),

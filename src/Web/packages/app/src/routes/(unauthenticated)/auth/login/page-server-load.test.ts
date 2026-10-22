@@ -85,3 +85,26 @@ describe("login page auto-login redirects", () => {
     expect(await redirectTarget("/reports?__autologin=1", false)).toBeNull();
   });
 });
+
+describe("login page authenticator hand-off", () => {
+  it("opens the authenticator step once, ahead of auto-login", async () => {
+    const jar = new Map([[".Nocturne.TotpStepUp", "step-up-token"]]);
+    const cookies = {
+      get: (name: string) => jar.get(name),
+      delete: (name: string) => jar.delete(name),
+    } as unknown as Cookies;
+    const event = {
+      url: new URL("/auth/login?returnUrl=%2Freports", ORIGIN),
+      locals: {
+        isAuthenticated: false,
+        isShareHost: false,
+        apiClient: { status: { getStatus: async () => ({ isDemo: true }) } },
+      },
+      cookies,
+      parent: async () => ({ tenantless: false }),
+    } as unknown as LoadEvent;
+
+    expect(await load(event)).toEqual({ stepUpToken: "step-up-token" });
+    expect(jar.has(".Nocturne.TotpStepUp")).toBe(false);
+  });
+});

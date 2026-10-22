@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Net.Http.Json;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models;
@@ -27,6 +29,15 @@ public class ProfileParityTests : ParityTestBase
 
     #region Data Seeding
 
+    /// <summary>
+    /// Leaves out the typed profile's unset fields, as a real uploader does. Written as explicit
+    /// nulls, Nightscout would store and echo them, and the comparison would test the serializer.
+    /// </summary>
+    private static readonly JsonSerializerOptions NightscoutSeedOptions = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+
     private async Task SeedProfileAsync(Profile profile)
     {
         // Convert to Nightscout format
@@ -39,7 +50,7 @@ public class ProfileParityTests : ParityTestBase
             store = profile.Store
         };
 
-        var nsResponse = await NightscoutClient.PostAsJsonAsync("/api/v1/profile", nsProfile);
+        var nsResponse = await NightscoutClient.PostAsJsonAsync("/api/v1/profile", nsProfile, NightscoutSeedOptions);
         nsResponse.EnsureSuccessStatusCode();
 
         var nocResponse = await NocturneClient.PostAsJsonAsync("/api/v1/profile", profile);
@@ -68,9 +79,10 @@ public class ProfileParityTests : ParityTestBase
     [Fact]
     public async Task GetProfile_MultipleProfiles_ReturnsSameShape()
     {
+        // Distinct start dates: both servers list newest first, and neither orders a tie.
         var profile1 = TestDataFactory.CreateProfile(defaultProfile: "Day");
         var profile2 = TestDataFactory.CreateProfile(
-            defaultProfile: "Night");
+            defaultProfile: "Night", timestamp: TestTimeProvider.GetTestTime(minutesOffset: 1));
 
         await SeedProfileAsync(profile1);
         await SeedProfileAsync(profile2);

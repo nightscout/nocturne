@@ -14,6 +14,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V1;
@@ -24,7 +25,7 @@ public class PebbleControllerTests
 
     private readonly Mock<IEntryService> _entryService = new();
     private static readonly Guid TenantId = Guid.NewGuid();
-    private readonly Mock<IShareAppearanceReader> _appearance = new();
+    private readonly Mock<ITenantAppearanceReader> _appearance = new();
     private int _requestedSgvCount;
     private int _requestedCalCount;
 
@@ -40,12 +41,16 @@ public class PebbleControllerTests
             .ReturnsAsync(Array.Empty<Entry>());
 
         _appearance
-            .Setup(a => a.GetSharedAppearanceAsync(TenantId, It.IsAny<CancellationToken>()))
+            .Setup(a => a.GetTenantAppearanceAsync(TenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserDisplayPreferences { GlucoseUnits = tenantUnits });
         var tenantAccessor = new Mock<ITenantAccessor>();
         tenantAccessor.SetupGet(t => t.TenantId).Returns(TenantId);
 
         var projection = new DeviceStatusProjectionService(
+            Mock.Of<IDeviceStatusGroupRepository>(r => r.GetAsync(
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())
+                == Task.FromResult<IReadOnlyList<DeviceStatusGroup>>(Array.Empty<DeviceStatusGroup>())),
             Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IPumpSnapshotRepository>(),
             Mock.Of<IUploaderSnapshotRepository>(),
@@ -217,5 +222,25 @@ public class PebbleControllerTests
         var bg = FirstBg(await Get(controller));
 
         bg.GetProperty("bgdelta").GetString().Should().Be("0.0");
+    }
+
+    [Fact]
+    public async Task SgvInMmol_RoundsAtTheBoundaryWithTheCoreFactor()
+    {
+        var controller = NewController("mmol", Sgv(100, 0));
+
+        var bg = FirstBg(await Get(controller));
+
+        bg.GetProperty("sgv").GetString().Should().Be("5.5");
+    }
+
+    [Fact]
+    public async Task BgdeltaInMmol_RoundsAtTheBoundaryWithTheCoreFactor()
+    {
+        var controller = NewController("mmol", Sgv(209, 0), Sgv(100, 5));
+
+        var bg = FirstBg(await Get(controller));
+
+        bg.GetProperty("bgdelta").GetString().Should().Be("6.0");
     }
 }

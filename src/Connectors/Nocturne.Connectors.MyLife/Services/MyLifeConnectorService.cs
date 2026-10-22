@@ -15,9 +15,8 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.Connectors.MyLife.Services;
 
 /// <summary>
-/// MyLife connector service that syncs data using granular models.
-/// This connector creates SensorGlucose, Bolus, CarbIntake, BGCheck, Note,
-/// DeviceEvent, and TempBasal records directly instead of legacy Entry/Treatment.
+/// MyLife connector service. Publishes SensorGlucose, Bolus, CarbIntake, BGCheck, Note,
+/// DeviceEvent and TempBasal records.
 /// </summary>
 public class MyLifeConnectorService(
     HttpClient httpClient,
@@ -223,21 +222,19 @@ public class MyLifeConnectorService(
                 await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
                     profiles, PublishProfileDataAsync, config, cancellationToken);
 
-                var profileStateSpans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource);
+                var activations = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource);
                 await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-                    profileStateSpans, PublishStateSpanDataAsync, config, cancellationToken, "from pump settings");
+                    activations, PublishProfileActivationDataAsync, config, cancellationToken, "from pump settings");
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             // A token MyLife has already rejected would otherwise stay cached until its nominal
             // 24-hour expiry, failing every sync in between.
             if (ex is HttpRequestException { StatusCode: HttpStatusCode.Unauthorized })
                 tokenProvider.InvalidateToken();
 
-            _logger.LogError(ex, "Error during sync");
-            result.Success = false;
-            result.Errors.Add($"Sync error: {ex.Message}");
+            RecordSyncError(result, ex);
         }
 
         return result;

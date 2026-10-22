@@ -2,14 +2,16 @@ using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Nocturne.API.Services.Demo;
 
 /// <summary>
 /// The one owner of "everything the demo service wrote": the table list and the delete that empties
 /// it, for every caller that clears demo data. Takes the context so a caller may bring either
-/// tenant-scoping pattern — an injected scoped context, or a factory context with
-/// <see cref="NocturneDbContext.TenantId"/> pinned from the demo tenant lookup.
+/// tenant-scoping pattern — a context reading as the scope's tenant, or one pinned to the demo
+/// tenant the caller looked up.
 /// </summary>
 /// <remarks>
 /// Hard delete (<see cref="PurgeExtensions.PurgeAsync{TEntity}"/>), unlike the audited soft-delete
@@ -31,8 +33,7 @@ internal static class DemoDataPurge
     }
 
     /// <summary>
-    /// Treatments the demo service wrote: boluses, carbs, BG checks, notes, device events, bolus
-    /// calculations, temp basals and state spans.
+    /// Treatments and compression-low review data the demo service wrote.
     /// </summary>
     public static async Task<long> PurgeTreatmentsAsync(NocturneDbContext db, CancellationToken ct)
     {
@@ -43,8 +44,40 @@ internal static class DemoDataPurge
         deleted += await db.DeviceEvents.PurgeAsync(SourceFilter.For<DeviceEventEntity>(DataSources.DemoService), ct);
         deleted += await db.BolusCalculations.PurgeAsync(SourceFilter.For<BolusCalculationEntity>(DataSources.DemoService), ct);
         deleted += await db.TempBasals.PurgeAsync(SourceFilter.For<TempBasalEntity>(DataSources.DemoService), ct);
-        deleted += await db.StateSpans.PurgeAsync(s => s.Source == DataSources.DemoService, ct);
+        deleted += await db.ProfileActivations.PurgeAsync(SourceFilter.For<ProfileActivationEntity>(DataSources.DemoService), ct);
+        var demoAcceptedSpanIds = (await db.StateSpans
+                .Where(s => s.Source == "compression-low-detection" && s.MetadataJson != null)
+                .Select(s => new { s.Id, s.MetadataJson })
+                .ToListAsync(ct))
+            .Where(span => HasDemoSeedMarker(span.MetadataJson))
+            .Select(span => span.Id)
+            .ToArray();
+        deleted += await db.StateSpans.PurgeAsync(
+            s => s.Source == DataSources.DemoService || demoAcceptedSpanIds.Contains(s.Id), ct);
+        deleted += await db.CompressionLowSuggestions.PurgeAsync(
+            s => s.DataSource == DataSources.DemoService, ct);
+        deleted += await db.LabHbA1cResults
+            .Where(result => result.Note == "Demo lab result")
+            .ExecuteUpdateAsync(update => update.SetProperty(
+                result => result.DeletedAt, DateTime.UtcNow), ct);
         return deleted;
+    }
+
+    private static bool HasDemoSeedMarker(string? metadata)
+    {
+        if (string.IsNullOrWhiteSpace(metadata))
+            return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(metadata);
+            return document.RootElement.TryGetProperty("DemoSeed", out var marker)
+                && marker.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     /// <summary>APS snapshots the demo service wrote.</summary>

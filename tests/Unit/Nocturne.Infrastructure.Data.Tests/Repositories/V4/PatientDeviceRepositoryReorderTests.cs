@@ -32,7 +32,7 @@ public class PatientDeviceRepositoryReorderTests : IDisposable
 
         _context = _db.CreateContext();
         _repo = new PatientDeviceRepository(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             NullLogger<PatientDeviceRepository>.Instance);
     }
 

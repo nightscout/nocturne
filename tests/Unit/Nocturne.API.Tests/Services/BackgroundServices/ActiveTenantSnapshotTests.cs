@@ -28,7 +28,7 @@ public sealed class ActiveTenantSnapshotTests : IDisposable
         _db = TestDbContextFactory.CreateSqliteWithTenant(Guid.NewGuid(), "active", _gate)
             .SeedTenant(Guid.NewGuid(), "inactive", isActive: false);
 
-        _sut = new ActiveTenantSnapshot(_db.ContextFactory, _time, _logger);
+        _sut = new ActiveTenantSnapshot(_db.ContextFactory.AsNocturneFactory(), _time, _logger);
     }
 
     public void Dispose() => _db.Dispose();

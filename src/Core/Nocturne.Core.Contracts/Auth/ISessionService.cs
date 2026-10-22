@@ -9,9 +9,7 @@ public interface ISessionService
     /// <summary>
     /// Issue a new session (access + refresh token pair) for a subject.
     /// </summary>
-    /// <param name="subjectId">Subject identifier.</param>
     /// <param name="context">Contextual metadata for the session.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<SessionTokenPair> IssueSessionAsync(
         Guid subjectId, SessionContext context, CancellationToken ct = default);
 
@@ -19,9 +17,7 @@ public interface ISessionService
     /// Rotate an existing refresh token, issuing a new token pair with
     /// freshly resolved roles and permissions.
     /// </summary>
-    /// <param name="refreshToken">Current refresh token to rotate.</param>
     /// <param name="context">Contextual metadata for the session.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>New token pair, or null if the refresh token is invalid.</returns>
     Task<SessionTokenPair?> RotateSessionAsync(
         string refreshToken, SessionContext context, CancellationToken ct = default);

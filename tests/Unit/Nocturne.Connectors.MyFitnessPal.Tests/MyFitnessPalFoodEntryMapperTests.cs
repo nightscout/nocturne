@@ -52,11 +52,26 @@ public class MyFitnessPalFoodEntryMapperTests
         import.Carbs.Should().Be(30);
         import.Protein.Should().Be(8);
         import.Fat.Should().Be(2);
-        import.Energy.Should().Be(180);
+        import.Energy.Should().Be(753.12m);
 
         // The food record keeps the per-serving values for deduplication.
         import.Food!.Carbs.Should().Be(15);
-        import.Food.Energy.Should().Be(90);
+        import.Food.Energy.Should().Be(376.56m);
+    }
+
+    [Fact]
+    public void Map_StoresTheGraphsKilocaloriesAsKilojoules()
+    {
+        var (from, to) = WholeDay;
+        var entry = Entry();
+        entry.ConsumedNutrientSet = new MfpNutrientSet { Calories = 100 };
+        entry.Food!.NutrientSet = new MfpNutrientSet { Calories = 250 };
+
+        var import = Mapper().Map([entry], Config, from, to, Breakfast)
+            .Should().ContainSingle().Subject;
+
+        import.Energy.Should().Be(418.4m);
+        import.Food!.Energy.Should().Be(1046m);
     }
 
     [Fact]

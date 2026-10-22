@@ -183,6 +183,11 @@ public static class DataSources
     /// </summary>
     public const string WebSocket = "websocket";
 
+    /// <summary>
+    /// Sensor session starts Nocturne inferred from the warm-up gap in a CGM's readings.
+    /// </summary>
+    public const string SensorSessionInference = "sensor-session-inference";
+
     // ============================================================================
     // AID/Loop System Sources
     // ============================================================================
@@ -192,9 +197,6 @@ public static class DataSources
     /// </summary>
     public const string Loop = "loop";
 
-    /// <summary>
-    /// Data from OpenAPS system.
-    /// </summary>
     public const string OpenAps = "openaps";
 
     /// <summary>
@@ -202,14 +204,8 @@ public static class DataSources
     /// </summary>
     public const string AndroidAps = "aaps";
 
-    /// <summary>
-    /// Data from iAPS app.
-    /// </summary>
     public const string IAps = "iaps";
 
-    /// <summary>
-    /// Data from Trio app.
-    /// </summary>
     public const string Trio = "trio";
 
     // ============================================================================

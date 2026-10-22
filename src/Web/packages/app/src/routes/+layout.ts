@@ -7,6 +7,8 @@ import {
     registerPreferenceCookieDomain,
     registerPreferencesWriteThrough,
     reconcilePreferences,
+    presentOwnerPreferences,
+    applyTenantPresentation,
     setLanguage,
     type SupportedLocale,
 } from '$lib/stores/appearance-store.svelte'
@@ -54,12 +56,15 @@ export const load: LayoutLoad = async ({ url, data }) => {
         }
     }
 
-    if (browser && (data?.isAuthenticated || data?.isShareHost)) {
+    if (browser && data?.isShareHost) {
+        presentOwnerPreferences(data?.serverPreferences)
+    } else if (browser && data?.isAuthenticated) {
         // Server preferences win across devices; an empty server blob seeds from local once.
-        // On a share host they are the link owner's, and hydrating them here is what keeps the
-        // client from replacing the server-rendered view with this browser's defaults.
         reconcilePreferences(data?.serverPreferences)
     }
+
+    // After reconciling, so a guest's seeded cookie carries only what the guest set.
+    applyTenantPresentation(data?.tenantPreferences)
 
     if (browser && locales.includes(locale)) {
         await loadLocale(locale)

@@ -4,23 +4,24 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.ClientDevices;
 
 /// <summary>
-/// Persists client device registrations via <see cref="NocturneDbContext"/>. Tenant is supplied by
-/// the data context (carrier); the subject is passed in from the authenticated request.
+/// Persists client device registrations. The tenant is the scope's reader's; the subject is passed in
+/// from the authenticated request.
 /// </summary>
 /// <seealso cref="IClientDeviceService"/>
 public class ClientDeviceService : IClientDeviceService
 {
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<ClientDeviceService> _logger;
 
     /// <summary>Initializes a new instance of the <see cref="ClientDeviceService"/> class.</summary>
-    public ClientDeviceService(NocturneDbContext dbContext, ILogger<ClientDeviceService> logger)
+    public ClientDeviceService(INocturneDbContextFactory contexts, ILogger<ClientDeviceService> logger)
     {
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger;
     }
 
@@ -32,6 +33,7 @@ public class ClientDeviceService : IClientDeviceService
         Guid? grantId,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(request.InstallId))
         {
             throw new ArgumentException("InstallId is required.", nameof(request));
@@ -56,21 +58,21 @@ public class ClientDeviceService : IClientDeviceService
 
         // Idempotent upsert on (tenant, install_id). Tenant scoping is applied by the global query
         // filter; the unique index backs the race path below if two registrations collide.
-        var existing = await _dbContext.ClientDevices
+        var existing = await db.ClientDevices
             .FirstOrDefaultAsync(d => d.InstallId == request.InstallId, cancellationToken);
 
         if (existing is not null)
         {
-            return await UpdateExistingAsync(existing, subjectId, request, accepted, grantId, cancellationToken);
+            return await UpdateExistingAsync(db, existing, subjectId, request, accepted, grantId, cancellationToken);
         }
 
         var entity = new ClientDeviceEntity { InstallId = request.InstallId };
         Apply(entity, subjectId, request, accepted, grantId);
-        _dbContext.ClientDevices.Add(entity);
+        db.ClientDevices.Add(entity);
 
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
             _logger.LogInformation(
                 "Registered {Kind} device {DeviceId} (install {InstallId}) for subject {SubjectId}.",
                 entity.Kind, entity.Id, entity.InstallId, subjectId);
@@ -80,8 +82,8 @@ public class ClientDeviceService : IClientDeviceService
         {
             // A concurrent registration may have won the insert (unique install id); fold this call
             // into an update against the winning row if one now exists, otherwise rethrow.
-            _dbContext.Entry(entity).State = EntityState.Detached;
-            var raced = await _dbContext.ClientDevices
+            db.Entry(entity).State = EntityState.Detached;
+            var raced = await db.ClientDevices
                 .FirstOrDefaultAsync(d => d.InstallId == request.InstallId, cancellationToken);
             if (raced is null)
             {
@@ -91,7 +93,7 @@ public class ClientDeviceService : IClientDeviceService
             _logger.LogWarning(
                 "Concurrent registration for install {InstallId}; folding into an update.",
                 request.InstallId);
-            return await UpdateExistingAsync(raced, subjectId, request, accepted, grantId, cancellationToken);
+            return await UpdateExistingAsync(db, raced, subjectId, request, accepted, grantId, cancellationToken);
         }
     }
 
@@ -102,6 +104,7 @@ public class ClientDeviceService : IClientDeviceService
     /// </summary>
     /// <exception cref="InvalidOperationException">The install id belongs to a different subject.</exception>
     private async Task<ClientDeviceDto> UpdateExistingAsync(
+        NocturneDbContext db,
         ClientDeviceEntity existing,
         Guid subjectId,
         RegisterDeviceRequest request,
@@ -116,7 +119,7 @@ public class ClientDeviceService : IClientDeviceService
         }
 
         Apply(existing, subjectId, request, capabilities, grantId);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         return ToDto(existing);
     }
 
@@ -125,13 +128,14 @@ public class ClientDeviceService : IClientDeviceService
         Guid subjectId,
         CancellationToken cancellationToken = default)
     {
-        var rows = await _dbContext.ClientDevices
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var rows = await db.ClientDevices
             .Where(d => d.SubjectId == subjectId)
             .OrderByDescending(d => d.LastSeenAt)
             .Select(d => new
             {
                 Device = d,
-                AppName = _dbContext.OAuthGrants
+                AppName = db.OAuthGrants
                     .Where(g => g.Id == d.GrantId)
                     .Select(g => g.Client!.DisplayName)
                     .FirstOrDefault(),
@@ -146,12 +150,13 @@ public class ClientDeviceService : IClientDeviceService
         IReadOnlyCollection<Guid> grantIds,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         if (grantIds.Count == 0)
         {
             return new Dictionary<Guid, int>();
         }
 
-        return await _dbContext.ClientDevices
+        return await db.ClientDevices
             .Where(d => d.GrantId != null && grantIds.Contains(d.GrantId.Value))
             .GroupBy(d => d.GrantId!.Value)
             .Select(g => new { GrantId = g.Key, Count = g.Count() })
@@ -165,7 +170,8 @@ public class ClientDeviceService : IClientDeviceService
         string? label,
         CancellationToken cancellationToken = default)
     {
-        var device = await _dbContext.ClientDevices
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var device = await db.ClientDevices
             .FirstOrDefaultAsync(d => d.Id == deviceId, cancellationToken);
         if (device is null || device.SubjectId != subjectId)
         {
@@ -174,7 +180,7 @@ public class ClientDeviceService : IClientDeviceService
 
         device.Label = label;
         device.UpdatedAt = DateTime.UtcNow;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         return ToDto(device);
     }
 
@@ -184,15 +190,16 @@ public class ClientDeviceService : IClientDeviceService
         Guid subjectId,
         CancellationToken cancellationToken = default)
     {
-        var device = await _dbContext.ClientDevices
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var device = await db.ClientDevices
             .FirstOrDefaultAsync(d => d.Id == deviceId, cancellationToken);
         if (device is null || device.SubjectId != subjectId)
         {
             return false;
         }
 
-        _dbContext.ClientDevices.Remove(device);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        db.ClientDevices.Remove(device);
+        await db.SaveChangesAsync(cancellationToken);
         return true;
     }
 
@@ -202,7 +209,8 @@ public class ClientDeviceService : IClientDeviceService
         Guid subjectId,
         CancellationToken cancellationToken = default)
     {
-        var device = await _dbContext.ClientDevices
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var device = await db.ClientDevices
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == deviceId, cancellationToken);
 
@@ -218,7 +226,7 @@ public class ClientDeviceService : IClientDeviceService
         // device_action test excursion a short future end so it appears here for the window
         // and then self-withdraws. Real excursions always end in the past.
         var now = DateTime.UtcNow;
-        var excursions = await _dbContext.AlertExcursions
+        var excursions = await db.AlertExcursions
             .AsNoTracking()
             .Include(e => e.AlertRule)
                 .ThenInclude(r => r!.Channels)
@@ -230,7 +238,7 @@ public class ClientDeviceService : IClientDeviceService
             .OrderByDescending(e => e.StartedAt)
             .ToListAsync(cancellationToken);
 
-        var mutedByOwner = await _dbContext.AlertExcursionMutes
+        var mutedByOwner = await db.AlertExcursionMutes
             .AsNoTracking()
             .Where(m => m.SubjectId == subjectId)
             .Select(m => m.AlertExcursionId)

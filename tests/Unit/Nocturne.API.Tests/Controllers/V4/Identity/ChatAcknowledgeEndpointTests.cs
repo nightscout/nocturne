@@ -51,17 +51,19 @@ public class ChatAcknowledgeEndpointTests : IDisposable
 
     private ChatIdentityDirectoryController CreateController()
     {
-        var tenantFactory = new Mock<ITenantDbContextFactory>();
+        var tenantFactory = new Mock<INocturneDbContextFactory>();
         tenantFactory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .Returns(() => ValueTask.FromResult(_db.CreateContext(_tenantId)));
+        tenantFactory
+            .Setup(f => f.CreatePlatformAsync(It.IsAny<CancellationToken>()))
+            .Returns(() => ValueTask.FromResult(_db.CreateContext(Guid.Empty)));
 
         return new ChatIdentityDirectoryController(
             new ChatIdentityDirectoryService(
-                _db.ContextFactory, Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
+                _db.ContextFactory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
             new ChatIdentityPendingLinkService(
-                _db.ContextFactory, Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
-            _db.ContextFactory,
+                _db.ContextFactory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
             tenantFactory.Object,
             _tenantAccessor.Object,
             _ackService.Object);

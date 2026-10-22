@@ -22,6 +22,9 @@ public static class DeviceAttributionCategories
     /// <summary>Categories eligible to own a <see cref="V4.TempBasal"/>.</summary>
     public static IReadOnlyList<DeviceCategory> TempBasal { get; } = [DeviceCategory.InsulinPump];
 
+    /// <summary>Categories eligible to own a <see cref="V4.ProfileActivation"/>: the pump that runs the profile.</summary>
+    public static IReadOnlyList<DeviceCategory> ProfileActivation { get; } = [DeviceCategory.InsulinPump];
+
     /// <summary>Categories eligible to own a <see cref="V4.BasalInjection"/> (MDI long-acting dose).</summary>
     public static IReadOnlyList<DeviceCategory> BasalInjection { get; } =
         [DeviceCategory.InsulinPen, DeviceCategory.SmartPen];

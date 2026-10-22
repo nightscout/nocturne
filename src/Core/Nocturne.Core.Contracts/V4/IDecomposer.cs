@@ -20,7 +20,6 @@ public interface IDecomposer<in T> where T : class
     /// performing idempotent create-or-update based on LegacyId matching.
     /// </summary>
     /// <param name="record">The legacy record to decompose.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>A <see cref="DecompositionResult"/> containing the created or updated v4 records.</returns>
     Task<DecompositionResult> DecomposeAsync(T record, WriteOrigin origin, CancellationToken ct = default);
 
@@ -29,7 +28,6 @@ public interface IDecomposer<in T> where T : class
     /// with the specified identifier.
     /// </summary>
     /// <param name="legacyId">The legacy record identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The total number of v4 records deleted across all target tables.</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 }

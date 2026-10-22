@@ -70,8 +70,8 @@ public static class AuditedBulkDeleteExtensions
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
     };
 
-    /// <summary>What a <c>bulk_delete</c> summary row records in place of per-row snapshots.</summary>
-    private readonly record struct BulkDeleteSummary(int Count, string Scope);
+    /// <summary>What a <c>bulk_delete</c> or <c>allow_reimport</c> summary row records in place of per-row snapshots.</summary>
+    private readonly record struct BulkSummary(int Count, string Scope);
 
     /// <summary>
     /// Executes a bulk hard delete, snapshotting every removed row into <c>mutation_audit_log</c>.
@@ -154,7 +154,7 @@ public static class AuditedBulkDeleteExtensions
         var (deleted, _) = await context.ExecuteInTransactionAsync(
             async token =>
             {
-                var deletedAt = NocturneDbContext.UtcNowAtStoredPrecision();
+                var deletedAt = await HistoryHorizon.StampAsync(context, token);
                 var rows = await ScopeAsync(context, query, duplicates, token);
                 var deleted = await SoftDeleteRowsAsync(context, rows, auditContext, deletedAt, duplicates, token);
                 await WriteBulkDeleteSummaryAsync<T>(context, deleted.Count, scope, auditContext, token);
@@ -202,7 +202,7 @@ public static class AuditedBulkDeleteExtensions
     {
         var (result, _) = await context.ExecuteInTransactionAsync(async token =>
         {
-            var deletedAt = NocturneDbContext.UtcNowAtStoredPrecision();
+            var deletedAt = await HistoryHorizon.StampAsync(context, token);
             var rows = await ScopeAsync(context, query, duplicates, token);
             // One row past the cap is all it takes to know the match set exceeds it.
             var records = await rows.Take(BroadcastMaterializationCap + 1).ToListAsync(token);
@@ -237,9 +237,9 @@ public static class AuditedBulkDeleteExtensions
     }
 
     /// <summary>
-    /// Whether a soft delete whose commit reported failure landed: its rows carry its stamp, taken at
-    /// <see cref="NocturneDbContext.UtcNowAtStoredPrecision"/> so that it compares equal to the stored one. With
-    /// nothing deleted there is nothing to report, and the work runs again.
+    /// Whether a soft delete whose commit reported failure landed: its rows carry its stamp, taken by
+    /// <see cref="HistoryHorizon.StampAsync"/> at the precision it is stored at, so that it compares
+    /// equal to the stored one. With nothing deleted there is nothing to report, and the work runs again.
     /// </summary>
     private static async Task<bool> SoftDeleteLandedAsync<T>(
         NocturneDbContext context, int count, DateTime deletedAt, CancellationToken ct)
@@ -324,6 +324,9 @@ public static class AuditedBulkDeleteExtensions
             };
         }
 
+        if (typeof(T) == typeof(StateSpanEntity))
+            await context.ClearSupersededByAsync(ids, ct);
+
         IReadOnlyList<Guid> promoted = recordType is { } type && duplicates == DuplicateDelete.PromoteSurvivor
             ? await DuplicateGroupPrimaries.RepointAwayFromAsync(
                 context, type, ids, deletedAt.AddMilliseconds(groups.Count), ct)
@@ -343,12 +346,42 @@ public static class AuditedBulkDeleteExtensions
             : query;
 
     /// <summary>
-    /// Appends the one summary row a bulk soft delete records: the entity type, how many rows it
+    /// Clears <c>deleted_by_user</c> on the user tombstones among <paramref name="query"/>, so a resync
+    /// re-creates their records (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>),
+    /// and records one <c>allow_reimport</c> summary row for <paramref name="scope"/>. The rows stay
+    /// deleted.
+    /// </summary>
+    /// <returns>The number of tombstones released.</returns>
+    public static async Task<int> AuditedAllowReimportAsync<T>(
+        this NocturneDbContext context,
+        IQueryable<T> query,
+        IAuditContext? auditContext,
+        string scope,
+        CancellationToken ct = default) where T : class, ITenantScoped, ISoftDeletable
+        => await context.ExecuteInTransactionAsync(async token =>
+        {
+            var released = await query.UserTombstones(context).ExecuteUpdateAsync(
+                s => s.SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), false), token);
+            await WriteBulkSummaryAsync<T>(context, "allow_reimport", released, scope, auditContext, token);
+            return released;
+        }, ct: ct);
+
+    private static Task WriteBulkDeleteSummaryAsync<T>(
+        NocturneDbContext context,
+        int count,
+        string scope,
+        IAuditContext? auditContext,
+        CancellationToken ct)
+        => WriteBulkSummaryAsync<T>(context, "bulk_delete", count, scope, auditContext, ct);
+
+    /// <summary>
+    /// Appends the one summary row a bulk operation records: the entity type, how many rows it
     /// covered, the scope it was issued against, and the actor. <c>EntityId</c> is null — the row
     /// describes a set, not a record.
     /// </summary>
-    private static async Task WriteBulkDeleteSummaryAsync<T>(
+    private static async Task WriteBulkSummaryAsync<T>(
         NocturneDbContext context,
+        string action,
         int count,
         string scope,
         IAuditContext? auditContext,
@@ -357,23 +390,14 @@ public static class AuditedBulkDeleteExtensions
         if (count == 0 || auditContext.IsSystemMutation())
             return;
 
-        context.Set<MutationAuditLogEntity>().Add(new MutationAuditLogEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = context.TenantId,
-            EntityType = AuditEntityTypeName<T>(),
-            EntityId = null,
-            Action = "bulk_delete",
-            ChangesJson = JsonSerializer.Serialize(new BulkDeleteSummary(count, scope), JsonOptions),
-            SubjectId = auditContext?.SubjectId,
-            SubjectName = auditContext?.SubjectName,
-            AuthType = auditContext?.AuthType,
-            IpAddress = auditContext?.IpAddress,
-            TokenId = auditContext?.TokenId,
-            TraceId = auditContext?.TraceId,
-            Endpoint = auditContext?.Endpoint,
-            CreatedAt = DateTime.UtcNow
-        });
+        context.Set<MutationAuditLogEntity>().Add(MutationAuditLogEntity.Create(
+            context.TenantId,
+            auditContext,
+            AuditEntityTypeName<T>(),
+            null,
+            action,
+            JsonSerializer.Serialize(new BulkSummary(count, scope), JsonOptions),
+            DateTime.UtcNow));
 
         await context.SaveChangesAsync(ct);
     }
@@ -416,23 +440,14 @@ public static class AuditedBulkDeleteExtensions
                 snapshot[prop.Metadata.Name] = isRedacted ? "[redacted]" : prop.CurrentValue;
             }
 
-            return new MutationAuditLogEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = context.TenantId,
-                EntityType = entityTypeName,
-                EntityId = (Guid)entry.Property("Id").CurrentValue!,
-                Action = "delete",
-                ChangesJson = JsonSerializer.Serialize(snapshot, JsonOptions),
-                SubjectId = auditContext?.SubjectId,
-                SubjectName = auditContext?.SubjectName,
-                AuthType = auditContext?.AuthType,
-                IpAddress = auditContext?.IpAddress,
-                TokenId = auditContext?.TokenId,
-                TraceId = auditContext?.TraceId,
-                Endpoint = auditContext?.Endpoint,
-                CreatedAt = now
-            };
+            return MutationAuditLogEntity.Create(
+                context.TenantId,
+                auditContext,
+                entityTypeName,
+                (Guid)entry.Property("Id").CurrentValue!,
+                "delete",
+                JsonSerializer.Serialize(snapshot, JsonOptions),
+                now);
         }).ToList();
     }
 

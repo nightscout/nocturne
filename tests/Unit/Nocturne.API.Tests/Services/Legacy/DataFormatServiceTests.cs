@@ -1,5 +1,6 @@
 using System.Text;
 using FluentAssertions;
+using Microsoft.Net.Http.Headers;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Models;
 using Xunit;
@@ -126,111 +127,88 @@ public class DataFormatServiceTests
 
     #endregion
 
-    #region FormatEntries CSV Tests
+    #region FormatEntries Tests
 
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public void FormatEntries_WithEmptyArray_ShouldReturnOnlyHeader()
+    public void FormatEntries_WithEmptyArray_ShouldReturnEmptyBody()
     {
-        // Arrange
-        var entries = new Entry[0];
-        var format = "csv";
+        DataFormatService.FormatEntries([], "csv").Should().BeEmpty();
+        DataFormatService.FormatEntries([], "tsv").Should().BeEmpty();
+    }
 
-        // Act
+    [Fact]
+    [Trait("Category", "Unit")]
+    [Trait("Category", "Parity")]
+    public void FormatEntries_AsCsv_ShouldEmitFiveQuotedColumnsWithNoHeader()
+    {
+        var result = DataFormatService.FormatEntries([CreateSampleEntry()], "csv");
+
+        result.Should().Be("\"2023-01-01T12:00:00.000Z\",1234567890,115,\"Flat\",\"TestDevice\"");
+    }
+
+    [Theory]
+    [InlineData("tsv")]
+    [InlineData("txt")]
+    [Trait("Category", "Unit")]
+    [Trait("Category", "Parity")]
+    public void FormatEntries_AsTabSeparatedText_ShouldUseTabsAndNoHeader(string format)
+    {
+        var result = DataFormatService.FormatEntries([CreateSampleEntry()], format);
+
+        result.Should().Be("\"2023-01-01T12:00:00.000Z\"\t1234567890\t115\t\"Flat\"\t\"TestDevice\"");
+    }
+
+    [Theory]
+    [InlineData("csv", ",")]
+    [InlineData("tsv", "\t")]
+    [Trait("Category", "Unit")]
+    [Trait("Category", "Parity")]
+    public void FormatEntries_ShouldJoinRowsWithCrlfAndNoTrailingNewline(string format, string separator)
+    {
+        var entries = new[]
+        {
+            new Entry { Mills = 2, Sgv = 120, DateString = "b" },
+            new Entry { Mills = 1, Sgv = 110, DateString = "a" },
+        };
+
         var result = DataFormatService.FormatEntries(entries, format);
 
-        // Assert
         result
             .Should()
-            .StartWith(
-                "_id,mills,date,dateString,sgv,mbg,type,direction,device,filtered,unfiltered,rssi,noise"
-            );
-        result.Should().EndWith(Environment.NewLine);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Trait("Category", "Parity")]
-    public void FormatEntries_SingleEntry_ShouldFormatAsCsv()
-    {
-        // Arrange
-        var entry = CreateSampleEntry();
-        var entries = new Entry[] { entry };
-        var format = "csv";
-
-        // Act
-        var result = DataFormatService.FormatEntries(entries, format);
-
-        // Assert
-        var lines = result.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
-        lines.Length.Should().Be(2); // Header + 1 data row
-        lines[0]
-            .Should()
             .Be(
-                "_id,mills,date,dateString,sgv,mbg,type,direction,device,filtered,unfiltered,rssi,noise"
+                $"\"b\"{separator}2{separator}120{separator}{separator}\r\n\"a\"{separator}1{separator}110{separator}{separator}"
             );
-        lines[1].Should().Contain("test-id");
-        lines[1].Should().Contain("1234567890");
-        lines[1].Should().Contain("120");
-        lines[1].Should().Contain("sgv");
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public void FormatEntries_WithSpecialCharacters_ShouldEscapeCsvProperly()
+    public void FormatEntries_WithNullFields_ShouldLeaveThemEmpty()
     {
-        // Arrange
-        var entry = new Entry
-        {
-            Id = "test,with,commas",
-            Mills = 1234567890,
-            Mgdl = 120,
-            Type = "sgv",
-            Device = "device\"with\"quotes",
-            DateString = "2023-01-01T12:00:00.000Z",
-            Direction = "Flat",
-            Notes = "Notes\nwith\nnewlines",
-        };
-        var entries = new Entry[] { entry };
-        var format = "csv";
+        var entry = new Entry { Mills = 1234567890, Mgdl = 120, Type = "sgv" };
 
-        // Act
-        var result = DataFormatService.FormatEntries(entries, format);
+        var result = DataFormatService.FormatEntries([entry], "csv");
 
-        // Assert
-        result.Should().Contain("\"test,with,commas\""); // Commas should be escaped
-        result.Should().Contain("\"device\"\"with\"\"quotes\""); // Quotes should be escaped
+        result.Should().Be("\"1970-01-15T06:56:07.890Z\",1234567890,,,");
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public void FormatEntries_WithNullFields_ShouldHandleGracefully()
+    public void FormatEntries_ShouldJsonEscapeQuotesAndControlCharacters()
     {
-        // Arrange
         var entry = new Entry
         {
-            Id = null,
-            Mills = 1234567890,
-            Mgdl = 120,
-            Type = "sgv",
-            Device = null,
-            Direction = null,
-            DateString = null,
+            Mills = 1,
+            DateString = "d",
+            Device = "device\"with\"quotes\twith\r\nbreaks",
         };
-        var entries = new Entry[] { entry };
-        var format = "csv";
 
-        // Act
-        var result = DataFormatService.FormatEntries(entries, format);
+        var result = DataFormatService.FormatEntries([entry], "tsv");
 
-        // Assert
-        result.Should().NotBeNull();
-        var lines = result.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
-        lines.Length.Should().BeGreaterThan(1); // Should have header + data row
-        lines[1].Should().StartWith(",1234567890,"); // Null ID should be empty
+        result.Should().Be("\"d\"\t1\t\t\t\"device\\\"with\\\"quotes\\twith\\r\\nbreaks\"");
     }
 
     [Fact]
@@ -238,163 +216,91 @@ public class DataFormatServiceTests
     [Trait("Category", "Parity")]
     public void FormatEntries_WithUnicodeCharacters_ShouldPreserveEncoding()
     {
-        // Arrange
         var entry = new Entry
         {
-            Id = "test-ñáéíóú-emoji-🩸",
             Mills = 1234567890,
-            Mgdl = 120,
-            Type = "sgv",
-            Device = "デバイス", // Japanese characters
-            Direction = "Flat",
+            Device = "デバイス",
             DateString = "2023-01-01T12:00:00.000Z",
         };
-        var entries = new Entry[] { entry };
-        var format = "csv";
 
-        // Act
-        var result = DataFormatService.FormatEntries(entries, format);
+        var result = DataFormatService.FormatEntries([entry], "csv");
 
-        // Assert
-        result.Should().Contain("test-ñáéíóú-emoji-🩸");
-        result.Should().Contain("デバイス");
+        result.Should().Contain("\"デバイス\"");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    [Trait("Category", "Parity")]
+    public void FormatEntries_ShouldEmitEveryRowOfALargeDataset()
+    {
+        var entries = Enumerable
+            .Range(0, 1000)
+            .Select(i => new Entry { Mills = 1234567890 + i, DateString = "d" })
+            .ToArray();
+
+        var result = DataFormatService.FormatEntries(entries, "csv");
+
+        result.Split("\r\n").Should().HaveCount(1000);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    [Trait("Category", "Parity")]
+    public void FormatEntries_WithVeryLongStrings_ShouldKeepThemWhole()
+    {
+        var longString = new string('A', 10000);
+        var entry = new Entry { Mills = 1, DateString = "d", Device = longString };
+
+        var result = DataFormatService.FormatEntries([entry], "csv");
+
+        result.Should().Contain($"\"{longString}\"");
     }
 
     #endregion
 
-    #region FormatEntries TSV Tests
+    #region NegotiateFormat Tests
 
-    [Fact]
+    [Theory]
+    [InlineData(null, "", null)]
+    [InlineData("", "application/json", null)]
+    [InlineData("json", "text/csv", "csv")]
+    [InlineData("csv", "application/json", "csv")]
+    [InlineData("xml", "", null)]
+    [InlineData("xml", "text/csv", "csv")]
+    [InlineData("TSV", "application/json", "tsv")]
+    [InlineData(null, "text/csv;q=0", null)]
+    [InlineData(null, "application/xml, text/csv;q=0", null)]
+    [InlineData(null, "text/csv;q=0, text/plain", "txt")]
+    [InlineData(null, "text/*", "txt")]
+    [InlineData(null, "text/*, application/json", null)]
+    [InlineData(null, "application/json, text/*", null)]
+    [InlineData(null, "text/*, text/csv", "csv")]
+    [InlineData(null, "text/*;q=0.1, application/json", null)]
+    [InlineData(null, "application/xml", null)]
+    [InlineData(null, "*/*", null)]
+    [InlineData(null, "text/plain", "txt")]
+    [InlineData(null, "text/plain, application/json", "txt")]
+    [InlineData(null, "application/json, text/plain", null)]
+    [InlineData(null, "application/json, text/csv;q=0.1", null)]
+    [InlineData(null, "text/csv;q=0.1, application/json", null)]
+    [InlineData(null, "text/csv, application/json;q=0.5", "csv")]
+    [InlineData(null, "application/json, text/csv", null)]
+    [InlineData(null, "text/csv, text/tab-separated-values;q=0.9", "csv")]
+    [InlineData(null, "text/tab-separated-values;q=0.2, text/csv;q=0.8", "csv")]
+    [InlineData(null, "text/html, */*;q=0.8", null)]
+    [InlineData(null, "text/csv", "csv")]
+    [InlineData(null, "TEXT/TAB-SEPARATED-VALUES", "tsv")]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public void FormatEntries_AsTsv_ShouldUseTabDelimiters()
+    public void NegotiateFormat_ShouldPickTheTextFormatTheRequestAsksFor(
+        string? format,
+        string accept,
+        string? expected
+    )
     {
-        // Arrange
-        var entry = CreateSampleEntry();
-        var entries = new Entry[] { entry };
-        var format = "tsv";
+        var parsed = MediaTypeHeaderValue.ParseList(accept.Length == 0 ? [] : [accept]);
 
-        // Act
-        var result = DataFormatService.FormatEntries(entries, format);
-
-        // Assert
-        var lines = result.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
-        lines.Length.Should().Be(2); // Header + 1 data row
-        lines[0]
-            .Should()
-            .Be(
-                "_id\tmills\tdate\tdateString\tsgv\tmbg\ttype\tdirection\tdevice\tfiltered\tunfiltered\trssi\tnoise"
-            );
-        lines[1].Should().Contain("\t"); // Should contain tabs
-        lines[1].Should().NotContain(","); // Should not contain commas
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Trait("Category", "Parity")]
-    public void FormatEntries_AsTsv_WithTabsInData_ShouldReplaceWithSpaces()
-    {
-        // Arrange
-        var entry = new Entry
-        {
-            Id = "test\twith\ttabs",
-            Mills = 1234567890,
-            Mgdl = 120,
-            Type = "sgv",
-            Device = "device\twith\ttabs",
-            Direction = "Flat",
-            DateString = "2023-01-01T12:00:00.000Z",
-        };
-        var entries = new Entry[] { entry };
-        var format = "tsv";
-
-        // Act
-        var result = DataFormatService.FormatEntries(entries, format);
-
-        // Assert
-        result.Should().Contain("test with tabs"); // Tabs should be replaced with spaces
-        result.Should().Contain("device with tabs");
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Trait("Category", "Parity")]
-    public void FormatEntries_AsTsv_WithNewlinesInData_ShouldReplaceWithSpaces()
-    {
-        // Arrange
-        var entry = new Entry
-        {
-            Id = "test\nwith\nnewlines",
-            Mills = 1234567890,
-            Mgdl = 120,
-            Type = "sgv",
-            Device = "device\r\nwith\r\ncarriage",
-            Direction = "Flat",
-            DateString = "2023-01-01T12:00:00.000Z",
-        };
-        var entries = new Entry[] { entry };
-        var format = "tsv";
-
-        // Act
-        var result = DataFormatService.FormatEntries(entries, format);
-
-        // Assert
-        result.Should().Contain("test with newlines"); // Newlines should be replaced with spaces
-        result.Should().Contain("device  with  carriage"); // Carriage returns should be replaced with spaces
-    }
-
-    #endregion
-
-    #region FormatEntries TXT Tests
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Trait("Category", "Parity")]
-    public void FormatEntries_AsTxt_ShouldCreateReadableFormat()
-    {
-        // Arrange
-        var entry = new Entry
-        {
-            Id = "test-id",
-            Mills = 1234567890,
-            Mgdl = 120,
-            Sgv = 115,
-            Type = "sgv",
-            DateString = "2023-01-01T12:00:00.000Z",
-        };
-        var entries = new Entry[] { entry };
-        var format = "txt";
-
-        // Act
-        var result = DataFormatService.FormatEntries(entries, format);
-
-        // Assert
-        result.Should().Contain("Entry test-id: 115 mg/dL at 2023-01-01T12:00:00.000Z (sgv)");
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Trait("Category", "Parity")]
-    public void FormatEntries_AsTxt_WithNullSgv_ShouldUseMgdl()
-    {
-        // Arrange
-        var entry = new Entry
-        {
-            Id = "test-id",
-            Mills = 1234567890,
-            Mgdl = 120,
-            Sgv = null,
-            Type = "sgv",
-            DateString = "2023-01-01T12:00:00.000Z",
-        };
-        var entries = new Entry[] { entry };
-        var format = "txt";
-
-        // Act
-        var result = DataFormatService.FormatEntries(entries, format);
-
-        // Assert
-        result.Should().Contain("Entry test-id: 120 mg/dL at 2023-01-01T12:00:00.000Z (sgv)");
+        DataFormatService.NegotiateFormat(format, parsed).Should().Be(expected);
     }
 
     #endregion
@@ -750,36 +656,6 @@ public class DataFormatServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void FormatEntries_WithLargeDataset_ShouldEmitEveryRow()
-    {
-        // Arrange
-        var entries = new Entry[1000];
-        for (int i = 0; i < 1000; i++)
-        {
-            entries[i] = new Entry
-            {
-                Id = $"entry-{i}",
-                Mills = 1234567890 + i,
-                Mgdl = 100 + (i % 50),
-                Type = "sgv",
-                Device = $"device-{i % 10}",
-                Direction = "Flat",
-                DateString = "2023-01-01T12:00:00.000Z",
-            };
-        }
-        var format = "csv";
-
-        // Act
-        var result = DataFormatService.FormatEntries(entries, format);
-
-        // Assert
-        result.Should().NotBeNullOrEmpty();
-        var lines = result.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
-        lines.Length.Should().Be(1001); // Header + 1000 data rows
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
     public void FormatTreatments_WithLargeDataset_ShouldEmitEveryRow()
     {
         // Arrange
@@ -804,65 +680,6 @@ public class DataFormatServiceTests
         result.Should().NotBeNullOrEmpty();
         var lines = result.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         lines.Length.Should().Be(1001); // Header + 1000 data rows
-    }
-
-    #endregion
-
-    #region Memory and Edge Case Tests
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Trait("Category", "Parity")]
-    public void FormatEntries_WithVeryLongStrings_ShouldHandleGracefully()
-    {
-        // Arrange
-        var longString = new string('A', 10000); // 10KB string
-        var entry = new Entry
-        {
-            Id = longString,
-            Mills = 1234567890,
-            Mgdl = 120,
-            Type = "sgv",
-            Device = longString,
-            DateString = "2023-01-01T12:00:00.000Z",
-        };
-        var entries = new Entry[] { entry };
-        var format = "csv";
-
-        // Act
-        var result = DataFormatService.FormatEntries(entries, format);
-
-        // Assert
-        result.Should().NotBeNullOrEmpty();
-        result.Should().Contain(longString);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Trait("Category", "Parity")]
-    public void FormatEntries_WithMixedLineEndings_ShouldNormalizeCorrectly()
-    {
-        // Arrange
-        var entry = new Entry
-        {
-            Id = "test-id\r\nwith\nmixed\rline\n\rendings",
-            Mills = 1234567890,
-            Mgdl = 120,
-            Type = "sgv",
-            DateString = "2023-01-01T12:00:00.000Z",
-        };
-        var entries = new Entry[] { entry };
-
-        // Act
-        var csvResult = DataFormatService.FormatEntries(entries, "csv");
-        var tsvResult = DataFormatService.FormatEntries(entries, "tsv");
-
-        // Assert
-        // CSV should escape the field with quotes
-        csvResult.Should().Contain("\"test-id\r\nwith\nmixed\rline\n\rendings\"");
-
-        // TSV should replace all line endings with spaces
-        tsvResult.Should().Contain("test-id  with mixed line  endings");
     }
 
     #endregion

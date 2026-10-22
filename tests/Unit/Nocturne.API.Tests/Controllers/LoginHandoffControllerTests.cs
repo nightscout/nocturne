@@ -52,13 +52,13 @@ public class LoginHandoffControllerTests : IDisposable
         var loginCodeService = new LoginCodeService(
             new Mock<IJwtService>().Object,
             new AuthAuditService(
-                _auditContext,
+                _auditContext.AsFactory(),
                 new HttpContextAccessor { HttpContext = _httpContext },
                 new AuditContext(),
                 new Mock<ILogger<AuthAuditService>>().Object));
 
         _controller = new LoginHandoffController(
-            _tenantContext,
+            _tenantContext.AsFactory(),
             loginCodeService,
             _sessionService.Object,
             Options.Create(new OidcOptions { Cookie = new CookieSettings { Secure = true } }),
@@ -105,6 +105,21 @@ public class LoginHandoffControllerTests : IDisposable
         _sessionService.Verify(
             s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task Exchange_ARecoveryCode_FailsAndLeavesItUnconsumed()
+    {
+        SeedCode(purpose: LoginCodePurpose.Recovery);
+
+        var result = await InvokeAsync();
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        (await _tenantContext.LoginCodes.AsNoTracking().SingleAsync()).ConsumedAt.Should().BeNull();
     }
 
     [Fact]
@@ -197,7 +212,7 @@ public class LoginHandoffControllerTests : IDisposable
         row.TenantId.Should().Be(_tenantId);
     }
 
-    private void SeedCode(DateTime? expiresAt = null)
+    private void SeedCode(DateTime? expiresAt = null, LoginCodePurpose purpose = LoginCodePurpose.Login)
     {
         _tenantContext.LoginCodes.Add(new LoginCodeEntity
         {
@@ -205,6 +220,7 @@ public class LoginHandoffControllerTests : IDisposable
             TenantId = _tenantId,
             SubjectId = _memberSubjectId,
             CodeHash = HashUtils.Sha256Hex(Code),
+            Purpose = purpose,
             ExpiresAt = expiresAt ?? DateTime.UtcNow.AddMinutes(5),
         });
         _tenantContext.SaveChanges();

@@ -148,30 +148,24 @@ public class FoodParityTests : ParityTestBase
     [Fact]
     public async Task GetFoodQuickpicks_WithData_ReturnsSameShape()
     {
-        // Quickpicks are foods with type "quickpick"
-        var quickpick = new Food
-        {
-            Id = Guid.NewGuid().ToString(),
-            Type = "quickpick",
-            Name = "Quick Snack",
-            Category = "Snacks",
-            Carbs = 15,
-            Portion = 1,
-            Unit = "serving"
-        };
-
-        var nsQuickpick = new
+        // Nightscout lists quickpicks with find({type: 'quickpick', hidden: 'false'}): its food
+        // editor posts form-encoded, so hidden is stored as a string, and a quickpick without it
+        // is never listed. Both systems get the body that editor sends.
+        var quickpick = new
         {
             type = "quickpick",
             name = "Quick Snack",
             category = "Snacks",
             carbs = 15,
             portion = 1,
-            unit = "serving"
+            unit = "serving",
+            hidden = "false",
+            hideafteruse = "true",
+            position = 99999,
         };
 
-        await NightscoutClient.PostAsJsonAsync("/api/v1/food", nsQuickpick);
-        await NocturneClient.PostAsJsonAsync("/api/v1/food", quickpick);
+        (await NightscoutClient.PostAsJsonAsync("/api/v1/food", quickpick)).EnsureSuccessStatusCode();
+        (await NocturneClient.PostAsJsonAsync("/api/v1/food", quickpick)).EnsureSuccessStatusCode();
 
         await AssertGetParityAsync("/api/v1/food/quickpicks");
     }

@@ -64,6 +64,16 @@ describe("appearance-store SSR resolution", () => {
     expect(body).toContain(">24<");
   });
 
+  it("renders the energy unit the backend resolved for the request", async () => {
+    const [resolved, unresolved] = await Promise.all([
+      ssr([{ regionFormat: "en-AU", effectiveEnergyUnit: "kJ" }]),
+      ssr([]),
+    ]);
+
+    expect(resolved).toContain("energy:kJ");
+    expect(unresolved).toContain("energy:kcal");
+  });
+
   it("applies every preference layer's own fields, not just the first layer's", async () => {
     const body = await ssr([{ glucoseUnits: "mmol" }, { timeFormat: "24" }]);
 

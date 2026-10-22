@@ -75,7 +75,7 @@ public class ConnectedAppsController : ControllerBase
                 ClientName = g.ClientDisplayName,
                 ClientUri = g.ClientUri,
                 LogoUri = g.LogoUri,
-                IsVerified = g.IsKnownClient,
+                Identity = g.ClientIdentity,
                 Scopes = g.Scopes,
                 Label = g.Label,
                 CreatedAt = g.CreatedAt,
@@ -142,8 +142,9 @@ public class ConnectedAppDto
     [JsonPropertyName("logoUri")]
     public string? LogoUri { get; set; }
 
-    [JsonPropertyName("isVerified")]
-    public bool IsVerified { get; set; }
+    /// <inheritdoc cref="OAuthGrantInfo.ClientIdentity"/>
+    [JsonPropertyName("identity")]
+    public OAuthClientIdentity Identity { get; set; }
 
     [JsonPropertyName("scopes")]
     public List<string> Scopes { get; set; } = [];

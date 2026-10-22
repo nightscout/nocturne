@@ -31,6 +31,10 @@ export interface BridgeConfig {
    *  the Host they connect on. Kept optional in the type because it is sourced
    *  from the environment; setupBridge throws when it is absent. */
   baseDomain?: string;
+  /** The least time between two reads of the API's tenant list (default 5000 ms). The list is read
+   *  again when a socket is admitted for a tenant the bridge holds no relay for, when a connection
+   *  arrives on an apex that serves no tenant, and before a lost relay reconnects. */
+  tenantRefreshIntervalMs?: number;
 }
 
 export interface CompleteBridgeConfig {
@@ -80,8 +84,10 @@ export interface ClientInfo {
   userAgent: string | undefined;
 }
 
-/** An alarm as the bridge relays it: an `urgent` level goes out as `urgent_alarm`, every
- *  other field passes through from the API. */
+/** The Socket.IO event an alarm goes out as, named by the SignalR event it arrived on. */
+export type AlarmEvent = 'alarm' | 'urgent_alarm';
+
+/** An alarm as the bridge relays it: every field passes through from the API. */
 export interface AlarmData {
   level?: unknown;
   [key: string]: unknown;

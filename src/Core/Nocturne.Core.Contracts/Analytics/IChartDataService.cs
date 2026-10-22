@@ -21,7 +21,6 @@ public interface IChartDataService
     /// <param name="endTime">End of the time range in Unix milliseconds</param>
     /// <param name="intervalMinutes">Interval for IOB/COB series sampling (1-60)</param>
     /// <param name="includeHealthSeries">Whether to load the heart-rate and step series; when false both are empty</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Fully populated dashboard chart data DTO</returns>
     Task<DashboardChartData> GetDashboardChartDataAsync(
         long startTime,
@@ -37,7 +36,6 @@ public interface IChartDataService
     /// </summary>
     /// <param name="startTime">Start of the time range in Unix milliseconds</param>
     /// <param name="endTime">End of the time range in Unix milliseconds</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Basal delivery points covering the requested window</returns>
     Task<List<BasalPoint>> GetBasalSeriesAsync(
         long startTime,

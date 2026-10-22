@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import { formatNumber } from "$lib/utils/formatting";
 
   interface Props {
@@ -6,12 +7,15 @@
     deleted?: number;
     /** Records of a kind Nocturne does not store. */
     unsupported?: number;
+    /** Records with a value Nocturne could not store, kept as rejected uploads. */
+    refused?: number;
     class?: string;
   }
 
   const {
     deleted = 0,
     unsupported = 0,
+    refused = 0,
     class: className = "",
   }: Props = $props();
 </script>
@@ -35,5 +39,15 @@
       {formatNumber(unsupported)} records were not added because Nocturne does not
       store that kind of record.
     {/if}
+  </p>
+{/if}
+{#if refused > 0}
+  <p class={className}>
+    {#if refused === 1}
+      1 record could not be stored. It is listed under
+    {:else}
+      {formatNumber(refused)} records could not be stored. They are listed under
+    {/if}
+    <a href={resolve("/reports/data-quality/rejected-uploads")} class="underline">Rejected Uploads</a>.
   </p>
 {/if}

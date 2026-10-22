@@ -10,6 +10,7 @@ using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.API.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -30,7 +31,7 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 [Authorize(Roles = "platform_admin")]
 [AllowDuringSetup]
 public class AccessRequestController(
-    NocturneDbContext dbContext,
+    INocturneDbContextFactory contexts,
     ISubjectService subjectService,
     ITenantService tenantService,
     ITenantRoleService tenantRoleService,
@@ -43,7 +44,8 @@ public class AccessRequestController(
     [ProducesResponseType(typeof(List<AccessRequestDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<AccessRequestDto>>> GetPendingRequests(CancellationToken ct)
     {
-        var requests = await dbContext.Subjects
+        await using var db = await contexts.CreateAsync(ct);
+        var requests = await db.Subjects
             .Where(s => s.ApprovalStatus == "Pending" && !s.IsSystemSubject)
             .OrderByDescending(s => s.CreatedAt)
             .Select(s => new AccessRequestDto
@@ -68,7 +70,8 @@ public class AccessRequestController(
         [FromBody] ApproveAccessRequestRequest request,
         CancellationToken ct)
     {
-        var subject = await dbContext.Subjects
+        await using var db = await contexts.CreateAsync(ct);
+        var subject = await db.Subjects
             .FirstOrDefaultAsync(s => s.Id == subjectId && s.ApprovalStatus == "Pending", ct);
 
         if (subject == null)
@@ -80,7 +83,7 @@ public class AccessRequestController(
         subject.ApprovalStatus = "Approved";
         subject.IsActive = true;
         subject.UpdatedAt = DateTime.UtcNow;
-        await dbContext.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         var tenantContext = tenantAccessor.Context;
         if (tenantContext != null)
@@ -101,7 +104,7 @@ public class AccessRequestController(
                 tenantId, subjectId, request.RoleIds, request.DirectPermissions,
                 limitTo24Hours: request.LimitTo24Hours, ct: ct);
 
-            var ownerIds = await dbContext.TenantMembers
+            var ownerIds = await db.TenantMembers
                 .OwnersOf(tenantId)
                 .Select(tm => tm.SubjectId)
                 .ToListAsync(ct);
@@ -131,7 +134,8 @@ public class AccessRequestController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> Deny(Guid subjectId, CancellationToken ct)
     {
-        var subject = await dbContext.Subjects
+        await using var db = await contexts.CreateAsync(ct);
+        var subject = await db.Subjects
             .FirstOrDefaultAsync(s => s.Id == subjectId && s.ApprovalStatus == "Pending", ct);
 
         if (subject == null)
@@ -140,7 +144,7 @@ public class AccessRequestController(
         var denyTenantContext = tenantAccessor.Context;
         if (denyTenantContext != null)
         {
-            var ownerIds = await dbContext.TenantMembers
+            var ownerIds = await db.TenantMembers
                 .OwnersOf(denyTenantContext.TenantId)
                 .Select(tm => tm.SubjectId)
                 .ToListAsync(ct);

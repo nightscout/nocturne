@@ -3,11 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Tests.Rls;
 using Npgsql;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -34,27 +36,27 @@ public class AlertTrackerTransitionLockTests
 
         await using var first = await ContextAsync(provider, tenant);
         await using var second = await ContextAsync(provider, tenant);
-        var firstRepo = new AlertTrackerRepository(first);
-        var secondRepo = new AlertTrackerRepository(second);
+        var firstRepo = new AlertTrackerRepository(DbUnitOfWork.Own(first));
+        var secondRepo = new AlertTrackerRepository(DbUnitOfWork.Own(second));
         var locked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var holder = firstRepo.ExecuteInTransactionAsync(async ct =>
+        var holder = firstRepo.ExecuteInTransactionAsync(async (tx, ct) =>
         {
-            await firstRepo.LockRuleAsync(ruleId, ct);
-            await firstRepo.UpsertTrackerStateAsync(State(ruleId, "active"), ct);
+            await tx.LockRuleAsync(ruleId, ct);
+            await tx.UpsertTrackerStateAsync(State(ruleId, "active"), ct);
             locked.SetResult();
             await release.Task;
             return true;
         });
         await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
-        var contender = secondRepo.ExecuteInTransactionAsync(async ct =>
+        var contender = secondRepo.ExecuteInTransactionAsync(async (tx, ct) =>
         {
-            await secondRepo.LockRuleAsync(ruleId, ct);
-            return (await secondRepo.GetTrackerStateAsync(ruleId, ct))?.State;
+            await tx.LockRuleAsync(ruleId, ct);
+            return (await tx.GetTrackerStateAsync(ruleId, ct))?.State;
         });
-        await Task.Delay(500);
+        await PostgresLockWaits.UntilBlockedAsync(_fx.AppConnectionString, contender);
         contender.IsCompleted.Should().BeFalse("the first transaction holds the rule's lock");
 
         release.SetResult();
@@ -74,23 +76,23 @@ public class AlertTrackerTransitionLockTests
 
         await using var first = await ContextAsync(provider, tenant);
         await using var second = await ContextAsync(provider, tenant);
-        var firstRepo = new AlertTrackerRepository(first);
-        var secondRepo = new AlertTrackerRepository(second);
+        var firstRepo = new AlertTrackerRepository(DbUnitOfWork.Own(first));
+        var secondRepo = new AlertTrackerRepository(DbUnitOfWork.Own(second));
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var locked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var holder = firstRepo.ExecuteInTransactionAsync(async ct =>
+        var holder = firstRepo.ExecuteInTransactionAsync(async (tx, ct) =>
         {
-            await firstRepo.LockRuleAsync(ruleA, ct);
+            await tx.LockRuleAsync(ruleA, ct);
             locked.SetResult();
             await release.Task;
             return true;
         });
         await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
-        await secondRepo.ExecuteInTransactionAsync(async ct =>
+        await secondRepo.ExecuteInTransactionAsync(async (tx, ct) =>
         {
-            await secondRepo.LockRuleAsync(ruleB, ct);
+            await tx.LockRuleAsync(ruleB, ct);
             return true;
         }).WaitAsync(TimeSpan.FromSeconds(10));
 
@@ -106,7 +108,7 @@ public class AlertTrackerTransitionLockTests
         await using var provider = BuildProvider();
         await using var context = await ContextAsync(provider, tenant);
 
-        var act = () => new AlertTrackerRepository(context).LockRuleAsync(Guid.NewGuid());
+        var act = () => new AlertTrackerRepository(DbUnitOfWork.Own(context)).LockRuleAsync(Guid.NewGuid());
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }

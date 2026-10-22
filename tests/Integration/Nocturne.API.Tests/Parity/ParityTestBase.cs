@@ -91,14 +91,18 @@ public abstract class ParityTestBase : IAsyncLifetime
             var nsEntry = new Dictionary<string, object?>
             {
                 ["type"] = entry.Type ?? "sgv",
-                ["sgv"] = entry.Sgv,
-                ["direction"] = entry.Direction,
                 ["device"] = entry.Device,
                 ["date"] = entry.Mills,
                 ["dateString"] = entry.DateString,
             };
 
             // Only include optional fields if they have values
+            if (entry.Sgv.HasValue) nsEntry["sgv"] = entry.Sgv.Value;
+            if (entry.Direction is not null) nsEntry["direction"] = entry.Direction;
+            if (entry.Mbg.HasValue) nsEntry["mbg"] = entry.Mbg.Value;
+            if (entry.Slope.HasValue) nsEntry["slope"] = entry.Slope.Value;
+            if (entry.Intercept.HasValue) nsEntry["intercept"] = entry.Intercept.Value;
+            if (entry.Scale.HasValue) nsEntry["scale"] = entry.Scale.Value;
             if (entry.Noise.HasValue) nsEntry["noise"] = entry.Noise.Value;
             if (entry.Filtered.HasValue) nsEntry["filtered"] = entry.Filtered.Value;
             if (entry.Unfiltered.HasValue) nsEntry["unfiltered"] = entry.Unfiltered.Value;
@@ -148,23 +152,26 @@ public abstract class ParityTestBase : IAsyncLifetime
     }
 
     /// <summary>
-    /// Seeds device status to both systems
+    /// Seeds device status to both systems, the same body to each. A status needs content
+    /// (here an uploader battery): Nocturne stores a devicestatus by what it reports, so a bare
+    /// <c>{device, created_at}</c> is accepted and stores nothing.
     /// </summary>
     protected async Task SeedDeviceStatusAsync(params DeviceStatus[] statuses)
     {
         foreach (var status in statuses)
         {
-            var nsStatus = new
+            var body = new Dictionary<string, object?>
             {
-                device = status.Device,
-                created_at = status.CreatedAt,
-                uploaderBattery = status.Uploader?.Battery
+                ["device"] = status.Device,
+                ["created_at"] = status.CreatedAt,
             };
+            if (status.Uploader?.Battery is { } battery)
+                body["uploader"] = new Dictionary<string, object?> { ["battery"] = battery };
 
-            var nsResponse = await NightscoutClient.PostAsJsonAsync("/api/v1/devicestatus", nsStatus);
+            var nsResponse = await NightscoutClient.PostAsJsonAsync("/api/v1/devicestatus", body);
             nsResponse.EnsureSuccessStatusCode();
 
-            var nocResponse = await NocturneClient.PostAsJsonAsync("/api/v1/devicestatus", status);
+            var nocResponse = await NocturneClient.PostAsJsonAsync("/api/v1/devicestatus", body);
             nocResponse.EnsureSuccessStatusCode();
         }
     }

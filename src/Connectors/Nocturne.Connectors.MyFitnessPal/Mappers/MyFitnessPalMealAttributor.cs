@@ -1,5 +1,6 @@
 using System.Globalization;
 using Nocturne.Connectors.MyFitnessPal.Models;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Connectors.MyFitnessPal.Mappers;
 
@@ -37,7 +38,7 @@ public static class MyFitnessPalMealAttributor
     ///     One kilojoule in calories. The legacy diary reports energy in the account's own unit,
     ///     while the graph always reports calories.
     /// </summary>
-    private const decimal CaloriesPerKilojoule = 1m / 4.184m;
+    private const decimal CaloriesPerKilojoule = 1m / (decimal)NutritionConstants.KilojoulesPerKilocalorie;
 
     /// <summary>
     ///     Assigns meal names to a single day's entries.

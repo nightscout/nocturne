@@ -10,6 +10,7 @@ using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Profiles;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Controllers.V4.Profiles;
 
@@ -32,7 +33,7 @@ internal static class UISettingsControllerHarness
     )
     {
         return NewController(
-            new UISettingsService(dbContext, NullLogger<UISettingsService>.Instance),
+            new UISettingsService(dbContext.AsFactory(), NullLogger<UISettingsService>.Instance),
             demoMode
         );
     }

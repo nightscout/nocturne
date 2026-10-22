@@ -5,7 +5,7 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Alerts;
@@ -17,7 +17,7 @@ namespace Nocturne.API.Services.Alerts;
 /// snapshot, the Home Assistant reconnect replay) read <see cref="AlertSnooze"/> directly.
 /// </remarks>
 internal sealed class AlertSnoozeService(
-    IDbContextFactory<NocturneDbContext> contextFactory,
+    INocturneDbContextFactory contextFactory,
     ITenantAccessor tenantAccessor,
     IAlertRepository repository,
     IAlertDeliveryService deliveryService,
@@ -33,8 +33,7 @@ internal sealed class AlertSnoozeService(
         var tenantId = tenantAccessor.TenantId;
         var now = timeProvider.GetUtcNow().UtcDateTime;
 
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = tenantId;
+        await using var db = await contextFactory.CreateAsync(ct);
 
         var instance = await db.AlertInstances
             .Include(i => i.AlertExcursion)
@@ -88,10 +87,8 @@ internal sealed class AlertSnoozeService(
         var now = timeProvider.GetUtcNow().UtcDateTime;
 
         AlertInstanceEntity? instance;
-        await using (var db = await contextFactory.CreateDbContextAsync(ct))
+        await using (var db = await contextFactory.CreateAsync(ct))
         {
-            db.TenantId = tenantId;
-
             instance = await db.AlertInstances
                 .AsNoTracking()
                 .Include(i => i.AlertExcursion)

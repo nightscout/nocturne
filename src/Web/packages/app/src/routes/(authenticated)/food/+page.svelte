@@ -3,12 +3,10 @@
   import { setFoodState } from './food-context.js';
   import { onMount } from 'svelte';
   import type { Food } from '$api';
-  import type { GiLevel } from './types';
+  import { GiIcon, GiLabel, isGiLevel, type GiLevel } from '$lib/components/food';
 
   import FoodList from './FoodList.svelte';
   import Composer from './Composer.svelte';
-  import GiIcon from './GiIcon.svelte';
-  import GiLabel from './GiLabel.svelte';
 
   import Plus from '@lucide/svelte/icons/plus';
   import Download from '@lucide/svelte/icons/download';
@@ -23,7 +21,6 @@
   import * as InputGroup from '$lib/components/ui/input-group';
   import { Toggle } from '$lib/components/ui/toggle';
   import * as ToggleGroup from '$lib/components/ui/toggle-group';
-  import { isGiLevel } from './types';
 
   const state = new FoodState();
   setFoodState(state);

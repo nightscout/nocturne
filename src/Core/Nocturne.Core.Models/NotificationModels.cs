@@ -9,27 +9,15 @@ namespace Nocturne.Core.Models;
 /// <seealso cref="NotificationAckRequest"/>
 public class NotificationV2Response
 {
-    /// <summary>
-    /// Success status of the notification operation
-    /// </summary>
     [JsonPropertyName("success")]
     public bool Success { get; set; }
 
-    /// <summary>
-    /// Message describing the result of the notification operation
-    /// </summary>
     [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Optional data payload for the notification
-    /// </summary>
     [JsonPropertyName("data")]
     public object? Data { get; set; }
 
-    /// <summary>
-    /// Timestamp when the notification was processed
-    /// </summary>
     [JsonPropertyName("timestamp")]
     public long Timestamp { get; set; }
 }
@@ -44,29 +32,14 @@ public class NotificationBase
     /// </summary>
     public int Level { get; set; }
 
-    /// <summary>
-    /// Title of the notification
-    /// </summary>
     public string Title { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Message content of the notification
-    /// </summary>
     public string Message { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Group identifier for notification categorization
-    /// </summary>
     public string Group { get; set; } = "default";
 
-    /// <summary>
-    /// Timestamp when the notification was created
-    /// </summary>
     public long Timestamp { get; set; }
 
-    /// <summary>
-    /// Plugin that generated this notification
-    /// </summary>
     public string? Plugin { get; set; }
 
     /// <summary>
@@ -74,9 +47,6 @@ public class NotificationBase
     /// </summary>
     public bool IsAnnouncement { get; set; }
 
-    /// <summary>
-    /// Additional debug information
-    /// </summary>
     public object? Debug { get; set; }
 
     /// <summary>
@@ -84,9 +54,6 @@ public class NotificationBase
     /// </summary>
     public int Count { get; set; }
 
-    /// <summary>
-    /// Timestamp when the notification was last recorded
-    /// </summary>
     public long LastRecorded { get; set; }
 
     /// <summary>
@@ -94,9 +61,7 @@ public class NotificationBase
     /// </summary>
     public bool Persistent { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether this is a clear alarm notification
-    /// </summary>
+    /// <summary>Marks an all-clear notification in the Nightscout payload.</summary>
     public bool Clear { get; set; }
 }
 
@@ -112,9 +77,6 @@ public class NotificationAckRequest
     [JsonPropertyName("level")]
     public int Level { get; set; }
 
-    /// <summary>
-    /// Group identifier for the alarm
-    /// </summary>
     [JsonPropertyName("group")]
     public string Group { get; set; } = "default";
 
@@ -124,9 +86,6 @@ public class NotificationAckRequest
     [JsonPropertyName("time")]
     public int? Time { get; set; }
 
-    /// <summary>
-    /// Whether to send a clear notification
-    /// </summary>
     [JsonPropertyName("sendClear")]
     public bool? SendClear { get; set; }
 }
@@ -136,21 +95,12 @@ public class NotificationAckRequest
 /// </summary>
 public class NotificationAckResponse
 {
-    /// <summary>
-    /// Success status of the acknowledgment operation
-    /// </summary>
     [JsonPropertyName("success")]
     public bool Success { get; set; }
 
-    /// <summary>
-    /// Message describing the result
-    /// </summary>
     [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Timestamp of the operation
-    /// </summary>
     [JsonPropertyName("timestamp")]
     public long Timestamp { get; set; }
 }
@@ -161,9 +111,6 @@ public class NotificationAckResponse
 /// </summary>
 public class PushoverCallbackRequest
 {
-    /// <summary>
-    /// Pushover receipt ID
-    /// </summary>
     [JsonPropertyName("receipt")]
     public string? Receipt { get; set; }
 
@@ -173,9 +120,6 @@ public class PushoverCallbackRequest
     [JsonPropertyName("status")]
     public int? Status { get; set; }
 
-    /// <summary>
-    /// Timestamp when acknowledged
-    /// </summary>
     [JsonPropertyName("acknowledged_at")]
     public long? AcknowledgedAt { get; set; }
 
@@ -185,9 +129,6 @@ public class PushoverCallbackRequest
     [JsonPropertyName("acknowledged_by")]
     public string? AcknowledgedBy { get; set; }
 
-    /// <summary>
-    /// User key from Pushover
-    /// </summary>
     [JsonPropertyName("user_key")]
     public string? UserKey { get; set; }
 
@@ -204,15 +145,9 @@ public class PushoverCallbackRequest
 /// </summary>
 public class AdminNotification
 {
-    /// <summary>
-    /// Notification title
-    /// </summary>
     [JsonPropertyName("title")]
     public string Title { get; set; } = "None";
 
-    /// <summary>
-    /// Notification message
-    /// </summary>
     [JsonPropertyName("message")]
     public string Message { get; set; } = "None";
 
@@ -222,9 +157,7 @@ public class AdminNotification
     [JsonPropertyName("count")]
     public int Count { get; set; } = 1;
 
-    /// <summary>
-    /// Timestamp when last recorded
-    /// </summary>
+    /// <summary>When the notification was last recorded, in Unix milliseconds.</summary>
     [JsonPropertyName("lastRecorded")]
     public long LastRecorded { get; set; }
 
@@ -235,20 +168,11 @@ public class AdminNotification
     public bool Persistent { get; set; }
 }
 
-/// <summary>
-/// Admin notifications response model
-/// </summary>
 public class AdminNotifiesResponse
 {
-    /// <summary>
-    /// Status code
-    /// </summary>
     [JsonPropertyName("status")]
     public int Status { get; set; } = 200;
 
-    /// <summary>
-    /// Response message containing notification data
-    /// </summary>
     [JsonPropertyName("message")]
     public AdminNotifiesMessage Message { get; set; } = new();
 }
@@ -258,9 +182,6 @@ public class AdminNotifiesResponse
 /// </summary>
 public class AdminNotifiesMessage
 {
-    /// <summary>
-    /// List of admin notifications
-    /// </summary>
     [JsonPropertyName("notifies")]
     public List<AdminNotification> Notifies { get; set; } = new();
 
@@ -277,14 +198,8 @@ public class AdminNotifiesMessage
 /// </summary>
 public class PushoverNotificationRequest
 {
-    /// <summary>
-    /// Notification title
-    /// </summary>
     public string Title { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Notification message content
-    /// </summary>
     public string Message { get; set; } = string.Empty;
 
     /// <summary>
@@ -313,14 +228,8 @@ public class PushoverNotificationRequest
     /// </summary>
     public string? Device { get; set; }
 
-    /// <summary>
-    /// URL to include in notification (optional)
-    /// </summary>
     public string? Url { get; set; }
 
-    /// <summary>
-    /// Title for the URL (optional)
-    /// </summary>
     public string? UrlTitle { get; set; }
 
     /// <summary>
@@ -351,9 +260,6 @@ public class PushoverResponse
     /// </summary>
     public string? Receipt { get; set; }
 
-    /// <summary>
-    /// Pushover request ID
-    /// </summary>
     public string? Request { get; set; }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
@@ -24,7 +25,7 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
     /// Initializes a new instance of the <see cref="TherapySettingsRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public TherapySettingsRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TherapySettingsRepository> logger, IV4RecordBroadcaster<TherapySettings>? broadcaster = null)
+    public TherapySettingsRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TherapySettingsRepository> logger, IV4RecordBroadcaster<TherapySettings>? broadcaster = null)
         : base(contextFactory, auditContext, logger, broadcaster)
     {
     }
@@ -38,6 +39,14 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
     /// <inheritdoc />
     protected override void ApplyUpdate(TherapySettingsEntity target, TherapySettings source) =>
         TherapySettingsMapper.UpdateEntity(target, source);
+
+    /// <summary>
+    /// Leaves out the snapshots of Profile Switch treatments
+    /// (<see cref="TherapySettings.ProfileSwitchStoreMarker"/>), which are not profiles. Nightscout
+    /// only ever builds them in memory (lib/profilefunctions.js) and never lists them.
+    /// </summary>
+    protected override IQueryable<TherapySettingsEntity> Listed(IQueryable<TherapySettingsEntity> rows) =>
+        rows.Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker));
 
     /// <summary>
     /// Gets therapy settings by profile name.
@@ -91,20 +100,6 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
             AuditContext, $"legacy_id_prefix={prefix}", ct);
     }
 
-    /// <inheritdoc />
-    public async Task<IEnumerable<TherapySettings>> GetByLegacyIdPrefixAsync(
-        string prefix, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .TherapySettings.AsNoTracking()
-            .Where(e => e.LegacyId != null && e.LegacyId.StartsWith(prefix))
-            .OrderByDescending(e => e.Timestamp)
-            .ThenByDescending(e => e.Id)
-            .ToListAsync(ct);
-        return entities.Select(TherapySettingsMapper.ToDomainModel);
-    }
-
     /// <summary>
     /// Gets therapy settings by correlation identifier.
     /// </summary>
@@ -137,12 +132,23 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<ProfileStoreRow>> GetStoreIndexAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await DocumentRows(ctx)
+            .Select(d => new ProfileStoreRow(
+                d.DocumentId, d.Row.LegacyId != null, d.Row.ProfileName, d.Row.Timestamp, d.Row.IsDefault,
+                d.Row.DocumentDefaultProfile))
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
     public async Task<TherapySettings?> GetNewestDocumentRowAsync(CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx
             .TherapySettings.AsNoTracking()
-            .Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker))
+            .Where(IsDocumentRow)
             .OrderByDescending(e => e.Timestamp)
             .ThenByDescending(e => e.Id)
             .FirstOrDefaultAsync(ct);
@@ -153,18 +159,79 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
     public async Task<IReadOnlyList<string>> GetDocumentIdsAsync(CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var rows = await ctx
-            .TherapySettings.AsNoTracking()
-            .Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker))
-            .Select(e => new TherapySettings { Id = e.Id, LegacyId = e.LegacyId, Timestamp = e.Timestamp })
-            .ToListAsync(ct);
+        return await RankedDocumentIds(ctx).ToListAsync(ct);
+    }
 
-        return rows
-            .GroupBy(TherapySettings.DocumentIdOf, StringComparer.Ordinal)
-            .OrderByDescending(g => g.Max(r => r.Timestamp))
-            .ThenByDescending(g => g.Key, StringComparer.Ordinal)
-            .Select(g => g.Key)
+    /// <inheritdoc />
+    public async Task<long> CountDocumentsAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await DocumentRows(ctx).Select(d => d.DocumentId).Distinct().LongCountAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<IReadOnlyList<TherapySettings>>> GetDocumentsAsync(
+        int limit, int offset, bool descending, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var page = await RankedDocumentIds(ctx, descending).Skip(offset).Take(limit).ToListAsync(ct);
+
+        var rows = (await DocumentRows(ctx).Where(d => page.Contains(d.DocumentId)).ToListAsync(ct))
+            .ToLookup(d => d.DocumentId, d => TherapySettingsMapper.ToDomainModel(d.Row), StringComparer.Ordinal);
+
+        return page
+            .Where(rows.Contains)
+            .Select(id => (IReadOnlyList<TherapySettings>)rows[id].ToList())
             .ToList();
+    }
+
+    private static readonly Expression<Func<TherapySettingsEntity, bool>> IsDocumentRow =
+        e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker);
+
+    /// <summary>
+    /// The rows decomposed from profile documents, each with the id of its document computed in SQL
+    /// as <see cref="TherapySettings.DocumentIdOf"/> computes it.
+    /// </summary>
+    private static IQueryable<DocumentRow> DocumentRows(NocturneDbContext ctx) =>
+        ctx.TherapySettings.AsNoTracking()
+            .Where(IsDocumentRow)
+            .Select(e => new DocumentRow
+            {
+                DocumentId = e.LegacyId == null
+                    ? e.Id.ToString()
+                    : e.LegacyId.Contains(":")
+                        ? e.LegacyId.Substring(0, e.LegacyId.IndexOf(":"))
+                        : e.LegacyId,
+                Row = e,
+            });
+
+    /// <summary>
+    /// The document ids, newest first as Nightscout sorts them: by the document's newest row, then by
+    /// id descending, compared bytewise as <see cref="StringComparer.Ordinal"/> compares them. When
+    /// <paramref name="descending"/> is <c>false</c>, the reverse of that order.
+    /// </summary>
+    private static IQueryable<string> RankedDocumentIds(NocturneDbContext ctx, bool descending = true)
+    {
+        var documents = DocumentRows(ctx)
+            .GroupBy(d => d.DocumentId)
+            .Select(g => new { DocumentId = g.Key, Newest = g.Max(d => d.Row.Timestamp) });
+
+        var ordered = descending
+            ? documents
+                .OrderByDescending(d => d.Newest)
+                .ThenByDescending(d => EF.Functions.Collate(d.DocumentId, "C"))
+            : documents
+                .OrderBy(d => d.Newest)
+                .ThenBy(d => EF.Functions.Collate(d.DocumentId, "C"));
+
+        return ordered.Select(d => d.DocumentId);
+    }
+
+    private sealed class DocumentRow
+    {
+        public required string DocumentId { get; init; }
+
+        public required TherapySettingsEntity Row { get; init; }
     }
 
     /// <inheritdoc />
@@ -179,7 +246,7 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await ctx
             .TherapySettings.AsNoTracking()
-            .Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker))
+            .Where(IsDocumentRow)
             .Where(e => e.LegacyId != null
                 ? e.LegacyId.StartsWith(prefix) || e.LegacyId == documentId
                 : e.Id == rowId)

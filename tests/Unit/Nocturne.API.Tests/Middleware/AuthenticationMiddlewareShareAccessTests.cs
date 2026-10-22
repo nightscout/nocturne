@@ -49,7 +49,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(_dbName));
 
         _publicAccess = new PublicAccessCacheService(
-            new MemoryCache(new MemoryCacheOptions()), factory.Object, NullLogger<PublicAccessCacheService>.Instance);
+            new MemoryCache(new MemoryCacheOptions()), factory.Object.AsNocturneFactory(), NullLogger<PublicAccessCacheService>.Instance);
     }
 
     private AuthenticationMiddleware Build(params IAuthHandler[] handlers) =>
@@ -85,7 +85,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         var services = new ServiceCollection();
         services.AddSingleton<IJwtService>(jwt);
-        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(_dbName));
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(_dbName).AsFactory());
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         var handler = new SessionCookieHandler(
@@ -97,7 +97,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
     private static DefaultHttpContext ContextFor(bool shareAccess)
     {
         var services = new ServiceCollection();
-        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         // The seeded subject is a member of the seeded tenant; the middleware's membership check
         // is orthogonal to the share gate under test, so it is satisfied rather than exercised.
         services.AddSingleton(Mock.Of<ITenantMemberService>(m =>

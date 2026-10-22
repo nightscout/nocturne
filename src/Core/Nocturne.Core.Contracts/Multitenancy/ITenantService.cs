@@ -20,7 +20,6 @@ public interface ITenantService
     /// <summary>Re-seeds roles, public membership, and OAuth clients for an existing tenant after a data purge.</summary>
     Task SeedAfterResetAsync(Guid tenantId, CancellationToken ct = default);
 
-    /// <summary>Returns all tenants on the platform.</summary>
     Task<List<TenantDto>> GetAllAsync(CancellationToken ct = default);
 
     /// <summary>Returns the tenant with its member list, or null if not found.</summary>
@@ -36,7 +35,6 @@ public interface ITenantService
     /// <summary>Permanently deletes a tenant and all associated data.</summary>
     Task DeleteAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Adds a subject as a member of the specified tenant with the given roles and permissions.</summary>
     Task AddMemberAsync(Guid tenantId, Guid subjectId, List<Guid> roleIds, List<string>? directPermissions = null, string? label = null, bool limitTo24Hours = false, CancellationToken ct = default);
 
     /// <summary>
@@ -57,6 +55,10 @@ public interface ITenantService
     Task<SlugValidationResult> ValidateSlugAsync(string slug, CancellationToken ct = default);
 
     /// <summary>Creates a new tenant and its owner subject in a single operation, using either a passkey credential or an OIDC identity.</summary>
+    /// <exception cref="ProvisionConflictException">
+    /// The credential names an owner subject id that already exists. Only an already-linked OIDC
+    /// identity resolves the owner to an existing subject.
+    /// </exception>
     Task<ProvisionResult> ProvisionWithOwnerAsync(
         string slug, string displayName, string ownerUsername, string ownerEmail,
         ProvisionCredentialData? credential, ProvisionOidcIdentityData? oidcIdentity,
@@ -92,9 +94,6 @@ public record TenantMemberDto(
 /// </summary>
 public record TenantMemberRoleDto(Guid RoleId, string Name, string Slug);
 
-/// <summary>
-/// Result of a tenant slug validation check.
-/// </summary>
 public record SlugValidationResult(bool IsValid, string? Message = null);
 
 /// <summary>
@@ -122,6 +121,9 @@ public record ProvisionOidcIdentityData(
 /// Result of a full tenant-plus-owner provisioning operation.
 /// </summary>
 public record ProvisionResult(Guid TenantId, Guid SubjectId, string Slug);
+
+/// <summary>A provision that would reuse an existing subject it has no claim to.</summary>
+public sealed class ProvisionConflictException(string message) : Exception(message);
 
 /// <summary>
 /// Outcome of removing a membership. <paramref name="Ok"/> is false only for a refusal, which

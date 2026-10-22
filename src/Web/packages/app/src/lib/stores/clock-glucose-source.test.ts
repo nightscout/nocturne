@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Entry } from "$lib/websocket/types";
+import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
 import { clockGlucoseSourceOf } from "./realtime-store.svelte";
 
 const MILLS = Date.UTC(2026, 11, 31, 14, 5);
@@ -7,7 +8,7 @@ const MILLS = Date.UTC(2026, 11, 31, 14, 5);
 type ClockSourceStore = Parameters<typeof clockGlucoseSourceOf>[0];
 
 /**
- * The store's own `currentBG`, `lastUpdated` and `bgDelta` carry 0 and the
+ * The store's own `currentBG` and `lastUpdated` carry 0 and the
  * current time for the dashboard, so a source built over those could not tell
  * an absent reading from a real one. This stands in the entries they are
  * derived from instead.
@@ -19,6 +20,7 @@ function storeWith(entries: Entry[]): ClockSourceStore {
     previousEntry: sorted[1] ?? null,
     direction: sorted[0]?.direction ?? "",
     demoMode: false,
+    chartThresholds: null,
   };
 }
 
@@ -29,6 +31,16 @@ describe("clockGlucoseSourceOf", () => {
     expect(source.currentBG).toBeNull();
     expect(source.lastUpdated).toBeNull();
     expect(source.bgDelta).toBeNull();
+  });
+
+  it("resolves the store's chart thresholds over the fallbacks", () => {
+    const chartThresholds = { veryLow: 60, low: 80, high: 160, veryHigh: 220 };
+    const store = { ...storeWith([]), chartThresholds };
+
+    expect(clockGlucoseSourceOf(store).thresholds).toMatchObject(chartThresholds);
+    expect(clockGlucoseSourceOf(storeWith([])).thresholds).toEqual(
+      resolveChartThresholds()
+    );
   });
 
   it("reads the newest entry's value and time", () => {

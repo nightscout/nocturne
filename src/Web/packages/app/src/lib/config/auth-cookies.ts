@@ -13,6 +13,7 @@ import {
   COOKIE_GUEST_SESSION_NAME,
   COOKIE_RECOVERY_SESSION_NAME,
   COOKIE_LAST_SIGN_IN_NAME,
+  COOKIE_TOTP_STEP_UP_NAME,
 } from "./constants";
 
 export function getAccessTokenCookieName(): string {
@@ -31,6 +32,7 @@ export const AUTH_COOKIE_NAMES = {
   recoverySession: COOKIE_RECOVERY_SESSION_NAME,
   isAuthenticated: "IsAuthenticated",
   lastSignIn: COOKIE_LAST_SIGN_IN_NAME,
+  totpStepUp: COOKIE_TOTP_STEP_UP_NAME,
 } as const;
 
 /**

@@ -107,8 +107,7 @@ recorded in alert history; it just does not notify anyone.
 
 | Channel | Where the alert goes |
 |---------|----------------------|
-| **Browser Push** | A notification from your browser, even when no Nocturne tab is open. |
-| **In-App** | The Nocturne notification centre and the alert banner in the app. |
+| **In-App** | The Nocturne notification centre of the member chosen as the channel's recipient. A new channel goes to you unless you pick someone else on the site. |
 | **Discord**, **Slack**, **Telegram**, **WhatsApp** | A direct message to a linked account, or a post in a channel or group the Nocturne bot has joined. See [Chat bots](/docs/bots). |
 | **Email** | An email to an address you choose. Needs email set up first; see [Email alerts](/docs/alerts/email). |
 | **Webhook** | A message sent to a web address you control, for connecting other systems. |

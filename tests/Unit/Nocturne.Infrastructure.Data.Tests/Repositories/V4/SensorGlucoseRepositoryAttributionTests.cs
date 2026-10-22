@@ -36,7 +36,7 @@ public class SensorGlucoseRepositoryAttributionTests : IDisposable
 
         var dedup = new Mock<IDeduplicationService>();
         _repo = new SensorGlucoseRepository(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             dedup.Object,
             new Mock<IAuditContext>().Object,
             NullLogger<SensorGlucoseRepository>.Instance);

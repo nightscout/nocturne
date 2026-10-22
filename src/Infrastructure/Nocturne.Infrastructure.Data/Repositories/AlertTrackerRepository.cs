@@ -3,25 +3,33 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
 /// <summary>
-/// Repository for alert tracker state and excursion persistence.
+/// Repository for alert tracker state and excursion persistence. Each call runs on its own context,
+/// or on the caller's <see cref="DbUnitOfWork"/> when constructed over one.
 /// Methods are virtual to allow mocking with CallBase in tests.
 /// </summary>
 public class AlertTrackerRepository : IAlertTrackerRepository
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory? _contexts;
+    private readonly DbUnitOfWork? _unit;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AlertTrackerRepository"/> class.
-    /// </summary>
-    /// <param name="context">The database context.</param>
-    public AlertTrackerRepository(NocturneDbContext context)
+    /// <summary>A repository whose calls each open their own context.</summary>
+    public AlertTrackerRepository(INocturneDbContextFactory contexts)
     {
-        _context = context;
+        _contexts = contexts;
     }
+
+    /// <summary>A repository whose calls run on <paramref name="unit"/>, which the caller owns.</summary>
+    public AlertTrackerRepository(DbUnitOfWork unit)
+    {
+        _unit = unit;
+    }
+
+    private ValueTask<DbContextLease> OpenAsync(CancellationToken ct) => DbContextLease.OpenAsync(_unit, _contexts, ct);
 
     /// <summary>
     /// Get the tracker state for a specific alert rule.
@@ -33,7 +41,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         Guid alertRuleId,
         CancellationToken ct = default)
     {
-        var entity = await _context.AlertTrackerState
+        await using var lease = await OpenAsync(ct);
+        var entity = await lease.Context.AlertTrackerState
             .FirstOrDefaultAsync(s => s.AlertRuleId == alertRuleId, ct);
 
         return entity == null ? null : MapTrackerState(entity);
@@ -48,12 +57,14 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         AlertTrackerState state,
         CancellationToken ct = default)
     {
-        var existing = await _context.AlertTrackerState
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
+        var existing = await db.AlertTrackerState
             .FirstOrDefaultAsync(s => s.AlertRuleId == state.AlertRuleId, ct);
 
         if (existing == null)
         {
-            _context.AlertTrackerState.Add(new AlertTrackerStateEntity
+            db.AlertTrackerState.Add(new AlertTrackerStateEntity
             {
                 AlertRuleId = state.AlertRuleId,
                 State = state.State,
@@ -74,7 +85,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
             existing.AwaitingRearm = state.AwaitingRearm;
         }
 
-        await _context.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>
@@ -87,7 +98,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         Guid alertRuleId,
         CancellationToken ct = default)
     {
-        var entity = await _context.AlertRules
+        await using var lease = await OpenAsync(ct);
+        var entity = await lease.Context.AlertRules
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == alertRuleId, ct);
 
@@ -97,7 +109,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
     /// <inheritdoc/>
     public virtual async Task<AlertExcursion?> GetExcursionAsync(Guid excursionId, CancellationToken ct = default)
     {
-        var entity = await _context.AlertExcursions
+        await using var lease = await OpenAsync(ct);
+        var entity = await lease.Context.AlertExcursions
             .AsNoTracking()
             .FirstOrDefaultAsync(e => e.Id == excursionId, ct);
         return entity is null ? null : MapAlertExcursion(entity);
@@ -122,8 +135,9 @@ public class AlertTrackerRepository : IAlertTrackerRepository
             StartedAt = startedAt,
         };
 
-        _context.AlertExcursions.Add(excursion);
-        await _context.SaveChangesAsync(ct);
+        await using var lease = await OpenAsync(ct);
+        lease.Context.AlertExcursions.Add(excursion);
+        await lease.Context.SaveChangesAsync(ct);
         return MapAlertExcursion(excursion);
     }
 
@@ -138,13 +152,14 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         DateTime endedAt,
         CancellationToken ct = default)
     {
-        var excursion = await _context.AlertExcursions
+        await using var lease = await OpenAsync(ct);
+        var excursion = await lease.Context.AlertExcursions
             .FirstOrDefaultAsync(e => e.Id == excursionId, ct);
 
         if (excursion != null)
         {
             excursion.EndedAt = endedAt;
-            await _context.SaveChangesAsync(ct);
+            await lease.Context.SaveChangesAsync(ct);
         }
     }
 
@@ -159,13 +174,14 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         DateTime hysteresisStartedAt,
         CancellationToken ct = default)
     {
-        var excursion = await _context.AlertExcursions
+        await using var lease = await OpenAsync(ct);
+        var excursion = await lease.Context.AlertExcursions
             .FirstOrDefaultAsync(e => e.Id == excursionId, ct);
 
         if (excursion != null)
         {
             excursion.HysteresisStartedAt = hysteresisStartedAt;
-            await _context.SaveChangesAsync(ct);
+            await lease.Context.SaveChangesAsync(ct);
         }
     }
 
@@ -178,13 +194,14 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         Guid excursionId,
         CancellationToken ct = default)
     {
-        var excursion = await _context.AlertExcursions
+        await using var lease = await OpenAsync(ct);
+        var excursion = await lease.Context.AlertExcursions
             .FirstOrDefaultAsync(e => e.Id == excursionId, ct);
 
         if (excursion != null)
         {
             excursion.HysteresisStartedAt = null;
-            await _context.SaveChangesAsync(ct);
+            await lease.Context.SaveChangesAsync(ct);
         }
     }
 
@@ -192,25 +209,44 @@ public class AlertTrackerRepository : IAlertTrackerRepository
 
     /// <inheritdoc/>
     /// <remarks>See <see cref="AdvisoryLockExtensions"/>.</remarks>
-    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The repository is not the one <see cref="ExecuteInTransactionAsync{T}"/> handed its work, or
+    /// no transaction is open on its unit.
+    /// </exception>
     public virtual Task LockRuleAsync(Guid alertRuleId, CancellationToken ct = default) =>
-        _context.LockForTransactionAsync(TransitionLockClass, alertRuleId, ct);
+        _unit is null
+            ? throw new InvalidOperationException("An advisory lock is taken inside a transaction")
+            : _unit.Context.LockForTransactionAsync(TransitionLockClass, alertRuleId, ct);
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Runs under <see cref="RetryingTransactionExtensions.ExecuteInTransactionAsync{T}"/>. Opening
-    /// the connection sets the tenant GUCs (TenantConnectionInterceptor), so every statement in the
-    /// transaction runs under the context's tenant. Tracker state and excursions are detached before
-    /// each attempt even when tracked before the call, so the work reads them fresh under the rule's
-    /// lock.
+    /// Runs as a <see cref="DbUnitOfWork"/>: this repository's own when it was constructed over one,
+    /// else a new unit, and hands the work a repository over it. Opening the connection sets the
+    /// tenant GUCs (TenantConnectionInterceptor), so every statement in the transaction runs under the
+    /// context's tenant. Tracker state and excursions are detached before each attempt even when
+    /// tracked before the call, so the work reads them fresh under the rule's lock.
     /// </remarks>
-    public virtual Task<T> ExecuteInTransactionAsync<T>(
-        Func<CancellationToken, Task<T>> work,
-        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
-        CancellationToken ct = default) =>
-        _context.ExecuteInTransactionAsync(
-            work,
-            verifySucceeded,
+    public virtual async Task<T> ExecuteInTransactionAsync<T>(
+        Func<IAlertTrackerRepository, CancellationToken, Task<T>> work,
+        Func<IAlertTrackerRepository, T, CancellationToken, Task<bool>>? verifySucceeded = null,
+        CancellationToken ct = default)
+    {
+        if (_unit is not null)
+            return await CommitAsync(_unit, this, work, verifySucceeded, ct);
+
+        await using var unit = await DbUnitOfWork.OpenAsync(_contexts!, ct);
+        return await CommitAsync(unit, new AlertTrackerRepository(unit), work, verifySucceeded, ct);
+    }
+
+    private static Task<T> CommitAsync<T>(
+        DbUnitOfWork unit,
+        IAlertTrackerRepository bound,
+        Func<IAlertTrackerRepository, CancellationToken, Task<T>> work,
+        Func<IAlertTrackerRepository, T, CancellationToken, Task<bool>>? verifySucceeded,
+        CancellationToken ct) =>
+        unit.CommitAsync(
+            token => work(bound, token),
+            verifySucceeded is null ? null : (result, token) => verifySucceeded(bound, result, token),
             entity => entity is AlertTrackerStateEntity or AlertExcursionEntity,
             ct);
 

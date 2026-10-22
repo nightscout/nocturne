@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Middleware.Handlers;
@@ -163,7 +164,16 @@ public class OidcTokenHandler : IAuthHandler
             var validationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
-                ValidIssuer = provider.IssuerUrl,
+                IssuerValidator = (issuer, securityToken, _) =>
+                    OidcIssuer.Matches(
+                        issuer,
+                        (securityToken as JwtSecurityToken)?.Payload.TryGetValue("tid", out var tid) == true
+                            ? tid?.ToString()
+                            : null,
+                        provider.IssuerUrl,
+                        config.Issuer)
+                        ? issuer
+                        : throw new SecurityTokenInvalidIssuerException($"Issuer '{issuer}' is not this provider"),
                 ValidateAudience = true,
                 ValidAudience = provider.ClientId,
                 ValidateLifetime = true,
@@ -270,6 +280,9 @@ public class OidcTokenHandler : IAuthHandler
         var oidcSubjectId =
             claims.FindFirst("sub")?.Value ?? claims.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var email = claims.FindFirst("email")?.Value ?? claims.FindFirst(ClaimTypes.Email)?.Value;
+        // email_verified speaks for the standard email claim only, so a remapped email is unverified.
+        var emailVerified = string.Equals(
+            claims.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
         var name =
             claims.FindFirst("name")?.Value
             ?? claims.FindFirst("preferred_username")?.Value
@@ -289,6 +302,7 @@ public class OidcTokenHandler : IAuthHandler
                     {
                         case "email":
                             email = claimValue;
+                            emailVerified &= mapping.Key == "email";
                             break;
                         case "name":
                             name = claimValue;
@@ -309,6 +323,7 @@ public class OidcTokenHandler : IAuthHandler
             oidcSubjectId,
             provider.IssuerUrl,
             email,
+            emailVerified,
             name,
             provider.DefaultRoles
         );
@@ -317,8 +332,7 @@ public class OidcTokenHandler : IAuthHandler
         var permissions = await subjectService.GetSubjectPermissionsAsync(subject.Id);
         var roles = await subjectService.GetSubjectRolesAsync(subject.Id);
 
-        // Update last login
-        _ = subjectService.UpdateLastLoginAsync(subject.Id);
+        _ = RecordLastLoginAsync(_scopeFactory, _logger, subject.Id);
 
         // Extract expiration from token
         var expClaim = claims.FindFirst("exp")?.Value;
@@ -354,5 +368,27 @@ public class OidcTokenHandler : IAuthHandler
         public string? Error { get; set; }
         public ClaimsPrincipal? Claims { get; set; }
         public JwtSecurityToken? Token { get; set; }
+    }
+
+    /// <summary>
+    /// Stamps <paramref name="subjectId"/>'s last login, started fire-and-forget once the token has
+    /// authenticated. It runs on a scope of its own: the request's handler scope is disposed when
+    /// <see cref="AuthenticateAsync"/> returns, which can be before this write runs. A failure is
+    /// logged and never reaches the request.
+    /// </summary>
+    internal static async Task RecordLastLoginAsync(
+        IServiceScopeFactory scopeFactory,
+        ILogger logger,
+        Guid subjectId)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<ISubjectService>().UpdateLastLoginAsync(subjectId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to update last login for subject {SubjectId}", subjectId);
+        }
     }
 }

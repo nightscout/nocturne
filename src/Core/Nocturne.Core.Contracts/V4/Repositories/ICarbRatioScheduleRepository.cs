@@ -19,13 +19,12 @@ public interface ICarbRatioScheduleRepository : IProfileScopedRepository<CarbRat
 {
     /// <summary>Retrieve a page of <see cref="CarbRatioSchedule"/> records filtered by time range, device, and source.</summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end of the time window, or <c>null</c> for no upper bound.</param>
+    /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
     /// <param name="device">Optional device identifier filter.</param>
     /// <param name="source">Optional data source filter.</param>
     /// <param name="limit">Maximum number of records to return (default 100).</param>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
-    /// <param name="ct">Cancellation token.</param>
     new Task<IEnumerable<CarbRatioSchedule>> GetAsync(
         DateTime? from,
         DateTime? to,

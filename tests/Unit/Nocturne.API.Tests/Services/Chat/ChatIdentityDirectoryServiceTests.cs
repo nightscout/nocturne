@@ -29,7 +29,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
 
         _factory = _db.ContextFactory;
         _service = new ChatIdentityDirectoryService(
-            _factory,
+            _factory.AsNocturneFactory(),
             Mock.Of<ILogger<ChatIdentityDirectoryService>>());
     }
 
@@ -182,7 +182,8 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     }
 
     /// <summary>Writes a directory row directly, bypassing the service.</summary>
-    private void InsertLink(string platformUserId, Guid tenantId, string label, bool isDefault)
+    private void InsertLink(
+        string platformUserId, Guid tenantId, string label, bool isDefault, Guid? subjectId = null)
     {
         using var db = _db.CreateContext();
         db.ChatIdentityDirectory.Add(new ChatIdentityDirectoryEntry
@@ -191,7 +192,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             Platform = Platform,
             PlatformUserId = platformUserId,
             TenantId = tenantId,
-            NocturneUserId = NewSubject(),
+            NocturneUserId = subjectId ?? NewSubject(),
             Label = label,
             DisplayName = label,
             IsDefault = isDefault,
@@ -280,6 +281,19 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateLinkAsync_refuses_a_tenant_link_held_by_another_subject()
+    {
+        var tenantId = NewTenant();
+        var holder = await _service.CreateLinkAsync(Platform, UserA, tenantId, NewSubject(), "lily", "Lily", default);
+
+        var act = () => _service.CreateLinkAsync(Platform, UserA, tenantId, NewSubject(), "lily", "Lily", default);
+
+        await act.Should().ThrowAsync<ChatAccountLinkedToAnotherMemberException>();
+        var all = await _service.GetCandidatesAsync(Platform, UserA, default);
+        all.Should().ContainSingle().Which.NocturneUserId.Should().Be(holder.NocturneUserId);
+    }
+
+    [Fact]
     public async Task CreateLinkAsync_auto_suffixes_label_collision()
     {
         await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily 1", default);
@@ -310,7 +324,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             pending => InsertLink(UserA, stolen, pending.Label, isDefault: false),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
-            factory, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var entry = await service.CreateLinkAsync(
             Platform, UserA, ours, NewSubject(), "lily", "Ours", default);
@@ -327,21 +341,42 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     public async Task CreateLinkAsync_returns_the_winning_row_when_same_tenant_link_lands_mid_insert()
     {
         var tenantId = NewTenant();
+        var subjectId = NewSubject();
+
+        var factory = new InterloperDbContextFactory(
+            _db.Options,
+            _ => InsertLink(UserA, tenantId, "winner", isDefault: true, subjectId),
+            interlopeCount: 1);
+        var service = new ChatIdentityDirectoryService(
+            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+
+        var entry = await service.CreateLinkAsync(
+            Platform, UserA, tenantId, subjectId, "loser", "Loser", default);
+
+        entry.Label.Should().Be("winner");
+
+        var all = await _service.GetCandidatesAsync(Platform, UserA, default);
+        all.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task CreateLinkAsync_refuses_when_another_subjects_same_tenant_link_lands_mid_insert()
+    {
+        var tenantId = NewTenant();
 
         var factory = new InterloperDbContextFactory(
             _db.Options,
             _ => InsertLink(UserA, tenantId, "winner", isDefault: true),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
-            factory, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
-        var entry = await service.CreateLinkAsync(
+        var act = () => service.CreateLinkAsync(
             Platform, UserA, tenantId, NewSubject(), "loser", "Loser", default);
 
-        entry.Label.Should().Be("winner");
-
+        await act.Should().ThrowAsync<ChatAccountLinkedToAnotherMemberException>();
         var all = await _service.GetCandidatesAsync(Platform, UserA, default);
-        all.Should().HaveCount(1);
+        all.Should().ContainSingle().Which.Label.Should().Be("winner");
     }
 
     [Fact]
@@ -357,7 +392,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             _ => InsertLink(UserA, theirs, "theirs", isDefault: true),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
-            factory, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var entry = await service.CreateLinkAsync(
             Platform, UserA, ours, NewSubject(), "ours", "Ours", default);
@@ -390,7 +425,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             interlopeCount: 1,
             beforeRetry: () => DeleteLink(UserA, "lily"));
         var service = new ChatIdentityDirectoryService(
-            factory, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var entry = await service.CreateLinkAsync(
             Platform, UserA, ours, NewSubject(), "lily", "Ours", default);
@@ -407,7 +442,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     {
         var factory = new BarrenFailureDbContextFactory(_db.Options);
         var service = new ChatIdentityDirectoryService(
-            factory, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var act = async () => await service.CreateLinkAsync(
             Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily", default);
@@ -427,7 +462,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
             pending => InsertLink(UserA, NewTenant(), pending.Label, isDefault: false),
             interlopeCount: int.MaxValue);
         var service = new ChatIdentityDirectoryService(
-            factory, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            factory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
         var act = async () => await service.CreateLinkAsync(
             Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily", default);

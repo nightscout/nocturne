@@ -7,9 +7,6 @@ namespace Nocturne.Core.Models.Authorization;
 /// <seealso cref="AuthType"/>
 public class AuthResult
 {
-    /// <summary>
-    /// Whether authentication succeeded
-    /// </summary>
     public bool Succeeded { get; set; }
 
     /// <summary>
@@ -27,17 +24,11 @@ public class AuthResult
     /// </summary>
     public bool ShouldSkip { get; set; }
 
-    /// <summary>
-    /// Create a successful auth result.
-    /// </summary>
     /// <param name="context">The authentication context for the authenticated request.</param>
     /// <returns>An <see cref="AuthResult"/> with <see cref="Succeeded"/> set to <c>true</c>.</returns>
     public static AuthResult Success(AuthContext context) =>
         new() { Succeeded = true, AuthContext = context };
 
-    /// <summary>
-    /// Create a failed auth result.
-    /// </summary>
     /// <param name="error">Human-readable error message describing the failure.</param>
     /// <returns>An <see cref="AuthResult"/> with <see cref="Succeeded"/> set to <c>false</c>.</returns>
     public static AuthResult Failure(string error) =>
@@ -69,14 +60,8 @@ public class AuthResult
 /// </summary>
 public class AuthContext
 {
-    /// <summary>
-    /// Whether the user is authenticated
-    /// </summary>
     public bool IsAuthenticated { get; set; }
 
-    /// <summary>
-    /// Type of authentication used
-    /// </summary>
     public AuthType AuthType { get; set; }
 
     /// <summary>
@@ -84,14 +69,8 @@ public class AuthContext
     /// </summary>
     public Guid? SubjectId { get; set; }
 
-    /// <summary>
-    /// Resolved tenant ID for this request
-    /// </summary>
     public Guid? TenantId { get; set; }
 
-    /// <summary>
-    /// Subject name for display
-    /// </summary>
     public string? SubjectName { get; set; }
 
     /// <summary>
@@ -99,14 +78,8 @@ public class AuthContext
     /// </summary>
     public string? Email { get; set; }
 
-    /// <summary>
-    /// External OIDC subject ID
-    /// </summary>
     public string? OidcSubjectId { get; set; }
 
-    /// <summary>
-    /// OIDC issuer URL
-    /// </summary>
     public string? OidcIssuer { get; set; }
 
     /// <summary>
@@ -130,6 +103,17 @@ public class AuthContext
     public Guid? TokenId { get; set; }
 
     /// <summary>
+    /// The refresh-token family a session login belongs to; null for every other credential and
+    /// for a session token minted without one.
+    /// </summary>
+    public string? SessionId { get; set; }
+
+    /// <summary>
+    /// The OAuth client an access token was issued to; null for every other credential.
+    /// </summary>
+    public string? ClientId { get; set; }
+
+    /// <summary>
     /// Raw token string (for legacy compatibility)
     /// </summary>
     public string? RawToken { get; set; }
@@ -142,9 +126,6 @@ public class AuthContext
     /// </summary>
     public string? CredentialFingerprint { get; set; }
 
-    /// <summary>
-    /// When the authentication expires
-    /// </summary>
     public DateTimeOffset? ExpiresAt { get; set; }
 
     /// <summary>
@@ -181,9 +162,6 @@ public class AuthContext
     /// </summary>
     public bool IsActingAsFollower => ActingAsSubjectId.HasValue;
 
-    /// <summary>
-    /// Create an unauthenticated context.
-    /// </summary>
     /// <returns>An <see cref="AuthContext"/> with <see cref="IsAuthenticated"/> set to <c>false</c>.</returns>
     public static AuthContext Unauthenticated() =>
         new() { IsAuthenticated = false, AuthType = AuthType.None };
@@ -234,9 +212,6 @@ public class AuthContext
         Roles.Contains(role, StringComparer.OrdinalIgnoreCase);
 }
 
-/// <summary>
-/// Types of authentication
-/// </summary>
 public enum AuthType
 {
     /// <summary>
@@ -259,9 +234,6 @@ public enum AuthType
     /// </summary>
     ApiKey,
 
-    /// <summary>
-    /// Session cookie
-    /// </summary>
     SessionCookie,
 
     /// <summary>

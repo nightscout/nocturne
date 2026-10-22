@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -8,6 +9,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Tests.Services.Monitoring;
 
@@ -66,20 +68,22 @@ public class TrackerAlertRuleBackfillServiceTests : IDisposable
         var services = new ServiceCollection();
         services.AddSingleton<IDbContextFactory<NocturneDbContext>>(
             new StubDbContextFactory(options));
-        services.AddScoped(sp =>
-            sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext());
+        services.AddSingleton(sp =>
+            sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory());
+        services.AddScoped(sp => new TenantReadContext(
+            sp.GetRequiredService<ITenantAccessor>(), null, sp.GetRequiredService<IAuditContext>()));
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddScoped<ITrackerAlertRuleSyncService>(sp =>
         {
             var ambient = sp.GetRequiredService<IAuditContext>();
-            var dbContext = sp.GetRequiredService<NocturneDbContext>();
+            var readContext = sp.GetRequiredService<TenantReadContext>();
             var stub = new Mock<ITrackerAlertRuleSyncService>();
             stub.Setup(x => x.SyncDefinitionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .Returns(() =>
                 {
                     ambientIsSystem = ambient.IsSystem;
-                    contextEndpoint = dbContext.AuditContext?.Endpoint;
+                    contextEndpoint = readContext.AuditContext?.Endpoint;
                     synced.TrySetResult();
                     return Task.CompletedTask;
                 });
@@ -95,8 +99,7 @@ public class TrackerAlertRuleBackfillServiceTests : IDisposable
         await synced.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await sut.StopAsync(CancellationToken.None);
 
-        ambientIsSystem.Should().BeTrue(
-            "the sync service stamps its factory-created contexts from the ambient audit context");
+        ambientIsSystem.Should().BeTrue();
         contextEndpoint.Should().Be(TrackerAlertRuleBackfillService.AuditEndpoint);
     }
 

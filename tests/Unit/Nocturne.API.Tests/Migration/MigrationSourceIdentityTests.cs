@@ -11,6 +11,8 @@ using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -31,7 +33,8 @@ public class MigrationSourceIdentityTests
     {
         var dbName = $"migration-sources-{Guid.NewGuid():N}";
         var provider = new ServiceCollection()
-            .AddDbContext<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
+            .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
+            .AddDataServices()
             .AddSingleton(notifications ?? new Mock<INotificationV1Service>().Object)
             .BuildServiceProvider();
 
@@ -94,7 +97,7 @@ public class MigrationSourceIdentityTests
             .Which.SourceDescription.Should().Be(CleanUrl);
 
         await using var scope = provider.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
         var source = await db.MigrationSources.SingleAsync();
         source.SourceIdentifier.Should().Be(CleanUrl);
         source.NightscoutUrl.Should().Be(CleanUrl);
@@ -111,7 +114,7 @@ public class MigrationSourceIdentityTests
 
         await using (var seedScope = provider.CreateAsyncScope())
         {
-            var seed = seedScope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            await using var seed = await seedScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
             seed.MigrationSources.Add(new MigrationSourceEntity
             {
                 Id = legacyId,
@@ -130,7 +133,7 @@ public class MigrationSourceIdentityTests
         await StartAndSettleAsync(service, tenant, TokenUrl);
 
         await using var scope = provider.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
         var source = await db.MigrationSources.SingleAsync();
         source.Id.Should().Be(legacyId);
         source.SourceIdentifier.Should().Be(CleanUrl);
@@ -176,7 +179,7 @@ public class MigrationSourceIdentityTests
 
         await using (var seedScope = provider.CreateAsyncScope())
         {
-            var seed = seedScope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            await using var seed = await seedScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
             var source = new MigrationSourceEntity
             {
                 Id = Guid.CreateVersion7(),

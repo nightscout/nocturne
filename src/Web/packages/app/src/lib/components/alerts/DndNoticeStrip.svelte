@@ -4,13 +4,14 @@
   import { severity } from "./severity";
 
   /**
-   * Notice shown while Do Not Disturb is suppressing non-critical rules.
+   * Notice shown while Do Not Disturb is suppressing every rule that is neither
+   * critical nor allowed through it.
    *
    * This replaced a four-state "armed" strip whose copy reported channel health
    * ("All channels healthy", "Critical channels unreachable") from the
    * active-alert count. The API exposes no per-channel delivery probe, so those
-   * states asserted reachability nothing had measured. Render this only when DND
-   * is on right now.
+   * states asserted reachability nothing had measured. Render this only when
+   * DND is on right now.
    */
   interface Props {
     /** Provided when DND can be turned off inline. */
@@ -35,7 +36,8 @@
     <BellOff class="h-4 w-4" />
   </span>
   <div class="flex-1 text-sm font-medium">
-    Do Not Disturb is on. Only critical rules will fire.
+    Do Not Disturb is on. Only critical rules and rules allowed through Do Not
+    Disturb will fire.
   </div>
   {#if onDisableDnd}
     <Button

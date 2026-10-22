@@ -67,6 +67,22 @@ public class SessionCookieHandlerTests
     }
 
     [Fact]
+    public async Task SessionToken_CarriesItsSessionIdIntoTheAuthContext()
+    {
+        var token = _jwt.GenerateAccessToken(
+            new SubjectInfo { Id = _subjectId, Name = "Member" },
+            permissions: ["api:read"],
+            roles: ["reader"],
+            sessionId: "laptop");
+
+        var result = await _handler.AuthenticateAsync(BuildContext(token));
+
+        result.Succeeded.Should().BeTrue();
+        result.AuthContext!.SessionId.Should().Be("laptop");
+        SessionCookieHandler.IsGrantShaped(_jwt.ValidateAccessToken(token).Claims!).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task TenantPinnedScopedOAuthToken_IsNotAuthenticated()
     {
         // The headline vector: a tenant-pinned, scope-limited OAuth access token moved into the
@@ -117,7 +133,7 @@ public class SessionCookieHandlerTests
 
     /// <summary>
     /// The claims the session overload of <see cref="IJwtService.GenerateAccessToken"/> can emit
-    /// (sub, name, email, roles, permission, jti, iat, exp). A session JWT carrying only these is
+    /// (sub, name, email, roles, permission, sid, jti, iat, exp). A session JWT carrying only these is
     /// the shape the handler accepts.
     /// </summary>
     private static readonly HashSet<string> SessionShapeClaims =
@@ -127,6 +143,7 @@ public class SessionCookieHandlerTests
         nameof(JwtClaims.Email),
         nameof(JwtClaims.Roles),
         nameof(JwtClaims.Permissions),
+        nameof(JwtClaims.SessionId),
         nameof(JwtClaims.JwtId),
         nameof(JwtClaims.IssuedAt),
         nameof(JwtClaims.ExpiresAt),

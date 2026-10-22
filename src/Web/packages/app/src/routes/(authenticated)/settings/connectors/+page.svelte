@@ -12,6 +12,7 @@
     DataSourceInfo,
     ConnectorStatusDto,
     ConnectorCapabilities,
+    SyncResult,
   } from "$lib/api/generated/nocturne-api-client";
 
   import {
@@ -42,9 +43,8 @@
   import ClientDevices from "$lib/components/settings/ClientDevices.svelte";
   import ApiTokens from "$lib/components/settings/ApiTokens.svelte";
   import UploaderSetupDialog from "$lib/components/connectors/UploaderSetupDialog.svelte";
-  import { createUploaderTokenHandoff } from "./uploader-token-handoff";
   import ConnectorDetailsDialog from "$lib/components/connectors/ConnectorDetailsDialog.svelte";
-  import ManualSyncDialog, { type BatchSyncResult } from "$lib/components/connectors/ManualSyncDialog.svelte";
+  import ManualSyncDialog from "$lib/components/connectors/ManualSyncDialog.svelte";
   import UploaderAppsCard from "$lib/components/connectors/UploaderAppsCard.svelte";
   import ServerConnectorsCard, { type ConnectorStatusWithDescription } from "$lib/components/connectors/ServerConnectorsCard.svelte";
   import DataSourceManageDialog from "$lib/components/connectors/DataSourceManageDialog.svelte";
@@ -107,7 +107,7 @@
   // Manual sync state
   let isManualSyncing = $state(false);
   let showManualSyncDialog = $state(false);
-  let manualSyncResult = $state<BatchSyncResult | null>(null);
+  let manualSyncResults = $state<Record<string, SyncResult> | null>(null);
 
   // Connector heartbeat metrics state
   let selectedConnector = $state<ConnectorStatusWithDescription | null>(null);
@@ -143,11 +143,10 @@
     }
   });
 
-  // API token create dialog (triggered from uploader setup)
+  // API token create dialog, opened from the connection details card
   let apiTokenCreateOpen = $state(false);
   let apiTokenPrefillLabel = $state("");
   let apiTokenPrefillScopes = $state<string[]>([]);
-  const uploaderHandoff = createUploaderTokenHandoff();
 
   // Whether the user has already been told these lists are stale. The effect
   // below refreshes once per finished run, so a batch of them and the refresh
@@ -231,13 +230,11 @@
 
   async function triggerManualSync() {
     isManualSyncing = true;
-    manualSyncResult = null;
+    manualSyncResults = null;
     showManualSyncDialog = true;
 
-    const startTime = new Date();
     const connectorsToSync = connectorStatuses.filter((c) => c.isEnabled !== false);
-    const results: BatchSyncResult["connectorResults"] = [];
-    let successes = 0;
+    const results: Record<string, SyncResult> = {};
 
     const to = new Date();
     const from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -248,61 +245,24 @@
         const connectorId = connector.id;
         if (!connectorId) continue;
 
-        const start = performance.now();
-        let success = false;
-        let errorMsg = undefined;
-
         try {
-          const result = await triggerConnectorSync({ id: connectorId, request });
-          success = result.success ?? false;
-          if (!success) errorMsg = result.message || "Unknown error";
+          results[connectorId] = await triggerConnectorSync({ id: connectorId, request });
         } catch (e) {
-          success = false;
-          errorMsg = describeSubmitError(
-            e,
-            "We couldn't start this sync. Please try again."
-          );
+          results[connectorId] = {
+            success: false,
+            message: describeSubmitError(
+              e,
+              "We couldn't start this sync. Please try again."
+            ),
+          };
         }
-
-        const durationMs = performance.now() - start;
-        results.push({
-          connectorName: connectorId,
-          success,
-          errorMessage: errorMsg,
-          duration: `${Math.round(durationMs)}ms`,
-        });
-
-        if (success) successes++;
       }
 
-      const endTime = new Date();
-      manualSyncResult = {
-        success: successes === connectorsToSync.length,
-        totalConnectors: connectorsToSync.length,
-        successfulConnectors: successes,
-        failedConnectors: connectorsToSync.length - successes,
-        startTime,
-        endTime,
-        connectorResults: results,
-      };
+      manualSyncResults = results;
 
-      if (successes > 0) {
+      if (Object.values(results).some((r) => r.success)) {
         await refreshAll();
       }
-    } catch (e) {
-      manualSyncResult = {
-        success: false,
-        errorMessage: describeSubmitError(
-          e,
-          "We couldn't start the sync. Please try again."
-        ),
-        totalConnectors: 0,
-        successfulConnectors: 0,
-        failedConnectors: 0,
-        startTime: new Date(),
-        endTime: new Date(),
-        connectorResults: [],
-      };
     } finally {
       isManualSyncing = false;
     }
@@ -467,7 +427,7 @@
                 icon={source.icon}
                 status={mapDataSourceStatus(source)}
                 totalEntries={source.totalEntries}
-                totalCoversLast30Days
+                totalEntriesWindowDays={source.totalEntriesWindowDays}
                 entriesLast24h={source.entriesLast24h}
                 lastSeen={source.lastSeen}
                 subtitle={source.name !== source.deviceId ? source.deviceId : undefined}
@@ -596,25 +556,13 @@
         bind:createOpen={apiTokenCreateOpen}
         prefillLabel={apiTokenPrefillLabel}
         prefillScopes={apiTokenPrefillScopes}
-        onCreateClose={() => {
-          if (uploaderHandoff.resumes()) showSetupDialog = true;
-        }}
       />
     </div>
   {/if}
 </div>
 
 <!-- Setup Instructions Dialog -->
-<UploaderSetupDialog
-  bind:open={showSetupDialog}
-  {selectedUploader}
-  onRequestApiKey={(label, scopes) => {
-    apiTokenPrefillLabel = label;
-    apiTokenPrefillScopes = scopes;
-    uploaderHandoff.handOff();
-    apiTokenCreateOpen = true;
-  }}
-/>
+<UploaderSetupDialog bind:open={showSetupDialog} {selectedUploader} />
 
 <!-- Data Source Management Dialog -->
 <DataSourceManageDialog
@@ -623,7 +571,7 @@
   onDeleteComplete={loadServices}
 />
 
-<ManualSyncDialog bind:open={showManualSyncDialog} {isManualSyncing} {manualSyncResult} syncProgress={isManualSyncing ? activeSyncProgress : null} />
+<ManualSyncDialog bind:open={showManualSyncDialog} {isManualSyncing} {manualSyncResults} syncProgress={isManualSyncing ? activeSyncProgress : null} />
 
 <!-- Connector Details Dialog -->
 <ConnectorDetailsDialog bind:open={showConnectorDialog} {selectedConnector} {selectedConnectorCapabilities} onSyncComplete={loadConnectorStatuses} />

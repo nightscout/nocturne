@@ -45,7 +45,7 @@
         {
           "name": "INSTANCE_KEY",
           "label": "Instance key",
-          "description": "Minimum 12 characters: used for JWT signing and service authentication"
+          "description": "Minimum 32 characters: used for JWT signing and service authentication"
         },
         {
           "name": "BASE_DOMAIN",
@@ -57,6 +57,11 @@
           "label": "Trusted proxy ranges",
           "default": "127.0.0.1/32",
           "description": "Space-separated CIDRs of a CDN in front of this deployment, e.g. Cloudflare\u0027s published ranges. Decides whose CF-Connecting-IP header is believed; leave as-is unless a CDN is present, and never set it empty."
+        },
+        {
+          "name": "ALLOWED_FRAME_ANCESTORS",
+          "label": "Allowed frame ancestors",
+          "description": "Space-separated origins allowed to embed the signed-in app in an iframe, e.g. https://ha.example.com:8123 for a Home Assistant dashboard. Leave empty to forbid it; share links can always be embedded."
         },
         {
           "name": "OTEL_EXPORTER_OTLP_ENDPOINT",

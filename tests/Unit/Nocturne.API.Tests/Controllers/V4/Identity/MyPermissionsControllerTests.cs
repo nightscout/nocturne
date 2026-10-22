@@ -146,7 +146,7 @@ public class MyPermissionsControllerTests
             .ReturnsAsync(() => db.CreateContext());
         var httpContext = controller.ControllerContext.HttpContext;
         httpContext.RequestServices = new ServiceCollection()
-            .AddSingleton(factory.Object)
+            .AddSingleton(factory.Object.AsNocturneFactory())
             .BuildServiceProvider();
         httpContext.Items["AuthContext"] = new AuthContext
         {

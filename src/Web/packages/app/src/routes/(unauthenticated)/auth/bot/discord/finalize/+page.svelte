@@ -3,66 +3,59 @@
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
 	import Loader2 from "@lucide/svelte/icons/loader-circle";
-	import { claimLink } from "$lib/api/generated/chatIdentities.generated.remote";
-	import { describeSubmitError } from "$lib/forms/submit-error";
+	import { Button } from "$lib/components/ui/button";
+	import { retainQuery } from "$lib/api/retain-query.svelte";
+	import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
+	import { confirmDiscordLink, getDiscordLinkClaim } from "./finalize.remote";
 
-	// Read token from URL
-	const token = $derived(page.url.searchParams.get("token") ?? "");
+	const claim = $derived(page.url.searchParams.get("claim") ?? "");
 
-	// Auth guard: redirect to login if not authenticated
 	$effect(() => {
-		if (!page.data.isAuthenticated && token) {
-			const returnUrl = `/auth/bot/discord/finalize?token=${token}`;
+		if (!page.data.isAuthenticated && claim) {
+			const returnUrl = `/auth/bot/discord/finalize?claim=${encodeURIComponent(claim)}`;
 			goto(resolve(`/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`), { replaceState: true });
 		}
 	});
 
-	// Claim state
-	let result = $state<{ success: true; label: string; displayName: string } | { success: false; message: string } | null>(null);
-	let loading = $state(true);
+	const claimQuery = $derived(page.data.isAuthenticated && claim ? getDiscordLinkClaim(claim) : null);
+	retainQuery(() => claimQuery);
+	const pending = $derived(claimQuery?.current);
 
-	// Auto-claim on mount if authenticated
-	$effect(() => {
-		if (page.data.isAuthenticated && token && !result) {
-			claimToken();
-		}
-	});
+	let linked = $state<{ label: string; displayName: string } | null>(null);
+	let isConfirming = $state(false);
+	let confirmError = $state<string | null>(null);
 
-	async function claimToken() {
-		loading = true;
+	async function handleConfirm() {
+		isConfirming = true;
+		confirmError = null;
 		try {
-			const link = await claimLink({ token });
-			result = {
-				success: true,
-				label: link.label ?? "",
-				displayName: link.displayName ?? "",
-			};
+			linked = await confirmDiscordLink(claim);
 		} catch (err: unknown) {
-			console.error("Failed to claim OAuth2 link:", err);
-			result = {
-				success: false,
-				message: describeSubmitError(
-					err,
-					"We couldn't complete the Discord link. The token may have expired. Please try again from Settings."
-				),
-			};
+			const status = errorStatus(err);
+			confirmError =
+				status === 409
+					? "This Discord account is already linked to another member."
+					: status === 400
+						? "This link is expired or invalid. Please try again from Settings."
+						: describeSubmitError(
+								err,
+								"We couldn't complete the Discord link. It may have expired. Please try again from Settings.",
+							);
 		} finally {
-			loading = false;
+			isConfirming = false;
 		}
 	}
 </script>
 
 <div class="flex flex-col items-center justify-center min-h-screen gap-4 p-6 text-center">
-	{#if !token}
-		<h1 class="text-2xl font-bold">Missing Token</h1>
-		<p class="text-destructive max-w-md">Missing token parameter.</p>
-	{:else if loading}
-		<Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
-	{:else if result?.success}
+	{#if !claim}
+		<h1 class="text-2xl font-bold">Missing link details</h1>
+		<p class="text-destructive max-w-md">Start linking your Discord account again from Settings.</p>
+	{:else if linked}
 		<h1 class="text-2xl font-bold">Discord account linked</h1>
 		<p class="text-muted-foreground max-w-md">
-			Your Discord account is now linked as <strong>{result.displayName}</strong>
-			(label <code>{result.label}</code>). Run <code>/bg</code> in Discord to get started.
+			Your Discord account is now linked as <strong>{linked.displayName}</strong>
+			(label <code>{linked.label}</code>). Run <code>/bg</code> in Discord to get started.
 		</p>
 		<a
 			href={resolve("/settings/integrations/discord")}
@@ -70,14 +63,38 @@
 		>
 			Back to Settings
 		</a>
-	{:else if result && !result.success}
-		<h1 class="text-2xl font-bold">Link failed</h1>
-		<p class="text-destructive max-w-md">{result.message}</p>
+	{:else if pending === null || claimQuery?.error}
+		<h1 class="text-2xl font-bold">Can't complete this link</h1>
+		<p class="text-destructive max-w-md">
+			This link has expired, or was started from another browser or account. Start linking your
+			Discord account again from Settings.
+		</p>
 		<a
 			href={resolve("/settings/integrations/discord")}
 			class="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
 		>
 			Back to Settings
 		</a>
+	{:else if pending}
+		<h1 class="text-2xl font-bold">Link Discord account</h1>
+		<p class="text-muted-foreground max-w-md">
+			{#if pending.discordUsername}
+				Link the Discord account <strong>@{pending.discordUsername}</strong> to your Nocturne account?
+			{:else}
+				Link the Discord account you just signed in with to your Nocturne account?
+			{/if}
+			It will be able to read your glucose and acknowledge your alerts.
+		</p>
+		{#if confirmError}
+			<p class="text-destructive max-w-md">{confirmError}</p>
+		{/if}
+		<Button onclick={handleConfirm} disabled={isConfirming}>
+			{#if isConfirming}
+				<Loader2 class="inline h-4 w-4 animate-spin mr-1" />
+			{/if}
+			Link account
+		</Button>
+	{:else}
+		<Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
 	{/if}
 </div>

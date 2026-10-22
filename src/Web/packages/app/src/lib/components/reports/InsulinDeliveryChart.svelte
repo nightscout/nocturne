@@ -1,20 +1,22 @@
 <script lang="ts">
-  import { AreaChart } from "layerchart";
-  import type { HourlyInsulinDeliveryPoint } from "$lib/api";
+  import { AreaChart, Spline, Tooltip } from "layerchart";
+  import { curveStep } from "d3";
+  import type { HourlyInsulinDeliveryPoint, HourlyInsulinDeliveryResponse } from "$lib/api";
   import Syringe from "@lucide/svelte/icons/syringe";
   import {
+    dashOf,
     patternClass,
     type TextureKey,
   } from "$lib/components/charts/print/chart-print-patterns";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
 
   interface Props {
-    /** Backend-computed hourly delivery averages (24 entries, hour 0-23) */
-    data: HourlyInsulinDeliveryPoint[];
+    /** Backend-computed hourly delivery averages (24 entries, hour 0-23) and period totals */
+    delivery?: HourlyInsulinDeliveryResponse;
     showStacked?: boolean;
   }
 
-  let { data, showStacked = true }: Props = $props();
+  let { delivery, showStacked = true }: Props = $props();
 
   function formatHour(hour: number): string {
     if (hour === 0) return "12 AM";
@@ -23,7 +25,8 @@
     return `${hour - 12} PM`;
   }
 
-  const chartData = $derived(data ?? []);
+  const chartData = $derived(delivery?.hours ?? []);
+  const periods = $derived(showStacked ? delivery?.totalDeliveryPeriods : delivery?.basalPeriods);
 
   // The non-stacked variant plots basal only (used by the basal analysis
   // report); the stacked variant plots the full delivery split.
@@ -35,14 +38,23 @@
 
   const maxInsulin = $derived.by(() => {
     if (chartData.length === 0) return 5;
-    const maxValue = Math.max(...chartData.map(displayValue));
+    const maxValue = Math.max(
+      ...chartData.map(displayValue),
+      ...(showStacked ? chartData.map((d) => d.profileBasalRate ?? 0) : [])
+    );
     return Math.max(2, Math.ceil(maxValue * 1.2));
   });
 
   const hasScheduledBasalData = $derived(
     chartData.some((d) => (d.scheduledBasal ?? 0) > 0)
   );
+  const hasProfileBasalRate = $derived(
+    showStacked && chartData.some((d) => (d.profileBasalRate ?? 0) > 0)
+  );
   const hasTempBasalData = $derived(chartData.some((d) => (d.tempBasal ?? 0) > 0));
+  const hasAutomaticBolusData = $derived(
+    chartData.some((d) => (d.automaticBolus ?? 0) > 0)
+  );
 
   type Series = {
     key: string;
@@ -78,16 +90,24 @@
         label: "Basal",
         texture: "insulin-scheduled-basal",
       });
-    return [
-      ...basal,
+    const bolus: Series[] = [
       {
-        key: "bolus",
-        value: (d) => d.bolus ?? 0,
+        key: "manualBolus",
+        value: (d) => d.manualBolus ?? 0,
         color: "var(--insulin-bolus)",
-        label: "Bolus",
+        label: "Manual Bolus",
         texture: "insulin-bolus",
       },
     ];
+    if (hasAutomaticBolusData)
+      bolus.push({
+        key: "automaticBolus",
+        value: (d) => d.automaticBolus ?? 0,
+        color: "var(--iob-temporary)",
+        label: "Automatic Bolus",
+        texture: "insulin-automatic-bolus",
+      });
+    return [...basal, ...bolus];
   });
 
   const series = $derived(
@@ -128,43 +148,84 @@
           },
         }}
         padding={{ top: 20, right: 20, bottom: 40, left: 50 }}
-      />
+      >
+        {#snippet tooltip({ context })}
+          <Tooltip.Root {context}>
+            {#snippet children({ data: point }: { data: HourlyInsulinDeliveryPoint })}
+              <Tooltip.Header value={formatHour(point.hour ?? 0)} />
+              <Tooltip.List>
+                {#each series as s (s.key)}
+                  <Tooltip.Item
+                    label={s.label}
+                    value={`${s.value(point).toFixed(2)} U`}
+                    color={s.color}
+                    valueAlign="right"
+                  />
+                {/each}
+                {#if showStacked}
+                  <Tooltip.Item label="Total" value={`${(point.total ?? 0).toFixed(2)} U`} valueAlign="right" />
+                  {#if hasProfileBasalRate}
+                    <Tooltip.Item
+                      label="Scheduled basal rate"
+                      value={`${(point.profileBasalRate ?? 0).toFixed(2)} U/h`}
+                      color="var(--basal)"
+                      valueAlign="right"
+                    />
+                  {/if}
+                {/if}
+              </Tooltip.List>
+            {/snippet}
+          </Tooltip.Root>
+        {/snippet}
+        {#snippet aboveMarks()}
+          {#if hasProfileBasalRate}
+            <Spline
+              data={chartData}
+              x={(d) => d.hour}
+              y={(d) => d.profileBasalRate ?? 0}
+              curve={curveStep}
+              class="stroke-basal stroke-2 fill-none"
+              stroke-dasharray={dashOf("scheduled-basal-rate")}
+            />
+          {/if}
+        {/snippet}
+      </AreaChart>
     </div>
     {#if showStacked}
       <ChartKey
         class="mt-2"
-        items={stackedSeries.map((s) => ({ texture: s.texture, label: s.label, color: s.color }))}
+        items={[
+          ...stackedSeries.map((s) => ({ texture: s.texture, label: s.label, color: s.color })),
+          ...(hasProfileBasalRate
+            ? [{ texture: "scheduled-basal-rate" as const, label: "Scheduled basal rate", shape: "line" as const }]
+            : []),
+        ]}
       />
     {/if}
 
-    {#if chartData.length >= 24}
-      {@const morning = chartData.slice(6, 12).reduce((s, d) => s + displayValue(d), 0)}
-      {@const afternoon = chartData
-        .slice(12, 18)
-        .reduce((s, d) => s + displayValue(d), 0)}
-      {@const evening =
-        chartData.slice(18, 24).reduce((s, d) => s + displayValue(d), 0) +
-        chartData.slice(0, 6).reduce((s, d) => s + displayValue(d), 0)}
-      {@const totalDaily = morning + afternoon + evening}
-      {@const periods = [
-        { label: "Morning (6am-12pm)", units: morning },
-        { label: "Afternoon (12pm-6pm)", units: afternoon },
-        { label: "Evening/Night", units: evening },
+    {#if periods}
+      {@const blocks = [
+        { label: "Morning (6am-12pm)", ...periods.morning },
+        { label: "Afternoon (12pm-6pm)", ...periods.afternoon },
+        { label: "Evening/Night (6pm-6am)", ...periods.eveningNight },
       ]}
       <dl class="m-0 mt-4 grid grid-cols-3 divide-x divide-border border-t border-border">
-        {#each periods as period (period.label)}
+        {#each blocks as block (block.label)}
           <div class="px-3 pt-3 first:pl-0 last:pr-0">
-            <dt class="text-xs text-muted-foreground">{period.label}</dt>
+            <dt class="text-xs text-muted-foreground">{block.label}</dt>
             <dd class="m-0 mt-1 flex flex-wrap items-baseline gap-x-1">
-              <span class="text-lg font-semibold tabular-nums">{period.units.toFixed(1)}</span>
+              <span class="text-lg font-semibold tabular-nums">{(block.units ?? 0).toFixed(2)}</span>
               <span class="text-xs text-muted-foreground">U</span>
               <span class="ml-1 text-xs text-muted-foreground tabular-nums">
-                {totalDaily > 0 ? ((period.units / totalDaily) * 100).toFixed(0) : 0}%
+                {(block.percent ?? 0).toFixed(0)}%
               </span>
             </dd>
           </div>
         {/each}
       </dl>
+      <p class="m-0 mt-2 text-xs text-muted-foreground tabular-nums">
+        Daily total {(periods.dailyTotal ?? 0).toFixed(2)} U
+      </p>
     {/if}
   {:else}
     <div

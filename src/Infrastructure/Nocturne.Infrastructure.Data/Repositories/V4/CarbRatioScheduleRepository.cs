@@ -24,7 +24,7 @@ public class CarbRatioScheduleRepository : V4RepositoryBase<CarbRatioSchedule, C
     /// Initializes a new instance of the <see cref="CarbRatioScheduleRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public CarbRatioScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CarbRatioScheduleRepository> logger, IV4RecordBroadcaster<CarbRatioSchedule>? broadcaster = null)
+    public CarbRatioScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CarbRatioScheduleRepository> logger, IV4RecordBroadcaster<CarbRatioSchedule>? broadcaster = null)
         : base(contextFactory, auditContext, logger, broadcaster)
     {
     }
@@ -38,6 +38,10 @@ public class CarbRatioScheduleRepository : V4RepositoryBase<CarbRatioSchedule, C
     /// <inheritdoc />
     protected override void ApplyUpdate(CarbRatioScheduleEntity target, CarbRatioSchedule source) =>
         CarbRatioScheduleMapper.UpdateEntity(target, source);
+
+    /// <inheritdoc cref="TherapySettingsRepository.Listed"/>
+    protected override IQueryable<CarbRatioScheduleEntity> Listed(IQueryable<CarbRatioScheduleEntity> rows) =>
+        rows.Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker));
 
     /// <summary>
     /// Gets carbohydrate ratio schedules by profile name.

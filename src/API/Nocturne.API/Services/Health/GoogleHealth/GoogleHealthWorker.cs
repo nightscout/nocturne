@@ -1,15 +1,20 @@
+using Nocturne.API.Multitenancy;
+using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Connectors;
+using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
 
 public sealed class GoogleHealthWorker(
     IServiceScopeFactory scopes,
     GoogleHealthCoordinator coordinator,
+    IOptions<GoogleHealthPlatformOptions> platform,
     ILogger<GoogleHealthWorker> logger) : BackgroundService
 {
     private const string ConnectorId = "googlehealth";
@@ -40,9 +45,8 @@ public sealed class GoogleHealthWorker(
                 if (claim is null) return;
                 if (await coordinator.DisconnectRequestAsync(tenantId, ct) is { } disconnect)
                 {
-                    using var recovery = scopes.CreateScope();
-                    recovery.ServiceProvider.GetRequiredService<ITenantAccessor>()
-                        .SetTenant(new(tenantId, "", "", true, false));
+                    await using var recovery = TenantJobScope.Open(
+                        scopes, new TenantContext(tenantId, "", "", true, false), $"connector:{ConnectorId}");
                     await recovery.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.Health.IGoogleHealthService>()
                         .ResumeDisconnectAsync(disconnect.SubjectId, disconnect.RequestId);
                     return;
@@ -51,6 +55,12 @@ public sealed class GoogleHealthWorker(
                 var completed = false;
                 try
                 {
+                    // Dropped rather than failed; see GoogleHealthConfigurationLoader.
+                    if (!platform.Value.IsConfigured)
+                    {
+                        completed = true;
+                        return;
+                    }
                     using var listing = scopes.CreateScope();
                     var tenant = await listing.ServiceProvider.GetRequiredService<ITenantService>()
                         .GetByIdAsync(tenantId, ct);
@@ -83,9 +93,8 @@ public sealed class GoogleHealthWorker(
 
     private async Task<bool> SyncTenantAsync(Guid id, string slug, string displayName, CancellationToken ct)
     {
-        using var scope = scopes.CreateScope();
-        scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
-            .SetTenant(new(id, slug, displayName, true, false));
+        await using var scope = TenantJobScope.Open(
+            scopes, new TenantContext(id, slug, displayName, true, false), $"connector:{ConnectorId}");
         var sync = scope.ServiceProvider.GetRequiredService<IConnectorSyncService>();
         SyncResult result;
         while (true)
@@ -126,6 +135,6 @@ public sealed class GoogleHealthWorker(
             lastErrorAt: now,
             isHealthy: false,
             ct: ct);
-            return true;
+        return true;
     }
 }

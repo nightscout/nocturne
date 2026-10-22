@@ -55,7 +55,7 @@ public class AuditControllerTests : IDisposable
             .Build();
 
         var controller = new AuditController(
-            factoryMock.Object,
+            factoryMock.Object.AsNocturneFactory(),
             _tenantAccessor.Object,
             _configCache.Object,
             configuration);

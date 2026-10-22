@@ -82,6 +82,7 @@ internal class MockApnsClient : IApnsClient
         string deviceToken = "unknown";
         string alert = "";
         var customProperties = new Dictionary<string, string?>();
+        var apsProperties = new Dictionary<string, string?>();
 
         try
         {
@@ -100,6 +101,11 @@ internal class MockApnsClient : IApnsClient
         // Extract alert from aps section
         if (root.TryGetProperty("aps", out var aps))
         {
+            foreach (var property in aps.EnumerateObject())
+                apsProperties[property.Name] = property.Value.ValueKind == JsonValueKind.String
+                    ? property.Value.GetString()
+                    : property.Value.GetRawText();
+
             if (aps.TryGetProperty("alert", out var alertElement))
             {
                 alert = alertElement.ValueKind == JsonValueKind.String
@@ -132,6 +138,7 @@ internal class MockApnsClient : IApnsClient
             Alert = alert,
             SentToDevelopmentServer = IsSentToDevelopmentServer(push),
             CustomProperties = customProperties,
+            ApsProperties = apsProperties,
         };
 
         _factory.CapturePush(captured);
@@ -164,6 +171,7 @@ public class CapturedApnsPush
     public string Alert { get; init; } = "";
     public bool SentToDevelopmentServer { get; init; }
     public Dictionary<string, string?> CustomProperties { get; init; } = [];
+    public Dictionary<string, string?> ApsProperties { get; init; } = [];
 
     /// <summary>
     /// Gets a custom property value
@@ -171,5 +179,10 @@ public class CapturedApnsPush
     public string? GetProperty(string name)
     {
         return CustomProperties.TryGetValue(name, out var value) ? value : null;
+    }
+
+    public string? GetApsProperty(string name)
+    {
+        return ApsProperties.TryGetValue(name, out var value) ? value : null;
     }
 }

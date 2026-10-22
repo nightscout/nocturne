@@ -37,7 +37,7 @@ public class BolusRepositoryTests : IDisposable
         _mockDeduplicationService = new Mock<IDeduplicationService>();
 
         _repo = new BolusRepository(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             _mockDeduplicationService.Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance);

@@ -25,9 +25,6 @@ public enum SystemEventType
     /// </summary>
     Warning,
 
-    /// <summary>
-    /// Informational event
-    /// </summary>
     Info
 }
 
@@ -45,13 +42,7 @@ public enum SystemEventCategory
     /// </summary>
     Pump,
 
-    /// <summary>
-    /// CGM-related events
-    /// </summary>
     Cgm,
 
-    /// <summary>
-    /// Connectivity-related events
-    /// </summary>
     Connectivity
 }

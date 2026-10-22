@@ -21,18 +21,12 @@ public interface INotificationV2Service
     /// <summary>
     /// Processes a generic V2 notification
     /// </summary>
-    /// <param name="notification">Base notification data</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Notification response indicating success or failure</returns>
     Task<NotificationV2Response> ProcessNotificationAsync(
         NotificationBase notification,
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Gets the current notification status and configuration
-    /// </summary>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Current notification system status</returns>
     Task<object> GetNotificationStatusAsync(CancellationToken cancellationToken = default);
 }

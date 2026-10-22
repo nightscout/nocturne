@@ -64,7 +64,8 @@ public class CreateBolusRequest : IBulkUpsertRequest
     public BolusType? BolusType { get; set; }
 
     /// <summary>
-    /// Whether this bolus was manually entered or originated from a pump/loop system.
+    /// Whether this bolus was manually entered or originated from a pump/loop system. A request with
+    /// <see cref="Automatic"/> set is stored as <see cref="BolusKind.Algorithm"/> whatever this says.
     /// </summary>
     /// <value>Defaults to <see cref="BolusKind.Manual"/>.</value>
     public BolusKind Kind { get; set; } = BolusKind.Manual;

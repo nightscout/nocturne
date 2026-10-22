@@ -62,6 +62,7 @@ public class NotificationV2Service : INotificationV2Service
             data,
             profile?.LoopSettings,
             remoteAddress,
+            profile?.IsAPNSProduction,
             cancellationToken
         );
     }

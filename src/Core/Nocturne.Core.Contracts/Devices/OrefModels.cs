@@ -52,7 +52,6 @@ public class OrefProfile
     [JsonPropertyName("peak")]
     public int Peak { get; set; } = 75;
 
-    /// <summary>Use custom peak time</summary>
     [JsonPropertyName("useCustomPeakTime")]
     public bool UseCustomPeakTime { get; set; }
 
@@ -216,7 +215,6 @@ public class OrefTreatment
     [JsonPropertyName("startedAt")]
     public string? StartedAt { get; set; }
 
-    /// <summary>Created at timestamp</summary>
     [JsonPropertyName("createdAt")]
     public string? CreatedAt { get; set; }
 
@@ -236,7 +234,6 @@ public class OrefTreatment
     [JsonPropertyName("bwCarbs")]
     public double? BwCarbs { get; set; }
 
-    /// <summary>Journal carbs</summary>
     [JsonPropertyName("journalCarbs")]
     public double? JournalCarbs { get; set; }
 
@@ -248,11 +245,9 @@ public class OrefTreatment
     [JsonPropertyName("duration")]
     public double? Duration { get; set; }
 
-    /// <summary>Event type string</summary>
     [JsonPropertyName("_type")]
     public string? EventType { get; set; }
 
-    /// <summary>Create a bolus treatment</summary>
     public static OrefTreatment Bolus(double insulin, DateTimeOffset timestamp) =>
         new()
         {
@@ -263,7 +258,6 @@ public class OrefTreatment
             EventType = "Bolus",
         };
 
-    /// <summary>Create a temp basal treatment</summary>
     public static OrefTreatment TempBasal(
         double rate,
         double durationMinutes,
@@ -279,7 +273,6 @@ public class OrefTreatment
             EventType = "TempBasal",
         };
 
-    /// <summary>Create a carb entry</summary>
     public static OrefTreatment CarbEntry(double carbs, DateTimeOffset timestamp) =>
         new()
         {
@@ -309,7 +302,6 @@ public class OrefGlucoseReading
     [JsonPropertyName("dateString")]
     public string? DateString { get; set; }
 
-    /// <summary>Display time string</summary>
     [JsonPropertyName("displayTime")]
     public string? DisplayTime { get; set; }
 
@@ -317,7 +309,6 @@ public class OrefGlucoseReading
     [JsonPropertyName("noise")]
     public double? Noise { get; set; }
 
-    /// <summary>Direction arrow</summary>
     [JsonPropertyName("direction")]
     public string? Direction { get; set; }
 }
@@ -348,7 +339,6 @@ public class OrefGlucoseStatus
     [JsonPropertyName("date")]
     public long Date { get; set; }
 
-    /// <summary>Noise level</summary>
     [JsonPropertyName("noise")]
     public double? Noise { get; set; }
 }
@@ -395,15 +385,12 @@ public class OrefIobResult
     [JsonPropertyName("activity")]
     public double Activity { get; set; }
 
-    /// <summary>IOB from basal adjustments</summary>
     [JsonPropertyName("basalIob")]
     public double BasalIob { get; set; }
 
-    /// <summary>IOB from boluses</summary>
     [JsonPropertyName("bolusIob")]
     public double BolusIob { get; set; }
 
-    /// <summary>Net basal insulin delivered</summary>
     [JsonPropertyName("netBasalInsulin")]
     public double NetBasalInsulin { get; set; }
 
@@ -434,23 +421,18 @@ public class OrefCobResult
     [JsonPropertyName("carbsAbsorbed")]
     public double CarbsAbsorbed { get; set; }
 
-    /// <summary>Current deviation</summary>
     [JsonPropertyName("currentDeviation")]
     public double CurrentDeviation { get; set; }
 
-    /// <summary>Maximum deviation</summary>
     [JsonPropertyName("maxDeviation")]
     public double MaxDeviation { get; set; }
 
-    /// <summary>Minimum deviation</summary>
     [JsonPropertyName("minDeviation")]
     public double MinDeviation { get; set; }
 
-    /// <summary>Slope from max deviation</summary>
     [JsonPropertyName("slopeFromMax")]
     public double SlopeFromMax { get; set; }
 
-    /// <summary>Slope from min deviation</summary>
     [JsonPropertyName("slopeFromMin")]
     public double SlopeFromMin { get; set; }
 }
@@ -499,27 +481,21 @@ public class OrefMealData
 /// </summary>
 public class OrefDetermineBasalInputs
 {
-    /// <summary>Current glucose status</summary>
     [JsonPropertyName("glucoseStatus")]
     public required OrefGlucoseStatus GlucoseStatus { get; set; }
 
-    /// <summary>Current temp basal</summary>
     [JsonPropertyName("currentTemp")]
     public required OrefCurrentTemp CurrentTemp { get; set; }
 
-    /// <summary>Current IOB data</summary>
     [JsonPropertyName("iobData")]
     public required OrefIobResult IobData { get; set; }
 
-    /// <summary>User profile</summary>
     [JsonPropertyName("profile")]
     public required OrefProfile Profile { get; set; }
 
-    /// <summary>Autosens data</summary>
     [JsonPropertyName("autosensData")]
     public OrefAutosensResult AutosensData { get; set; } = new();
 
-    /// <summary>Meal data</summary>
     [JsonPropertyName("mealData")]
     public OrefMealData MealData { get; set; } = new();
 
@@ -578,7 +554,6 @@ public class OrefDetermineBasalResult
     [JsonPropertyName("error")]
     public string? Error { get; set; }
 
-    /// <summary>Sensitivity ratio used</summary>
     [JsonPropertyName("sensitivityRatio")]
     public double? SensitivityRatio { get; set; }
 
@@ -586,7 +561,6 @@ public class OrefDetermineBasalResult
     [JsonPropertyName("variableSens")]
     public double? VariableSens { get; set; }
 
-    /// <summary>Predicted BG values</summary>
     [JsonPropertyName("predictedBg")]
     public double[]? PredictedBg { get; set; }
 
@@ -610,19 +584,15 @@ public class OrefDetermineBasalResult
     [JsonPropertyName("bgMinsAgo")]
     public double? BgMinsAgo { get; set; }
 
-    /// <summary>Target BG used</summary>
     [JsonPropertyName("targetBg")]
     public double? TargetBg { get; set; }
 
-    /// <summary>Whether SMB is enabled</summary>
     [JsonPropertyName("smbEnabled")]
     public bool? SmbEnabled { get; set; }
 
-    /// <summary>Carbs required</summary>
     [JsonPropertyName("carbsReq")]
     public double? CarbsReq { get; set; }
 
-    /// <summary>Threshold BG</summary>
     [JsonPropertyName("threshold")]
     public double? Threshold { get; set; }
 

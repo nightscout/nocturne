@@ -8,8 +8,8 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 
 /// <summary>
 /// Settable <see cref="ITenantAccessor"/> for golden tests. The fixture sets the current tenant
-/// before a scenario resolves a scope; the scoped <see cref="NocturneDbContext"/> and
-/// <c>TenantDbContextFactory</c> both read it to stamp the RLS tenant carrier.
+/// before a scenario resolves a scope; every context of that scope, scoped or from
+/// <c>INocturneDbContextFactory</c>, reads it live as its tenant.
 /// </summary>
 internal sealed class TestTenantAccessor : ITenantAccessor
 {

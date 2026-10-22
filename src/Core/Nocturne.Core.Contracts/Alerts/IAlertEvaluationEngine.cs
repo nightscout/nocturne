@@ -76,10 +76,8 @@ public interface IAlertEvaluationEngine
     /// tracker advance → unconditional auto-resolve under the <c>auto_resolve</c> path
     /// root (skipped after a close, gated on an active excursion).
     /// </summary>
-    /// <param name="rule">The rule snapshot to evaluate.</param>
     /// <param name="context">Enriched sensor context for the tick. <c>CurrentRuleId</c>/<c>CurrentPath</c> threading is owned by the engine.</param>
     /// <param name="options">Per-call options (leaf log).</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<AlertEngineEvaluation> EvaluateRuleAsync(
         AlertRuleSnapshot rule,
         SensorContext context,
@@ -96,7 +94,6 @@ public interface IAlertEvaluationEngine
     /// <param name="node">The condition tree to evaluate.</param>
     /// <param name="context">Enriched sensor context. <c>CurrentRuleId</c>/<c>CurrentPath</c> threading is owned by the engine.</param>
     /// <param name="pathRoot">Root path segment (e.g. <c>snooze</c>).</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<bool> EvaluateNodeAsync(
         Guid ruleId,
         ConditionNode node,
@@ -114,7 +111,6 @@ public interface IAlertEvaluationEngine
     /// </summary>
     /// <param name="rule">The rule whose auto-resolve params are evaluated.</param>
     /// <param name="context">Enriched sensor context.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<ExcursionTransition> EvaluateAutoResolveAsync(
         AlertRuleSnapshot rule,
         SensorContext context,

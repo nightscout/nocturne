@@ -212,7 +212,7 @@ internal static class DuplicateGroupPrimaries
 
     /// <summary>
     /// Moves each group's <see cref="LinkedRecordEntity.IsPrimary"/> onto
-    /// <see cref="DeduplicationService.PickSurvivor(IEnumerable{LinkedRecordEntity}, Func{Guid, bool})"/>,
+    /// <see cref="DeduplicationService.PickSurvivor(IEnumerable{LinkedRecordEntity}, Func{Guid, bool}, Func{Guid, DeduplicationService.SpanEnd})"/>,
     /// <see cref="RepickChunkSize"/> groups at a time. A group with no primary at all renders as
     /// nothing, so it is given one here too.
     /// </summary>
@@ -233,14 +233,18 @@ internal static class DuplicateGroupPrimaries
         var rows = await ctx.LinkedRecords.AsNoTracking()
             .Where(lr => lr.RecordType == key && canonicalIds.Contains(lr.CanonicalId))
             .ToListAsync(ct);
-        var live = await LiveIdsAsync(ctx, recordType, rows.Select(r => r.RecordId).Distinct().ToArray(), ct);
+        var ids = rows.Select(r => r.RecordId).Distinct().ToArray();
+        var spanEnds = recordType == RecordType.StateSpan ? await LiveSpanEndsAsync(ctx, ids, ct) : [];
+        var live = recordType == RecordType.StateSpan
+            ? spanEnds.Keys.ToHashSet()
+            : await LiveIdsAsync(ctx, recordType, ids, ct);
 
         var demote = new List<Guid>();
         var promote = new List<Guid>();
         var promotedLive = new List<Guid>();
         foreach (var group in rows.GroupBy(r => r.CanonicalId))
         {
-            var survivor = DeduplicationService.PickSurvivor(group, live.Contains);
+            var survivor = DeduplicationService.PickSurvivor(group, live.Contains, spanEnds.GetValueOrDefault);
             if (survivor.IsPrimary)
                 continue;
 
@@ -274,6 +278,15 @@ internal static class DuplicateGroupPrimaries
         RecordType.StateSpan => Live(ctx.StateSpans, ids, ct),
         _ => Task.FromResult(new HashSet<Guid>()),
     };
+
+    /// <summary>How each live state span among <paramref name="ids"/> ended, keyed by id.</summary>
+    private static async Task<Dictionary<Guid, DeduplicationService.SpanEnd>> LiveSpanEndsAsync(
+        NocturneDbContext ctx, Guid[] ids, CancellationToken ct) =>
+        (await ctx.StateSpans.AsNoTracking()
+            .Where(s => s.DeletedAt == null && ids.Contains(s.Id))
+            .Select(s => new { s.Id, s.SupersededById, s.EndTimestamp })
+            .ToListAsync(ct))
+        .ToDictionary(s => s.Id, s => new DeduplicationService.SpanEnd(s.SupersededById, s.EndTimestamp));
 
     private static async Task<HashSet<Guid>> Live<TEntity>(IQueryable<TEntity> rows, Guid[] ids, CancellationToken ct)
         where TEntity : class, IIdentified, ISoftDeletable =>

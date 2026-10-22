@@ -33,6 +33,12 @@ public static class StateSpanMapper
     }
 
     /// <summary>
+    /// The category a stored value names, or <see cref="StateSpanCategory.PumpMode"/> when it names none.
+    /// </summary>
+    public static StateSpanCategory ParseCategory(string category) =>
+        Enum.TryParse<StateSpanCategory>(category, out var parsed) ? parsed : StateSpanCategory.PumpMode;
+
+    /// <summary>
     /// Convert database entity to domain model
     /// </summary>
     public static StateSpan ToDomainModel(StateSpanEntity entity)
@@ -40,9 +46,7 @@ public static class StateSpanMapper
         return new StateSpan
         {
             Id = entity.OriginalId ?? entity.Id.ToString(),
-            Category = Enum.TryParse<StateSpanCategory>(entity.Category, out var category)
-                ? category
-                : StateSpanCategory.PumpMode,
+            Category = ParseCategory(entity.Category),
             State = entity.State,
             StartTimestamp = entity.StartTimestamp,
             EndTimestamp = entity.EndTimestamp,

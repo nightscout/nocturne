@@ -7,6 +7,7 @@ using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Health;
@@ -47,7 +48,7 @@ public class HealthRecordIdResolutionTests
         var context = Context();
         return (
             new HeartRateService(
-                context,
+                context.AsFactory(),
                 PassThrough<HeartRate>(),
                 Mock.Of<ISignalRBroadcastService>(),
                 NullLogger<HeartRateService>.Instance),
@@ -59,7 +60,7 @@ public class HealthRecordIdResolutionTests
         var context = Context();
         return (
             new StepCountService(
-                context,
+                context.AsFactory(),
                 PassThrough<StepCount>(),
                 Mock.Of<ISignalRBroadcastService>(),
                 NullLogger<StepCountService>.Instance),
@@ -71,7 +72,7 @@ public class HealthRecordIdResolutionTests
         var context = Context();
         return (
             new BodyWeightService(
-                context,
+                context.AsFactory(),
                 PassThrough<BodyWeight>(),
                 Mock.Of<ISignalRBroadcastService>(),
                 NullLogger<BodyWeightService>.Instance),

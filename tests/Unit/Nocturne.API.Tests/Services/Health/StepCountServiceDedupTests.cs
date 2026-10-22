@@ -7,6 +7,7 @@ using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Health;
@@ -31,7 +32,7 @@ public class StepCountServiceDedupTests
             .Returns((IEnumerable<StepCount> docs) => docs);
 
         var service = new StepCountService(
-            context,
+            context.AsFactory(),
             processing.Object,
             Mock.Of<ISignalRBroadcastService>(),
             NullLogger<StepCountService>.Instance);

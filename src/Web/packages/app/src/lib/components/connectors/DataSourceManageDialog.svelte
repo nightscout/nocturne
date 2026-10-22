@@ -5,6 +5,7 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
@@ -17,7 +18,10 @@
   import { canManageConnectors } from "$lib/authorization/connector-management";
   import { page } from "$app/state";
   import { getCategoryIcon } from "$lib/utils/connector-display";
-  import { formatNumber, lastSeen } from "$lib/utils/formatting";
+  import {
+    formatNumber,
+    lastSeen,
+  } from "$lib/utils/formatting";
 
   interface Props {
     open: boolean;
@@ -41,6 +45,7 @@
   let showDeleteConfirmDialog = $state(false);
   let isDeletingDataSource = $state(false);
   let deleteConfirmText = $state("");
+  let allowReimport = $state(false);
   let deleteResult = $state<{
     success?: boolean;
     totalDeleted?: number;
@@ -77,7 +82,10 @@
     isDeletingDataSource = true;
     deleteResult = null;
     try {
-      const result = await deleteDataSourceDataRemote(selectedDataSource.id!);
+      const result = await deleteDataSourceDataRemote({
+        id: selectedDataSource.id!,
+        allowReimport,
+      });
       deleteResult = {
         success: result.success ?? false,
         totalDeleted: result.totalDeleted,
@@ -152,7 +160,11 @@
           </div>
           <div>
             <span class="text-muted-foreground">
-              Records in the last 30 days
+              {#if selectedDataSource.totalEntriesWindowDays == null}
+                Records in total
+              {:else}
+                Records in the last {selectedDataSource.totalEntriesWindowDays} days
+              {/if}
             </span>
             <p class="mt-1 font-medium">
               {formatNumber(selectedDataSource.totalEntries)}
@@ -188,6 +200,7 @@
             onclick={() => {
               showDeleteConfirmDialog = true;
               deleteConfirmText = "";
+              allowReimport = false;
             }}
           >
             <Pencil class="h-4 w-4" />
@@ -233,8 +246,11 @@
                 <li>All device status records</li>
               </ul>
               <p class="text-sm text-destructive mt-2">
-                This source sent {formatNumber(selectedDataSource.totalEntries)}
-                records in the last 30 days.
+                {#if selectedDataSource.totalEntriesWindowDays == null}
+                  This source sent {formatNumber(selectedDataSource.totalEntries)} records in total.
+                {:else}
+                  This source sent {formatNumber(selectedDataSource.totalEntries)} records in the last {selectedDataSource.totalEntriesWindowDays} days.
+                {/if}
               </p>
             </div>
 
@@ -269,6 +285,24 @@
                 </div>
               {/if}
             {:else}
+              <label class="mt-4 flex items-start gap-3 rounded-lg border p-4 cursor-pointer">
+                <Checkbox
+                  id="data-source-allow-reimport"
+                  class="mt-0.5"
+                  bind:checked={allowReimport}
+                />
+                <span class="space-y-1">
+                  <span class="block text-sm font-medium text-foreground">Allow re-import</span>
+                  <span class="block text-sm text-muted-foreground">
+                    {#if allowReimport}
+                      Records this source sends again are imported, including any of its records
+                      deleted earlier.
+                    {:else}
+                      Deleted records are never imported again, even if this source sends them.
+                    {/if}
+                  </span>
+                </span>
+              </label>
               <div class="space-y-2 mt-4">
                 <label for="confirm-delete" class="text-sm font-medium">
                   Type <strong>DELETE</strong>
@@ -300,7 +334,7 @@
               Deleting...
             {:else}
               <Trash2 class="h-4 w-4" />
-              Delete All Data
+              {allowReimport ? "Delete and Allow Re-import" : "Delete All Data"}
             {/if}
           </Button>
         {/if}

@@ -168,8 +168,8 @@ describe("contextual documentation", () => {
     const catalogue = readFileSync(
       new URL("../../../../../locales/en.po", import.meta.url),
       "utf8"
-    );
-    expect(catalogue).toContain(`msgid ${JSON.stringify(text)}`);
+    ).replace(/"\r?\n"/g, "");
+    expect(catalogue.includes(`msgid ${JSON.stringify(text)}`)).toBe(true);
   });
   it("keeps admin-only guides out of member and guest search", () => {
     const member = documentationLinks(

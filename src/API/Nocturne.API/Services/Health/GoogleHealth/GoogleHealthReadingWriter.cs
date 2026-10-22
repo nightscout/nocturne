@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Connectors.GoogleHealth.Services;
@@ -8,6 +9,7 @@ using Nocturne.Core.Models.Health;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
 
@@ -16,7 +18,8 @@ public sealed class GoogleHealthReadingWriter(
     IStepCountService stepCounts,
     IBodyWeightService bodyWeights,
     ISleepService sleep,
-    NocturneDbContext db,
+    INocturneDbContextFactory contexts,
+    ITenantAccessor tenant,
     ILogger<GoogleHealthReadingWriter> logger) : IGoogleHealthReadingWriter
 {
     public const string Source = DataSources.GoogleHealthConnector;
@@ -35,7 +38,7 @@ public sealed class GoogleHealthReadingWriter(
         if (activeTypes.Except(GoogleHealthClient.SupportedTypes).Any())
             throw new ArgumentException("Unsupported reconciliation data type.", nameof(activeTypes));
         var runId = Guid.CreateVersion7();
-        reconciliationRuns.Add(runId, new(db.TenantId, from.UtcDateTime, to.UtcDateTime,
+        reconciliationRuns.Add(runId, new(tenant.TenantId, from.UtcDateTime, to.UtcDateTime,
             activeTypes.Distinct(StringComparer.Ordinal).ToDictionary(type => type,
                 _ => new HashSet<string>(StringComparer.Ordinal), StringComparer.Ordinal)));
         return Task.FromResult(runId);
@@ -48,7 +51,7 @@ public sealed class GoogleHealthReadingWriter(
         CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var run = GetRun(runId);
+        var run = GetRun(runId, tenant.TenantId);
         if (!run.Identifiers.TryGetValue(dataType, out var staged))
             throw new ArgumentException("The data type is not part of this reconciliation run.", nameof(dataType));
         foreach (var identifier in identifiers.Where(identifier => !string.IsNullOrWhiteSpace(identifier)))
@@ -57,12 +60,14 @@ public sealed class GoogleHealthReadingWriter(
                 throw new GoogleHealthException("history_too_large", stage: "native_reconciliation_stage", dataType: dataType);
             staged.Add(identifier);
         }
+
         return Task.CompletedTask;
     }
 
     public async Task CompleteReconciliationAsync(Guid runId, CancellationToken ct)
     {
-        var run = GetRun(runId);
+        await using var db = await contexts.CreateAsync(ct);
+        var run = GetRun(runId, db.TenantId);
         var strategy = db.Database.CreateExecutionStrategy();
         await strategy.ExecuteAsync(async () =>
         {
@@ -143,13 +148,13 @@ public sealed class GoogleHealthReadingWriter(
     public Task AbandonReconciliationAsync(Guid runId, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if (reconciliationRuns.TryGetValue(runId, out var run) && run.TenantId == db.TenantId)
+        if (reconciliationRuns.TryGetValue(runId, out var run) && run.TenantId == tenant.TenantId)
             reconciliationRuns.Remove(runId);
         return Task.CompletedTask;
     }
 
-    private ReconciliationRun GetRun(Guid runId) =>
-        reconciliationRuns.TryGetValue(runId, out var run) && run.TenantId == db.TenantId
+    private ReconciliationRun GetRun(Guid runId, Guid tenantId) =>
+        reconciliationRuns.TryGetValue(runId, out var run) && run.TenantId == tenantId
             ? run
             : throw new InvalidOperationException("Reconciliation run is unavailable for this tenant.");
 
@@ -170,79 +175,54 @@ public sealed class GoogleHealthReadingWriter(
             "GoogleHealthReadingWriter.WriteAsync: processing {ReadingsCount} readings and {SleepCount} sleep sessions",
             readings.Count, sleepSessions.Count);
 
-        try
+        foreach (var heartRateBatch in Map(readings, "heart-rate", reading => new HeartRate
         {
-            foreach (var heartRateBatch in Map(readings, "heart-rate", reading => new HeartRate
-            {
-                Mills = reading.Mills,
-                UtcOffset = reading.UtcOffsetMinutes,
-                Bpm = checked((int)reading.Value),
-                Accuracy = 0,
-                Device = "Google Health",
-                EnteredBy = "Google Health",
-                DataSource = Source,
-                SyncIdentifier = GoogleHealthClient.Key(reading)
-            }).Chunk(batchSize))
-                await WriteBatchAsync("heart-rate", heartRateBatch.Length, heartRateBatch.Max(record => record.Mills),
-                    () => heartRates.CreateHeartRatesAsync(heartRateBatch, ct));
+            Mills = reading.Mills,
+            UtcOffset = reading.UtcOffsetMinutes,
+            Bpm = checked((int)reading.Value),
+            Accuracy = 0,
+            Device = "Google Health",
+            EnteredBy = "Google Health",
+            DataSource = Source,
+            SyncIdentifier = GoogleHealthClient.Key(reading)
+        }).Chunk(batchSize))
+            await heartRates.CreateHeartRatesAsync(heartRateBatch, ct);
 
-            foreach (var stepBatch in Map(readings, "steps", reading => new StepCount
-            {
-                Mills = reading.Mills,
-                UtcOffset = reading.UtcOffsetMinutes,
-                Metric = checked((int)reading.Value),
-                Source = 0,
-                Device = "Google Health",
-                EnteredBy = "Google Health",
-                DataSource = Source,
-                SyncIdentifier = GoogleHealthClient.Key(reading)
-            }).Chunk(batchSize))
-                await WriteBatchAsync("steps", stepBatch.Length, stepBatch.Max(record => record.Mills),
-                    () => stepCounts.CreateStepCountsAsync(stepBatch, ct));
+        foreach (var stepBatch in Map(readings, "steps", reading => new StepCount
+        {
+            Mills = reading.Mills,
+            UtcOffset = reading.UtcOffsetMinutes,
+            Metric = checked((int)reading.Value),
+            Source = 0,
+            Device = "Google Health",
+            EnteredBy = "Google Health",
+            DataSource = Source,
+            SyncIdentifier = GoogleHealthClient.Key(reading)
+        }).Chunk(batchSize))
+            await stepCounts.CreateStepCountsAsync(stepBatch, ct);
 
-            foreach (var weightBatch in Map(readings, "weight", reading => new BodyWeight
-            {
-                Mills = reading.Mills,
-                UtcOffset = reading.UtcOffsetMinutes,
-                WeightKg = reading.Value,
-                Device = "Google Health",
-                EnteredBy = "Google Health",
-                DataSource = Source,
-                SyncIdentifier = GoogleHealthClient.Key(reading)
-            }).Chunk(batchSize))
-                await WriteBatchAsync("weight", weightBatch.Length, weightBatch.Max(record => record.Mills),
-                    () => bodyWeights.CreateBodyWeightsAsync(weightBatch, ct));
+        foreach (var weightBatch in Map(readings, "weight", reading => new BodyWeight
+        {
+            Mills = reading.Mills,
+            UtcOffset = reading.UtcOffsetMinutes,
+            WeightKg = reading.Value,
+            Device = "Google Health",
+            EnteredBy = "Google Health",
+            DataSource = Source,
+            SyncIdentifier = GoogleHealthClient.Key(reading)
+        }).Chunk(batchSize))
+            await bodyWeights.CreateBodyWeightsAsync(weightBatch, ct);
 
-            foreach (var session in sleepSessions)
+        foreach (var session in sleepSessions)
+        {
+            try
             {
-                try
-                {
-                    await WriteBatchAsync("sleep", 1,
-                        new DateTimeOffset(DateTime.SpecifyKind(session.EndTime, DateTimeKind.Utc)).ToUnixTimeMilliseconds(),
-                        () => sleep.UpsertSessionAsync(session, ct));
-                }
-                catch (RecreationBlockedException)
-                {
-                    logger.LogDebug("Skipping a manually deleted Google Health sleep session");
-                }
+                await sleep.UpsertSessionAsync(session, ct);
             }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "GoogleHealthReadingWriter.WriteAsync failed while persisting health records");
-            throw;
-        }
-    }
-
-    private async Task WriteBatchAsync(string dataType, int count, long latestMills, Func<Task> write)
-    {
-        try
-        {
-            await write();
-        }
-        catch
-        {
-            throw;
+            catch (RecreationBlockedException)
+            {
+                logger.LogDebug("Skipping a manually deleted Google Health sleep session");
+            }
         }
     }
 
@@ -275,6 +255,7 @@ public sealed class GoogleHealthReadingWriter(
 
     public async Task PurgeAsync(CancellationToken ct)
     {
+        await using var db = await contexts.CreateAsync(ct);
         var strategy = db.Database.CreateExecutionStrategy();
         await strategy.ExecuteAsync(async () =>
         {

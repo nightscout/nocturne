@@ -15,6 +15,7 @@
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import { list, revoke } from "$lib/api/generated/connectedApps.generated.remote";
+  import { OAuthClientIdentity } from "$api-clients";
   import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
@@ -115,10 +116,14 @@
                 <span class="truncate">
                   {app.clientName ?? app.clientId}
                 </span>
-                {#if app.isVerified}
+                {#if app.identity === OAuthClientIdentity.Verified}
                   <Badge variant="secondary" class="shrink-0">
                     <BadgeCheck class="mr-1 h-3 w-3" />
                     Verified
+                  </Badge>
+                {:else if app.identity === OAuthClientIdentity.Unverified}
+                  <Badge variant="outline" class="shrink-0">
+                    Unverified
                   </Badge>
                 {:else}
                   <Badge variant="outline" class="shrink-0">

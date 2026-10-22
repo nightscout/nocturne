@@ -20,10 +20,8 @@ public enum TreatmentLogCategory
     /// <summary>Blood glucose checks.</summary>
     BgCheck,
 
-    /// <summary>Notes.</summary>
     Note,
 
-    /// <summary>Device events.</summary>
     DeviceEvent,
 
     /// <summary>Long-acting insulin injections.</summary>

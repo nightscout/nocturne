@@ -30,7 +30,7 @@ public enum SourceHandle
 }
 
 /// <summary>
-/// Represents information about a data source that's been pushing data to Nocturne.
+/// Information about a data source that's been pushing data to Nocturne.
 /// This is derived from analyzing the `device` field on entries and devicestatus records.
 /// </summary>
 public class DataSourceInfo
@@ -41,9 +41,6 @@ public class DataSourceInfo
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Display name for the data source
-    /// </summary>
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
@@ -72,9 +69,6 @@ public class DataSourceInfo
     [JsonPropertyName("sourceType")]
     public string SourceType { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Description of this data source
-    /// </summary>
     [JsonPropertyName("description")]
     public string Description { get; set; } = string.Empty;
 
@@ -97,10 +91,16 @@ public class DataSourceInfo
     public int EntriesLast24Hours { get; set; }
 
     /// <summary>
-    /// Total number of entries from this source
+    /// Number of entries from this source inside the window named by <see cref="TotalEntriesWindowDays"/>
     /// </summary>
     [JsonPropertyName("totalEntries")]
     public long TotalEntries { get; set; }
+
+    /// <summary>
+    /// Days back from now that <see cref="TotalEntries"/> covers, or null when it counts the source's lifetime
+    /// </summary>
+    [JsonPropertyName("totalEntriesWindowDays")]
+    public int? TotalEntriesWindowDays { get; set; }
 
     /// <summary>
     /// Health status based on recent activity: "active", "stale", "inactive"
@@ -142,19 +142,13 @@ public class DataSourceInfo
 }
 
 /// <summary>
-/// Represents an available connector that can be configured to pull data into Nocturne
+/// Available connector that can be configured to pull data into Nocturne
 /// </summary>
 public class AvailableConnector
 {
-    /// <summary>
-    /// Unique identifier for the connector
-    /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Display name
-    /// </summary>
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
@@ -170,9 +164,6 @@ public class AvailableConnector
     [JsonPropertyName("description")]
     public string Description { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Icon identifier
-    /// </summary>
     [JsonPropertyName("icon")]
     public string Icon { get; set; } = string.Empty;
 
@@ -194,9 +185,6 @@ public class AvailableConnector
     [JsonPropertyName("isConfigured")]
     public bool IsConfigured { get; set; }
 
-    /// <summary>
-    /// Configuration fields required for this connector
-    /// </summary>
     [JsonPropertyName("configFields")]
     public List<ConnectorConfigField>? ConfigFields { get; set; }
 
@@ -214,20 +202,11 @@ public class AvailableConnector
     public string? DataSourceId { get; set; }
 }
 
-/// <summary>
-/// Describes a configuration field for a connector
-/// </summary>
 public class ConnectorConfigField
 {
-    /// <summary>
-    /// Field identifier
-    /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Display label
-    /// </summary>
     [JsonPropertyName("label")]
     public string Label { get; set; } = string.Empty;
 
@@ -237,34 +216,19 @@ public class ConnectorConfigField
     [JsonPropertyName("type")]
     public string Type { get; set; } = "text";
 
-    /// <summary>
-    /// Whether the field is required
-    /// </summary>
     [JsonPropertyName("required")]
     public bool Required { get; set; }
 
-    /// <summary>
-    /// Placeholder text
-    /// </summary>
     [JsonPropertyName("placeholder")]
     public string? Placeholder { get; set; }
 
-    /// <summary>
-    /// Help text
-    /// </summary>
     [JsonPropertyName("helpText")]
     public string? HelpText { get; set; }
 
-    /// <summary>
-    /// Options for select fields
-    /// </summary>
     [JsonPropertyName("options")]
     public List<SelectOption>? Options { get; set; }
 }
 
-/// <summary>
-/// Option for a select field
-/// </summary>
 public class SelectOption
 {
     [JsonPropertyName("value")]
@@ -286,9 +250,6 @@ public enum UploaderPlatform
     [JsonStringEnumMemberName("web")] Web,
 }
 
-/// <summary>
-/// Category of uploader app
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<UploaderCategory>))]
 public enum UploaderCategory
 {
@@ -298,7 +259,7 @@ public enum UploaderCategory
 }
 
 /// <summary>
-/// Represents an uploader application that can push data to Nocturne.
+/// Uploader application that can push data to Nocturne.
 /// Display strings (name, description, setup instructions) live on the frontend,
 /// keyed by <see cref="Id"/>.
 /// </summary>
@@ -310,21 +271,12 @@ public class UploaderApp
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Platform the app runs on
-    /// </summary>
     [JsonPropertyName("platform")]
     public UploaderPlatform Platform { get; set; }
 
-    /// <summary>
-    /// Category of uploader
-    /// </summary>
     [JsonPropertyName("category")]
     public UploaderCategory Category { get; set; }
 
-    /// <summary>
-    /// Icon identifier
-    /// </summary>
     [JsonPropertyName("icon")]
     public string Icon { get; set; } = string.Empty;
 
@@ -335,9 +287,6 @@ public class UploaderApp
     public string? Url { get; set; }
 }
 
-/// <summary>
-/// Complete services overview response
-/// </summary>
 public class ServicesOverview
 {
     /// <summary>
@@ -370,39 +319,21 @@ public class ServicesOverview
 /// </summary>
 public class ApiEndpointInfo
 {
-    /// <summary>
-    /// Base URL for this Nocturne instance
-    /// </summary>
     [JsonPropertyName("baseUrl")]
     public string BaseUrl { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Whether an API secret is required
-    /// </summary>
     [JsonPropertyName("requiresApiSecret")]
     public bool RequiresApiSecret { get; set; } = true;
 
-    /// <summary>
-    /// Whether the current request is authenticated
-    /// </summary>
     [JsonPropertyName("isAuthenticated")]
     public bool IsAuthenticated { get; set; }
 
-    /// <summary>
-    /// Entries API endpoint
-    /// </summary>
     [JsonPropertyName("entriesEndpoint")]
     public string EntriesEndpoint { get; set; } = "/api/v1/entries";
 
-    /// <summary>
-    /// Treatments API endpoint
-    /// </summary>
     [JsonPropertyName("treatmentsEndpoint")]
     public string TreatmentsEndpoint { get; set; } = "/api/v1/treatments";
 
-    /// <summary>
-    /// Device status API endpoint
-    /// </summary>
     [JsonPropertyName("deviceStatusEndpoint")]
     public string DeviceStatusEndpoint { get; set; } = "/api/v1/devicestatus";
 }
@@ -412,9 +343,6 @@ public class ApiEndpointInfo
 /// </summary>
 public class ConnectorDataSummary
 {
-    /// <summary>
-    /// The connector ID
-    /// </summary>
     [JsonPropertyName("connectorId")]
     public string ConnectorId { get; set; } = string.Empty;
 
@@ -424,21 +352,12 @@ public class ConnectorDataSummary
     [JsonPropertyName("recordCounts")]
     public Dictionary<string, long> RecordCounts { get; set; } = new();
 
-    /// <summary>
-    /// Total count of all records
-    /// </summary>
     [JsonPropertyName("total")]
     public long Total => RecordCounts.Values.Sum();
 }
 
-/// <summary>
-/// Result of a data source deletion operation
-/// </summary>
 public class DataSourceDeleteResult
 {
-    /// <summary>
-    /// Whether the operation was successful
-    /// </summary>
     [JsonPropertyName("success")]
     public bool Success { get; set; }
 
@@ -448,15 +367,9 @@ public class DataSourceDeleteResult
     [JsonPropertyName("deletedCounts")]
     public Dictionary<string, long> DeletedCounts { get; set; } = new();
 
-    /// <summary>
-    /// Total number of records deleted
-    /// </summary>
     [JsonPropertyName("totalDeleted")]
     public long TotalDeleted => DeletedCounts.Values.Sum();
 
-    /// <summary>
-    /// The data source that was deleted
-    /// </summary>
     [JsonPropertyName("dataSource")]
     public string DataSource { get; set; } = string.Empty;
 

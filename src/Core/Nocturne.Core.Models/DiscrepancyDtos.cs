@@ -2,15 +2,11 @@ using System.Text.Json.Serialization;
 
 namespace Nocturne.Core.Models;
 
-/// <summary>
-/// Data transfer object for discrepancy analysis results
-/// </summary>
 /// <seealso cref="DiscrepancyDetailDto"/>
 /// <seealso cref="DiscrepancySeverity"/>
 /// <seealso cref="DiscrepancyType"/>
 public class DiscrepancyAnalysisDto
 {
-    /// <summary>Unique identifier for this analysis record</summary>
     public Guid Id { get; set; }
 
     /// <summary>
@@ -22,7 +18,6 @@ public class DiscrepancyAnalysisDto
     [JsonPropertyName("correlationId")]
     public string TraceId { get; set; } = string.Empty;
 
-    /// <summary>When the analysis was performed</summary>
     public DateTimeOffset AnalysisTimestamp { get; set; }
 
     /// <summary>HTTP method of the compared request (e.g., "GET", "POST")</summary>
@@ -46,7 +41,6 @@ public class DiscrepancyAnalysisDto
     /// <summary>HTTP status code returned by the legacy Nightscout instance</summary>
     public int? NightscoutStatusCode { get; set; }
 
-    /// <summary>HTTP status code returned by Nocturne</summary>
     public int? NocturneStatusCode { get; set; }
 
     /// <summary>Response time of the legacy Nightscout instance in milliseconds</summary>
@@ -79,7 +73,6 @@ public class DiscrepancyAnalysisDto
     /// <summary>Whether the Nightscout instance failed to return a response</summary>
     public bool NightscoutMissing { get; set; }
 
-    /// <summary>Whether Nocturne failed to return a response</summary>
     public bool NocturneMissing { get; set; }
 
     /// <summary>Error message if the comparison itself failed</summary>
@@ -104,9 +97,6 @@ public class ForwardedDiscrepancyDto
     /// </summary>
     public DateTimeOffset ReceivedAt { get; set; }
 
-    /// <summary>
-    /// The discrepancy analysis data
-    /// </summary>
     public DiscrepancyAnalysisDto Analysis { get; set; } = new();
 }
 
@@ -118,13 +108,11 @@ public class ForwardedDiscrepancyDto
 /// <seealso cref="DiscrepancySeverity"/>
 public class DiscrepancyDetailDto
 {
-    /// <summary>Unique identifier for this discrepancy detail record</summary>
     public Guid Id { get; set; }
 
     /// <summary>Category of discrepancy (status code, body, header, etc.)</summary>
     public DiscrepancyType DiscrepancyType { get; set; }
 
-    /// <summary>Severity level of this discrepancy</summary>
     public DiscrepancySeverity Severity { get; set; }
 
     /// <summary>JSON path or field name where the discrepancy was found (e.g., "entries[0].sgv")</summary>
@@ -139,7 +127,6 @@ public class DiscrepancyDetailDto
     /// <summary>Human-readable description of the discrepancy</summary>
     public string Description { get; set; } = string.Empty;
 
-    /// <summary>When this discrepancy detail was recorded</summary>
     public DateTimeOffset RecordedAt { get; set; }
 }
 
@@ -151,13 +138,11 @@ public class CompatibilityStatus
     /// <summary>Overall compatibility score as a percentage (0-100), where 100 is full compatibility</summary>
     public double OverallScore { get; set; }
 
-    /// <summary>Total number of requests that have been compared</summary>
     public int TotalRequests { get; set; }
 
     /// <summary>Health status string (e.g., "healthy", "degraded", "critical")</summary>
     public string HealthStatus { get; set; } = string.Empty;
 
-    /// <summary>When this status was last recalculated</summary>
     public DateTimeOffset LastUpdated { get; set; }
 
     /// <summary>Number of open <see cref="DiscrepancySeverity.Critical"/> issues</summary>
@@ -172,9 +157,6 @@ public class CompatibilityStatus
 
 
 
-/// <summary>
-/// Type of response match
-/// </summary>
 public enum ResponseMatchType
 {
     /// <summary>
@@ -182,19 +164,10 @@ public enum ResponseMatchType
     /// </summary>
     Perfect,
 
-    /// <summary>
-    /// Minor differences found
-    /// </summary>
     MinorDifferences,
 
-    /// <summary>
-    /// Major differences found
-    /// </summary>
     MajorDifferences,
 
-    /// <summary>
-    /// Critical differences found
-    /// </summary>
     CriticalDifferences,
 
     /// <summary>
@@ -202,14 +175,8 @@ public enum ResponseMatchType
     /// </summary>
     NightscoutMissing,
 
-    /// <summary>
-    /// Nocturne response is missing
-    /// </summary>
     NocturneMissing,
 
-    /// <summary>
-    /// Both responses are missing
-    /// </summary>
     BothMissing,
 
     /// <summary>
@@ -228,19 +195,10 @@ public enum DiscrepancyType
     /// </summary>
     StatusCode,
 
-    /// <summary>
-    /// Response header differs
-    /// </summary>
     Header,
 
-    /// <summary>
-    /// Content type differs
-    /// </summary>
     ContentType,
 
-    /// <summary>
-    /// Response body differs
-    /// </summary>
     Body,
 
     /// <summary>
@@ -248,24 +206,12 @@ public enum DiscrepancyType
     /// </summary>
     JsonStructure,
 
-    /// <summary>
-    /// String value differs
-    /// </summary>
     StringValue,
 
-    /// <summary>
-    /// Numeric value differs
-    /// </summary>
     NumericValue,
 
-    /// <summary>
-    /// Timestamp differs
-    /// </summary>
     Timestamp,
 
-    /// <summary>
-    /// Array length differs
-    /// </summary>
     ArrayLength,
 
     /// <summary>
@@ -274,9 +220,6 @@ public enum DiscrepancyType
     Performance,
 }
 
-/// <summary>
-/// Severity level of a discrepancy
-/// </summary>
 public enum DiscrepancySeverity
 {
     /// <summary>

@@ -12,7 +12,7 @@
     getTrackerDefinition,
     isUnwiredElementType,
   } from "$lib/clock-builder";
-  import { renderClockElementValue } from "$lib/components/clock/element-value";
+  import { faceUnits, renderClockElementValue } from "$lib/components/clock/element-value";
   import TrendArrow from "$lib/components/clock/TrendArrow.svelte";
   import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
   import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
@@ -111,7 +111,7 @@
   });
 
   const bgStyle = $derived(
-    clockBackgroundStyle(config?.settings, currentBG, "var(--background)")
+    clockBackgroundStyle(config?.settings, currentBG, "var(--background)", glucose.thresholds)
   );
 
   const overlayOpacity = $derived(
@@ -280,7 +280,11 @@
         dataWindow: "display",
       })}
       <div class="absolute inset-0 z-0">
-        <GlucoseChartShell engine={bgChartEngine} heightClass="h-full">
+        <GlucoseChartShell
+          engine={bgChartEngine}
+          heightClass="h-full"
+          glucoseUnits={faceUnits(config?.settings)}
+        >
           {#snippet tracks()}
             {#if backgroundChart.chartConfig?.showBasal ?? false}
               <BasalTrack />
@@ -343,7 +347,11 @@
                   class="overflow-hidden rounded"
                   style="width: {(element.width || 400) * scale}px; height: {(element.height || 200) * scale}px;"
                 >
-                  <GlucoseChartShell engine={inlineEngine} heightClass="h-full">
+                  <GlucoseChartShell
+                    engine={inlineEngine}
+                    heightClass="h-full"
+                    glucoseUnits={faceUnits(config?.settings)}
+                  >
                     {#snippet tracks()}
                       {#if element.chartConfig?.showBasal ?? false}
                         <BasalTrack />
@@ -391,7 +399,7 @@
               {@const customCss = buildCustomCssString(element)}
               <div
                 class="flex items-center"
-                style="color: {getElementColor(element, currentBG)}; opacity: {element.style?.opacity ?? 1.0};{customCss ? ` ${customCss}` : ''}"
+                style="color: {getElementColor(element, currentBG, glucose.thresholds)}; opacity: {element.style?.opacity ?? 1.0};{customCss ? ` ${customCss}` : ''}"
               >
                 <TrendArrow {direction} {size} />
               </div>
@@ -402,7 +410,7 @@
               {@const customCss = buildCustomCssString(element)}
               <div
                 class="flex items-center gap-1 {getFontClass(element.style?.font)} {getFontWeightClass(element.style?.fontWeight)}"
-                style="color: {getElementColor(element, currentBG)}; opacity: {element.style?.opacity ?? 1.0}; font-size: {size}px;{customCss ? ` ${customCss}` : ''}"
+                style="color: {getElementColor(element, currentBG, glucose.thresholds)}; opacity: {element.style?.opacity ?? 1.0}; font-size: {size}px;{customCss ? ` ${customCss}` : ''}"
               >
                 {#if showOptions.includes("icon") && def?.category}
                   <TrackerCategoryIcon
@@ -418,7 +426,7 @@
             {:else if element.type !== "chart"}
               <span
                 class="leading-none tabular-nums {getFontClass(element.style?.font)} {getFontWeightClass(element.style?.fontWeight)} {isStale && element.type === 'sg' ? 'line-through opacity-60' : ''}"
-                style={buildStyleString(element, currentBG, scale)}
+                style={buildStyleString(element, currentBG, scale, glucose.thresholds)}
               >
                 {renderClockElementValue(element, config.settings, glucose, currentTime)}
               </span>

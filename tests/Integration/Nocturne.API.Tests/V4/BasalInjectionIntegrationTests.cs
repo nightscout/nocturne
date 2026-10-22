@@ -160,8 +160,12 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
         rowCount.Should().Be(1, "the partial unique index forbids a second live row for the same sync key");
     }
 
+    /// <summary>
+    /// Deleting a record stops its source from re-uploading it: the deleted row keeps its sync key,
+    /// and a re-POST under that key is refused rather than inserted (<c>V4CrudControllerBase.Create</c>).
+    /// </summary>
     [Fact]
-    public async Task POST_with_same_SyncIdentifier_after_soft_delete_creates_new_row()
+    public async Task POST_with_same_SyncIdentifier_after_user_delete_is_refused()
     {
         var insulinId = await SeedBasalPatientInsulinAsync(_tenantAId);
         using var client = CreateClient(_slugA, _accessTokenA);
@@ -169,7 +173,6 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
         var dataSource = "test-source";
         var syncId = $"sync-{Guid.NewGuid():N}";
 
-        // Create and soft-delete the first row.
         var (status1, body1) = await PostBasalInjectionAsync(
             client, insulinId, units: 12.0, dataSource: dataSource, syncIdentifier: syncId);
         status1.Should().Be(HttpStatusCode.Created);
@@ -178,22 +181,15 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
         var deleteResponse = await client.DeleteAsync($"/api/v4/insulin/basal-injections/{id1}");
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        // Re-post with the same sync identifier; the partial unique index
-        // (... WHERE sync_identifier IS NOT NULL AND deleted_at IS NULL) must
-        // permit a second live row.
-        var (status2, body2) = await PostBasalInjectionAsync(
+        var (status2, _) = await PostBasalInjectionAsync(
             client, insulinId, units: 13.5, dataSource: dataSource, syncIdentifier: syncId);
-        status2.Should().Be(HttpStatusCode.Created,
-            "after soft-delete the sync key is free again and a new row should be inserted");
+        status2.Should().Be(HttpStatusCode.Conflict,
+            "the owner deleted the record this source and sync key name");
 
-        var id2 = body2.GetProperty("id").GetGuid();
-        id2.Should().NotBe(id1, "the new insertion must be a distinct row, not the resurrected one");
-
-        // One live row, two physical rows.
         (await CountBySyncIdentifierAsync(_tenantAId, dataSource, syncId, includeDeleted: false))
-            .Should().Be(1, "exactly one live row per sync key");
+            .Should().Be(0, "the refused upload inserts nothing");
         (await CountBySyncIdentifierAsync(_tenantAId, dataSource, syncId, includeDeleted: true))
-            .Should().Be(2, "the soft-deleted row remains in storage");
+            .Should().Be(1, "the deleted row keeps the sync key");
     }
 
     [Fact]

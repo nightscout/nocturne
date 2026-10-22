@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
-using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Hubs;
+using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
 using Nocturne.Tests.Shared.Mocks;
@@ -470,7 +470,7 @@ public class SignalRBroadcastServiceTests
         var instance = new TrackerInstanceDto { Id = Guid.NewGuid() };
 
         await _service.BroadcastTrackerUpdateAsync(
-            "create",
+            TrackerRealtimeAction.Create,
             instance,
             Guid.NewGuid().ToString(),
             TrackerVisibility.Public
@@ -493,7 +493,7 @@ public class SignalRBroadcastServiceTests
         var instance = new TrackerInstanceDto { Id = Guid.NewGuid() };
 
         await _service.BroadcastTrackerUpdateAsync(
-            "create",
+            TrackerRealtimeAction.Create,
             instance,
             owner.ToString(),
             TrackerVisibility.Private

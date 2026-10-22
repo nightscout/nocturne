@@ -24,13 +24,14 @@ public class RealtimeAdmissionControllerTests
     private static bool TenantRelayFor(AuthContext authContext) =>
         AdmissionFor(authContext).TenantRelay;
 
-    private static RealtimeAdmission AdmissionFor(AuthContext authContext)
+    private static RealtimeAdmission AdmissionFor(AuthContext authContext, params string[] scopes)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.SetAuthContext(authContext);
         httpContext.SetTenantContext(
             new TenantContext(Tenant, "sleepy", "Sleepy", IsActive: true, IsDemo: false));
-        httpContext.SetGrantedScopes(new HashSet<string> { Scope.GlucoseRead });
+        httpContext.SetGrantedScopes(
+            Scope.Normalize(scopes.Length == 0 ? [Scope.GlucoseRead] : scopes));
 
         var controller = new RealtimeAdmissionController
         {
@@ -115,6 +116,59 @@ public class RealtimeAdmissionControllerTests
             SubjectId = Guid.CreateVersion7(),
             TenantId = Tenant,
         }).SubjectId.Should().BeNull();
+    }
+
+    private static AuthContext MemberSession(bool limitTo24Hours = false) => new()
+    {
+        IsAuthenticated = true,
+        AuthType = AuthType.SessionCookie,
+        SubjectId = Guid.CreateVersion7(),
+        LimitTo24Hours = limitTo24Hours,
+    };
+
+    [Fact]
+    public void Admission_names_only_the_categories_the_caller_holds_a_read_scope_for()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead, Scope.TreatmentsRead).Categories
+            .Should().BeEquivalentTo(["entries", "glucose", "treatments", "care"]);
+    }
+
+    [Fact]
+    public void A_glucose_only_caller_is_admitted_to_no_treatment_or_device_category()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead).Categories
+            .Should().BeEquivalentTo(["entries", "glucose"]);
+    }
+
+    [Fact]
+    public void A_history_clamped_caller_is_admitted_to_no_category()
+    {
+        var admission = AdmissionFor(MemberSession(limitTo24Hours: true), Scope.FullAccess);
+
+        admission.Categories.Should().BeEmpty();
+        admission.HistoryClamped.Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_guest_session_is_admitted_to_no_category_whatever_its_scopes()
+    {
+        AdmissionFor(
+            new AuthContext { IsAuthenticated = true, AuthType = AuthType.Guest },
+            Scope.GlucoseRead, Scope.TreatmentsRead).Categories.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void An_anonymous_share_is_admitted_to_no_category()
+    {
+        AdmissionFor(
+            new AuthContext
+            {
+                IsAuthenticated = false,
+                AuthType = AuthType.None,
+                SubjectId = Guid.CreateVersion7(),
+                TenantId = Tenant,
+            },
+            Scope.GlucoseRead, Scope.TreatmentsRead).Categories.Should().BeEmpty();
     }
 
     [Fact]

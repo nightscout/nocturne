@@ -4,12 +4,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Options;
-using Moq;
 using Nocturne.API.Attributes;
 using Nocturne.API.Filters;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Xunit;
 
@@ -67,7 +66,7 @@ public class RecreationBlockedFilterEnvelopeTests
             Exception = Blocked,
         };
 
-        new RecreationBlockedFilter(EchoingProblemDetailsFactory(), Options.Create(new JsonOptions()))
+        new RecreationBlockedFilter(new EchoingProblemDetailsFactory(), Options.Create(new JsonOptions()))
             .OnException(context);
 
         context.ExceptionHandled.Should().BeTrue();
@@ -81,17 +80,5 @@ public class RecreationBlockedFilterEnvelopeTests
         return document.RootElement.EnumerateObject()
             .Select(p => (p.Name, p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString()! : p.Value.GetRawText()))
             .ToList();
-    }
-
-    private static ProblemDetailsFactory EchoingProblemDetailsFactory()
-    {
-        var factory = new Mock<ProblemDetailsFactory>();
-        factory
-            .Setup(f => f.CreateProblemDetails(
-                It.IsAny<HttpContext>(), It.IsAny<int?>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
-            .Returns((HttpContext _, int? status, string? title, string? type, string? detail, string? instance) =>
-                new ProblemDetails { Status = status, Title = title, Type = type, Detail = detail, Instance = instance });
-        return factory.Object;
     }
 }

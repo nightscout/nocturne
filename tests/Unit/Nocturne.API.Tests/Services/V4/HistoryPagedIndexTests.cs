@@ -22,13 +22,15 @@ public class HistoryPagedIndexTests
     {
         var paged = LegacyTreatmentTables.All
             .Except(LegacyTreatmentTables.StateSpanTables)
-            .Select(t => t.GetType().GetGenericArguments()[1])
-            .Append(typeof(ApsSnapshotEntity))
+            .Select(t => t is LegacyProfileActivationTable
+                ? typeof(ProfileActivationEntity)
+                : t.GetType().GetGenericArguments()[1])
+            .Concat(DeviceStatusHistoryTables)
             .Concat(EntryHistoryTables)
             .Concat(ProfileHistoryTables)
             .ToList();
 
-        paged.Should().HaveCount(16, "an empty set would let the equality below pass vacuously");
+        paged.Should().HaveCount(20, "an empty set would let the equality below pass vacuously");
 
         var indexed = Model().GetEntityTypes()
             .Where(e => e.GetIndexes().Any(IsHistoryIndex))
@@ -63,6 +65,15 @@ public class HistoryPagedIndexTests
             && (index.IsDescending == null || !index.IsDescending.Contains(true))
             && index.GetFilter() == "deleted_at IS NULL");
     }
+
+    /// <summary>The tables the devicestatus anchor pages for v3 history.</summary>
+    private static readonly Type[] DeviceStatusHistoryTables =
+    [
+        typeof(ApsSnapshotEntity),
+        typeof(PumpSnapshotEntity),
+        typeof(UploaderSnapshotEntity),
+        typeof(DeviceStatusExtrasEntity),
+    ];
 
     /// <summary>The glucose types <c>EntryReadService.GetModifiedSinceAsync</c> merges.</summary>
     private static readonly Type[] EntryHistoryTables =

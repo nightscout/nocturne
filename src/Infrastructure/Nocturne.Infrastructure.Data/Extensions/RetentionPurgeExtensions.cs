@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -10,7 +11,7 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// <remarks>
 /// <para>
 /// The tenant reach the DELETE needs comes from
-/// <see cref="RlsPinningExtensions.CreateTenantPinnedContextAsync"/> and cannot come from a
+/// <see cref="INocturneDbContextFactory.CreateForTenantAsync"/> and cannot come from a
 /// <c>set_config</c> issued as its own command: EF opens and closes the connection around each
 /// command, and the pool's DISCARD ALL clears the session variable on the way back. Every
 /// tenant-scoped table is <c>FORCE ROW LEVEL SECURITY</c>, so an unpinned DELETE evaluates
@@ -62,7 +63,7 @@ public static partial class RetentionPurgeExtensions
     /// <paramref name="minAge"/> is not positive, or <paramref name="batchSize"/> is below 1.
     /// </exception>
     public static async Task<int> PurgeOlderThanAsync(
-        this IDbContextFactory<NocturneDbContext> factory,
+        this INocturneDbContextFactory factory,
         Guid tenantId,
         string table,
         string timestampColumn,
@@ -101,7 +102,7 @@ public static partial class RetentionPurgeExtensions
 
         do
         {
-            await using var db = await factory.CreateTenantPinnedContextAsync(tenantId, ct);
+            await using var db = await factory.CreateForTenantAsync(tenantId, ct);
 
             batchDeleted = await db.Database.ExecuteSqlRawAsync(sql, [cutoff, tenantId], ct);
 

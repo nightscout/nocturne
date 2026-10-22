@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
@@ -56,6 +57,7 @@ public class ShareLinkController : ControllerBase
     /// <see cref="TenantEntity.ShareTokenEncrypted"/> lists.
     /// </summary>
     [HttpPost("reveal")]
+    [RequireInteractiveSession]
     [RemoteCommand]
     [ProducesResponseType(typeof(ShareLinkDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -89,6 +91,7 @@ public class ShareLinkController : ControllerBase
     /// stops working immediately.
     /// </summary>
     [HttpPost("rotate")]
+    [RequireInteractiveSession]
     [RemoteCommand(Invalidates = ["GetShareLink"])]
     [ProducesResponseType(typeof(ShareLinkDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -118,6 +121,7 @@ public class ShareLinkController : ControllerBase
 
     /// <summary>Choose whether the public view shows full history or only the last 24 hours.</summary>
     [HttpPut("full-history")]
+    [RequireInteractiveSession]
     [RemoteCommand(Invalidates = ["GetShareLink"])]
     [ProducesResponseType(typeof(ShareLinkDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -139,6 +143,7 @@ public class ShareLinkController : ControllerBase
     /// shares nothing.
     /// </summary>
     [HttpPut("scopes")]
+    [RequireInteractiveSession]
     [RemoteCommand(Invalidates = ["GetShareLink"])]
     [ProducesResponseType(typeof(ShareLinkDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -148,6 +153,10 @@ public class ShareLinkController : ControllerBase
     {
         if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
+
+        // A member may publish only what they can read themselves.
+        if (Scope.ValidateDelegation(request.Scopes, HttpContext.GetGrantedScopes()) is { } violation)
+            return Problem(detail: violation.Description, statusCode: 403, title: violation.Code);
 
         try
         {

@@ -1,7 +1,12 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Analytics;
@@ -16,16 +21,30 @@ public class SummaryService : ISummaryService
 {
     private readonly IDDataService _ddataService;
     private readonly IPropertiesService _propertiesService;
+    private readonly IActiveProfileResolver _activeProfileResolver;
+    private readonly ITherapySettingsRepository _therapySettingsRepository;
+    private readonly IProfileProjectionService _profileProjection;
     private readonly ILogger<SummaryService> _logger;
+
+    private static readonly JsonSerializerOptions StoredEntryOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
 
     public SummaryService(
         IDDataService ddataService,
         IPropertiesService propertiesService,
+        IActiveProfileResolver activeProfileResolver,
+        ITherapySettingsRepository therapySettingsRepository,
+        IProfileProjectionService profileProjection,
         ILogger<SummaryService> logger
     )
     {
         _ddataService = ddataService;
         _propertiesService = propertiesService;
+        _activeProfileResolver = activeProfileResolver;
+        _therapySettingsRepository = therapySettingsRepository;
+        _profileProjection = profileProjection;
         _logger = logger;
     }
 
@@ -40,18 +59,19 @@ public class SummaryService : ISummaryService
             var currentTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var ddata = await _ddataService.GetDDataAsync(currentTime, cancellationToken);
             var sgvs = ProcessSgvs(ddata.Sgvs, hours);
-            var profile = ddata.Profiles?.FirstOrDefault()?.Store?.FirstOrDefault().Value;
+            var profileName = await _activeProfileResolver.GetProfileNameAsync(
+                currentTime,
+                cancellationToken
+            );
+            var profile = await ResolveActiveProfileAsync(profileName, cancellationToken);
             var treatments = ProcessTreatments(ddata.Treatments, profile, hours);
             var state = await ConstructStateAsync(cancellationToken);
-
-            // Remove timeAsSeconds property from profile to match legacy behavior
-            var processedProfile = RemoveTimeAsSecondsFromProfile(profile);
 
             return new SummaryResponse
             {
                 Sgvs = sgvs,
                 Treatments = treatments,
-                Profile = processedProfile,
+                Profile = ToStoredEntry(profile),
                 State = state,
             };
         }
@@ -163,7 +183,11 @@ public class SummaryService : ISummaryService
         }
 
         var profileBasals = profileData.Basal;
+        // NIGHTSCOUT-COMPAT: Nightscout reads only absolute here and reports a percent temp as 0 U/h, a
+        // suspension. A percent temp reports the rate it delivers, and one whose rate is unknown is
+        // left out so the profile basal shows through.
         var temps = tempBasals
+            .Where(temp => temp.Percent is null || (temp.Absolute ?? temp.DeliveredRate) is not null)
             .Select(temp => new SummaryTempBasal
             {
                 Start =
@@ -171,7 +195,7 @@ public class SummaryService : ISummaryService
                         ? createdAt.ToUnixTimeMilliseconds()
                         : temp.Mills,
                 Duration = temp.Duration.HasValue ? (int)(temp.Duration.Value * 60 * 1000) : 0,
-                Absolute = temp.Absolute ?? 0,
+                Absolute = temp.Absolute ?? temp.DeliveredRate ?? 0,
             })
             .ToList();
 
@@ -445,30 +469,66 @@ public class SummaryService : ISummaryService
     }
 
     /// <summary>
-    /// Removes the timeAsSeconds property from profile to match legacy behavior
+    /// The store entry read now (<see cref="IActiveProfileResolver.GetProfileNameAsync"/>), or the
+    /// <see cref="Nocturne.Core.Models.V4.TherapySettings.IsDefault"/> row's when that store has no entry.
+    /// Entries are assembled from their rows, not read out of the newest projected documents, which
+    /// Profile Switch snapshots can crowd out.
     /// </summary>
-    private object? RemoveTimeAsSecondsFromProfile(ProfileData? profileData)
+    private async Task<ProfileData?> ResolveActiveProfileAsync(
+        string profileName,
+        CancellationToken cancellationToken
+    )
     {
-        if (profileData == null)
+        var row = (
+            await _therapySettingsRepository.GetByProfileNameAsync(profileName, cancellationToken)
+        ).FirstOrDefault();
+        if (await EntryOfAsync(row, cancellationToken) is { } entry)
+            return entry;
+
+        var defaults = await _therapySettingsRepository.GetDefaultsAsync(cancellationToken);
+        return await EntryOfAsync(defaults.FirstOrDefault(), cancellationToken);
+    }
+
+    private async Task<ProfileData?> EntryOfAsync(
+        Nocturne.Core.Models.V4.TherapySettings? row,
+        CancellationToken cancellationToken
+    )
+    {
+        if (row is null)
             return null;
 
-        // Create a simple clone without timeAsSeconds properties
-        // This matches the legacy removeProps functionality
-        return new
+        var document = await _profileProjection.GetProfileByIdAsync(row.Id.ToString(), cancellationToken);
+        return document?.Store.GetValueOrDefault(row.ProfileName);
+    }
+
+    /// <summary>
+    /// The entry as a raw JSON object, so the response's camelCase policy cannot rename its keys,
+    /// without <c>timeAsSeconds</c>. An empty object when no profile is active.
+    /// </summary>
+    private static JsonObject ToStoredEntry(ProfileData? profile)
+    {
+        if (profile is null)
+            return new JsonObject();
+
+        var entry = JsonSerializer.SerializeToNode(profile, StoredEntryOptions)!.AsObject();
+        RemoveTimeAsSeconds(entry);
+        return entry;
+    }
+
+    private static void RemoveTimeAsSeconds(JsonNode? node)
+    {
+        switch (node)
         {
-            profileData.Dia,
-            profileData.CarbsHr,
-            profileData.Delay,
-            profileData.Timezone,
-            profileData.Units,
-            profileData.DelayHigh,
-            profileData.DelayLow,
-            Basal = profileData.Basal?.Select(b => new { b.Time, b.Value }),
-            CarbRatio = profileData.CarbRatio?.Select(c => new { c.Time, c.Value }),
-            Sens = profileData.Sens?.Select(s => new { s.Time, s.Value }),
-            TargetLow = profileData.TargetLow?.Select(t => new { t.Time, t.Value }),
-            TargetHigh = profileData.TargetHigh?.Select(t => new { t.Time, t.Value }),
-        };
+            case JsonObject obj:
+                obj.Remove("timeAsSeconds");
+                foreach (var child in obj.Select(p => p.Value))
+                    RemoveTimeAsSeconds(child);
+                break;
+            case JsonArray array:
+                foreach (var child in array)
+                    RemoveTimeAsSeconds(child);
+                break;
+        }
     }
 
     /// <summary>

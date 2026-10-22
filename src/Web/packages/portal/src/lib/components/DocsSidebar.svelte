@@ -14,6 +14,7 @@
     import Package from "@lucide/svelte/icons/package";
     import Utensils from "@lucide/svelte/icons/utensils";
     import Timer from "@lucide/svelte/icons/timer";
+    import HeartPulse from "@lucide/svelte/icons/heart-pulse";
     import ChevronRight from "@lucide/svelte/icons/chevron-right";
     import { DOCS_NAV_SECTIONS, type DocsSectionId } from "$lib/data/docs-nav";
     import { track } from "$lib/analytics";
@@ -28,6 +29,7 @@
         trackers: Timer,
         alerts: Bell,
         bots: Bot,
+        "data-sources": HeartPulse,
         configuration: Settings,
         observability: Activity,
         "windows-widget": LayoutGrid,

@@ -1,9 +1,11 @@
+using Nocturne.API.Multitenancy;
 using Microsoft.AspNetCore.SignalR.Client;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.NocturneRemote.Configurations;
 using Nocturne.Connectors.NocturneRemote.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using System.Collections.Concurrent;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;
 
@@ -51,10 +53,10 @@ public class NocturneRemoteConnectorBackgroundService
                         c => c.State != HubConnectionState.Disconnected, StopAndDisposeAsync))
                     continue;
 
-                using var tenantScope = ServiceProvider.CreateScope();
-
-                var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
+                await using var tenantScope = TenantJobScope.Open(
+                    ServiceProvider,
+                    new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false),
+                    AuditEndpoint);
 
                 var loader = tenantScope.ServiceProvider
                     .GetRequiredService<IConnectorConfigurationLoader<NocturneRemoteConnectorConfiguration>>();

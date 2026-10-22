@@ -20,7 +20,7 @@ public class ConditionTimerRepositoryTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = TenantId;
-        _repository = new ConditionTimerRepository(_context);
+        _repository = new ConditionTimerRepository(_context.AsFactory());
     }
 
     public void Dispose()

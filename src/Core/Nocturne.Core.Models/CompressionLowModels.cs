@@ -42,9 +42,6 @@ public class TriggerDetectionRequest
     public string? EndDate { get; set; }
 }
 
-/// <summary>
-/// Result of detection for a single night
-/// </summary>
 /// <seealso cref="DetectionResult"/>
 public class NightDetectionResult
 {
@@ -68,7 +65,6 @@ public class DetectionResult
     [JsonPropertyName("totalSuggestionsCreated")]
     public int TotalSuggestionsCreated { get; set; }
 
-    /// <summary>Number of nights that were analyzed</summary>
     [JsonPropertyName("nightsProcessed")]
     public int NightsProcessed { get; set; }
 

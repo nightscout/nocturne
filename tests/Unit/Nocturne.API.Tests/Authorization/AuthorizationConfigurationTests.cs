@@ -66,27 +66,24 @@ public class AuthorizationConfigurationTests
 
     [Theory]
     [InlineData("Nocturne.API.Controllers.V4.TenantAdmin.MigrationController")]
-    [InlineData("Nocturne.API.Controllers.V4.TenantAdmin.ProcessingController")]
     [InlineData("Nocturne.API.Controllers.V4.TenantAdmin.NightscoutTransitionController")]
     [InlineData("Nocturne.API.Controllers.V4.TenantAdmin.DeduplicationController")]
-    public void TenantAdminController_RequiresAdmin(string typeName)
+    public void TenantAdminController_RequiresSuperuser(string typeName)
     {
         var type = ApiAssembly.GetType(typeName);
         type.Should().NotBeNull($"{typeName} should exist");
 
-        type!.GetCustomAttributes(inherit: true).OfType<RequireAdminAttribute>()
+        type!.GetCustomAttributes(inherit: true).OfType<RequireSuperuserAttribute>()
             .Should().NotBeEmpty(
-                $"{typeName} exposes tenant-admin operations that the HasPermissions fallback cannot gate");
+                $"{typeName} exposes operations that the HasPermissions fallback cannot gate");
     }
 
     [Theory]
     [InlineData("Nocturne.API.Controllers.V4.Platform.StatusController")]
     [InlineData("Nocturne.API.Controllers.V1.StatusController")]
-    [InlineData("Nocturne.API.Controllers.V3.StatusController")]
     [InlineData("Nocturne.API.Controllers.MetadataController")]
     [InlineData("Nocturne.API.Controllers.V1.VersionsController")]
     [InlineData("Nocturne.API.Controllers.V3.VersionController")]
-    [InlineData("Nocturne.API.Controllers.V3.LastModifiedController")]
     [InlineData("Nocturne.API.Controllers.V1.AuthenticationController")]
     public void PublicController_AllowsAnonymous(string typeName)
     {
@@ -99,7 +96,7 @@ public class AuthorizationConfigurationTests
     }
 
     [Fact]
-    public void DiscrepancyIngest_IsAnonymous_WhileReadsRequireAdmin()
+    public void DiscrepancyIngest_IsAnonymous_WhileReadsRequireSuperuser()
     {
         var type = ApiAssembly.GetType("Nocturne.API.Controllers.V4.TenantAdmin.DiscrepancyController");
         type.Should().NotBeNull();
@@ -111,10 +108,10 @@ public class AuthorizationConfigurationTests
         ingest!.GetCustomAttributes(inherit: true).OfType<AllowAnonymousAttribute>()
             .Should().NotBeEmpty();
 
-        // The dashboard reads remain admin-only.
+        // The dashboard reads remain superuser-only.
         var metrics = type.GetMethod("GetCompatibilityMetrics");
         metrics.Should().NotBeNull();
-        metrics!.GetCustomAttributes(inherit: true).OfType<RequireAdminAttribute>()
+        metrics!.GetCustomAttributes(inherit: true).OfType<RequireSuperuserAttribute>()
             .Should().NotBeEmpty();
     }
 

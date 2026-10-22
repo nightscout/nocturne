@@ -1,7 +1,9 @@
+using System.Text.Json;
 using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
@@ -196,37 +198,23 @@ public class ProfileController : ControllerBase
 
         try
         {
-            Profile[] profiles;
-
-            // Handle both single profile and array of profiles (Nightscout compatibility)
-            if (body.ValueKind == System.Text.Json.JsonValueKind.Array)
-            {
-                profiles = System.Text.Json.JsonSerializer.Deserialize<Profile[]>(
-                    body.GetRawText(),
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                ) ?? Array.Empty<Profile>();
-            }
-            else if (body.ValueKind == System.Text.Json.JsonValueKind.Object)
-            {
-                var profile = System.Text.Json.JsonSerializer.Deserialize<Profile>(
-                    body.GetRawText(),
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                );
-                profiles = profile != null ? new[] { profile } : Array.Empty<Profile>();
-            }
-            else
+            var profiles = NightscoutJsonBody.ReadObjects<Profile>(body);
+            if (profiles is null)
             {
                 _logger.LogDebug("Invalid profile data format");
                 return BadRequest("Invalid profile data format");
             }
 
-            _logger.LogDebug("Processing {Count} profiles", profiles.Length);
+            _logger.LogDebug("Processing {Count} profiles", profiles.Count);
 
-            if (profiles.Length == 0)
+            if (profiles.Count == 0)
             {
                 _logger.LogDebug("No profiles provided in request body");
                 return Ok(Array.Empty<Profile>());
             }
+
+            foreach (var created in profiles)
+                StampCreatedAt(created);
 
             var createdProfiles = await _writeService.CreateProfilesAsync(
                 profiles,
@@ -236,6 +224,11 @@ public class ProfileController : ControllerBase
 
             _logger.LogDebug("Created {Count} profiles", result.Length);
             return Ok(result);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Invalid JSON in create profiles request");
+            return BadRequest("Invalid profile data format");
         }
         catch (Exception ex)
         {
@@ -273,6 +266,8 @@ public class ProfileController : ControllerBase
             return BadRequest("Profile store must name at least one profile");
         }
 
+        StampCreatedAt(profile);
+
         try
         {
             var saved = await _writeService.UpdateProfileAsync(
@@ -289,6 +284,16 @@ public class ProfileController : ControllerBase
             _logger.LogError(ex, "Error occurred while saving profile {ProfileId}", profile.Id);
             return StatusCode(500, "Internal server error while saving profile");
         }
+    }
+
+    /// <summary>
+    /// Gives a document posted without <c>created_at</c> the time it arrived, as Nightscout's create and
+    /// save do, so one with no <c>startDate</c> or <c>mills</c> either starts then rather than at the epoch.
+    /// </summary>
+    private static void StampCreatedAt(Profile profile)
+    {
+        if (string.IsNullOrEmpty(profile.CreatedAt))
+            profile.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
     }
 
     /// <summary>

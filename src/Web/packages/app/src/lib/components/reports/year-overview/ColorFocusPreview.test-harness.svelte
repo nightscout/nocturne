@@ -2,6 +2,7 @@
   import ColorFocusRange from "./ColorFocusRange.svelte";
   import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
   import { GLUCOSE_HEATMAP_LEGEND_STOPS } from "$lib/utils/chart-colors";
+  import { convertToDisplayUnits } from "@nocturne/ui/glucose";
 </script>
 
 <div class="year-overview bg-card text-card-foreground p-4" data-testid="preview-card">
@@ -15,7 +16,7 @@
           style:--sample={getGlucoseHeatmapFill(value)}
           data-testid={`sample-${value}`}
         ></div>
-        {(value / 18).toFixed(1)}
+        {convertToDisplayUnits(value, "mmol").toFixed(1)}
       </div>
     {/each}
     <div class="text-center text-xs">

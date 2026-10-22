@@ -467,6 +467,25 @@ public class DeviceServiceTests
         VerifyWidenings(existingId, 2_000L, 3_000L);
     }
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task DeferLastSeen_Discarded_WritesNothingAndLeavesCachedLastSeenAtPersistedValue()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 1_000L);
+        await ResolveOmnipodAsync(1_000L);
+
+        await using (var deferral = _service.DeferLastSeen())
+        {
+            await ResolveOmnipodAsync(3_000L);
+            deferral.Discard();
+        }
+        VerifyWidenings(existingId);
+
+        await ResolveOmnipodAsync(2_000L);
+        VerifyWidenings(existingId, 2_000L);
+    }
+
     private Task<Guid?> ResolveOmnipodAsync(long mills) =>
         _service.ResolveAsync(DeviceCategory.InsulinPump, "Omnipod DASH", "ABC123", mills);
 

@@ -63,6 +63,10 @@ public class AlertRulesControllerDisableTests
                 It.IsAny<string?>(), It.IsAny<StoredConditionTrees>()))
             .Returns((AlertConditionType _, string body, bool _, string? autoResolve, string? client, StoredConditionTrees _) =>
                 new ConditionUpdateCheck([], body, autoResolve, client, []));
+        validator
+            .Setup(v => v.Validate(
+                It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([]);
 
         var referenceService = new Mock<IAlertReferenceService>();
         referenceService
@@ -80,13 +84,13 @@ public class AlertRulesControllerDisableTests
         var handler = new Mock<IExcursionResolutionHandler>();
 
         var controller = new AlertRulesController(
-            new TestTenantDbContextFactory(db),
+            new TestNocturneDbContextFactory(db),
             referenceService.Object,
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
             validator.Object,
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(db)),
+            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(db.AsFactory())),
             new AlertRuleRetirement(tracker.Object, handler.Object),
             Mock.Of<ILogger<AlertRulesController>>());
 

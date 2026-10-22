@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.API.Tests.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Profiles.Resolvers;
 
@@ -15,25 +16,21 @@ public class TherapySettingsResolverTests : IDisposable
     private readonly Mock<ITherapySettingsRepository> _repo = new();
     private readonly Mock<IPatientInsulinRepository> _insulinRepo = new();
     private readonly Mock<IPatientRecordRepository> _patientRecordRepo = new();
-    private readonly Mock<IActiveProfileResolver> _activeProfileResolver = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessor = new();
+    private readonly Mock<IActiveProfileResolver> _activeProfileResolver = ActiveProfileResolverMock.WithDefault();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
     private readonly TherapySettingsResolver _sut;
 
-    private static readonly Guid TenantId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     private const long NoonMills = 1705320000000;
 
     public TherapySettingsResolverTests()
     {
-        _tenantAccessor.Setup(t => t.TenantId).Returns(TenantId);
 
         _sut = new TherapySettingsResolver(
             _repo.Object,
             _insulinRepo.Object,
             _patientRecordRepo.Object,
             _activeProfileResolver.Object,
-            _tenantAccessor.Object,
-            _cache,
+            new ProfileVersionCache(TestTenantCache.Create(_cache)),
             NullLogger<TherapySettingsResolver>.Instance);
     }
 
@@ -59,8 +56,8 @@ public class TherapySettingsResolverTests : IDisposable
     public async Task GetDIA_ReturnsPatientInsulinDia_WhenNotExternallyManaged()
     {
         var settings = MakeSettings(dia: 5.0);
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(settings);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { settings });
         _insulinRepo.Setup(r => r.GetPrimaryBolusInsulinAsync(default))
             .ReturnsAsync(new PatientInsulin { Dia = 4.5, IsPrimary = true });
 
@@ -73,8 +70,8 @@ public class TherapySettingsResolverTests : IDisposable
     public async Task GetDIA_ReturnsTherapySettingsDia_WhenExternallyManaged()
     {
         var settings = MakeSettings(dia: 6.0, isExternallyManaged: true);
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(settings);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { settings });
 
         var result = await _sut.GetDIAAsync(NoonMills);
 
@@ -86,8 +83,8 @@ public class TherapySettingsResolverTests : IDisposable
     public async Task GetDIA_FallsBackToTherapySettings_WhenNoPatientInsulin()
     {
         var settings = MakeSettings(dia: 5.0);
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(settings);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { settings });
         _insulinRepo.Setup(r => r.GetPrimaryBolusInsulinAsync(default))
             .ReturnsAsync((PatientInsulin?)null);
 
@@ -99,8 +96,8 @@ public class TherapySettingsResolverTests : IDisposable
     [Fact]
     public async Task GetDIA_ReturnsDefault_WhenNoSettingsExist()
     {
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync((TherapySettings?)null);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(Array.Empty<TherapySettings>());
 
         var result = await _sut.GetDIAAsync(NoonMills);
 
@@ -111,8 +108,8 @@ public class TherapySettingsResolverTests : IDisposable
     public async Task GetCarbAbsorptionRate_ReturnsValue()
     {
         var settings = MakeSettings(carbsHr: 30);
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(settings);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { settings });
 
         var result = await _sut.GetCarbAbsorptionRateAsync(NoonMills);
 
@@ -122,8 +119,8 @@ public class TherapySettingsResolverTests : IDisposable
     [Fact]
     public async Task GetCarbAbsorptionRate_ReturnsDefault_WhenNoSettings()
     {
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync((TherapySettings?)null);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(Array.Empty<TherapySettings>());
 
         var result = await _sut.GetCarbAbsorptionRateAsync(NoonMills);
 
@@ -137,8 +134,8 @@ public class TherapySettingsResolverTests : IDisposable
         // regardless of any legacy value living on the active TherapySettings record.
         _patientRecordRepo.Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PatientRecord { Timezone = "Australia/Sydney" });
-        _repo.Setup(r => r.GetActiveAtAsync(It.IsAny<string>(), It.IsAny<DateTime>(), default))
-            .ReturnsAsync(MakeSettings(timezone: "Europe/London"));
+        _repo.Setup(r => r.GetByProfileNameAsync(It.IsAny<string>(), default))
+            .ReturnsAsync(new[] { MakeSettings(timezone: "Europe/London") });
 
         var result = await _sut.GetTimezoneAsync();
 
@@ -155,8 +152,8 @@ public class TherapySettingsResolverTests : IDisposable
             .ReturnsAsync(new PatientRecord { Timezone = null });
         _activeProfileResolver.Setup(r => r.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("A");
-        _repo.Setup(r => r.GetActiveAtAsync("A", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(MakeSettings(timezone: "Europe/London"));
+        _repo.Setup(r => r.GetByProfileNameAsync("A", default))
+            .ReturnsAsync(new[] { MakeSettings(timezone: "Europe/London") });
 
         var result = await _sut.GetTimezoneAsync();
 
@@ -173,10 +170,10 @@ public class TherapySettingsResolverTests : IDisposable
             .ReturnsAsync(new PatientRecord { Timezone = null });
         _activeProfileResolver.Setup(r => r.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("A");
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync((TherapySettings?)null);
-        _repo.Setup(r => r.GetActiveAtAsync("A", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(MakeSettings(timezone: "Pacific/Auckland"));
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(Array.Empty<TherapySettings>());
+        _repo.Setup(r => r.GetByProfileNameAsync("A", default))
+            .ReturnsAsync(new[] { MakeSettings(timezone: "Pacific/Auckland") });
 
         var result = await _sut.GetTimezoneAsync();
 
@@ -190,8 +187,8 @@ public class TherapySettingsResolverTests : IDisposable
             .ReturnsAsync((PatientRecord?)null);
         _activeProfileResolver.Setup(r => r.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string?)null);
-        _repo.Setup(r => r.GetActiveAtAsync(It.IsAny<string>(), It.IsAny<DateTime>(), default))
-            .ReturnsAsync((TherapySettings?)null);
+        _repo.Setup(r => r.GetByProfileNameAsync(It.IsAny<string>(), default))
+            .ReturnsAsync(Array.Empty<TherapySettings>());
 
         var result = await _sut.GetTimezoneAsync();
 
@@ -202,8 +199,8 @@ public class TherapySettingsResolverTests : IDisposable
     public async Task GetUnits_ReturnsUnits()
     {
         var settings = MakeSettings(units: "mmol/L");
-        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
-            .ReturnsAsync(settings);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { settings });
 
         var result = await _sut.GetUnitsAsync();
 
@@ -228,5 +225,50 @@ public class TherapySettingsResolverTests : IDisposable
         var result = await _sut.HasDataAsync();
 
         result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HasData_CountsOncePerScope()
+    {
+        _repo.Setup(r => r.CountAsync(null, null, default)).ReturnsAsync(0);
+
+        await _sut.HasDataAsync();
+        await _sut.HasDataAsync();
+        await _sut.HasDataAsync();
+
+        _repo.Verify(r => r.CountAsync(null, null, default), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LookupsAcrossASettingsEditEachGetTheirOwnVersion(bool earlyLookupFirst)
+    {
+        var olderVersion = MakeSettings(dia: 4.0);
+        olderVersion.Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(NoonMills).UtcDateTime.AddDays(-1);
+        var editedVersion = MakeSettings(dia: 6.0);
+        editedVersion.Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(NoonMills).UtcDateTime.AddHours(-1);
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { editedVersion, olderVersion });
+        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
+            .ReturnsAsync((string _, DateTime at, CancellationToken _) =>
+                at < editedVersion.Timestamp ? olderVersion : editedVersion);
+        var beforeEdit = NoonMills - 2 * 3_600_000;
+
+        double early;
+        double late;
+        if (earlyLookupFirst)
+        {
+            early = await _sut.GetDIAAsync(beforeEdit);
+            late = await _sut.GetDIAAsync(NoonMills);
+        }
+        else
+        {
+            late = await _sut.GetDIAAsync(NoonMills);
+            early = await _sut.GetDIAAsync(beforeEdit);
+        }
+
+        early.Should().Be(4.0);
+        late.Should().Be(6.0);
     }
 }

@@ -1,5 +1,7 @@
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Analytics;
 using Nocturne.Core.Models.V4;
 
@@ -40,8 +42,8 @@ public class SensorIntegrityService : ISensorIntegrityService
         DetectorConfig? config = null,
         CancellationToken ct = default)
     {
-        var fromUtc = AsUtc(from);
-        var toUtc = AsUtc(to);
+        var fromUtc = from.AsUtc();
+        var toUtc = to.AsUtc();
 
         var glucoseTask = _sensorGlucoseRepository.GetForAnalyticsAsync(
             fromUtc, toUtc, device: null, source: source, limit: int.MaxValue, descending: false, ct: ct);
@@ -148,15 +150,6 @@ public class SensorIntegrityService : ISensorIntegrityService
             Events = events.Count,
             NocturnalEvents = events.Count(e => e.IsNocturnal),
         };
-
-    // Treat the bound as a UTC instant: relabel an unspecified kind (the common bound-from-query
-    // case), but genuinely convert a local kind rather than reinterpreting its wall-clock.
-    private static DateTime AsUtc(DateTime dt) => dt.Kind switch
-    {
-        DateTimeKind.Utc => dt,
-        DateTimeKind.Local => dt.ToUniversalTime(),
-        _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
-    };
 
     private static bool IsNocturnal(DateTime nadirUtc, int? utcOffsetMinutes)
     {

@@ -1,18 +1,19 @@
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Glucose;
+using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Identity;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.API.Services.Glucose;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;
 
@@ -27,9 +28,11 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// The service schedules itself to wake shortly after the configured wake time so that
 /// the full overnight window is available for analysis.
 /// </remarks>
-/// <seealso cref="ICompressionLowDetectionService"/>
-public class CompressionLowDetectionService : BackgroundService, ICompressionLowDetectionService
+/// <seealso cref="CompressionLowDetection"/>
+public class CompressionLowDetectionService : BackgroundService
 {
+    internal const string AuditEndpoint = "service:compression-low-detection";
+
     private readonly IServiceProvider _serviceProvider;
     private readonly ActiveTenantSnapshot _activeTenants;
     private readonly ILogger<CompressionLowDetectionService> _logger;
@@ -114,9 +117,10 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         {
             try
             {
-                using var scope = _serviceProvider.CreateScope();
-                var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
+                await using var scope = TenantJobScope.Open(
+                    _serviceProvider,
+                    new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false),
+                    AuditEndpoint);
 
                 var uiSettingsService = scope.ServiceProvider.GetRequiredService<IUISettingsService>();
                 var therapySettingsResolver = scope.ServiceProvider.GetRequiredService<ITherapySettingsResolver>();
@@ -181,9 +185,10 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         {
             try
             {
-                using var scope = _serviceProvider.CreateScope();
-                var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
+                await using var scope = TenantJobScope.Open(
+                    _serviceProvider,
+                    new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false),
+                    AuditEndpoint);
 
                 // Determine "last night" in the user's local timezone
                 var therapySettingsResolver = scope.ServiceProvider.GetRequiredService<ITherapySettingsResolver>();
@@ -206,7 +211,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
                 var detectionTimeLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, userTimeZone);
                 var lastNight = DateOnly.FromDateTime(detectionTimeLocal.AddDays(-1));
 
-                await DetectForNightInternalAsync(lastNight, scope.ServiceProvider, cancellationToken);
+                await DetectForNightAsync(lastNight, scope.ServiceProvider, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -215,34 +220,14 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         }
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Propagates the current HTTP request's tenant context to the new service scope so that
-    /// tenant-scoped services resolve correctly when called from an API endpoint.
-    /// </remarks>
-    /// <param name="nightOf">The local calendar date whose overnight window should be analysed.</param>
+    /// <summary>
+    /// Detects and saves the compression lows of the night of <paramref name="nightOf"/> for the tenant
+    /// <paramref name="scopedProvider"/> reads as, and returns how many it saved.
+    /// </summary>
+    /// <param name="nightOf">The local calendar date whose overnight window is analysed.</param>
+    /// <param name="scopedProvider">A job scope from <see cref="TenantJobScope"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The number of compression-low suggestions created.</returns>
     public async Task<int> DetectForNightAsync(
-        DateOnly nightOf,
-        CancellationToken cancellationToken = default)
-    {
-        using var scope = _serviceProvider.CreateScope();
-
-        // When called from an HTTP endpoint, the tenant context lives in the request scope.
-        // Propagate it to the new scope so tenant-scoped services (EntryService, etc.) work.
-        var httpContextAccessor = scope.ServiceProvider.GetService<IHttpContextAccessor>();
-        var requestTenantAccessor = httpContextAccessor?.HttpContext?.RequestServices.GetService<ITenantAccessor>();
-        if (requestTenantAccessor is { IsResolved: true, Context: not null })
-        {
-            var scopedTenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-            scopedTenantAccessor.SetTenant(requestTenantAccessor.Context);
-        }
-
-        return await DetectForNightInternalAsync(nightOf, scope.ServiceProvider, cancellationToken);
-    }
-
-    private async Task<int> DetectForNightInternalAsync(
         DateOnly nightOf,
         IServiceProvider scopedProvider,
         CancellationToken cancellationToken)
@@ -298,7 +283,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         // Get entries
         var entries = (await entryService.GetEntriesAsync(
             find: $"{{\"mills\":{{\"$gte\":{windowStart},\"$lte\":{windowEnd}}}}}",
-            count: 1000,
+            count: int.MaxValue,
             skip: 0,
             cancellationToken: cancellationToken))
             .Where(e => e.Sgv.HasValue)
@@ -344,11 +329,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
             }
         }
 
-        // Save suggestions
-        foreach (var suggestion in suggestions)
-        {
-            await repository.CreateAsync(suggestion, cancellationToken);
-        }
+        await repository.CreateManyAsync(suggestions, cancellationToken);
 
         // Create notification if any suggestions found.
         // Notification uses i18n keys so the frontend can render localized text.
@@ -387,7 +368,14 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         int RecoveryMinutes,
         DateTime NadirTime);
 
-    internal List<VShapeCandidate> DetectVShapeCandidates(List<Entry> entries)
+    internal List<VShapeCandidate> DetectVShapeCandidates(List<Entry> entries) =>
+        entries
+            .GroupBy(e => (e.DataSource, e.Device))
+            .SelectMany(sensor => DetectVShapeCandidatesForSensor(sensor.ToList()))
+            .OrderBy(c => c.StartMills)
+            .ToList();
+
+    private List<VShapeCandidate> DetectVShapeCandidatesForSensor(List<Entry> entries)
     {
         var candidates = new List<VShapeCandidate>();
 

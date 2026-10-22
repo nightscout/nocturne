@@ -45,7 +45,7 @@ public class SyncKeyedWriterConformanceTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private TestTenantDbContextFactory Factory => new(_context);
+    private TestNocturneDbContextFactory Factory => new(_context);
 
     private TempBasalRepository TempBasals() =>
         new(Factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,

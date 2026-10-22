@@ -35,13 +35,13 @@ public class AlertRulesControllerConditionValidationTests
             .Options;
         var ctx = new NocturneDbContext(options) { TenantId = Tenant };
         var controller = new AlertRulesController(
-            new TestTenantDbContextFactory(ctx),
+            new TestNocturneDbContextFactory(ctx),
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
             validator,
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(ctx)),
+            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(ctx.AsFactory())),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
             logger ?? Mock.Of<ILogger<AlertRulesController>>());
         return (controller, ctx);

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using NJsonSchema.Annotations;
 
 namespace Nocturne.Core.Models.V4;
@@ -29,6 +30,10 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     /// </summary>
     public const string ProfileSwitchStoreMarker = "@@@@@";
 
+    /// <summary>Whether <paramref name="settings"/> is a profile-switch snapshot (see <see cref="ProfileSwitchStoreMarker"/>).</summary>
+    public static bool IsProfileSwitchSnapshot(TherapySettings settings) =>
+        settings.ProfileName.Contains(ProfileSwitchStoreMarker, StringComparison.Ordinal);
+
     /// <summary>
     /// The <c>_id</c> a row answers to as a legacy profile document: the part of its legacy id before
     /// the first colon, since a document fans out to one <c>"{_id}:{storeName}"</c> row per store; the
@@ -44,9 +49,6 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     /// </summary>
     public string ProfileName { get; set; } = "Default";
 
-    /// <summary>
-    /// Timezone for this profile
-    /// </summary>
     public string? Timezone { get; set; }
 
     /// <summary>
@@ -109,6 +111,9 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     /// </summary>
     public LoopProfileSettings? LoopSettings { get; set; }
 
+    /// <inheritdoc cref="Profile.IsAPNSProduction"/>
+    public bool? IsAPNSProduction { get; set; }
+
     /// <summary>
     /// Whether this is the tenant's default profile: at most one row per tenant carries it.
     /// </summary>
@@ -122,6 +127,14 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     /// write carrying a stale read of the flag cannot leave a second default.
     /// </remarks>
     public bool IsDefault { get; set; }
+
+    /// <summary>
+    /// The <c>defaultProfile</c> of the legacy profile document this row was decomposed from, shared
+    /// by every row of that document; null for a row written on its own, or decomposed before it was
+    /// recorded. Only decomposing the document writes it, so it is not part of the V4 API.
+    /// </summary>
+    [JsonIgnore]
+    public string? DocumentDefaultProfile { get; set; }
 
     /// <summary>
     /// Who entered this profile (e.g., "Loop", "Trio")

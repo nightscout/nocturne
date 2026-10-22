@@ -36,7 +36,7 @@
     status: DataSourceStatus;
     statusMessage?: string;
     totalEntries?: number;
-    totalCoversLast30Days?: boolean;
+    totalEntriesWindowDays?: number | null;
     entriesLast24h?: number;
     lastSeen?: string;
     lastSyncAttempt?: string;
@@ -61,7 +61,7 @@
     status,
     statusMessage,
     totalEntries,
-    totalCoversLast30Days = false,
+    totalEntriesWindowDays,
     entriesLast24h,
     lastSeen,
     lastSyncAttempt,
@@ -156,9 +156,11 @@
   const iconColors = $derived(getIconColors(status));
   const itemVariant = $derived(getItemVariant(status));
   const totalRecordsLabel = $derived(
-    totalCoversLast30Days
-      ? `${formatNumber(totalEntries)} records in the last 30 days`
-      : `${formatNumber(totalEntries)} records`
+    totalEntries === undefined
+      ? undefined
+      : totalEntriesWindowDays == null
+        ? `${formatNumber(totalEntries)} records in total`
+        : `${formatNumber(totalEntries)} records in the last ${totalEntriesWindowDays} days`
   );
 </script>
 
@@ -291,18 +293,20 @@
           </p>
         {:else}
           <p class="text-sm text-muted-foreground">
-            {#if totalBreakdown && Object.keys(totalBreakdown).length > 0}
+            {#if totalRecordsLabel !== undefined && totalBreakdown && Object.keys(totalBreakdown).length > 0}
               {@render breakdownTerm(
                 totalRecordsLabel,
                 "Breakdown by type:",
                 totalBreakdown
               )}
-            {:else}
+            {:else if totalRecordsLabel !== undefined}
               {totalRecordsLabel}
             {/if}
 
             {#if (entriesLast24h ?? 0) > 0}
-              <span class="mx-1">&middot;</span>
+              {#if totalRecordsLabel !== undefined}
+                <span class="mx-1">&middot;</span>
+              {/if}
               {#if last24hBreakdown && Object.keys(last24hBreakdown).length > 0}
                 {@render breakdownTerm(
                   `${formatNumber(entriesLast24h)} in 24h`,

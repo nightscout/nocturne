@@ -26,6 +26,7 @@ public class BGCheckEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFi
     /// </summary>
     [Column("glucose_type")]
     [MaxLength(32)]
+    [FitToColumn]
     public string? GlucoseType { get; set; }
 
     /// <summary>
@@ -33,6 +34,7 @@ public class BGCheckEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFi
     /// </summary>
     [Column("units")]
     [MaxLength(32)]
+    [FitToColumn]
     public string? Units { get; set; }
 
     /// <summary>

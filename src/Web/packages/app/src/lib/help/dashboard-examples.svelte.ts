@@ -28,7 +28,7 @@ const iso = (millis: number) => new Date(millis).toISOString();
 export function exampleStatistics(automatic = true): MultiPeriodStatistics {
   const delivery = {
     totalBolus: 18,
-    microBolusInsulin: automatic ? 4 : 0,
+    automaticBolus: automatic ? 4 : 0,
     totalBasal: automatic ? 24 : 20,
     tdd: automatic ? 42 : 38,
   };
@@ -59,7 +59,7 @@ export function exampleStatistics(automatic = true): MultiPeriodStatistics {
       periodDays: 90,
       insulinDelivery: {
         totalBolus: 1620,
-        microBolusInsulin: automatic ? 360 : 0,
+        automaticBolus: automatic ? 360 : 0,
         totalBasal: automatic ? 2160 : 1800,
         tdd: automatic ? 42 : 38,
       },

@@ -18,7 +18,7 @@ public class BasalInjectionRepository : SyncUpsertRepositoryBase<BasalInjection,
 {
     /// <inheritdoc />
     public BasalInjectionRepository(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<BasalInjectionRepository> logger,
         IV4RecordBroadcaster<BasalInjection>? broadcaster = null)

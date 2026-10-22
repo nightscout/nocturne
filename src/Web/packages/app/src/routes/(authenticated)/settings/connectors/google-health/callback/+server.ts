@@ -1,5 +1,20 @@
 import { redirect } from "@sveltejs/kit";
+import { parseErrorBody } from "$lib/api/error-body";
+import {
+  isGoogleHealthErrorCode,
+  type GoogleHealthErrorCode,
+} from "$lib/connectors/google-health-error-codes";
 import type { RequestHandler } from "./$types";
+
+/**
+ * The problem `detail` the API answered with, when it is a code the page has a sentence for.
+ * The body is read as in {@link parseErrorBody}.
+ */
+function failureCode(err: unknown): GoogleHealthErrorCode | "failed" {
+  const thrown = err && typeof err === "object" && "detail" in err ? err.detail : undefined;
+  const detail = typeof thrown === "string" ? thrown : parseErrorBody(err)?.detail;
+  return detail !== undefined && isGoogleHealthErrorCode(detail) ? detail : "failed";
+}
 
 export const GET: RequestHandler = async ({ locals, url, setHeaders }) => {
   setHeaders({ "cache-control": "no-store", "referrer-policy": "no-referrer" });
@@ -17,8 +32,9 @@ export const GET: RequestHandler = async ({ locals, url, setHeaders }) => {
       try {
         await locals.apiClient.googleHealth.completeGoogleHealth({ code, state });
         outcome = "connected";
-      } catch {
+      } catch (err) {
         // Authorization codes, tokens and provider errors must never be logged.
+        outcome = failureCode(err);
       }
     }
   }

@@ -28,7 +28,6 @@ public class DeviceEventEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDevice
     /// Free-text notes about the device event
     /// </summary>
     [Column("notes")]
-    [MaxLength(4096)]
     public string? Notes { get; set; }
 
     /// <summary>

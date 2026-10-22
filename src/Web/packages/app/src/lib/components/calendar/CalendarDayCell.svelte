@@ -25,6 +25,7 @@
   let {
     day,
     viewMode,
+    showTirPercent,
     currentYear,
     currentMonth,
     trackerEvents,
@@ -42,6 +43,7 @@
   }: {
     day: CalendarSlot;
     viewMode: "tir" | "profile";
+    showTirPercent: boolean;
     currentYear: number;
     currentMonth: number;
     trackerEvents: Map<string, CalendarTrackerEvent[]>;
@@ -97,9 +99,11 @@
       date: day.date,
       timestamp: day.timestamp,
       totalReadings: day.totalReadings ?? 0,
+      veryLowPercent: day.veryLowPercent ?? 0,
       lowPercent: day.lowPercent ?? 0,
       inRangePercent: day.inRangePercent ?? 0,
       highPercent: day.highPercent ?? 0,
+      veryHighPercent: day.veryHighPercent ?? 0,
       totalCarbs: day.totalCarbs ?? 0,
       totalBolus: day.totalBolus ?? 0,
       totalBasal: day.totalBasal ?? 0,
@@ -172,11 +176,21 @@
               class="absolute inset-0 p-2 pt-6"
             >
               <DayStackedBar
+                veryLowPercent={stats.veryLowPercent}
                 lowPercent={stats.lowPercent}
                 inRangePercent={stats.inRangePercent}
                 highPercent={stats.highPercent}
+                veryHighPercent={stats.veryHighPercent}
                 onclick={() => handleDayClick(stats.source)}
               />
+              {#if showTirPercent}
+                <span
+                  data-testid="tir-percent"
+                  class="pointer-events-none absolute inset-x-0 top-1/2 mx-auto w-fit -translate-y-1/2 rounded bg-background/80 px-1 text-xs font-semibold text-foreground tabular-nums"
+                >
+                  {Math.round(stats.inRangePercent)}%
+                </span>
+              {/if}
             </div>
           {:else}
             <div {...props} class="absolute inset-0">
@@ -203,6 +217,16 @@
           </div>
           <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
             <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-glucose-very-high"></span>
+              <span class="text-muted-foreground">Very High:</span>
+            </div>
+            <span class="font-medium">{stats.veryHighPercent.toFixed(1)}%</span>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-glucose-high"></span>
+              <span class="text-muted-foreground">High:</span>
+            </div>
+            <span class="font-medium">{stats.highPercent.toFixed(1)}%</span>
+            <div class="flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-glucose-in-range"></span>
               <span class="text-muted-foreground">In Range:</span>
             </div>
@@ -213,10 +237,10 @@
             </div>
             <span class="font-medium">{stats.lowPercent.toFixed(1)}%</span>
             <div class="flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-glucose-high"></span>
-              <span class="text-muted-foreground">High:</span>
+              <span class="w-2 h-2 rounded-full bg-glucose-very-low"></span>
+              <span class="text-muted-foreground">Very Low:</span>
             </div>
-            <span class="font-medium">{stats.highPercent.toFixed(1)}%</span>
+            <span class="font-medium">{stats.veryLowPercent.toFixed(1)}%</span>
           </div>
           <div class="border-t pt-1.5 mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
             <span class="text-muted-foreground">Carbs:</span>

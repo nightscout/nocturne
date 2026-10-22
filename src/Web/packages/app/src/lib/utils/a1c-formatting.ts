@@ -9,9 +9,9 @@ export function a1cUnitLabel(): string {
   return a1cUnits.current === "percent" ? "%" : "mmol/mol";
 }
 
-export function a1cDisplayValue(
-  value: A1cDisplayValue | null | undefined
-): number | undefined {
+export function a1cDisplayValue<T>(
+  value: { percent?: T; mmolMol?: T } | null | undefined
+): T | undefined {
   return a1cUnits.current === "percent" ? value?.percent : value?.mmolMol;
 }
 

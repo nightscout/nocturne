@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -42,21 +43,24 @@ public class TreatmentDecomposerSourceDeleteRollbackTests : IDisposable
 
     public TreatmentDecomposerSourceDeleteRollbackTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, "test", _failure);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate, _failure);
         _context = _db.CreateContext();
 
         _decomposer = new(
-            _context,
+            _context.AsFactory(),
             Mock.Of<IBolusRepository>(), Mock.Of<ITempBasalRepository>(),
             Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(),
             Mock.Of<IDeviceEventRepository>(), Mock.Of<IBolusCalculationRepository>(),
             Mock.Of<IStateSpanService>(),
+            ProfileActivationTestDeps.Repository(_context),
+            ProfileActivationTestDeps.Writer(_context),
             Mock.Of<ITreatmentFoodService>(),
             Mock.Of<IDeviceService>(),
             Mock.Of<IPatientDeviceStamper>(),
             Mock.Of<IProfileDecomposer>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
+            TempBasalTestDeps.Unscheduled(),
             new AuditContext { IsSystem = true },
             NullLogger<TreatmentDecomposer>.Instance);
     }
@@ -95,6 +99,33 @@ public class TreatmentDecomposerSourceDeleteRollbackTests : IDisposable
         (await read.Boluses.IgnoreQueryFilters().SingleAsync(b => b.Id == bolus)).DeletedAt.Should().BeNull();
         (await read.CarbIntakes.IgnoreQueryFilters().SingleAsync(c => c.Id == carb)).DeletedAt.Should().BeNull();
         (await read.LinkedRecords.SingleAsync(l => l.IsPrimary)).RecordId.Should().Be(carb);
+    }
+
+    [Fact]
+    public async Task A_failure_deleting_the_span_rolls_back_the_tables_deleted_before_it()
+    {
+        var bolus = Guid.CreateVersion7();
+        _context.Boluses.Add(new BolusEntity
+        {
+            Id = bolus, TenantId = TenantId, LegacyId = "t-4", DataSource = Connector, Insulin = 1, Timestamp = At,
+        });
+        _context.StateSpans.Add(new StateSpanEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, OriginalId = "t-4", Source = Connector,
+            Category = "Override", State = "Active", StartTimestamp = At,
+            MetadataJson = """{"collection":"treatments","utcOffset":0}""",
+        });
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        _failure.FailOn = "UPDATE \"state_spans\"";
+        var act = () => _decomposer.DeleteFromSourceAsync(Connector, new HashSet<string> { "t-4" });
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("injected write failure");
+        _failure.FailOn = null;
+        await using var read = _db.CreateContext();
+        (await read.Boluses.IgnoreQueryFilters().SingleAsync(b => b.Id == bolus)).DeletedAt.Should().BeNull();
+        (await read.StateSpans.IgnoreQueryFilters().SingleAsync()).DeletedAt.Should().BeNull();
     }
 
     [Fact]

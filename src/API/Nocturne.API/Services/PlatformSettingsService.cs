@@ -1,8 +1,10 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services;
 
@@ -25,7 +27,7 @@ public class PlatformCredentials
 
 public class PlatformSettingsService
 {
-    private readonly NocturneDbContext _db;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ISecretEncryptionService _encryption;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -56,6 +58,8 @@ public class PlatformSettingsService
         ["telegram"] =
         [
             new("botToken", "Bot Token", true),
+            // Must match the secret_token passed to Telegram's setWebhook.
+            new("webhookSecretToken", "Webhook Secret Token", true),
         ],
         ["whatsapp"] =
         [
@@ -73,9 +77,18 @@ public class PlatformSettingsService
         ],
     };
 
-    public PlatformSettingsService(NocturneDbContext db, ISecretEncryptionService encryption)
+    /// <summary>Formats a field's value must match when one is supplied, with the message shown otherwise.</summary>
+    private static readonly Dictionary<(string Category, string Field), (Regex Pattern, string Message)> FieldFormats = new()
     {
-        _db = db;
+        // Telegram's setWebhook accepts only this alphabet and length for secret_token.
+        [("telegram", "webhookSecretToken")] = (
+            new Regex("^[A-Za-z0-9_-]{1,256}$", RegexOptions.CultureInvariant),
+            "Webhook Secret Token must be 1-256 characters of letters, digits, '_' or '-'"),
+    };
+
+    public PlatformSettingsService(INocturneDbContextFactory contexts, ISecretEncryptionService encryption)
+    {
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _encryption = encryption;
     }
 
@@ -88,9 +101,23 @@ public class PlatformSettingsService
             ? fields.Select(f => f.Name).ToHashSet()
             : [];
 
+    /// <summary>Errors for supplied values that do not match their field's format; blank values are skipped.</summary>
+    public static Dictionary<string, string> ValidateFormats(string category, IReadOnlyDictionary<string, string> fields)
+    {
+        var errors = new Dictionary<string, string>();
+        foreach (var (key, value) in fields)
+        {
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            if (FieldFormats.TryGetValue((category, key), out var format) && !format.Pattern.IsMatch(value))
+                errors[key] = format.Message;
+        }
+        return errors;
+    }
+
     public async Task<List<PlatformSettingsSummary>> GetAllAsync()
     {
-        var entities = await _db.PlatformSettings.AsNoTracking().ToListAsync();
+        await using var db = await _contexts.CreateAsync();
+        var entities = await db.PlatformSettings.AsNoTracking().ToListAsync();
         return CategorySchemas.Keys.Select(category =>
         {
             var entity = entities.FirstOrDefault(e => e.Category == category);
@@ -106,8 +133,9 @@ public class PlatformSettingsService
 
     public async Task<PlatformSettingsSummary?> GetAsync(string category)
     {
+        await using var db = await _contexts.CreateAsync();
         if (!IsValidCategory(category)) return null;
-        var entity = await _db.PlatformSettings.AsNoTracking()
+        var entity = await db.PlatformSettings.AsNoTracking()
             .FirstOrDefaultAsync(e => e.Category == category);
         return new PlatformSettingsSummary
         {
@@ -124,10 +152,11 @@ public class PlatformSettingsService
     /// </summary>
     public async Task<List<PlatformCredentials>> GetAllDecryptedAsync()
     {
+        await using var db = await _contexts.CreateAsync();
         if (!_encryption.IsConfigured)
             return [];
 
-        var entities = await _db.PlatformSettings.AsNoTracking().ToListAsync();
+        var entities = await db.PlatformSettings.AsNoTracking().ToListAsync();
         var results = new List<PlatformCredentials>();
         foreach (var entity in entities)
         {
@@ -151,6 +180,7 @@ public class PlatformSettingsService
     public async Task<(bool Success, Dictionary<string, string>? Errors)> UpsertAsync(
         string category, bool enabled, Dictionary<string, string> fields)
     {
+        await using var db = await _contexts.CreateAsync();
         if (!IsValidCategory(category))
             return (false, new() { ["category"] = "Unknown category" });
 
@@ -160,7 +190,7 @@ public class PlatformSettingsService
         var schema = CategorySchemas[category];
         var validFieldNames = GetValidFieldNames(category);
 
-        var entity = await _db.PlatformSettings
+        var entity = await db.PlatformSettings
             .FirstOrDefaultAsync(e => e.Category == category);
 
         // Merge: non-empty incoming fields overwrite, empty fields preserve existing
@@ -171,6 +201,10 @@ public class PlatformSettingsService
                 entity.EncryptedJson, JsonOptions) ?? [];
             existing = _encryption.DecryptSecrets(enc);
         }
+
+        var formatErrors = ValidateFormats(category, fields);
+        if (formatErrors.Count > 0)
+            return (false, formatErrors);
 
         var merged = new Dictionary<string, string>(existing);
         foreach (var (key, value) in fields)
@@ -213,7 +247,7 @@ public class PlatformSettingsService
                 EncryptedJson = encryptedJson,
                 ConfiguredFields = configuredFields,
             };
-            _db.PlatformSettings.Add(entity);
+            db.PlatformSettings.Add(entity);
         }
         else
         {
@@ -222,23 +256,24 @@ public class PlatformSettingsService
             entity.ConfiguredFields = configuredFields;
         }
 
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
         return (true, null);
     }
 
     public async Task<bool> DeleteAsync(string category)
     {
+        await using var db = await _contexts.CreateAsync();
         if (!IsValidCategory(category))
             return false;
 
-        var entity = await _db.PlatformSettings
+        var entity = await db.PlatformSettings
             .FirstOrDefaultAsync(e => e.Category == category);
 
         if (entity is null)
             return false;
 
-        _db.PlatformSettings.Remove(entity);
-        await _db.SaveChangesAsync();
+        db.PlatformSettings.Remove(entity);
+        await db.SaveChangesAsync();
         return true;
     }
 }

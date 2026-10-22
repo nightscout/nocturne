@@ -2,6 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { OAuthClientIdentity } from "$api-clients";
 
 // Mock the generated remote functions before importing the component.
 // The component calls list() as a reactive query (reading `.current`) and
@@ -22,7 +23,7 @@ function makeApp(overrides: Record<string, unknown> = {}) {
     grantId: "grant-1",
     clientId: "prelude",
     clientName: "Prelude",
-    isVerified: true,
+    identity: OAuthClientIdentity.Verified,
     scopes: ["glucose.read"],
     createdAt: new Date().toISOString(),
     deviceCount: 0,
@@ -79,5 +80,16 @@ describe("ConnectedApps", () => {
         })
       )
       .not.toBeInTheDocument();
+  });
+
+  it.each([
+    [OAuthClientIdentity.Verified, "Verified"],
+    [OAuthClientIdentity.Unverified, "Unverified"],
+    [OAuthClientIdentity.SelfRegistered, "Self-registered"],
+  ])("badges a %s client as %s", async (identity, badge) => {
+    appsCurrent = [makeApp({ identity })];
+    render(ConnectedApps);
+
+    await expect.element(page.getByText(badge, { exact: true })).toBeVisible();
   });
 });

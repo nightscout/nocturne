@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Auth;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -34,11 +35,12 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
     }
 
     private TenantService Service() => new(
-        _db.ContextFactory,
+        _db.ContextFactory.AsNocturneFactory(),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
+        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         Mock.Of<ILogger<TenantService>>());
 
     /// <param name="role">A role seed slug, as every membership an invite creates carries one.</param>

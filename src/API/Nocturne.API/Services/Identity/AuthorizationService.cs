@@ -18,6 +18,7 @@ using AuthSubject = Nocturne.Core.Models.Authorization.Subject;
 using OAuthGrantTypes = Nocturne.Core.Models.Authorization.OAuthGrantTypes;
 using Scope = Nocturne.Core.Models.Authorization.Scope;
 using ScopeTranslator = Nocturne.Core.Models.Authorization.ScopeTranslator;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -36,14 +37,12 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     private readonly IRoleService _roleService;
     private readonly IDirectGrantService _directGrantService;
     private readonly IJwtService _jwtService;
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ICategoryReadContext _categoryReadContext;
     private readonly PermissionTrie _permissionTrie;
     private readonly Dictionary<string, Permission> _seenPermissions = new();
     private readonly object _permissionsLock = new();
 
-    // Memory protection for _seenPermissions
-    private const int MAX_PERMISSIONS_CACHE_SIZE = 5000;
     private bool _disposed;
 
     /// <summary>
@@ -59,7 +58,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         IRoleService roleService,
         IDirectGrantService directGrantService,
         IJwtService jwtService,
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         ICategoryReadContext categoryReadContext
     )
     {
@@ -69,7 +68,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         _roleService = roleService;
         _directGrantService = directGrantService;
         _jwtService = jwtService;
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _categoryReadContext = categoryReadContext;
         _permissionTrie = new PermissionTrie();
 
@@ -88,16 +87,9 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <returns>Authorization response with JWT token</returns>
     public async Task<AuthorizationResponse?> GenerateJwtFromAccessTokenAsync(string accessToken)
     {
-        try
-        {
-            _logger.LogDebug("Generating JWT for access token");
-            return await GenerateJwtFromDirectGrantAsync(accessToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating JWT from access token");
-            return null;
-        }
+        await using var db = await _contexts.CreateAsync();
+        _logger.LogDebug("Generating JWT for access token");
+        return await GenerateJwtFromDirectGrantAsync(db, accessToken);
     }
 
     /// <summary>
@@ -105,14 +97,14 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// so the minted JWT carries the grant's scopes, tenant pin and 24-hour limit rather than the
     /// subject's roles/permissions, and downstream requests authenticate through
     /// <see cref="Middleware.Handlers.OAuthAccessTokenHandler"/>.
-    /// The grants query relies on the tenant-pinned scoped context's global query
-    /// filter, matching how subject lookups are tenant-scoped on this endpoint.
+    /// The grants query relies on the global query filter of a context reading as the request,
+    /// which carries the request's resolved tenant, matching how subject lookups are tenant-scoped on this endpoint.
     /// </summary>
-    private async Task<AuthorizationResponse?> GenerateJwtFromDirectGrantAsync(string accessToken)
+    private async Task<AuthorizationResponse?> GenerateJwtFromDirectGrantAsync(NocturneDbContext db, string accessToken)
     {
         var tokenHash = HashUtils.Sha256Hex(accessToken);
 
-        var live = _dbContext.OAuthGrants
+        var live = db.OAuthGrants
             .AsNoTracking()
             .Where(DirectGrantTokenHandler.IsLiveDirectGrant(DateTime.UtcNow));
 
@@ -160,11 +152,11 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         );
 
         // Stamp last-used so grants exchanged for JWTs don't show as never used.
-        // Awaited (not fire-and-forget like the auth handlers) because the scoped
-        // context is disposed at request end; failure must not block the exchange.
+        // Awaited (not fire-and-forget like the auth handlers) because the context is
+        // disposed when this method returns; failure must not block the exchange.
         try
         {
-            await _dbContext.OAuthGrants
+            await db.OAuthGrants
                 .Where(g => g.Id == grant.Id)
                 .ExecuteUpdateAsync(s => s.SetProperty(g => g.LastUsedAt, DateTime.UtcNow));
         }
@@ -191,50 +183,42 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <returns>List of permissions with usage statistics</returns>
     public async Task<PermissionsResponse> GetAllPermissionsAsync()
     {
-        try
+        _logger.LogDebug("Getting all seen permissions");
+
+        var permissions = new List<Permission>();
+
+        lock (_permissionsLock)
         {
-            _logger.LogDebug("Getting all seen permissions");
+            permissions = _seenPermissions.Values.ToList();
+        }
 
-            var permissions = new List<Permission>();
+        var roles = await _roleService.GetAllRolesAsync();
 
-            lock (_permissionsLock)
+        var now = DateTime.UtcNow;
+
+        foreach (var role in roles)
+        {
+            foreach (var permission in role.Permissions)
             {
-                permissions = _seenPermissions.Values.ToList();
-            }
-
-            var roles = await _roleService.GetAllRolesAsync();
-
-            var now = DateTime.UtcNow;
-
-            foreach (var role in roles)
-            {
-                foreach (var permission in role.Permissions)
+                if (!_seenPermissions.ContainsKey(permission))
                 {
-                    if (!_seenPermissions.ContainsKey(permission))
-                    {
-                        permissions.Add(
-                            new Permission
-                            {
-                                Name = permission,
-                                Count = 0,
-                                FirstSeen = now,
-                                LastSeen = now,
-                            }
-                        );
-                    }
+                    permissions.Add(
+                        new Permission
+                        {
+                            Name = permission,
+                            Count = 0,
+                            FirstSeen = now,
+                            LastSeen = now,
+                        }
+                    );
                 }
             }
+        }
 
-            return new PermissionsResponse
-            {
-                Permissions = permissions.OrderBy(p => p.Name).ToList(),
-            };
-        }
-        catch (Exception ex)
+        return new PermissionsResponse
         {
-            _logger.LogError(ex, "Error getting all permissions");
-            return new PermissionsResponse();
-        }
+            Permissions = permissions.OrderBy(p => p.Name).ToList(),
+        };
     }
 
     /// <summary>
@@ -243,49 +227,38 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <returns>Permission trie structure</returns>
     public async Task<PermissionTrieResponse> GetPermissionTrieAsync()
     {
-        try
+        _logger.LogDebug("Building permission trie structure");
+
+        var roles = await _roleService.GetAllRolesAsync();
+
+        var allPermissions = new HashSet<string>();
+        foreach (var role in roles)
         {
-            _logger.LogDebug("Building permission trie structure");
-
-            var roles = await _roleService.GetAllRolesAsync();
-
-            var allPermissions = new HashSet<string>();
-            foreach (var role in roles)
+            foreach (var permission in role.Permissions)
             {
-                foreach (var permission in role.Permissions)
-                {
-                    allPermissions.Add(permission);
-                }
+                allPermissions.Add(permission);
             }
-
-            // Add seen permissions
-            lock (_permissionsLock)
-            {
-                foreach (var permission in _seenPermissions.Keys)
-                {
-                    allPermissions.Add(permission);
-                }
-            }
-
-            // Build new trie with all permissions
-            var trie = new PermissionTrie();
-            trie.Add(allPermissions);
-
-            // Convert to our response format
-            var response = new PermissionTrieResponse
-            {
-                Root = BuildTrieNode(trie),
-                Count = trie.Count,
-            };
-
-            _logger.LogDebug("Built permission trie with {Count} permissions", response.Count);
-            return response;
         }
-        catch (Exception ex)
+
+        lock (_permissionsLock)
         {
-            _logger.LogError(ex, "Error building permission trie");
-            return new PermissionTrieResponse();
+            foreach (var permission in _seenPermissions.Keys)
+            {
+                allPermissions.Add(permission);
+            }
         }
+
+        var trie = new PermissionTrie();
+        trie.Add(allPermissions);
+
+        var response = new PermissionTrieResponse
+        {
+            Root = BuildTrieNode(trie),
+            Count = trie.Count,
+        };
+
+        _logger.LogDebug("Built permission trie with {Count} permissions", response.Count);
+        return response;
     }
 
     /// <summary>
@@ -324,49 +297,6 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         }
     }
 
-    /// <summary>
-    /// Record a permission usage for statistics
-    /// </summary>
-    /// <param name="permission">Permission that was used</param>
-    public Task RecordPermissionUsageAsync(string permission)
-    {
-        try
-        {
-            lock (_permissionsLock)
-            {
-                var now = DateTime.UtcNow;
-
-                if (_seenPermissions.ContainsKey(permission))
-                {
-                    _seenPermissions[permission].Count++;
-                    _seenPermissions[permission].LastSeen = now;
-                }
-                else
-                {
-                    _seenPermissions[permission] = new Permission
-                    {
-                        Name = permission,
-                        Count = 1,
-                        FirstSeen = now,
-                        LastSeen = now,
-                    };
-                }
-
-                // Periodically clean up old permissions to prevent memory leaks
-                if (_seenPermissions.Count % 100 == 0)
-                {
-                    CleanupOldPermissions();
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error recording permission usage for {Permission}", permission);
-        }
-
-        return Task.CompletedTask;
-    }
-
     // A Nightscout "subject" is an API token, not a person: a name, a set of roles and an access
     // token, with no way to sign in. These five methods are the Nightscout-compatible face of the
     // direct grants that store it. A subject row instead would put a device on the member list and
@@ -378,17 +308,18 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <returns>List of all subjects</returns>
     public async Task<List<Subject>> GetAllSubjectsAsync()
     {
+        await using var db = await _contexts.CreateAsync();
         try
         {
             _logger.LogDebug("Getting all subjects");
 
             // A tenant that has never issued a token holds none, and asking must not create one.
-            if (await _dbContext.FindDeviceSubjectOf(_dbContext.TenantId) is not { } deviceSubjectId)
+            if (await db.FindDeviceSubjectOf(db.TenantId) is not { } deviceSubjectId)
             {
                 return [];
             }
 
-            var grants = await DeviceGrants(deviceSubjectId)
+            var grants = await DeviceGrants(db, deviceSubjectId)
                 .OrderByDescending(g => g.CreatedAt)
                 .ToListAsync();
             return grants.Select(MapGrantToLegacySubject).ToList();
@@ -407,6 +338,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <returns>Subject or null if not found</returns>
     public async Task<Subject?> GetSubjectByIdAsync(string id)
     {
+        await using var db = await _contexts.CreateAsync();
         try
         {
             _logger.LogDebug("Getting subject by ID: {Id}", id);
@@ -417,12 +349,12 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 return null;
             }
 
-            if (await _dbContext.FindDeviceSubjectOf(_dbContext.TenantId) is not { } deviceSubjectId)
+            if (await db.FindDeviceSubjectOf(db.TenantId) is not { } deviceSubjectId)
             {
                 return null;
             }
 
-            var grant = await DeviceGrants(deviceSubjectId).FirstOrDefaultAsync(g => g.Id == guid);
+            var grant = await DeviceGrants(db, deviceSubjectId).FirstOrDefaultAsync(g => g.Id == guid);
             return grant == null ? null : MapGrantToLegacySubject(grant);
         }
         catch (Exception ex)
@@ -439,12 +371,13 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <returns>Created subject, carrying the plaintext token this one time</returns>
     public async Task<Subject> CreateSubjectAsync(Subject subject)
     {
+        await using var db = await _contexts.CreateAsync();
         try
         {
             var label = subject.Name ?? "Unknown";
             _logger.LogDebug("Creating new subject: {Name}", label);
 
-            var deviceSubjectId = await _dbContext.DeviceSubjectOf(_dbContext.TenantId);
+            var deviceSubjectId = await db.DeviceSubjectOf(db.TenantId);
             var scopes = await ResolveScopesAsync(subject.Roles);
 
             // Nightscout will create a subject that holds nothing; a grant needs at least one
@@ -458,7 +391,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             }
 
             var result = await _directGrantService.CreateAsync(
-                _dbContext,
+                db,
                 deviceSubjectId,
                 label,
                 [.. scopes],
@@ -502,6 +435,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <returns>Updated subject or null if not found</returns>
     public async Task<Subject?> UpdateSubjectAsync(Subject subject)
     {
+        await using var db = await _contexts.CreateAsync();
         try
         {
             _logger.LogDebug("Updating subject: {Id}", subject.Id);
@@ -512,12 +446,12 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 return null;
             }
 
-            if (await _dbContext.FindDeviceSubjectOf(_dbContext.TenantId) is not { } deviceSubjectId)
+            if (await db.FindDeviceSubjectOf(db.TenantId) is not { } deviceSubjectId)
             {
                 return null;
             }
 
-            var grant = await _dbContext.OAuthGrants
+            var grant = await db.OAuthGrants
                 .Where(g => g.SubjectId == deviceSubjectId)
                 .Where(DirectGrantTokenHandler.IsLiveDirectGrant(DateTime.UtcNow))
                 .FirstOrDefaultAsync(g => g.Id == guid);
@@ -551,7 +485,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 grant.Scopes = Scope.NormalizeForStorage(scopes);
             }
 
-            await _dbContext.SaveChangesAsync();
+            await db.SaveChangesAsync();
 
             return MapGrantToLegacySubject(grant);
         }
@@ -569,6 +503,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <returns>True if deleted, false if not found</returns>
     public async Task<bool> DeleteSubjectAsync(string id)
     {
+        await using var db = await _contexts.CreateAsync();
         try
         {
             _logger.LogDebug("Deleting subject: {Id}", id);
@@ -581,9 +516,9 @@ public class AuthorizationService : IAuthorizationService, IDisposable
 
             // Revoked rather than deleted: the row is the audit trail for everything the token did.
             // Scoped to the device subject for the reason given on DeviceGrants.
-            return await _dbContext.FindDeviceSubjectOf(_dbContext.TenantId) is { } deviceSubjectId
+            return await db.FindDeviceSubjectOf(db.TenantId) is { } deviceSubjectId
                 && await _directGrantService.RevokeAsync(
-                    _dbContext, guid, deviceSubjectId, ipAddress: null, userAgent: null);
+                    db, guid, deviceSubjectId, ipAddress: null, userAgent: null);
         }
         catch (Exception ex)
         {
@@ -598,8 +533,8 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <c>DirectGrantController</c>, so listing them here would put every member's credentials on
     /// an admin screen and let <see cref="DeleteSubjectAsync"/> revoke them.
     /// </summary>
-    private IQueryable<OAuthGrantEntity> DeviceGrants(Guid deviceSubjectId) =>
-        _dbContext.OAuthGrants
+    private IQueryable<OAuthGrantEntity> DeviceGrants(NocturneDbContext db, Guid deviceSubjectId) =>
+        db.OAuthGrants
             .AsNoTracking()
             .Where(g => g.SubjectId == deviceSubjectId)
             .Where(DirectGrantTokenHandler.IsLiveDirectGrant(DateTime.UtcNow));
@@ -920,55 +855,6 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         }
 
         return root;
-    }
-
-    /// <summary>
-    /// Clean up old permissions from the cache to prevent unbounded memory growth
-    /// </summary>
-    private void CleanupOldPermissions()
-    {
-        try
-        {
-            if (_seenPermissions.Count <= MAX_PERMISSIONS_CACHE_SIZE)
-                return;
-
-            var now = DateTime.UtcNow;
-            var cutoffTime = now.AddDays(-30); // Remove permissions not seen in 30 days
-
-            var permissionsToRemove = _seenPermissions
-                .Where(kvp => kvp.Value.LastSeen < cutoffTime)
-                .Select(kvp => kvp.Key)
-                .ToList();
-
-            foreach (var permission in permissionsToRemove)
-            {
-                _seenPermissions.Remove(permission);
-            }
-
-            // If still too many, remove the least recently used
-            if (_seenPermissions.Count > MAX_PERMISSIONS_CACHE_SIZE)
-            {
-                var lruPermissions = _seenPermissions
-                    .OrderBy(kvp => kvp.Value.LastSeen)
-                    .Take(_seenPermissions.Count - (MAX_PERMISSIONS_CACHE_SIZE * 3 / 4))
-                    .Select(kvp => kvp.Key)
-                    .ToList();
-
-                foreach (var permission in lruPermissions)
-                {
-                    _seenPermissions.Remove(permission);
-                }
-            }
-
-            _logger.LogDebug(
-                "Cleaned up permissions cache, current size: {Count}",
-                _seenPermissions.Count
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error cleaning up permissions cache");
-        }
     }
 
     /// <summary>

@@ -25,7 +25,7 @@ public class UpstreamFingerprintSaveTests : IDisposable
         var accessor = new Mock<IHttpContextAccessor>();
         accessor.Setup(a => a.HttpContext).Returns((HttpContext)null!);
         _db = TestDbContextFactory.CreateSqliteWithTenant(
-            _tenantId, "test", new MutationAuditInterceptor(accessor.Object));
+            _tenantId, "test", new MutationAuditInterceptor());
     }
 
     public void Dispose()
@@ -41,7 +41,7 @@ public class UpstreamFingerprintSaveTests : IDisposable
 
         await using (var ctx = _db.CreateContext())
         {
-            ctx.AuditContext = new UserAuditContext();
+            ctx.AttributedTo(new UserAuditContext());
             (await ctx.CarbIntakes.SingleAsync(c => c.Id == id)).Carbs = 50;
             using (Scope(Connector, "fingerprint-value"))
                 await ctx.SaveChangesAsync();

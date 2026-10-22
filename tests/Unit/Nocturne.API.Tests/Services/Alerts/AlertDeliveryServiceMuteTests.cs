@@ -37,16 +37,16 @@ public class AlertDeliveryServiceMuteTests
     {
         var factory = new Mock<IDbContextFactory<NocturneDbContext>>();
         factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(_dbName));
+            .ReturnsAsync(NewContext);
         var services = new ServiceCollection()
-            .AddSingleton(factory.Object)
+            .AddSingleton(factory.Object.AsNocturneFactory())
             .AddSingleton<ChatIdentityDirectoryService>()
             .AddSingleton(_notifications.Object)
             .AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>))
             .AddSingleton<InAppProvider>()
             .BuildServiceProvider();
         return new AlertDeliveryService(
-            factory.Object,
+            factory.Object.AsNocturneFactory(),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             Mock.Of<ISignalRBroadcastService>(),
             services,
@@ -68,6 +68,15 @@ public class AlertDeliveryServiceMuteTests
         InstanceId = Guid.NewGuid(),
         ActiveExcursionCount = 1,
     };
+
+    private static void AddMembers(NocturneDbContext db, params Guid[] subjectIds)
+    {
+        foreach (var subjectId in subjectIds)
+        {
+            db.Subjects.Add(new SubjectEntity { Id = subjectId, Name = "Member" });
+            db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.NewGuid(), TenantId = Tenant, SubjectId = subjectId, DirectPermissions = ["*"] });
+        }
+    }
 
     private static AlertRuleChannelSnapshot InApp(Guid subjectId) =>
         new(Guid.NewGuid(), Guid.NewGuid(), ChannelType.InApp, subjectId.ToString(), null, 0);
@@ -94,6 +103,7 @@ public class AlertDeliveryServiceMuteTests
         var other = Guid.NewGuid();
         await using (var seed = NewContext())
         {
+            AddMembers(seed, muter, other);
             seed.AlertExcursionMutes.Add(new AlertExcursionMuteEntity
             {
                 Id = Guid.NewGuid(), TenantId = Tenant, SubjectId = muter, AlertExcursionId = excursionId,
@@ -144,6 +154,7 @@ public class AlertDeliveryServiceMuteTests
         var muter = Guid.NewGuid();
         await using (var seed = NewContext())
         {
+            AddMembers(seed, muter);
             seed.AlertExcursionMutes.Add(new AlertExcursionMuteEntity
             {
                 Id = Guid.NewGuid(), TenantId = Tenant, SubjectId = muter, AlertExcursionId = Guid.NewGuid(),

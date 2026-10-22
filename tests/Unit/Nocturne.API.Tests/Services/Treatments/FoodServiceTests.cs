@@ -162,9 +162,7 @@ public class FoodServiceTests
         };
 
         _mockFoodRepository
-            .Setup(x => x.GetFoodWithAdvancedFilterAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(x => x.SearchFoodAsync(It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedFoods);
 
         // Act
@@ -174,9 +172,7 @@ public class FoodServiceTests
         result.Should().NotBeNull();
         result.Should().BeEquivalentTo(expectedFoods);
         _mockFoodRepository.Verify(
-            x => x.GetFoodWithAdvancedFilterAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()),
+            x => x.SearchFoodAsync(It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -201,9 +197,7 @@ public class FoodServiceTests
         };
 
         _mockFoodRepository
-            .Setup(x => x.GetFoodWithAdvancedFilterAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(x => x.SearchFoodAsync(It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedFoods);
 
         // Act
@@ -213,7 +207,7 @@ public class FoodServiceTests
         result.Should().NotBeNull();
         result.Should().BeEquivalentTo(expectedFoods);
         _mockFoodRepository.Verify(
-            x => x.GetFoodWithAdvancedFilterAsync(count, skip, find, false, It.IsAny<CancellationToken>()),
+            x => x.SearchFoodAsync(find, count, skip, It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -226,9 +220,7 @@ public class FoodServiceTests
         // Arrange
         var expectedException = new InvalidOperationException("Database error");
         _mockFoodRepository
-            .Setup(x => x.GetFoodWithAdvancedFilterAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(x => x.SearchFoodAsync(It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(expectedException);
 
         // Act & Assert
@@ -833,164 +825,6 @@ public class FoodServiceTests
         // Act & Assert
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _foodService.DeleteFoodAsync(foodId, CancellationToken.None)
-        );
-        exception.Should().Be(expectedException);
-    }
-
-    #endregion
-
-    #region DeleteMultipleFoodAsync Tests
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task DeleteMultipleFoodAsync_WithoutFilter_DeletesAllAndBroadcasts()
-    {
-        // Arrange
-        var deletedCount = 5L;
-
-        _mockFoodRepository
-            .Setup(x => x.BulkDeleteFoodAsync("{}", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(deletedCount);
-
-        // Act
-        var result = await _foodService.DeleteMultipleFoodAsync(null, CancellationToken.None);
-
-        // Assert
-        result.Should().Be(deletedCount);
-
-        _mockFoodRepository.Verify(
-            x => x.BulkDeleteFoodAsync("{}", It.IsAny<CancellationToken>()),
-            Times.Once
-        );
-
-        _mockSideEffects.Verify(
-            x => x.OnBulkDeletedAsync(
-                "food",
-                deletedCount,
-                It.IsAny<WriteEffectOptions>(),
-                It.IsAny<CancellationToken>()
-            ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task DeleteMultipleFoodAsync_WithFilter_DeletesMatchingAndBroadcasts()
-    {
-        // Arrange
-        var filter = "{\"category\":\"Fruit\"}";
-        var deletedCount = 3L;
-
-        _mockFoodRepository
-            .Setup(x => x.BulkDeleteFoodAsync(filter, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(deletedCount);
-
-        // Act
-        var result = await _foodService.DeleteMultipleFoodAsync(filter, CancellationToken.None);
-
-        // Assert
-        result.Should().Be(deletedCount);
-
-        _mockFoodRepository.Verify(
-            x => x.BulkDeleteFoodAsync(filter, It.IsAny<CancellationToken>()),
-            Times.Once
-        );
-
-        _mockSideEffects.Verify(
-            x => x.OnBulkDeletedAsync(
-                "food",
-                deletedCount,
-                It.IsAny<WriteEffectOptions>(),
-                It.IsAny<CancellationToken>()
-            ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task DeleteMultipleFoodAsync_WhenNoDocumentsDeleted_ReturnsZeroAndDoesNotBroadcast()
-    {
-        // Arrange
-        var filter = "{\"category\":\"NonExistent\"}";
-        var deletedCount = 0L;
-
-        _mockFoodRepository
-            .Setup(x => x.BulkDeleteFoodAsync(filter, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(deletedCount);
-
-        // Act
-        var result = await _foodService.DeleteMultipleFoodAsync(filter, CancellationToken.None);
-
-        // Assert
-        result.Should().Be(deletedCount);
-
-        _mockFoodRepository.Verify(
-            x => x.BulkDeleteFoodAsync(filter, It.IsAny<CancellationToken>()),
-            Times.Once
-        );
-
-        _mockSideEffects.Verify(
-            x => x.OnBulkDeletedAsync(
-                It.IsAny<string>(),
-                It.IsAny<long>(),
-                It.IsAny<WriteEffectOptions>(),
-                It.IsAny<CancellationToken>()
-            ),
-            Times.Never
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task DeleteMultipleFoodAsync_WhenMongoDbServiceThrows_ShouldPropagateException()
-    {
-        // Arrange
-        var filter = "{\"category\":\"Fruit\"}";
-        var expectedException = new InvalidOperationException("Database error");
-
-        _mockFoodRepository
-            .Setup(x => x.BulkDeleteFoodAsync(filter, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(expectedException);
-
-        // Act & Assert
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _foodService.DeleteMultipleFoodAsync(filter, CancellationToken.None)
-        );
-        exception.Should().Be(expectedException);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task DeleteMultipleFoodAsync_WhenSignalRBroadcastThrows_ShouldPropagateException()
-    {
-        // Arrange
-        var filter = "{\"category\":\"Fruit\"}";
-        var deletedCount = 3L;
-        var expectedException = new InvalidOperationException("SignalR error");
-
-        _mockFoodRepository
-            .Setup(x => x.BulkDeleteFoodAsync(filter, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(deletedCount);
-
-        _mockSideEffects
-            .Setup(x => x.OnBulkDeletedAsync(
-                It.IsAny<string>(),
-                It.IsAny<long>(),
-                It.IsAny<WriteEffectOptions>(),
-                It.IsAny<CancellationToken>()
-            ))
-            .ThrowsAsync(expectedException);
-
-        // Act & Assert
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _foodService.DeleteMultipleFoodAsync(filter, CancellationToken.None)
         );
         exception.Should().Be(expectedException);
     }

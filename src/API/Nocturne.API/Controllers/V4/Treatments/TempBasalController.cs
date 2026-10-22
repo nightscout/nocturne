@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
@@ -29,6 +30,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [Tags("Treatments")]
 [Route("api/v4/insulin/temp-basals")]
 [Produces("application/json")]
+[ClearsTenantCache(TenantCacheFamily.Treatments, TenantCacheFamily.Statistics)]
 public class TempBasalController(
     ITempBasalRepository repo,
     IPatientDeviceStamper deviceStamper) : ControllerBase
@@ -168,8 +170,12 @@ public class TempBasalController(
         CorrelationId = request.CorrelationId,
         Rate = request.Rate,
         ScheduledRate = request.ScheduledRate,
-        Origin = request.Origin ?? TempBasalOrigin.Manual,
+        Origin = request.Origin ?? TempBasalOriginProvenance.UploaderDefault(request.App, app: null),
+        OriginEvidence = request.Origin is null ? TempBasalOriginEvidence.Uploader : TempBasalOriginEvidence.Reported,
         PumpRecordId = request.PumpRecordId,
         ApsSnapshotId = request.ApsSnapshotId,
+        AdditionalProperties = request.Origin is { } origin
+            ? TempBasalAutomaticFlag.Keep(null, TempBasalAutomaticFlag.Of(origin))
+            : null,
     };
 }

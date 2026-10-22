@@ -1,57 +1,54 @@
 using System.Runtime.CompilerServices;
-using Microsoft.Extensions.Caching.Memory;
+using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
 /// <summary>
 /// Builds the per-tenant <see cref="ScheduleAssignment"/> timeline for a query window by combining
-/// Profile state-spans, schedule-version history, CCP metadata, and timezone, then delegates the
+/// the profile activations, schedule-version history, CCP adjustment, and timezone, then delegates the
 /// segment math to the pure <see cref="BasalCalculator"/>.
 /// </summary>
 /// <remarks>
-/// Sub-divides each profile-span at every <see cref="BasalSchedule"/> version boundary so mid-window
-/// schedule edits are reflected (matching the per-instant behavior of <see cref="IBasalRateResolver"/>).
-/// Gaps in profile-span coverage are filled with the implicit "Default" profile, also sub-divided by
-/// schedule version. When neither named profile spans nor any default schedule rows exist, an
-/// assignment with no entries is emitted: <see cref="BasalCalculator"/> renders that as a constant
-/// 1.0 U/hr fallback, identical to <c>BasalRateResolver</c>'s point fallback.
+/// Sub-divides each activation's stretch at every <see cref="BasalSchedule"/> version boundary so
+/// mid-window schedule edits are reflected (matching the per-instant behavior of <see cref="IBasalRateResolver"/>).
+/// An activation that carries its own schedules is one assignment. Every other stretch reads the store
+/// <see cref="IActiveProfileResolver.GetProfileSpansForRangeAsync"/> names for it, sub-divided by schedule
+/// version. When that store has no schedule rows, an assignment with no entries is emitted:
+/// <see cref="BasalCalculator"/> renders that as a constant 1.0 U/hr fallback, identical to
+/// <c>BasalRateResolver</c>'s point fallback.
 ///
-/// Per-window assemble cache (5s TTL) keyed by tenant + window absorbs the multi-period dashboard
+/// Per-window assemble cache (5s TTL) in <see cref="ITenantCache"/> absorbs the multi-period dashboard
 /// pattern where 1d/3d/7d/30d/90d are requested back-to-back.
 /// </remarks>
 internal sealed class BasalSegmentService : IBasalSegmentService
 {
-    private readonly IStateSpanService _stateSpanService;
+    private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly IBasalScheduleRepository _scheduleRepo;
     private readonly ITherapySettingsRepository _therapyRepo;
-    private readonly ITenantAccessor _tenantAccessor;
-    private readonly IMemoryCache _cache;
-    private readonly ICategoryReadContext _categoryReadContext;
+    private readonly IPatientRecordRepository _patientRecordRepo;
+    private readonly ITenantCache _cache;
 
-    private const string DefaultProfileName = "Default";
     private const int CacheTtlSeconds = 5;
 
     public BasalSegmentService(
-        IStateSpanService stateSpanService,
+        IActiveProfileResolver activeProfileResolver,
         IBasalScheduleRepository scheduleRepo,
         ITherapySettingsRepository therapyRepo,
-        ITenantAccessor tenantAccessor,
-        IMemoryCache cache,
-        ICategoryReadContext categoryReadContext)
+        IPatientRecordRepository patientRecordRepo,
+        ITenantCache cache)
     {
-        _stateSpanService = stateSpanService;
+        _activeProfileResolver = activeProfileResolver;
         _scheduleRepo = scheduleRepo;
         _therapyRepo = therapyRepo;
-        _tenantAccessor = tenantAccessor;
+        _patientRecordRepo = patientRecordRepo;
         _cache = cache;
-        _categoryReadContext = categoryReadContext;
     }
 
     public async IAsyncEnumerable<BasalSegment> GetSegmentsAsync(
@@ -72,92 +69,55 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         }
     }
 
-    /// <remarks>
-    /// A history-clamped request neither reads nor writes the cache, per
-    /// <see cref="ActiveProfileResolver"/>.
-    /// </remarks>
     private async Task<IReadOnlyList<ScheduleAssignment>> GetAssignmentsAsync(
         BasalWindow window,
         CancellationToken ct)
     {
-        if (_categoryReadContext.IsHistoryClamped)
-            return await BuildAssignmentsAsync(window, ct);
-
-        var cacheKey = $"BasalAssignments:{_tenantAccessor.TenantId}:{window.StartMills}:{window.EndMills}";
-        if (_cache.TryGetValue(cacheKey, out IReadOnlyList<ScheduleAssignment>? cached) && cached is not null)
-            return cached;
-
-        var assignments = await BuildAssignmentsAsync(window, ct);
-        _cache.Set(cacheKey, assignments, TimeSpan.FromSeconds(CacheTtlSeconds));
-        return assignments;
+        return await _cache.GetOrCreateLocalAsync(
+            $"basal-assignments:{window.StartMills}:{window.EndMills}",
+            () => BuildAssignmentsAsync(window, ct),
+            TimeSpan.FromSeconds(CacheTtlSeconds));
     }
 
     private async Task<IReadOnlyList<ScheduleAssignment>> BuildAssignmentsAsync(
         BasalWindow window,
         CancellationToken ct)
     {
-        var fromUtc = DateTimeOffset.FromUnixTimeMilliseconds(window.StartMills).UtcDateTime;
-        var toUtc = DateTimeOffset.FromUnixTimeMilliseconds(window.EndMills).UtcDateTime;
+        var spans = await _activeProfileResolver.GetProfileSpansForRangeAsync(
+            window.StartMills, window.EndMills, ct);
 
-        // 1. Profile state-spans overlapping the window.
-        var spans = (await _stateSpanService.GetStateSpansAsync(
-            category: StateSpanCategory.Profile,
-            from: fromUtc,
-            to: toUtc,
-            count: 1000,
-            descending: false,
-            cancellationToken: ct))
-            .Where(s => s.StartMills < window.EndMills && (!s.EndMills.HasValue || s.EndMills.Value > window.StartMills))
-            .OrderBy(s => s.StartMills)
-            .ToList();
-
-        // 2. Distinct profile names referenced by spans, plus "Default" for gap-fill.
-        var spanProfileNames = spans
-            .Select(s => ExtractProfileName(s) ?? DefaultProfileName)
-            .Distinct()
-            .ToList();
-        var profileNames = spanProfileNames.Contains(DefaultProfileName)
-            ? spanProfileNames
-            : spanProfileNames.Append(DefaultProfileName).ToList();
-
-        // 3. For each profile name, load schedule-version history and timezone.
+        // For each profile name, load schedule and settings version history.
+        var patientTimezone = (await _patientRecordRepo.GetAsync(ct))?.Timezone;
         var byProfile = new Dictionary<string, ProfileResources>(StringComparer.Ordinal);
-        foreach (var name in profileNames)
+        foreach (var name in spans.Select(s => s.ProfileName).Distinct(StringComparer.Ordinal))
         {
             var schedules = (await _scheduleRepo.GetByProfileNameAsync(name, ct))
-                .Where(s => s.Timestamp <= toUtc)
                 .OrderBy(s => s.Timestamp)
                 .ToList();
-            var therapy = await _therapyRepo.GetActiveAtAsync(name, toUtc, ct);
-            byProfile[name] = new ProfileResources(schedules, therapy?.Timezone);
+            var settings = (await _therapyRepo.GetByProfileNameAsync(name, ct))
+                .OrderByDescending(t => t.Timestamp)
+                .ToArray();
+            byProfile[name] = new ProfileResources(schedules, settings, patientTimezone);
         }
 
-        // 4. Stitch named-profile assignments and gap-filling Default assignments together.
-        // Spans may overlap (e.g. concurrent override + base profile); we clamp each span's
-        // start to the running cursor so overlap regions don't get emitted twice and the
-        // last-starting span wins.
         var result = new List<ScheduleAssignment>();
-        long cursor = window.StartMills;
         foreach (var span in spans)
         {
-            var spanStart = Math.Max(Math.Max(span.StartMills, window.StartMills), cursor);
-            var spanEnd = Math.Min(span.EndMills ?? window.EndMills, window.EndMills);
-            if (spanEnd <= spanStart) continue;
-
-            // Gap before this span → default.
-            if (cursor < spanStart)
-                result.AddRange(BuildAssignmentsForRange(cursor, spanStart, DefaultProfileName, byProfile, percentage: 100, timeshiftMs: 0));
-
-            var profileName = ExtractProfileName(span) ?? DefaultProfileName;
-            var (percentage, timeshiftMs) = ExtractCcp(span);
-            result.AddRange(BuildAssignmentsForRange(spanStart, spanEnd, profileName, byProfile, percentage, timeshiftMs));
-
-            cursor = spanEnd;
+            var (percentage, timeshiftMs) = span.Adjustment is { } adjustment
+                ? (adjustment.Percentage, adjustment.TimeshiftMs)
+                : (100, 0L);
+            var spanEnd = span.EndMills ?? window.EndMills;
+            if (span.Schedules is { } snapshot)
+            {
+                result.Add(new ScheduleAssignment(
+                    span.StartMills, spanEnd, span.ProfileName, snapshot.Basal ?? [], percentage, timeshiftMs,
+                    byProfile[span.ProfileName].TimeZoneAt(span.StartMills, snapshot.Timezone)));
+            }
+            else
+            {
+                result.AddRange(BuildAssignmentsForRange(span.StartMills, spanEnd, span.ProfileName, byProfile, percentage, timeshiftMs));
+            }
         }
-
-        // Trailing gap → default.
-        if (cursor < window.EndMills)
-            result.AddRange(BuildAssignmentsForRange(cursor, window.EndMills, DefaultProfileName, byProfile, percentage: 100, timeshiftMs: 0));
 
         return result;
     }
@@ -185,7 +145,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         var schedules = resources.Schedules;
         if (schedules.Count == 0)
         {
-            yield return new ScheduleAssignment(fromMills, toMills, profileName, [], percentage, timeshiftMs, resources.TimeZoneId);
+            yield return new ScheduleAssignment(fromMills, toMills, profileName, [], percentage, timeshiftMs, resources.TimeZoneAt(fromMills));
             yield break;
         }
 
@@ -201,15 +161,14 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         }
         else
         {
-            // No schedule existed at fromMills. Emit a leading slice with no entries up to the
-            // first schedule's effective time; the calculator falls back to the default rate
-            // there, matching legacy IBasalRateResolver behavior at instants before any schedule.
+            // No schedule existed at fromMills: up to the first one, the newest is read, as
+            // ProfileVersionCache.ActiveAt reads it for IBasalRateResolver.
             var firstStartMs = new DateTimeOffset(schedules[0].Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
             var leadingEnd = Math.Min(firstStartMs, toMills);
             if (leadingEnd > sliceStart)
             {
                 yield return new ScheduleAssignment(
-                    sliceStart, leadingEnd, profileName, [], percentage, timeshiftMs, resources.TimeZoneId);
+                    sliceStart, leadingEnd, profileName, schedules[^1].Entries, percentage, timeshiftMs, resources.TimeZoneAt(sliceStart));
                 sliceStart = leadingEnd;
             }
             if (sliceStart >= toMills) yield break;
@@ -225,7 +184,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
 
             yield return new ScheduleAssignment(
                 sliceStart, versionStartMs, profileName,
-                activeSchedule.Entries, percentage, timeshiftMs, resources.TimeZoneId);
+                activeSchedule.Entries, percentage, timeshiftMs, resources.TimeZoneAt(sliceStart));
 
             sliceStart = versionStartMs;
             activeSchedule = schedules[i];
@@ -234,7 +193,7 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         if (sliceStart < toMills)
             yield return new ScheduleAssignment(
                 sliceStart, toMills, profileName,
-                activeSchedule.Entries, percentage, timeshiftMs, resources.TimeZoneId);
+                activeSchedule.Entries, percentage, timeshiftMs, resources.TimeZoneAt(sliceStart));
     }
 
     private static int LastIndexAtOrBefore(List<BasalSchedule> sortedAsc, DateTime cutoff)
@@ -249,44 +208,13 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         return idx;
     }
 
-    private static string? ExtractProfileName(StateSpan span)
+    /// <param name="Settings">The profile's settings versions, newest first.</param>
+    private sealed record ProfileResources(List<BasalSchedule> Schedules, TherapySettings[] Settings, string? PatientTimezone)
     {
-        if (span.Metadata is null) return null;
-        if (!span.Metadata.TryGetValue("profileName", out var value)) return null;
-        return value switch
-        {
-            null => null,
-            string s => s,
-            System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.String } je => je.GetString(),
-            _ => value.ToString(),
-        };
+        public string? TimeZoneAt(long mills, string? switchTimezone = null) =>
+            ScheduleTimeHelper.TimezoneOf(
+                PatientTimezone,
+                switchTimezone,
+                ProfileVersionCache.ActiveAt(Settings, DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime)?.Timezone);
     }
-
-    private static (double Percentage, long TimeshiftMs) ExtractCcp(StateSpan span)
-    {
-        if (span.Metadata is null) return (100, 0);
-        if (!span.Metadata.TryGetValue("percentage", out var pctRaw)) return (100, 0);
-        var pct = ToDouble(pctRaw) ?? 100;
-
-        long timeshiftMs = 0;
-        if (span.Metadata.TryGetValue("timeshift", out var tsRaw))
-        {
-            var hours = ToDouble(tsRaw) ?? 0;
-            timeshiftMs = (long)(hours % 24 * 3_600_000);
-        }
-        return (pct, timeshiftMs);
-    }
-
-    private static double? ToDouble(object? v) => v switch
-    {
-        null => null,
-        double d => d,
-        int i => i,
-        long l => l,
-        float f => f,
-        System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.Number } je => je.GetDouble(),
-        _ => double.TryParse(v.ToString(), out var d) ? d : null,
-    };
-
-    private sealed record ProfileResources(List<BasalSchedule> Schedules, string? TimeZoneId);
 }

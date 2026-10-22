@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
@@ -30,7 +31,7 @@ public class GlookoSystemEventMapper
         var series = graphData.Series;
 
         if (series.PumpAlarm != null)
-            foreach (var alarm in series.PumpAlarm)
+            foreach (var alarm in ConnectorFaults.NonNullRecords(series.PumpAlarm, _logger, _connectorSource, "V3 pumpAlarm"))
             {
                 var timestamp = _timeMapper.GetCorrectedGlookoTime(alarm.X);
 
@@ -87,7 +88,7 @@ public class GlookoSystemEventMapper
         var events = new List<SystemEvent>();
         if (alarms == null) return events;
 
-        foreach (var alarm in alarms)
+        foreach (var alarm in ConnectorFaults.NonNullRecords(alarms, _logger, _connectorSource, "SSV2 alarm"))
         {
             try
             {
@@ -117,9 +118,9 @@ public class GlookoSystemEventMapper
                     }
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping SSV2 alarm", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed SSV2 alarm {Guid}", _connectorSource, alarm.Guid);
             }
         }
 

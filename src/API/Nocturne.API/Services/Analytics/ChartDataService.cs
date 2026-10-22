@@ -27,6 +27,7 @@ namespace Nocturne.API.Services.Analytics;
 public class ChartDataService : IChartDataService
 {
     internal const int TempBasalQueryLimit = 131072;
+    internal const long BufferMs = 8L * 60 * 60 * 1000;
 
     private readonly IEnumerable<IChartDataStage> _pipeline;
     private readonly IChartDataAssembler _assembler;
@@ -78,13 +79,12 @@ public class ChartDataService : IChartDataService
         CancellationToken cancellationToken = default
     )
     {
-        const long bufferMs = 8L * 60 * 60 * 1000;
         var context = new ChartDataContext
         {
             StartTime = startTime,
             EndTime = endTime,
             IntervalMinutes = intervalMinutes,
-            BufferStartTime = startTime - bufferMs,
+            BufferStartTime = startTime - BufferMs,
             IncludeHealthSeries = includeHealthSeries,
         };
 
@@ -109,7 +109,7 @@ public class ChartDataService : IChartDataService
             defaultBasalRate = await _basalRateResolver.GetBasalRateAsync(endTime, ct: cancellationToken);
 
         var tempBasals = (await _tempBasalRepository.GetAsync(
-            from: DateTimeOffset.FromUnixTimeMilliseconds(startTime).UtcDateTime,
+            from: DateTimeOffset.FromUnixTimeMilliseconds(startTime - BufferMs).UtcDateTime,
             to: DateTimeOffset.FromUnixTimeMilliseconds(endTime).UtcDateTime,
             device: null,
             source: null,
@@ -118,6 +118,7 @@ public class ChartDataService : IChartDataService
             descending: false,
             ct: cancellationToken
         )).ToList();
+        tempBasals = SelectDisplayTempBasals(tempBasals, startTime, endTime);
 
         var timeline = await _therapyTimelineResolver.BuildAsync(
             startTime,
@@ -136,6 +137,21 @@ public class ChartDataService : IChartDataService
     }
 
     #region Internal Helpers
+
+    /// <summary>
+    /// Temp basals overlapping the window. A row that began before it must carry an end inside it:
+    /// an open-ended row is also how a duration-0 cancel is stored, so it cannot be told from a
+    /// running temp basal and would otherwise paint the whole window.
+    /// </summary>
+    internal static List<TempBasal> SelectDisplayTempBasals(
+        IEnumerable<TempBasal> tempBasals,
+        long startTime,
+        long endTime
+    ) =>
+        tempBasals
+            .Where(tb => tb.StartMills <= endTime
+                && (tb.EndMills is { } end ? end > startTime : tb.StartMills >= startTime))
+            .ToList();
 
     internal static (List<GlucosePointDto> data, double yMax) BuildGlucoseData(
         List<SensorGlucose> readings
@@ -210,6 +226,7 @@ public class ChartDataService : IChartDataService
                 Notes = e.Notes,
                 TreatmentId = e.LegacyId ?? e.Id.ToString(),
                 Color = ChartColorMapper.FromDeviceEvent(e.EventType),
+                IsInferred = e.IsInferred,
             })
             .ToList();
     }
@@ -255,6 +272,7 @@ public class ChartDataService : IChartDataService
     )
     {
         return tempBasals
+            .Where(tb => tb.Origin == TempBasalOrigin.Suspended || tb.Rate is not null)
             .Select(tb =>
             {
                 var origin = BasalSeriesBuilder.MapTempBasalOrigin(tb.Origin);
@@ -263,7 +281,7 @@ public class ChartDataService : IChartDataService
                     Id = tb.LegacyId ?? tb.Id.ToString(),
                     StartMills = tb.StartMills,
                     EndMills = tb.EndMills,
-                    Rate = origin == BasalDeliveryOrigin.Suspended ? 0 : tb.Rate,
+                    Rate = origin == BasalDeliveryOrigin.Suspended ? 0 : tb.Rate!.Value,
                     Origin = origin,
                     Source = tb.DataSource,
                     FillColor = ChartColorMapper.FillFromBasalOrigin(origin),
@@ -271,6 +289,35 @@ public class ChartDataService : IChartDataService
                 };
             })
             .ToList();
+    }
+
+    /// <summary>
+    /// The later of the newest pump status's pump clock (its upload time when it reports none) and
+    /// the end of the newest temp basal, or the start of an open one. A pump running its scheduled
+    /// basal has no temp basal to show for it, which AAPS leaves for long stretches while its
+    /// devicestatus keeps reporting the pump every loop, so the temp basals alone date the pump's
+    /// last contact to whenever the last one ended.
+    /// </summary>
+    internal static long? LastPumpSyncMills(IEnumerable<TempBasal> tempBasals, PumpSnapshot? latestPump)
+    {
+        long? latest = null;
+        foreach (var tb in tempBasals)
+        {
+            var end = tb.EndMills ?? tb.StartMills;
+            if (latest is null || end > latest)
+                latest = end;
+        }
+
+        if (latestPump is not null)
+        {
+            var contact = UploaderTimestamp.ParseUtcDateTime(latestPump.Clock) is { } clock
+                ? new DateTimeOffset(DateTime.SpecifyKind(clock, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+                : latestPump.Mills;
+            if (latest is null || contact > latest)
+                latest = contact;
+        }
+
+        return latest;
     }
 
     internal static List<ChartStateSpanDto> MapTempBasalSpans(

@@ -1,7 +1,9 @@
+using Nocturne.API.Multitenancy;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;
 
@@ -9,17 +11,20 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// Periodically drives cursor-based deduplication reconciliation for every active tenant.
 /// On each tick it enumerates active tenants and calls
 /// <see cref="IDeduplicationService.ReconcileNewLinksAsync(int, int, CancellationToken)"/> for each,
-/// merging duplicate canonical groups created since the tenant's persisted cursor.
+/// merging duplicate canonical groups created since the tenant's persisted cursor, then
+/// <see cref="IDeduplicationService.RepairStateSpanPrimariesAsync(CancellationToken)"/> and
+/// <see cref="IDeduplicationService.PruneSingletonLinksAsync(int, int, CancellationToken)"/>. A tenant
+/// whose merge lock is held has its merges left to the next tick.
 /// </summary>
-/// <remarks>
-/// Single-instance deployment only. If the API is ever scaled out, gate per-tenant reconcile with a
-/// Postgres advisory lock (pg_advisory_xact_lock) so instances don't both reconcile the same tenant.
-/// </remarks>
 internal sealed class DeduplicationReconciliationBackgroundService : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(2);
     private static readonly int BatchSize = 5000;
     private static readonly int MaxBatchesPerTick = 4;
+    private static readonly int PruneBatchSize = 10_000;
+    private static readonly int MaxPruneBatchesPerTick = 10;
+
+    private const string AuditEndpoint = "service:dedup-reconciliation";
 
     private readonly IServiceProvider _serviceProvider;
     private readonly ActiveTenantSnapshot _activeTenants;
@@ -84,17 +89,19 @@ internal sealed class DeduplicationReconciliationBackgroundService : BackgroundS
         {
             try
             {
-                using var scope = _serviceProvider.CreateScope();
-
-                var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
+                await using var scope = TenantJobScope.Open(
+                    _serviceProvider,
+                    new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false),
+                    AuditEndpoint);
 
                 var dedup = scope.ServiceProvider.GetRequiredService<IDeduplicationService>();
                 var result = await dedup.ReconcileNewLinksAsync(BatchSize, MaxBatchesPerTick, ct);
+                var repaired = await dedup.RepairStateSpanPrimariesAsync(ct);
+                var pruned = await dedup.PruneSingletonLinksAsync(PruneBatchSize, MaxPruneBatchesPerTick, ct);
 
                 _logger.LogDebug(
-                    "Reconciled deduplication for tenant {TenantSlug}: {GroupsMerged} groups merged",
-                    tenant.Slug, result.GroupsMerged);
+                    "Reconciled deduplication for tenant {TenantSlug}: {GroupsMerged} groups merged, {SpanPrimariesRepaired} state span primaries repaired, {LinksPruned} singleton links pruned",
+                    tenant.Slug, result.GroupsMerged, repaired, pruned);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

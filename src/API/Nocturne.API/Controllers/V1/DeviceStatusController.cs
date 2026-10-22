@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
@@ -32,6 +33,7 @@ public class DeviceStatusController : ControllerBase
     private readonly IDeviceStatusDecomposer _decomposer;
     private readonly IWriteSideEffects _sideEffects;
     private readonly IDataEventSink<DeviceStatus> _events;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<DeviceStatusController> _logger;
 
     private const string CollectionName = "devicestatus";
@@ -49,6 +51,7 @@ public class DeviceStatusController : ControllerBase
         IDeviceStatusDecomposer decomposer,
         IWriteSideEffects sideEffects,
         IDataEventSink<DeviceStatus> events,
+        TimeProvider timeProvider,
         ILogger<DeviceStatusController> logger
     )
     {
@@ -56,6 +59,7 @@ public class DeviceStatusController : ControllerBase
         _decomposer = decomposer;
         _sideEffects = sideEffects;
         _events = events;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -103,26 +107,12 @@ public class DeviceStatusController : ControllerBase
                 skip = 0; // Normalize to 0 for Nightscout compatibility
             }
 
-            // Extract find query parameters from query string
-            string? findQuery = null;
-            var queryKeys = HttpContext?.Request?.Query?.Keys;
-            if (queryKeys != null)
-            {
-                var findParams = queryKeys
-                    .Where(k => k.StartsWith("find["))
-                    .ToList();
-
-                if (findParams.Count > 0)
-                {
-                    var queryParts = findParams
-                        .Select(k => $"{k}={HttpContext!.Request.Query[k]}")
-                        .ToList();
-                    findQuery = string.Join("&", queryParts);
-                }
-            }
-
-            var deviceStatusEntries = await _projection.GetAsync(
-                LegacyReadLimits.ClampMergedCount(count), skip, findQuery, cancellationToken
+            var find = DeviceStatusProjectionService.ParseFind(LegacyFindDateWindow.Apply(
+                LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null),
+                _timeProvider.GetUtcNow()
+            ));
+            var deviceStatusEntries = await _projection.GetMatchingAsync(
+                find, LegacyReadLimits.ClampMergedCount(count), skip, cancellationToken
             );
             var deviceStatusArray = deviceStatusEntries.ToArray();
 
@@ -186,35 +176,21 @@ public class DeviceStatusController : ControllerBase
 
         try
         {
-            DeviceStatus[] deviceStatusEntries;
-
-            // Handle both single object and array of device status entries (Nightscout compatibility)
-            if (body.ValueKind == JsonValueKind.Array)
-            {
-                deviceStatusEntries = JsonSerializer.Deserialize<DeviceStatus[]>(body.GetRawText())
-                    ?? Array.Empty<DeviceStatus>();
-            }
-            else if (body.ValueKind == JsonValueKind.Object)
-            {
-                var singleEntry = JsonSerializer.Deserialize<DeviceStatus>(body.GetRawText());
-                deviceStatusEntries = singleEntry != null
-                    ? new[] { singleEntry }
-                    : Array.Empty<DeviceStatus>();
-            }
-            else
+            var deviceStatusEntries = NightscoutJsonBody.ReadObjects<DeviceStatus>(body);
+            if (deviceStatusEntries is null)
             {
                 _logger.LogWarning("Invalid JSON format for device status");
                 return BadRequest("Invalid JSON format. Expected object or array of device status entries.");
             }
 
-            if (deviceStatusEntries.Length == 0)
+            if (deviceStatusEntries.Count == 0)
             {
                 _logger.LogWarning("Device status creation requested with no entries");
                 return BadRequest("At least one device status entry is required");
             }
 
             // Validate entries - device name is required (Relaxed for parity with Nightscout V1)
-            for (int i = 0; i < deviceStatusEntries.Length; i++)
+            for (int i = 0; i < deviceStatusEntries.Count; i++)
             {
                 var deviceStatus = deviceStatusEntries[i];
                 if (deviceStatus.Device == null)
@@ -371,30 +347,29 @@ public class DeviceStatusController : ControllerBase
 
         try
         {
-            // Build find query from query string parameters
-            var findQuery = HttpContext?.Request?.QueryString.Value ?? string.Empty;
+            var findQuery = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
+            var find = DeviceStatusProjectionService.ParseFind(findQuery);
 
-            // Remove the leading '?' if present
-            if (findQuery.StartsWith("?"))
-            {
-                findQuery = findQuery.Substring(1);
-            }
-
-            if (DeviceStatusProjectionService.ParseDeleteFind(findQuery) is null)
+            if (find.IsEmpty || find.HasInexactCondition)
             {
                 _logger.LogWarning("Bulk delete device status refused: the query names no find it can apply");
                 return BadRequest(
-                    "A find on device or created_at is required for bulk delete, and every find key must be one of those"
+                    "A find is required for bulk delete, and every condition in it must be one it can evaluate"
                 );
             }
 
             // Find matching records via V4 projection, then delete each by legacy ID.
             // NOTE: hardcoded limit of 10,000 means bulk deletes silently truncate
             // if more records match. Nightscout legacy has the same limitation.
+            // Nightscout windows every delete naming no created_at or _id, a time-only one included.
             const int bulkDeleteLimit = 10_000;
-            var matchingRecords = (await _projection.GetAsync(
-                count: bulkDeleteLimit, skip: 0, find: findQuery, ct: cancellationToken
-            )).ToList();
+            var matchingRecords = await _projection.GetMatchingAsync(
+                DeviceStatusProjectionService.ParseFind(
+                    LegacyFindDateWindow.Apply(findQuery, _timeProvider.GetUtcNow(), windowUnfiltered: true)),
+                bulkDeleteLimit,
+                skip: 0,
+                cancellationToken
+            );
 
             if (matchingRecords.Count == bulkDeleteLimit)
             {

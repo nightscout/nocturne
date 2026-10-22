@@ -1,8 +1,9 @@
+using Nocturne.API.Multitenancy;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -27,6 +28,8 @@ public sealed class ShareLinkRotatedNotifier : IShareLinkRotatedNotifier
 {
     /// <summary>Notification type for a share link that no longer resolves.</summary>
     public const string NotificationType = "sharing.link_rotated";
+
+    private const string AuditEndpoint = "service:share-link-notifier";
 
     private readonly IServiceProvider _services;
     private readonly ILogger<ShareLinkRotatedNotifier> _logger;
@@ -60,17 +63,14 @@ public sealed class ShareLinkRotatedNotifier : IShareLinkRotatedNotifier
             if (tenant is null)
                 return;
 
-            scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
-                .SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
-
-            // in_app_notifications is tenant-scoped and FORCE ROW LEVEL SECURITY is on, so the
-            // insert is only visible to the policy once the RLS tenant is pinned on the scoped
-            // context the repository writes through. Without this the write is rejected.
-            scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = tenantId;
+            await using var tenantScope = TenantJobScope.Open(
+                _services,
+                new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false),
+                AuditEndpoint);
 
             // Title and subtitle are i18n keys resolved by the frontend copy layer
             // (notification-labels.ts); the backend has no copy layer. No token appears here.
-            await scope.ServiceProvider.GetRequiredService<IInAppNotificationService>()
+            await tenantScope.ServiceProvider.GetRequiredService<IInAppNotificationService>()
                 .CreateNotificationAsync(
                     userId: ownerSubjectId,
                     type: NotificationType,
@@ -94,8 +94,8 @@ public sealed class ShareLinkRotatedNotifier : IShareLinkRotatedNotifier
         CancellationToken cancellationToken)
     {
         await using var db = await scopedServices
-            .GetRequiredService<IDbContextFactory<NocturneDbContext>>()
-            .CreateDbContextAsync(cancellationToken);
+            .GetRequiredService<INocturneDbContextFactory>()
+            .CreatePlatformAsync(cancellationToken);
 
         return await db.Tenants.AsNoTracking()
             .Where(t => t.Id == tenantId)

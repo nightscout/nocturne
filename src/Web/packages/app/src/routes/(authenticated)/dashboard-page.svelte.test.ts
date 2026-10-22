@@ -31,6 +31,19 @@ vi.mock("$lib/components/dashboard", async () => ({
     .default,
 }));
 
+const uiSettings = vi.hoisted(() => ({
+  features: {} as FeatureSettings,
+  predictionEnabled: undefined as boolean | undefined,
+}));
+
+vi.mock("$api/ui-settings.remote", () => ({
+  getUiSettings: () =>
+    remoteQuery(() => ({
+      features: uiSettings.features,
+      algorithm: { prediction: { enabled: uiSettings.predictionEnabled } },
+    })),
+}));
+
 vi.mock("$api/generated/connectorStatus.generated.remote", () => ({
   getStatus: () => remoteQuery(() => []),
 }));
@@ -56,6 +69,7 @@ const pageData: HarnessProps["data"] = {
   isAuthenticated: true,
   isShareHost: false,
   canViewRealtimeData: false,
+  showBackupSignInPrompt: false,
   isDemo: false,
   isGuestSession: false,
   isPlatformAdmin: false,
@@ -72,6 +86,7 @@ const pageData: HarnessProps["data"] = {
   displayPreferences: [],
   displayLanguage: "en",
   serverPreferences: null,
+  tenantPreferences: null,
   user: {
     subjectId: "subject-1",
     name: "Test User",
@@ -96,16 +111,22 @@ function renderDashboard(
     data = pageData,
     withRealtimeStore = false,
     currentReadingLoaded = false,
-  }: { data?: HarnessProps["data"]; withRealtimeStore?: boolean; currentReadingLoaded?: boolean } = {}
+  }: {
+    data?: HarnessProps["data"];
+    withRealtimeStore?: boolean;
+    currentReadingLoaded?: boolean;
+  } = {}
 ) {
+  uiSettings.features = settings;
   render(DashboardPageHarness, {
-    props: { features: settings, data, withRealtimeStore, currentReadingLoaded },
+    props: { data, withRealtimeStore, currentReadingLoaded },
   });
 }
 
 describe("dashboard page", () => {
   beforeEach(() => {
     dashboardTopWidgets.hydrate(PINNED);
+    uiSettings.predictionEnabled = undefined;
   });
 
   it("keeps the user's top widgets when the tenant turns the Statistics section off", async () => {
@@ -160,7 +181,9 @@ describe("dashboard page", () => {
       withRealtimeStore: true,
     });
 
-    await expect.element(glucoseChart()).toHaveAttribute("data-defer-drawing", "true");
+    await expect
+      .element(glucoseChart())
+      .toHaveAttribute("data-defer-drawing", "true");
   });
 
   it("draws the chart's plot once the current reading has landed, ahead of the rest of the starting data", async () => {
@@ -170,12 +193,33 @@ describe("dashboard page", () => {
       currentReadingLoaded: true,
     });
 
-    await expect.element(glucoseChart()).toHaveAttribute("data-defer-drawing", "false");
+    await expect
+      .element(glucoseChart())
+      .toHaveAttribute("data-defer-drawing", "false");
   });
 
   it("draws the chart's plot straight away for a viewer without realtime data", async () => {
     renderDashboard(features(), { withRealtimeStore: true });
 
-    await expect.element(glucoseChart()).toHaveAttribute("data-defer-drawing", "false");
+    await expect
+      .element(glucoseChart())
+      .toHaveAttribute("data-defer-drawing", "false");
+  });
+
+  it("shows predictions on the chart by default", async () => {
+    renderDashboard(features());
+
+    await expect
+      .element(glucoseChart())
+      .toHaveAttribute("data-show-predictions", "true");
+  });
+
+  it("hides predictions on the chart when the algorithm settings turn them off", async () => {
+    uiSettings.predictionEnabled = false;
+    renderDashboard(features());
+
+    await expect
+      .element(glucoseChart())
+      .toHaveAttribute("data-show-predictions", "false");
   });
 });

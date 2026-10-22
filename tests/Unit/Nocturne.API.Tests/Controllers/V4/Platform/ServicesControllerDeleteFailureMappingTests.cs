@@ -1,12 +1,10 @@
 using FluentAssertions;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.V4.Platform;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Core.Contracts.Connectors;
@@ -40,34 +38,20 @@ public class ServicesControllerDeleteFailureMappingTests
             Mock.Of<ITenantAccessor>(),
             Options.Create(new BaseDomainOptions()))
         {
-            ProblemDetailsFactory = new PassThroughProblemDetailsFactory(),
+            ProblemDetailsFactory = new EchoingProblemDetailsFactory(),
         };
-
-    /// <summary>Stands in for the MVC-registered factory, which needs a request scope.</summary>
-    private sealed class PassThroughProblemDetailsFactory : ProblemDetailsFactory
-    {
-        public override ProblemDetails CreateProblemDetails(
-            HttpContext httpContext, int? statusCode = null, string? title = null,
-            string? type = null, string? detail = null, string? instance = null) =>
-            new() { Status = statusCode, Title = title, Type = type, Detail = detail, Instance = instance };
-
-        public override ValidationProblemDetails CreateValidationProblemDetails(
-            HttpContext httpContext, ModelStateDictionary modelStateDictionary, int? statusCode = null,
-            string? title = null, string? type = null, string? detail = null, string? instance = null) =>
-            new(modelStateDictionary) { Status = statusCode, Title = title, Type = type, Detail = detail, Instance = instance };
-    }
 
     [Fact]
     public async Task DeleteDataSourceData_MissingSource_Returns404_WhateverTheMessageSays()
     {
         _dataSourceService
-            .Setup(s => s.DeleteDataSourceDataAsync(DataSourceId, It.IsAny<CancellationToken>()))
+            .Setup(s => s.DeleteDataSourceDataAsync(DataSourceId, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DataSourceDeleteResult.Failed(
                 DataSourceId,
                 DataSourceDeleteError.NotFound,
                 "No data source matches that identifier"));
 
-        var response = await CreateController().DeleteDataSourceData(DataSourceId, CancellationToken.None);
+        var response = await CreateController().DeleteDataSourceData(DataSourceId, cancellationToken: CancellationToken.None);
 
         var problem = response.Result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(404);
@@ -79,13 +63,13 @@ public class ServicesControllerDeleteFailureMappingTests
     public async Task DeleteDataSourceData_DeleteFailure_Returns500_EvenWhenTheMessageMentionsNotFound()
     {
         _dataSourceService
-            .Setup(s => s.DeleteDataSourceDataAsync(DataSourceId, It.IsAny<CancellationToken>()))
+            .Setup(s => s.DeleteDataSourceDataAsync(DataSourceId, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DataSourceDeleteResult.Failed(
                 DataSourceId,
                 DataSourceDeleteError.DeleteFailed,
                 "relation \"boluses\" not found"));
 
-        var response = await CreateController().DeleteDataSourceData(DataSourceId, CancellationToken.None);
+        var response = await CreateController().DeleteDataSourceData(DataSourceId, cancellationToken: CancellationToken.None);
 
         var failure = response.Result.Should().BeOfType<ObjectResult>().Subject;
         failure.StatusCode.Should().Be(500);
@@ -96,13 +80,13 @@ public class ServicesControllerDeleteFailureMappingTests
     public async Task DeleteConnectorData_MissingConnector_Returns404_WhateverTheMessageSays()
     {
         _dataSourceService
-            .Setup(s => s.DeleteConnectorDataAsync(ConnectorId, It.IsAny<CancellationToken>()))
+            .Setup(s => s.DeleteConnectorDataAsync(ConnectorId, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DataSourceDeleteResult.Failed(
                 ConnectorId,
                 DataSourceDeleteError.NotFound,
                 "No connector matches that identifier"));
 
-        var response = await CreateController().DeleteConnectorData(ConnectorId, CancellationToken.None);
+        var response = await CreateController().DeleteConnectorData(ConnectorId, cancellationToken: CancellationToken.None);
 
         var problem = response.Result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(404);
@@ -114,13 +98,13 @@ public class ServicesControllerDeleteFailureMappingTests
     public async Task DeleteConnectorData_DeleteFailure_Returns500_EvenWhenTheMessageMentionsNotFound()
     {
         _dataSourceService
-            .Setup(s => s.DeleteConnectorDataAsync(ConnectorId, It.IsAny<CancellationToken>()))
+            .Setup(s => s.DeleteConnectorDataAsync(ConnectorId, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DataSourceDeleteResult.Failed(
                 ConnectorId,
                 DataSourceDeleteError.DeleteFailed,
                 "sync cursor not found while purging"));
 
-        var response = await CreateController().DeleteConnectorData(ConnectorId, CancellationToken.None);
+        var response = await CreateController().DeleteConnectorData(ConnectorId, cancellationToken: CancellationToken.None);
 
         var failure = response.Result.Should().BeOfType<ObjectResult>().Subject;
         failure.StatusCode.Should().Be(500);

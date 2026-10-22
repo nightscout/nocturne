@@ -16,12 +16,4 @@ export interface YearCalendarDatum {
   dateString: string;
 }
 
-/** A week column label beneath the heatmap. */
-export interface YearWeekColumn {
-  x: number;
-  weekNumber: number;
-  from: string;
-  to: string;
-}
-
 export type { DailySummaryDay };

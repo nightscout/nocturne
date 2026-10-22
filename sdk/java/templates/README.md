@@ -24,8 +24,14 @@ SDK's OkHttp 4.x transitive and supply their own 3.12.x at runtime, which
 only works if the generated code sticks to the shared API surface.
 
 The "Verify OkHttp 3.12 floor compatibility" step in
-`.github/workflows/sdk-publish.yml` compiles the generated sources against
-OkHttp 3.12.13 / gson 2.8.6 and fails the publish if this guarantee breaks.
+`.github/workflows/sdk-publish.yml` runs `./gradlew compileOkhttp3Floor`, which
+fails the publish if this guarantee breaks. The task comes from
+`build.gradle.mustache` (see below): it resolves the generated project's own
+dependency graph with okhttp pinned to 3.12.13 and gson to 2.8.6, and compiles
+`src/main/java` against it. The floor is a constraint on the real graph, so it
+cannot drift from the `dependencies` block. Run
+`./gradlew dependencies --configuration okhttp3Floor` in the generated project
+to see what it resolved.
 
 Note: `okHttpVersion` in `config.yaml` is **not** a supported
 openapi-generator option — it was silently ignored (versions ≤ 0.2.3
@@ -47,22 +53,32 @@ publish, so they are not overridden.
 plain `auth/OAuth.java` (a bearer-token holder, no Oltu) is still generated, so
 `setAccessToken` keeps working; consumers obtain tokens themselves.
 
-The floor gate's classpath in `sdk-publish.yml` carries no Oltu jars, so a
-generator upgrade that brings an Oltu import back fails the publish.
+`compileOkhttp3Floor` also fails when the resolved `okhttp3Floor` graph contains
+any `org.apache.oltu*` module or `org.json:json` (Oltu's transitive, which
+duplicates the Android framework's `org.json`). A generator upgrade that
+restores the Oltu dependency in `build.gradle` fails the publish this way, and
+one that also restores an Oltu import fails it on the missing classes too.
 
 ## `libraries/okhttp-gson/build.gradle.mustache`
 
-Three changes:
+Four changes:
 
 1. Removes the `jakarta.ws.rs-api` and `commons-lang3` dependencies —
    declared by the stock template but referenced by zero generated sources.
 2. Removes the Apache Oltu dependency (see "Apache Oltu" above).
-3. Appends a guarded `apply from: '../publish.gradle'` so the Maven Central
+3. Adds the `okhttp3Floor` configuration (extends `implementation`, with okhttp
+   and gson pinned down, resolving the `java-api` usage like `compileClasspath`)
+   and the `compileOkhttp3Floor` task that compiles the main sources against it
+   and rejects Oltu and `org.json:json` in the resolved graph.
+4. Appends a guarded `apply from: '../publish.gradle'` so the Maven Central
    publishing/signing overlay is picked up whenever the project is generated
    into its repo location (`sdk/java/out`), with no build-file editing in CI.
 
-A stale fork of this template fails loudly: missing dependencies break the
-gradle build, and the publish overlay guard only affects publishing config.
+A stale fork of this template fails loudly only where something is checked:
+missing dependencies break the gradle build, and a restored Oltu dependency
+fails `compileOkhttp3Floor`. A missed removal of `jakarta.ws.rs-api` or
+`commons-lang3` fails nothing; the publish overlay guard only affects
+publishing config.
 
 ## Refreshing after a generator upgrade
 
@@ -72,12 +88,6 @@ When bumping the pinned `openapitools/openapi-generator-cli` version:
    `https://raw.githubusercontent.com/OpenAPITools/openapi-generator/<tag>/modules/openapi-generator/src/main/resources/Java/libraries/okhttp-gson/`
 2. Re-apply the changes above (diff against the previous stock version to
    see exactly what was changed).
-3. The floor-compatibility CI step catches a missed `RequestBody.create`
-   swap or a returning Oltu import; a missed build.gradle change surfaces as
-   a gradle build failure. Check whether the generator emits any new
+3. The floor-compatibility CI step (`compileOkhttp3Floor`) catches a missed `RequestBody.create`
+   swap and a returning Oltu or `org.json:json` dependency. Check whether the generator emits any new
    Oltu-backed file that needs an entry in `../.openapi-generator-ignore`.
-4. Diff the new stock `build.gradle.mustache`'s dependency block against the
-   floor step's classpath in `sdk-publish.yml`. A generator bump can change a
-   dependency version or add one; the two lists are maintained by hand and
-   nothing checks that they agree. A stale entry fails loudly (missing
-   package), never silently.

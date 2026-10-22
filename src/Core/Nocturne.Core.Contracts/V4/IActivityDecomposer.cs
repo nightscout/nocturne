@@ -28,7 +28,6 @@ public interface IActivityDecomposer
     /// and regular activities are bulk-created as StateSpans.
     /// </summary>
     /// <param name="activities">The legacy Activities to decompose</param>
-    /// <param name="ct">Cancellation token</param>
     /// <returns>
     /// A <see cref="DecompositionResult"/> containing all created V4 records across all activities.
     /// </returns>

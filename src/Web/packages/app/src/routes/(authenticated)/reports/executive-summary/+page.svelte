@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    a1cDisplayValue,
     a1cLabel,
     a1cUnitLabel,
     formatA1cValue,
@@ -20,6 +21,7 @@
   import TrendingUp from "@lucide/svelte/icons/trending-up";
   import Shield from "@lucide/svelte/icons/shield";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import CircleCheck from "@lucide/svelte/icons/circle-check";
   import Activity from "@lucide/svelte/icons/activity";
   import BarChart3 from "@lucide/svelte/icons/chart-column";
   import Calendar from "@lucide/svelte/icons/calendar";
@@ -28,6 +30,7 @@
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
+  import { TargetStatus } from "$api/generated/nocturne-api-client";
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
@@ -53,6 +56,12 @@
   const analysis = $derived(reportsResource.current?.analysis);
   const lastUpdated = $derived(reportsResource.current?.dateRange?.lastUpdated);
   const dayCount = $derived(reportsResource.date.dayCount);
+  const cvStatus = $derived(analysis?.clinicalAssessment?.cvAssessment?.status);
+  const cvMeetsTarget = $derived(
+    cvStatus == null || cvStatus === TargetStatus.NotAssessed
+      ? undefined
+      : cvStatus === TargetStatus.Met
+  );
 </script>
 
 <svelte:head>
@@ -63,6 +72,23 @@
   />
 </svelte:head>
 
+{#snippet targetState(target: string, met: boolean | undefined)}
+  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+    <span class="text-muted-foreground">{target}</span>
+    {#if met != null}
+      <span class="flex items-center gap-1 font-medium {met ? 'text-success' : 'text-warning'}">
+        {#if met}
+          <CircleCheck class="w-4 h-4" />
+          Target met
+        {:else}
+          <AlertTriangle class="w-4 h-4" />
+          Target not met
+        {/if}
+      </span>
+    {/if}
+  </div>
+{/snippet}
+
 {#if reportsResource.current}
   <div class="@container space-y-8">
     {#if analysis}
@@ -71,16 +97,14 @@
       {@const variability = analysis?.glycemicVariability}
       {@const stats = analysis?.basicStats}
       {@const quality = analysis?.dataQuality}
-      {@const totalLows = (tir?.low ?? 0) + (tir?.veryLow ?? 0)}
-      {@const totalHighs = (tir?.high ?? 0) + (tir?.veryHigh ?? 0)}
 
       <FigureStrip
         figures={[
           { label: "Time in range", value: tir?.target?.toFixed(0) ?? "–", unit: "%", note: "Target: ≥70%" },
-          { label: "Below range", value: totalLows.toFixed(1), unit: "%", note: "Target: <4%" },
-          { label: "Above range", value: totalHighs.toFixed(1), unit: "%", note: "Target: <25%" },
+          { label: "Below range", value: (tir?.belowRange ?? 0).toFixed(1), unit: "%", note: "Target: <4%" },
+          { label: "Above range", value: (tir?.aboveRange ?? 0).toFixed(1), unit: "%", note: "Target: <25%" },
           { label: a1cLabel(true), value: formatA1cValue(variability?.estimatedA1cDisplay), unit: a1cUnitLabel(), note: variability?.a1cTarget ? `Target: <${formatA1c(variability.a1cTarget)}` : undefined, },
-          { label: "CV", value: variability?.coefficientOfVariation?.toFixed(0) ?? "–", unit: "%", note: "Target: ≤33%" },
+          { label: "CV", value: variability?.coefficientOfVariation?.toFixed(0) ?? "–", unit: "%", note: variability?.coefficientOfVariationTarget != null ? `Target: ≤${variability.coefficientOfVariationTarget}%` : undefined },
           { label: "Average", value: String(bgOr(stats?.mean)), unit: bgLabel(), note: `Over ${dayCount} days` },
         ]}
       />
@@ -142,8 +166,15 @@
           <CardContent class="space-y-4">
             <div>
               {#if variability?.estimatedA1c != null}
-                <p class="text-sm text-muted-foreground">
-                  Target: below {formatA1c(variability?.a1cTarget)}. Your care team sets your individual target.
+                <div class="text-4xl font-semibold tabular-nums">
+                  {formatA1c(variability.estimatedA1cDisplay)}
+                </div>
+                {@render targetState(
+                  `Target: below ${formatA1c(variability.a1cTarget)}`,
+                  a1cDisplayValue(variability.estimatedA1cMeetsTarget)
+                )}
+                <p class="text-sm text-muted-foreground mt-1">
+                  Your care team sets your individual target.
                 </p>
               {:else}
                 <div class="text-lg font-medium text-muted-foreground">
@@ -189,11 +220,19 @@
               <div class="text-lg font-medium text-muted-foreground">
                 No data for this window
               </div>
+            {:else}
+              <div class="text-xs text-muted-foreground">Coefficient of variation</div>
+              <div class="text-4xl font-semibold tabular-nums">
+                {variability.coefficientOfVariation.toFixed(0)}%
+              </div>
+              {@render targetState(
+                `Target: ≤${variability.coefficientOfVariationTarget}%`,
+                cvMeetsTarget
+              )}
             {/if}
 
             <p class="text-sm text-muted-foreground">
-              Target: ≤33%. Lower means steadier glucose with fewer ups and
-              downs.
+              Lower means steadier glucose with fewer ups and downs.
             </p>
 
             <!-- Additional variability metrics -->

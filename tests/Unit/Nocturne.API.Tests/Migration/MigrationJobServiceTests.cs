@@ -9,6 +9,8 @@ using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -31,7 +33,8 @@ public class MigrationJobServiceTests
     {
         var dbName = $"migration-jobs-{Guid.NewGuid():N}";
         var provider = existingProvider ?? new ServiceCollection()
-            .AddDbContext<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
+            .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
+            .AddDataServices()
             .BuildServiceProvider();
 
         var service = new MigrationJobService(
@@ -115,8 +118,8 @@ public class MigrationJobServiceTests
     {
         var (service, _) = CreateService();
 
-        // Refusing to start without a resolved tenant prevents the detached migration task from
-        // falling back to a stale pooled DbContext tenant and importing into the wrong tenant.
+        // The detached migration task writes under whatever tenant it is given, so it refuses to
+        // start without one.
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.StartMigrationAsync(ApiRequest(), tenantContext: null));
     }

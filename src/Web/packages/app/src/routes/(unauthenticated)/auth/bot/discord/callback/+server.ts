@@ -1,34 +1,20 @@
 import type { RequestHandler } from "./$types";
 import { error, redirect } from "@sveltejs/kit";
 import { z } from "zod";
-import {
-	createServerApiClient,
-	getApiBaseUrl,
-} from "$lib/server/api-client-factory";
-import { getHashedInstanceKey } from "$lib/server/instance-key";
-import { verifyOAuthLinkState } from "$lib/server/bot/oauth-state";
+import { platformHandle } from "@nocturne/bot";
+import { signDiscordLinkClaim, verifyDiscordLinkState } from "$lib/server/bot/oauth-state";
 import { getDiscordOAuthConfig } from "$lib/server/bot/platform-credentials";
 
 const DiscordTokenSchema = z.object({ access_token: z.string().optional() });
-const DiscordUserSchema = z.object({ id: z.string().optional() });
+const DiscordUserSchema = z.object({
+	id: z.string().optional(),
+	username: z.string().optional(),
+});
 
 /**
- * Apex-hosted Discord OAuth2 callback.
- *
- * Flow:
- *   1. User clicks "Link Discord account" on Settings → Integrations → Discord
- *      (a tenant subdomain page).
- *   2. That page redirects to Discord's authorize URL with an HMAC-signed
- *      state parameter that carries the tenant slug.
- *   3. Discord redirects back here (apex) with `code` + `state`.
- *   4. We verify the HMAC, exchange the code for an access token, fetch the
- *      Discord user id, issue a short-lived pending-link token bound to
- *      (discord, userId, slug, "oauth2-finalize"), and redirect to the
- *      tenant-scoped finalize hop.
- *   5. The finalize hop consumes the token and creates the directory link.
- *
- * This route lives on the apex and bypasses tenant resolution via the
- * /auth/* allowlist in siteSecurityHandle.
+ * Apex-hosted Discord OAuth2 callback. Exchanges the code for the Discord user and hands a signed
+ * claim naming that account to the tenant's finalize page, which asks the member to confirm it.
+ * Lives on the apex and bypasses tenant resolution via the /auth/* allowlist in siteSecurityHandle.
  */
 export const GET: RequestHandler = async ({ url, fetch }) => {
 	const code = url.searchParams.get("code");
@@ -37,7 +23,7 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 		throw error(400, "Missing code or state parameter.");
 	}
 
-	const payload = verifyOAuthLinkState(state);
+	const payload = verifyDiscordLinkState(state);
 	if (!payload) {
 		throw error(400, "Invalid or expired state.");
 	}
@@ -90,30 +76,12 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 		throw error(502, "Discord user profile missing id.");
 	}
 
-	// Issue a short-lived claim token bound to this Discord user + tenant slug.
-	// The finalize hop on the tenant subdomain will consume it.
-	const apiBaseUrl = getApiBaseUrl();
-	if (!apiBaseUrl) {
-		throw error(500, "API base URL not configured.");
-	}
-	const apiClient = createServerApiClient(apiBaseUrl, fetch, {
-		hashedInstanceKey: getHashedInstanceKey(),
-		extraHeaders: { "X-Forwarded-Proto": "https" },
+	const claim = signDiscordLinkClaim(payload, {
+		id: discordUser.id,
+		username: platformHandle("discord", discordUser.username),
 	});
-
-	const pendingResponse = await apiClient.chatIdentityDirectory.createPending({
-		platform: "discord",
-		platformUserId: discordUser.id,
-		tenantSlug: payload.slug,
-		source: "oauth2-finalize",
-	});
-	const claimToken = pendingResponse.token;
-	if (!claimToken) {
-		throw error(502, "Failed to issue claim token.");
-	}
-
 	throw redirect(
 		302,
-		`https://${payload.slug}.${baseDomain}/auth/bot/discord/finalize?token=${claimToken}`,
+		`https://${payload.slug}.${baseDomain}/auth/bot/discord/finalize?claim=${encodeURIComponent(claim)}`,
 	);
 };

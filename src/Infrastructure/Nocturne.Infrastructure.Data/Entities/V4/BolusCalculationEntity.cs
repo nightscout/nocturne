@@ -26,6 +26,7 @@ public class BolusCalculationEntity : V4TimeSeriesEntityBase, IUpstreamFingerpri
     /// </summary>
     [Column("blood_glucose_input_source")]
     [MaxLength(256)]
+    [FitToColumn]
     public string? BloodGlucoseInputSource { get; set; }
 
     /// <summary>

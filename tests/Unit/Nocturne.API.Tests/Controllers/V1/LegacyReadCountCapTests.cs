@@ -9,6 +9,7 @@ using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
@@ -95,34 +96,16 @@ public class LegacyReadCountCapTests
         int? observedCount = null;
         entryService
             .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string?>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<bool>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>())
             )
-            .Callback(
-                (
-                    string? _,
-                    int count,
-                    int _,
-                    string? _,
-                    string? _,
-                    bool _,
-                    CancellationToken _
-                ) => observedCount = count
-            )
+            .Callback((EntryQuery query, CancellationToken _) => observedCount = query.Count)
             .ReturnsAsync(Array.Empty<Entry>());
 
         var controller = new EntriesController(
             entryService.Object,
             Mock.Of<IDocumentProcessingService>(),
-            Mock.Of<IProcessingStatusService>(),
             Mock.Of<ICanonicalAlertEvaluator>(),
+            TimeProvider.System,
             Mock.Of<ILogger<EntriesController>>()
         )
         {
@@ -172,6 +155,49 @@ public class LegacyReadCountCapTests
 
         observedCount.Should().Be(expected);
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task Treatments_ExplicitNonPositiveCount_ReturnsEmptyWithoutQuerying(int requested)
+    {
+        var treatmentService = new Mock<ITreatmentService>(MockBehavior.Strict);
+        var controller = CreateTreatmentsController(treatmentService.Object, new DefaultHttpContext());
+
+        var result = await controller.GetTreatments(count: requested);
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<Treatment[]>().Which.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Treatments_AbsentCount_PassesNullSoTheServiceAppliesItsDefault()
+    {
+        int? observedCount = -1;
+        var treatmentService = new Mock<ITreatmentService>();
+        treatmentService
+            .Setup(x => x.GetTreatmentsAsync(It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .Callback((string? _, int? count, int? _, CancellationToken _) => observedCount = count)
+            .ReturnsAsync(Array.Empty<Treatment>());
+        var controller = CreateTreatmentsController(treatmentService.Object, new DefaultHttpContext());
+
+        await controller.GetTreatments();
+
+        observedCount.Should().BeNull();
+    }
+
+    private static TreatmentsController CreateTreatmentsController(
+        ITreatmentService treatmentService,
+        HttpContext httpContext
+    ) =>
+        new(
+            treatmentService,
+            Mock.Of<IDocumentProcessingService>(),
+            TimeProvider.System,
+            Mock.Of<ILogger<TreatmentsController>>()
+        )
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+        };
 
     [Theory]
     [InlineData(AtMergedCap, AtMergedCap)]
@@ -279,59 +305,34 @@ public class LegacyReadCountCapTests
     [Theory]
     [InlineData(AtMergedCap, AtMergedCap)]
     [InlineData(AboveMergedCap, AtMergedCap)]
-    public async Task DeviceStatus_ClampsCountPassedToTheSnapshotRepository(
+    public async Task DeviceStatus_ClampsCountPassedToTheStatusRepository(
         int requested,
         int expected
     )
     {
-        var apsRepo = new Mock<IApsSnapshotRepository>();
+        var groupRepo = new Mock<IDeviceStatusGroupRepository>();
         int? observedLimit = null;
-        apsRepo
+        groupRepo
             .Setup(x =>
                 x.GetAsync(
                     It.IsAny<DateTime?>(),
                     It.IsAny<DateTime?>(),
                     It.IsAny<string?>(),
-                    It.IsAny<string?>(),
                     It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<bool>(),
+                    It.IsAny<int>(), It.IsAny<bool>(),
                     It.IsAny<CancellationToken>()
                 )
             )
             .Callback(
-                (
-                    DateTime? _,
-                    DateTime? _,
-                    string? _,
-                    string? _,
-                    int limit,
-                    int _,
-                    bool _,
-                    CancellationToken _
-                ) => observedLimit = limit
+                (DateTime? _, DateTime? _, string? _, int limit, int _, bool _, CancellationToken _) =>
+                    observedLimit = limit
             )
-            .ReturnsAsync(Array.Empty<ApsSnapshot>());
-
-        var pumpRepo = new Mock<IPumpSnapshotRepository>();
-        pumpRepo
-            .Setup(x =>
-                x.GetAsync(
-                    It.IsAny<DateTime?>(),
-                    It.IsAny<DateTime?>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<bool>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(Array.Empty<PumpSnapshot>());
+            .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
 
         var projection = new DeviceStatusProjectionService(
-            apsRepo.Object,
-            pumpRepo.Object,
+            groupRepo.Object,
+            Mock.Of<IApsSnapshotRepository>(),
+            Mock.Of<IPumpSnapshotRepository>(),
             Mock.Of<IUploaderSnapshotRepository>(),
             Mock.Of<IStateSpanRepository>(),
             Mock.Of<IDeviceStatusExtrasRepository>(),
@@ -343,6 +344,7 @@ public class LegacyReadCountCapTests
             Mock.Of<IDeviceStatusDecomposer>(),
             Mock.Of<IWriteSideEffects>(),
             Mock.Of<IDataEventSink<DeviceStatus>>(),
+            TimeProvider.System,
             Mock.Of<ILogger<DeviceStatusController>>()
         )
         {
@@ -359,7 +361,8 @@ public class LegacyReadCountCapTests
         var controller = new ActivityController(
             activityService,
             Mock.Of<IActivityDecomposer>(),
-            Mock.Of<ILogger<ActivityController>>()
+            Mock.Of<ILogger<ActivityController>>(),
+            TimeProvider.System
         )
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },

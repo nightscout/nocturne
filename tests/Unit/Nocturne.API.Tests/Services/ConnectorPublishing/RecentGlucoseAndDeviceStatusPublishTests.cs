@@ -157,7 +157,7 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
 
     private GlucosePublisher RealGlucosePublisher()
     {
-        var ctxFactory = new TestTenantDbContextFactory(_context);
+        var ctxFactory = new TestNocturneDbContextFactory(_context);
         var audit = Mock.Of<IAuditContext>();
         var sensorGlucose = new SensorGlucoseRepository(
             ctxFactory, Mock.Of<IDeduplicationService>(), audit, NullLogger<SensorGlucoseRepository>.Instance);
@@ -171,7 +171,7 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
             .ReturnsAsync((GlucoseProcessing?)null);
 
         var decomposer = new EntryDecomposer(
-            _context, sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
+            sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
             Mock.Of<IPatientDeviceStamper>(), audit, NullLogger<EntryDecomposer>.Instance);
         var entryService = new EntryService(
             Mock.Of<IEntryStore>(), decomposer, Mock.Of<IEntryCache>(), Mock.Of<IDataEventSink<Entry>>(),

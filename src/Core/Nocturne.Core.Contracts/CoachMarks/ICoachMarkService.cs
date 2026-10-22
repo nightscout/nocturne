@@ -13,6 +13,11 @@ public interface ICoachMarkService
     Task<IReadOnlyList<CoachMarkState>> GetAllAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get one coach mark's state for the current user, or null when it has none.
+    /// </summary>
+    Task<CoachMarkState?> GetAsync(string markKey, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Create or update a coach mark's status, setting timestamp fields as appropriate.
     /// </summary>
     Task<CoachMarkState> UpsertAsync(string markKey, string status, CancellationToken cancellationToken = default);

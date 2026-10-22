@@ -41,6 +41,11 @@ public sealed record EntryQuery
     public bool ReverseResults { get; init; } = false;
 
     /// <summary>
+    /// The field results are ordered by; <see cref="ReverseResults"/> sets the direction.
+    /// </summary>
+    public ReadSortField SortField { get; init; } = ReadSortField.Time;
+
+    /// <summary>
     /// Optional explicit lower bound (inclusive) on entry timestamp, in Unix milliseconds.
     /// When set, takes priority over any <c>$gte</c> filter parsed from <see cref="Find"/>.
     /// Used by point-in-time evaluators (e.g. alert replay) that need a stable upper/lower

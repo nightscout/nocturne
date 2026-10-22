@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -81,7 +82,7 @@ public class MealMatchingServiceTests
             TenantId = Guid.Parse("77777777-7777-7777-7777-777777777777"),
         };
         var settings = new MyFitnessPalMatchingSettingsService(
-            context,
+            context.AsFactory(),
             NullLogger<MyFitnessPalMatchingSettingsService>.Instance);
         await context.DisposeAsync();
 

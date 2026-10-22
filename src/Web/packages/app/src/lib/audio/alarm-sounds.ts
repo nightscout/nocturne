@@ -660,8 +660,69 @@ export function getVibrationPattern(soundId: string): number[] {
 // ============================================================================
 
 const CUSTOM_SOUNDS_STORAGE_KEY = 'nocturne-custom-alarm-sounds';
-const MAX_CUSTOM_SOUND_SIZE_MB = 5;
-const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/mp4', 'audio/aac'];
+export const MAX_CUSTOM_SOUND_SIZE_MB = 5;
+/**
+ * Browsers report these files under differing or empty MIME types (`video/webm`, `audio/x-m4a`,
+ * `audio/vnd.dlna.adts`, ...), and a data URL decodes only under the canonical one, so a file
+ * reported under any other type is stored under the canonical type of its extension.
+ */
+const CUSTOM_SOUND_TYPE_BY_EXTENSION: Readonly<Record<string, string>> = {
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.flac': 'audio/flac',
+  '.aac': 'audio/aac',
+  '.m4a': 'audio/mp4',
+  '.webm': 'audio/webm',
+};
+const CUSTOM_SOUND_TYPES = new Set(Object.values(CUSTOM_SOUND_TYPE_BY_EXTENSION));
+
+/** The file input's `accept` value for custom sounds. */
+export const CUSTOM_SOUND_ACCEPT = [
+  ...CUSTOM_SOUND_TYPES,
+  ...Object.keys(CUSTOM_SOUND_TYPE_BY_EXTENSION),
+].join(',');
+
+export type CustomSoundRejection = 'unsupported-type' | 'too-large' | 'undecodable' | 'timed-out';
+
+/** A custom sound the browser will not store; callers word {@link reason} for the person. */
+export class CustomSoundRejectedError extends Error {
+  constructor(readonly reason: CustomSoundRejection) {
+    super(`Custom sound rejected: ${reason}`);
+    this.name = 'CustomSoundRejectedError';
+  }
+}
+
+/**
+ * The canonical MIME type a custom sound is stored and decoded as.
+ *
+ * @throws {CustomSoundRejectedError} when the file's type or size is not accepted.
+ */
+export function resolveCustomSoundType(file: File): string {
+  const dot = file.name.lastIndexOf('.');
+  const type = CUSTOM_SOUND_TYPES.has(file.type)
+    ? file.type
+    : dot < 0
+      ? undefined
+      : CUSTOM_SOUND_TYPE_BY_EXTENSION[file.name.slice(dot).toLowerCase()];
+  if (!type) {
+    throw new CustomSoundRejectedError('unsupported-type');
+  }
+  if (file.size > MAX_CUSTOM_SOUND_SIZE_MB * 1024 * 1024) {
+    throw new CustomSoundRejectedError('too-large');
+  }
+  return type;
+}
+
+/**
+ * The file typed as {@link resolveCustomSoundType} resolves it, which is what its data URL needs to decode.
+ *
+ * @throws {CustomSoundRejectedError} when the file's type or size is not accepted.
+ */
+export function asCanonicalCustomSound(file: File): Blob {
+  const type = resolveCustomSoundType(file);
+  return file.type === type ? file : new Blob([file], { type });
+}
 
 export interface CustomAlarmSound {
   id: string;
@@ -790,19 +851,8 @@ async function saveToIndexedDB(sounds: CustomAlarmSound[]): Promise<void> {
  * Upload a custom alarm sound from a File
  */
 export async function uploadCustomSound(file: File, name?: string): Promise<CustomAlarmSound> {
-  // Validate file type
-  if (!ALLOWED_AUDIO_TYPES.includes(file.type)) {
-    throw new Error(`Invalid file type: ${file.type}. Allowed types: MP3, WAV, OGG, WebM, M4A, AAC`);
-  }
-
-  // Validate file size
-  const sizeMB = file.size / (1024 * 1024);
-  if (sizeMB > MAX_CUSTOM_SOUND_SIZE_MB) {
-    throw new Error(`File too large: ${sizeMB.toFixed(1)}MB. Maximum size: ${MAX_CUSTOM_SOUND_SIZE_MB}MB`);
-  }
-
-  // Read file as data URL
-  const dataUrl = await readFileAsDataUrl(file);
+  const audio = asCanonicalCustomSound(file);
+  const dataUrl = await readFileAsDataUrl(audio);
 
   // Validate that the audio can be decoded
   await validateAudioFile(dataUrl);
@@ -811,7 +861,7 @@ export async function uploadCustomSound(file: File, name?: string): Promise<Cust
     id: `custom-${randomUUID()}`,
     name: name || file.name.replace(/\.[^.]+$/, ''), // Remove extension for display name
     fileName: file.name,
-    mimeType: file.type,
+    mimeType: audio.type,
     size: file.size,
     dataUrl,
     createdAt: new Date().toISOString(),
@@ -866,7 +916,7 @@ export async function getCustomSounds(): Promise<CustomAlarmSound[]> {
 /**
  * Read a File as a data URL
  */
-function readFileAsDataUrl(file: File): Promise<string> {
+function readFileAsDataUrl(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () =>
@@ -891,13 +941,13 @@ async function validateAudioFile(dataUrl: string): Promise<void> {
     };
 
     audio.onerror = () => {
-      reject(new Error('Could not decode audio file. Please ensure it is a valid audio file.'));
+      reject(new CustomSoundRejectedError('undecodable'));
     };
 
     // Set a timeout in case the file never loads
     const timeout = setTimeout(() => {
       audio.src = '';
-      reject(new Error('Audio file validation timed out.'));
+      reject(new CustomSoundRejectedError('timed-out'));
     }, 10000);
 
     audio.oncanplaythrough = () => {

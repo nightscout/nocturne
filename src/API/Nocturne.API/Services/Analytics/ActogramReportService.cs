@@ -12,10 +12,8 @@ namespace Nocturne.API.Services.Analytics;
 /// <inheritdoc cref="IActogramReportService"/>
 /// <remarks>
 /// Issues the required queries (glucose, sleep state spans, step counts,
-/// heart rates) sequentially: every dependency resolves through the same
-/// per-request scoped <c>NocturneDbContext</c>, and EF Core's
-/// <c>ConcurrencyDetector</c> rejects parallel operations on a single
-/// context with <c>InvalidOperationException</c>. Threshold resolution
+/// heart rates) sequentially (<see cref="Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory"/>).
+/// Threshold resolution
 /// mirrors <c>ProfileLoadStage</c>: the clinical low/high band is fixed, and the
 /// active profile's personal target is carried separately in
 /// <see cref="ChartThresholdsDto.TargetLow"/>/<see cref="ChartThresholdsDto.TargetHigh"/>
@@ -68,11 +66,6 @@ public sealed class ActogramReportService : IActogramReportService
         var fromDt = DateTimeOffset.FromUnixTimeMilliseconds(startTime).UtcDateTime;
         var toDt = DateTimeOffset.FromUnixTimeMilliseconds(endTime).UtcDateTime;
 
-        // Sequential awaits: every query below resolves through the same
-        // per-request scoped NocturneDbContext, and EF Core's ConcurrencyDetector
-        // rejects overlapping operations on a single context. Npgsql also
-        // serializes commands per connection, so Task.WhenAll buys no real
-        // throughput here even when it doesn't crash.
         var glucoseRecords = await _sensorGlucoseRepository.GetForAnalyticsAsync(
             from: fromDt,
             to: toDt,

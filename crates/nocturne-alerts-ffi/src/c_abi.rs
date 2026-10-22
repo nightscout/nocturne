@@ -104,6 +104,32 @@ pub unsafe extern "C" fn nocturne_alerts_references_wall_clock(
     unsafe { entry(request_json, "request", envelope::wall_clock) }
 }
 
+/// The context facts a rule reads. Free the result with
+/// [`nocturne_alerts_free_string`].
+///
+/// # Safety
+/// `request_json` must be null or a NUL-terminated string valid for reads for
+/// the duration of the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nocturne_alerts_rule_reads(request_json: *const c_char) -> *mut c_char {
+    // SAFETY: forwarded from this function's contract.
+    unsafe { entry(request_json, "request", envelope::rule_reads) }
+}
+
+/// Whether a rule reads any of the given context facts. Free the result with
+/// [`nocturne_alerts_free_string`].
+///
+/// # Safety
+/// `request_json` must be null or a NUL-terminated string valid for reads for
+/// the duration of the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nocturne_alerts_references_any(
+    request_json: *const c_char,
+) -> *mut c_char {
+    // SAFETY: forwarded from this function's contract.
+    unsafe { entry(request_json, "request", envelope::references_any) }
+}
+
 /// Enumerates the condition paths and leaf ids of a condition tree. Free the
 /// result with [`nocturne_alerts_free_string`].
 ///

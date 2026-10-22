@@ -71,9 +71,6 @@ public class TempBasal : IV4Record, IDeviceAttributed
     /// </summary>
     public int? UtcOffset { get; set; }
 
-    /// <summary>
-    /// Device identifier that set this temp basal
-    /// </summary>
     public string? Device { get; set; }
 
     /// <summary>
@@ -81,9 +78,6 @@ public class TempBasal : IV4Record, IDeviceAttributed
     /// </summary>
     public string? App { get; set; }
 
-    /// <summary>
-    /// Origin data source identifier
-    /// </summary>
     public string? DataSource { get; set; }
 
     /// <summary>
@@ -96,20 +90,16 @@ public class TempBasal : IV4Record, IDeviceAttributed
     /// </summary>
     public string? LegacyId { get; set; }
 
-    /// <summary>
-    /// When this record was created
-    /// </summary>
     public DateTime CreatedAt { get; set; }
 
-    /// <summary>
-    /// When this record was last modified
-    /// </summary>
     public DateTime ModifiedAt { get; set; }
 
     /// <summary>
-    /// Temporary basal rate in units per hour
+    /// Temporary basal rate in units per hour. Null only for a temp set by <see cref="Percent"/>
+    /// whose rate is unknown: none was uploaded and no schedule was in force at its start. Its
+    /// delivery is unknown, not zero.
     /// </summary>
-    public double Rate { get; set; }
+    public double? Rate { get; set; }
 
     /// <summary>
     /// Scheduled basal rate that this temp basal overrides
@@ -117,11 +107,39 @@ public class TempBasal : IV4Record, IDeviceAttributed
     public double? ScheduledRate { get; set; }
 
     /// <summary>
+    /// For a temp basal set relative to the schedule, the change from the scheduled rate in percent
+    /// (Nightscout's <c>percent</c>: -50 halves it, 50 adds half again); null for an absolute temp.
+    /// <see cref="Rate"/> holds the rate the uploader sent with it, else what it resolves to against
+    /// the schedule in force at its start.
+    /// </summary>
+    public double? Percent { get; set; }
+
+    /// <summary>
+    /// Whether Nocturne resolved <see cref="Rate"/> from <see cref="Percent"/> against the schedule,
+    /// rather than the uploader sending it. A resolved rate is not served back as the upload's
+    /// <c>rate</c>, and is resolved again when the percent changes.
+    /// </summary>
+    public bool RateFromSchedule { get; set; }
+
+    /// <summary>
+    /// The rate <paramref name="percent"/> sets over <paramref name="scheduledRate"/>, as Nightscout's
+    /// <c>getTempBasal</c> computes it: <c>basal * (100 + percent) / 100</c>.
+    /// </summary>
+    public static double RateRelativeTo(double scheduledRate, double percent) =>
+        Math.Max(0, scheduledRate * (100 + percent) / 100);
+
+    /// <summary>
     /// Origin of this temp basal: <see cref="TempBasalOrigin.Algorithm"/>,
     /// <see cref="TempBasalOrigin.Scheduled"/>, <see cref="TempBasalOrigin.Manual"/>,
     /// <see cref="TempBasalOrigin.Suspended"/>, or <see cref="TempBasalOrigin.Inferred"/>.
     /// </summary>
     public TempBasalOrigin Origin { get; set; }
+
+    /// <summary>
+    /// How <see cref="Origin"/> was decided. Null on a record stored before it was recorded; see
+    /// <see cref="TempBasalOriginProvenance.EvidenceOf(TempBasal)"/>.
+    /// </summary>
+    public TempBasalOriginEvidence? OriginEvidence { get; set; }
 
     /// <summary>
     /// Foreign key to the <see cref="Device"/> table.

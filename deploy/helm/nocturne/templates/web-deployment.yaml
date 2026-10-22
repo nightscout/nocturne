@@ -1,3 +1,6 @@
+{{- if include "nocturne.removedToggleOn" .Values.web.autoscaling }}
+{{- fail "web.autoscaling has been removed: set web.replicaCount instead (see the chart README, \"Web replicas\")." }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,9 +9,7 @@ metadata:
     {{- include "nocturne.labels" . | nindent 4 }}
     app.kubernetes.io/component: web
 spec:
-  {{- if not .Values.web.autoscaling.enabled }}
   replicas: {{ .Values.web.replicaCount }}
-  {{- end }}
   selector:
     matchLabels: {{- include "nocturne.web.selectorLabels" . | nindent 6 }}
   template:
@@ -48,6 +49,10 @@ spec:
             {{- if .Values.baseDomain }}
             - name: BASE_DOMAIN
               value: {{ .Values.baseDomain | quote }}
+            {{- end }}
+            {{- with .Values.web.allowedFrameAncestors }}
+            - name: ALLOWED_FRAME_ANCESTORS
+              value: {{ . | quote }}
             {{- end }}
             - name: INSTANCE_KEY
               valueFrom:

@@ -50,6 +50,7 @@ public class SessionServiceTests
                 It.IsAny<SubjectInfo>(),
                 It.IsAny<IEnumerable<string>>(),
                 It.IsAny<IEnumerable<string>>(),
+                It.IsAny<string?>(),
                 It.IsAny<TimeSpan?>()))
             .Returns(TestAccessToken);
         _jwtService.Setup(j => j.GetAccessTokenLifetime())
@@ -64,7 +65,7 @@ public class SessionServiceTests
                 TestRefreshToken, _context.IpAddress, _context.UserAgent))
             .ReturnsAsync(TestNewRefreshToken);
         _refreshTokenService.Setup(r => r.ValidateRefreshTokenAsync(TestNewRefreshToken))
-            .ReturnsAsync(_subjectId);
+            .ReturnsAsync(new RefreshTokenSession(_subjectId, _context.OidcSessionId));
     }
 
     private SessionService CreateService() =>
@@ -176,6 +177,29 @@ public class SessionServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task IssueSessionAsync_AccessTokenNamesTheRefreshTokenFamily()
+    {
+        string? family = null;
+        _refreshTokenService.Setup(r => r.CreateRefreshTokenAsync(
+                _subjectId, It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Callback<Guid, string?, string?, string?, string?>((_, sid, _, _, _) => family = sid)
+            .ReturnsAsync(TestRefreshToken);
+        string? claimed = null;
+        _jwtService.Setup(j => j.GenerateAccessToken(
+                It.IsAny<SubjectInfo>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>(),
+                It.IsAny<string?>(), It.IsAny<TimeSpan?>()))
+            .Callback<SubjectInfo, IEnumerable<string>, IEnumerable<string>, string?, TimeSpan?>(
+                (_, _, _, sid, _) => claimed = sid)
+            .Returns(TestAccessToken);
+
+        await CreateService().IssueSessionAsync(_subjectId, _context with { OidcSessionId = null });
+
+        family.Should().NotBeNullOrEmpty();
+        claimed.Should().Be(family);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task IssueSessionAsync_ExpiresInSeconds_MatchesJwtLifetime()
     {
         // Arrange
@@ -243,6 +267,23 @@ public class SessionServiceTests
         // Assert
         _subjectService.Verify(s => s.GetSubjectRolesAsync(_subjectId), Times.Once);
         _subjectService.Verify(s => s.GetSubjectPermissionsAsync(_subjectId), Times.Once);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("oidc-session-123")]
+    [InlineData(null)]
+    public async Task RotateSessionAsync_AccessTokenCarriesTheRotatedTokensFamily(string? family)
+    {
+        _refreshTokenService.Setup(r => r.ValidateRefreshTokenAsync(TestNewRefreshToken))
+            .ReturnsAsync(new RefreshTokenSession(_subjectId, family));
+        var service = CreateService();
+
+        await service.RotateSessionAsync(TestRefreshToken, _context);
+
+        _jwtService.Verify(j => j.GenerateAccessToken(
+            It.IsAny<SubjectInfo>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>(),
+            family, It.IsAny<TimeSpan?>()), Times.Once);
     }
 
     #endregion

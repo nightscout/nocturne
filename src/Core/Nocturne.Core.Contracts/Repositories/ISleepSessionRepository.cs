@@ -22,7 +22,6 @@ public interface ISleepSessionRepository
     /// <param name="offset">Number of records to skip for pagination.</param>
     /// <param name="descending">When <c>true</c>, orders by start time descending.</param>
     /// <param name="includeStages">When <c>true</c>, populates <see cref="SleepSession.Stages"/> on each record.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A collection of matching <see cref="SleepSession"/> records.</returns>
     Task<IEnumerable<SleepSession>> GetSessionsAsync(
         DateTime? from = null,
@@ -42,7 +41,6 @@ public interface ISleepSessionRepository
     /// <param name="to">Optional end of the time range (inclusive).</param>
     /// <param name="type">Optional <see cref="SleepSessionType"/> filter.</param>
     /// <param name="source">Optional <see cref="SleepSource"/> filter.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The total number of matching records.</returns>
     Task<int> CountSessionsAsync(
         DateTime? from = null,
@@ -51,11 +49,6 @@ public interface ISleepSessionRepository
         SleepSource? source = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Returns a single sleep session by its identifier.
-    /// </summary>
-    /// <param name="id">The sleep session identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The <see cref="SleepSession"/> if found, or <c>null</c>.</returns>
     Task<SleepSession?> GetSessionByIdAsync(
         Guid id,
@@ -65,7 +58,6 @@ public interface ISleepSessionRepository
     /// Creates or updates a sleep session, matched by its identifier or original ID.
     /// </summary>
     /// <param name="session">The <see cref="SleepSession"/> to upsert.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The persisted <see cref="SleepSession"/>.</returns>
     /// <exception cref="V4.Repositories.RecreationBlockedException">
     /// The session matches one the user deleted, which a re-upload never brings back.
@@ -74,12 +66,7 @@ public interface ISleepSessionRepository
         SleepSession session,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Updates an existing sleep session by ID.
-    /// </summary>
-    /// <param name="id">The sleep session identifier.</param>
     /// <param name="session">The updated <see cref="SleepSession"/> data.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The updated <see cref="SleepSession"/>, or <c>null</c> if not found.</returns>
     /// <exception cref="V4.Repositories.RecreationBlockedException">
     /// The update moves the session onto a source and original ID that another live session, or one
@@ -90,11 +77,6 @@ public interface ISleepSessionRepository
         SleepSession session,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Deletes a sleep session by ID.
-    /// </summary>
-    /// <param name="id">The sleep session identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><c>true</c> if deleted; <c>false</c> if not found.</returns>
     Task<bool> DeleteSessionAsync(
         Guid id,

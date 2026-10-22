@@ -3,70 +3,55 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a point-in-time system event (alarm, warning, info) from a pump or CGM.
+/// Point-in-time system event (alarm, warning, info) from a pump or CGM.
 /// System events are stored in the <c>system_events</c> table and are displayed on the chart timeline.
 /// </summary>
 /// <seealso cref="SystemEventType"/>
 /// <seealso cref="SystemEventCategory"/>
 public class SystemEvent
 {
-    /// <summary>
-    /// Gets or sets the unique identifier
-    /// </summary>
     [JsonPropertyName("id")]
     public string? Id { get; set; }
 
-    /// <summary>
-    /// Gets or sets the event severity/type
-    /// </summary>
     [JsonPropertyName("eventType")]
     public SystemEventType EventType { get; set; }
 
-    /// <summary>
-    /// Gets or sets the device category
-    /// </summary>
     [JsonPropertyName("category")]
     public SystemEventCategory Category { get; set; }
 
     /// <summary>
-    /// Gets or sets the device-specific event code
+    /// Device-specific event code
     /// </summary>
     [JsonPropertyName("code")]
     public string? Code { get; set; }
 
     /// <summary>
-    /// Gets or sets the human-readable description
+    /// Human-readable description
     /// </summary>
     [JsonPropertyName("description")]
     public string? Description { get; set; }
 
     /// <summary>
-    /// Gets or sets when the event occurred (Unix milliseconds)
+    /// When the event occurred (Unix milliseconds)
     /// </summary>
     [JsonPropertyName("mills")]
     public long Mills { get; set; }
 
-    /// <summary>
-    /// Gets or sets the data source identifier
-    /// </summary>
     [JsonPropertyName("source")]
     public string? Source { get; set; }
 
     /// <summary>
-    /// Gets or sets additional event details (stored as JSON)
+    /// Additional event details (stored as JSON)
     /// </summary>
     [JsonPropertyName("metadata")]
     public Dictionary<string, object>? Metadata { get; set; }
 
     /// <summary>
-    /// Gets or sets the original ID from source system for deduplication
+    /// Original ID from source system for deduplication
     /// </summary>
     [JsonPropertyName("originalId")]
     public string? OriginalId { get; set; }
 
-    /// <summary>
-    /// Gets or sets the created at timestamp
-    /// </summary>
     [JsonPropertyName("createdAt")]
     public DateTime? CreatedAt { get; set; }
 }

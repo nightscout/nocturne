@@ -1,6 +1,5 @@
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 
@@ -16,11 +15,10 @@ internal sealed class SensitivityResolver : ISensitivityResolver
     private readonly ITherapySettingsRepository _therapyRepo;
     private readonly IPatientRecordRepository _patientRecordRepo;
     private readonly IActiveProfileResolver _activeProfileResolver;
-    private readonly ITenantAccessor _tenantAccessor;
-    private readonly IMemoryCache _cache;
+    private readonly ProfileVersionCache _versions;
+    private readonly IProfileActivationResolver _activations;
     private readonly ILogger<SensitivityResolver> _logger;
 
-    private const int CacheTtlSeconds = 5;
     private const double DefaultSensitivity = 50.0;
 
     public SensitivityResolver(
@@ -28,65 +26,46 @@ internal sealed class SensitivityResolver : ISensitivityResolver
         ITherapySettingsRepository therapyRepo,
         IPatientRecordRepository patientRecordRepo,
         IActiveProfileResolver activeProfileResolver,
-        ITenantAccessor tenantAccessor,
-        IMemoryCache cache,
+        ProfileVersionCache versions,
+        IProfileActivationResolver activations,
         ILogger<SensitivityResolver> logger)
     {
         _repo = repo;
         _therapyRepo = therapyRepo;
         _patientRecordRepo = patientRecordRepo;
         _activeProfileResolver = activeProfileResolver;
-        _tenantAccessor = tenantAccessor;
-        _cache = cache;
+        _versions = versions;
+        _activations = activations;
         _logger = logger;
     }
 
     public async Task<double> GetSensitivityAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
     {
-        var profileName = specProfile
-            ?? await _activeProfileResolver.GetActiveProfileNameAsync(timeMills, ct)
-            ?? "Default";
-
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
-
-        var schedule = await GetCachedScheduleAsync(profileName, timestamp, ct);
+        var schedule = await ActiveSchedule.ResolveAsync(
+            timeMills, specProfile, _activeProfileResolver, _repo, _versions,
+            s => s.Entries, s => s.Sensitivity, _therapyRepo, _patientRecordRepo, ct);
         if (schedule is null)
             return DefaultSensitivity;
 
-        var adjustment = await _activeProfileResolver.GetCircadianAdjustmentAsync(timeMills, ct);
-        var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
-
-        var secondsFromMidnight = await ScheduleTimeHelper.GetSecondsFromMidnightAsync(
-            shiftedMills, profileName, timestamp, _therapyRepo, _patientRecordRepo, ct);
-
-        var value = ScheduleResolution.FindValueAtTime(schedule.Entries, secondsFromMidnight)
+        var value = ScheduleResolution.FindValueAtTime(schedule.Entries, schedule.SecondsFromMidnight)
             ?? DefaultSensitivity;
 
-        if (adjustment is not null)
+        if (schedule.Adjustment is { } adjustment)
             value = value * 100.0 / adjustment.Percentage;
 
         return value;
     }
 
+    /// <remarks>
+    /// Read off the activation itself, which carries its percentage whether or not its schedules
+    /// already have it applied.
+    /// </remarks>
     public async Task<double?> GetCurrentSensitivityPercentAsync(CancellationToken ct = default)
     {
         var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var adjustment = await _activeProfileResolver.GetCircadianAdjustmentAsync(nowMills, ct);
-        if (adjustment is null || adjustment.Percentage <= 0)
+        var active = await _activations.GetAtAsync(nowMills, ct);
+        if (active is null || active.Activation.Percentage <= 0)
             return null;
-        return 10_000.0 / adjustment.Percentage;
-    }
-
-    private async Task<Core.Models.V4.SensitivitySchedule?> GetCachedScheduleAsync(
-        string profileName, DateTime timestamp, CancellationToken ct)
-    {
-        var cacheKey = $"SensitivitySchedule:{_tenantAccessor.TenantId}:{profileName}";
-
-        if (_cache.TryGetValue(cacheKey, out Core.Models.V4.SensitivitySchedule? cached))
-            return cached;
-
-        var schedule = await _repo.GetActiveAtAsync(profileName, timestamp, ct);
-        _cache.Set(cacheKey, schedule, TimeSpan.FromSeconds(CacheTtlSeconds));
-        return schedule;
+        return 10_000.0 / active.Activation.Percentage;
     }
 }

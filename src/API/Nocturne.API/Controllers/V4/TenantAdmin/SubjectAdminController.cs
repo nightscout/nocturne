@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
@@ -22,9 +23,9 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 [AllowDuringSetup]
 public class SubjectAdminController : ControllerBase
 {
-    private readonly NocturneDbContext _db;
+    private readonly INocturneDbContextFactory _contexts;
 
-    public SubjectAdminController(NocturneDbContext db) => _db = db;
+    public SubjectAdminController(INocturneDbContextFactory contexts) => _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
 
     /// <summary>
     /// Grant or revoke platform admin for a subject.
@@ -33,13 +34,14 @@ public class SubjectAdminController : ControllerBase
     [HttpPut("{id:guid}/platform-admin")]
     public async Task<IActionResult> SetPlatformAdmin(Guid id, [FromBody] SetPlatformAdminRequest request)
     {
-        var subject = await _db.Subjects.FindAsync(id);
+        await using var db = await _contexts.CreateAsync();
+        var subject = await db.Subjects.FindAsync(id);
         if (subject is null) return NotFound();
 
         if (!request.IsPlatformAdmin)
         {
             // Block demotion if this is the last platform admin
-            var adminCount = await _db.Subjects.CountAsync(s => s.IsPlatformAdmin);
+            var adminCount = await db.Subjects.CountAsync(s => s.IsPlatformAdmin);
             if (adminCount <= 1 && subject.IsPlatformAdmin)
             {
                 return Conflict(new
@@ -52,7 +54,7 @@ public class SubjectAdminController : ControllerBase
 
         subject.IsPlatformAdmin = request.IsPlatformAdmin;
         subject.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         return NoContent();
     }

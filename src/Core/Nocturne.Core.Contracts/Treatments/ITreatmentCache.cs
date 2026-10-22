@@ -17,7 +17,6 @@ public interface ITreatmentCache
     /// </summary>
     /// <param name="query">The <see cref="TreatmentQuery"/> that determines the cache key and filter parameters.</param>
     /// <param name="compute">Factory invoked on cache miss to produce the result that will be stored.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>
     /// The cached or freshly computed list of <see cref="Treatment"/> records, or <c>null</c> if
     /// the query cannot be served from cache.
@@ -30,6 +29,5 @@ public interface ITreatmentCache
     /// <summary>
     /// Invalidate all cached treatment data for the current tenant.
     /// </summary>
-    /// <param name="ct">Cancellation token.</param>
     Task InvalidateAsync(CancellationToken ct = default);
 }

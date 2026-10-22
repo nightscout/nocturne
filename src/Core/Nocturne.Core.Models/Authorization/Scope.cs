@@ -31,19 +31,15 @@ public static class Scope
     public const string GlucoseReadWrite = "glucose.readwrite";
     /// <summary>Read-only access to treatments (boluses, carbs, temp basals, etc.).</summary>
     public const string TreatmentsRead = "treatments.read";
-    /// <summary>Read and write access to treatments.</summary>
     public const string TreatmentsReadWrite = "treatments.readwrite";
     /// <summary>Read-only access to device status records.</summary>
     public const string DevicesRead = "devices.read";
-    /// <summary>Read and write access to device status records.</summary>
     public const string DevicesReadWrite = "devices.readwrite";
     /// <summary>Read-only access to heart rate data.</summary>
     public const string HeartRateRead = "heartrate.read";
-    /// <summary>Read and write access to heart rate data.</summary>
     public const string HeartRateReadWrite = "heartrate.readwrite";
     /// <summary>Read-only access to step count data.</summary>
     public const string StepCountRead = "stepcount.read";
-    /// <summary>Read and write access to step count data.</summary>
     public const string StepCountReadWrite = "stepcount.readwrite";
     /// <summary>Read-only access to sleep sessions.</summary>
     public const string SleepRead = "sleep.read";
@@ -51,7 +47,6 @@ public static class Scope
     public const string SleepReadWrite = "sleep.readwrite";
     /// <summary>Read-only access to food records.</summary>
     public const string FoodRead = "food.read";
-    /// <summary>Read and write access to food records.</summary>
     public const string FoodReadWrite = "food.readwrite";
     /// <summary>Read-only access to generated reports.</summary>
     public const string ReportsRead = "reports.read";
@@ -60,11 +55,9 @@ public static class Scope
 
     /// <summary>Read-only access to therapy settings (profiles).</summary>
     public const string TherapyRead = "therapy.read";
-    /// <summary>Read and write access to therapy settings.</summary>
     public const string TherapyReadWrite = "therapy.readwrite";
     /// <summary>Read-only access to alert settings and history.</summary>
     public const string AlertsRead = "alerts.read";
-    /// <summary>Read and write access to alert settings.</summary>
     public const string AlertsReadWrite = "alerts.readwrite";
 
     // Account
@@ -669,6 +662,16 @@ public static class Scope
 
         return null;
     }
+
+    /// <summary>
+    /// The part of a client's request an approver can delegate. Unlike
+    /// <see cref="ValidateDelegation"/> this narrows instead of refusing: the scope list on a consent
+    /// is the client's ask, not the approver's, and approving it grants what the approver holds.
+    /// </summary>
+    /// <param name="requested">The normalized scopes the client asked for.</param>
+    /// <param name="approverScopes">The approving caller's resolved scopes.</param>
+    public static HashSet<string> CapAt(IEnumerable<string> requested, IReadOnlySet<string> approverScopes) =>
+        requested.Where(scope => Satisfies(approverScopes, scope)).ToHashSet(StringComparer.Ordinal);
 }
 
 /// <summary>

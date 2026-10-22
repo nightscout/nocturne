@@ -42,7 +42,7 @@ public sealed class AccessRequestControllerTests : IDisposable
             .ReturnsAsync(RoleGrantValidation.Valid);
 
         _controller = new AccessRequestController(
-            _dbContext,
+            _dbContext.AsFactory(),
             Mock.Of<ISubjectService>(),
             _tenantService.Object,
             roleService.Object,

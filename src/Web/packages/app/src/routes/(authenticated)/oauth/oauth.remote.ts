@@ -83,7 +83,6 @@ export const lookupDeviceForm = form(deviceLookupSchema, async (data, issue) => 
         userCode: deviceInfo.userCode ?? data.user_code,
         clientId: deviceInfo.clientId ?? "",
         displayName: deviceInfo.clientDisplayName ?? null,
-        isKnown: deviceInfo.isKnownClient ?? false,
         scopes: deviceInfo.scopes ?? [],
         isExpired: deviceInfo.isExpired ?? false,
       },

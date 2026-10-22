@@ -49,4 +49,50 @@ public class TenantControllerAttachOidcTests
         problem.Detail.Should().Be("This provider account is already linked to another Nocturne user.");
         problem.Extensions.Should().ContainKey("error").WhoseValue.Should().Be("AlreadyLinkedToOther");
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Removing_a_members_last_factor_answers_409_with_the_code_a_client_reads(bool passkey)
+    {
+        var tenantId = Guid.NewGuid();
+        var subjectId = Guid.NewGuid();
+        var factorId = Guid.NewGuid();
+        _subjectService.Setup(s => s.TryRemovePasskeyCredentialAsync(subjectId, factorId))
+            .ReturnsAsync(FactorRemovalResult.LastPrimaryFactor);
+        _subjectService.Setup(s => s.TryRemoveOidcIdentityAsync(subjectId, factorId))
+            .ReturnsAsync(FactorRemovalResult.LastPrimaryFactor);
+
+        var result = passkey
+            ? await _controller.RemovePasskeyCredential(tenantId, subjectId, factorId, _subjectService.Object, CancellationToken.None)
+            : await _controller.RemoveOidcIdentity(tenantId, subjectId, factorId, _subjectService.Object, CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        var problem = objectResult.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Detail.Should().NotBeNullOrWhiteSpace();
+        problem.Extensions.Should().ContainKey("error").WhoseValue.Should().Be("last_factor");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Removing_a_factor_the_member_does_not_have_answers_404(bool passkey)
+    {
+        var tenantId = Guid.NewGuid();
+        var subjectId = Guid.NewGuid();
+        var factorId = Guid.NewGuid();
+        _subjectService.Setup(s => s.TryRemovePasskeyCredentialAsync(subjectId, factorId))
+            .ReturnsAsync(FactorRemovalResult.NotFound);
+        _subjectService.Setup(s => s.TryRemoveOidcIdentityAsync(subjectId, factorId))
+            .ReturnsAsync(FactorRemovalResult.NotFound);
+
+        var result = passkey
+            ? await _controller.RemovePasskeyCredential(tenantId, subjectId, factorId, _subjectService.Object, CancellationToken.None)
+            : await _controller.RemoveOidcIdentity(tenantId, subjectId, factorId, _subjectService.Object, CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        objectResult.Value.Should().BeOfType<ProblemDetails>();
+    }
 }

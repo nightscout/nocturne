@@ -28,7 +28,7 @@ public enum ExcursionTransitionType
 }
 
 /// <summary>
-/// Represents the result of an excursion evaluation, pairing the
+/// Result of an excursion evaluation, pairing the
 /// <see cref="ExcursionTransitionType"/> with the excursion identifier when applicable.
 /// </summary>
 /// <param name="Type">The transition that occurred.</param>
@@ -65,7 +65,6 @@ public interface IExcursionTracker
     /// only while the rule is idle awaiting re-arm (docs/alerts/engine-semantics.md §6.3);
     /// <see langword="null"/> for a rule without one, which reads as false.
     /// </param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>An <see cref="ExcursionTransition"/> describing the state change.</returns>
     Task<ExcursionTransition> ProcessEvaluationAsync(
         Nocturne.Core.Models.AlertRuleSnapshot rule,
@@ -80,7 +79,6 @@ public interface IExcursionTracker
     /// </summary>
     /// <param name="alertRuleId">The rule whose active excursion should be closed.</param>
     /// <param name="reason">Why the excursion is being closed. Stamped on resolved instances.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>
     /// An <see cref="ExcursionTransition"/> of type <see cref="ExcursionTransitionType.ExcursionClosed"/>
     /// with the closed excursion id and <paramref name="reason"/>, or
@@ -96,7 +94,6 @@ public interface IExcursionTracker
     /// expires when no evaluation arrives.
     /// </summary>
     /// <param name="alertRuleId">The rule whose hysteresis window to check.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>
     /// <see cref="ExcursionTransitionType.ExcursionClosed"/> when the window had elapsed; otherwise
     /// <see cref="ExcursionTransitionType.None"/>.
@@ -110,6 +107,5 @@ public interface IExcursionTracker
     /// <c>EndedAt IS NULL</c>).
     /// </summary>
     /// <param name="alertRuleId">The rule to query.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<Guid?> GetActiveExcursionIdAsync(Guid alertRuleId, CancellationToken ct);
 }

@@ -231,7 +231,8 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
     public async Task CrossTenant_GuestLink_NotActivatable()
     {
         // Arrange - create a guest link in tenant A
-        using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
+        using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(
+            Fixture, _slugA, _baseDomain, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, _subjectAId));
         var createResponse = await clientA.PostAsJsonAsync("/api/v4/guest-links", new
         {
             label = "Cross-Tenant Test",
@@ -261,7 +262,8 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task CrossTenant_PendingGuestCode_NotReported()
     {
-        using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
+        using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(
+            Fixture, _slugA, _baseDomain, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, _subjectAId));
         var createResponse = await clientA.PostAsJsonAsync("/api/v4/guest-links", new { label = "Pending Probe" });
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -281,7 +283,8 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
     public async Task CrossTenant_DirectGrant_NotUsable()
     {
         // Arrange - create a direct grant token in tenant A
-        using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
+        using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(
+            Fixture, _slugA, _baseDomain, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, _subjectAId));
         var createResponse = await clientA.PostAsJsonAsync("/api/auth/direct-grants", new
         {
             label = "cross-tenant-test",

@@ -2,6 +2,7 @@
 # Writes the image tags for this build to $GITHUB_OUTPUT. Every job in docker-publish.yml calls
 # it, so the images each job pushes and the ones the report job verifies agree.
 #   version      the primary tag every image is pushed with
+#   app_version  the release version stamped into the API assembly; empty off a release tag
 #   extra_tags   space-separated further tags pointed at the same manifest
 #   web_tags     comma-separated full references for the web image (primary + extra)
 #
@@ -14,6 +15,11 @@ set -euo pipefail
 
 if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
   version="${GITHUB_REF#refs/tags/v}"
+  if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$ ]]; then
+    echo "::error::tag ${GITHUB_REF#refs/tags/} is not v<major>.<minor>.<patch>[-<pre-release>]"
+    exit 1
+  fi
+  app_version="$version"
   if [[ "$version" == *-* ]]; then
     extra=""
   else
@@ -21,6 +27,7 @@ if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
   fi
 elif [[ "$GITHUB_REF" == refs/heads/main ]]; then
   version="develop"
+  app_version=""
   extra="main-${GITHUB_SHA::7}"
 else
   echo "::error::images are published from main and v* tags only, not ${GITHUB_REF}"
@@ -35,6 +42,7 @@ done
 
 {
   echo "version=${version}"
+  echo "app_version=${app_version}"
   echo "extra_tags=${extra}"
   echo "web_tags=${web_tags}"
 } >> "$GITHUB_OUTPUT"

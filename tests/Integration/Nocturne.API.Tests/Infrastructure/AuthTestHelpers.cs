@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
@@ -436,6 +437,20 @@ public static class AuthTestHelpers
     }
 
     /// <summary>
+    /// Issues <paramref name="subjectId"/> a session as a sign-in would, and returns its access
+    /// token. Sent as a Bearer it is the person's own sign-in, which managing credentials and sign-in
+    /// factors requires; the token <see cref="SeedAuthenticatedSubjectAsync"/> returns is a direct
+    /// grant and is refused there.
+    /// </summary>
+    public static async Task<string> IssueSessionTokenAsync(ApiIntegrationTestFixture fixture, Guid subjectId)
+    {
+        using var scope = fixture.Services.CreateScope();
+        var session = await scope.ServiceProvider.GetRequiredService<ISessionService>()
+            .IssueSessionAsync(subjectId, new SessionContext(DeviceDescription: "integration-test"));
+        return session.AccessToken;
+    }
+
+    /// <summary>
     /// Creates an HttpClient with a Bearer authorization header for the given access token.
     /// </summary>
     public static HttpClient CreateBearerClient(
@@ -585,8 +600,8 @@ public static class AuthTestHelpers
             Id = Guid.CreateVersion7(),
             TenantId = tenantId,
             AlertRuleId = rule.Id,
-            ChannelType = ChannelType.WebPush,
-            Destination = "default",
+            ChannelType = ChannelType.InApp,
+            Destination = Guid.CreateVersion7().ToString(),
         });
         await db.SaveChangesAsync();
         return rule.Id;

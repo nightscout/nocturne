@@ -23,11 +23,13 @@ internal static class ExcursionTransitionWriter
     /// whichever excursion the decision left active. The decision's post-state already reflects
     /// that close.
     /// <para>
-    /// The write takes the rule's transition lock (<see cref="IAlertTrackerRepository.LockRuleAsync"/>)
-    /// and re-reads the state under it. A state no longer equal to <paramref name="prior"/> was
-    /// written by another process after this one read it, so the decision is stale: nothing is
-    /// written and the transition is <see cref="ExcursionTransitionType.None"/>. That process has
-    /// already made and acted on the transition this one would have.
+    /// The caller holds the rule's <see cref="AlertRuleEvaluationGate"/> lease. The write also takes
+    /// the rule's transition lock, the backstop <see cref="IAlertTrackerRepository.LockRuleAsync"/>
+    /// describes, and re-reads the state under it. A state no longer equal to
+    /// <paramref name="prior"/> was written by an overlapping process after this one read it, so the
+    /// decision is stale: nothing is written and the transition is
+    /// <see cref="ExcursionTransitionType.None"/>. That process has already made and acted on the
+    /// transition this one would have.
     /// </para>
     /// <para>
     /// A decision made against <paramref name="decidedAgainst"/> is stale too once the rule, read
@@ -56,9 +58,9 @@ internal static class ExcursionTransitionWriter
             return (Unwritten(prior, decision), null);
 
         var written = await repository.ExecuteInTransactionAsync(
-            token => WriteAsync(
-                repository, logger, ruleId, prior, decision, decidedAgainst, now, autoResolved, token),
-            (attempt, token) => LandedAsync(repository, attempt, token),
+            (tx, token) => WriteAsync(
+                tx, logger, ruleId, prior, decision, decidedAgainst, now, autoResolved, token),
+            LandedAsync,
             ct);
         return (written.Transition, written.AutoResolve);
     }
@@ -97,8 +99,8 @@ internal static class ExcursionTransitionWriter
 
     /// <summary>
     /// Whether an attempt whose commit reported failure committed anyway, judged by the rows only
-    /// that attempt could have written. The rule's lock is released at commit, so another process
-    /// may have written the tracker state since: a committed open, close or hysteresis start is
+    /// that attempt could have written. The rule's lock is released at commit, so an overlapping
+    /// process may have written the tracker state since: a committed open, close or hysteresis start is
     /// recognised by its excursion row instead, whose new id or <c>now</c> no other write shares.
     /// Only the transitions no excursion row records are judged by the tracker state.
     /// </summary>

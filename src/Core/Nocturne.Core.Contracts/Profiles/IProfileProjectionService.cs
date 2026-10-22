@@ -15,29 +15,35 @@ namespace Nocturne.Core.Contracts.Profiles;
 public interface IProfileProjectionService
 {
     /// <summary>
-    /// Get the most recent profile by querying the latest <see cref="Models.V4.TherapySettings"/> record
-    /// and assembling all correlated schedule records into a <see cref="Profile"/>.
+    /// The newest stored profile document, as <see cref="GetProfilesAsync"/> ranks them.
     /// </summary>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The most recent profile, or <c>null</c> if no therapy settings exist.</returns>
+    /// <returns>The newest profile document, or <c>null</c> when none is stored.</returns>
     Task<Profile?> GetCurrentProfileAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Get a profile by its legacy MongoDB ObjectId or GUID string.
+    /// The whole profile document <paramref name="id"/> resolves to through <see cref="ResolveDocumentIdAsync"/>.
     /// </summary>
     /// <param name="id">Legacy MongoDB ObjectId or GUID identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The matching profile, or <c>null</c> if not found.</returns>
     Task<Profile?> GetProfileByIdAsync(string id, CancellationToken ct = default);
 
     /// <summary>
-    /// Get a paginated list of profiles, ordered by timestamp descending.
+    /// The id of the stored profile document <paramref name="id"/> names: a row's legacy or own id,
+    /// a document id, or the <see cref="MongoObjectId.Coerce"/> form v3 serves it under. Reads and
+    /// writes by id resolve through this, so each reaches the document the other does.
     /// </summary>
-    /// <param name="count">Maximum number of profiles to return.</param>
-    /// <param name="skip">Number of profiles to skip for pagination.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Projected profiles from V4 therapy settings.</returns>
-    Task<IEnumerable<Profile>> GetProfilesAsync(int count = 10, int skip = 0, CancellationToken ct = default);
+    /// <returns>The document id, or <c>null</c> when nothing stored answers to <paramref name="id"/>.</returns>
+    Task<string?> ResolveDocumentIdAsync(string id, CancellationToken ct = default);
+
+    /// <summary>
+    /// A page of the stored profile documents, each carrying every one of its stores: newest first
+    /// when <paramref name="descending"/> is <c>true</c>, otherwise oldest first, the page cut from
+    /// that order. Profile-switch snapshots are not documents and are left out.
+    /// </summary>
+    /// <param name="count">Maximum number of documents to return.</param>
+    /// <param name="skip">Number of documents to skip.</param>
+    /// <param name="descending">Whether the newest document comes first.</param>
+    Task<IEnumerable<Profile>> GetProfilesAsync(int count = 10, int skip = 0, bool descending = true, CancellationToken ct = default);
 
     /// <summary>
     /// Profiles whose <c>srvModified</c> — the newest write stamp among the therapy settings and the
@@ -46,15 +52,12 @@ public interface IProfileProjectionService
     /// </summary>
     /// <param name="cursorMills">The client's cursor, in Unix milliseconds.</param>
     /// <param name="limit">The page size; a page may exceed it to finish its last millisecond.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<ModifiedSincePage<Profile>> GetProfilesModifiedSinceAsync(
         long cursorMills, int limit, CancellationToken ct = default);
 
     /// <summary>
-    /// Count the total number of distinct profile records.
+    /// The number of stored profile documents <see cref="GetProfilesAsync"/> pages through.
     /// </summary>
     /// <param name="find">Optional filter string (reserved for future use).</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Number of distinct therapy settings records.</returns>
     Task<long> CountProfilesAsync(string? find = null, CancellationToken ct = default);
 }

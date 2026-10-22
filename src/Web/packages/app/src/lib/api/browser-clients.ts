@@ -14,7 +14,6 @@ import {
   ProfileClient,
   SensorGlucoseClient,
   TrackersClient,
-  UISettingsClient,
 } from "./generated/nocturne-api-client";
 
 type Http = NonNullable<ConstructorParameters<typeof SensorGlucoseClient>[1]>;
@@ -49,7 +48,6 @@ export const nutritionClient = () => new NutritionClient("", browserHttp());
 export const profileClient = () => new ProfileClient("", browserHttp());
 export const sensorGlucoseClient = () => new SensorGlucoseClient("", browserHttp());
 export const trackersClient = () => new TrackersClient("", browserHttp());
-export const uiSettingsClient = () => new UISettingsClient("", browserHttp());
 
 /** Drops the shared fetch so the next client is built on a fresh one. */
 export function resetBrowserClients(): void {

@@ -3,9 +3,11 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
@@ -35,7 +37,7 @@ public class PebbleController : ControllerBase
     private readonly IEntryService _entryService;
     private readonly DeviceStatusProjectionService _projectionService;
     private readonly ITreatmentService _treatmentService;
-    private readonly IShareAppearanceReader _appearanceReader;
+    private readonly ITenantAppearanceReader _appearanceReader;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<PebbleController> _logger;
 
@@ -57,7 +59,7 @@ public class PebbleController : ControllerBase
         IEntryService entryService,
         DeviceStatusProjectionService projectionService,
         ITreatmentService treatmentService,
-        IShareAppearanceReader appearanceReader,
+        ITenantAppearanceReader appearanceReader,
         ITenantAccessor tenantAccessor,
         ILogger<PebbleController> logger
     )
@@ -195,23 +197,16 @@ public class PebbleController : ControllerBase
     private async Task<bool> ResolveUseMmolAsync(string? units, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrEmpty(units))
-            return IsMmol(units);
+            return GlucoseUnits.IsMmol(units);
 
-        var appearance = await _appearanceReader.GetSharedAppearanceAsync(
-            _tenantAccessor.TenantId,
-            cancellationToken
-        );
-        return IsMmol(appearance.GlucoseUnits);
+        return await GlucoseUnits.UsesMmolAsync(_appearanceReader, _tenantAccessor, cancellationToken);
     }
-
-    private static bool IsMmol(string? units) =>
-        units?.StartsWith("mmol", StringComparison.OrdinalIgnoreCase) == true;
 
     private static string FormatGlucose(double mgdl, bool useMmol)
     {
         if (useMmol)
         {
-            return (mgdl / 18.0).ToString("F1");
+            return (mgdl / GlucoseConstants.MgdlPerMmol).ToString("F1");
         }
         return mgdl.ToString("F0");
     }
