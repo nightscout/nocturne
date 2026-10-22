@@ -275,6 +275,7 @@ msgstr ""
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
+#: src/lib/help/reference.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
@@ -294,6 +295,7 @@ msgstr "Low"
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
+#: src/lib/help/reference.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
@@ -1231,8 +1233,10 @@ msgid "No condition configured"
 msgstr ""
 
 #. 0: mins
+#. 0: facts.googleHealthSyncIntervalMinutes
 #. 0: toleranceMinutes
 #: src/lib/components/alerts/DndPanel.svelte
+#: src/lib/components/help/HelpReference.svelte
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
 msgid "{0} minutes"
 msgstr "{0} minutes"
@@ -2215,6 +2219,7 @@ msgid "System"
 msgstr ""
 
 #: src/lib/components/clock-builder/TextStyleControls.svelte
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Weight"
 msgstr "Weight"
@@ -3449,6 +3454,7 @@ msgstr ""
 msgid "Insulins"
 msgstr ""
 
+#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/alerts/+page.svelte
@@ -3484,6 +3490,7 @@ msgid "Cone of probabilities"
 msgstr ""
 
 #: src/lib/components/dashboard/PredictionSettings.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Cone"
 msgstr ""
 
@@ -3492,6 +3499,7 @@ msgid "All prediction lines"
 msgstr ""
 
 #: src/lib/components/dashboard/PredictionSettings.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Lines"
 msgstr ""
 
@@ -3776,13 +3784,16 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/entries/BGCheckSection.svelte
+#: src/lib/help/dashboard-examples.svelte.ts
 msgid "Finger"
 msgstr "Finger"
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/entries/BGCheckSection.svelte
+#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/help/dashboard-examples.svelte.ts
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 msgid "Sensor"
 msgstr "Sensor"
@@ -4220,6 +4231,7 @@ msgstr "Sleep"
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
+#: src/lib/help/dashboard-examples.svelte.ts
 msgid "Exercise"
 msgstr "Exercise"
 
@@ -4268,6 +4280,7 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/entries/BasalInjectionSection.svelte
+#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
@@ -4483,6 +4496,7 @@ msgstr "Setup"
 msgid "Account"
 msgstr "Account"
 
+#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/components/rbac/permission-categories.svelte.ts
 #: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
@@ -4490,17 +4504,20 @@ msgstr "Account"
 msgid "Patient Record"
 msgstr "Patient Record"
 
+#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Appearance"
 msgstr "Appearance"
 
+#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Therapy"
 msgstr "Therapy"
 
+#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
@@ -4514,6 +4531,7 @@ msgstr "Data Quality"
 msgid "Notifications & Trackers"
 msgstr "Notifications & Trackers"
 
+#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
@@ -7178,6 +7196,7 @@ msgstr ""
 
 #: ../portal/src/lib/components/AuroraPool.svelte
 #: ../portal/src/lib/components/features/ConnectorsDemo.svelte
+#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
 msgid "Loop"
 msgstr "Loop"
@@ -7526,6 +7545,7 @@ msgid "Cannula"
 msgstr ""
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/status-pills/ReservoirPill.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
@@ -8570,6 +8590,7 @@ msgid "g carbs"
 msgstr ""
 
 #: ../portal/src/routes/docs/+layout.svelte
+#: src/lib/components/help/HelpPageView.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
 msgid "Escape"
 msgstr "Escape"
@@ -10033,6 +10054,7 @@ msgid "Blood Glucose <0/>"
 msgstr ""
 
 #: src/lib/components/dashboard/widgets/TrackersWidget.svelte
+#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/help/dashboard-guide.svelte.ts
 msgid "Trackers"
 msgstr "Trackers"
@@ -11073,6 +11095,7 @@ msgstr ""
 msgid "Summary <0/>"
 msgstr ""
 
+#. 0: facts.googleHealthDefaultHistoryDays
 #. 0: expiresInDays
 #. 0: days
 #. 0: daysOption
@@ -11082,6 +11105,7 @@ msgstr ""
 #. 0: dateInfo.dayCount
 #. 0: dayCount
 #. 0: dayCount
+#: src/lib/components/help/HelpReference.svelte
 #: src/lib/components/members/CreateInviteCard.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/lib/components/ui/date-range-picker.svelte
@@ -12331,6 +12355,8 @@ msgstr ""
 msgid "<0/> Step Count Actogram"
 msgstr ""
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
+#: src/lib/components/help/HelpHarness.test.svelte
 #: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/steps/+page.svelte
@@ -12847,12 +12873,14 @@ msgstr ""
 msgid "Default chart range"
 msgstr ""
 
+#. 0: period
 #. 0: hours
 #. 0: Math.abs(hoursUntil).toFixed(1)
 #. 0: absHours
 #. 0: focusHours
 #. 0: therapy.dia ?? "-"
 #. 0: therapy.dia ?? "-"
+#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/lib/components/ui/duration-input/duration-input.svelte
@@ -13645,6 +13673,8 @@ msgid "Chat with developers and other users"
 msgstr ""
 
 #: ../portal/src/lib/components/SiteFooter.svelte
+#: src/lib/components/help/HelpBrowser.svelte
+#: src/lib/components/help/HelpPanel.svelte
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Documentation"
 msgstr "Documentation"
@@ -18733,6 +18763,7 @@ msgstr ""
 msgid "Weight History - Settings - Nocturne"
 msgstr ""
 
+#: src/lib/components/help/HelpReference.svelte
 #: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 #: src/routes/(authenticated)/settings/weight/+page.svelte
@@ -22936,6 +22967,8 @@ msgstr ""
 msgid "Elevated"
 msgstr ""
 
+#: src/lib/components/help/HelpDashboard.svelte
+#: src/lib/help/reference.svelte.ts
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Very high"
 msgstr "Very high"
@@ -23898,6 +23931,7 @@ msgstr ""
 #~ msgid "Est. A1c (DCCT %)"
 #~ msgstr ""
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Heart rate"
@@ -25002,7 +25036,9 @@ msgstr ""
 msgid "No lows lasting 15 minutes or more during this session"
 msgstr ""
 
+#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+#: src/lib/help/reference.svelte.ts
 msgid "Very low"
 msgstr "Very low"
 
@@ -25210,6 +25246,7 @@ msgstr ""
 msgid "Hour"
 msgstr ""
 
+#: src/lib/help/reference.svelte.ts
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 msgid "In range"
 msgstr "In range"
@@ -25557,6 +25594,8 @@ msgstr ""
 
 #: src/lib/components/connectors/GoogleHealthSourceRow.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/lib/components/help/HelpReference.svelte
+#: src/lib/components/help/HelpReference.svelte
 #: src/lib/help/connectors.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health"
@@ -25997,6 +26036,7 @@ msgstr "Tipi di dati rilevati e come Nocturne può utilizzarli"
 msgid "{0}/{1} selected"
 msgstr "{0}/{1} selezionato"
 
+#: src/lib/components/help/HelpReference.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthCategoryTable.svelte
 msgid "Data type"
 msgstr "Tipo di dati"
@@ -26229,94 +26269,117 @@ msgstr ""
 msgid "One or more connectors failed; review the connector details and retry the failed range."
 msgstr "Uno o più connettori hanno avuto esito negativo; controlla i dettagli dei connettori e riprova l'intervallo non riuscito."
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Sleep sessions and stages"
 msgstr "Sessioni e fasi del sonno"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Active energy burned"
 msgstr "Energia consumata con l’attività"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Total calories"
 msgstr "Calorie totali"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Distance"
 msgstr "Distanza"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Floors"
 msgstr "Piani"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Workouts"
 msgstr "Allenamenti"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Body fat"
 msgstr "Grasso corporeo"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Height"
 msgstr "Altezza"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Nutrition log"
 msgstr "Diario alimentare"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Hydration"
 msgstr "Idratazione"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Blood glucose"
 msgstr "Glicemia"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Oxygen saturation"
 msgstr "Saturazione di ossigeno"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Heart rate variability"
 msgstr "Variabilità della frequenza cardiaca"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Resting heart rate"
 msgstr "Frequenza cardiaca a riposo"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Daily oxygen saturation"
 msgstr "Saturazione di ossigeno giornaliera"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Daily respiratory rate"
 msgstr "Frequenza respiratoria giornaliera"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Sleep respiratory rate"
 msgstr "Frequenza respiratoria durante il sonno"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Core body temperature"
 msgstr "Temperatura corporea centrale"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Menstrual period"
 msgstr "Mestruazioni"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Ovulation test"
 msgstr "Test di ovulazione"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Cervical mucus"
 msgstr "Muco cervicale"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Sexual activity"
 msgstr "Attività sessuale"
 
+#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Unknown data type"
 msgstr "Tipo di dati sconosciuto"
