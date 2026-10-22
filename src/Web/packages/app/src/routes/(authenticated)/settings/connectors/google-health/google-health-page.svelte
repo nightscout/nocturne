@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { googleHealthDataTypeLabel as dataTypeLabel } from "$lib/components/connectors/google-health-labels.svelte";
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
